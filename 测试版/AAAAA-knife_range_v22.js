@@ -1,5 +1,8 @@
 // ============================================================
-// 近战距离修改器 v21 — v20去除写入延迟，从第1刀就生效
+// 近战距离修改器 v22 — 用 attach 替代 replace，兼容快刀脚本共存
+// 核心改动: 步骤1从 Interceptor.replace 改为 Interceptor.attach
+//           只观察 get_KnifeSpeed 调用捕获 myPlayer，不替换函数
+//           避免与 speed_knife_v16 的 replace 冲突
 // ============================================================
 
 (function() {
@@ -26,16 +29,19 @@
     var rangeLogCount = 0;
 
     // ============================================================
-    // 步骤1: replace get_KnifeSpeed 捕获 myPlayer (v19验证可用)
+    // 步骤1: attach get_KnifeSpeed 捕获 myPlayer（仅观察，不替换）
+    //        与 speed_knife_v16 的 replace 可共存
     // ============================================================
     try {
         var getKnifeSpeedAddr = base.add(0xB170A0);
-        var origGetKnifeSpeed = new NativeFunction(getKnifeSpeedAddr, 'float', ['pointer']);
-        Interceptor.replace(getKnifeSpeedAddr, new NativeCallback(function(self) {
-            var result = origGetKnifeSpeed(self);
-            if (!myPlayerFound) {
+        Interceptor.attach(getKnifeSpeedAddr, {
+            onEnter: function(args) {
+                this._self = args[0];
+            },
+            onLeave: function(retval) {
+                if (myPlayerFound) return;
                 try {
-                    var owner = self.add(0x8).readPointer();
+                    var owner = this._self.add(0x8).readPointer();
                     if (owner && !owner.isNull() && isMyPlayerFn(owner)) {
                         myPlayer = owner;
                         myPlayerFound = true;
@@ -43,9 +49,8 @@
                     }
                 } catch(e) {}
             }
-            return result;
-        }, 'float', ['pointer']));
-        sendLog('info', '近战', 'get_KnifeSpeed replace @ ' + getKnifeSpeedAddr);
+        });
+        sendLog('info', '近战', 'get_KnifeSpeed attach @ ' + getKnifeSpeedAddr + ' (兼容模式)');
     } catch(e) {
         sendLog('warn', '近战', 'get_KnifeSpeed hook失败: ' + e.message);
     }
@@ -152,6 +157,6 @@
         } catch(e) {}
     }
 
-    sendLog('info', '近战', 'v21 已启用 (' + KNIFE_RANGE_MULTIPLIER + 'x)');
+    sendLog('info', '近战', 'v22 已启用 (' + KNIFE_RANGE_MULTIPLIER + 'x) — 兼容快刀共存');
 
 })();
