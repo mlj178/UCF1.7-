@@ -135,6 +135,36 @@ WPN_Knife 和 Weapon 两个 Hook 的 `onLeave` 共用同一个 retval 缓冲区�
 
 ## 四、全模式应用方法
 
+### 为什么 v8 不是全模式生效
+
+v8 有**两个致命问题**导致部分模式无效：
+
+**问题1：Hook 点不对**
+
+| | v8 | v12+/v21 |
+|------|-----|-----|
+| Hook 函数 | `WPN_Knife.PlayKnifeAttackAnim` (0xB642B0) | `WPN_Knife.GetKnifeAttackData` (0xB63EC0) |
+| 函数类型 | **动画函数** | **数据函数** |
+
+`PlayKnifeAttackAnim` 是播放攻击动画的函数。轻击（Combo1/2）走这条路，但**重击（Bigshot）走 `OnSpecialBtnDown`**（0xB64240），不经过 `PlayKnifeAttackAnim`。某些游戏模式（如生化模式、挑战模式）的攻击判定链路可能直接取数据做伤害计算，跳过动画函数。
+
+`GetKnifeAttackData` 是底层数据获取函数——**只要游戏需要知道攻击距离，就必然调它**，无论什么模式、什么攻击类型。
+
+**问题2：写入目标不同**
+
+```
+v8 写入路径:
+  WPN_Knife + 0x68 → WeaponData_Knife* (ScriptableObject, 全局共享资产)
+                   + 0xC0 → array[] → range
+
+v12+/v21 写入路径:
+  GetKnifeAttackData(retval) → retval+0x4 = range (调用者栈上临时缓冲区)
+```
+
+v8 写入 `WeaponData_Knife` 这个 **ScriptableObject**。不同游戏模式可能从不同的 AssetBundle 加载不同的 `WeaponData_Knife` 实例。如果某个模式加载的武器数据不在 v8 遇到的那个资产实例上，range 就不会被修改。
+
+v21 写入每次 `GetKnifeAttackData` 返回的**临时缓冲区**——函数被调一次就改一次，不依赖任何静态资产实例。
+
 ### Hook 目标
 
 | 函数 | RVA | 说明 |
@@ -142,7 +172,7 @@ WPN_Knife 和 Weapon 两个 Hook 的 `onLeave` 共用同一个 retval 缓冲区�
 | `WPN_Knife.GetKnifeAttackData` | 0xB63EC0 | 所有近战武器的攻击数据获取入口 |
 | `PlayerWeapons.get_KnifeSpeed` | 0xB170A0 | 每次挥刀必调，用于安全捕获 myPlayer |
 
-### 为什么全模式生效
+### 为什么 v21 全模式生效
 
 `WPN_Knife.GetKnifeAttackData` 是所有近战武器（刀、斧、铲等）获取攻击数据的统一底层函数。无论团队模式、生化模式、个人竞技、挑战模式，只要玩家挥刀，游戏必然调此函数获取 `KnifeAttackData` 结构体。
 
