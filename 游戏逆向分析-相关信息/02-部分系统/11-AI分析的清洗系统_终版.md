@@ -29,11 +29,6 @@
 
 ### 方法 (3)
 
-- `void Invoke(string token)`
-  （void Invoke（string token））
-- `void EndInvoke(IAsyncResult result)`
-  （void 结束调用（I异步结果 result））
-
 ---
 
 ## AnimationHumanStream
@@ -58,17 +53,11 @@
   （float 获取轴Length（int humanId））
 - `Quaternion GetPostRotation(int humanId)`
   （Quaternion 获取PostRotation（int humanId））
-- `float Internal_GetAxisLength(int humanId)`
-  （float Internal_获取轴Length（int humanId））
-- `Quaternion Internal_GetPostRotation(int humanId)`
-  （Quaternion Internal_获取PostRotation（int humanId））
 
 ---
 
 ## AvatarIKGoal
 ### 字段 (1)
-
-- `int value__`（整数 值__）(偏移: 0x0)
 
 ---
 
@@ -81,8 +70,6 @@
   （bool 获取Humanoid身体Part激活的（Avatar掩码身体Part index））
 - `int get_transformCount()`
   （int get_transform数量（））
-- `string GetTransformPath(int index)`
-  （string 获取变换路径（int index））
 - `float GetTransformWeight(int index)`
   （float 获取变换Weight（int index））
 - `bool GetTransformActive(int index)`
@@ -92,8 +79,6 @@
 
 ## AvatarMaskBodyPart
 ### 字段 (1)
-
-- `int value__`（整数 值__）(偏移: 0x0)
 
 ---
 
@@ -120,21 +105,10 @@
 - `string Tx`（string Tx）(偏移: 0x1C)
 - `string Ty`（string Ty）(偏移: 0x20)
 - `string Tz`（string Tz）(偏移: 0x24)
-- `AnimationCurve rotX`（动画Curve rotX）(偏移: 0x28)
-- `AnimationCurve rotY`（动画Curve rotY）(偏移: 0x2C)
-- `AnimationCurve rotZ`（动画Curve rotZ）(偏移: 0x30)
-- `AnimationCurve rotW`（动画Curve rotW）(偏移: 0x34)
-- `AnimationCurve posX`（动画Curve posX）(偏移: 0x38)
-- `AnimationCurve posY`（动画Curve posY）(偏移: 0x3C)
-- `AnimationCurve posZ`（动画Curve posZ）(偏移: 0x40)
 - `AvatarIKGoal goal`（AvatarIKGoal goal）(偏移: 0x44)
-- `Quaternion lastQ`（Quaternion lastQ）(偏移: 0x48)
-- `bool lastQSet`（bool lastQ集合）(偏移: 0x58)
 
 ### 方法 (8)
 
-- `void Reset()`
-  （void 重置（））
 - `void SetIKKeyframes(float time, Avatar avatar, float humanScale, Vector3 bodyPosition, Quaternion bodyRotation)`
   （void 集合IKKeyframes（float time, Avatar avatar, float humanScale, 三维向量 bodyPosition, Quaternion bodyRotation））
 - `void SetKeyframes(float time, Vector3 pos, Quaternion rot)`
@@ -193,7 +167,6 @@
 
 - `CharacterEffect.FxData[] datas`（角色Effect.特效Data[] datas）(偏移: 0xC)
 - `Player owner`（玩家 所有者）(偏移: 0x10)
-- `List<EffectObj> fxList`（List<特效Obj> fx列表）(偏移: 0x14)
 
 ### 方法 (5)
 
@@ -205,7 +178,6 @@
 - `Transform node`（变换 node）(偏移: 0x0)
 - `Vector3 offset`（三维向量 偏移）(偏移: 0x4)
 - `Vector3 euler`（三维向量 欧拉角）(偏移: 0x10)
-- `GameObject fxPrefab`（游戏对象 fx预制体）(偏移: 0x1C)
 
 ---
 
@@ -219,8 +191,6 @@
 - `Animator characterAnimator`（动画器 character动画器）(偏移: 0x48)
 - `Animator handAnimator`（动画器 hand动画器）(偏移: 0x4C)
 - `CharacterEffect characterEffect`（角色特效 character特效）(偏移: 0x50)
-- `Renderer[] cvRenderers`（Renderer[] cvRenderers）(偏移: 0x54)
-- `AudioClip dieVoice`（音频弹匣 dieVoice）(偏移: 0x58)
 - `Transform spine`（变换 spine）(偏移: 0x5C)
 - `Transform spine1`（变换 spine1）(偏移: 0x60)
 - `Transform neck`（变换 neck）(偏移: 0x64)
@@ -232,13 +202,11 @@
 - `CharacterVoice voiceAsset`（角色语音 voice资产）(偏移: 0x80)
 - `HUD_RoleAsset roleAsset`（HUD_Role资产 role资产）(偏移: 0x84)
 - `CharacterModel.MoveDirection deathDir`（角色Model.移动方向 deathDir）(偏移: 0x88)
-- `CharacterModel.MoveDirection lastMovDir`（角色Model.移动方向 lastMovDir）(偏移: 0x8C)
 - `string lowerAnimName`（string lower动画名称）(偏移: 0x90)
 - `string lowerAnimName_Temp`（string lower动画Name_Temp）(偏移: 0x94)
 - `string lowerAnimTag`（string lower动画标签）(偏移: 0x98)
 - `string upperAnimName`（string upper动画名称）(偏移: 0x9C)
 - `CharWpnAnimData animSetting`（Char武器动画数据 anim设置）(偏移: 0xA0)
-- `ParticleSystem aliveEffect`（粒子系统 alive特效）(偏移: 0xAC)
 - `bool reverseSpineRotation`（bool reverseSpineRotation）(偏移: 0xB0)
 
 ### 方法 (39)
@@ -251,24 +219,12 @@
   （QV模型 get_bindQv模型（））
 - `void set_bindQvMdl(QVModel value)`
   （void set_bindQv模型（QV模型 value））
-- `void Update()`
-  （void 更新（））
-- `void LateUpdate()`
-  （void 延迟更新（））
 - `void BindMapGunQvModel(QVModel qvMdl)`
   （void Bind映射枪械Qv模型（QV模型 qvMdl））
 - `void RecycleCurQvModel()`
   （void RecycleCurQv模型（））
 - `void SetOwner(Player newOwner)`
   （void 集合Owner（玩家 newOwner））
-- `void SetValidOwner()`
-  （void 设置有效所有者（））
-- `void RemoveFromOldOwner()`
-  （void 从旧所有者移除（））
-- `void InitSocketItem()`
-  （void 初始化套接字项目（））
-- `void SetActive(bool active)`
-  （void 设置激活（布尔值 active））
 - `void PlayHitAnim(Vector3 dmgOrigin)`
   （void 播放命中动画（三维向量 dmgOrigin））
 - `void OnPlayerRespawn()`
@@ -293,14 +249,10 @@
   （角色Model.移动方向 获取死亡方向（float angle））
 - `void SetWeaponAnim(CharWpnAnimData animData)`
   （void 集合Weapon动画（Char武器动画数据 animData））
-- `void ResetAnimator()`
-  （void 重置动画器（））
 - `void UpdateLowerAngle()`
   （void 更新下半身角度（））
 - `void UpdateAnim()`
   （void 更新动画（））
-- `string CombineAnimName(CharacterModel.MoveDirection moveDir, bool walk, bool crouch)`
-  （string Combine动画名称（角色Model.移动方向 moveDir, bool walk, bool crouch））
 - `void PlayUpperAnim(string animName, float lerpTime = 0.2, bool cancelIfPlaying = True)`
   （void 播放上半身动画（string animName, float lerpTime = 0.2, bool cancelIfPlaying = True））
 - `void PlayLowerAnim(string animName, string animTag, float lerpTime = 0.2, bool cancelIfPlaying = True)`
@@ -323,28 +275,12 @@
 ## CharacterModel.Sex
 ### 字段 (1)
 
-- `int value__`（整数 值__）(偏移: 0x0)
-
 ---
 
 ## CharacterVoice
 **继承**: ScriptableObject（脚本对象）
 
 ### 字段 (13)
-
-- `AudioClip headShot`（音频弹匣 head射击）(偏移: 0xC)
-- `AudioClip[] multilKill`（音频Clip[] multil击杀）(偏移: 0x10)
-- `AudioClip grenade`（音频弹匣 grenade）(偏移: 0x14)
-- `AudioClip knife`（音频弹匣 knife）(偏移: 0x18)
-- `AudioClip die`（音频弹匣 die）(偏移: 0x1C)
-- `AudioClip[] fireInTheHole`（音频Clip[] fireInTheHole）(偏移: 0x20)
-- `AudioClip[] fireInTheHole_C`（音频Clip[] fireInTheHole_C）(偏移: 0x24)
-- `AudioClip gameStart_TD`（音频弹匣 gameStart_TD）(偏移: 0x28)
-- `AudioClip gameWin`（音频弹匣 gameWin）(偏移: 0x2C)
-- `AudioClip gameDraw`（音频弹匣 gameDraw）(偏移: 0x30)
-- `AudioClip gameLose`（音频弹匣 gameLose）(偏移: 0x34)
-- `AudioClip gameStart_DM`（音频弹匣 gameStart_DM）(偏移: 0x38)
-- `AudioClip gameOver_DM`（音频弹匣 gameOver_DM）(偏移: 0x3C)
 
 ---
 
@@ -396,11 +332,9 @@
 ### 字段 (9)
 
 - `float baseMoveSpeed`（float base移动Speed）(偏移: 0xC)
-- `Action<Team> team_Listenner`（Action<Team> team_Listenner）(偏移: 0x24)
 - `bool isGhostEntity`（bool is幽灵实体）(偏移: 0x30)
 - `bool isNoHitFeedback`（bool isNo命中Feedback）(偏移: 0x31)
 - `List<Buff> buffs`（List<Buff> buffs）(偏移: 0x34)
-- `Action<bool> LifeState_Listenner`（Action<bool> LifeState_Listenner）(偏移: 0x38)
 - `Ref2Float SpeedPenalty_BuffUpdater`（双引用浮点数 SpeedPenalty_增益Updater）(偏移: 0x3C)
 - `Ref2Float DamageRate_BuffUpdater`（双引用浮点数 伤害Rate_增益Updater）(偏移: 0x40)
 - `RefBool Invincible_BuffUpdater`（引用布尔值 Invincible_增益Updater）(偏移: 0x44)
@@ -441,8 +375,6 @@
   （角色控制器 get_character控制器（））
 - `void set_characterController(CharacterController value)`
   （void set_character控制器（角色控制器 value））
-- `void Update()`
-  （void 更新（））
 - `void SetTeam(Team newTeam)`
   （void 集合队伍（队伍 newTeam））
 - `void RemoveFromTeamList(bool onlyAliveList)`
@@ -477,210 +409,8 @@
   （void 更新增益属性（））
 - `void SetGhostEntityState(bool isGhost)`
   （void 集合幽灵实体状态（bool isGhost））
-- `void UpdateColliderLayer()`
-  （void 更新碰撞器层（））
-- `string GetName()`
-  （字符串 获取名称（））
 - `Transform GetVisibleHitBox(Ray viewRay)`
   （变换 获取可见命中框（射线 viewRay））
-
----
-
-## HUD_Nano4_HumanGauge
-**继承**: SimpleHudBase（SimpleHud基础）
-
-### 字段 (10)
-
-- `GameObject background`（游戏对象 background）(偏移: 0x10)
-- `GameObject slotPrefab`（游戏对象 slot预制体）(偏移: 0x14)
-- `Image gauge`（图像 gauge）(偏移: 0x18)
-- `RawImage[] slots`（RawImage[] slots）(偏移: 0x1C)
-- `Texture[] slotTexs`（Texture[] slotTexs）(偏移: 0x20)
-- `AnimationHud head`（动画Hud head）(偏移: 0x24)
-- `Text atkPowerText`（文本 atk力度文本）(偏移: 0x28)
-- `AudioClip heroReadySnd`（音频弹匣 heroReadySnd）(偏移: 0x2C)
-- `int deadSoldierCount`（int deadSoldier数量）(偏移: 0x30)
-- `int heroNeedCount`（int hero需要数量）(偏移: 0x34)
-
-### 方法 (14)
-
-- `bool get_isNoHero()`
-  （bool get_isNo英雄（））
-- `bool get_isHeroReady()`
-  （bool get_is英雄Ready（））
-- `bool get_isSlotType()`
-  （bool get_is槽位类型（））
-- `void MyPlayerInit(Player myPlayer)`
-  （void My玩家初始化（玩家 myPlayer））
-- `void OnTeamChange(Team team)`
-  （void On队伍Change（队伍 team））
-- `void OnMyPlayerLifeStateChange(bool isAlive)`
-  （void OnMy玩家Life状态Change（bool isAlive））
-- `void Update()`
-  （void 更新（））
-- `void SetTotalSlot(int count)`
-  （void 集合Total槽位（int count））
-- `void AddSlot()`
-  （void 添加槽位（））
-- `void ShowHeroReadyTip()`
-  （void 显示英雄ReadyTip（））
-- `void SetVisible(bool value)`
-  （void 集合可见的（bool value））
-- `void SetSlotVisible(bool visible)`
-  （void 集合槽位可见的（bool visible））
-- `void ResetHeroReady()`
-  （void 重置英雄Ready（））
-
----
-
-## HUD_NanoRoleSign
-**继承**: HUD_ProjectionSign（HUD_投影标志）
-
-### 字段 (3)
-
-- `Player bindPlayer`（玩家 bind玩家）(偏移: 0x50)
-- `bool globalView`（bool global视图）(偏移: 0x54)
-- `bool soldierSign`（bool soldier标志）(偏移: 0x55)
-
-### 方法 (3)
-
-- `void Bind(Player player)`
-  （void 绑定（玩家 player））
-- `void OnRoleChange(NanoRole oldRole, NanoRole newRole)`
-  （void OnRoleChange（纳米角色 oldRole, 纳米角色 newRole））
-- `bool GetVisible()`
-  （bool 获取可见的（））
-
----
-
-## HUD_RadarIcon_Entity
-**继承**: HUD_RadarIcon（HUD_雷达图标）
-
-### 字段 (12)
-
-- `Entity entity`（实体 entity）(偏移: 0x4C)
-- `Sprite teammate`（精灵 teammate）(偏移: 0x50)
-- `Sprite teammate_Far`（精灵 teammate_Far）(偏移: 0x54)
-- `Sprite teammate_Top`（精灵 teammate_顶部）(偏移: 0x58)
-- `Sprite teammate_Bottom`（精灵 teammate_底部）(偏移: 0x5C)
-- `Sprite teammate_Dead`（精灵 teammate_Dead）(偏移: 0x60)
-- `Sprite enemy`（精灵 enemy）(偏移: 0x64)
-- `Sprite enemy_Far`（精灵 enemy_Far）(偏移: 0x68)
-- `Sprite enemy_Top`（精灵 enemy_顶部）(偏移: 0x6C)
-- `Sprite enemy_Bottom`（精灵 enemy_底部）(偏移: 0x70)
-- `Vector2 normalPivot`（二维向量 normalPivot）(偏移: 0x0)
-- `Vector2 farPivot`（二维向量 farPivot）(偏移: 0x8)
-
-### 方法 (4)
-
-- `void Update()`
-  （void 更新（））
-- `bool IsVisible()`
-  （布尔值 是否可见（））
-- `void Bind(Entity entity)`
-  （void Bind（实体 entity））
-- `void Recycle(bool roundRecycle)`
-  （void 回收（布尔值 循环回收））
-
----
-
-## HUD_Role
-**继承**: Singleton<HUD_Role>（Singleton<HUD_Role>）
-
-### 字段 (16)
-
-- `Sprite[] aceSprites`（Sprite[] aceSprites）(偏移: 0xC)
-- `AudioClip[] aceAudio`（音频Clip[] ace音频）(偏移: 0x10)
-- `HealthData healthData`（Health数据 health数据）(偏移: 0x14)
-- `RawImage backgroundImage`（Raw图像 background图像）(偏移: 0x18)
-- `Image effectImage`（图像 effect图像）(偏移: 0x1C)
-- `RawImage lineImage`（Raw图像 line图像）(偏移: 0x20)
-- `Text healthNum`（文本 healthNum）(偏移: 0x24)
-- `Text armorNum`（文本 armorNum）(偏移: 0x28)
-- `Material redFlashMat`（材质 redFlash材质）(偏移: 0x2C)
-- `float lerpAnimEndTime`（float lerp动画结束时间）(偏移: 0x30)
-- `Image aceImage`（图像 ace图像）(偏移: 0x34)
-- `Color green`（颜色 green）(偏移: 0x0)
-- `Color orange`（颜色 orange）(偏移: 0x10)
-- `Color red`（颜色 red）(偏移: 0x20)
-- `NameKeyPool skillBtnPool`（名称键池 skillBtn池）(偏移: 0x38)
-- `HUD_SkillBtn[] skillBtns`（HUD_技能Btn[] skillBtns）(偏移: 0x3C)
-
-### 方法 (10)
-
-- `void Update()`
-  （void 更新（））
-- `void SetColor(Color color, bool flash = False)`
-  （void 集合颜色（颜色 color, bool flash = False））
-- `void OnMyPlayerJoin(Player myPlayer)`
-  （void 我的玩家加入时（玩家 myPlayer））
-- `void SetAsset(HUD_RoleAsset roleAsset)`
-  （void 集合资产（HUD_Role资产 roleAsset））
-- `void UpdateAceSign(HUD_Role.AceSign oldSign, HUD_Role.AceSign newSign)`
-  （void 更新王牌标志（HUD_Role.王牌标志 oldSign, HUD_Role.王牌标志 newSign））
-- `void RemoveSkillBtn(HUD_SkillBtn btn)`
-  （void 移除技能Btn（HUD_技能Btn btn））
-- `void TrySetPos(HUD_SkillBtn btn, int pos)`
-  （void Try集合Pos（HUD_技能Btn btn, int pos））
-- `void StartLerpAnim()`
-  （void 开始Lerp动画（））
-
----
-
-## HUD_Role.AceSign
-### 字段 (1)
-
-- `int value__`（整数 值__）(偏移: 0x0)
-
----
-
-## HUD_RoleAsset
-**继承**: ScriptableObject（脚本对象）
-
-### 字段 (3)
-
-- `Texture background`（纹理 background）(偏移: 0xC)
-- `Sprite effect`（精灵 effect）(偏移: 0x10)
-- `Texture line`（纹理 line）(偏移: 0x14)
-
----
-
-## HUD_SelectMasterRole
-**继承**: MonoBehaviour（MonoBehaviour行为）
-
-### 字段 (3)
-
-- `Image img`（图像 img）(偏移: 0xC)
-- `Sprite[] sprs`（Sprite[] sprs）(偏移: 0x10)
-- `NanoRoleSelect roleSelect`（纳米Role选择 role选择）(偏移: 0x14)
-
-### 方法 (4)
-
-- `void PlayerController_FocusHUD_Listenner(ref string hud)`
-  （void 玩家控制器_聚焦HUD_监听器（引用 字符串 hud））
-- `void NanoRoleSelect_Type_Listnner(NanoRoleSelect.Type obj)`
-  （void 纳米RoleSelect_Type_Listnner（纳米RoleSelect.类型 obj））
-
----
-
-## HUD_SelectNanoRole
-**继承**: MonoBehaviour（MonoBehaviour行为）
-
-### 字段 (4)
-
-- `GameObject main`（游戏对象 main）(偏移: 0xC)
-- `GameObject[] images`（游戏Object[] images）(偏移: 0x10)
-- `Text timeText`（文本 time文本）(偏移: 0x14)
-- `NanoRoleSelect roleSelect`（纳米Role选择 role选择）(偏移: 0x18)
-
-### 方法 (6)
-
-- `void PlayerController_FocusHUD_Listenner(ref string hud)`
-  （void 玩家控制器_聚焦HUD_监听器（引用 字符串 hud））
-- `void Update()`
-  （void 更新（））
-- `void NanoRoleSelect_Type_Listnner(NanoRoleSelect.Type obj)`
-  （void 纳米RoleSelect_Type_Listnner（纳米RoleSelect.类型 obj））
 
 ---
 
@@ -693,8 +423,6 @@
 
 ## HumanBodyBones
 ### 字段 (1)
-
-- `int value__`（整数 值__）(偏移: 0x0)
 
 ---
 
@@ -712,7 +440,6 @@
 
 ### 字段 (4)
 
-- `Material overrideMat`（材质 override材质）(偏移: 0x10)
 - `LayerMask layerMask`（层掩码 layer掩码）(偏移: 0x14)
 - `RenderPassEvent passEvent`（RenderPass事件 pass事件）(偏移: 0x18)
 - `HumanCatchPass humanCatchPass`（人类CatchPass humanCatchPass）(偏移: 0x1C)
@@ -729,7 +456,6 @@
 
 ### 字段 (3)
 
-- `Material mat`（材质 mat）(偏移: 0x54)
 - `RenderStateBlock m_RenderStateBlock`（Render状态Block m_Render状态Block）(偏移: 0x58)
 - `FilteringSettings m_FilteringSettings`（过滤设置 m_过滤设置）(偏移: 0xC4)
 
@@ -896,8 +622,6 @@
 ## InputField.CharacterValidation
 ### 字段 (1)
 
-- `int value__`（整数 值__）(偏移: 0x0)
-
 ---
 
 ## InteractionTrigger.CharacterPosition
@@ -928,21 +652,14 @@
 ### 字段 (4)
 
 - `AudioSource audioSource`（音频Source audioSource）(偏移: 0xC)
-- `AudioClip manBreath`（音频弹匣 manBreath）(偏移: 0x10)
-- `AudioClip womanBreath`（音频弹匣 womanBreath）(偏移: 0x14)
 - `bool isWoman`（bool isWoman）(偏移: 0x18)
 
 ### 方法 (3)
-
-- `void Update()`
-  （void 更新（））
 
 ---
 
 ## NanoRole
 ### 字段 (1)
-
-- `int value__`（整数 值__）(偏移: 0x0)
 
 ---
 
@@ -1024,15 +741,11 @@
   （void 选择英雄（））
 - `void SelectTerminator()`
   （void 选择Terminator（））
-- `void Update()`
-  （void 更新（））
 
 ---
 
 ## NanoRoleSelect.Type
 ### 字段 (1)
-
-- `int value__`（整数 值__）(偏移: 0x0)
 
 ---
 
@@ -1221,8 +934,6 @@
   （纳米角色 get_nanoRole（））
 - `void set_nanoRole(NanoRole value)`
   （void set_nanoRole（纳米角色 value））
-- `void Update()`
-  （void 更新（））
 - `void FixedUpdate()`
   （void 固定更新（））
 - `void UpdateGroundMatName()`
@@ -1321,8 +1032,6 @@
   （void 更新增益属性（））
 - `void AddNextRespawnInvincible(float time)`
   （void 添加下一个重生Invincible（float time））
-- `string GetName()`
-  （字符串 获取名称（））
 - `Transform GetVisibleHitBox(Ray viewRay)`
   （变换 获取可见命中框（射线 viewRay））
 
@@ -1331,14 +1040,10 @@
 ## Player.MoveType
 ### 字段 (1)
 
-- `int value__`（整数 值__）(偏移: 0x0)
-
 ---
 
 ## Player.RespawnType
 ### 字段 (1)
-
-- `int value__`（整数 值__）(偏移: 0x0)
 
 ---
 
@@ -1375,8 +1080,6 @@
   （void set_model可见的（bool value））
 - `void set_focus(bool value)`
   （void set_focus（bool value））
-- `void Update()`
-  （void 更新（））
 - `void SetModelDelayPos()`
   （void 集合模型延迟Pos（））
 - `void AddModelDelayPos(float delay)`
@@ -1481,10 +1184,6 @@
   （string get_聚焦抬头显示（））
 - `Player get_player()`
   （玩家 get_player（））
-- `void Start()`
-  （void 开始（））
-- `void Update()`
-  （void 更新（））
 - `void CameraRotation()`
   （void 摄像机Rotation（））
 - `void SelectWeapon()`
@@ -1603,20 +1302,12 @@
 
 ### 方法 (1)
 
-- `string ToString()`
-  （字符串 转字符串（））
-
 ---
 
 ## PlayerLoopSystem.UpdateFunction
 **继承**: MulticastDelegate（多播委托）
 
 ### 方法 (3)
-
-- `void Invoke()`
-  （void 调用（））
-- `void EndInvoke(IAsyncResult result)`
-  （void 结束调用（I异步结果 result））
 
 ---
 
@@ -1641,7 +1332,6 @@
 - `Color AbsorbedColor`（颜色 被吸收颜色）(偏移: 0x0)
 - `PlayerMdlInfo.FxType fxType`（玩家模型Info.特效类型 fx类型）(偏移: 0x18)
 - `Ref2Float Getter_Alpha`（双引用浮点数 获取_透明度）(偏移: 0x20)
-- `List<Renderer> cvRenderers`（List<Renderer> cvRenderers）(偏移: 0x24)
 
 ### 方法 (12)
 
@@ -1655,8 +1345,6 @@
   （void 移除模型（模型 mdl））
 - `void UpdateListColor(List<PlayerMdlInfo.MatData> list, Color oldColor, Color newColor)`
   （void 更新列表颜色（List<玩家模型Info.材质Data> list, 颜色 oldColor, 颜色 newColor））
-- `void Update()`
-  （void 更新（））
 - `ShadowCastingMode GetShadowCastingMode()`
   （ShadowCasting模式 获取ShadowCasting模式（））
 - `void UpdateShadowCaster()`
@@ -1667,49 +1355,12 @@
 ## PlayerMdlInfo.FxType
 ### 字段 (1)
 
-- `int value__`（整数 值__）(偏移: 0x0)
-
 ---
 
 ## PlayerMdlInfo.MatData
 ### 字段 (2)
 
-- `Material mat`（材质 mat）(偏移: 0x0)
 - `bool isTransparent`（bool is透明的）(偏移: 0x4)
-
----
-
-## PlayerPrefs
-### 方法 (14)
-
-- `bool TrySetInt(string key, int value)`
-  （bool Try集合整数（string key, int value））
-- `bool TrySetFloat(string key, float value)`
-  （bool Try集合浮点数（string key, float value））
-- `bool TrySetSetString(string key, string value)`
-  （bool Try集合集合字符串（string key, string value））
-- `void SetInt(string key, int value)`
-  （void 集合整数（string key, int value））
-- `int GetInt(string key, int defaultValue)`
-  （int 获取整数（string key, int defaultValue））
-- `void SetFloat(string key, float value)`
-  （void 集合浮点数（string key, float value））
-- `float GetFloat(string key, float defaultValue)`
-  （float 获取浮点数（string key, float defaultValue））
-- `void SetString(string key, string value)`
-  （void 集合字符串（string key, string value））
-- `string GetString(string key, string defaultValue)`
-  （string 获取字符串（string key, string defaultValue））
-- `string GetString(string key)`
-  （string 获取字符串（string key））
-- `bool HasKey(string key)`
-  （bool 是否有键（string key））
-- `void DeleteKey(string key)`
-  （void Delete键（string key））
-- `void DeleteAll()`
-  （void Delete所有（））
-- `void Save()`
-  （void 保存（））
 
 ---
 
@@ -1717,11 +1368,6 @@
 **继承**: MulticastDelegate（多播委托）
 
 ### 方法 (3)
-
-- `void Invoke(Player player, ref float value)`
-  （void Invoke（玩家 player, ref float value））
-- `void EndInvoke(ref float value, IAsyncResult result)`
-  （void 结束Invoke（ref float value, I异步Result result））
 
 ---
 
@@ -1801,8 +1447,6 @@
 
 ## PlayerVelocity.VelLockType
 ### 字段 (1)
-
-- `int value__`（整数 值__）(偏移: 0x0)
 
 ---
 
@@ -2012,9 +1656,6 @@
 
 ### 方法 (2)
 
-- `void Update()`
-  （void 更新（））
-
 ---
 
 ## TestPlayer
@@ -2030,8 +1671,6 @@
 
 ### 方法 (3)
 
-- `void Update()`
-  （void 更新（））
 - `void OnPathComplete(Path newPath)`
   （void 路径完成时（路径 newPath））
 
@@ -2060,22 +1699,12 @@
 
 ### 方法 (3)
 
-- `void Invoke(VideoPlayer source, string message)`
-  （void Invoke（Video玩家 source, string message））
-- `void EndInvoke(IAsyncResult result)`
-  （void 结束调用（I异步结果 result））
-
 ---
 
 ## VideoPlayer.EventHandler
 **继承**: MulticastDelegate（多播委托）
 
 ### 方法 (3)
-
-- `void Invoke(VideoPlayer source)`
-  （void Invoke（Video玩家 source））
-- `void EndInvoke(IAsyncResult result)`
-  （void 结束调用（I异步结果 result））
 
 ---
 
@@ -2084,22 +1713,12 @@
 
 ### 方法 (3)
 
-- `void Invoke(VideoPlayer source, long frameIdx)`
-  （void Invoke（Video玩家 source, long frameIdx））
-- `void EndInvoke(IAsyncResult result)`
-  （void 结束调用（I异步结果 result））
-
 ---
 
 ## VideoPlayer.TimeEventHandler
 **继承**: MulticastDelegate（多播委托）
 
 ### 方法 (3)
-
-- `void Invoke(VideoPlayer source, double seconds)`
-  （void Invoke（Video玩家 source, double seconds））
-- `void EndInvoke(IAsyncResult result)`
-  （void 结束调用（I异步结果 result））
 
 ---
 
@@ -2156,8 +1775,6 @@
 
 ### 方法 (3)
 
-- `void Start()`
-  （void 开始（））
 - `void Stop()`
   （void 停止（））
 
@@ -2181,8 +1798,6 @@
 
 ## CryptoStreamMode
 ### 字段 (1)
-
-- `int value__`（整数 值__）(偏移: 0x0)
 
 ---
 
@@ -2292,8 +1907,6 @@
 ## DamageType
 ### 字段 (1)
 
-- `int value__`（整数 值__）(偏移: 0x0)
-
 ---
 
 ## DamageTypeExpand
@@ -2309,7 +1922,6 @@
 
 - `Entity killer`（实体 killer）(偏移: 0x0)
 - `Entity dead`（实体 dead）(偏移: 0x4)
-- `HeadShotType headShot`（头部射击类型 head射击）(偏移: 0x8)
 - `bool wallThrough`（bool wallThrough）(偏移: 0xC)
 - `DamageType damageType`（伤害类型 damage类型）(偏移: 0x10)
 - `Vector3 damageOrigin`（三维向量 damageOrigin）(偏移: 0x14)
@@ -2345,22 +1957,12 @@
 
 ### 方法 (3)
 
-- `void Invoke(ref DamageEventData data)`
-  （void Invoke（ref DamageEventData data））
-- `void EndInvoke(ref DamageEventData data, IAsyncResult result)`
-  （void 结束Invoke（ref DamageEventData data, I异步Result result））
-
 ---
 
 ## GameManager.DeathEvent
 **继承**: MulticastDelegate（多播委托）
 
 ### 方法 (3)
-
-- `void Invoke(DeathEventData data)`
-  （void Invoke（死亡事件数据 data））
-- `void EndInvoke(IAsyncResult result)`
-  （void 结束调用（I异步结果 result））
 
 ---
 
@@ -2389,476 +1991,6 @@
 
 - `float get_distance()`
   （浮点数 获取_距离（））
-
----
-
-## HUD_DamageArrow
-**继承**: Singleton<HUD_DamageArrow>（Singleton<HUD_伤害Arrow>）
-
-### 字段 (5)
-
-- `Image image`（图像 image）(偏移: 0xC)
-- `RectTransform rectTransform`（Rect变换 rect变换）(偏移: 0x10)
-- `float hideTime`（float hide时间）(偏移: 0x14)
-- `Color imageColor`（颜色 image颜色）(偏移: 0x18)
-- `Vector3 damageOrigin`（三维向量 damageOrigin）(偏移: 0x28)
-
-### 方法 (4)
-
-- `void Update()`
-  （void 更新（））
-- `void Start()`
-  （void 开始（））
-- `void DamageEvent(ref DamageEventData eventData)`
-  （void 伤害事件（ref DamageEventData eventData））
-
----
-
-## HUD_Gauge_EvilFire
-**继承**: HUD_Gauge（HUD_Gauge）
-
-### 字段 (6)
-
-- `Color color1`（颜色 color1）(偏移: 0x30)
-- `Color color2`（颜色 color2）(偏移: 0x40)
-- `RawImage gaugeImage`（Raw图像 gauge图像）(偏移: 0x50)
-- `GameObject gaugeLight`（游戏对象 gauge光照）(偏移: 0x54)
-- `bool useColor2`（bool useColor2）(偏移: 0x58)
-- `float nextChangeColorTime`（float nextChange颜色时间）(偏移: 0x5C)
-
-### 方法 (3)
-
-- `void Update()`
-  （void 更新（））
-- `void Play(float maxPowerTime, float lastestShootTime)`
-  （void 播放（float maxPowerTime, float lastestShootTime））
-
----
-
-## HUD_KillMark
-**继承**: Singleton<HUD_KillMark>（Singleton<HUD_击杀Mark>）
-
-### 字段 (11)
-
-- `KillMarkAsset asset`（击杀标记资产 asset）(偏移: 0xC)
-- `CommonKillMark commonMark`（Common击杀Mark commonMark）(偏移: 0x10)
-- `RectTransform multiKillEffect`（Rect变换 multi击杀特效）(偏移: 0x14)
-- `RawImage multiKillEffectImage`（Raw图像 multi击杀特效图像）(偏移: 0x18)
-- `CommonKillMark specialKill`（Common击杀Mark special击杀）(偏移: 0x1C)
-- `AudioSource voiceAudioSource`（音频Source voice音频Source）(偏移: 0x20)
-- `CharacterVoice voiceAsset`（角色语音 voice资产）(偏移: 0x24)
-- `int FirstKill`（int 第一个击杀）(偏移: 0x0)
-- `int LastKill`（int 最后一个击杀）(偏移: 0x4)
-- `int Revenge`（int 复仇）(偏移: 0x8)
-- `HUD_KillMark.KillMarkEvent KillMarkEvent_Listener`（HUD_击杀Mark.击杀Mark事件 击杀MarkEvent_监听器）(偏移: 0xC)
-
-### 方法 (6)
-
-- `void Start()`
-  （void 开始（））
-- `void PlayCommonMark(HUD_KillMark.ShowType showType, int multiKill, HeadShotType headShot, bool wallThrough, DamageType damageType, bool isVVIP)`
-  （void 播放CommonMark（HUD_击杀Mark.显示类型 showType, int multiKill, 头部射击类型 headShot, bool wallThrough, 伤害类型 damageType, bool isVVIP））
-- `void DeathEvent(DeathEventData eventData)`
-  （void 死亡事件（死亡事件数据 eventData））
-
----
-
-## HUD_KillMark.EventData
-### 字段 (5)
-
-- `Player killer`（玩家 killer）(偏移: 0x0)
-- `Player dead`（玩家 dead）(偏移: 0x4)
-- `int multiKill`（int multi击杀）(偏移: 0x8)
-- `HUD_KillMark.ShowType showType`（HUD_击杀Mark.显示类型 show类型）(偏移: 0xC)
-- `DamageType dmgType`（伤害类型 dmg类型）(偏移: 0x10)
-
----
-
-## HUD_KillMark.KillMarkEvent
-**继承**: MulticastDelegate（多播委托）
-
-### 方法 (3)
-
-- `void Invoke(ref HUD_KillMark.EventData killMarkEvtData)`
-  （void Invoke（ref HUD_KillMark.EventData killMarkEvtData））
-- `void EndInvoke(ref HUD_KillMark.EventData killMarkEvtData, IAsyncResult result)`
-  （void 结束Invoke（ref HUD_KillMark.EventData killMarkEvtData, I异步Result result））
-
----
-
-## HUD_KillMark.ShowType
-### 字段 (1)
-
-- `int value__`（整数 值__）(偏移: 0x0)
-
----
-
-## HUD_KillMarkUnder
-**继承**: Singleton<HUD_KillMarkUnder>（Singleton<HUD_击杀MarkUnder>）
-
-### 字段 (5)
-
-- `GameObject prefab`（游戏对象 预制体）(偏移: 0xC)
-- `Sprite[] sprites`（Sprite[] sprites）(偏移: 0x10)
-- `List<Image> markList`（List<Image> mark列表）(偏移: 0x14)
-- `int currentCount`（int current数量）(偏移: 0x0)
-- `int tenCounter`（int tenCounter）(偏移: 0x4)
-
-### 方法 (3)
-
-- `void AddMark(HUD_KillMarkUnder.Type type)`
-  （void 添加Mark（HUD_击杀MarkUnder.类型 type））
-- `void Shrink()`
-  （void Shrink（））
-
----
-
-## HUD_KillMarkUnder.Type
-### 字段 (1)
-
-- `int value__`（整数 值__）(偏移: 0x0)
-
----
-
-## HUD_KillMsg
-**继承**: Singleton<HUD_KillMsg>（Singleton<HUD_击杀Msg>）
-
-### 字段 (17)
-
-- `List<HUD_KillMsgIndividual> spareMsg`（List<HUD_击杀MsgIndividual> spareMsg）(偏移: 0xC)
-- `List<HUD_KillMsgIndividual> busyMsg`（List<HUD_击杀MsgIndividual> busyMsg）(偏移: 0x10)
-- `Queue<float> refreshTime`（Queue<float> refresh时间）(偏移: 0x14)
-- `Sprite[] headshotIcon`（Sprite[] headshot图标）(偏移: 0x18)
-- `Sprite[] wallThroughIcon`（Sprite[] wallThrough图标）(偏移: 0x1C)
-- `Sprite[] mulltiKillIcon`（Sprite[] mullti击杀图标）(偏移: 0x20)
-- `Sprite[] firstAndLastKillIcon`（Sprite[] firstAnd最后一个击杀图标）(偏移: 0x24)
-- `Sprite nanoKillHeroIcon`（精灵 nano击杀英雄图标）(偏移: 0x28)
-- `Sprite nanoMeleeDeathIcon`（精灵 nanoMelee死亡图标）(偏移: 0x2C)
-- `Material additiveMaterial`（材质 additive材质）(偏移: 0x30)
-- `Color vvipFlashColor`（颜色 vvipFlash颜色）(偏移: 0x0)
-- `Color color_BL`（颜色 color_BL）(偏移: 0x10)
-- `Color color_GR`（颜色 color_GR）(偏移: 0x20)
-- `Color color_NanoGhost`（颜色 color_纳米幽灵）(偏移: 0x30)
-- `Color color_Human`（颜色 color_人类）(偏移: 0x40)
-- `Color color_DM_Me`（颜色 color_DM_Me）(偏移: 0x50)
-- `Color color_DM_Other`（颜色 color_DM_Other）(偏移: 0x60)
-
-### 方法 (7)
-
-- `void Start()`
-  （void 开始（））
-- `void Update()`
-  （void 更新（））
-- `void DeathEvent(DeathEventData data)`
-  （void 死亡事件（死亡事件数据 data））
-- `void NanoInfect(string nanoName, string soldierName, Sprite icon)`
-  （void 纳米Infect（string nanoName, string soldierName, 精灵 icon））
-- `void AddMsg(string killerName, Color killerColor, string deadName, Color deadColor, Sprite icon, bool isVVIP, HeadShotType headShot, bool wallThrough, SpecialKillType specialKill, NanoKillType nanoKill, int multiKill)`
-  （void 添加Msg（string killerName, 颜色 killerColor, string deadName, 颜色 deadColor, 精灵 icon, bool isVVIP, 头部射击类型 headShot, bool wallThrough, 特殊击杀类型 specialKill, 纳米击杀类型 nanoKill, int multiKill））
-- `HUD_KillMsgIndividual GetMsg()`
-  （HUD_击杀MsgIndividual 获取Msg（））
-- `Color GetColor(Player player)`
-  （颜色 获取颜色（玩家 player））
-
----
-
-## HUD_KillMsgIndividual
-**继承**: MonoBehaviour（MonoBehaviour行为）
-
-### 字段 (12)
-
-- `RectTransform mainTransform`（Rect变换 main变换）(偏移: 0xC)
-- `Text deathText`（文本 death文本）(偏移: 0x10)
-- `RectTransform iconTransform`（Rect变换 icon变换）(偏移: 0x14)
-- `Image iconImage`（图像 icon图像）(偏移: 0x18)
-- `RectTransform killerTransform`（Rect变换 killer变换）(偏移: 0x1C)
-- `Text killerText`（文本 killer文本）(偏移: 0x20)
-- `Image nanoKillTypeImage`（图像 nano击杀类型图像）(偏移: 0x24)
-- `RectTransform killTypeTransform1`（Rect变换 kill类型Transform1）(偏移: 0x28)
-- `Image killType1`（图像 killType1）(偏移: 0x2C)
-- `RectTransform killTypeTransform2`（Rect变换 kill类型Transform2）(偏移: 0x30)
-- `Image killType2`（图像 killType2）(偏移: 0x34)
-- `bool isVVIP`（bool isVVIP）(偏移: 0x38)
-
-### 方法 (1)
-
-- `void Update()`
-  （void 更新（））
-
----
-
-## HUD_KillerSign
-**继承**: HUD_ProjectionSign（HUD_投影标志）
-
-### 字段 (1)
-
-- `float hideTime`（float hide时间）(偏移: 0x50)
-
-### 方法 (2)
-
-- `void Update()`
-  （void 更新（））
-- `void Bind(Transform killer)`
-  （void Bind（变换 killer））
-
----
-
-## HUD_MapGun
-**继承**: Singleton<HUD_MapGun>（Singleton<HUD_映射Gun>）
-
-### 字段 (5)
-
-- `GameObject exitTip`（游戏对象 exitTip）(偏移: 0xC)
-- `RawImage backgroundImage`（Raw图像 background图像）(偏移: 0x10)
-- `Text ammoText`（文本 ammo文本）(偏移: 0x14)
-- `Text emptyAmmoText`（文本 empty弹药文本）(偏移: 0x18)
-- `int emptyAmmoTextAnim`（int empty弹药文本动画）(偏移: 0x1C)
-
-### 方法 (6)
-
-- `void Start()`
-  （void 开始（））
-- `void OnMyPlayerJoin(Player myPlayer)`
-  （void 我的玩家加入时（玩家 myPlayer））
-- `void OnNanoRoleChange(NanoRole oldRole, NanoRole newRole)`
-  （void On纳米RoleChange（纳米角色 oldRole, 纳米角色 newRole））
-- `void OnLifeStateChange(bool isAlive)`
-  （void 生命状态改变时（布尔值 isAlive））
-- `void Update()`
-  （void 更新（））
-
----
-
-## HUD_NanoDamageScore
-**继承**: Singleton<HUD_NanoDamageScore>（Singleton<HUD_纳米伤害Score>）
-
-### 字段 (19)
-
-- `int maxDamage`（int max伤害）(偏移: 0xC)
-- `RectTransform[] starRect`（RectTransform[] starRect）(偏移: 0x10)
-- `RawImage[] starImage`（RawImage[] star图像）(偏移: 0x14)
-- `GameObject damageStarPrefab`（游戏对象 damage星预制体）(偏移: 0x18)
-- `RectTransform damageStarBornPos`（Rect变换 damage星出生Pos）(偏移: 0x1C)
-- `SimpleObjectPool starPool`（Simple对象池 star池）(偏移: 0x20)
-- `GameObject goalStarPrefab`（游戏对象 goal星预制体）(偏移: 0x24)
-- `SimpleObjectPool goalStarPool`（Simple对象池 goal星池）(偏移: 0x28)
-- `RectTransform[] forStarEffect`（RectTransform[] for星特效）(偏移: 0x2C)
-- `float randomDistance`（float random距离）(偏移: 0x30)
-- `float nextGoalFxTime`（float nextGoal特效时间）(偏移: 0x34)
-- `int nextStarPos`（int next星Pos）(偏移: 0x38)
-- `Queue<bool> starQueue`（Queue<bool> star队列）(偏移: 0x3C)
-- `float shrinkAnimTime`（float shrink动画时间）(偏移: 0x0)
-- `Action activeStarRecycyle`（动作 active星Recycyle）(偏移: 0x4)
-- `Action goalStarRecycle`（动作 goal星Recycle）(偏移: 0x8)
-- `CommonKillMark nanoScore`（Common击杀Mark nano分数）(偏移: 0x40)
-- `Texture scoreMark`（纹理 scoreMark）(偏移: 0x44)
-- `AnimationHud nanoKillMark`（动画Hud nano击杀Mark）(偏移: 0x48)
-
-### 方法 (17)
-
-- `void Start()`
-  （void 开始（））
-- `void OnMyPlayerJoin(Player myPlayer)`
-  （void 我的玩家加入时（玩家 myPlayer））
-- `void OnMyPlayerLifeStateChange(bool alive)`
-  （void OnMy玩家Life状态Change（bool alive））
-- `void OnMyPlayerTeamChange(Team newTeam)`
-  （void OnMy玩家队伍Change（队伍 newTeam））
-- `void SetVisible(bool newVisbile)`
-  （void 集合可见的（bool newVisbile））
-- `void ResetStar()`
-  （void 重置星（））
-- `void DamageEvent(ref DamageEventData eventData)`
-  （void 伤害事件（ref DamageEventData eventData））
-- `void AddStartCount(int count, bool hide)`
-  （void 添加开始数量（int count, bool hide））
-- `bool SubStarCount(int count)`
-  （bool 子星数量（int count））
-- `IEnumerator StarGenerator()`
-  （IEnumerator 星Generator（））
-- `void StarArrive(int index, bool is500)`
-  （void 星Arrive（int index, bool is500））
-- `void PlayNanoScoreMark()`
-  （void 播放纳米分数Mark（））
-- `void OnPlayNanoKillMark(bool oldState, bool newState)`
-  （void On播放纳米击杀Mark（bool oldState, bool newState））
-
----
-
-## HUD_NanoDamageScore_Effect
-**继承**: RecyclableObject（可回收对象）
-
-### 字段 (3)
-
-- `RectTransform rectTransform`（Rect变换 rect变换）(偏移: 0x30)
-- `RawImage image`（Raw图像 image）(偏移: 0x34)
-- `Vector3 targetPos`（三维向量 targetPos）(偏移: 0x38)
-
-### 方法 (3)
-
-- `void Work()`
-  （void 工作（））
-- `void Recycle(bool roundRecycle)`
-  （void 回收（布尔值 循环回收））
-- `void SetPos(Vector3 bornPos, Vector3 targetPos)`
-  （void 集合Pos（三维向量 bornPos, 三维向量 targetPos））
-
----
-
-## HUD_NanoDamageScore_Star
-**继承**: RecyclableObject（可回收对象）
-
-### 字段 (7)
-
-- `RectTransform rectTransform`（Rect变换 rect变换）(偏移: 0x30)
-- `RawImage rawimage`（Raw图像 rawimage）(偏移: 0x34)
-- `int index`（整数 索引）(偏移: 0x38)
-- `bool is500`（bool is500）(偏移: 0x3C)
-- `bool hide`（bool hide）(偏移: 0x3D)
-- `Vector2 targetPos1`（二维向量 targetPos1）(偏移: 0x40)
-- `Vector2 targetPos2`（二维向量 targetPos2）(偏移: 0x48)
-
-### 方法 (5)
-
-- `void SetData(int index, bool is500, bool hide)`
-  （void 集合数据（int index, bool is500, bool hide））
-- `void Work()`
-  （void 工作（））
-- `void Recycle(bool roundRecycle)`
-  （void 回收（布尔值 循环回收））
-
----
-
-## HUD_SkillBtn
-**继承**: RecyclableObject（可回收对象）
-
-### 字段 (4)
-
-- `int curPos`（int curPos）(偏移: 0x30)
-- `Image image`（图像 image）(偏移: 0x34)
-- `Sprite[] btnSprs`（Sprite[] btnSprs）(偏移: 0x38)
-- `Skill bindSkill`（技能 bind技能）(偏移: 0x3C)
-
-### 方法 (3)
-
-- `void Update()`
-  （void 更新（））
-- `void SetPos(int pos)`
-  （void 集合Pos（int pos））
-- `void Recycle(bool roundRecycle)`
-  （void 回收（布尔值 循环回收））
-
----
-
-## HUD_Weapon
-**继承**: Singleton<HUD_Weapon>（Singleton<HUD_Weapon>）
-
-### 字段 (23)
-
-- `Recoil recoil`（后坐力 recoil）(偏移: 0xC)
-- `float clipRedEndTime`（float clip红色结束时间）(偏移: 0x10)
-- `RawImage ammo_BG`（Raw图像 ammo_BG）(偏移: 0x14)
-- `Text clipText`（文本 clip文本）(偏移: 0x18)
-- `Text ammoText`（文本 ammo文本）(偏移: 0x1C)
-- `RectTransform weaponNameRect`（Rect变换 weapon名称Rect）(偏移: 0x20)
-- `Text weaponNameText`（文本 weapon名称文本）(偏移: 0x24)
-- `RawImage weaponBGImage`（Raw图像 weaponBG图像）(偏移: 0x28)
-- `RawImage weaponEffectImage`（Raw图像 weapon特效图像）(偏移: 0x2C)
-- `RawImage weaponLineImage`（Raw图像 weaponLine图像）(偏移: 0x30)
-- `GameObject infinityAmmo`（游戏对象 infinity弹药）(偏移: 0x34)
-- `Texture[] ammoBGTexs`（Texture[] ammoBGTexs）(偏移: 0x38)
-- `GameObject ammoEnergyBG`（游戏对象 ammoEnergyBG）(偏移: 0x3C)
-- `Image ammoEnergyGauge`（图像 ammoEnergyGauge）(偏移: 0x40)
-- `Vector2 wpnNamePos_L`（二维向量 武器名称Pos_L）(偏移: 0x0)
-- `Vector2 wpnNamePos_R`（二维向量 武器名称Pos_R）(偏移: 0x8)
-- `Vector2 AmmoPos_below_1000`（二维向量 弹药Pos_below_1000）(偏移: 0x10)
-- `Vector2 AmmoPos_above_1000`（二维向量 弹药Pos_above_1000）(偏移: 0x18)
-- `Color Color_BuffClip`（颜色 Color_增益弹匣）(偏移: 0x20)
-- `float effectAnimTime`（float effect动画时间）(偏移: 0x30)
-- `float effectEndTime`（float effect结束时间）(偏移: 0x44)
-- `WPN_Gun.AmmoData ammoData`（WPN_Gun.弹药数据 ammo数据）(偏移: 0x48)
-- `float lerpAnimEndTime`（float lerp动画结束时间）(偏移: 0x4C)
-
-### 方法 (9)
-
-- `void Update()`
-  （void 更新（））
-- `void AmmoUpdate()`
-  （void 弹药更新（））
-- `void PlayAmmoLerpAnim()`
-  （void 播放弹药Lerp动画（））
-- `void SetIcon(WpnSpriteAsset asset)`
-  （void 集合图标（武器精灵资产 asset））
-- `void SetName(string name)`
-  （void 集合名称（string name））
-- `void SetAmmoBGType(HUD_Weapon.AmmoBGType bgType)`
-  （void 集合弹药BG类型（HUD_Weapon.弹药BG类型 bgType））
-
----
-
-## HUD_Weapon.AmmoBGType
-### 字段 (1)
-
-- `int value__`（整数 值__）(偏移: 0x0)
-
----
-
-## HUD_WeaponSlot
-**继承**: Singleton<HUD_WeaponSlot>（Singleton<HUD_WeaponSlot>）
-
-### 字段 (7)
-
-- `HUD_WeaponSlotIndividual[] slots`（HUD_Weapon槽位Individual[] slots）(偏移: 0xC)
-- `int rapidChangeSlot`（int rapidChange槽位）(偏移: 0x10)
-- `RawImage rapidChangeImage`（Raw图像 rapidChange图像）(偏移: 0x14)
-- `int specialWeaponSlot`（int specialWeapon槽位）(偏移: 0x18)
-- `RawImage specialWeaponImage`（Raw图像 specialWeapon图像）(偏移: 0x1C)
-- `Texture2D[] specialWeaponSprs`（Texture2D[] specialWeaponSprs）(偏移: 0x20)
-- `Vector2 SpecialWeaponTipPos`（二维向量 特殊WeaponTipPos）(偏移: 0x0)
-
-### 方法 (6)
-
-- `void Update()`
-  （void 更新（））
-- `void Clean(int slot)`
-  （void Clean（int slot））
-- `void Select(int slot, bool isRapidChange)`
-  （void 选择（int slot, bool isRapidChange））
-- `void SetSpecialWeaponState(bool isOn)`
-  （void 集合特殊Weapon状态（bool isOn））
-- `void SetSpecialWeaponSlot(int slot)`
-  （void 集合特殊Weapon槽位（int slot））
-
----
-
-## HUD_WeaponSlotIndividual
-**继承**: MonoBehaviour（MonoBehaviour行为）
-
-### 字段 (6)
-
-- `RawImage slotImage`（Raw图像 slot图像）(偏移: 0xC)
-- `RectTransform slotRect`（Rect变换 slotRect）(偏移: 0x10)
-- `RawImage weaponImage`（Raw图像 weapon图像）(偏移: 0x14)
-- `RawImage extraImage`（Raw图像 extra图像）(偏移: 0x18)
-- `Vector2 wpnOriginPos`（二维向量 武器OriginPos）(偏移: 0x0)
-- `Vector2 wpnOffsetPos`（二维向量 武器OffsetPos）(偏移: 0x8)
-
-### 方法 (8)
-
-- `Color get_curColor()`
-  （颜色 get_cur颜色（））
-- `void set_curColor(Color value)`
-  （void set_cur颜色（颜色 value））
-- `void Update()`
-  （void 更新（））
-- `void SetSprite(WpnSpriteAsset spriteAsset)`
-  （void 集合精灵（武器精灵资产 spriteAsset））
-- `void Clean()`
-  （void Clean（））
-- `void ForwardAnim()`
-  （void 前进动画（））
-- `void BackAnim()`
-  （void 后动画（））
 
 ---
 
@@ -3031,15 +2163,8 @@
 
 ### 字段 (9)
 
-- `Texture[] headShot`（Texture[] head射击）(偏移: 0xC)
-- `Texture[] multilKill`（Texture[] multil击杀）(偏移: 0x10)
 - `Texture[] multilKillEffect`（Texture[] multil击杀特效）(偏移: 0x14)
-- `Texture grenade`（纹理 grenade）(偏移: 0x18)
 - `Texture[] wallThrough`（Texture[] wallThrough）(偏移: 0x1C)
-- `Texture knife`（纹理 knife）(偏移: 0x20)
-- `Texture revenge`（纹理 revenge）(偏移: 0x24)
-- `Texture firstKill`（纹理 first击杀）(偏移: 0x28)
-- `Texture lastKill`（纹理 last击杀）(偏移: 0x2C)
 
 ---
 
@@ -3110,8 +2235,6 @@
 
 ### 方法 (4)
 
-- `void Start()`
-  （void 开始（））
 - `IEnumerator LoopShoot()`
   （IEnumerator 循环射击（））
 - `void Shoot()`
@@ -3140,10 +2263,6 @@
   （QV模型 get_weapon模型（））
 - `void set_weaponMdl(QVModel value)`
   （void set_weapon模型（QV模型 value））
-- `void Start()`
-  （void 开始（））
-- `void Update()`
-  （void 更新（））
 - `void Active(Player player)`
   （void 激活的（玩家 player））
 - `void OnPlayerExit(Player player)`
@@ -3173,12 +2292,8 @@
 
 ### 方法 (4)
 
-- `void Start()`
-  （void 开始（））
 - `void Animation()`
   （void 动画（））
-- `void Update()`
-  （void 更新（））
 
 ---
 
@@ -3192,10 +2307,6 @@
 
 ### 方法 (8)
 
-- `void Update()`
-  （void 更新（））
-- `void Start()`
-  （void 开始（））
 - `void OnMyPlayerJoin(Player myPlayer)`
   （void 我的玩家加入时（玩家 myPlayer））
 - `void OnMyKillChange(int oldKill, int newKill)`
@@ -3216,7 +2327,6 @@
 
 ### 字段 (6)
 
-- `AudioClip remain10KillSound`（音频弹匣 remain10击杀音效）(偏移: 0x74)
 - `CommonHud_1 remain10KillTip`（CommonHud_1 remain10击杀Tip）(偏移: 0x78)
 - `GameObject invinsibleGauge`（游戏对象 invinsibleGauge）(偏移: 0x7C)
 - `bool firstKill`（bool first击杀）(偏移: 0x80)
@@ -3225,8 +2335,6 @@
 
 ### 方法 (8)
 
-- `void Start()`
-  （void 开始（））
 - `void OnMyPlayerJoin(Player myPlayer)`
   （void 我的玩家加入时（玩家 myPlayer））
 - `void DeathEvent(DeathEventData eventData)`
@@ -3299,8 +2407,6 @@
 ## ProcessorArchitecture
 ### 字段 (1)
 
-- `int value__`（整数 值__）(偏移: 0x0)
-
 ---
 
 ## Recoil
@@ -3312,7 +2418,6 @@
 - `bool aimIKSolvedLast`（bool aimIKSolved最后一个）(偏移: 0x1C)
 - `Recoil.Handedness handedness`（Recoil.Handedness handedness）(偏移: 0x20)
 - `bool twoHanded`（bool twoHanded）(偏移: 0x24)
-- `AnimationCurve recoilWeight`（动画Curve recoilWeight）(偏移: 0x28)
 - `float magnitudeRandom`（float magnitude随机）(偏移: 0x2C)
 - `Vector3 rotationRandom`（三维向量 rotation随机）(偏移: 0x30)
 - `Vector3 handRotationOffset`（三维向量 handRotationOffset）(偏移: 0x3C)
@@ -3356,8 +2461,6 @@
 ## Recoil.Handedness
 ### 字段 (1)
 
-- `int value__`（整数 值__）(偏移: 0x0)
-
 ---
 
 ## Recoil.RecoilOffset
@@ -3372,8 +2475,6 @@
 
 ### 方法 (2)
 
-- `void Start()`
-  （void 开始（））
 - `void Apply(IKSolverFullBodyBiped solver, Quaternion rotation, float masterWeight, float length, float timeLeft)`
   （void 应用（IKSolver满身体Biped solver, Quaternion rotation, float masterWeight, float length, float timeLeft））
 
@@ -3402,8 +2503,6 @@
 **继承**: SO_Item_Wpn（SO_Item_武器）
 
 ### 字段 (1)
-
-- `Texture smallIcon`（纹理 small图标）(偏移: 0x2C)
 
 ---
 
@@ -3446,8 +2545,6 @@
 
 ### 方法 (18)
 
-- `void Update()`
-  （void 更新（））
 - `void EnterIdleState()`
   （void Enter待机状态（））
 - `void Spawn()`
@@ -3474,8 +2571,6 @@
   （void 创建Explosion（））
 - `void SetState(SentryGun.State newState)`
   （void 集合状态（SentryGun.状态 newState））
-- `string GetName()`
-  （字符串 获取名称（））
 - `void AddHealthBar()`
   （void 添加HealthBar（））
 
@@ -3483,8 +2578,6 @@
 
 ## SentryGun.State
 ### 字段 (1)
-
-- `int value__`（整数 值__）(偏移: 0x0)
 
 ---
 
@@ -3501,8 +2594,6 @@
 
 ## ShootPosture
 ### 字段 (1)
-
-- `int value__`（整数 值__）(偏移: 0x0)
 
 ---
 
@@ -3525,8 +2616,6 @@
 
 ## SkillKey
 ### 字段 (1)
-
-- `int value__`（整数 值__）(偏移: 0x0)
 
 ---
 
@@ -3603,8 +2692,6 @@
 
 ### 字段 (1)
 
-- `AudioClip hitSnd`（音频弹匣 hitSnd）(偏移: 0xC)
-
 ### 方法 (2)
 
 - `void OnTriggerStay(Collider other)`
@@ -3672,11 +2759,6 @@
 ### 字段 (8)
 
 - `GameObject sentryGunPrefab`（游戏对象 sentry枪械预制体）(偏移: 0xB8)
-- `AudioClip SND_Exp`（音频弹匣 SND_Exp）(偏移: 0xBC)
-- `AudioClip SND_Fire`（音频弹匣 SND_开火）(偏移: 0xC0)
-- `AudioClip SND_PostFire`（音频弹匣 SND_Post开火）(偏移: 0xC4)
-- `AudioClip SND_Idle`（音频弹匣 SND_待机）(偏移: 0xC8)
-- `AudioClip SND_Hit`（音频弹匣 SND_命中）(偏移: 0xCC)
 - `string GVshotAnimName`（string GVshot动画名称）(偏移: 0xD0)
 - `GameObject HealthBar`（游戏对象 HealthBar）(偏移: 0xD4)
 
@@ -3731,10 +2813,6 @@
 
 ### 方法 (9)
 
-- `void SetValidOwner()`
-  （void 设置有效所有者（））
-- `void RemoveFromOldOwner()`
-  （void 从旧所有者移除（））
 - `void Deploy(bool noSelectAnim = False)`
   （void 部署（布尔值 无选择动画 = 假））
 - `bool Cry(Player player)`
@@ -3769,8 +2847,6 @@
   （void 初始化（））
 - `void PostCalDamage(ref DamageEventData data)`
   （void PostCal伤害（ref DamageEventData data））
-- `void Update()`
-  （void 更新（））
 - `void OnAnimationEnter(string animName, string animTag)`
   （void On动画Enter（string animName, string animTag））
 - `void OnKnifeAttackAnimEnd(string animName)`
@@ -3797,8 +2873,6 @@
 
 ### 方法 (7)
 
-- `void Update()`
-  （void 更新（））
 - `void Deploy(bool noSelectAnim = False)`
   （void 部署（布尔值 无选择动画 = 假））
 - `void UnDeploy(bool temporary = False)`
@@ -3832,8 +2906,6 @@
 
 - `bool get_isPowering()`
   （bool get_isPowering（））
-- `void Update()`
-  （void 更新（））
 - `void Init()`
   （void 初始化（））
 - `void Deploy(bool noSelectAnim = False)`
@@ -3915,12 +2987,6 @@
   （void 取消部署（布尔值 临时 = 假））
 - `void ResetModeChange()`
   （void 重置模式Change（））
-- `void SetValidOwner()`
-  （void 设置有效所有者（））
-- `void RemoveFromOldOwner()`
-  （void 从旧所有者移除（））
-- `void Update()`
-  （void 更新（））
 - `void UpdateDisabledSetting(PlayerWeapons wpns)`
   （void 更新禁用的设置（玩家武器 wpns））
 - `bool CanSecKill(Player player)`
@@ -4045,8 +3111,6 @@
   （bool get_next瞄准Ready（））
 - `void set_nextZoomReady(bool value)`
   （void set_next瞄准Ready（bool value））
-- `void Update()`
-  （void 更新（））
 - `void OnAnimationEnd(string animName, string animTag)`
   （void 动画结束时（字符串 animName, 字符串 animTag））
 - `void OnAnimationExit(string animName, string animTag)`
@@ -4179,8 +3243,6 @@
 ## WPN_Gun.SemiGunFireLinkState
 ### 字段 (1)
 
-- `int value__`（整数 值__）(偏移: 0x0)
-
 ---
 
 ## WPN_Knife
@@ -4197,8 +3259,6 @@
   （WeaponData_近战武器 get_real数据（））
 - `void Init()`
   （void 初始化（））
-- `void Update()`
-  （void 更新（））
 - `void OnSpecialBtnDown()`
   （void 特殊按钮按下时（））
 - `void PlayKnifeAttackAnim(WPN_Knife.KnifeAttackType type)`
@@ -4222,8 +3282,6 @@
 
 ## WPN_Knife.KnifeAttackType
 ### 字段 (1)
-
-- `int value__`（整数 值__）(偏移: 0x0)
 
 ---
 
@@ -4288,10 +3346,6 @@
 
 - `void Init()`
   （void 初始化（））
-- `void SetValidOwner()`
-  （void 设置有效所有者（））
-- `void RemoveFromOldOwner()`
-  （void 从旧所有者移除（））
 - `bool SkillArcane(Player player)`
   （bool 技能Arcane（玩家 player））
 - `bool SkillSentryGun(Player player)`
@@ -4316,8 +3370,6 @@
   （void 初始化（武器 wpn））
 - `void Wpn_AnimName_Modifier(ref string animName)`
   （void Wpn_动画Name_修改器（ref string animName））
-- `void Update()`
-  （void 更新（））
 
 ---
 
@@ -4371,8 +3423,6 @@
 
 - `void Init(Weapon wpn)`
   （void 初始化（武器 wpn））
-- `void Update()`
-  （void 更新（））
 - `void GetPrefireAnimTime()`
   （void 获取Prefire动画时间（））
 - `bool Prefire()`
@@ -4404,8 +3454,6 @@
   （void 动画速度设置（））
 - `void OnFireBtnPressed()`
   （void On开火Btn按下的（））
-- `void Update()`
-  （void 更新（））
 - `void OnFireBtnUnPressed()`
   （void On开火BtnUn按下的（））
 - `void Fire()`
@@ -4465,8 +3513,6 @@
 
 - `void Init(Weapon wpn)`
   （void 初始化（武器 wpn））
-- `void Update()`
-  （void 更新（））
 
 ---
 
@@ -4496,8 +3542,6 @@
   （WPN_枪械 get_gun（））
 - `void Init(Weapon wpn)`
   （void 初始化（武器 wpn））
-- `void Update()`
-  （void 更新（））
 - `void AmmoBGSetting()`
   （void 弹药BG设置（））
 - `bool FireDisabledCheck()`
@@ -4533,12 +3577,8 @@
   （void 动画结束时（字符串 animName, 字符串 animTag））
 - `void CalculateReadyData()`
   （void 计算Ready数据（））
-- `void Update()`
-  （void 更新（））
 - `void UnDeploy(bool temporary = False)`
   （void 取消部署（布尔值 临时 = 假））
-- `void RemoveFromOldOwner()`
-  （void 从旧所有者移除（））
 - `void RopeStart()`
   （void Rope开始（））
 - `void RopeEnd()`
@@ -4568,8 +3608,6 @@
   （void 从所有者生成时（））
 - `void OnAnimationEnd(string animName, string animTag)`
   （void 动画结束时（字符串 animName, 字符串 animTag））
-- `void Update()`
-  （void 更新（））
 - `void Deploy(bool noSelectAnim = False)`
   （void 部署（布尔值 无选择动画 = 假））
 - `void UnDeploy(bool temporary = False)`
@@ -4626,8 +3664,6 @@
   （void 初始化（））
 - `void OnAnimationEnd(string animName, string animTag)`
   （void 动画结束时（字符串 animName, 字符串 animTag））
-- `void Update()`
-  （void 更新（））
 - `void UnDeploy(bool temporary = False)`
   （void 取消部署（布尔值 临时 = 假））
 - `void Deploy(bool noSelectAnim = False)`
@@ -4685,8 +3721,6 @@
   （void set_fireBtn按下的（bool value））
 - `bool get_isMapGun()`
   （bool get_is映射枪械（））
-- `void Update()`
-  （void 更新（））
 - `void UpdateDisabledSetting(PlayerWeapons wpns)`
   （void 更新禁用的设置（玩家武器 wpns））
 - `void Init()`
@@ -4713,12 +3747,8 @@
   （void 集合移动Speed惩罚（float penalty））
 - `void SetCharacterAnim()`
   （void 集合角色动画（））
-- `void RemoveFromOldOwner()`
-  （void 从旧所有者移除（））
 - `void OnSelectedFromWeaponPool()`
   （void On选中的FromWeapon池（））
-- `void SetValidOwner()`
-  （void 设置有效所有者（））
 - `void OnFireBtnDown()`
   （void On开火Btn下（））
 - `void OnFireBtnPressed()`
@@ -4790,8 +3820,6 @@
 ## Weapon.SlotType
 ### 字段 (1)
 
-- `int value__`（整数 值__）(偏移: 0x0)
-
 ---
 
 ## WeaponAsset
@@ -4828,8 +3856,6 @@
 
 ## WeaponClass
 ### 字段 (1)
-
-- `int value__`（整数 值__）(偏移: 0x0)
 
 ---
 
@@ -4936,8 +3962,6 @@
 ## WeaponLimited
 ### 字段 (1)
 
-- `int value__`（整数 值__）(偏移: 0x0)
-
 ---
 
 ## WeaponLogic
@@ -4950,3525 +3974,8 @@
 
 ---
 
-## WhiteBalance
-**继承**: VolumeComponent, IPostProcessComponent（体积组件, I后处理组件）
-
-### 字段 (2)
-
-- `ClampedFloatParameter temperature`（Clamped浮点数Parameter temperature）(偏移: 0x1C)
-- `ClampedFloatParameter tint`（Clamped浮点数Parameter tint）(偏移: 0x20)
-
-### 方法 (2)
-
-- `bool IsActive()`
-  （布尔值 是否激活的（））
-- `bool IsTileCompatible()`
-  （布尔值 是否瓦片兼容（））
-
----
-
 ## ZlibBaseStream.StreamMode
 ### 字段 (1)
-
-- `int value__`（整数 值__）(偏移: 0x0)
-
----
-
-# 动画系统 (54个类)
-
-## AS_AnimEndAction
-**继承**: StateMachineBehaviour（状态MachineBehaviour）
-
-### 字段 (1)
-
-- `bool isEnd`（bool is结束）(偏移: 0xC)
-
-### 方法 (1)
-
-- `void OnStateUpdate(Animator animator, AnimatorStateInfo stateInfo, int layerIndex)`
-  （void On状态更新（动画器 animator, 动画器状态信息 stateInfo, int layerIndex））
-
----
-
-## AnimSFX
-**继承**: RecyclableObject（可回收对象）
-
-### 字段 (3)
-
-- `RawImage img`（Raw图像 img）(偏移: 0x30)
-- `float animTime`（float anim时间）(偏移: 0x34)
-- `bool isTargetFull`（bool is目标满）(偏移: 0x38)
-
-### 方法 (3)
-
-- `void Recycle(bool roundRecycle)`
-  （void 回收（布尔值 循环回收））
-- `void Work()`
-  （void 工作（））
-- `void Animation()`
-  （void 动画（））
-
----
-
-## Animation
-**继承**: Behaviour, IEnumerable（Behaviour, IEnumerable）
-
-### 方法 (20)
-
-- `void Stop()`
-  （void 停止（））
-- `void Rewind(string name)`
-  （void Rewind（string name））
-- `void RewindNamed(string name)`
-  （void RewindNamed（string name））
-- `void Sample()`
-  （void Sample（））
-- `AnimationState get_Item(string name)`
-  （动画状态 get_项目（string name））
-- `bool Play()`
-  （bool 播放（））
-- `bool Play(PlayMode mode)`
-  （bool 播放（播放模式 mode））
-- `bool PlayDefaultAnimation(PlayMode mode)`
-  （bool 播放默认的动画（播放模式 mode））
-- `bool Play(string animation)`
-  （bool 播放（string animation））
-- `bool Play(string animation, PlayMode mode)`
-  （bool 播放（string animation, 播放模式 mode））
-- `void CrossFade(string animation, float fadeLength)`
-  （void CrossFade（string animation, float fadeLength））
-- `void CrossFade(string animation, float fadeLength, PlayMode mode)`
-  （void CrossFade（string animation, float fadeLength, 播放模式 mode））
-- `IEnumerator GetEnumerator()`
-  （IEnumerator 获取枚举器（））
-- `AnimationState GetState(string name)`
-  （动画状态 获取状态（string name））
-- `AnimationState GetStateAtIndex(int index)`
-  （动画状态 获取状态At索引（int index））
-- `int GetStateCount()`
-  （int 获取状态数量（））
-- `bool get_animatePhysics()`
-  （bool get_animate物理（））
-
----
-
-## Animation.Enumerator
-**继承**: IEnumerator（IEnumerator枚举器）
-
-### 字段 (2)
-
-- `Animation m_Outer`（动画 m_Outer）(偏移: 0x8)
-- `int m_CurrentIndex`（int m_当前索引）(偏移: 0xC)
-
-### 方法 (3)
-
-- `object get_Current()`
-  （对象 获取_当前（））
-- `bool MoveNext()`
-  （布尔值 移动下一个（））
-- `void Reset()`
-  （void 重置（））
-
----
-
-## AnimationCurve
-**继承**: IEquatable<AnimationCurve>（IEquatable<动画Curve>）
-
-### 字段 (1)
-
-- `IntPtr m_Ptr`（整数指针 m_指针）(偏移: 0x8)
-
-### 方法 (26)
-
-- `void Internal_Destroy(IntPtr ptr)`
-  （void 内部_销毁（整数指针 ptr））
-- `IntPtr Internal_Create(Keyframe[] keys)`
-  （整数Ptr Internal_创建（Keyframe[] keys））
-- `bool Internal_Equals(IntPtr other)`
-  （bool Internal_Equals（整数Ptr other））
-- `void Finalize()`
-  （void 终结（））
-- `float Evaluate(float time)`
-  （float Evaluate（float time））
-- `Keyframe[] get_keys()`
-  （Keyframe[] get_keys（））
-- `void set_keys(Keyframe[] value)`
-  （void set_keys（Keyframe[] value））
-- `int AddKey(float time, float value)`
-  （int 添加键（float time, float value））
-- `int AddKey(Keyframe key)`
-  （int 添加键（Keyframe key））
-- `int AddKey_Internal(Keyframe key)`
-  （int 添加Key_内部的（Keyframe key））
-- `int MoveKey(int index, Keyframe key)`
-  （int 移动键（int index, Keyframe key））
-- `void RemoveKey(int index)`
-  （void 移除键（int index））
-- `Keyframe get_Item(int index)`
-  （Keyframe get_项目（int index））
-- `int get_length()`
-  （int get_length（））
-- `void SetKeys(Keyframe[] keys)`
-  （void 集合Keys（Keyframe[] keys））
-- `Keyframe GetKey(int index)`
-  （Keyframe 获取键（int index））
-- `Keyframe[] GetKeys()`
-  （Keyframe[] 获取Keys（））
-- `void SmoothTangents(int index, float weight)`
-  （void SmoothTangents（int index, float weight））
-- `AnimationCurve Linear(float timeStart, float valueStart, float timeEnd, float valueEnd)`
-  （动画Curve Linear（float timeStart, float valueStart, float timeEnd, float valueEnd））
-- `AnimationCurve EaseInOut(float timeStart, float valueStart, float timeEnd, float valueEnd)`
-  （动画Curve EaseInOut（float timeStart, float valueStart, float timeEnd, float valueEnd））
-- `bool Equals(object o)`
-  （布尔值 等于（对象 o））
-- `bool Equals(AnimationCurve other)`
-  （bool Equals（动画Curve other））
-- `int GetHashCode()`
-  （整数 获取哈希码（））
-
----
-
-## AnimationEvent
-### 字段 (11)
-
-- `float m_Time`（float m_时间）(偏移: 0x8)
-- `string m_FunctionName`（string m_Function名称）(偏移: 0xC)
-- `string m_StringParameter`（string m_字符串Parameter）(偏移: 0x10)
-- `Object m_ObjectReferenceParameter`（对象 m_对象引用Parameter）(偏移: 0x14)
-- `float m_FloatParameter`（float m_浮点数Parameter）(偏移: 0x18)
-- `int m_IntParameter`（int m_整数Parameter）(偏移: 0x1C)
-- `int m_MessageOptions`（int m_MessageOptions）(偏移: 0x20)
-- `AnimationEventSource m_Source`（动画事件Source m_Source）(偏移: 0x24)
-- `AnimationState m_StateSender`（动画状态 m_状态Sender）(偏移: 0x28)
-- `AnimatorStateInfo m_AnimatorStateInfo`（动画器状态信息 m_动画器状态信息）(偏移: 0x2C)
-- `AnimatorClipInfo m_AnimatorClipInfo`（动画器弹匣信息 m_动画器弹匣信息）(偏移: 0x50)
-
----
-
-## AnimationEventReceiver
-**继承**: MonoBehaviour（MonoBehaviour行为）
-
-### 字段 (4)
-
-- `byte handTag`（byte hand标签）(偏移: 0xC)
-- `SO_FxGroup[] effects`（SO_特效Group[] effects）(偏移: 0x10)
-- `ParticleSystem[] ptcSystems`（粒子System[] ptcSystems）(偏移: 0x14)
-- `Model mdl`（模型 mdl）(偏移: 0x18)
-
-### 方法 (11)
-
-- `bool get_isHand()`
-  （bool get_is手部（））
-- `void AE_ReloadOver()`
-  （void AE_换弹Over（））
-- `void KnifeAttack(int index)`
-  （void 近战武器Attack（int index））
-- `void BulletRelease()`
-  （void 子弹Release（））
-- `void WeaponSpecialEvent(string msg)`
-  （void Weapon特殊事件（string msg））
-- `void FootStep(int isRightFoot)`
-  （void 脚部Step（int isRightFoot））
-- `void JumpEvent(int isDrop)`
-  （void 跳跃事件（int isDrop））
-
----
-
-## AnimationEventSource
-### 字段 (1)
-
-- `int value__`（整数 值__）(偏移: 0x0)
-
----
-
-## AnimationHud
-**继承**: MonoBehaviour（MonoBehaviour行为）
-
-### 字段 (3)
-
-- `AnimationHud.Anim[] animations`（动画Hud.Anim[] animations）(偏移: 0xC)
-- `Image image`（图像 image）(偏移: 0x10)
-- `RawImage rawImage`（Raw图像 raw图像）(偏移: 0x14)
-
-### 方法 (7)
-
-- `SubscribeableProperty<bool> get_isPlaying()`
-  （可订阅的Property<bool> get_isPlaying（））
-- `void set_isPlaying(SubscribeableProperty<bool> value)`
-  （void set_isPlaying（可订阅的Property<bool> value））
-- `void Play(int index)`
-  （void 播放（int index））
-- `void Play(string animName)`
-  （void 播放（string animName））
-- `IEnumerator AnimationCoroutine(int animID)`
-  （IEnumerator 动画协程（int animID））
-- `void Stop()`
-  （void 停止（））
-
----
-
-## AnimationHud.Anim
-### 字段 (5)
-
-- `string name`（字符串 名称）(偏移: 0x0)
-- `Sprite[] sprites`（Sprite[] sprites）(偏移: 0x4)
-- `Texture[] textures`（Texture[] textures）(偏移: 0x8)
-- `float[] interval`（float[] interval）(偏移: 0xC)
-- `bool loop`（bool loop）(偏移: 0x10)
-
----
-
-## AnimationLayerMixerPlayable
-**继承**: IPlayable, IEquatable<AnimationLayerMixerPlayable>（IPlayable, IEquatable<动画层MixerPlayable>）
-
-### 字段 (2)
-
-- `PlayableHandle m_Handle`（可播放句柄 m_句柄）(偏移: 0x0)
-- `AnimationLayerMixerPlayable m_NullPlayable`（动画层MixerPlayable m_NullPlayable）(偏移: 0x0)
-
-### 方法 (9)
-
-- `AnimationLayerMixerPlayable Create(PlayableGraph graph, int inputCount = 0)`
-  （动画层MixerPlayable 创建（PlayableGraph graph, int inputCount = 0））
-- `PlayableHandle CreateHandle(PlayableGraph graph, int inputCount = 0)`
-  （Playable句柄 创建句柄（PlayableGraph graph, int inputCount = 0））
-- `PlayableHandle GetHandle()`
-  （可播放句柄 获取句柄（））
-- `Playable op_Implicit(AnimationLayerMixerPlayable playable)`
-  （Playable op_Implicit（动画层MixerPlayable playable））
-- `bool Equals(AnimationLayerMixerPlayable other)`
-  （bool Equals（动画层MixerPlayable other））
-- `void SetLayerMaskFromAvatarMask(uint layerIndex, AvatarMask mask)`
-  （void 集合层掩码FromAvatar掩码（uint layerIndex, Avatar掩码 mask））
-- `bool CreateHandleInternal(PlayableGraph graph, ref PlayableHandle handle)`
-  （bool 创建句柄内部的（PlayableGraph graph, ref PlayableHandle handle））
-- `void SetLayerMaskFromAvatarMaskInternal(ref PlayableHandle handle, uint layerIndex, AvatarMask mask)`
-  （void 集合层掩码FromAvatar掩码内部的（ref PlayableHandle handle, uint layerIndex, Avatar掩码 mask））
-
----
-
-## AnimationLink
-**继承**: NodeLink2（节点Link2）
-
-### 字段 (6)
-
-- `string clip`（string clip）(偏移: 0x58)
-- `float animSpeed`（float animSpeed）(偏移: 0x5C)
-- `bool reverseAnim`（bool reverse动画）(偏移: 0x60)
-- `GameObject referenceMesh`（游戏对象 reference网格）(偏移: 0x64)
-- `AnimationLink.LinkClip[] sequence`（动画Link.LinkClip[] sequence）(偏移: 0x68)
-- `string boneRoot`（string bone根）(偏移: 0x6C)
-
-### 方法 (3)
-
-- `Transform SearchRec(Transform tr, string name)`
-  （变换 搜索Rec（变换 tr, string name））
-- `void CalculateOffsets(List<Vector3> trace, out Vector3 endPosition)`
-  （void 计算Offsets（List<Vector3> trace, out Vector3 endPosition））
-- `void OnDrawGizmosSelected()`
-  （void 绘制选中辅助线时（））
-
----
-
-## AnimationLink.LinkClip
-### 字段 (3)
-
-- `AnimationClip clip`（动画弹匣 clip）(偏移: 0x8)
-- `Vector3 velocity`（三维向量 速度）(偏移: 0xC)
-- `int loopCount`（int loop数量）(偏移: 0x18)
-
-### 方法 (1)
-
-- `string get_name()`
-  （字符串 获取_名称（））
-
----
-
-## AnimationLinkTraverser
-**继承**: VersionedMonoBehaviour（版本化MonoBehaviour）
-
-### 字段 (2)
-
-- `Animation anim`（动画 anim）(偏移: 0x10)
-- `RichAI ai`（RichAI ai）(偏移: 0x14)
-
-### 方法 (3)
-
-- `IEnumerator TraverseOffMeshLink(RichSpecial rs)`
-  （IEnumerator TraverseOff网格Link（Rich特殊 rs））
-
----
-
-## AnimationMixerPlayable
-**继承**: IPlayable, IEquatable<AnimationMixerPlayable>（IPlayable, IEquatable<动画MixerPlayable>）
-
-### 字段 (2)
-
-- `PlayableHandle m_Handle`（可播放句柄 m_句柄）(偏移: 0x0)
-- `AnimationMixerPlayable m_NullPlayable`（动画MixerPlayable m_NullPlayable）(偏移: 0x0)
-
-### 方法 (7)
-
-- `AnimationMixerPlayable Create(PlayableGraph graph, int inputCount = 0, bool normalizeWeights = False)`
-  （动画MixerPlayable 创建（PlayableGraph graph, int inputCount = 0, bool normalizeWeights = False））
-- `PlayableHandle CreateHandle(PlayableGraph graph, int inputCount = 0, bool normalizeWeights = False)`
-  （Playable句柄 创建句柄（PlayableGraph graph, int inputCount = 0, bool normalizeWeights = False））
-- `PlayableHandle GetHandle()`
-  （可播放句柄 获取句柄（））
-- `Playable op_Implicit(AnimationMixerPlayable playable)`
-  （Playable op_Implicit（动画MixerPlayable playable））
-- `bool Equals(AnimationMixerPlayable other)`
-  （bool Equals（动画MixerPlayable other））
-- `bool CreateHandleInternal(PlayableGraph graph, bool normalizeWeights, ref PlayableHandle handle)`
-  （bool 创建句柄内部的（PlayableGraph graph, bool normalizeWeights, ref PlayableHandle handle））
-
----
-
-## AnimationMotionXToDeltaPlayable
-**继承**: IPlayable, IEquatable<AnimationMotionXToDeltaPlayable>（IPlayable, IEquatable<动画MotionXToDeltaPlayable>）
-
-### 字段 (2)
-
-- `PlayableHandle m_Handle`（可播放句柄 m_句柄）(偏移: 0x0)
-- `AnimationMotionXToDeltaPlayable m_NullPlayable`（动画MotionXToDeltaPlayable m_NullPlayable）(偏移: 0x0)
-
-### 方法 (9)
-
-- `AnimationMotionXToDeltaPlayable Create(PlayableGraph graph)`
-  （动画MotionXToDeltaPlayable 创建（PlayableGraph graph））
-- `PlayableHandle CreateHandle(PlayableGraph graph)`
-  （Playable句柄 创建句柄（PlayableGraph graph））
-- `PlayableHandle GetHandle()`
-  （可播放句柄 获取句柄（））
-- `Playable op_Implicit(AnimationMotionXToDeltaPlayable playable)`
-  （Playable op_Implicit（动画MotionXToDeltaPlayable playable））
-- `bool Equals(AnimationMotionXToDeltaPlayable other)`
-  （bool Equals（动画MotionXToDeltaPlayable other））
-- `void SetAbsoluteMotion(bool value)`
-  （void 集合AbsoluteMotion（bool value））
-- `bool CreateHandleInternal(PlayableGraph graph, ref PlayableHandle handle)`
-  （bool 创建句柄内部的（PlayableGraph graph, ref PlayableHandle handle））
-- `void SetAbsoluteMotionInternal(ref PlayableHandle handle, bool value)`
-  （void 集合AbsoluteMotion内部的（ref PlayableHandle handle, bool value））
-
----
-
-## AnimationOffsetPlayable
-**继承**: IPlayable, IEquatable<AnimationOffsetPlayable>（IPlayable, IEquatable<动画OffsetPlayable>）
-
-### 字段 (2)
-
-- `PlayableHandle m_Handle`（可播放句柄 m_句柄）(偏移: 0x0)
-- `AnimationOffsetPlayable m_NullPlayable`（动画OffsetPlayable m_NullPlayable）(偏移: 0x0)
-
-### 方法 (7)
-
-- `AnimationOffsetPlayable Create(PlayableGraph graph, Vector3 position, Quaternion rotation, int inputCount)`
-  （动画OffsetPlayable 创建（PlayableGraph graph, 三维向量 position, Quaternion rotation, int inputCount））
-- `PlayableHandle CreateHandle(PlayableGraph graph, Vector3 position, Quaternion rotation, int inputCount)`
-  （Playable句柄 创建句柄（PlayableGraph graph, 三维向量 position, Quaternion rotation, int inputCount））
-- `PlayableHandle GetHandle()`
-  （可播放句柄 获取句柄（））
-- `Playable op_Implicit(AnimationOffsetPlayable playable)`
-  （Playable op_Implicit（动画OffsetPlayable playable））
-- `bool Equals(AnimationOffsetPlayable other)`
-  （bool Equals（动画OffsetPlayable other））
-- `bool CreateHandleInternal(PlayableGraph graph, Vector3 position, Quaternion rotation, ref PlayableHandle handle)`
-  （bool 创建句柄内部的（PlayableGraph graph, 三维向量 position, Quaternion rotation, ref PlayableHandle handle））
-
----
-
-## AnimationOutputWeightProcessor
-**继承**: ITimelineEvaluateCallback（ITimelineEvaluate回调）
-
-### 字段 (2)
-
-- `AnimationPlayableOutput m_Output`（动画PlayableOutput m_Output）(偏移: 0x8)
-- `List<AnimationOutputWeightProcessor.WeightInfo> m_Mixers`（List<动画OutputWeightProcessor.WeightInfo> m_Mixers）(偏移: 0x10)
-
-### 方法 (3)
-
-- `void FindMixers()`
-  （void 查找Mixers（））
-- `void FindMixers(Playable parent, int port, Playable node)`
-  （void 查找Mixers（Playable parent, int port, Playable node））
-- `void Evaluate()`
-  （void Evaluate（））
-
----
-
-## AnimationOutputWeightProcessor.WeightInfo
-### 字段 (3)
-
-- `Playable mixer`（Playable mixer）(偏移: 0x0)
-- `Playable parentMixer`（Playable parentMixer）(偏移: 0x8)
-- `int port`（int port）(偏移: 0x10)
-
----
-
-## AnimationPlayableAsset
-**继承**: PlayableAsset, ITimelineClipAsset, IPropertyPreview, ISerializationCallbackReceiver（Playable资产, ITimeline弹匣资产, I属性Preview, ISerialization回调Receiver）
-
-### 字段 (11)
-
-- `AnimationClip m_Clip`（动画弹匣 m_弹匣）(偏移: 0xC)
-- `Vector3 m_Position`（三维向量 m_位置）(偏移: 0x10)
-- `Vector3 m_EulerAngles`（三维向量 m_EulerAngles）(偏移: 0x1C)
-- `bool m_UseTrackMatchFields`（bool m_UseTrack比赛Fields）(偏移: 0x28)
-- `MatchTargetFields m_MatchTargetFields`（比赛目标Fields m_比赛目标Fields）(偏移: 0x2C)
-- `bool m_RemoveStartOffset`（bool m_移除开始Offset）(偏移: 0x30)
-- `bool m_ApplyFootIK`（bool m_应用脚部IK）(偏移: 0x31)
-- `AnimationPlayableAsset.LoopMode m_Loop`（动画PlayableAsset.Loop模式 m_Loop）(偏移: 0x34)
-- `int k_LatestVersion`（int k_LatestVersion）(偏移: 0x0)
-- `int m_Version`（整数 m_版本）(偏移: 0x3C)
-- `Quaternion m_Rotation`（四元数 m_旋转）(偏移: 0x40)
-
-### 方法 (32)
-
-- `Vector3 get_position()`
-  （三维向量 获取_位置（））
-- `void set_position(Vector3 value)`
-  （void 设置_位置（三维向量 value））
-- `Quaternion get_rotation()`
-  （四元数 获取_旋转（））
-- `void set_rotation(Quaternion value)`
-  （void 设置_旋转（四元数 value））
-- `Vector3 get_eulerAngles()`
-  （三维向量 获取_欧拉角（））
-- `void set_eulerAngles(Vector3 value)`
-  （void set_eulerAngles（三维向量 value））
-- `bool get_useTrackMatchFields()`
-  （bool get_useTrack比赛Fields（））
-- `void set_useTrackMatchFields(bool value)`
-  （void set_useTrack比赛Fields（bool value））
-- `MatchTargetFields get_matchTargetFields()`
-  （比赛目标Fields get_match目标Fields（））
-- `void set_matchTargetFields(MatchTargetFields value)`
-  （void set_match目标Fields（比赛目标Fields value））
-- `bool get_removeStartOffset()`
-  （bool get_remove开始Offset（））
-- `void set_removeStartOffset(bool value)`
-  （void set_remove开始Offset（bool value））
-- `bool get_applyFootIK()`
-  （bool get_apply脚部IK（））
-- `void set_applyFootIK(bool value)`
-  （void set_apply脚部IK（bool value））
-- `AnimationPlayableAsset.LoopMode get_loop()`
-  （动画PlayableAsset.Loop模式 get_loop（））
-- `void set_loop(AnimationPlayableAsset.LoopMode value)`
-  （void set_loop（动画PlayableAsset.Loop模式 value））
-- `bool get_hasRootTransforms()`
-  （bool get_has根Transforms（））
-- `AppliedOffsetMode get_appliedOffsetMode()`
-  （AppliedOffset模式 get_appliedOffset模式（））
-- `void set_appliedOffsetMode(AppliedOffsetMode value)`
-  （void set_appliedOffset模式（AppliedOffset模式 value））
-- `double get_duration()`
-  （双精度 获取_持续时间（））
-- `IEnumerable<PlayableBinding> get_outputs()`
-  （IEnumerable<可播放绑定> 获取_输出（））
-- `Playable CreatePlayable(PlayableGraph graph, GameObject go)`
-  （Playable 创建Playable（PlayableGraph graph, 游戏对象 go））
-- `bool ShouldApplyScaleRemove(AppliedOffsetMode mode)`
-  （bool 应该应用缩放移除（AppliedOffset模式 mode））
-- `ClipCaps get_clipCaps()`
-  （弹匣Caps 获取_弹匣Caps（））
-- `void ResetOffsets()`
-  （void 重置偏移（））
-- `void GatherProperties(PlayableDirector director, IPropertyCollector driver)`
-  （void 收集属性（可播放导演 director, I属性收集器 driver））
-- `void OnUpgradeFromVersion(int oldVersion)`
-  （void OnUpgradeFromVersion（int oldVersion））
-
----
-
-## AnimationPlayableAsset.AnimationPlayableAssetUpgrade
-### 方法 (1)
-
-- `void ConvertRotationToEuler(AnimationPlayableAsset asset)`
-  （void 转换RotationToEuler（动画Playable资产 asset））
-
----
-
-## AnimationPlayableAsset.LoopMode
-### 字段 (1)
-
-- `int value__`（整数 值__）(偏移: 0x0)
-
----
-
-## AnimationPlayableBinding
-### 方法 (2)
-
-- `PlayableBinding Create(string name, Object key)`
-  （PlayableBinding 创建（string name, 对象 key））
-- `PlayableOutput CreateAnimationOutput(PlayableGraph graph, string name)`
-  （PlayableOutput 创建动画Output（PlayableGraph graph, string name））
-
----
-
-## AnimationPlayableExtensions
-### 方法 (1)
-
----
-
-## AnimationPlayableGraphExtensions
-### 方法 (1)
-
-- `bool InternalCreateAnimationOutput(ref PlayableGraph graph, string name, out PlayableOutputHandle handle)`
-  （bool 内部的创建动画Output（ref PlayableGraph graph, string name, out PlayableOutputHandle handle））
-
----
-
-## AnimationPlayableOutput
-**继承**: IPlayableOutput（I可播放输出）
-
-### 字段 (1)
-
-- `PlayableOutputHandle m_Handle`（可播放输出句柄 m_句柄）(偏移: 0x0)
-
-### 方法 (7)
-
-- `AnimationPlayableOutput Create(PlayableGraph graph, string name, Animator target)`
-  （动画PlayableOutput 创建（PlayableGraph graph, string name, 动画器 target））
-- `AnimationPlayableOutput get_Null()`
-  （动画PlayableOutput get_Null（））
-- `PlayableOutputHandle GetHandle()`
-  （可播放输出句柄 获取句柄（））
-- `PlayableOutput op_Implicit(AnimationPlayableOutput output)`
-  （PlayableOutput op_Implicit（动画PlayableOutput output））
-- `AnimationPlayableOutput op_Explicit(PlayableOutput output)`
-  （动画PlayableOutput op_Explicit（PlayableOutput output））
-- `void SetTarget(Animator value)`
-  （void 集合目标（动画器 value））
-- `void InternalSetTarget(ref PlayableOutputHandle handle, Animator target)`
-  （void 内部的集合目标（ref PlayableOutputHandle handle, 动画器 target））
-
----
-
-## AnimationPosePlayable
-**继承**: IPlayable, IEquatable<AnimationPosePlayable>（IPlayable, IEquatable<动画PosePlayable>）
-
-### 字段 (2)
-
-- `PlayableHandle m_Handle`（可播放句柄 m_句柄）(偏移: 0x0)
-- `AnimationPosePlayable m_NullPlayable`（动画PosePlayable m_NullPlayable）(偏移: 0x0)
-
-### 方法 (2)
-
-- `PlayableHandle GetHandle()`
-  （可播放句柄 获取句柄（））
-- `bool Equals(AnimationPosePlayable other)`
-  （bool Equals（动画PosePlayable other））
-
----
-
-## AnimationScriptPlayable
-**继承**: IPlayable, IEquatable<AnimationScriptPlayable>（IPlayable, IEquatable<动画ScriptPlayable>）
-
-### 字段 (2)
-
-- `PlayableHandle m_Handle`（可播放句柄 m_句柄）(偏移: 0x0)
-- `AnimationScriptPlayable m_NullPlayable`（动画ScriptPlayable m_NullPlayable）(偏移: 0x0)
-
-### 方法 (2)
-
-- `PlayableHandle GetHandle()`
-  （可播放句柄 获取句柄（））
-- `bool Equals(AnimationScriptPlayable other)`
-  （bool Equals（动画ScriptPlayable other））
-
----
-
-## AnimationStream
-### 字段 (7)
-
-- `uint m_AnimatorBindingsVersion`（uint m_动画器BindingsVersion）(偏移: 0x0)
-- `IntPtr constant`（整数Ptr constant）(偏移: 0x4)
-- `IntPtr input`（整数Ptr input）(偏移: 0x8)
-- `IntPtr output`（整数Ptr output）(偏移: 0xC)
-- `IntPtr workspace`（整数Ptr workspace）(偏移: 0x10)
-- `IntPtr inputStreamAccessor`（整数Ptr input流Accessor）(偏移: 0x14)
-- `IntPtr animationHandleBinder`（整数Ptr animation句柄Binder）(偏移: 0x18)
-
----
-
-## AnimationTrack
-**继承**: TrackAsset, ILayerable（Track资产, ILayerable）
-
-### 字段 (19)
-
-- `TimelineClip.ClipExtrapolation m_InfiniteClipPreExtrapolation`（TimelineClip.弹匣Extrapolation m_Infinite弹匣PreExtrapolation）(偏移: 0x58)
-- `TimelineClip.ClipExtrapolation m_InfiniteClipPostExtrapolation`（TimelineClip.弹匣Extrapolation m_Infinite弹匣PostExtrapolation）(偏移: 0x5C)
-- `Vector3 m_InfiniteClipOffsetPosition`（三维向量 m_Infinite弹匣OffsetPosition）(偏移: 0x60)
-- `Vector3 m_InfiniteClipOffsetEulerAngles`（三维向量 m_Infinite弹匣OffsetEulerAngles）(偏移: 0x6C)
-- `double m_InfiniteClipTimeOffset`（double m_Infinite弹匣时间Offset）(偏移: 0x78)
-- `bool m_InfiniteClipRemoveOffset`（bool m_Infinite弹匣移除Offset）(偏移: 0x80)
-- `bool m_InfiniteClipApplyFootIK`（bool m_Infinite弹匣应用脚部IK）(偏移: 0x81)
-- `AnimationPlayableAsset.LoopMode mInfiniteClipLoop`（动画PlayableAsset.Loop模式 mInfinite弹匣Loop）(偏移: 0x84)
-- `MatchTargetFields m_MatchTargetFields`（比赛目标Fields m_比赛目标Fields）(偏移: 0x88)
-- `Vector3 m_Position`（三维向量 m_位置）(偏移: 0x8C)
-- `Vector3 m_EulerAngles`（三维向量 m_EulerAngles）(偏移: 0x98)
-- `AvatarMask m_AvatarMask`（Avatar掩码 m_Avatar掩码）(偏移: 0xA4)
-- `bool m_ApplyAvatarMask`（bool m_应用Avatar掩码）(偏移: 0xA8)
-- `TrackOffset m_TrackOffset`（TrackOffset m_TrackOffset）(偏移: 0xAC)
-- `AnimationClip m_InfiniteClip`（动画弹匣 m_Infinite弹匣）(偏移: 0xB0)
-- `Queue<Transform> s_CachedQueue`（Queue<Transform> s_Cached队列）(偏移: 0x0)
-- `Quaternion m_OpenClipOffsetRotation`（Quaternion m_打开弹匣OffsetRotation）(偏移: 0xB4)
-- `Quaternion m_Rotation`（四元数 m_旋转）(偏移: 0xC4)
-- `bool m_ApplyOffsets`（bool m_应用Offsets）(偏移: 0xD4)
-
-### 方法 (79)
-
-- `Vector3 get_position()`
-  （三维向量 获取_位置（））
-- `void set_position(Vector3 value)`
-  （void 设置_位置（三维向量 value））
-- `Quaternion get_rotation()`
-  （四元数 获取_旋转（））
-- `void set_rotation(Quaternion value)`
-  （void 设置_旋转（四元数 value））
-- `Vector3 get_eulerAngles()`
-  （三维向量 获取_欧拉角（））
-- `void set_eulerAngles(Vector3 value)`
-  （void set_eulerAngles（三维向量 value））
-- `bool get_applyOffsets()`
-  （bool get_applyOffsets（））
-- `void set_applyOffsets(bool value)`
-  （void set_applyOffsets（bool value））
-- `TrackOffset get_trackOffset()`
-  （TrackOffset get_trackOffset（））
-- `void set_trackOffset(TrackOffset value)`
-  （void set_trackOffset（TrackOffset value））
-- `MatchTargetFields get_matchTargetFields()`
-  （比赛目标Fields get_match目标Fields（））
-- `void set_matchTargetFields(MatchTargetFields value)`
-  （void set_match目标Fields（比赛目标Fields value））
-- `bool get_infiniteClipRemoveOffset()`
-  （bool get_infinite弹匣移除Offset（））
-- `void set_infiniteClipRemoveOffset(bool value)`
-  （void set_infinite弹匣移除Offset（bool value））
-- `AvatarMask get_avatarMask()`
-  （Avatar掩码 get_avatar掩码（））
-- `void set_avatarMask(AvatarMask value)`
-  （void set_avatar掩码（Avatar掩码 value））
-- `bool get_applyAvatarMask()`
-  （bool get_applyAvatar掩码（））
-- `void set_applyAvatarMask(bool value)`
-  （void set_applyAvatar掩码（bool value））
-- `bool CanCompileClips()`
-  （bool 能否CompileClips（））
-- `IEnumerable<PlayableBinding> get_outputs()`
-  （IEnumerable<可播放绑定> 获取_输出（））
-- `bool get_inClipMode()`
-  （bool get_in弹匣模式（））
-- `Vector3 get_infiniteClipOffsetPosition()`
-  （三维向量 get_infinite弹匣OffsetPosition（））
-- `void set_infiniteClipOffsetPosition(Vector3 value)`
-  （void set_infinite弹匣OffsetPosition（三维向量 value））
-- `Quaternion get_infiniteClipOffsetRotation()`
-  （Quaternion get_infinite弹匣OffsetRotation（））
-- `void set_infiniteClipOffsetRotation(Quaternion value)`
-  （void set_infinite弹匣OffsetRotation（Quaternion value））
-- `Vector3 get_infiniteClipOffsetEulerAngles()`
-  （三维向量 get_infinite弹匣OffsetEulerAngles（））
-- `void set_infiniteClipOffsetEulerAngles(Vector3 value)`
-  （void set_infinite弹匣OffsetEulerAngles（三维向量 value））
-- `bool get_infiniteClipApplyFootIK()`
-  （bool get_infinite弹匣应用脚部IK（））
-- `void set_infiniteClipApplyFootIK(bool value)`
-  （void set_infinite弹匣应用脚部IK（bool value））
-- `double get_infiniteClipTimeOffset()`
-  （double get_infinite弹匣时间Offset（））
-- `void set_infiniteClipTimeOffset(double value)`
-  （void set_infinite弹匣时间Offset（double value））
-- `TimelineClip.ClipExtrapolation get_infiniteClipPreExtrapolation()`
-  （TimelineClip.弹匣Extrapolation get_infinite弹匣PreExtrapolation（））
-- `void set_infiniteClipPreExtrapolation(TimelineClip.ClipExtrapolation value)`
-  （void set_infinite弹匣PreExtrapolation（TimelineClip.弹匣Extrapolation value））
-- `AnimationPlayableAsset.LoopMode get_infiniteClipLoop()`
-  （动画PlayableAsset.Loop模式 get_infinite弹匣Loop（））
-- `void set_infiniteClipLoop(AnimationPlayableAsset.LoopMode value)`
-  （void set_infinite弹匣Loop（动画PlayableAsset.Loop模式 value））
-- `void ResetOffsets()`
-  （void 重置偏移（））
-- `void CreateInfiniteClip(string infiniteClipName)`
-  （void 创建Infinite弹匣（string infiniteClipName））
-- `TimelineClip CreateRecordableClip(string animClipName)`
-  （Timeline弹匣 创建Recordable弹匣（string animClipName））
-- `void OnCreateClip(TimelineClip clip)`
-  （void On创建弹匣（Timeline弹匣 clip））
-- `int CalculateItemsHash()`
-  （int 计算ItemsHash（））
-- `void UpdateClipOffsets()`
-  （void 更新弹匣Offsets（））
-- `Playable CompileTrackPlayable(PlayableGraph graph, AnimationTrack track, GameObject go, IntervalTree<RuntimeElement> tree, AppliedOffsetMode mode)`
-  （Playable CompileTrackPlayable（PlayableGraph graph, 动画Track track, 游戏对象 go, 间隔Tree<RuntimeElement> tree, AppliedOffset模式 mode））
-- `Playable OnCreateClipPlayableGraph(PlayableGraph graph, GameObject go, IntervalTree<RuntimeElement> tree)`
-  （Playable On创建弹匣PlayableGraph（PlayableGraph graph, 游戏对象 go, 间隔Tree<RuntimeElement> tree））
-- `int GetDefaultBlendCount()`
-  （int 获取默认的Blend数量（））
-- `void AttachDefaultBlend(PlayableGraph graph, AnimationLayerMixerPlayable mixer, bool requireOffset)`
-  （void Attach默认的Blend（PlayableGraph graph, 动画层MixerPlayable mixer, bool requireOffset））
-- `Playable AttachOffsetPlayable(PlayableGraph graph, Playable playable, Vector3 pos, Quaternion rot)`
-  （Playable AttachOffsetPlayable（PlayableGraph graph, Playable playable, 三维向量 pos, Quaternion rot））
-- `bool RequiresMotionXPlayable(AppliedOffsetMode mode, GameObject gameObject)`
-  （bool RequiresMotionXPlayable（AppliedOffset模式 mode, 游戏对象 gameObject））
-- `bool UsesAbsoluteMotion(AppliedOffsetMode mode)`
-  （bool UsesAbsoluteMotion（AppliedOffset模式 mode））
-- `bool HasController(GameObject gameObject)`
-  （bool 是否有控制器（游戏对象 gameObject））
-- `Animator GetBinding(PlayableDirector director)`
-  （动画器 获取Binding（PlayableDirector director））
-- `AnimationLayerMixerPlayable CreateGroupMixer(PlayableGraph graph, GameObject go, int inputCount)`
-  （动画层MixerPlayable 创建组Mixer（PlayableGraph graph, 游戏对象 go, int inputCount））
-- `Playable CreateInfiniteTrackPlayable(PlayableGraph graph, GameObject go, IntervalTree<RuntimeElement> tree, AppliedOffsetMode mode)`
-  （Playable 创建InfiniteTrackPlayable（PlayableGraph graph, 游戏对象 go, 间隔Tree<RuntimeElement> tree, AppliedOffset模式 mode））
-- `Playable ApplyTrackOffset(PlayableGraph graph, Playable root, GameObject go, AppliedOffsetMode mode)`
-  （Playable 应用TrackOffset（PlayableGraph graph, Playable root, 游戏对象 go, AppliedOffset模式 mode））
-- `void GetEvaluationTime(out double outStart, out double outDuration)`
-  （void 获取Evaluation时间（out double outStart, out double outDuration））
-- `void GetSequenceTime(out double outStart, out double outDuration)`
-  （void 获取Sequence时间（out double outStart, out double outDuration））
-- `void GatherProperties(PlayableDirector director, IPropertyCollector driver)`
-  （void 收集属性（可播放导演 director, I属性收集器 driver））
-- `AppliedOffsetMode GetOffsetMode(GameObject go, bool animatesRootTransform)`
-  （AppliedOffset模式 获取Offset模式（游戏对象 go, bool animatesRootTransform））
-- `bool IsRootTransformDisabledByMask(GameObject gameObject, Transform genericRootNode)`
-  （bool 是否根变换禁用的By掩码（游戏对象 gameObject, 变换 genericRootNode））
-- `Transform GetGenericRootNode(GameObject gameObject)`
-  （变换 获取Generic根节点（游戏对象 gameObject））
-- `bool AnimatesRootTransform()`
-  （bool Animates根变换（））
-- `Transform FindInHierarchyBreadthFirst(Transform t, string name)`
-  （变换 查找InHierarchyBreadth第一个（变换 t, string name））
-- `Vector3 get_openClipOffsetPosition()`
-  （三维向量 get_open弹匣OffsetPosition（））
-- `void set_openClipOffsetPosition(Vector3 value)`
-  （void set_open弹匣OffsetPosition（三维向量 value））
-- `Quaternion get_openClipOffsetRotation()`
-  （Quaternion get_open弹匣OffsetRotation（））
-- `void set_openClipOffsetRotation(Quaternion value)`
-  （void set_open弹匣OffsetRotation（Quaternion value））
-- `Vector3 get_openClipOffsetEulerAngles()`
-  （三维向量 get_open弹匣OffsetEulerAngles（））
-- `void set_openClipOffsetEulerAngles(Vector3 value)`
-  （void set_open弹匣OffsetEulerAngles（三维向量 value））
-- `TimelineClip.ClipExtrapolation get_openClipPreExtrapolation()`
-  （TimelineClip.弹匣Extrapolation get_open弹匣PreExtrapolation（））
-- `void set_openClipPreExtrapolation(TimelineClip.ClipExtrapolation value)`
-  （void set_open弹匣PreExtrapolation（TimelineClip.弹匣Extrapolation value））
-- `void OnUpgradeFromVersion(int oldVersion)`
-  （void OnUpgradeFromVersion（int oldVersion））
-
----
-
-## AnimationTrack.AnimationTrackUpgrade
-### 方法 (3)
-
-- `void ConvertRotationsToEuler(AnimationTrack track)`
-  （void 转换RotationsToEuler（动画Track track））
-- `void ConvertRootMotion(AnimationTrack track)`
-  （void 转换根Motion（动画Track track））
-- `void ConvertInfiniteTrack(AnimationTrack track)`
-  （void 转换InfiniteTrack（动画Track track））
-
----
-
-## AnimationTriggers
-### 字段 (5)
-
-- `string m_NormalTrigger`（string m_法线触发器）(偏移: 0x8)
-- `string m_HighlightedTrigger`（string m_Highlighted触发器）(偏移: 0xC)
-- `string m_PressedTrigger`（string m_按下的触发器）(偏移: 0x10)
-- `string m_SelectedTrigger`（string m_选中的触发器）(偏移: 0x14)
-- `string m_DisabledTrigger`（string m_禁用的触发器）(偏移: 0x18)
-
-### 方法 (10)
-
-- `string get_normalTrigger()`
-  （string get_normal触发器（））
-- `void set_normalTrigger(string value)`
-  （void set_normal触发器（string value））
-- `string get_highlightedTrigger()`
-  （string get_highlighted触发器（））
-- `void set_highlightedTrigger(string value)`
-  （void set_highlighted触发器（string value））
-- `string get_pressedTrigger()`
-  （string get_pressed触发器（））
-- `void set_pressedTrigger(string value)`
-  （void set_pressed触发器（string value））
-- `string get_selectedTrigger()`
-  （string get_selected触发器（））
-- `void set_selectedTrigger(string value)`
-  （void set_selected触发器（string value））
-- `string get_disabledTrigger()`
-  （string get_disabled触发器（））
-- `void set_disabledTrigger(string value)`
-  （void set_disabled触发器（string value））
-
----
-
-## Animator
-**继承**: Behaviour（行为）
-
-### 方法 (52)
-
-- `bool get_isHuman()`
-  （bool get_is人类（））
-- `bool get_hasRootMotion()`
-  （bool get_has根Motion（））
-- `float get_humanScale()`
-  （float get_human缩放（））
-- `void SetFloat(string name, float value)`
-  （void 集合浮点数（string name, float value））
-- `void SetBool(string name, bool value)`
-  （void 集合布尔值（string name, bool value））
-- `void SetInteger(string name, int value)`
-  （void 集合Integer（string name, int value））
-- `void SetTrigger(string name)`
-  （void 集合触发器（string name））
-- `void ResetTrigger(string name)`
-  （void 重置触发器（string name））
-- `Vector3 get_deltaPosition()`
-  （三维向量 get_deltaPosition（））
-- `Quaternion get_deltaRotation()`
-  （Quaternion get_deltaRotation（））
-- `void set_applyRootMotion(bool value)`
-  （void set_apply根Motion（bool value））
-- `AnimatorUpdateMode get_updateMode()`
-  （动画器更新模式 get_update模式（））
-- `void set_updateMode(AnimatorUpdateMode value)`
-  （void set_update模式（动画器更新模式 value））
-- `int get_layerCount()`
-  （int get_layer数量（））
-- `void GetAnimatorStateInfo(int layerIndex, StateInfoIndex stateInfoIndex, out AnimatorStateInfo info)`
-  （void 获取动画器状态信息（int layerIndex, 状态信息索引 stateInfoIndex, out AnimatorStateInfo info））
-- `AnimatorStateInfo GetCurrentAnimatorStateInfo(int layerIndex)`
-  （动画器状态信息 获取当前动画器状态信息（int layerIndex））
-- `AnimatorStateInfo GetNextAnimatorStateInfo(int layerIndex)`
-  （动画器状态信息 获取下一个动画器状态信息（int layerIndex））
-- `void GetCurrentAnimatorClipInfo(int layerIndex, List<AnimatorClipInfo> clips)`
-  （void 获取当前动画器弹匣信息（int layerIndex, List<动画器弹匣Info> clips））
-- `void GetAnimatorClipInfoInternal(int layerIndex, bool isCurrent, object clips)`
-  （void 获取动画器弹匣信息内部的（int layerIndex, bool isCurrent, object clips））
-- `void GetNextAnimatorClipInfo(int layerIndex, List<AnimatorClipInfo> clips)`
-  （void 获取下一个动画器弹匣信息（int layerIndex, List<动画器弹匣Info> clips））
-- `bool IsInTransition(int layerIndex)`
-  （bool 是否InTransition（int layerIndex））
-- `void set_speed(float value)`
-  （void set_speed（float value））
-- `void CrossFadeInFixedTime(string stateName, float fixedTransitionDuration)`
-  （void CrossFadeIn固定时间（string stateName, float fixedTransitionDuration））
-- `void CrossFadeInFixedTime(string stateName, float fixedTransitionDuration, int layer)`
-  （void CrossFadeIn固定时间（string stateName, float fixedTransitionDuration, int layer））
-- `void CrossFadeInFixedTime(string stateName, float fixedTransitionDuration, int layer, float fixedTimeOffset)`
-  （void CrossFadeIn固定时间（string stateName, float fixedTransitionDuration, int layer, float fixedTimeOffset））
-- `void CrossFadeInFixedTime(int stateHashName, float fixedTransitionDuration, int layer, float fixedTimeOffset, float normalizedTransitionTime)`
-  （void CrossFadeIn固定时间（int stateHashName, float fixedTransitionDuration, int layer, float fixedTimeOffset, float normalizedTransitionTime））
-- `void CrossFade(string stateName, float normalizedTransitionDuration, int layer, float normalizedTimeOffset)`
-  （void CrossFade（string stateName, float normalizedTransitionDuration, int layer, float normalizedTimeOffset））
-- `void CrossFade(string stateName, float normalizedTransitionDuration, int layer)`
-  （void CrossFade（string stateName, float normalizedTransitionDuration, int layer））
-- `void CrossFade(string stateName, float normalizedTransitionDuration, int layer, float normalizedTimeOffset, float normalizedTransitionTime)`
-  （void CrossFade（string stateName, float normalizedTransitionDuration, int layer, float normalizedTimeOffset, float normalizedTransitionTime））
-- `void CrossFade(int stateHashName, float normalizedTransitionDuration, int layer, float normalizedTimeOffset, float normalizedTransitionTime)`
-  （void CrossFade（int stateHashName, float normalizedTransitionDuration, int layer, float normalizedTimeOffset, float normalizedTransitionTime））
-- `void PlayInFixedTime(string stateName, int layer)`
-  （void 播放In固定时间（string stateName, int layer））
-- `void PlayInFixedTime(string stateName, int layer, float fixedTime)`
-  （void 播放In固定时间（string stateName, int layer, float fixedTime））
-- `void PlayInFixedTime(int stateNameHash, int layer, float fixedTime)`
-  （void 播放In固定时间（int stateNameHash, int layer, float fixedTime））
-- `void Play(string stateName, int layer)`
-  （void 播放（string stateName, int layer））
-- `void Play(string stateName, int layer, float normalizedTime)`
-  （void 播放（string stateName, int layer, float normalizedTime））
-- `void Play(int stateNameHash, int layer, float normalizedTime)`
-  （void 播放（int stateNameHash, int layer, float normalizedTime））
-- `Transform GetBoneTransform(HumanBodyBones humanBoneId)`
-  （变换 获取Bone变换（人类身体Bones humanBoneId））
-- `Transform GetBoneTransformInternal(int humanBoneId)`
-  （变换 获取Bone变换内部的（int humanBoneId））
-- `void set_cullingMode(AnimatorCullingMode value)`
-  （void set_culling模式（动画器Culling模式 value））
-- `bool get_hasBoundPlayables()`
-  （bool get_hasBoundPlayables（））
-- `int StringToHash(string name)`
-  （int 字符串ToHash（string name））
-- `Avatar get_avatar()`
-  （Avatar get_avatar（））
-- `void SetFloatString(string name, float value)`
-  （void 集合浮点数字符串（string name, float value））
-- `void SetBoolString(string name, bool value)`
-  （void 集合布尔值字符串（string name, bool value））
-- `void SetIntegerString(string name, int value)`
-  （void 集合Integer字符串（string name, int value））
-- `void SetTriggerString(string name)`
-  （void 集合触发器字符串（string name））
-- `void ResetTriggerString(string name)`
-  （void 重置触发器字符串（string name））
-- `void Update(float deltaTime)`
-  （void 更新（float deltaTime））
-
----
-
-## AnimatorClipInfo
-### 字段 (2)
-
-- `int m_ClipInstanceID`（int m_弹匣实例ID）(偏移: 0x0)
-- `float m_Weight`（float m_Weight）(偏移: 0x4)
-
-### 方法 (3)
-
-- `float get_weight()`
-  （float get_weight（））
-
----
-
-## AnimatorCullingMode
-### 字段 (1)
-
-- `int value__`（整数 值__）(偏移: 0x0)
-
----
-
-## AnimatorStateInfo
-### 字段 (9)
-
-- `int m_Name`（int m_名称）(偏移: 0x0)
-- `int m_Path`（int m_路径）(偏移: 0x4)
-- `int m_FullPath`（int m_满路径）(偏移: 0x8)
-- `float m_NormalizedTime`（float m_Normalized时间）(偏移: 0xC)
-- `float m_Length`（float m_Length）(偏移: 0x10)
-- `float m_Speed`（float m_Speed）(偏移: 0x14)
-- `float m_SpeedMultiplier`（float m_SpeedMultiplier）(偏移: 0x18)
-- `int m_Tag`（int m_标签）(偏移: 0x1C)
-- `int m_Loop`（int m_Loop）(偏移: 0x20)
-
-### 方法 (4)
-
-- `bool IsName(string name)`
-  （bool 是否名称（string name））
-- `int get_fullPathHash()`
-  （int get_full路径Hash（））
-- `int get_shortNameHash()`
-  （int get_short名称Hash（））
-- `float get_normalizedTime()`
-  （float get_normalized时间（））
-
----
-
-## AnimatorTransitionInfo
-### 字段 (8)
-
-- `int m_FullPath`（int m_满路径）(偏移: 0x0)
-- `int m_UserName`（int m_User名称）(偏移: 0x4)
-- `int m_Name`（int m_名称）(偏移: 0x8)
-- `bool m_HasFixedDuration`（bool m_是否有固定持续时间）(偏移: 0xC)
-- `float m_Duration`（float m_持续时间）(偏移: 0x10)
-- `float m_NormalizedTime`（float m_Normalized时间）(偏移: 0x14)
-- `bool m_AnyState`（bool m_任意状态）(偏移: 0x18)
-- `int m_TransitionType`（int m_Transition类型）(偏移: 0x1C)
-
----
-
-## AnimatorUpdateMode
-### 字段 (1)
-
-- `int value__`（整数 值__）(偏移: 0x0)
-
----
-
-## CFAnimator
-**继承**: Model（模型）
-
-### 字段 (5)
-
-- `SO_AnimationLerpData animLerpData`（SO_动画Lerp数据 animLerp数据）(偏移: 0x44)
-- `bool changeMode`（bool change模式）(偏移: 0x54)
-- `bool alwaysRunAnim`（bool always运行动画）(偏移: 0x5C)
-- `RefString AnimName_Modifier`（Ref字符串 动画Name_修改器）(偏移: 0x60)
-- `Coroutine knifeStun`（协程 knife眩晕）(偏移: 0x64)
-
-### 方法 (36)
-
-- `Animator get_characterAnimator()`
-  （动画器 get_character动画器（））
-- `Animator get_handAnimator()`
-  （动画器 get_hand动画器（））
-- `Animator get_animator()`
-  （动画器 get_animator（））
-- `void set_animator(Animator value)`
-  （void set_animator（动画器 value））
-- `string get_currentAnimName()`
-  （string get_current动画名称（））
-- `void set_currentAnimName(string value)`
-  （void set_current动画名称（string value））
-- `string get_currentAnimTag()`
-  （string get_current动画标签（））
-- `void set_currentAnimTag(string value)`
-  （void set_current动画标签（string value））
-- `bool get_isAnimEmptyTag()`
-  （bool get_is动画空标签（））
-- `bool get_isSelecting()`
-  （bool get_isSelecting（））
-- `bool get_isReloading()`
-  （bool get_isReloading（））
-- `bool get_semiGunShooting()`
-  （bool get_semi枪械Shooting（））
-- `void Update()`
-  （void 更新（））
-- `float GetAnimLerpTime(string animName)`
-  （float 获取动画Lerp时间（string animName））
-- `void PlayAnim(string animName, string animTag, bool isLoopAnim, float offset)`
-  （void 播放动画（string animName, string animTag, bool isLoopAnim, float offset））
-- `void PlayAnimIfNotPlaying(string animName, string animTag, bool isLoopAnim = False)`
-  （void 播放动画IfNotPlaying（string animName, string animTag, bool isLoopAnim = False））
-- `void PlayTempAnim(string animName, bool isLoopAnim = False, bool cancelIfPlaying = True, float offset = 0)`
-  （void 播放Temp动画（string animName, bool isLoopAnim = False, bool cancelIfPlaying = True, float offset = 0））
-- `void PlayWeaponAnimWithSameTag(string animName)`
-  （void 播放Weapon动画WithSame标签（string animName））
-- `void PlayWeaponAnim(string animName, string animTag)`
-  （void 播放Weapon动画（string animName, string animTag））
-- `void AnimationEndMessage(AnimatorStateInfo stateInfo)`
-  （void 动画结束Message（动画器状态信息 stateInfo））
-- `void OnAnimationEnter(string animName, string animTag)`
-  （void On动画Enter（string animName, string animTag））
-- `void OnAnimationEnd(string animName, string animTag)`
-  （void 动画结束时（字符串 animName, 字符串 animTag））
-- `void OnAnimationExit(string animName, string animTag)`
-  （void On动画Exit（string animName, string animTag））
-- `void UpdateRunAnimation()`
-  （void 更新运行动画（））
-- `void SetFloat(string name, float value, bool character)`
-  （void 集合浮点数（string name, float value, bool character））
-- `void UpdateAnimator(float deltaTime)`
-  （void 更新动画器（float deltaTime））
-- `void AnimatorInit()`
-  （void 动画器初始化（））
-- `void PlayKnifeHitStunAnim(bool isBigshot)`
-  （void 播放近战武器命中眩晕动画（bool isBigshot））
-- `void ChangeCurAnimToTemp()`
-  （void ChangeCur动画ToTemp（））
-- `string ModifyAnimName(string animName)`
-  （string Modify动画名称（string animName））
-
----
-
-## CharWpnAnimData
-### 字段 (3)
-
-- `string upper`（string upper）(偏移: 0x0)
-- `bool upper_4side`（bool upper_4side）(偏移: 0x4)
-- `string lower`（string lower）(偏移: 0x8)
-
----
-
-## InteractionObject.AnimatorEvent
-### 字段 (6)
-
-- `Animator animator`（动画器 animator）(偏移: 0x8)
-- `Animation animation`（动画 animation）(偏移: 0xC)
-- `string animationState`（string animation状态）(偏移: 0x10)
-- `float crossfadeTime`（float crossfade时间）(偏移: 0x14)
-- `int layer`（int layer）(偏移: 0x18)
-- `bool resetNormalizedTime`（bool resetNormalized时间）(偏移: 0x1C)
-
-### 方法 (3)
-
-- `void Activate(bool pickUp)`
-  （void 激活（bool pickUp））
-- `void Activate(Animator animator)`
-  （void 激活（动画器 animator））
-- `void Activate(Animation animation)`
-  （void 激活（动画 animation））
-
----
-
-## MecanimBridge
-**继承**: VersionedMonoBehaviour（版本化MonoBehaviour）
-
-### 字段 (7)
-
-- `float velocitySmoothing`（float velocitySmoothing）(偏移: 0x10)
-- `IAstarAI ai`（IAstarAI ai）(偏移: 0x14)
-- `Animator anim`（动画器 anim）(偏移: 0x18)
-- `Transform tr`（变换 tr）(偏移: 0x1C)
-- `Vector3 smoothedVelocity`（三维向量 smoothed速度）(偏移: 0x20)
-- `Vector3[] prevFootPos`（Vector3[] prev脚部Pos）(偏移: 0x2C)
-- `Transform[] footTransforms`（Transform[] footTransforms）(偏移: 0x30)
-
-### 方法 (6)
-
-- `void Update()`
-  （void 更新（））
-- `Vector3 CalculateBlendPoint()`
-  （三维向量 计算BlendPoint（））
-- `void OnAnimatorMove()`
-  （void On动画器移动（））
-- `Vector3 RotatePointAround(Vector3 point, Vector3 around, Quaternion rotation)`
-  （三维向量 RotatePointAround（三维向量 point, 三维向量 around, Quaternion rotation））
-- `Quaternion RotateTowards(Vector3 direction, float maxDegrees)`
-  （Quaternion RotateTowards（三维向量 direction, float maxDegrees））
-
----
-
-## MineBotAnimation
-**继承**: VersionedMonoBehaviour（版本化MonoBehaviour）
-
-### 字段 (6)
-
-- `Animator anim`（动画器 anim）(偏移: 0x10)
-- `GameObject endOfPathEffect`（游戏对象 endOf路径特效）(偏移: 0x14)
-- `bool isAtDestination`（bool isAtDestination）(偏移: 0x18)
-- `IAstarAI ai`（IAstarAI ai）(偏移: 0x1C)
-- `Transform tr`（变换 tr）(偏移: 0x20)
-- `Vector3 lastTarget`（三维向量 last目标）(偏移: 0x24)
-
-### 方法 (3)
-
-- `void OnTargetReached()`
-  （void 到达目标时（））
-- `void Update()`
-  （void 更新（））
-
----
-
-## SO_AnimationLerpData
-**继承**: ScriptableObject（脚本对象）
-
-### 字段 (1)
-
-- `SO_AnimationLerpData.Dic dictionary`（SO_动画LerpData.Dic dictionary）(偏移: 0xC)
-
-### 方法 (1)
-
-- `float GetLerpTime(string animName)`
-  （float 获取Lerp时间（string animName））
-
----
-
-## SimpleAnimStateAction
-**继承**: StateMachineBehaviour（状态MachineBehaviour）
-
-### 字段 (4)
-
-- `string Enter_ActionName`（string Enter_动作名称）(偏移: 0xC)
-- `string Enter_Data`（string Enter_数据）(偏移: 0x10)
-- `string Exit_ActionName`（string Exit_动作名称）(偏移: 0x14)
-- `string Exit_Data`（string Exit_数据）(偏移: 0x18)
-
-### 方法 (2)
-
-- `void OnStateEnter(Animator animator, AnimatorStateInfo stateInfo, int layerIndex)`
-  （void On状态Enter（动画器 animator, 动画器状态信息 stateInfo, int layerIndex））
-- `void OnStateExit(Animator animator, AnimatorStateInfo stateInfo, int layerIndex)`
-  （void On状态Exit（动画器 animator, 动画器状态信息 stateInfo, int layerIndex））
-
----
-
-## TileAnimationData
-### 字段 (3)
-
-- `Sprite[] m_AnimatedSprites`（Sprite[] m_AnimatedSprites）(偏移: 0x0)
-- `float m_AnimationSpeed`（float m_动画Speed）(偏移: 0x4)
-- `float m_AnimationStartTime`（float m_动画开始时间）(偏移: 0x8)
-
----
-
-# 加密与安全系统 (53个类)
-
-## AesCryptoServiceProvider
-**继承**: Aes（Aes）
-
-### 方法 (16)
-
-- `void GenerateIV()`
-  （void 生成IV（））
-- `void GenerateKey()`
-  （void 生成密钥（））
-- `ICryptoTransform CreateDecryptor(byte[] key, byte[] iv)`
-  （ICrypto变换 创建Decryptor（byte[] key, byte[] iv））
-- `ICryptoTransform CreateEncryptor(byte[] key, byte[] iv)`
-  （ICrypto变换 创建Encryptor（byte[] key, byte[] iv））
-- `byte[] get_IV()`
-  （byte[] get_IV（））
-- `void set_IV(byte[] value)`
-  （void set_IV（byte[] value））
-- `byte[] get_Key()`
-  （字节[] 获取_键（））
-- `void set_Key(byte[] value)`
-  （void 设置_键（字节[] value））
-- `int get_KeySize()`
-  （整数 获取_键大小（））
-- `void set_KeySize(int value)`
-  （void 设置_键大小（整数 value））
-- `int get_FeedbackSize()`
-  （int get_Feedback大小（））
-- `CipherMode get_Mode()`
-  （Cipher模式 get_模式（））
-- `PaddingMode get_Padding()`
-  （Padding模式 get_Padding（））
-- `void set_Padding(PaddingMode value)`
-  （void set_Padding（Padding模式 value））
-- `ICryptoTransform CreateEncryptor()`
-  （ICrypto变换 创建Encryptor（））
-- `void Dispose(bool disposing)`
-  （void 释放（布尔值 正在释放））
-
----
-
-## CallContextSecurityData
-**继承**: ICloneable（ICloneable可克隆）
-
-### 字段 (1)
-
-- `IPrincipal _principal`（IPrincipal _principal）(偏移: 0x8)
-
-### 方法 (2)
-
-- `bool get_HasInfo()`
-  （布尔值 获取_是否有信息（））
-- `object Clone()`
-  （对象 克隆（））
-
----
-
-## CryptoConfig
-### 方法 (7)
-
-- `byte[] EncodeOID(string str)`
-  （byte[] EncodeOID（string str））
-- `byte[] EncodeLongNumber(long x)`
-  （byte[] EncodeLongNumber（long x））
-- `bool get_AllowOnlyFipsAlgorithms()`
-  （bool get_允许OnlyFipsAlgorithms（））
-- `object CreateFromName(string name)`
-  （object 创建From名称（string name））
-- `object CreateFromName(string name, object[] args)`
-  （object 创建From名称（string name, object[] args））
-- `string MapNameToOID(string name, object arg)`
-  （string 映射名称ToOID（string name, object arg））
-- `string MapNameToOID(string name)`
-  （string 映射名称ToOID（string name））
-
----
-
-## CryptoConvert
-### 方法 (1)
-
-- `string ToHex(byte[] input)`
-  （string ToHex（byte[] input））
-
----
-
-## CryptoMode
-### 字段 (1)
-
-- `int value__`（整数 值__）(偏移: 0x0)
-
----
-
-## CryptoStream
-**继承**: Stream, IDisposable（流, IDisposable）
-
-### 字段 (12)
-
-- `Stream _stream`（流 _stream）(偏移: 0x14)
-- `ICryptoTransform _Transform`（ICrypto变换 _变换）(偏移: 0x18)
-- `byte[] _InputBuffer`（byte[] _输入缓冲区）(偏移: 0x1C)
-- `int _InputBufferIndex`（int _输入缓冲区索引）(偏移: 0x20)
-- `int _InputBlockSize`（int _输入Block大小）(偏移: 0x24)
-- `byte[] _OutputBuffer`（byte[] _Output缓冲区）(偏移: 0x28)
-- `int _OutputBufferIndex`（int _Output缓冲区索引）(偏移: 0x2C)
-- `int _OutputBlockSize`（int _OutputBlock大小）(偏移: 0x30)
-- `CryptoStreamMode _transformMode`（Crypto流模式 _transform模式）(偏移: 0x34)
-- `bool _canRead`（bool _canRead）(偏移: 0x38)
-- `bool _canWrite`（bool _canWrite）(偏移: 0x39)
-- `bool _finalBlockTransformed`（bool _finalBlockTransformed）(偏移: 0x3A)
-
-### 方法 (16)
-
-- `bool get_CanRead()`
-  （布尔值 获取_能否读取（））
-- `bool get_CanSeek()`
-  （布尔值 获取_能否查找（））
-- `bool get_CanWrite()`
-  （布尔值 获取_能否写入（））
-- `long get_Length()`
-  （长整数 获取_长度（））
-- `long get_Position()`
-  （长整数 获取_位置（））
-- `void set_Position(long value)`
-  （void 设置_位置（长整数 value））
-- `bool get_HasFlushedFinalBlock()`
-  （bool get_是否有FlushedFinalBlock（））
-- `void FlushFinalBlock()`
-  （void FlushFinalBlock（））
-- `void Flush()`
-  （void 刷新（））
-- `long Seek(long offset, SeekOrigin origin)`
-  （长整数 查找（长整数 offset, 查找起点 origin））
-- `void SetLength(long value)`
-  （void 设置_长度（长整数 value））
-- `int Read([In] [Out] byte[] buffer, int offset, int count)`
-  （整数 读取（[In] [Out] 字节[] buffer, 整数 offset, 整数 count））
-- `void Write(byte[] buffer, int offset, int count)`
-  （void 写入（字节[] buffer, 整数 offset, 整数 count））
-- `void Clear()`
-  （void 清除（））
-- `void Dispose(bool disposing)`
-  （void 释放（布尔值 正在释放））
-- `void InitializeBuffer()`
-  （void 初始化缓冲区（））
-
----
-
-## DESCryptoServiceProvider
-**继承**: DES（DES）
-
-### 方法 (4)
-
-- `ICryptoTransform CreateEncryptor(byte[] rgbKey, byte[] rgbIV)`
-  （ICrypto变换 创建Encryptor（byte[] rgbKey, byte[] rgbIV））
-- `ICryptoTransform CreateDecryptor(byte[] rgbKey, byte[] rgbIV)`
-  （ICrypto变换 创建Decryptor（byte[] rgbKey, byte[] rgbIV））
-- `void GenerateKey()`
-  （void 生成密钥（））
-- `void GenerateIV()`
-  （void 生成IV（））
-
----
-
-## DSACryptoServiceProvider
-**继承**: DSA（DSA）
-
-### 字段 (7)
-
-- `KeyPairPersistence store`（键PairPersistence store）(偏移: 0x10)
-- `bool persistKey`（bool persist键）(偏移: 0x14)
-- `bool persisted`（bool persisted）(偏移: 0x0)
-- `bool privateKeyExportable`（bool private键Exportable）(偏移: 0x0)
-- `bool m_disposed`（布尔值 m_已释放）(偏移: 0x0)
-- `DSAManaged dsa`（DSAManaged dsa）(偏移: 0x0)
-- `bool useMachineKeyStore`（bool useMachine键商店）(偏移: 0x0)
-
-### 方法 (6)
-
-- `void Common(int dwKeySize, bool parameters)`
-  （void Common（int dwKeySize, bool parameters））
-- `void Finalize()`
-  （void 终结（））
-- `int get_KeySize()`
-  （整数 获取_键大小（））
-- `DSAParameters ExportParameters(bool includePrivateParameters)`
-  （DSAParameters ExportParameters（bool includePrivateParameters））
-- `void Dispose(bool disposing)`
-  （void 释放（布尔值 正在释放））
-- `void OnKeyGenerated(object sender, EventArgs e)`
-  （void On键Generated（object sender, 事件Args e））
-
----
-
-## EncryptionAlgorithm
-### 字段 (1)
-
-- `int value__`（整数 值__）(偏移: 0x0)
-
----
-
-## HUD_Cheat
-**继承**: Singleton<HUD_Cheat>（Singleton<HUD_Cheat>）
-
-### 字段 (8)
-
-- `RectTransform mainRect`（Rect变换 mainRect）(偏移: 0xC)
-- `GameObject choicePrefab`（游戏对象 choice预制体）(偏移: 0x10)
-- `SimpleObjectPool pool`（Simple对象池 pool）(偏移: 0x14)
-- `List<HUD_CheatChoice> curChoiceList`（List<HUD_CheatChoice> curChoice列表）(偏移: 0x18)
-- `Texture[] buttonTexs`（Texture[] buttonTexs）(偏移: 0x1C)
-- `ChoiceBase[] originMenu`（ChoiceBase[] origin菜单）(偏移: 0x20)
-- `ChoiceBase[] curMenu`（ChoiceBase[] cur菜单）(偏移: 0x24)
-- `Radio nanoRoleMenu`（Radio nanoRole菜单）(偏移: 0x28)
-
-### 方法 (13)
-
-- `Player get_myPlayer()`
-  （玩家 get_my玩家（））
-- `int get_NanoRoleChoice()`
-  （int get_纳米RoleChoice（））
-- `void SetVisible(bool visible)`
-  （void 设置可见（布尔值 visible））
-- `void RefreshAnim()`
-  （void 刷新动画（））
-- `void InitChoice()`
-  （void 初始化Choice（））
-- `void PlayerController_FocusHUD_Listenner(ref string value)`
-  （void 玩家Controller_聚焦HUD_Listenner（ref string value））
-- `void ResetChoice(ChoiceBase[] choices)`
-  （void 重置Choice（ChoiceBase[] choices））
-- `void UpdateInvincible(bool value)`
-  （void 更新Invincible（bool value））
-- `void TryBecomeSavior()`
-  （void TryBecomeSavior（））
-- `void TryBecomeHero(NanoRole role)`
-  （void TryBecome英雄（纳米角色 role））
-- `void TryBecomeTerminator(NanoRole role)`
-  （void TryBecomeTerminator（纳米角色 role））
-- `void TryGiveWeapon(int wpnID)`
-  （void TryGiveWeapon（int wpnID））
-
----
-
-## HUD_CheatChoice
-**继承**: RecyclableObject（可回收对象）
-
-### 字段 (3)
-
-- `RectTransform rect`（矩形变换 rect）(偏移: 0x30)
-- `RawImage rawImg`（Raw图像 rawImg）(偏移: 0x34)
-- `Text choiceText`（文本 choice文本）(偏移: 0x38)
-
-### 方法 (3)
-
-- `void set_isFocus(bool value)`
-  （void set_is聚焦（bool value））
-- `void SetPos(int pos)`
-  （void 集合Pos（int pos））
-
----
-
-## MD5CryptoServiceProvider
-**继承**: MD5（MD5）
-
-### 字段 (6)
-
-- `uint[] _H`（uint[] _H）(偏移: 0x18)
-- `uint[] buff`（uint[] buff）(偏移: 0x1C)
-- `ulong count`（ulong count）(偏移: 0x20)
-- `byte[] _ProcessingBuffer`（byte[] _Processing缓冲区）(偏移: 0x28)
-- `int _ProcessingBufferCount`（int _Processing缓冲区数量）(偏移: 0x2C)
-- `uint[] K`（uint[] K）(偏移: 0x0)
-
-### 方法 (8)
-
-- `void Finalize()`
-  （void 终结（））
-- `void Dispose(bool disposing)`
-  （void 释放（布尔值 正在释放））
-- `void HashCore(byte[] rgb, int ibStart, int cbSize)`
-  （void 哈希核心（字节[] rgb, 整数 ibStart, 整数 cbSize））
-- `byte[] HashFinal()`
-  （字节[] 哈希最终（））
-- `void Initialize()`
-  （void 初始化（））
-- `void ProcessBlock(byte[] inputBuffer, int inputOffset)`
-  （void 处理Block（byte[] inputBuffer, int inputOffset））
-- `void ProcessFinalBlock(byte[] inputBuffer, int inputOffset, int inputCount)`
-  （void 处理FinalBlock（byte[] inputBuffer, int inputOffset, int inputCount））
-- `void AddLength(ulong length, byte[] buffer, int position)`
-  （void 添加Length（ulong length, byte[] buffer, int position））
-
----
-
-## ObscuredBool
-**继承**: IEquatable<ObscuredBool>, IComparable<ObscuredBool>, IComparable<bool>, IComparable（IEquatable<模糊的Bool>, IComparable<模糊的Bool>, IComparable<bool>, IComparable）
-
-### 字段 (6)
-
-- `byte cryptoKey`（byte crypto键）(偏移: 0x0)
-- `byte currentCryptoKey`（byte currentCrypto键）(偏移: 0x0)
-- `int hiddenValue`（int hidden值）(偏移: 0x4)
-- `bool inited`（布尔值 已初始化）(偏移: 0x8)
-- `bool fakeValue`（bool fake值）(偏移: 0x9)
-- `bool fakeValueActive`（布尔值 假值激活的）(偏移: 0xA)
-
-### 方法 (21)
-
-- `void SetNewCryptoKey(byte newKey)`
-  （void 集合新的Crypto键（byte newKey））
-- `int Encrypt(bool value)`
-  （int Encrypt（bool value））
-- `int Encrypt(bool value, byte key)`
-  （int Encrypt（bool value, byte key））
-- `bool Decrypt(int value)`
-  （bool Decrypt（int value））
-- `bool Decrypt(int value, byte key)`
-  （bool Decrypt（int value, byte key））
-- `ObscuredBool FromEncrypted(int encrypted)`
-  （模糊的布尔值 FromEncrypted（int encrypted））
-- `void ApplyNewCryptoKey()`
-  （void 应用新加密密钥（））
-- `void RandomizeCryptoKey()`
-  （void 随机化加密密钥（））
-- `int GetEncrypted()`
-  （int 获取Encrypted（））
-- `void SetEncrypted(int encrypted)`
-  （void 集合Encrypted（int encrypted））
-- `bool GetDecrypted()`
-  （bool 获取Decrypted（））
-- `bool InternalDecrypt()`
-  （bool 内部的Decrypt（））
-- `ObscuredBool op_Implicit(bool value)`
-  （模糊的布尔值 op_Implicit（bool value））
-- `bool op_Implicit(ObscuredBool value)`
-  （bool op_Implicit（模糊的布尔值 value））
-- `int GetHashCode()`
-  （整数 获取哈希码（））
-- `string ToString()`
-  （字符串 转字符串（））
-- `bool Equals(object obj)`
-  （布尔值 等于（对象 obj））
-- `bool Equals(ObscuredBool obj)`
-  （bool Equals（模糊的布尔值 obj））
-- `int CompareTo(ObscuredBool other)`
-  （int CompareTo（模糊的布尔值 other））
-- `int CompareTo(bool other)`
-  （int CompareTo（bool other））
-- `int CompareTo(object obj)`
-  （整数 比较到（对象 obj））
-
----
-
-## ObscuredByte
-**继承**: IFormattable, IEquatable<ObscuredByte>, IComparable<ObscuredByte>, IComparable<byte>, IComparable（IFormattable, IEquatable<模糊的Byte>, IComparable<模糊的Byte>, IComparable<byte>, IComparable）
-
-### 字段 (6)
-
-- `byte cryptoKey`（byte crypto键）(偏移: 0x0)
-- `byte currentCryptoKey`（byte currentCrypto键）(偏移: 0x0)
-- `byte hiddenValue`（byte hidden值）(偏移: 0x0)
-- `bool inited`（布尔值 已初始化）(偏移: 0x0)
-- `byte fakeValue`（byte fake值）(偏移: 0x0)
-- `bool fakeValueActive`（布尔值 假值激活的）(偏移: 0x0)
-
-### 方法 (26)
-
-- `void SetNewCryptoKey(byte newKey)`
-  （void 集合新的Crypto键（byte newKey））
-- `byte EncryptDecrypt(byte value)`
-  （byte EncryptDecrypt（byte value））
-- `void EncryptDecrypt(byte[] value)`
-  （void EncryptDecrypt（byte[] value））
-- `byte EncryptDecrypt(byte value, byte key)`
-  （byte EncryptDecrypt（byte value, byte key））
-- `void EncryptDecrypt(byte[] value, byte key)`
-  （void EncryptDecrypt（byte[] value, byte key））
-- `ObscuredByte FromEncrypted(byte encrypted)`
-  （模糊的Byte FromEncrypted（byte encrypted））
-- `void ApplyNewCryptoKey()`
-  （void 应用新加密密钥（））
-- `void RandomizeCryptoKey()`
-  （void 随机化加密密钥（））
-- `byte GetEncrypted()`
-  （byte 获取Encrypted（））
-- `void SetEncrypted(byte encrypted)`
-  （void 集合Encrypted（byte encrypted））
-- `byte GetDecrypted()`
-  （byte 获取Decrypted（））
-- `byte InternalDecrypt()`
-  （byte 内部的Decrypt（））
-- `ObscuredByte op_Implicit(byte value)`
-  （模糊的Byte op_Implicit（byte value））
-- `byte op_Implicit(ObscuredByte value)`
-  （byte op_Implicit（模糊的Byte value））
-- `ObscuredByte op_Increment(ObscuredByte input)`
-  （模糊的Byte op_Increment（模糊的Byte input））
-- `ObscuredByte op_Decrement(ObscuredByte input)`
-  （模糊的Byte op_Decrement（模糊的Byte input））
-- `int GetHashCode()`
-  （整数 获取哈希码（））
-- `string ToString()`
-  （字符串 转字符串（））
-- `string ToString(string format)`
-  （字符串 转字符串（字符串 格式））
-- `string ToString(IFormatProvider provider)`
-  （字符串 转字符串（I格式化提供者 provider））
-- `string ToString(string format, IFormatProvider provider)`
-  （字符串 转字符串（字符串 格式, I格式化提供者 provider））
-- `bool Equals(object obj)`
-  （布尔值 等于（对象 obj））
-- `bool Equals(ObscuredByte obj)`
-  （bool Equals（模糊的Byte obj））
-- `int CompareTo(ObscuredByte other)`
-  （int CompareTo（模糊的Byte other））
-- `int CompareTo(byte other)`
-  （int CompareTo（byte other））
-- `int CompareTo(object obj)`
-  （整数 比较到（对象 obj））
-
----
-
-## ObscuredChar
-**继承**: IEquatable<ObscuredChar>, IComparable<ObscuredChar>, IComparable<char>, IComparable（IEquatable<模糊的Char>, IComparable<模糊的Char>, IComparable<char>, IComparable）
-
-### 字段 (6)
-
-- `char cryptoKey`（char crypto键）(偏移: 0x0)
-- `char currentCryptoKey`（char currentCrypto键）(偏移: 0x0)
-- `char hiddenValue`（char hidden值）(偏移: 0x2)
-- `bool inited`（布尔值 已初始化）(偏移: 0x4)
-- `char fakeValue`（char fake值）(偏移: 0x6)
-- `bool fakeValueActive`（布尔值 假值激活的）(偏移: 0x8)
-
-### 方法 (22)
-
-- `void SetNewCryptoKey(char newKey)`
-  （void 集合新的Crypto键（char newKey））
-- `char EncryptDecrypt(char value)`
-  （char EncryptDecrypt（char value））
-- `char EncryptDecrypt(char value, char key)`
-  （char EncryptDecrypt（char value, char key））
-- `ObscuredChar FromEncrypted(char encrypted)`
-  （模糊的Char FromEncrypted（char encrypted））
-- `void ApplyNewCryptoKey()`
-  （void 应用新加密密钥（））
-- `void RandomizeCryptoKey()`
-  （void 随机化加密密钥（））
-- `char GetEncrypted()`
-  （char 获取Encrypted（））
-- `void SetEncrypted(char encrypted)`
-  （void 集合Encrypted（char encrypted））
-- `char GetDecrypted()`
-  （char 获取Decrypted（））
-- `char InternalDecrypt()`
-  （char 内部的Decrypt（））
-- `ObscuredChar op_Implicit(char value)`
-  （模糊的Char op_Implicit（char value））
-- `char op_Implicit(ObscuredChar value)`
-  （char op_Implicit（模糊的Char value））
-- `ObscuredChar op_Increment(ObscuredChar input)`
-  （模糊的Char op_Increment（模糊的Char input））
-- `ObscuredChar op_Decrement(ObscuredChar input)`
-  （模糊的Char op_Decrement（模糊的Char input））
-- `int GetHashCode()`
-  （整数 获取哈希码（））
-- `string ToString()`
-  （字符串 转字符串（））
-- `string ToString(IFormatProvider provider)`
-  （字符串 转字符串（I格式化提供者 provider））
-- `bool Equals(object obj)`
-  （布尔值 等于（对象 obj））
-- `bool Equals(ObscuredChar obj)`
-  （bool Equals（模糊的Char obj））
-- `int CompareTo(ObscuredChar other)`
-  （int CompareTo（模糊的Char other））
-- `int CompareTo(char other)`
-  （int CompareTo（char other））
-- `int CompareTo(object obj)`
-  （整数 比较到（对象 obj））
-
----
-
-## ObscuredCheatingDetector
-**继承**: ACTkDetectorBase（反作弊检测器基类）
-
-### 字段 (6)
-
-- `int instancesInScene`（int instancesIn场景）(偏移: 0x0)
-- `double doubleEpsilon`（double doubleEpsilon）(偏移: 0x20)
-- `float floatEpsilon`（float floatEpsilon）(偏移: 0x28)
-- `float vector2Epsilon`（float vector2Epsilon）(偏移: 0x2C)
-- `float vector3Epsilon`（float vector3Epsilon）(偏移: 0x30)
-- `float quaternionEpsilon`（float quaternionEpsilon）(偏移: 0x34)
-
-### 方法 (15)
-
-- `ObscuredCheatingDetector AddToSceneOrGetExisting()`
-  （模糊的CheatingDetector 添加To场景Or获取Existing（））
-- `void StartDetection()`
-  （void 开始Detection（））
-- `void StopDetection()`
-  （void 停止检测（））
-- `void Dispose()`
-  （void 释放（））
-- `ObscuredCheatingDetector get_Instance()`
-  （模糊的CheatingDetector get_实例（））
-- `void set_Instance(ObscuredCheatingDetector value)`
-  （void set_实例（模糊的CheatingDetector value））
-- `ObscuredCheatingDetector get_GetOrCreateInstance()`
-  （模糊的CheatingDetector get_获取Or创建实例（））
-- `bool get_ExistsAndIsRunning()`
-  （bool get_ExistsAnd是否Running（））
-- `void OnLevelWasLoadedNew(Scene scene, LoadSceneMode mode)`
-  （void On等级WasLoaded新的（场景 scene, 加载场景模式 mode））
-- `void StartDetectionAutomatically()`
-  （void 自动开始检测（））
-- `void DisposeInternal()`
-  （void 释放内部（））
-
----
-
-## ObscuredDecimal
-**继承**: IFormattable, IEquatable<ObscuredDecimal>, IComparable<ObscuredDecimal>, IComparable<Decimal>, IComparable（IFormattable, IEquatable<模糊的Decimal>, IComparable<模糊的Decimal>, IComparable<Decimal>, IComparable）
-
-### 字段 (6)
-
-- `long cryptoKey`（long crypto键）(偏移: 0x0)
-- `long currentCryptoKey`（long currentCrypto键）(偏移: 0x0)
-- `ACTkByte16 hiddenValue`（ACTkByte16 hidden值）(偏移: 0x8)
-- `bool inited`（布尔值 已初始化）(偏移: 0x18)
-- `Decimal fakeValue`（Decimal fake值）(偏移: 0x1C)
-- `bool fakeValueActive`（布尔值 假值激活的）(偏移: 0x2C)
-
-### 方法 (29)
-
-- `void SetNewCryptoKey(long newKey)`
-  （void 集合新的Crypto键（long newKey））
-- `Decimal Encrypt(Decimal value)`
-  （Decimal Encrypt（Decimal value））
-- `Decimal Encrypt(Decimal value, long key)`
-  （Decimal Encrypt（Decimal value, long key））
-- `ACTkByte16 InternalEncrypt(Decimal value)`
-  （ACTkByte16 内部的Encrypt（Decimal value））
-- `ACTkByte16 InternalEncrypt(Decimal value, long key)`
-  （ACTkByte16 内部的Encrypt（Decimal value, long key））
-- `Decimal Decrypt(Decimal value)`
-  （Decimal Decrypt（Decimal value））
-- `Decimal Decrypt(Decimal value, long key)`
-  （Decimal Decrypt（Decimal value, long key））
-- `ObscuredDecimal FromEncrypted(Decimal encrypted)`
-  （模糊的Decimal FromEncrypted（Decimal encrypted））
-- `void ApplyNewCryptoKey()`
-  （void 应用新加密密钥（））
-- `void RandomizeCryptoKey()`
-  （void 随机化加密密钥（））
-- `Decimal GetEncrypted()`
-  （Decimal 获取Encrypted（））
-- `void SetEncrypted(Decimal encrypted)`
-  （void 集合Encrypted（Decimal encrypted））
-- `Decimal GetDecrypted()`
-  （Decimal 获取Decrypted（））
-- `Decimal InternalDecrypt()`
-  （Decimal 内部的Decrypt（））
-- `ObscuredDecimal op_Implicit(Decimal value)`
-  （模糊的Decimal op_Implicit（Decimal value））
-- `Decimal op_Implicit(ObscuredDecimal value)`
-  （Decimal op_Implicit（模糊的Decimal value））
-- `ObscuredDecimal op_Explicit(ObscuredFloat f)`
-  （模糊的Decimal op_Explicit（模糊的浮点数 f））
-- `ObscuredDecimal op_Increment(ObscuredDecimal input)`
-  （模糊的Decimal op_Increment（模糊的Decimal input））
-- `ObscuredDecimal op_Decrement(ObscuredDecimal input)`
-  （模糊的Decimal op_Decrement（模糊的Decimal input））
-- `int GetHashCode()`
-  （整数 获取哈希码（））
-- `string ToString()`
-  （字符串 转字符串（））
-- `string ToString(string format)`
-  （字符串 转字符串（字符串 格式））
-- `string ToString(IFormatProvider provider)`
-  （字符串 转字符串（I格式化提供者 provider））
-- `string ToString(string format, IFormatProvider provider)`
-  （字符串 转字符串（字符串 格式, I格式化提供者 provider））
-- `bool Equals(object obj)`
-  （布尔值 等于（对象 obj））
-- `bool Equals(ObscuredDecimal obj)`
-  （bool Equals（模糊的Decimal obj））
-- `int CompareTo(ObscuredDecimal other)`
-  （int CompareTo（模糊的Decimal other））
-- `int CompareTo(Decimal other)`
-  （int CompareTo（Decimal other））
-- `int CompareTo(object obj)`
-  （整数 比较到（对象 obj））
-
----
-
-## ObscuredDecimal.DecimalLongBytesUnion
-### 字段 (4)
-
-- `Decimal d`（Decimal d）(偏移: 0x0)
-- `long l1`（long l1）(偏移: 0x0)
-- `long l2`（long l2）(偏移: 0x8)
-- `ACTkByte16 b16`（ACTkByte16 b16）(偏移: 0x0)
-
----
-
-## ObscuredDouble
-**继承**: IFormattable, IEquatable<ObscuredDouble>, IComparable<ObscuredDouble>, IComparable<double>, IComparable（IFormattable, IEquatable<模糊的Double>, IComparable<模糊的Double>, IComparable<double>, IComparable）
-
-### 字段 (7)
-
-- `long cryptoKey`（long crypto键）(偏移: 0x0)
-- `long currentCryptoKey`（long currentCrypto键）(偏移: 0x0)
-- `long hiddenValue`（long hidden值）(偏移: 0x8)
-- `ACTkByte8 hiddenValueOldByte8`（ACTkByte8 hidden值旧的Byte8）(偏移: 0x10)
-- `bool inited`（布尔值 已初始化）(偏移: 0x18)
-- `double fakeValue`（double fake值）(偏移: 0x20)
-- `bool fakeValueActive`（布尔值 假值激活的）(偏移: 0x28)
-
-### 方法 (29)
-
-- `void SetNewCryptoKey(long newKey)`
-  （void 集合新的Crypto键（long newKey））
-- `long Encrypt(double value)`
-  （long Encrypt（double value））
-- `long Encrypt(double value, long key)`
-  （long Encrypt（double value, long key））
-- `long InternalEncrypt(double value, long key = 0)`
-  （long 内部的Encrypt（double value, long key = 0））
-- `double Decrypt(long value)`
-  （double Decrypt（long value））
-- `double Decrypt(long value, long key)`
-  （double Decrypt（long value, long key））
-- `long MigrateEncrypted(long encrypted, byte fromVersion = 0, byte toVersion = 2)`
-  （long MigrateEncrypted（long encrypted, byte fromVersion = 0, byte toVersion = 2））
-- `ObscuredDouble FromEncrypted(long encrypted)`
-  （模糊的Double FromEncrypted（long encrypted））
-- `void ApplyNewCryptoKey()`
-  （void 应用新加密密钥（））
-- `void RandomizeCryptoKey()`
-  （void 随机化加密密钥（））
-- `long GetEncrypted()`
-  （long 获取Encrypted（））
-- `void SetEncrypted(long encrypted)`
-  （void 集合Encrypted（long encrypted））
-- `double GetDecrypted()`
-  （double 获取Decrypted（））
-- `double InternalDecrypt()`
-  （double 内部的Decrypt（））
-- `ObscuredDouble op_Implicit(double value)`
-  （模糊的Double op_Implicit（double value））
-- `double op_Implicit(ObscuredDouble value)`
-  （double op_Implicit（模糊的Double value））
-- `ObscuredDouble op_Explicit(ObscuredFloat f)`
-  （模糊的Double op_Explicit（模糊的浮点数 f））
-- `ObscuredDouble op_Increment(ObscuredDouble input)`
-  （模糊的Double op_Increment（模糊的Double input））
-- `ObscuredDouble op_Decrement(ObscuredDouble input)`
-  （模糊的Double op_Decrement（模糊的Double input））
-- `int GetHashCode()`
-  （整数 获取哈希码（））
-- `string ToString()`
-  （字符串 转字符串（））
-- `string ToString(string format)`
-  （字符串 转字符串（字符串 格式））
-- `string ToString(IFormatProvider provider)`
-  （字符串 转字符串（I格式化提供者 provider））
-- `string ToString(string format, IFormatProvider provider)`
-  （字符串 转字符串（字符串 格式, I格式化提供者 provider））
-- `bool Equals(object obj)`
-  （布尔值 等于（对象 obj））
-- `bool Equals(ObscuredDouble obj)`
-  （bool Equals（模糊的Double obj））
-- `int CompareTo(ObscuredDouble other)`
-  （int CompareTo（模糊的Double other））
-- `int CompareTo(double other)`
-  （int CompareTo（double other））
-- `int CompareTo(object obj)`
-  （整数 比较到（对象 obj））
-
----
-
-## ObscuredDouble.DoubleLongBytesUnion
-### 字段 (3)
-
-- `double d`（double d）(偏移: 0x0)
-- `long l`（long l）(偏移: 0x0)
-- `ACTkByte8 b8`（ACTkByte8 b8）(偏移: 0x0)
-
----
-
-## ObscuredFloat
-**继承**: IFormattable, IEquatable<ObscuredFloat>, IComparable<ObscuredFloat>, IComparable<float>, IComparable（IFormattable, IEquatable<模糊的Float>, IComparable<模糊的Float>, IComparable<float>, IComparable）
-
-### 字段 (7)
-
-- `int cryptoKey`（整数 加密密钥）(偏移: 0x0)
-- `int currentCryptoKey`（整数 当前加密密钥）(偏移: 0x0)
-- `int hiddenValue`（int hidden值）(偏移: 0x4)
-- `ACTkByte4 hiddenValueOldByte4`（ACTkByte4 hidden值旧的Byte4）(偏移: 0x8)
-- `bool inited`（布尔值 已初始化）(偏移: 0xC)
-- `float fakeValue`（float fake值）(偏移: 0x10)
-- `bool fakeValueActive`（布尔值 假值激活的）(偏移: 0x14)
-
-### 方法 (28)
-
-- `void SetNewCryptoKey(int newKey)`
-  （void 设置新加密密钥（整数 newKey））
-- `int Encrypt(float value)`
-  （int Encrypt（float value））
-- `int Encrypt(float value, int key)`
-  （int Encrypt（float value, int key））
-- `int InternalEncrypt(float value, int key = 0)`
-  （int 内部的Encrypt（float value, int key = 0））
-- `float Decrypt(int value)`
-  （float Decrypt（int value））
-- `float Decrypt(int value, int key)`
-  （float Decrypt（int value, int key））
-- `int MigrateEncrypted(int encrypted, byte fromVersion = 0, byte toVersion = 2)`
-  （int MigrateEncrypted（int encrypted, byte fromVersion = 0, byte toVersion = 2））
-- `ObscuredFloat FromEncrypted(int encrypted)`
-  （模糊的浮点数 FromEncrypted（int encrypted））
-- `void ApplyNewCryptoKey()`
-  （void 应用新加密密钥（））
-- `void RandomizeCryptoKey()`
-  （void 随机化加密密钥（））
-- `int GetEncrypted()`
-  （int 获取Encrypted（））
-- `void SetEncrypted(int encrypted)`
-  （void 集合Encrypted（int encrypted））
-- `float GetDecrypted()`
-  （float 获取Decrypted（））
-- `float InternalDecrypt()`
-  （float 内部的Decrypt（））
-- `ObscuredFloat op_Implicit(float value)`
-  （模糊的浮点数 op_Implicit（float value））
-- `float op_Implicit(ObscuredFloat value)`
-  （float op_Implicit（模糊的浮点数 value））
-- `ObscuredFloat op_Increment(ObscuredFloat input)`
-  （模糊的浮点数 op_Increment（模糊的浮点数 input））
-- `ObscuredFloat op_Decrement(ObscuredFloat input)`
-  （模糊的浮点数 op_Decrement（模糊的浮点数 input））
-- `int GetHashCode()`
-  （整数 获取哈希码（））
-- `string ToString()`
-  （字符串 转字符串（））
-- `string ToString(string format)`
-  （字符串 转字符串（字符串 格式））
-- `string ToString(IFormatProvider provider)`
-  （字符串 转字符串（I格式化提供者 provider））
-- `string ToString(string format, IFormatProvider provider)`
-  （字符串 转字符串（字符串 格式, I格式化提供者 provider））
-- `bool Equals(object obj)`
-  （布尔值 等于（对象 obj））
-- `bool Equals(ObscuredFloat obj)`
-  （bool Equals（模糊的浮点数 obj））
-- `int CompareTo(ObscuredFloat other)`
-  （int CompareTo（模糊的浮点数 other））
-- `int CompareTo(float other)`
-  （int CompareTo（float other））
-- `int CompareTo(object obj)`
-  （整数 比较到（对象 obj））
-
----
-
-## ObscuredFloat.FloatIntBytesUnion
-### 字段 (3)
-
-- `float f`（float f）(偏移: 0x0)
-- `int i`（int i）(偏移: 0x0)
-- `ACTkByte4 b4`（ACTkByte4 b4）(偏移: 0x0)
-
----
-
-## ObscuredInt
-**继承**: IFormattable, IEquatable<ObscuredInt>, IComparable<ObscuredInt>, IComparable<int>, IComparable（IFormattable, IEquatable<模糊的Int>, IComparable<模糊的Int>, IComparable<int>, IComparable）
-
-### 字段 (6)
-
-- `int cryptoKey`（整数 加密密钥）(偏移: 0x0)
-- `int currentCryptoKey`（整数 当前加密密钥）(偏移: 0x0)
-- `int hiddenValue`（int hidden值）(偏移: 0x4)
-- `bool inited`（布尔值 已初始化）(偏移: 0x8)
-- `int fakeValue`（int fake值）(偏移: 0xC)
-- `bool fakeValueActive`（布尔值 假值激活的）(偏移: 0x10)
-
-### 方法 (29)
-
-- `void SetNewCryptoKey(int newKey)`
-  （void 设置新加密密钥（整数 newKey））
-- `int Encrypt(int value)`
-  （int Encrypt（int value））
-- `int Encrypt(int value, int key)`
-  （int Encrypt（int value, int key））
-- `int Decrypt(int value)`
-  （int Decrypt（int value））
-- `int Decrypt(int value, int key)`
-  （int Decrypt（int value, int key））
-- `ObscuredInt FromEncrypted(int encrypted)`
-  （模糊整数 FromEncrypted（int encrypted））
-- `void ApplyNewCryptoKey()`
-  （void 应用新加密密钥（））
-- `void RandomizeCryptoKey()`
-  （void 随机化加密密钥（））
-- `int GetEncrypted()`
-  （int 获取Encrypted（））
-- `void SetEncrypted(int encrypted)`
-  （void 集合Encrypted（int encrypted））
-- `int GetDecrypted()`
-  （int 获取Decrypted（））
-- `int InternalDecrypt()`
-  （int 内部的Decrypt（））
-- `ObscuredInt op_Implicit(int value)`
-  （模糊整数 op_Implicit（int value））
-- `int op_Implicit(ObscuredInt value)`
-  （int op_Implicit（模糊整数 value））
-- `ObscuredFloat op_Implicit(ObscuredInt value)`
-  （模糊的浮点数 op_Implicit（模糊整数 value））
-- `ObscuredDouble op_Implicit(ObscuredInt value)`
-  （模糊的Double op_Implicit（模糊整数 value））
-- `ObscuredUInt op_Explicit(ObscuredInt value)`
-  （模糊的U整数 op_Explicit（模糊整数 value））
-- `ObscuredInt op_Increment(ObscuredInt input)`
-  （模糊整数 op_Increment（模糊整数 input））
-- `ObscuredInt op_Decrement(ObscuredInt input)`
-  （模糊整数 op_Decrement（模糊整数 input））
-- `int GetHashCode()`
-  （整数 获取哈希码（））
-- `string ToString()`
-  （字符串 转字符串（））
-- `string ToString(string format)`
-  （字符串 转字符串（字符串 格式））
-- `string ToString(IFormatProvider provider)`
-  （字符串 转字符串（I格式化提供者 provider））
-- `string ToString(string format, IFormatProvider provider)`
-  （字符串 转字符串（字符串 格式, I格式化提供者 provider））
-- `bool Equals(object obj)`
-  （布尔值 等于（对象 obj））
-- `bool Equals(ObscuredInt obj)`
-  （bool Equals（模糊整数 obj））
-- `int CompareTo(ObscuredInt other)`
-  （int CompareTo（模糊整数 other））
-- `int CompareTo(int other)`
-  （int CompareTo（int other））
-- `int CompareTo(object obj)`
-  （整数 比较到（对象 obj））
-
----
-
-## ObscuredLong
-**继承**: IFormattable, IEquatable<ObscuredLong>, IComparable<ObscuredLong>, IComparable<long>, IComparable（IFormattable, IEquatable<模糊的Long>, IComparable<模糊的Long>, IComparable<long>, IComparable）
-
-### 字段 (6)
-
-- `long cryptoKey`（long crypto键）(偏移: 0x0)
-- `long currentCryptoKey`（long currentCrypto键）(偏移: 0x0)
-- `long hiddenValue`（long hidden值）(偏移: 0x8)
-- `bool inited`（布尔值 已初始化）(偏移: 0x10)
-- `long fakeValue`（long fake值）(偏移: 0x18)
-- `bool fakeValueActive`（布尔值 假值激活的）(偏移: 0x20)
-
-### 方法 (26)
-
-- `void SetNewCryptoKey(long newKey)`
-  （void 集合新的Crypto键（long newKey））
-- `long Encrypt(long value)`
-  （long Encrypt（long value））
-- `long Decrypt(long value)`
-  （long Decrypt（long value））
-- `long Encrypt(long value, long key)`
-  （long Encrypt（long value, long key））
-- `long Decrypt(long value, long key)`
-  （long Decrypt（long value, long key））
-- `ObscuredLong FromEncrypted(long encrypted)`
-  （模糊的Long FromEncrypted（long encrypted））
-- `void ApplyNewCryptoKey()`
-  （void 应用新加密密钥（））
-- `void RandomizeCryptoKey()`
-  （void 随机化加密密钥（））
-- `long GetEncrypted()`
-  （long 获取Encrypted（））
-- `void SetEncrypted(long encrypted)`
-  （void 集合Encrypted（long encrypted））
-- `long GetDecrypted()`
-  （long 获取Decrypted（））
-- `long InternalDecrypt()`
-  （long 内部的Decrypt（））
-- `ObscuredLong op_Implicit(long value)`
-  （模糊的Long op_Implicit（long value））
-- `long op_Implicit(ObscuredLong value)`
-  （long op_Implicit（模糊的Long value））
-- `ObscuredLong op_Increment(ObscuredLong input)`
-  （模糊的Long op_Increment（模糊的Long input））
-- `ObscuredLong op_Decrement(ObscuredLong input)`
-  （模糊的Long op_Decrement（模糊的Long input））
-- `int GetHashCode()`
-  （整数 获取哈希码（））
-- `string ToString()`
-  （字符串 转字符串（））
-- `string ToString(string format)`
-  （字符串 转字符串（字符串 格式））
-- `string ToString(IFormatProvider provider)`
-  （字符串 转字符串（I格式化提供者 provider））
-- `string ToString(string format, IFormatProvider provider)`
-  （字符串 转字符串（字符串 格式, I格式化提供者 provider））
-- `bool Equals(object obj)`
-  （布尔值 等于（对象 obj））
-- `bool Equals(ObscuredLong obj)`
-  （bool Equals（模糊的Long obj））
-- `int CompareTo(ObscuredLong other)`
-  （int CompareTo（模糊的Long other））
-- `int CompareTo(long other)`
-  （int CompareTo（long other））
-- `int CompareTo(object obj)`
-  （整数 比较到（对象 obj））
-
----
-
-## ObscuredPerformanceTests
-**继承**: MonoBehaviour（MonoBehaviour行为）
-
-### 字段 (25)
-
-- `bool boolTest`（bool boolTest）(偏移: 0xC)
-- `int boolIterations`（int boolIterations）(偏移: 0x10)
-- `bool byteTest`（bool byteTest）(偏移: 0x14)
-- `int byteIterations`（int byteIterations）(偏移: 0x18)
-- `bool shortTest`（bool shortTest）(偏移: 0x1C)
-- `int shortIterations`（int shortIterations）(偏移: 0x20)
-- `bool ushortTest`（bool ushortTest）(偏移: 0x24)
-- `int ushortIterations`（int ushortIterations）(偏移: 0x28)
-- `bool intTest`（bool intTest）(偏移: 0x2C)
-- `int intIterations`（int intIterations）(偏移: 0x30)
-- `bool uintTest`（bool uintTest）(偏移: 0x34)
-- `int uintIterations`（int uintIterations）(偏移: 0x38)
-- `bool longTest`（bool longTest）(偏移: 0x3C)
-- `int longIterations`（int longIterations）(偏移: 0x40)
-- `bool floatTest`（bool floatTest）(偏移: 0x44)
-- `int floatIterations`（int floatIterations）(偏移: 0x48)
-- `bool doubleTest`（bool doubleTest）(偏移: 0x4C)
-- `int doubleIterations`（int doubleIterations）(偏移: 0x50)
-- `bool stringTest`（bool stringTest）(偏移: 0x54)
-- `int stringIterations`（int stringIterations）(偏移: 0x58)
-- `bool vector3Test`（bool vector3Test）(偏移: 0x5C)
-- `int vector3Iterations`（int vector3Iterations）(偏移: 0x60)
-- `bool prefsTest`（bool prefsTest）(偏移: 0x64)
-- `int prefsIterations`（int prefsIterations）(偏移: 0x68)
-- `StringBuilder logBuilder`（字符串构建器 log构建器）(偏移: 0x6C)
-
-### 方法 (14)
-
-- `void Start()`
-  （void 开始（））
-- `void StartTests()`
-  （void 开始Tests（））
-- `void TestBool()`
-  （void Test布尔值（））
-- `void TestByte()`
-  （void TestByte（））
-- `void TestShort()`
-  （void TestShort（））
-- `void TestUShort()`
-  （void TestUShort（））
-- `void TestDouble()`
-  （void TestDouble（））
-- `void TestFloat()`
-  （void Test浮点数（））
-- `void TestInt()`
-  （void Test整数（））
-- `void TestLong()`
-  （void TestLong（））
-- `void TestString()`
-  （void Test字符串（））
-- `void TestUInt()`
-  （void TestU整数（））
-- `void TestVector3()`
-  （void Test三维向量（））
-- `void TestPrefs()`
-  （void TestPrefs（））
-
----
-
-## ObscuredPrefs
-### 字段 (14)
-
-- `bool alterationReported`（bool alterationReported）(偏移: 0x0)
-- `bool foreignSavesReported`（bool foreignSavesReported）(偏移: 0x1)
-- `string cryptoKey`（string crypto键）(偏移: 0x4)
-- `string deviceId`（string deviceId）(偏移: 0x8)
-- `uint deviceIdHash`（uint deviceIdHash）(偏移: 0xC)
-- `Action onAlterationDetected`（动作 onAlterationDetected）(偏移: 0x10)
-- `Action OnAlterationDetected`（动作 OnAlterationDetected）(偏移: 0x14)
-- `Action onPossibleForeignSavesDetected`（动作 onPossibleForeignSavesDetected）(偏移: 0x18)
-- `Action OnPossibleForeignSavesDetected`（动作 OnPossibleForeignSavesDetected）(偏移: 0x1C)
-- `bool preservePlayerPrefs`（bool preserve玩家Prefs）(偏移: 0x20)
-- `ObscuredPrefs.DeviceLockLevel lockToDevice`（模糊的Prefs.DeviceLock等级 lockToDevice）(偏移: 0x21)
-- `bool readForeignSaves`（bool readForeignSaves）(偏移: 0x22)
-- `bool emergencyMode`（bool emergency模式）(偏移: 0x23)
-- `string deprecatedDeviceId`（string deprecatedDeviceId）(偏移: 0x24)
-
-### 方法 (107)
-
-- `void set_CryptoKey(string value)`
-  （void set_Crypto键（string value））
-- `string get_CryptoKey()`
-  （string get_Crypto键（））
-- `string get_DeviceId()`
-  （string get_DeviceId（））
-- `void set_DeviceId(string value)`
-  （void set_DeviceId（string value））
-- `string get_DeviceID()`
-  （string get_DeviceID（））
-- `void set_DeviceID(string value)`
-  （void set_DeviceID（string value））
-- `uint get_DeviceIdHash()`
-  （uint get_DeviceIdHash（））
-- `void ForceLockToDeviceInit()`
-  （void 强制LockToDevice初始化（））
-- `void SetNewCryptoKey(string newKey)`
-  （void 集合新的Crypto键（string newKey））
-- `void SetInt(string key, int value)`
-  （void 集合整数（string key, int value））
-- `int GetInt(string key)`
-  （int 获取整数（string key））
-- `int GetInt(string key, int defaultValue)`
-  （int 获取整数（string key, int defaultValue））
-- `string EncryptIntValue(string key, int value)`
-  （string Encrypt整数值（string key, int value））
-- `int DecryptIntValue(string key, string encryptedInput, int defaultValue)`
-  （int Decrypt整数值（string key, string encryptedInput, int defaultValue））
-- `void SetUInt(string key, uint value)`
-  （void 集合U整数（string key, uint value））
-- `uint GetUInt(string key)`
-  （uint 获取U整数（string key））
-- `uint GetUInt(string key, uint defaultValue)`
-  （uint 获取U整数（string key, uint defaultValue））
-- `string EncryptUIntValue(string key, uint value)`
-  （string EncryptU整数值（string key, uint value））
-- `uint DecryptUIntValue(string key, string encryptedInput, uint defaultValue)`
-  （uint DecryptU整数值（string key, string encryptedInput, uint defaultValue））
-- `void SetString(string key, string value)`
-  （void 集合字符串（string key, string value））
-- `string GetString(string key)`
-  （string 获取字符串（string key））
-- `string GetString(string key, string defaultValue)`
-  （string 获取字符串（string key, string defaultValue））
-- `string EncryptStringValue(string key, string value)`
-  （string Encrypt字符串值（string key, string value））
-- `string DecryptStringValue(string key, string encryptedInput, string defaultValue)`
-  （string Decrypt字符串值（string key, string encryptedInput, string defaultValue））
-- `void SetFloat(string key, float value)`
-  （void 集合浮点数（string key, float value））
-- `float GetFloat(string key)`
-  （float 获取浮点数（string key））
-- `float GetFloat(string key, float defaultValue)`
-  （float 获取浮点数（string key, float defaultValue））
-- `string EncryptFloatValue(string key, float value)`
-  （string Encrypt浮点数值（string key, float value））
-- `float DecryptFloatValue(string key, string encryptedInput, float defaultValue)`
-  （float Decrypt浮点数值（string key, string encryptedInput, float defaultValue））
-- `void SetDouble(string key, double value)`
-  （void 集合Double（string key, double value））
-- `double GetDouble(string key)`
-  （double 获取Double（string key））
-- `double GetDouble(string key, double defaultValue)`
-  （double 获取Double（string key, double defaultValue））
-- `string EncryptDoubleValue(string key, double value)`
-  （string EncryptDouble值（string key, double value））
-- `double DecryptDoubleValue(string key, string encryptedInput, double defaultValue)`
-  （double DecryptDouble值（string key, string encryptedInput, double defaultValue））
-- `void SetDecimal(string key, Decimal value)`
-  （void 集合Decimal（string key, Decimal value））
-- `Decimal GetDecimal(string key)`
-  （Decimal 获取Decimal（string key））
-- `Decimal GetDecimal(string key, Decimal defaultValue)`
-  （Decimal 获取Decimal（string key, Decimal defaultValue））
-- `string EncryptDecimalValue(string key, Decimal value)`
-  （string EncryptDecimal值（string key, Decimal value））
-- `Decimal DecryptDecimalValue(string key, string encryptedInput, Decimal defaultValue)`
-  （Decimal DecryptDecimal值（string key, string encryptedInput, Decimal defaultValue））
-- `void SetLong(string key, long value)`
-  （void 集合Long（string key, long value））
-- `long GetLong(string key)`
-  （long 获取Long（string key））
-- `long GetLong(string key, long defaultValue)`
-  （long 获取Long（string key, long defaultValue））
-- `string EncryptLongValue(string key, long value)`
-  （string EncryptLong值（string key, long value））
-- `long DecryptLongValue(string key, string encryptedInput, long defaultValue)`
-  （long DecryptLong值（string key, string encryptedInput, long defaultValue））
-- `void SetULong(string key, ulong value)`
-  （void 集合ULong（string key, ulong value））
-- `ulong GetULong(string key)`
-  （ulong 获取ULong（string key））
-- `ulong GetULong(string key, ulong defaultValue)`
-  （ulong 获取ULong（string key, ulong defaultValue））
-- `string EncryptULongValue(string key, ulong value)`
-  （string EncryptULong值（string key, ulong value））
-- `ulong DecryptULongValue(string key, string encryptedInput, ulong defaultValue)`
-  （ulong DecryptULong值（string key, string encryptedInput, ulong defaultValue））
-- `void SetBool(string key, bool value)`
-  （void 集合布尔值（string key, bool value））
-- `bool GetBool(string key)`
-  （bool 获取布尔值（string key））
-- `bool GetBool(string key, bool defaultValue)`
-  （bool 获取布尔值（string key, bool defaultValue））
-- `string EncryptBoolValue(string key, bool value)`
-  （string Encrypt布尔值值（string key, bool value））
-- `bool DecryptBoolValue(string key, string encryptedInput, bool defaultValue)`
-  （bool Decrypt布尔值值（string key, string encryptedInput, bool defaultValue））
-- `void SetByteArray(string key, byte[] value)`
-  （void 集合Byte数组（string key, byte[] value））
-- `byte[] GetByteArray(string key)`
-  （byte[] 获取Byte数组（string key））
-- `byte[] GetByteArray(string key, byte defaultValue, int defaultLength)`
-  （byte[] 获取Byte数组（string key, byte defaultValue, int defaultLength））
-- `string EncryptByteArrayValue(string key, byte[] value)`
-  （string EncryptByte数组值（string key, byte[] value））
-- `byte[] DecryptByteArrayValue(string key, string encryptedInput, byte defaultValue, int defaultLength)`
-  （byte[] DecryptByte数组值（string key, string encryptedInput, byte defaultValue, int defaultLength））
-- `byte[] ConstructByteArray(byte value, int length)`
-  （byte[] ConstructByte数组（byte value, int length））
-- `void SetVector2(string key, Vector2 value)`
-  （void 集合二维向量（string key, 二维向量 value））
-- `Vector2 GetVector2(string key)`
-  （二维向量 获取二维向量（string key））
-- `Vector2 GetVector2(string key, Vector2 defaultValue)`
-  （二维向量 获取二维向量（string key, 二维向量 defaultValue））
-- `string EncryptVector2Value(string key, Vector2 value)`
-  （string Encrypt二维向量值（string key, 二维向量 value））
-- `Vector2 DecryptVector2Value(string key, string encryptedInput, Vector2 defaultValue)`
-  （二维向量 Decrypt二维向量值（string key, string encryptedInput, 二维向量 defaultValue））
-- `void SetVector3(string key, Vector3 value)`
-  （void 集合三维向量（string key, 三维向量 value））
-- `Vector3 GetVector3(string key)`
-  （三维向量 获取三维向量（string key））
-- `Vector3 GetVector3(string key, Vector3 defaultValue)`
-  （三维向量 获取三维向量（string key, 三维向量 defaultValue））
-- `string EncryptVector3Value(string key, Vector3 value)`
-  （string Encrypt三维向量值（string key, 三维向量 value））
-- `Vector3 DecryptVector3Value(string key, string encryptedInput, Vector3 defaultValue)`
-  （三维向量 Decrypt三维向量值（string key, string encryptedInput, 三维向量 defaultValue））
-- `void SetQuaternion(string key, Quaternion value)`
-  （void 集合Quaternion（string key, Quaternion value））
-- `Quaternion GetQuaternion(string key)`
-  （Quaternion 获取Quaternion（string key））
-- `Quaternion GetQuaternion(string key, Quaternion defaultValue)`
-  （Quaternion 获取Quaternion（string key, Quaternion defaultValue））
-- `string EncryptQuaternionValue(string key, Quaternion value)`
-  （string EncryptQuaternion值（string key, Quaternion value））
-- `Quaternion DecryptQuaternionValue(string key, string encryptedInput, Quaternion defaultValue)`
-  （Quaternion DecryptQuaternion值（string key, string encryptedInput, Quaternion defaultValue））
-- `void SetColor(string key, Color32 value)`
-  （void 集合颜色（string key, Color32 value））
-- `Color32 GetColor(string key)`
-  （Color32 获取颜色（string key））
-- `Color32 GetColor(string key, Color32 defaultValue)`
-  （Color32 获取颜色（string key, Color32 defaultValue））
-- `string EncryptColorValue(string key, uint value)`
-  （string Encrypt颜色值（string key, uint value））
-- `void SetRect(string key, Rect value)`
-  （void 集合Rect（string key, Rect value））
-- `Rect GetRect(string key)`
-  （Rect 获取Rect（string key））
-- `Rect GetRect(string key, Rect defaultValue)`
-  （Rect 获取Rect（string key, Rect defaultValue））
-- `string EncryptRectValue(string key, Rect value)`
-  （string EncryptRect值（string key, Rect value））
-- `Rect DecryptRectValue(string key, string encryptedInput, Rect defaultValue)`
-  （Rect DecryptRect值（string key, string encryptedInput, Rect defaultValue））
-- `void SetRawValue(string key, string encryptedValue)`
-  （void 集合Raw值（string key, string encryptedValue））
-- `string GetRawValue(string key)`
-  （string 获取Raw值（string key））
-- `ObscuredPrefs.DataType GetRawValueType(string value)`
-  （模糊的Prefs.数据类型 获取Raw值类型（string value））
-- `string EncryptKey(string key)`
-  （string Encrypt键（string key））
-- `bool HasKey(string key)`
-  （bool 是否有键（string key））
-- `void DeleteKey(string key)`
-  （void Delete键（string key））
-- `void DeleteAll()`
-  （void Delete所有（））
-- `void Save()`
-  （void 保存（））
-- `string GetEncryptedPrefsString(string key, string encryptedKey)`
-  （string 获取EncryptedPrefs字符串（string key, string encryptedKey））
-- `string EncryptData(string key, byte[] cleanBytes, ObscuredPrefs.DataType type)`
-  （string Encrypt数据（string key, byte[] cleanBytes, 模糊的Prefs.数据类型 type））
-- `byte[] DecryptData(string key, string encryptedInput)`
-  （byte[] Decrypt数据（string key, string encryptedInput））
-- `uint CalculateChecksum(string input)`
-  （uint 计算Checksum（string input））
-- `void SavesTampered()`
-  （void SavesTampered（））
-- `void PossibleForeignSavesDetected()`
-  （void PossibleForeignSavesDetected（））
-- `string GetDeviceId()`
-  （string 获取DeviceId（））
-- `byte[] EncryptDecryptBytes(byte[] bytes, int dataLength, string key)`
-  （byte[] EncryptDecryptBytes（byte[] bytes, int dataLength, string key））
-- `string DeprecatedDecryptValue(string value)`
-  （string DeprecatedDecrypt值（string value））
-- `string DeprecatedCalculateChecksum(string input)`
-  （string Deprecated计算Checksum（string input））
-- `string get_DeprecatedDeviceId()`
-  （string get_DeprecatedDeviceId（））
-
----
-
-## ObscuredPrefs.DeviceLockLevel
-### 字段 (1)
-
-- `byte value__`（字节 值__）(偏移: 0x0)
-
----
-
-## ObscuredPrefsExamples
-**继承**: MonoBehaviour（MonoBehaviour行为）
-
-### 字段 (5)
-
-- `string prefsEncryptionKey`（string prefsEncryption键）(偏移: 0xC)
-- `string regularPrefs`（string regularPrefs）(偏移: 0x10)
-- `string obscuredPrefs`（string obscuredPrefs）(偏移: 0x14)
-- `bool savesAlterationDetected`（bool savesAlterationDetected）(偏移: 0x18)
-- `bool foreignSavesDetected`（bool foreignSavesDetected）(偏移: 0x19)
-
-### 方法 (17)
-
-- `bool get_PreservePlayerPrefs()`
-  （bool get_Preserve玩家Prefs（））
-- `void set_PreservePlayerPrefs(bool value)`
-  （void set_Preserve玩家Prefs（bool value））
-- `bool get_EmergencyMode()`
-  （bool get_Emergency模式（））
-- `void set_EmergencyMode(bool value)`
-  （void set_Emergency模式（bool value））
-- `bool get_ReadForeignSaves()`
-  （bool get_ReadForeignSaves（））
-- `void set_ReadForeignSaves(bool value)`
-  （void set_ReadForeignSaves（bool value））
-- `void SavesAlterationDetected()`
-  （void SavesAlterationDetected（））
-- `void ForeignSavesDetected()`
-  （void ForeignSavesDetected（））
-- `void LoadRegularPrefs()`
-  （void 加载RegularPrefs（））
-- `void SaveRegularPrefs()`
-  （void 保存RegularPrefs（））
-- `void DeleteRegularPrefs()`
-  （void DeleteRegularPrefs（））
-- `void LockObscuredPrefsToDevice(ObscuredPrefs.DeviceLockLevel level)`
-  （void Lock模糊的PrefsToDevice（模糊的Prefs.DeviceLock等级 level））
-- `void LoadObscuredPrefs()`
-  （void 加载模糊的Prefs（））
-- `void SaveObscuredPrefs()`
-  （void 保存模糊的Prefs（））
-- `void DeleteObscuredPrefs()`
-  （void Delete模糊的Prefs（））
-
----
-
-## ObscuredSByte
-**继承**: IFormattable, IEquatable<ObscuredSByte>, IComparable<ObscuredSByte>, IComparable<sbyte>, IComparable（IFormattable, IEquatable<模糊的SByte>, IComparable<模糊的SByte>, IComparable<sbyte>, IComparable）
-
-### 字段 (6)
-
-- `sbyte cryptoKey`（sbyte crypto键）(偏移: 0x0)
-- `sbyte currentCryptoKey`（sbyte currentCrypto键）(偏移: 0x0)
-- `sbyte hiddenValue`（sbyte hidden值）(偏移: 0x0)
-- `bool inited`（布尔值 已初始化）(偏移: 0x0)
-- `sbyte fakeValue`（sbyte fake值）(偏移: 0x0)
-- `bool fakeValueActive`（布尔值 假值激活的）(偏移: 0x0)
-
-### 方法 (24)
-
-- `void SetNewCryptoKey(sbyte newKey)`
-  （void 集合新的Crypto键（sbyte newKey））
-- `sbyte EncryptDecrypt(sbyte value)`
-  （sbyte EncryptDecrypt（sbyte value））
-- `sbyte EncryptDecrypt(sbyte value, sbyte key)`
-  （sbyte EncryptDecrypt（sbyte value, sbyte key））
-- `ObscuredSByte FromEncrypted(sbyte encrypted)`
-  （模糊的SByte FromEncrypted（sbyte encrypted））
-- `void ApplyNewCryptoKey()`
-  （void 应用新加密密钥（））
-- `void RandomizeCryptoKey()`
-  （void 随机化加密密钥（））
-- `sbyte GetEncrypted()`
-  （sbyte 获取Encrypted（））
-- `void SetEncrypted(sbyte encrypted)`
-  （void 集合Encrypted（sbyte encrypted））
-- `sbyte GetDecrypted()`
-  （sbyte 获取Decrypted（））
-- `sbyte InternalDecrypt()`
-  （sbyte 内部的Decrypt（））
-- `ObscuredSByte op_Implicit(sbyte value)`
-  （模糊的SByte op_Implicit（sbyte value））
-- `sbyte op_Implicit(ObscuredSByte value)`
-  （sbyte op_Implicit（模糊的SByte value））
-- `ObscuredSByte op_Increment(ObscuredSByte input)`
-  （模糊的SByte op_Increment（模糊的SByte input））
-- `ObscuredSByte op_Decrement(ObscuredSByte input)`
-  （模糊的SByte op_Decrement（模糊的SByte input））
-- `int GetHashCode()`
-  （整数 获取哈希码（））
-- `string ToString()`
-  （字符串 转字符串（））
-- `string ToString(string format)`
-  （字符串 转字符串（字符串 格式））
-- `string ToString(IFormatProvider provider)`
-  （字符串 转字符串（I格式化提供者 provider））
-- `string ToString(string format, IFormatProvider provider)`
-  （字符串 转字符串（字符串 格式, I格式化提供者 provider））
-- `bool Equals(object obj)`
-  （布尔值 等于（对象 obj））
-- `bool Equals(ObscuredSByte obj)`
-  （bool Equals（模糊的SByte obj））
-- `int CompareTo(ObscuredSByte other)`
-  （int CompareTo（模糊的SByte other））
-- `int CompareTo(sbyte other)`
-  （int CompareTo（sbyte other））
-- `int CompareTo(object obj)`
-  （整数 比较到（对象 obj））
-
----
-
-## ObscuredShort
-**继承**: IFormattable, IEquatable<ObscuredShort>, IComparable<ObscuredShort>, IComparable<short>, IComparable（IFormattable, IEquatable<模糊的Short>, IComparable<模糊的Short>, IComparable<short>, IComparable）
-
-### 字段 (6)
-
-- `short cryptoKey`（short crypto键）(偏移: 0x0)
-- `short currentCryptoKey`（short currentCrypto键）(偏移: 0x0)
-- `short hiddenValue`（short hidden值）(偏移: 0x2)
-- `bool inited`（布尔值 已初始化）(偏移: 0x4)
-- `short fakeValue`（short fake值）(偏移: 0x6)
-- `bool fakeValueActive`（布尔值 假值激活的）(偏移: 0x8)
-
-### 方法 (24)
-
-- `void SetNewCryptoKey(short newKey)`
-  （void 集合新的Crypto键（short newKey））
-- `short EncryptDecrypt(short value)`
-  （short EncryptDecrypt（short value））
-- `short EncryptDecrypt(short value, short key)`
-  （short EncryptDecrypt（short value, short key））
-- `ObscuredShort FromEncrypted(short encrypted)`
-  （模糊的Short FromEncrypted（short encrypted））
-- `void ApplyNewCryptoKey()`
-  （void 应用新加密密钥（））
-- `void RandomizeCryptoKey()`
-  （void 随机化加密密钥（））
-- `short GetEncrypted()`
-  （short 获取Encrypted（））
-- `void SetEncrypted(short encrypted)`
-  （void 集合Encrypted（short encrypted））
-- `short GetDecrypted()`
-  （short 获取Decrypted（））
-- `short InternalDecrypt()`
-  （short 内部的Decrypt（））
-- `ObscuredShort op_Implicit(short value)`
-  （模糊的Short op_Implicit（short value））
-- `short op_Implicit(ObscuredShort value)`
-  （short op_Implicit（模糊的Short value））
-- `ObscuredShort op_Increment(ObscuredShort input)`
-  （模糊的Short op_Increment（模糊的Short input））
-- `ObscuredShort op_Decrement(ObscuredShort input)`
-  （模糊的Short op_Decrement（模糊的Short input））
-- `int GetHashCode()`
-  （整数 获取哈希码（））
-- `string ToString()`
-  （字符串 转字符串（））
-- `string ToString(string format)`
-  （字符串 转字符串（字符串 格式））
-- `string ToString(IFormatProvider provider)`
-  （字符串 转字符串（I格式化提供者 provider））
-- `string ToString(string format, IFormatProvider provider)`
-  （字符串 转字符串（字符串 格式, I格式化提供者 provider））
-- `bool Equals(object obj)`
-  （布尔值 等于（对象 obj））
-- `bool Equals(ObscuredShort obj)`
-  （bool Equals（模糊的Short obj））
-- `int CompareTo(ObscuredShort other)`
-  （int CompareTo（模糊的Short other））
-- `int CompareTo(short other)`
-  （int CompareTo（short other））
-- `int CompareTo(object obj)`
-  （整数 比较到（对象 obj））
-
----
-
-## ObscuredUInt
-**继承**: IFormattable, IEquatable<ObscuredUInt>, IComparable<ObscuredUInt>, IComparable<uint>, IComparable（IFormattable, IEquatable<模糊的UInt>, IComparable<模糊的UInt>, IComparable<uint>, IComparable）
-
-### 字段 (6)
-
-- `uint cryptoKey`（uint crypto键）(偏移: 0x0)
-- `uint currentCryptoKey`（uint currentCrypto键）(偏移: 0x0)
-- `uint hiddenValue`（uint hidden值）(偏移: 0x4)
-- `bool inited`（布尔值 已初始化）(偏移: 0x8)
-- `uint fakeValue`（uint fake值）(偏移: 0xC)
-- `bool fakeValueActive`（布尔值 假值激活的）(偏移: 0x10)
-
-### 方法 (27)
-
-- `void SetNewCryptoKey(uint newKey)`
-  （void 集合新的Crypto键（uint newKey））
-- `uint Encrypt(uint value)`
-  （uint Encrypt（uint value））
-- `uint Decrypt(uint value)`
-  （uint Decrypt（uint value））
-- `uint Encrypt(uint value, uint key)`
-  （uint Encrypt（uint value, uint key））
-- `uint Decrypt(uint value, uint key)`
-  （uint Decrypt（uint value, uint key））
-- `ObscuredUInt FromEncrypted(uint encrypted)`
-  （模糊的U整数 FromEncrypted（uint encrypted））
-- `void ApplyNewCryptoKey()`
-  （void 应用新加密密钥（））
-- `void RandomizeCryptoKey()`
-  （void 随机化加密密钥（））
-- `uint GetEncrypted()`
-  （uint 获取Encrypted（））
-- `void SetEncrypted(uint encrypted)`
-  （void 集合Encrypted（uint encrypted））
-- `uint GetDecrypted()`
-  （uint 获取Decrypted（））
-- `uint InternalDecrypt()`
-  （uint 内部的Decrypt（））
-- `ObscuredUInt op_Implicit(uint value)`
-  （模糊的U整数 op_Implicit（uint value））
-- `uint op_Implicit(ObscuredUInt value)`
-  （uint op_Implicit（模糊的U整数 value））
-- `ObscuredInt op_Explicit(ObscuredUInt value)`
-  （模糊整数 op_Explicit（模糊的U整数 value））
-- `ObscuredUInt op_Increment(ObscuredUInt input)`
-  （模糊的U整数 op_Increment（模糊的U整数 input））
-- `ObscuredUInt op_Decrement(ObscuredUInt input)`
-  （模糊的U整数 op_Decrement（模糊的U整数 input））
-- `int GetHashCode()`
-  （整数 获取哈希码（））
-- `string ToString()`
-  （字符串 转字符串（））
-- `string ToString(string format)`
-  （字符串 转字符串（字符串 格式））
-- `string ToString(IFormatProvider provider)`
-  （字符串 转字符串（I格式化提供者 provider））
-- `string ToString(string format, IFormatProvider provider)`
-  （字符串 转字符串（字符串 格式, I格式化提供者 provider））
-- `bool Equals(object obj)`
-  （布尔值 等于（对象 obj））
-- `bool Equals(ObscuredUInt obj)`
-  （bool Equals（模糊的U整数 obj））
-- `int CompareTo(ObscuredUInt other)`
-  （int CompareTo（模糊的U整数 other））
-- `int CompareTo(uint other)`
-  （int CompareTo（uint other））
-- `int CompareTo(object obj)`
-  （整数 比较到（对象 obj））
-
----
-
-## ObscuredULong
-**继承**: IFormattable, IEquatable<ObscuredULong>, IComparable<ObscuredULong>, IComparable<ulong>, IComparable（IFormattable, IEquatable<模糊的ULong>, IComparable<模糊的ULong>, IComparable<ulong>, IComparable）
-
-### 字段 (6)
-
-- `ulong cryptoKey`（ulong crypto键）(偏移: 0x0)
-- `ulong currentCryptoKey`（ulong currentCrypto键）(偏移: 0x0)
-- `ulong hiddenValue`（ulong hidden值）(偏移: 0x8)
-- `bool inited`（布尔值 已初始化）(偏移: 0x10)
-- `ulong fakeValue`（ulong fake值）(偏移: 0x18)
-- `bool fakeValueActive`（布尔值 假值激活的）(偏移: 0x20)
-
-### 方法 (26)
-
-- `void SetNewCryptoKey(ulong newKey)`
-  （void 集合新的Crypto键（ulong newKey））
-- `ulong Encrypt(ulong value)`
-  （ulong Encrypt（ulong value））
-- `ulong Decrypt(ulong value)`
-  （ulong Decrypt（ulong value））
-- `ulong Encrypt(ulong value, ulong key)`
-  （ulong Encrypt（ulong value, ulong key））
-- `ulong Decrypt(ulong value, ulong key)`
-  （ulong Decrypt（ulong value, ulong key））
-- `ObscuredULong FromEncrypted(ulong encrypted)`
-  （模糊的ULong FromEncrypted（ulong encrypted））
-- `void ApplyNewCryptoKey()`
-  （void 应用新加密密钥（））
-- `void RandomizeCryptoKey()`
-  （void 随机化加密密钥（））
-- `ulong GetEncrypted()`
-  （ulong 获取Encrypted（））
-- `void SetEncrypted(ulong encrypted)`
-  （void 集合Encrypted（ulong encrypted））
-- `ulong GetDecrypted()`
-  （ulong 获取Decrypted（））
-- `ulong InternalDecrypt()`
-  （ulong 内部的Decrypt（））
-- `ObscuredULong op_Implicit(ulong value)`
-  （模糊的ULong op_Implicit（ulong value））
-- `ulong op_Implicit(ObscuredULong value)`
-  （ulong op_Implicit（模糊的ULong value））
-- `ObscuredULong op_Increment(ObscuredULong input)`
-  （模糊的ULong op_Increment（模糊的ULong input））
-- `ObscuredULong op_Decrement(ObscuredULong input)`
-  （模糊的ULong op_Decrement（模糊的ULong input））
-- `int GetHashCode()`
-  （整数 获取哈希码（））
-- `string ToString()`
-  （字符串 转字符串（））
-- `string ToString(string format)`
-  （字符串 转字符串（字符串 格式））
-- `string ToString(IFormatProvider provider)`
-  （字符串 转字符串（I格式化提供者 provider））
-- `string ToString(string format, IFormatProvider provider)`
-  （字符串 转字符串（字符串 格式, I格式化提供者 provider））
-- `bool Equals(object obj)`
-  （布尔值 等于（对象 obj））
-- `bool Equals(ObscuredULong obj)`
-  （bool Equals（模糊的ULong obj））
-- `int CompareTo(ObscuredULong other)`
-  （int CompareTo（模糊的ULong other））
-- `int CompareTo(ulong other)`
-  （int CompareTo（ulong other））
-- `int CompareTo(object obj)`
-  （整数 比较到（对象 obj））
-
----
-
-## ObscuredUShort
-**继承**: IFormattable, IEquatable<ObscuredUShort>, IComparable<ObscuredUShort>, IComparable<ushort>, IComparable（IFormattable, IEquatable<模糊的UShort>, IComparable<模糊的UShort>, IComparable<ushort>, IComparable）
-
-### 字段 (6)
-
-- `ushort cryptoKey`（ushort crypto键）(偏移: 0x0)
-- `ushort currentCryptoKey`（ushort currentCrypto键）(偏移: 0x0)
-- `ushort hiddenValue`（ushort hidden值）(偏移: 0x2)
-- `bool inited`（布尔值 已初始化）(偏移: 0x4)
-- `ushort fakeValue`（ushort fake值）(偏移: 0x6)
-- `bool fakeValueActive`（布尔值 假值激活的）(偏移: 0x8)
-
-### 方法 (24)
-
-- `void SetNewCryptoKey(ushort newKey)`
-  （void 集合新的Crypto键（ushort newKey））
-- `ushort EncryptDecrypt(ushort value)`
-  （ushort EncryptDecrypt（ushort value））
-- `ushort EncryptDecrypt(ushort value, ushort key)`
-  （ushort EncryptDecrypt（ushort value, ushort key））
-- `ObscuredUShort FromEncrypted(ushort encrypted)`
-  （模糊的UShort FromEncrypted（ushort encrypted））
-- `void ApplyNewCryptoKey()`
-  （void 应用新加密密钥（））
-- `void RandomizeCryptoKey()`
-  （void 随机化加密密钥（））
-- `ushort GetEncrypted()`
-  （ushort 获取Encrypted（））
-- `void SetEncrypted(ushort encrypted)`
-  （void 集合Encrypted（ushort encrypted））
-- `ushort GetDecrypted()`
-  （ushort 获取Decrypted（））
-- `ushort InternalDecrypt()`
-  （ushort 内部的Decrypt（））
-- `ObscuredUShort op_Implicit(ushort value)`
-  （模糊的UShort op_Implicit（ushort value））
-- `ushort op_Implicit(ObscuredUShort value)`
-  （ushort op_Implicit（模糊的UShort value））
-- `ObscuredUShort op_Increment(ObscuredUShort input)`
-  （模糊的UShort op_Increment（模糊的UShort input））
-- `ObscuredUShort op_Decrement(ObscuredUShort input)`
-  （模糊的UShort op_Decrement（模糊的UShort input））
-- `int GetHashCode()`
-  （整数 获取哈希码（））
-- `string ToString()`
-  （字符串 转字符串（））
-- `string ToString(string format)`
-  （字符串 转字符串（字符串 格式））
-- `string ToString(IFormatProvider provider)`
-  （字符串 转字符串（I格式化提供者 provider））
-- `string ToString(string format, IFormatProvider provider)`
-  （字符串 转字符串（字符串 格式, I格式化提供者 provider））
-- `bool Equals(object obj)`
-  （布尔值 等于（对象 obj））
-- `bool Equals(ObscuredUShort obj)`
-  （bool Equals（模糊的UShort obj））
-- `int CompareTo(ObscuredUShort other)`
-  （int CompareTo（模糊的UShort other））
-- `int CompareTo(ushort other)`
-  （int CompareTo（ushort other））
-- `int CompareTo(object obj)`
-  （整数 比较到（对象 obj））
-
----
-
-## RC2CryptoServiceProvider
-**继承**: RC2（RC2）
-
-### 字段 (2)
-
-- `bool m_use40bitSalt`（bool m_use40bitSalt）(偏移: 0x30)
-- `KeySizes[] s_legalKeySizes`（密钥大小[] s_合法密钥大小）(偏移: 0x0)
-
-### 方法 (5)
-
-- `ICryptoTransform CreateEncryptor(byte[] rgbKey, byte[] rgbIV)`
-  （ICrypto变换 创建Encryptor（byte[] rgbKey, byte[] rgbIV））
-- `ICryptoTransform CreateDecryptor(byte[] rgbKey, byte[] rgbIV)`
-  （ICrypto变换 创建Decryptor（byte[] rgbKey, byte[] rgbIV））
-- `void GenerateKey()`
-  （void 生成密钥（））
-- `void GenerateIV()`
-  （void 生成IV（））
-
----
-
-## RNGCryptoServiceProvider
-**继承**: RandomNumberGenerator（随机NumberGenerator）
-
-### 字段 (2)
-
-- `object _lock`（object _lock）(偏移: 0x0)
-- `IntPtr _handle`（整数Ptr _handle）(偏移: 0x8)
-
-### 方法 (8)
-
-- `void Check()`
-  （void 检查（））
-- `bool RngOpen()`
-  （bool Rng打开（））
-- `IntPtr RngInitialize(byte[] seed)`
-  （整数Ptr Rng初始化（byte[] seed））
-- `IntPtr RngGetBytes(IntPtr handle, byte[] data)`
-  （整数Ptr Rng获取Bytes（整数Ptr handle, byte[] data））
-- `void RngClose(IntPtr handle)`
-  （void Rng关闭（整数Ptr handle））
-- `void GetBytes(byte[] data)`
-  （void 获取Bytes（byte[] data））
-- `void Finalize()`
-  （void 终结（））
-- `void Dispose(bool disposing)`
-  （void 释放（布尔值 正在释放））
-
----
-
-## RSACryptoServiceProvider
-**继承**: RSA（RSA）
-
-### 字段 (7)
-
-- `CspProviderFlags s_UseMachineKeyStore`（Csp提供者Flags s_UseMachine键商店）(偏移: 0x0)
-- `KeyPairPersistence store`（键PairPersistence store）(偏移: 0x10)
-- `bool persistKey`（bool persist键）(偏移: 0x14)
-- `bool persisted`（bool persisted）(偏移: 0x15)
-- `bool privateKeyExportable`（bool private键Exportable）(偏移: 0x16)
-- `bool m_disposed`（布尔值 m_已释放）(偏移: 0x17)
-- `RSAManaged rsa`（RSAManaged rsa）(偏移: 0x18)
-
-### 方法 (7)
-
-- `bool get_UseMachineKeyStore()`
-  （bool get_UseMachine键商店（））
-- `void Common(int dwKeySize, bool parameters)`
-  （void Common（int dwKeySize, bool parameters））
-- `void Finalize()`
-  （void 终结（））
-- `int get_KeySize()`
-  （整数 获取_键大小（））
-- `RSAParameters ExportParameters(bool includePrivateParameters)`
-  （RSAParameters ExportParameters（bool includePrivateParameters））
-- `void Dispose(bool disposing)`
-  （void 释放（布尔值 正在释放））
-- `void OnKeyGenerated(object sender, EventArgs e)`
-  （void On键Generated（object sender, 事件Args e））
-
----
-
-## SHA1CryptoServiceProvider
-**继承**: SHA1（SHA1）
-
-### 字段 (1)
-
-- `SHA1Internal sha`（SHA1内部的 sha）(偏移: 0x18)
-
-### 方法 (5)
-
-- `void Finalize()`
-  （void 终结（））
-- `void Dispose(bool disposing)`
-  （void 释放（布尔值 正在释放））
-- `void HashCore(byte[] rgb, int ibStart, int cbSize)`
-  （void 哈希核心（字节[] rgb, 整数 ibStart, 整数 cbSize））
-- `byte[] HashFinal()`
-  （字节[] 哈希最终（））
-- `void Initialize()`
-  （void 初始化（））
-
----
-
-## SecurityElement
-### 字段 (9)
-
-- `string text`（字符串 文本）(偏移: 0x8)
-- `string tag`（string tag）(偏移: 0xC)
-- `ArrayList attributes`（数组列表 attributes）(偏移: 0x10)
-- `ArrayList children`（数组列表 children）(偏移: 0x14)
-- `char[] invalid_tag_chars`（char[] invalid_tag_chars）(偏移: 0x0)
-- `char[] invalid_text_chars`（char[] invalid_text_chars）(偏移: 0x4)
-- `char[] invalid_attr_name_chars`（char[] invalid_attr_name_chars）(偏移: 0x8)
-- `char[] invalid_attr_value_chars`（char[] invalid_attr_value_chars）(偏移: 0xC)
-- `char[] invalid_chars`（char[] invalid_chars）(偏移: 0x10)
-
-### 方法 (17)
-
-- `Hashtable get_Attributes()`
-  （Hashtable get_Attributes（））
-- `ArrayList get_Children()`
-  （数组列表 get_Children（））
-- `string get_Tag()`
-  （string get_标签（））
-- `void AddAttribute(string name, string value)`
-  （void 添加Attribute（string name, string value））
-- `void AddChild(SecurityElement child)`
-  （void 添加子级（Security元素 child））
-- `string Escape(string str)`
-  （string Escape（string str））
-- `string Unescape(string str)`
-  （string Unescape（string str））
-- `SecurityElement FromString(string xml)`
-  （Security元素 From字符串（string xml））
-- `bool IsValidAttributeName(string name)`
-  （bool 是否ValidAttribute名称（string name））
-- `bool IsValidAttributeValue(string value)`
-  （bool 是否ValidAttribute值（string value））
-- `bool IsValidTag(string tag)`
-  （bool 是否Valid标签（string tag））
-- `string ToString()`
-  （字符串 转字符串（））
-- `void ToXml(ref StringBuilder s, int level)`
-  （void ToXml（ref StringBuilder s, int level））
-- `SecurityElement.SecurityAttribute GetAttribute(string name)`
-  （SecurityElement.SecurityAttribute 获取Attribute（string name））
-
----
-
-## SecurityElement.SecurityAttribute
-### 字段 (2)
-
-- `string _name`（string _name）(偏移: 0x8)
-- `string _value`（string _value）(偏移: 0xC)
-
-### 方法 (2)
-
-- `string get_Name()`
-  （字符串 获取_名称（））
-- `string get_Value()`
-  （字符串 获取_值（））
-
----
-
-## SecurityException
-**继承**: SystemException（系统异常）
-
-### 字段 (1)
-
-- `string permissionState`（string permission状态）(偏移: 0x44)
-
-### 方法 (2)
-
-- `string ToString()`
-  （字符串 转字符串（））
-
----
-
-## SecurityManager
-### 方法 (2)
-
-- `bool CheckElevatedPermissions()`
-  （bool 检查ElevatedPermissions（））
-- `void EnsureElevatedPermissions()`
-  （void EnsureElevatedPermissions（））
-
----
-
-## SecurityParser
-**继承**: SmallXmlParser, SmallXmlParser.IContentHandler（SmallXmlParser, SmallXmlParser.IContent处理器）
-
-### 字段 (3)
-
-- `SecurityElement root`（Security元素 root）(偏移: 0x38)
-- `SecurityElement current`（Security元素 current）(偏移: 0x3C)
-- `Stack stack`（栈 stack）(偏移: 0x40)
-
-### 方法 (9)
-
-- `void LoadXml(string xml)`
-  （void 加载Xml（string xml））
-- `SecurityElement ToXml()`
-  （Security元素 ToXml（））
-- `void OnStartParsing(SmallXmlParser parser)`
-  （void On开始Parsing（SmallXmlParser parser））
-- `void OnIgnorableWhitespace(string s)`
-  （void OnIgnorableWhitespace（string s））
-- `void OnStartElement(string name, SmallXmlParser.IAttrList attrs)`
-  （void On开始元素（string name, SmallXmlParser.IAttr列表 attrs））
-- `void OnEndElement(string name)`
-  （void On结束元素（string name））
-- `void OnChars(string ch)`
-  （void OnChars（string ch））
-- `void OnEndParsing(SmallXmlParser parser)`
-  （void On结束Parsing（SmallXmlParser parser））
-
----
-
-## SecurityUtils
-### 方法 (7)
-
-- `void DemandReflectionAccess(Type type)`
-  （void DemandReflectionAccess（类型 type））
-- `bool HasReflectionPermission(Type type)`
-  （bool 是否有ReflectionPermission（类型 type））
-- `object SecureCreateInstance(Type type)`
-  （object Secure创建实例（类型 type））
-- `object SecureCreateInstance(Type type, object[] args, bool allowNonPublic)`
-  （object Secure创建实例（类型 type, object[] args, bool allowNonPublic））
-- `object SecureCreateInstance(Type type, object[] args)`
-  （object Secure创建实例（类型 type, object[] args））
-- `object SecureConstructorInvoke(Type type, Type[] argTypes, object[] args, bool allowNonPublic)`
-  （object SecureConstructorInvoke（类型 type, Type[] argTypes, object[] args, bool allowNonPublic））
-- `object SecureConstructorInvoke(Type type, Type[] argTypes, object[] args, bool allowNonPublic, BindingFlags extraFlags)`
-  （object SecureConstructorInvoke（类型 type, Type[] argTypes, object[] args, bool allowNonPublic, BindingFlags extraFlags））
-
----
-
-## TimeCheatingDetector
-**继承**: ACTkDetectorBase（反作弊检测器基类）
-
-### 字段 (20)
-
-- `WaitForEndOfFrame cachedEndOfFrame`（WaitFor结束OfFrame cached结束OfFrame）(偏移: 0x0)
-- `int instancesInScene`（int instancesIn场景）(偏移: 0x4)
-- `bool gettingOnlineTime`（bool gettingOnline时间）(偏移: 0x8)
-- `TimeCheatingDetector.TimeCheatingDetectorEventHandler CheatChecked`（时间CheatingDetector.时间CheatingDetector事件处理器 CheatChecked）(偏移: 0x1C)
-- `string requestUrl`（string requestUrl）(偏移: 0x20)
-- `TimeCheatingDetector.RequestMethod requestMethod`（时间CheatingDetector.请求Method requestMethod）(偏移: 0x24)
-- `int timeoutSeconds`（int timeoutSeconds）(偏移: 0x28)
-- `float interval`（浮点数 间隔）(偏移: 0x2C)
-- `int realCheatThreshold`（int realCheatThreshold）(偏移: 0x30)
-- `int wrongTimeThreshold`（int wrong时间Threshold）(偏移: 0x34)
-- `string onlineOfflineDifferencePrefsKey`（string onlineOfflineDifferencePrefs键）(偏移: 0x44)
-- `Uri cachedUri`（Uri cachedUri）(偏移: 0x48)
-- `TimeCheatingDetector.TimeCheatingDetectorEventHandler cheatChecked`（时间CheatingDetector.时间CheatingDetector事件处理器 cheatChecked）(偏移: 0x4C)
-- `float timeElapsed`（float timeElapsed）(偏移: 0x50)
-- `bool updateAfterPause`（bool updateAfter暂停）(偏移: 0x54)
-- `double lastOnlineSecondsUtc`（double lastOnlineSecondsUtc）(偏移: 0x58)
-- `Action<TimeCheatingDetector.ErrorKind> Error`（Action<时间CheatingDetector.ErrorKind> Error）(偏移: 0x60)
-- `Action CheckPassed`（动作 检查Passed）(偏移: 0x64)
-- `int threshold`（int threshold）(偏移: 0x68)
-- `string timeServer`（string time服务器）(偏移: 0x6C)
-
-### 方法 (54)
-
-- `string get_RequestUrl()`
-  （string get_请求Url（））
-- `void set_RequestUrl(string value)`
-  （void set_请求Url（string value））
-- `bool get_IsCheckingForCheat()`
-  （bool get_是否CheckingForCheat（））
-- `void set_IsCheckingForCheat(bool value)`
-  （void set_是否CheckingForCheat（bool value））
-- `TimeCheatingDetector get_Instance()`
-  （时间CheatingDetector get_实例（））
-- `void set_Instance(TimeCheatingDetector value)`
-  （void set_实例（时间CheatingDetector value））
-- `TimeCheatingDetector get_GetOrCreateInstance()`
-  （时间CheatingDetector get_获取Or创建实例（））
-- `void OnLevelWasLoadedNew(Scene scene, LoadSceneMode mode)`
-  （void On等级WasLoaded新的（场景 scene, 加载场景模式 mode））
-- `void OnApplicationPause(bool pauseStatus)`
-  （void OnApplication暂停（bool pauseStatus））
-- `void Update()`
-  （void 更新（））
-- `TimeCheatingDetector AddToSceneOrGetExisting()`
-  （时间CheatingDetector 添加To场景Or获取Existing（））
-- `void StartDetection(TimeCheatingDetector.TimeCheatingDetectorEventHandler cheatCheckedEventHandler)`
-  （void 开始Detection（时间CheatingDetector.时间CheatingDetector事件处理器 cheatCheckedEventHandler））
-- `void StartDetection(float interval, TimeCheatingDetector.TimeCheatingDetectorEventHandler cheatCheckedEventHandler)`
-  （void 开始Detection（float interval, 时间CheatingDetector.时间CheatingDetector事件处理器 cheatCheckedEventHandler））
-- `void StopDetection()`
-  （void 停止检测（））
-- `void Dispose()`
-  （void 释放（））
-- `Task<TimeCheatingDetector.OnlineTimeResult> GetOnlineTimeTask(string url, TimeCheatingDetector.RequestMethod method = 0)`
-  （Task<时间CheatingDetector.Online时间Result> 获取Online时间Task（string url, 时间CheatingDetector.请求Method method = 0））
-- `Task<TimeCheatingDetector.OnlineTimeResult> GetOnlineTimeTask(Uri uri, TimeCheatingDetector.RequestMethod method = 0)`
-  （Task<时间CheatingDetector.Online时间Result> 获取Online时间Task（Uri uri, 时间CheatingDetector.请求Method method = 0））
-- `UnityWebRequest GetWebRequest(Uri uri, TimeCheatingDetector.RequestMethod method)`
-  （Unity引擎Web请求 获取Web请求（Uri uri, 时间CheatingDetector.请求Method method））
-- `void FillRequestResult(UnityWebRequest request, ref TimeCheatingDetector.OnlineTimeResult result)`
-  （void Fill请求Result（Unity引擎Web请求 request, ref TimeCheatingDetector.OnlineTimeResult result））
-- `Uri UrlToUri(string url)`
-  （Uri UrlToUri（string url））
-- `bool TryGetDate(string source, out DateTime date)`
-  （bool Try获取Date（string source, out DateTime date））
-- `bool ForceCheck()`
-  （bool 强制检查（））
-- `IEnumerator ForceCheckEnumerator()`
-  （IEnumerator 强制检查Enumerator（））
-- `Task<TimeCheatingDetector.CheckResult> ForceCheckTask()`
-  （Task<时间CheatingDetector.检查Result> 强制检查Task（））
-- `void StartDetectionInternal(float checkInterval, TimeCheatingDetector.TimeCheatingDetectorEventHandler cheatCheckedEventHandler)`
-  （void 开始Detection内部的（float checkInterval, 时间CheatingDetector.时间CheatingDetector事件处理器 cheatCheckedEventHandler））
-- `bool Init(ACTkDetectorBase instance, string detectorName)`
-  （bool 初始化（ACTkDetector基础 instance, string detectorName））
-- `void StartDetectionAutomatically()`
-  （void 自动开始检测（））
-- `void PauseDetector()`
-  （void 暂停Detector（））
-- `void StopDetectionInternal()`
-  （void 停止Detection内部的（））
-- `void DisposeInternal()`
-  （void 释放内部（））
-- `IEnumerator CheckForCheat()`
-  （IEnumerator 检查ForCheat（））
-- `void ReportCheckResult()`
-  （void Report检查Result（））
-- `void OnOnlineTimeReceived(TimeCheatingDetector.OnlineTimeResult result)`
-  （void OnOnline时间Received（时间CheatingDetector.Online时间Result result））
-- `double GetLocalSecondsUtc()`
-  （double 获取本地的SecondsUtc（））
-- `double GetOnlineTime(string server)`
-  （double 获取Online时间（string server））
-
----
-
-## TimeCheatingDetector.CheckResult
-### 字段 (1)
-
-- `int value__`（整数 值__）(偏移: 0x0)
-
----
-
-## TimeCheatingDetector.ErrorKind
-### 字段 (1)
-
-- `int value__`（整数 值__）(偏移: 0x0)
-
----
-
-## TimeCheatingDetector.RequestMethod
-### 字段 (1)
-
-- `int value__`（整数 值__）(偏移: 0x0)
-
----
-
-## TimeCheatingDetector.TimeCheatingDetectorEventHandler
-**继承**: MulticastDelegate（多播委托）
-
-### 方法 (3)
-
-- `void Invoke(TimeCheatingDetector.CheckResult checkResult, TimeCheatingDetector.ErrorKind errorKind)`
-  （void Invoke（时间CheatingDetector.检查Result checkResult, 时间CheatingDetector.ErrorKind errorKind））
-- `void EndInvoke(IAsyncResult result)`
-  （void 结束调用（I异步结果 result））
-
----
-
-## TripleDESCryptoServiceProvider
-**继承**: TripleDES（TripleDES）
-
-### 方法 (4)
-
-- `ICryptoTransform CreateEncryptor(byte[] rgbKey, byte[] rgbIV)`
-  （ICrypto变换 创建Encryptor（byte[] rgbKey, byte[] rgbIV））
-- `ICryptoTransform CreateDecryptor(byte[] rgbKey, byte[] rgbIV)`
-  （ICrypto变换 创建Decryptor（byte[] rgbKey, byte[] rgbIV））
-- `void GenerateKey()`
-  （void 生成密钥（））
-- `void GenerateIV()`
-  （void 生成IV（））
-
----
-
-## ZipCrypto
-### 字段 (2)
-
-- `uint[] _Keys`（uint[] _Keys）(偏移: 0x8)
-- `CRC32 crc32`（CRC32 crc32）(偏移: 0xC)
-
-### 方法 (7)
-
-- `ZipCrypto ForWrite(string password)`
-  （ZipCrypto ForWrite（string password））
-- `ZipCrypto ForRead(string password, ZipEntry e)`
-  （ZipCrypto ForRead（string password, ZipEntry e））
-- `byte get_MagicByte()`
-  （byte get_MagicByte（））
-- `void InitCipher(string passphrase)`
-  （void 初始化Cipher（string passphrase））
-- `void UpdateKeys(byte byteValue)`
-  （void 更新Keys（byte byteValue））
-
----
-
-# 反作弊系统 (5个类)
-
-## ACTkDetectorBase
-**继承**: MonoBehaviour（MonoBehaviour行为）
-
-### 字段 (9)
-
-- `GameObject detectorsContainer`（游戏对象 detectors容器）(偏移: 0x0)
-- `bool autoStart`（bool auto开始）(偏移: 0xC)
-- `bool keepAlive`（bool keepAlive）(偏移: 0xD)
-- `bool autoDispose`（bool auto释放）(偏移: 0xE)
-- `Action CheatDetected`（动作 CheatDetected）(偏移: 0x10)
-- `UnityEvent detectionEvent`（Unity引擎事件 detection事件）(偏移: 0x14)
-- `bool detectionEventHasListener`（bool detection事件是否有监听器）(偏移: 0x18)
-- `bool started`（bool started）(偏移: 0x19)
-- `bool isRunning`（bool isRunning）(偏移: 0x1A)
-
-### 方法 (15)
-
-- `bool get_IsRunning()`
-  （bool get_是否Running（））
-- `void Start()`
-  （void 开始（））
-- `void OnApplicationQuit()`
-  （void 应用退出时（））
-- `void OnCheatingDetected()`
-  （void OnCheatingDetected（））
-- `bool Init(ACTkDetectorBase instance, string detectorName)`
-  （bool 初始化（ACTkDetector基础 instance, string detectorName））
-- `void DisposeInternal()`
-  （void 释放内部（））
-- `void StopDetectionInternal()`
-  （void 停止Detection内部的（））
-- `void PauseDetector()`
-  （void 暂停Detector（））
-- `bool ResumeDetector()`
-  （bool 恢复Detector（））
-
----
-
-## DetectorsExamples
-**继承**: MonoBehaviour（MonoBehaviour行为）
-
-### 字段 (6)
-
-- `bool injectionDetected`（bool injectionDetected）(偏移: 0xC)
-- `bool speedHackDetected`（bool speedHackDetected）(偏移: 0xD)
-- `bool wrongTimeDetected`（bool wrong时间Detected）(偏移: 0xE)
-- `bool timeCheatingDetected`（bool timeCheatingDetected）(偏移: 0xF)
-- `bool obscuredTypeCheatDetected`（bool obscured类型CheatDetected）(偏移: 0x10)
-- `bool wallHackCheatDetected`（bool wallHackCheatDetected）(偏移: 0x11)
-
-### 方法 (13)
-
-- `void OnSpeedHackDetected()`
-  （void OnSpeedHackDetected（））
-- `void OnTimeCheatingDetected()`
-  （void On时间CheatingDetected（））
-- `void OnInjectionDetected()`
-  （void OnInjectionDetected（））
-- `void OnInjectionDetectedWithCause(string cause)`
-  （void OnInjectionDetectedWithCause（string cause））
-- `void OnObscuredTypeCheatingDetected()`
-  （void On模糊的类型CheatingDetected（））
-- `void OnWallHackDetected()`
-  （void OnWallHackDetected（））
-- `void OnTimeCheatChecked(TimeCheatingDetector.CheckResult checkResult, TimeCheatingDetector.ErrorKind errorKind)`
-  （void On时间CheatChecked（时间CheatingDetector.检查Result checkResult, 时间CheatingDetector.ErrorKind errorKind））
-- `void Start()`
-  （void 开始（））
-- `void SpeedHackDetectorExample()`
-  （void SpeedHackDetectorExample（））
-- `void InjectionDetectorExample()`
-  （void InjectionDetectorExample（））
-- `void ObscuredCheatingDetectorExample()`
-  （void 模糊的CheatingDetectorExample（））
-- `void TimeCheatingDetectorExample()`
-  （void 时间CheatingDetectorExample（））
-- `void ForceTimeCheatingDetectorCheck()`
-  （void 强制时间CheatingDetector检查（））
-
----
-
-## InjectionDetector
-**继承**: ACTkDetectorBase（反作弊检测器基类）
-
-### 方法 (6)
-
-- `InjectionDetector get_Instance()`
-  （InjectionDetector get_实例（））
-- `void StartDetection()`
-  （void 开始Detection（））
-- `void StopDetection()`
-  （void 停止检测（））
-- `void Dispose()`
-  （void 释放（））
-- `void StartDetectionAutomatically()`
-  （void 自动开始检测（））
-
----
-
-## SpeedHackDetector
-**继承**: ACTkDetectorBase（反作弊检测器基类）
-
-### 字段 (11)
-
-- `int instancesInScene`（int instancesIn场景）(偏移: 0x0)
-- `float interval`（浮点数 间隔）(偏移: 0x1C)
-- `byte maxFalsePositives`（byte maxFalsePositives）(偏移: 0x20)
-- `int coolDown`（int cool下）(偏移: 0x24)
-- `byte currentFalsePositives`（byte currentFalsePositives）(偏移: 0x28)
-- `int currentCooldownShots`（int currentCooldownShots）(偏移: 0x2C)
-- `long ticksOnStart`（long ticksOn开始）(偏移: 0x30)
-- `long vulnerableTicksOnStart`（long vulnerableTicksOn开始）(偏移: 0x38)
-- `long previousTicks`（long previousTicks）(偏移: 0x40)
-- `long previousIntervalTicks`（long previous间隔Ticks）(偏移: 0x48)
-- `float vulnerableTimeOnStart`（float vulnerable时间On开始）(偏移: 0x50)
-
-### 方法 (21)
-
-- `SpeedHackDetector AddToSceneOrGetExisting()`
-  （SpeedHackDetector 添加To场景Or获取Existing（））
-- `void StartDetection()`
-  （void 开始Detection（））
-- `void StopDetection()`
-  （void 停止检测（））
-- `void Dispose()`
-  （void 释放（））
-- `SpeedHackDetector get_Instance()`
-  （SpeedHackDetector get_实例（））
-- `void set_Instance(SpeedHackDetector value)`
-  （void set_实例（SpeedHackDetector value））
-- `SpeedHackDetector get_GetOrCreateInstance()`
-  （SpeedHackDetector get_获取Or创建实例（））
-- `void OnLevelWasLoadedNew(Scene scene, LoadSceneMode mode)`
-  （void On等级WasLoaded新的（场景 scene, 加载场景模式 mode））
-- `void OnApplicationPause(bool pause)`
-  （void OnApplication暂停（bool pause））
-- `void Update()`
-  （void 更新（））
-- `void StartDetectionAutomatically()`
-  （void 自动开始检测（））
-- `void DisposeInternal()`
-  （void 释放内部（））
-- `void ResetStartTicks()`
-  （void 重置开始Ticks（））
-- `long GetReliableTicks()`
-  （long 获取ReliableTicks（））
-
----
-
-## WallHackDetector
-**继承**: ACTkDetectorBase（反作弊检测器基类）
-
-### 字段 (35)
-
-- `Vector3 rigidPlayerVelocity`（三维向量 rigid玩家速度）(偏移: 0x1C)
-- `int instancesInScene`（int instancesIn场景）(偏移: 0x0)
-- `WaitForEndOfFrame waitForEndOfFrame`（WaitFor结束OfFrame waitFor结束OfFrame）(偏移: 0x28)
-- `bool checkRigidbody`（bool check刚体）(偏移: 0x2C)
-- `bool checkController`（bool check控制器）(偏移: 0x0)
-- `bool checkWireframe`（bool checkWireframe）(偏移: 0x0)
-- `bool checkRaycast`（bool checkRaycast）(偏移: 0x0)
-- `int wireframeDelay`（int wireframe延迟）(偏移: 0x0)
-- `int raycastDelay`（int raycast延迟）(偏移: 0x34)
-- `Vector3 spawnPosition`（三维向量 spawnPosition）(偏移: 0x38)
-- `byte maxFalsePositives`（byte maxFalsePositives）(偏移: 0x44)
-- `GameObject serviceContainer`（游戏对象 service容器）(偏移: 0x48)
-- `GameObject solidWall`（游戏对象 solidWall）(偏移: 0x4C)
-- `GameObject thinWall`（游戏对象 thinWall）(偏移: 0x50)
-- `Camera wfCamera`（摄像机 wf摄像机）(偏移: 0x54)
-- `MeshRenderer foregroundRenderer`（网格渲染器 foreground渲染器）(偏移: 0x58)
-- `MeshRenderer backgroundRenderer`（网格渲染器 background渲染器）(偏移: 0x5C)
-- `Color wfColor1`（颜色 wfColor1）(偏移: 0x60)
-- `Color wfColor2`（颜色 wfColor2）(偏移: 0x70)
-- `Shader wfShader`（着色器 wf着色器）(偏移: 0x80)
-- `Material wfMaterial`（材质 wf材质）(偏移: 0x84)
-- `Texture2D shaderTexture`（Texture2D shader纹理）(偏移: 0x88)
-- `Texture2D targetTexture`（Texture2D target纹理）(偏移: 0x8C)
-- `RenderTexture renderTexture`（Render纹理 render纹理）(偏移: 0x90)
-- `int whLayer`（int wh层）(偏移: 0x94)
-- `int raycastMask`（int raycast掩码）(偏移: 0x98)
-- `Rigidbody rigidPlayer`（刚体 rigid玩家）(偏移: 0x9C)
-- `CharacterController charControllerPlayer`（角色控制器 char控制器玩家）(偏移: 0xA0)
-- `float charControllerVelocity`（float char控制器速度）(偏移: 0xA4)
-- `byte rigidbodyDetections`（byte rigidbodyDetections）(偏移: 0xA8)
-- `byte controllerDetections`（byte controllerDetections）(偏移: 0x0)
-- `byte wireframeDetections`（byte wireframeDetections）(偏移: 0x0)
-- `byte raycastDetections`（byte raycastDetections）(偏移: 0x0)
-- `bool wireframeDetected`（bool wireframeDetected）(偏移: 0x0)
-- `RaycastHit[] rayHits`（RaycastHit[] rayHits）(偏移: 0xB0)
-
-### 方法 (49)
-
-- `bool get_CheckRigidbody()`
-  （bool get_检查刚体（））
-- `void set_CheckRigidbody(bool value)`
-  （void set_检查刚体（bool value））
-- `bool get_CheckController()`
-  （bool get_检查控制器（））
-- `void set_CheckController(bool value)`
-  （void set_检查控制器（bool value））
-- `bool get_CheckWireframe()`
-  （bool get_检查Wireframe（））
-- `void set_CheckWireframe(bool value)`
-  （void set_检查Wireframe（bool value））
-- `bool get_CheckRaycast()`
-  （bool get_检查Raycast（））
-- `void set_CheckRaycast(bool value)`
-  （void set_检查Raycast（bool value））
-- `WallHackDetector AddToSceneOrGetExisting()`
-  （WallHackDetector 添加To场景Or获取Existing（））
-- `void StartDetection()`
-  （void 开始Detection（））
-- `void StopDetection()`
-  （void 停止检测（））
-- `void Dispose()`
-  （void 释放（））
-- `WallHackDetector get_Instance()`
-  （WallHackDetector get_实例（））
-- `void set_Instance(WallHackDetector value)`
-  （void set_实例（WallHackDetector value））
-- `WallHackDetector get_GetOrCreateInstance()`
-  （WallHackDetector get_获取Or创建实例（））
-- `void OnLevelWasLoadedNew(Scene scene, LoadSceneMode mode)`
-  （void On等级WasLoaded新的（场景 scene, 加载场景模式 mode））
-- `void FixedUpdate()`
-  （void 固定更新（））
-- `void Update()`
-  （void 更新（））
-- `void StartDetectionAutomatically()`
-  （void 自动开始检测（））
-- `void PauseDetector()`
-  （void 暂停Detector（））
-- `bool ResumeDetector()`
-  （bool 恢复Detector（））
-- `void StopDetectionInternal()`
-  （void 停止Detection内部的（））
-- `void DisposeInternal()`
-  （void 释放内部（））
-- `void UpdateServiceContainer()`
-  （void 更新服务容器（））
-- `IEnumerator InitDetector()`
-  （IEnumerator 初始化Detector（））
-- `void StartRigidModule()`
-  （void 开始Rigid模块（））
-- `void StartControllerModule()`
-  （void 开始控制器模块（））
-- `void StartWireframeModule()`
-  （void 开始Wireframe模块（））
-- `void ShootWireframeModule()`
-  （void 射击Wireframe模块（））
-- `IEnumerator CaptureFrame()`
-  （IEnumerator CaptureFrame（））
-- `void StartRaycastModule()`
-  （void 开始Raycast模块（））
-- `void ShootRaycastModule()`
-  （void 射击Raycast模块（））
-- `void StopRigidModule()`
-  （void 停止Rigid模块（））
-- `void StopControllerModule()`
-  （void 停止控制器模块（））
-- `void StopWireframeModule()`
-  （void 停止Wireframe模块（））
-- `void StopRaycastModule()`
-  （void 停止Raycast模块（））
-- `void InitRigidModule()`
-  （void 初始化Rigid模块（））
-- `void InitControllerModule()`
-  （void 初始化控制器模块（））
-- `void UninitRigidModule()`
-  （void UninitRigid模块（））
-- `void UninitControllerModule()`
-  （void Uninit控制器模块（））
-- `bool Detect()`
-  （bool Detect（））
-- `Color32 GenerateColor()`
-  （Color32 Generate颜色（））
-- `bool ColorsSimilar(Color32 c1, Color32 c2, int tolerance)`
-  （bool ColorsSimilar（Color32 c1, Color32 c2, int tolerance））
 
 ---
 
@@ -8486,8 +3993,6 @@
 ## Axis
 ### 字段 (1)
 
-- `int value__`（整数 值__）(偏移: 0x0)
-
 ---
 
 ## AxisBase
@@ -8500,15 +4005,10 @@
 
 ### 方法 (1)
 
-- `void Validate()`
-  （void 验证（））
-
 ---
 
 ## AxisConstraint
 ### 字段 (1)
-
-- `int value__`（整数 值__）(偏移: 0x0)
 
 ---
 
@@ -8551,10 +4051,6 @@
 
 ### 方法 (12)
 
-- `void Validate()`
-  （void 验证（））
-- `void Reset()`
-  （void 重置（））
 - `void SetInputAxisProvider(int axis, AxisState.IInputAxisProvider provider)`
   （void 集合输入轴提供者（int axis, 轴State.I输入轴提供者 provider））
 - `bool get_HasInputProvider()`
@@ -8591,8 +4087,6 @@
 
 ### 方法 (6)
 
-- `void Validate()`
-  （void 验证（））
 - `void CopyStateFrom(ref AxisState.Recentering other)`
   （void 复制状态From（ref AxisState.Recentering other））
 - `void CancelRecentering()`
@@ -8608,8 +4102,6 @@
 
 ## AxisState.SpeedMode
 ### 字段 (1)
-
-- `int value__`（整数 值__）(偏移: 0x0)
 
 ---
 
@@ -8714,52 +4206,8 @@
 
 ---
 
-## CinemachineInputAxisDriver
-### 字段 (6)
-
-- `float multiplier`（float multiplier）(偏移: 0x0)
-- `float accelTime`（float accel时间）(偏移: 0x4)
-- `float decelTime`（float decel时间）(偏移: 0x8)
-- `string name`（字符串 名称）(偏移: 0xC)
-- `float inputValue`（float input值）(偏移: 0x10)
-- `float mCurrentSpeed`（float m当前Speed）(偏移: 0x14)
-
-### 方法 (4)
-
-- `void Validate()`
-  （void 验证（））
-- `bool Update(float deltaTime, ref AxisBase axis)`
-  （bool 更新（float deltaTime, ref AxisBase axis））
-- `float ClampValue(ref AxisBase axis, float v)`
-  （float Clamp值（ref AxisBase axis, float v））
-- `bool Update(float deltaTime, ref AxisState axis)`
-  （bool 更新（float deltaTime, ref AxisState axis））
-
----
-
-## CinemachineTouchInputMapper
-**继承**: MonoBehaviour（MonoBehaviour行为）
-
-### 字段 (4)
-
-- `float TouchSensitivityX`（float 触摸SensitivityX）(偏移: 0xC)
-- `float TouchSensitivityY`（float 触摸SensitivityY）(偏移: 0x10)
-- `string TouchXInputMapTo`（string 触摸X输入映射To）(偏移: 0x14)
-- `string TouchYInputMapTo`（string 触摸Y输入映射To）(偏移: 0x18)
-
-### 方法 (2)
-
-- `void Start()`
-  （void 开始（））
-- `float GetInputAxis(string axisName)`
-  （float 获取输入轴（string axisName））
-
----
-
 ## ConsoleKey
 ### 字段 (1)
-
-- `int value__`（整数 值__）(偏移: 0x0)
 
 ---
 
@@ -8776,19 +4224,11 @@
   （char get_键Char（））
 - `ConsoleKey get_Key()`
   （Console键 get_键（））
-- `bool Equals(object value)`
-  （布尔值 等于（对象 value））
-- `bool Equals(ConsoleKeyInfo obj)`
-  （bool Equals（Console键信息 obj））
-- `int GetHashCode()`
-  （整数 获取哈希码（））
 
 ---
 
 ## ConsoleSpecialKey
 ### 字段 (1)
-
-- `int value__`（整数 值__）(偏移: 0x0)
 
 ---
 
@@ -8807,17 +4247,10 @@
 
 ### 方法 (3)
 
-- `void Invoke(object sender, EventArgs e)`
-  （void Invoke（object sender, 事件Args e））
-- `void EndInvoke(IAsyncResult result)`
-  （void 结束调用（I异步结果 result））
-
 ---
 
 ## EventKeywords
 ### 字段 (1)
-
-- `long value__`（long value__）(偏移: 0x0)
 
 ---
 
@@ -8841,27 +4274,6 @@
 
 ## GridLayoutGroup.Axis
 ### 字段 (1)
-
-- `int value__`（整数 值__）(偏移: 0x0)
-
----
-
-## HUD_BagButton
-**继承**: MonoBehaviour, IPointerEnterHandler, IEventSystemHandler, IPointerDownHandler（MonoBehaviour行为, I指针Enter处理器, I事件系统处理器, I指针下处理器）
-
-### 字段 (4)
-
-- `int bagIndex`（int bag索引）(偏移: 0xC)
-- `Sprite normalSprite`（精灵 normal精灵）(偏移: 0x10)
-- `Sprite focusSprite`（精灵 focus精灵）(偏移: 0x14)
-- `Image image`（图像 image）(偏移: 0x18)
-
-### 方法 (4)
-
-- `void OnPointerEnter(PointerEventData eventData)`
-  （void On指针Enter（指针事件数据 eventData））
-- `void OnPointerDown(PointerEventData eventData)`
-  （void 指针按下时（指针事件数据 eventData））
 
 ---
 
@@ -8954,12 +4366,6 @@
 
 - `ulong get_deviceId()`
   （无符号长整数 获取_设备ID（））
-- `bool Equals(object obj)`
-  （布尔值 等于（对象 obj））
-- `bool Equals(InputDevice other)`
-  （bool Equals（输入Device other））
-- `int GetHashCode()`
-  （整数 获取哈希码（））
 
 ---
 
@@ -8980,8 +4386,6 @@
 ## InputFeatureType
 ### 字段 (1)
 
-- `uint value__`（无符号整数 值__）(偏移: 0x0)
-
 ---
 
 ## InputFeatureUsage
@@ -8998,12 +4402,6 @@
   （字符串 获取_名称（））
 - `InputFeatureType get_internalType()`
   （输入Feature类型 get_internal类型（））
-- `bool Equals(object obj)`
-  （布尔值 等于（对象 obj））
-- `bool Equals(InputFeatureUsage other)`
-  （bool Equals（输入FeatureUsage other））
-- `int GetHashCode()`
-  （整数 获取哈希码（））
 
 ---
 
@@ -9198,8 +4596,6 @@
   （bool InPlaceEditingChanged（））
 - `void UpdateCaretFromKeyboard()`
   （void 更新CaretFrom键盘（））
-- `void LateUpdate()`
-  （void 延迟更新（））
 - `Vector2 ScreenToLocal(Vector2 screen)`
   （二维向量 屏幕的To本地的（二维向量 screen））
 - `int GetCharacterIndexFromPosition(Vector2 pos)`
@@ -9336,21 +4732,15 @@
 ## InputField.ContentType
 ### 字段 (1)
 
-- `int value__`（整数 值__）(偏移: 0x0)
-
 ---
 
 ## InputField.EditState
 ### 字段 (1)
 
-- `int value__`（整数 值__）(偏移: 0x0)
-
 ---
 
 ## InputField.InputType
 ### 字段 (1)
-
-- `int value__`（整数 值__）(偏移: 0x0)
 
 ---
 
@@ -9397,14 +4787,10 @@
 ## InputTracking.TrackingStateEventType
 ### 字段 (1)
 
-- `int value__`（整数 值__）(偏移: 0x0)
-
 ---
 
 ## KeyCode
 ### 字段 (1)
-
-- `int value__`（整数 值__）(偏移: 0x0)
 
 ---
 
@@ -9475,8 +4861,6 @@
 
 ## KeyInputState
 ### 字段 (1)
-
-- `int value__`（整数 值__）(偏移: 0x0)
 
 ---
 
@@ -9671,22 +5055,6 @@
 
 ---
 
-## NameKeyPool
-**继承**: ObjectPool（对象池）
-
-### 字段 (1)
-
-- `Hashtable hashtable`（Hashtable hashtable）(偏移: 0xC)
-
-### 方法 (3)
-
-- `void Recycle(RecyclableObject obj)`
-  （void Recycle（Recyclable对象 obj））
-- `RecyclableObject Get(string name)`
-  （Recyclable对象 获取（string name））
-
----
-
 ## NativeInputEventBuffer
 ### 字段 (4)
 
@@ -9718,8 +5086,6 @@
 
 ## NativeInputUpdateType
 ### 字段 (1)
-
-- `int value__`（整数 值__）(偏移: 0x0)
 
 ---
 
@@ -9756,11 +5122,6 @@
 **继承**: MulticastDelegate（多播委托）
 
 ### 方法 (3)
-
-- `void Invoke(object sender, EventArgs e)`
-  （void Invoke（object sender, 事件Args e））
-- `void EndInvoke(IAsyncResult result)`
-  （void 结束调用（I异步结果 result））
 
 ---
 
@@ -9801,8 +5162,6 @@
   （object 获取值（string name, object defaultValue））
 - `string[] GetSubKeyNames()`
   （string[] 获取子键Names（））
-- `string ToString()`
-  （字符串 转字符串（））
 - `bool get_IsRoot()`
   （bool get_是否根（））
 - `RegistryHive get_Hive()`
@@ -9827,8 +5186,6 @@
 
 ### 方法 (2)
 
-- `bool Equals(object x, object y)`
-  （bool Equals（object x, object y））
 - `int GetHashCode(object obj)`
   （整数 获取哈希码（对象 obj））
 
@@ -9836,8 +5193,6 @@
 
 ## ScriptableRenderPassInput
 ### 字段 (1)
-
-- `int value__`（整数 值__）(偏移: 0x0)
 
 ---
 
@@ -9861,25 +5216,6 @@
 
 ---
 
-## ShaderInput.LightData
-### 字段 (5)
-
-- `Vector4 position`（Vector4 position）(偏移: 0x0)
-- `Vector4 color`（Vector4 color）(偏移: 0x10)
-- `Vector4 attenuation`（Vector4 attenuation）(偏移: 0x20)
-- `Vector4 spotDirection`（Vector4 spot方向）(偏移: 0x30)
-- `Vector4 occlusionProbeChannels`（Vector4 occlusionProbeChannels）(偏移: 0x40)
-
----
-
-## ShaderInput.ShadowData
-### 字段 (2)
-
-- `Matrix4x4 worldToShadowMatrix`（Matrix4x4 worldToShadow矩阵）(偏移: 0x0)
-- `Vector4 shadowParams`（Vector4 shadowParams）(偏移: 0x40)
-
----
-
 ## SortKey
 ### 字段 (4)
 
@@ -9892,16 +5228,6 @@
 
 - `int Compare(SortKey sortkey1, SortKey sortkey2)`
   （int Compare（Sort键 sortkey1, Sort键 sortkey2））
-- `string get_OriginalString()`
-  （string get_Original字符串（））
-- `byte[] get_KeyData()`
-  （byte[] get_键数据（））
-- `bool Equals(object value)`
-  （布尔值 等于（对象 value））
-- `int GetHashCode()`
-  （整数 获取哈希码（））
-- `string ToString()`
-  （字符串 转字符串（））
 
 ---
 
@@ -9933,8 +5259,6 @@
 
 ### 方法 (10)
 
-- `void Reset()`
-  （void 重置（））
 - `void Initialize(CompareOptions options, int lcid, string s, bool frenchSort)`
   （void 初始化（CompareOptions options, int lcid, string s, bool frenchSort））
 - `void AppendCJKExtension(byte lv1msb, byte lv1lsb)`
@@ -10046,8 +5370,6 @@
 ## StandaloneInputModule.InputMode
 ### 字段 (1)
 
-- `int value__`（整数 值__）(偏移: 0x0)
-
 ---
 
 ## StrongNameKeyPair
@@ -10133,15 +5455,11 @@
   （void 处理触摸Press（指针事件数据 pointerEvent, bool pressed, bool released））
 - `void DeactivateModule()`
   （void 停用模块（））
-- `string ToString()`
-  （字符串 转字符串（））
 
 ---
 
 ## TouchPhase
 ### 字段 (1)
-
-- `int value__`（整数 值__）(偏移: 0x0)
 
 ---
 
@@ -10192,8 +5510,6 @@
 ## TouchScreenKeyboard.Status
 ### 字段 (1)
 
-- `int value__`（整数 值__）(偏移: 0x0)
-
 ---
 
 ## TouchScreenKeyboard_InternalConstructorHelperArguments
@@ -10224,8 +5540,6 @@
   （string get_轴属性（））
 - `void set_AxisProperty(string value)`
   （void set_轴属性（string value））
-- `string ToString()`
-  （字符串 转字符串（））
 
 ---
 
@@ -10242,11 +5556,6 @@
 - `float m_CachedSmoothValue`（float m_CachedSmooth值）(偏移: 0x24)
 
 ### 方法 (8)
-
-- `void Start()`
-  （void 开始（））
-- `string ToString()`
-  （字符串 转字符串（））
 
 ---
 
@@ -10272,10 +5581,6 @@
   （string get_键Smooth属性（））
 - `void set_KeySmoothProperty(string value)`
   （void set_键Smooth属性（string value））
-- `void Start()`
-  （void 开始（））
-- `string ToString()`
-  （字符串 转字符串（））
 
 ---
 
@@ -10319,8 +5624,6 @@
   （bool 是否左Click按下的（））
 - `Vector2 GetMousePosition()`
   （二维向量 获取鼠标Position（））
-- `string ToString()`
-  （字符串 转字符串（））
 
 ---
 
@@ -10357,8 +5660,6 @@
   （int 获取触摸数量（））
 - `Vector2 GetTouchPosition(int touchIndex)`
   （二维向量 获取触摸Position（int touchIndex））
-- `string ToString()`
-  （字符串 转字符串（））
 
 ---
 
@@ -10406,8 +5707,6 @@
 
 ## VFXMouseEventBinder.Activation
 ### 字段 (1)
-
-- `int value__`（整数 值__）(偏移: 0x0)
 
 ---
 
@@ -10458,8 +5757,6 @@
 ## X509KeyUsageFlags
 ### 字段 (1)
 
-- `int value__`（整数 值__）(偏移: 0x0)
-
 ---
 
 ## X509SubjectKeyIdentifierExtension
@@ -10494,8 +5791,6 @@
 
 ## X509SubjectKeyIdentifierHashAlgorithm
 ### 字段 (1)
-
-- `int value__`（整数 值__）(偏移: 0x0)
 
 ---
 
@@ -10620,8 +5915,6 @@
 ## CollisionFlags
 ### 字段 (1)
 
-- `int value__`（整数 值__）(偏移: 0x0)
-
 ---
 
 ## EventTrigger
@@ -10691,8 +5984,6 @@
 ## ForceMode
 ### 字段 (1)
 
-- `int value__`（整数 值__）(偏移: 0x0)
-
 ---
 
 ## GraphCollision
@@ -10752,8 +6043,6 @@
   （void 支持组（））
 - `void ASThread()`
   （void 异步线程（））
-- `void Start()`
-  （void 开始（））
 - `int GetBestRangeIndex(Transform character, Transform raycastFrom, RaycastHit raycastHit)`
   （int 获取Best范围索引（变换 character, 变换 raycastFrom, Raycast命中 raycastHit））
 
@@ -10815,8 +6104,6 @@
 
 ## LocalPhysicsMode
 ### 字段 (1)
-
-- `int value__`（整数 值__）(偏移: 0x0)
 
 ---
 
@@ -11002,14 +6289,6 @@
 
 ### 方法 (27)
 
-- `string ToString()`
-  （字符串 转字符串（））
-- `int GetHashCode()`
-  （整数 获取哈希码（））
-- `bool Equals(object other)`
-  （布尔值 等于（对象 other））
-- `bool Equals(PhysicsScene other)`
-  （bool Equals（物理场景 other））
 - `bool Raycast(Vector3 origin, Vector3 direction, float maxDistance = ∞, int layerMask = -5, QueryTriggerInteraction queryTriggerInteraction = 0)`
   （bool Raycast（三维向量 origin, 三维向量 direction, float maxDistance = ∞, int layerMask = -5, Query触发器Interaction queryTriggerInteraction = 0））
 - `bool Internal_RaycastTest(PhysicsScene physicsScene, Ray ray, float maxDistance, int layerMask, QueryTriggerInteraction queryTriggerInteraction)`
@@ -11054,14 +6333,6 @@
 
 ### 方法 (29)
 
-- `string ToString()`
-  （字符串 转字符串（））
-- `int GetHashCode()`
-  （整数 获取哈希码（））
-- `bool Equals(object other)`
-  （布尔值 等于（对象 other））
-- `bool Equals(PhysicsScene2D other)`
-  （bool Equals（物理Scene2D other））
 - `RaycastHit2D Linecast(Vector2 start, Vector2 end, ContactFilter2D contactFilter)`
   （RaycastHit2D Linecast（二维向量 start, 二维向量 end, ContactFilter2D contactFilter））
 - `RaycastHit2D Linecast_Internal(PhysicsScene2D physicsScene, Vector2 start, Vector2 end, ContactFilter2D contactFilter)`
@@ -11101,8 +6372,6 @@
 
 ## QueryTriggerInteraction
 ### 字段 (1)
-
-- `int value__`（整数 值__）(偏移: 0x0)
 
 ---
 
@@ -11187,8 +6456,6 @@
 ## RigidbodyType2D
 ### 字段 (1)
 
-- `int value__`（整数 值__）(偏移: 0x0)
-
 ---
 
 ## RopeTrigger
@@ -11214,8 +6481,6 @@
 **继承**: MonoBehaviour（MonoBehaviour行为）
 
 ### 字段 (1)
-
-- `AudioClip sound`（音频弹匣 sound）(偏移: 0xC)
 
 ### 方法 (1)
 
@@ -11284,8 +6549,6 @@
 ## VFXTriggerEventBinder.Activation
 ### 字段 (1)
 
-- `int value__`（整数 值__）(偏移: 0x0)
-
 ---
 
 ## VFXVelocityBinder
@@ -11305,10 +6568,6 @@
   （字符串 获取_属性（））
 - `void set_Property(string value)`
   （void 设置_属性（字符串 value））
-- `void Reset()`
-  （void 重置（））
-- `string ToString()`
-  （字符串 转字符串（））
 
 ---
 
@@ -11340,8 +6599,6 @@
   （void 更新开始结束（三维向量 start, 三维向量 end））
 - `uint GetConnectionSpecialCost(GraphNode a, GraphNode b, uint currentCost)`
   （uint 获取连接特殊Cost（Graph节点 a, Graph节点 b, uint currentCost））
-- `void Reset()`
-  （void 重置（））
 - `bool EndPointGridGraphSpecialCase(GraphNode closestWalkableEndNode)`
   （bool 结束Point网格Graph特殊Case（Graph节点 closestWalkableEndNode））
 - `void SetFlagOnSurroundingGridNodes(GridNode gridNode, int flag, bool flagState)`
@@ -11462,16 +6719,12 @@
   （bool get_shouldRecalculate路径（））
 - `void FindComponents()`
   （void 查找Components（））
-- `void Start()`
-  （void 开始（））
 - `void Init()`
   （void 初始化（））
 - `void Teleport(Vector3 newPosition, bool clearPath = True)`
   （void Teleport（三维向量 newPosition, bool clearPath = True））
 - `void CancelCurrentPathRequest()`
   （void 取消当前路径请求（））
-- `void Update()`
-  （void 更新（））
 - `void FixedUpdate()`
   （void 固定更新（））
 - `void MovementUpdate(float deltaTime, out Vector3 nextPosition, out Quaternion nextRotation)`
@@ -11510,8 +6763,6 @@
   （void 绘制选中辅助线时（））
 - `void OnDrawGizmos()`
   （void 绘制辅助线时（））
-- `void Reset()`
-  （void 重置（））
 - `void ResetShape()`
   （void 重置Shape（））
 - `int OnUpgradeSerializedData(int version, bool unityThread)`
@@ -11528,9 +6779,6 @@
 - `IAstarAI ai`（IAstarAI ai）(偏移: 0x14)
 
 ### 方法 (3)
-
-- `void Update()`
-  （void 更新（））
 
 ---
 
@@ -11606,8 +6854,6 @@
   （动作 get_on搜索路径（））
 - `void set_onSearchPath(Action value)`
   （void set_on搜索路径（动作 value））
-- `void Start()`
-  （void 开始（））
 - `void Init()`
   （void 初始化（））
 - `void Teleport(Vector3 position, bool clearPath = True)`
@@ -11630,8 +6876,6 @@
   （三维向量 获取FeetPosition（））
 - `void ConfigureNewPath()`
   （void Configure新的路径（））
-- `void Update()`
-  （void 更新（））
 - `void MovementUpdate(float deltaTime, out Vector3 nextPosition, out Quaternion nextRotation)`
   （void Movement更新（float deltaTime, out Vector3 nextPosition, out Quaternion nextRotation））
 - `void FinalizeMovement(Vector3 nextPosition, Quaternion nextRotation)`
@@ -11933,10 +7177,6 @@
 
 ### 方法 (6)
 
-- `void Start()`
-  （void 开始（））
-- `void LateUpdate()`
-  （void 延迟更新（））
 - `Vector3 get_pivot()`
   （三维向量 get_pivot（））
 - `void ApplyMinDistance()`
@@ -12103,8 +7343,6 @@
   （int getDomainID（））
 - `int GetCurrentThreadId()`
   （int 获取当前ThreadId（））
-- `string ToString()`
-  （字符串 转字符串（））
 - `void DoAssemblyLoad(Assembly assembly)`
   （void DoAssembly加载（Assembly assembly））
 - `Assembly DoAssemblyResolve(string name, Assembly requestingAssembly, bool refonly)`
@@ -12350,10 +7588,6 @@
 
 ### 方法 (4)
 
-- `void Start()`
-  （void 开始（））
-- `void LateUpdate()`
-  （void 延迟更新（））
 - `void DrawGraphLine(int index, Matrix4x4 m, float x1, float x2, float y1, float y2, Color color)`
   （void DrawGraphLine（int index, Matrix4x4 m, float x1, float x2, float y1, float y2, 颜色 color））
 
@@ -12380,8 +7614,6 @@
   （void 开始Profile（string tag））
 - `void EndProfile(string tag)`
   （void 结束Profile（string tag））
-- `void Reset()`
-  （void 重置（））
 - `void PrintFastResults()`
   （void PrintFastResults（））
 - `void PrintResults()`
@@ -12503,9 +7735,6 @@
 
 ### 方法 (1)
 
-- `void LateUpdate()`
-  （void 延迟更新（））
-
 ---
 
 ## AstarWorkItem
@@ -12518,8 +7747,6 @@
 
 ## AttributeTargets
 ### 字段 (1)
-
-- `int value__`（整数 值__）(偏移: 0x0)
 
 ---
 
@@ -12538,8 +7765,6 @@
 
 - `bool ShouldRecalculatePath(IAstarAI ai)`
   （bool 应该Recalculate路径（IAstarAI ai））
-- `void Reset()`
-  （void 重置（））
 - `void DidRecalculatePath(Vector3 destination)`
   （void DidRecalculate路径（三维向量 destination））
 - `void DrawGizmos(IAstarAI ai)`
@@ -12550,14 +7775,10 @@
 ## AutoRepathPolicy.Mode
 ### 字段 (1)
 
-- `int value__`（整数 值__）(偏移: 0x0)
-
 ---
 
 ## AvailableTrackingData
 ### 字段 (1)
-
-- `int value__`（整数 值__）(偏移: 0x0)
 
 ---
 
@@ -12596,8 +7817,6 @@
 
 ### 方法 (5)
 
-- `void Start()`
-  （void 开始（））
 - `bool NodeContainsAnyOf(GraphNode node, List<SingleNodeBlocker> selector)`
   （bool 节点Contains任意Of（Graph节点 node, List<单个节点Blocker> selector））
 - `bool NodeContainsAnyExcept(GraphNode node, List<SingleNodeBlocker> selector)`
@@ -12611,8 +7830,6 @@
 
 ## BlockManager.BlockMode
 ### 字段 (1)
-
-- `int value__`（整数 值__）(偏移: 0x0)
 
 ---
 
@@ -12722,8 +7939,6 @@
   （bool get_can跳跃（））
 - `void InitHangOutCount()`
   （void 初始化HangOut数量（））
-- `void Update()`
-  （void 更新（））
 - `void OnDrawGizmosSelected()`
   （void 绘制选中辅助线时（））
 - `void UpdateNearestGraphNode()`
@@ -12840,8 +8055,6 @@
   （bool get_isFinished（））
 - `void set_isFinished(bool value)`
   （void set_isFinished（bool value））
-- `void Update()`
-  （void 更新（））
 - `void Finish()`
   （void Finish（））
 - `void OnActionFinish()`
@@ -12901,8 +8114,6 @@
   （void Cal枪械距离控制（float wpnShotDistance））
 - `void CalKnifeDistanceControl()`
   （void Cal近战武器距离控制（））
-- `void Update()`
-  （void 更新（））
 - `bool ShouldWaitKnifeAttack()`
   （bool 应该Wait近战武器Attack（））
 
@@ -12961,8 +8172,6 @@
   （玩家 get_owner（））
 - `void set_owner(Player value)`
   （void set_owner（玩家 value））
-- `void Update()`
-  （void 更新（））
 - `void SetOwner(Player newOwner)`
   （void 集合Owner（玩家 newOwner））
 - `void OnSetValidOwner()`
@@ -13091,14 +8300,6 @@
 
 ---
 
-## CinemachineStateDrivenCamera.HashPair
-### 字段 (2)
-
-- `int parentHash`（int parentHash）(偏移: 0x0)
-- `int hash`（int hash）(偏移: 0x4)
-
----
-
 ## CodePageDataItem
 ### 字段 (5)
 
@@ -13134,8 +8335,6 @@
   （布尔值 获取_泛洪路径（））
 - `void OnEnterPool()`
   （void 进入池时（））
-- `void Reset()`
-  （void 重置（））
 - `void Prepare()`
   （void 准备（））
 - `void Initialize()`
@@ -13246,8 +8445,6 @@
   （布尔值 是否有效（））
 - `void Initiate(Transform transform)`
   （void Initiate（变换 transform））
-- `void Update()`
-  （void 更新（））
 
 ---
 
@@ -13270,8 +8467,6 @@
   （void On项目Added（ObservableList<DebugUI.Widget> sender, 列表Changed事件Args<DebugUI.Widget> e））
 - `void OnItemRemoved(ObservableList<DebugUI.Widget> sender, ListChangedEventArgs<DebugUI.Widget> e)`
   （void On项目Removed（ObservableList<DebugUI.Widget> sender, 列表Changed事件Args<DebugUI.Widget> e））
-- `int GetHashCode()`
-  （整数 获取哈希码（））
 
 ---
 
@@ -13307,8 +8502,6 @@
 ## DllImportSearchPath
 ### 字段 (1)
 
-- `int value__`（整数 值__）(偏移: 0x0)
-
 ---
 
 ## DomainNameHelper
@@ -13341,8 +8534,6 @@
 
 ## Enum.ParseFailureKind
 ### 字段 (1)
-
-- `int value__`（整数 值__）(偏移: 0x0)
 
 ---
 
@@ -13496,33 +8687,10 @@
 ## FBIKChain.Smoothing
 ### 字段 (1)
 
-- `int value__`（整数 值__）(偏移: 0x0)
-
----
-
-## FilmGrain
-**继承**: VolumeComponent, IPostProcessComponent（体积组件, I后处理组件）
-
-### 字段 (4)
-
-- `FilmGrainLookupParameter type`（FilmGrainLookupParameter type）(偏移: 0x1C)
-- `ClampedFloatParameter intensity`（钳制浮点数参数 强度）(偏移: 0x20)
-- `ClampedFloatParameter response`（Clamped浮点数Parameter response）(偏移: 0x24)
-- `NoInterpTextureParameter texture`（NoInterp纹理Parameter texture）(偏移: 0x28)
-
-### 方法 (2)
-
-- `bool IsActive()`
-  （布尔值 是否激活的（））
-- `bool IsTileCompatible()`
-  （布尔值 是否瓦片兼容（））
-
 ---
 
 ## FilmGrainLookup
 ### 字段 (1)
-
-- `int value__`（整数 值__）(偏移: 0x0)
 
 ---
 
@@ -13551,8 +8719,6 @@
   （bool 是否有路径To（Graph节点 node））
 - `GraphNode GetParent(GraphNode node)`
   （Graph节点 获取父级（Graph节点 node））
-- `void Reset()`
-  （void 重置（））
 - `void Prepare()`
   （void 准备（））
 - `void Initialize()`
@@ -13587,8 +8753,6 @@
 
 - `bool get_hasEndPoint()`
   （bool get_has结束Point（））
-- `void Reset()`
-  （void 重置（））
 - `void Initialize()`
   （void 初始化（））
 - `void CalculateStep(long targetTick)`
@@ -13600,8 +8764,6 @@
 
 ## FullBodyBipedChain
 ### 字段 (1)
-
-- `int value__`（整数 值__）(偏移: 0x0)
 
 ---
 
@@ -13633,14 +8795,10 @@
 ## GridLayoutGroup.Constraint
 ### 字段 (1)
 
-- `int value__`（整数 值__）(偏移: 0x0)
-
 ---
 
 ## Guid.ParseFailureKind
 ### 字段 (1)
-
-- `int value__`（整数 值__）(偏移: 0x0)
 
 ---
 
@@ -13737,8 +8895,6 @@
 ## InsertionBehavior
 ### 字段 (1)
 
-- `byte value__`（字节 值__）(偏移: 0x0)
-
 ---
 
 ## InteractionTarget
@@ -13827,8 +8983,6 @@
 
 - `void OnPathComplete(Path _p)`
   （void On路径Complete（路径 _p））
-- `void Update()`
-  （void 更新（））
 - `float XZSqrMagnitude(Vector3 a, Vector3 b)`
   （float XZSqrMagnitude（三维向量 a, 三维向量 b））
 - `Vector3 CalculateVelocity(Vector3 currentPosition)`
@@ -13854,8 +9008,6 @@
 
 ### 方法 (4)
 
-- `void Update()`
-  （void 更新（））
 - `Vector3 RaycastPosition(Vector3 position, float lasty)`
   （三维向量 RaycastPosition（三维向量 position, float lasty））
 - `bool RotateTowards(Vector3 trotdir)`
@@ -13878,36 +9030,6 @@
   （布尔值 是否激活的（））
 - `bool IsTileCompatible()`
   （布尔值 是否瓦片兼容（））
-
----
-
-## MainLightShadowCasterPass
-**继承**: ScriptableRenderPass（可脚本化渲染通道）
-
-### 字段 (11)
-
-- `float m_MaxShadowDistance`（float m_最大Shadow距离）(偏移: 0x54)
-- `int m_ShadowmapWidth`（int m_Shadowmap宽度）(偏移: 0x58)
-- `int m_ShadowmapHeight`（int m_Shadowmap高度）(偏移: 0x5C)
-- `int m_ShadowCasterCascadesCount`（int m_ShadowCasterCascades数量）(偏移: 0x60)
-- `bool m_SupportsBoxFilterForShadows`（bool m_SupportsBoxFilterForShadows）(偏移: 0x64)
-- `RenderTargetHandle m_MainLightShadowmap`（Render目标句柄 m_主要的光照Shadowmap）(偏移: 0x68)
-- `RenderTexture m_MainLightShadowmapTexture`（Render纹理 m_主要的光照Shadowmap纹理）(偏移: 0x88)
-- `Matrix4x4[] m_MainLightShadowMatrices`（Matrix4x4[] m_主要的光照ShadowMatrices）(偏移: 0x8C)
-- `ShadowSliceData[] m_CascadeSlices`（ShadowSliceData[] m_CascadeSlices）(偏移: 0x90)
-- `Vector4[] m_CascadeSplitDistances`（Vector4[] m_CascadeSplitDistances）(偏移: 0x94)
-- `ProfilingSampler m_ProfilingSetupSampler`（ProfilingSampler m_ProfilingSetupSampler）(偏移: 0x98)
-
-### 方法 (7)
-
-- `bool Setup(ref RenderingData renderingData)`
-  （bool Setup（ref RenderingData renderingData））
-- `void OnCameraCleanup(CommandBuffer cmd)`
-  （void 摄像机清理时（命令缓冲区 cmd））
-- `void Clear()`
-  （void 清除（））
-- `void SetupMainLightShadowReceiverConstants(CommandBuffer cmd, VisibleLight shadowLight, bool supportsSoftShadows)`
-  （void Setup主要的光照ShadowReceiverConstants（Command缓冲区 cmd, 可见的光照 shadowLight, bool supportsSoftShadows））
 
 ---
 
@@ -13942,8 +9064,6 @@
 ## MatchTargetFields
 ### 字段 (1)
 
-- `int value__`（整数 值__）(偏移: 0x0)
-
 ---
 
 ## MeshSubsetCombineUtility.MeshContainer
@@ -13965,8 +9085,6 @@
 
 - `MeshUtils.EdgePair Create()`
   （网格Utils.EdgePair 创建（））
-- `void Reset()`
-  （void 重置（））
 
 ---
 
@@ -14006,8 +9124,6 @@
   （bool get_inverted（））
 - `void set_inverted(bool value)`
   （void set_inverted（bool value））
-- `void Reset()`
-  （void 重置（））
 - `void OnEnterPool()`
   （void 进入池时（））
 - `void ChooseShortestPath()`
@@ -14042,8 +9158,6 @@
 ## MultiTargetPath.HeuristicMode
 ### 字段 (1)
 
-- `int value__`（整数 值__）(偏移: 0x0)
-
 ---
 
 ## NNConstraint
@@ -14074,8 +9188,6 @@
 
 ## Nano6ModeAsset.UpgradeAsset.TargetPos
 ### 字段 (1)
-
-- `int value__`（整数 值__）(偏移: 0x0)
 
 ---
 
@@ -14154,11 +9266,6 @@
 
 ### 方法 (3)
 
-- `void Invoke()`
-  （void 调用（））
-- `void EndInvoke(IAsyncResult result)`
-  （void 结束调用（I异步结果 result））
-
 ---
 
 ## NavMeshGraph
@@ -14225,8 +9332,6 @@
 ## NavMeshPathStatus
 ### 字段 (1)
 
-- `int value__`（整数 值__）(偏移: 0x0)
-
 ---
 
 ## Navigation
@@ -14269,15 +9374,11 @@
   （void set_selectOn右（Selectable value））
 - `Navigation get_defaultNavigation()`
   （Navigation get_defaultNavigation（））
-- `bool Equals(Navigation other)`
-  （bool Equals（Navigation other））
 
 ---
 
 ## Navigation.Mode
 ### 字段 (1)
-
-- `int value__`（整数 值__）(偏移: 0x0)
 
 ---
 
@@ -14326,8 +9427,6 @@
 
 ## Navigator.State
 ### 字段 (1)
-
-- `int value__`（整数 值__）(偏移: 0x0)
 
 ---
 
@@ -14602,8 +9701,6 @@
 
 - `void DiscardPending()`
   （void DiscardPending（））
-- `void Update()`
-  （void 更新（））
 - `void ForceUpdate()`
   （void 强制更新（））
 
@@ -14631,8 +9728,6 @@
 
 ## ParseFailureKind
 ### 字段 (1)
-
-- `int value__`（整数 值__）(偏移: 0x0)
 
 ---
 
@@ -14713,8 +9808,6 @@
 
 ## PathCompleteState
 ### 字段 (1)
-
-- `int value__`（整数 值__）(偏移: 0x0)
 
 ---
 
@@ -14815,14 +9908,10 @@
 ## PathLog
 ### 字段 (1)
 
-- `int value__`（整数 值__）(偏移: 0x0)
-
 ---
 
 ## PathMode
 ### 字段 (1)
-
-- `int value__`（整数 值__）(偏移: 0x0)
 
 ---
 
@@ -14918,9 +10007,6 @@
 - `bool addedExtraEndWp`（bool added额外的结束Wp）(偏移: 0x5D)
 
 ### 方法 (1)
-
-- `void Reset()`
-  （void 重置（））
 
 ---
 
@@ -15047,8 +10133,6 @@
 
 ## PathState
 ### 字段 (1)
-
-- `int value__`（整数 值__）(偏移: 0x0)
 
 ---
 
@@ -15212,8 +10296,6 @@
   （布尔值 获取_泛洪路径（））
 - `bool get_hasEndPoint()`
   （bool get_has结束Point（））
-- `void Reset()`
-  （void 重置（））
 - `void ReturnPath()`
   （void Return路径（））
 - `void Prepare()`
@@ -15271,55 +10353,11 @@
 
 - `RenderTargetBlendState get_defaultValue()`
   （Render目标Blend状态 get_default值（））
-- `bool Equals(RenderTargetBlendState other)`
-  （bool Equals（Render目标Blend状态 other））
-- `bool Equals(object obj)`
-  （布尔值 等于（对象 obj））
-- `int GetHashCode()`
-  （整数 获取哈希码（））
 
 ---
 
 ## RenderTargetFlags
 ### 字段 (1)
-
-- `int value__`（整数 值__）(偏移: 0x0)
-
----
-
-## RenderTargetHandle
-### 字段 (1)
-
-- `RenderTargetHandle CameraTarget`（Render目标句柄 摄像机目标）(偏移: 0x0)
-
-### 方法 (14)
-
-- `void set_id(int value)`
-  （void set_id（int value））
-- `int get_id()`
-  （int get_id（））
-- `void set_rtid(RenderTargetIdentifier value)`
-  （void set_rtid（Render目标Identifier value））
-- `RenderTargetIdentifier get_rtid()`
-  （Render目标Identifier get_rtid（））
-- `RenderTargetHandle GetCameraTarget(XRPass xr)`
-  （Render目标句柄 获取摄像机目标（XRPass xr））
-- `void Init(RenderTargetIdentifier renderTargetIdentifier)`
-  （void 初始化（Render目标Identifier renderTargetIdentifier））
-- `RenderTargetIdentifier Identifier()`
-  （Render目标Identifier Identifier（））
-- `bool HasInternalRenderTargetId()`
-  （bool 是否有内部的Render目标Id（））
-- `bool Equals(RenderTargetHandle other)`
-  （bool Equals（Render目标句柄 other））
-- `bool Equals(object obj)`
-  （布尔值 等于（对象 obj））
-- `int GetHashCode()`
-  （整数 获取哈希码（））
-- `bool op_Equality(RenderTargetHandle c1, RenderTargetHandle c2)`
-  （bool op_Equality（Render目标句柄 c1, Render目标句柄 c2））
-- `bool op_Inequality(RenderTargetHandle c1, RenderTargetHandle c2)`
-  （bool op_Inequality（Render目标句柄 c1, Render目标句柄 c2））
 
 ---
 
@@ -15340,14 +10378,6 @@
 
 - `RenderTargetIdentifier op_Implicit(int nameID)`
   （Render目标Identifier op_Implicit（int nameID））
-- `string ToString()`
-  （字符串 转字符串（））
-- `int GetHashCode()`
-  （整数 获取哈希码（））
-- `bool Equals(RenderTargetIdentifier rhs)`
-  （bool Equals（Render目标Identifier rhs））
-- `bool Equals(object obj)`
-  （布尔值 等于（对象 obj））
 - `bool op_Equality(RenderTargetIdentifier lhs, RenderTargetIdentifier rhs)`
   （bool op_Equality（Render目标Identifier lhs, Render目标Identifier rhs））
 - `bool op_Inequality(RenderTargetIdentifier lhs, RenderTargetIdentifier rhs)`
@@ -15357,8 +10387,6 @@
 
 ## RenderingPath
 ### 字段 (1)
-
-- `int value__`（整数 值__）(偏移: 0x0)
 
 ---
 
@@ -15377,8 +10405,6 @@
 - `HashSet<ulong> usedHashes`（HashSet<ulong> usedHashes）(偏移: 0xC)
 - `HashSet<ulong> existingHashes`（HashSet<ulong> existingHashes）(偏移: 0x10)
 - `Stack<Mesh> cachedMeshes`（Stack<Mesh> cachedMeshes）(偏移: 0x14)
-- `Material surfaceMaterial`（材质 surface材质）(偏移: 0x18)
-- `Material lineMaterial`（材质 line材质）(偏移: 0x1C)
 
 ### 方法 (10)
 
@@ -15644,8 +10670,6 @@
 ## StereoTargetEyeMask
 ### 字段 (1)
 
-- `int value__`（整数 值__）(偏移: 0x0)
-
 ---
 
 ## SynchronizationContextAwaitTaskContinuation
@@ -15780,10 +10804,6 @@
 
 ### 方法 (4)
 
-- `void Start()`
-  （void 开始（））
-- `void Update()`
-  （void 更新（））
 - `void UpdateTargetPosition()`
   （void 更新目标Position（））
 
@@ -15894,8 +10914,6 @@
 ## TargetPositionCache.Mode
 ### 字段 (1)
 
-- `int value__`（整数 值__）(偏移: 0x0)
-
 ---
 
 ## TargetPositionCache.TimeRange
@@ -15985,11 +11003,6 @@
 
 ### 方法 (3)
 
-- `void Invoke(Terrain terrain, RectInt heightRegion, bool synched)`
-  （void Invoke（Terrain terrain, Rect整数 heightRegion, bool synched））
-- `void EndInvoke(IAsyncResult result)`
-  （void 结束调用（I异步结果 result））
-
 ---
 
 ## TerrainData
@@ -16078,8 +11091,6 @@
 ## TerrainUtility.TerrainMap.ErrorCode
 ### 字段 (1)
 
-- `int value__`（整数 值__）(偏移: 0x0)
-
 ---
 
 ## TerrainUtility.TerrainMap.TerrainFilter
@@ -16150,8 +11161,6 @@
 ## TimeSpanParse.ParseFailureKind
 ### 字段 (1)
 
-- `int value__`（整数 值__）(偏移: 0x0)
-
 ---
 
 ## TrailRenderer
@@ -16197,9 +11206,6 @@
 
 ### 方法 (2)
 
-- `void Start()`
-  （void 开始（））
-
 ---
 
 ## VFXTerrainBinder
@@ -16220,12 +11226,8 @@
   （字符串 获取_属性（））
 - `void set_Property(string value)`
   （void 设置_属性（字符串 value））
-- `void OnValidate()`
-  （void 验证时（））
 - `void UpdateSubProperties()`
   （void 更新子属性（））
-- `string ToString()`
-  （字符串 转字符串（））
 
 ---
 
@@ -16246,19 +11248,12 @@
 ## Version.ParseFailureKind
 ### 字段 (1)
 
-- `int value__`（整数 值__）(偏移: 0x0)
-
 ---
 
 ## WaitCallback
 **继承**: MulticastDelegate（多播委托）
 
 ### 方法 (3)
-
-- `void Invoke(object state)`
-  （void 调用（对象 state））
-- `void EndInvoke(IAsyncResult result)`
-  （void 结束调用（I异步结果 result））
 
 ---
 
@@ -16286,8 +11281,6 @@
   （void set_wait时间（float value））
 - `bool get_keepWaiting()`
   （布尔值 获取_保持等待（））
-- `void Reset()`
-  （void 重置（））
 
 ---
 
@@ -16339,11 +11332,6 @@
 
 ### 方法 (3)
 
-- `void Invoke(object state, bool timedOut)`
-  （void Invoke（object state, bool timedOut））
-- `void EndInvoke(IAsyncResult result)`
-  （void 结束调用（I异步结果 result））
-
 ---
 
 ## X509BasicConstraintsExtension
@@ -16384,8 +11372,6 @@
 
 ### 方法 (6)
 
-- `void Reset()`
-  （void 重置（））
 - `bool EndPointGridGraphSpecialCase(GraphNode endNode)`
   （bool 结束Point网格Graph特殊Case（Graph节点 endNode））
 - `void CompletePathIfStartIsValidTarget()`
@@ -16426,79 +11412,12 @@
 
 ---
 
-## ZipContainer
-### 字段 (3)
-
-- `ZipFile _zf`（Zip文件 _zf）(偏移: 0x8)
-- `ZipOutputStream _zos`（ZipOutput流 _zos）(偏移: 0xC)
-- `ZipInputStream _zis`（Zip输入流 _zis）(偏移: 0x10)
-
-### 方法 (16)
-
-- `ZipFile get_ZipFile()`
-  （Zip文件 get_Zip文件（））
-- `ZipOutputStream get_ZipOutputStream()`
-  （ZipOutput流 get_ZipOutput流（））
-- `string get_Password()`
-  （string get_Password（））
-- `Zip64Option get_Zip64()`
-  （Zip64Option get_Zip64（））
-- `int get_BufferSize()`
-  （int get_缓冲区大小（））
-- `ParallelDeflateOutputStream get_ParallelDeflater()`
-  （ParallelDeflateOutput流 get_ParallelDeflater（））
-- `void set_ParallelDeflater(ParallelDeflateOutputStream value)`
-  （void set_ParallelDeflater（ParallelDeflateOutput流 value））
-- `long get_ParallelDeflateThreshold()`
-  （long get_ParallelDeflateThreshold（））
-- `int get_ParallelDeflateMaxBufferPairs()`
-  （int get_ParallelDeflate最大缓冲区Pairs（））
-- `int get_CodecBufferSize()`
-  （int get_Codec缓冲区大小（））
-- `CompressionStrategy get_Strategy()`
-  （CompressionStrategy get_Strategy（））
-- `Zip64Option get_UseZip64WhenSaving()`
-  （Zip64Option get_UseZip64WhenSaving（））
-- `Encoding get_AlternateEncoding()`
-  （Encoding get_AlternateEncoding（））
-- `Encoding get_DefaultEncoding()`
-  （Encoding get_默认的Encoding（））
-- `ZipOption get_AlternateEncodingUsage()`
-  （ZipOption get_AlternateEncodingUsage（））
-- `Stream get_ReadStream()`
-  （流 get_Read流（））
-
----
-
 ## _ThreadPoolWaitCallback
 ### 方法 (1)
 
 ---
 
 # 地图与导航系统 (86个类)
-
-## BinaryObjectWithMap
-### 字段 (6)
-
-- `BinaryHeaderEnum binaryHeaderEnum`（二进制头枚举 binary头枚举）(偏移: 0x8)
-- `int objectId`（整数 对象ID）(偏移: 0xC)
-- `string name`（字符串 名称）(偏移: 0x10)
-- `int numMembers`（int numMembers）(偏移: 0x14)
-- `string[] memberNames`（字符串[] 成员名称）(偏移: 0x18)
-- `int assemId`（整数 程序集ID）(偏移: 0x1C)
-
-### 方法 (4)
-
-- `void Set(int objectId, string name, int numMembers, string[] memberNames, int assemId)`
-  （void 集合（int objectId, string name, int numMembers, string[] memberNames, int assemId））
-- `void Write(__BinaryWriter sout)`
-  （void 写入（__二进制写入器 sout））
-- `void Read(__BinaryParser input)`
-  （void 读取（__二进制解析器 input））
-- `void Dump()`
-  （void 转储（））
-
----
 
 ## CameraManager
 **继承**: Singleton<CameraManager>（Singleton<摄像机Manager>）
@@ -16524,8 +11443,6 @@
   （void set_focus玩家（玩家 value））
 - `bool get_changeViewUnlock()`
   （bool get_change视图Unlock（））
-- `void Update()`
-  （void 更新（））
 - `void ChangePVandCV()`
   （void ChangePVand第一人称视角（））
 - `void SetFocusPlayer(Player player)`
@@ -16552,21 +11469,15 @@
 ## CausalityTraceLevel
 ### 字段 (1)
 
-- `int value__`（整数 值__）(偏移: 0x0)
-
 ---
 
 ## CompressionLevel
 ### 字段 (1)
 
-- `int value__`（整数 值__）(偏移: 0x0)
-
 ---
 
 ## ConfidenceLevel
 ### 字段 (1)
-
-- `int value__`（整数 值__）(偏移: 0x0)
 
 ---
 
@@ -16598,90 +11509,8 @@
 
 ---
 
-## DeferredTiler
-### 字段 (13)
-
-- `int m_TilePixelWidth`（int m_TilePixel宽度）(偏移: 0x0)
-- `int m_TilePixelHeight`（int m_TilePixel高度）(偏移: 0x4)
-- `int m_TileXCount`（int m_TileX数量）(偏移: 0x8)
-- `int m_TileYCount`（int m_TileY数量）(偏移: 0xC)
-- `int m_TileHeaderSize`（int m_Tile标题大小）(偏移: 0x10)
-- `int m_AvgLightPerTile`（int m_Avg光照PerTile）(偏移: 0x14)
-- `int m_TilerLevel`（int m_Tiler等级）(偏移: 0x18)
-- `FrustumPlanes m_FrustumPlanes`（FrustumPlanes m_FrustumPlanes）(偏移: 0x1C)
-- `bool m_IsOrthographic`（bool m_是否Orthographic）(偏移: 0x34)
-- `NativeArray<int> m_Counters`（NativeArray<int> m_Counters）(偏移: 0x38)
-- `NativeArray<ushort> m_TileData`（NativeArray<ushort> m_Tile数据）(偏移: 0x44)
-- `NativeArray<uint> m_TileHeaders`（NativeArray<uint> m_TileHeaders）(偏移: 0x50)
-- `NativeArray<PreTile> m_PreTiles`（NativeArray<PreTile> m_PreTiles）(偏移: 0x5C)
-
-### 方法 (30)
-
-- `int get_TilerLevel()`
-  （int get_Tiler等级（））
-- `int get_TileXCount()`
-  （int get_TileX数量（））
-- `int get_TileYCount()`
-  （int get_TileY数量（））
-- `int get_TilePixelWidth()`
-  （int get_TilePixel宽度（））
-- `int get_TilePixelHeight()`
-  （int get_TilePixel高度（））
-- `int get_TileHeaderSize()`
-  （int get_Tile标题大小（））
-- `int get_MaxLightPerTile()`
-  （int get_最大光照PerTile（））
-- `int get_TileDataCapacity()`
-  （int get_Tile数据Capacity（））
-- `NativeArray<ushort> get_Tiles()`
-  （NativeArray<ushort> get_Tiles（））
-- `NativeArray<uint> get_TileHeaders()`
-  （NativeArray<uint> get_TileHeaders（））
-- `void GetTileOffsetAndCount(int i, int j, out int offset, out int count)`
-  （void 获取TileOffsetAnd数量（int i, int j, out int offset, out int count））
-- `int GetTileHeaderOffset(int i, int j)`
-  （int 获取Tile标题Offset（int i, int j））
-- `void Setup(int tileDataCapacity)`
-  （void Setup（int tileDataCapacity））
-- `void OnCameraCleanup()`
-  （void On摄像机清理（））
-- `void CullFinalLights(ref NativeArray<DeferredTiler.PrePunctualLight> punctualLights, ref NativeArray<ushort> lightIndices, int lightStartIndex, int lightCount, int istart, int iend, int jstart, int jend)`
-  （void CullFinalLights（ref NativeArray<DeferredTiler.PrePunctualLight> punctualLights, ref NativeArray<ushort> lightIndices, int lightStartIndex, int lightCount, int istart, int iend, int jstart, int jend））
-- `void CullIntermediateLights(ref NativeArray<DeferredTiler.PrePunctualLight> punctualLights, ref NativeArray<ushort> lightIndices, int lightStartIndex, int lightCount, int istart, int iend, int jstart, int jend)`
-  （void CullIntermediateLights（ref NativeArray<DeferredTiler.PrePunctualLight> punctualLights, ref NativeArray<ushort> lightIndices, int lightStartIndex, int lightCount, int istart, int iend, int jstart, int jend））
-- `int AddTileData(ushort* lightData, ref int size)`
-  （int 添加Tile数据（ushort* lightData, ref int size））
-- `bool IntersectionLineSphere(float3 centre, float radius, float3 raySource, float3 rayDirection, out float t0, out float t1)`
-  （bool IntersectionLineSphere（float3 centre, float radius, float3 raySource, float3 rayDirection, out float t0, out float t1））
-- `bool Clip(ref PreTile tile, float3 posVS, float radius)`
-  （bool 弹匣（ref PreTile tile, float3 posVS, float radius））
-- `DeferredTiler.ClipResult ClipPartial(float4 plane, float4 sidePlaneA, float4 sidePlaneB, float3 posVS, float radius, float radiusSq, ref int insideCount)`
-  （DeferredTiler.弹匣Result 弹匣Partial（float4 plane, float4 sidePlaneA, float4 sidePlaneB, float3 posVS, float radius, float radiusSq, ref int insideCount））
-- `float4 MakePlane(float3 pb, float3 pc)`
-  （float4 MakePlane（float3 pb, float3 pc））
-- `float4 MakePlane(float3 pa, float3 pb, float3 pc)`
-  （float4 MakePlane（float3 pa, float3 pb, float3 pc））
-- `float DistanceToPlane(float4 plane, float3 p)`
-  （float 距离ToPlane（float4 plane, float3 p））
-- `float SignedSq(float f)`
-  （float SignedSq（float f））
-- `float min2(float a, float b)`
-  （float min2（float a, float b））
-- `float max2(float a, float b)`
-  （float max2（float a, float b））
-- `float max3(float a, float b, float c)`
-  （float max3（float a, float b, float c））
-- `uint _f32tof16(float x)`
-  （uint _f32tof16（float x））
-- `int Align(int s, int alignment)`
-  （int Align（int s, int alignment））
-
----
-
 ## DeferredTiler.ClipResult
 ### 字段 (1)
-
-- `int value__`（整数 值__）(偏移: 0x0)
 
 ---
 
@@ -16699,14 +11528,10 @@
 ## DocumentationSortingAttribute.Level
 ### 字段 (1)
 
-- `int value__`（整数 值__）(偏移: 0x0)
-
 ---
 
 ## EventLevel
 ### 字段 (1)
-
-- `int value__`（整数 值__）(偏移: 0x0)
 
 ---
 
@@ -16756,8 +11581,6 @@
 
 ### 方法 (13)
 
-- `void Start()`
-  （void 开始（））
 - `void OnPostScan()`
   （void 扫描后（））
 - `void InvertSettings()`
@@ -17009,10 +11832,6 @@
 
 ### 方法 (13)
 
-- `bool Equals(object obj)`
-  （布尔值 等于（对象 obj））
-- `int GetHashCode()`
-  （整数 获取哈希码（））
 - `string GetAscii(string unicode)`
   （string 获取Ascii（string unicode））
 - `string GetAscii(string unicode, int index, int count)`
@@ -17146,14 +11965,10 @@
 ## LightmapsMode
 ### 字段 (1)
 
-- `int value__`（整数 值__）(偏移: 0x0)
-
 ---
 
 ## LoadSceneMode
 ### 字段 (1)
-
-- `int value__`（整数 值__）(偏移: 0x0)
 
 ---
 
@@ -17211,8 +12026,6 @@
 - `string sceneName`（string scene名称）(偏移: 0x0)
 - `string mapName`（string map名称）(偏移: 0x4)
 - `Sprite mapIcon`（精灵 map图标）(偏移: 0x8)
-- `Texture loadingTex_BL`（纹理 loadingTex_BL）(偏移: 0xC)
-- `Texture loadingTex_GR`（纹理 loadingTex_GR）(偏移: 0x10)
 - `GameObject gameModePrefabOverride`（游戏对象 game模式预制体重写）(偏移: 0x14)
 - `WeaponLimited weaponLimited`（Weapon限制 weapon限制）(偏移: 0x18)
 
@@ -17306,32 +12119,6 @@
 
 ---
 
-## ObjectMap
-### 字段 (11)
-
-- `string objectName`（string object名称）(偏移: 0x8)
-- `Type objectType`（类型 object类型）(偏移: 0xC)
-- `BinaryTypeEnum[] binaryTypeEnumA`（Binary类型Enum[] binary类型EnumA）(偏移: 0x10)
-- `object[] typeInformationA`（object[] typeInformationA）(偏移: 0x14)
-- `Type[] memberTypes`（Type[] memberTypes）(偏移: 0x18)
-- `string[] memberNames`（字符串[] 成员名称）(偏移: 0x1C)
-- `ReadObjectInfo objectInfo`（Read对象信息 object信息）(偏移: 0x20)
-- `bool isInitObjectInfo`（bool is初始化对象信息）(偏移: 0x24)
-- `ObjectReader objectReader`（对象读取器 object读取器）(偏移: 0x28)
-- `int objectId`（整数 对象ID）(偏移: 0x2C)
-- `BinaryAssemblyInfo assemblyInfo`（BinaryAssembly信息 assembly信息）(偏移: 0x30)
-
-### 方法 (3)
-
-- `ReadObjectInfo CreateObjectInfo(ref SerializationInfo si, ref object[] memberData)`
-  （Read对象信息 创建对象信息（ref SerializationInfo si, ref object[] memberData））
-- `ObjectMap Create(string name, Type objectType, string[] memberNames, ObjectReader objectReader, int objectId, BinaryAssemblyInfo assemblyInfo)`
-  （对象映射 创建（string name, 类型 objectType, string[] memberNames, 对象读取器 objectReader, int objectId, BinaryAssembly信息 assemblyInfo））
-- `ObjectMap Create(string name, string[] memberNames, BinaryTypeEnum[] binaryTypeEnumA, object[] typeInformationA, int[] memberAssemIds, ObjectReader objectReader, int objectId, BinaryAssemblyInfo assemblyInfo, SizedArray assemIdToAssemblyTable)`
-  （对象映射 创建（string name, string[] memberNames, Binary类型Enum[] binaryTypeEnumA, object[] typeInformationA, int[] memberAssemIds, 对象读取器 objectReader, int objectId, BinaryAssembly信息 assemblyInfo, Sized数组 assemIdToAssemblyTable））
-
----
-
 ## ObjectMapInfo
 ### 字段 (4)
 
@@ -17401,8 +12188,6 @@
 ## SO_Item.Level
 ### 字段 (1)
 
-- `int value__`（整数 值__）(偏移: 0x0)
-
 ---
 
 ## Scene
@@ -17414,10 +12199,6 @@
 
 - `int get_handle()`
   （int get_handle（））
-- `int GetHashCode()`
-  （整数 获取哈希码（））
-- `bool Equals(object other)`
-  （布尔值 等于（对象 other））
 
 ---
 
@@ -17485,7 +12266,6 @@
 
 ### 字段 (2)
 
-- `Material m_CopyDepthMaterial`（材质 m_复制深度材质）(偏移: 0x74)
 - `ProfilingSampler m_ProfilingSampler`（性能分析采样器 m_性能分析采样器）(偏移: 0x0)
 
 ### 方法 (4)
@@ -17572,8 +12352,6 @@
 
 ## SupportedRenderingFeatures.LightmapMixedBakeModes
 ### 字段 (1)
-
-- `int value__`（整数 值__）(偏移: 0x0)
 
 ---
 
@@ -17699,8 +12477,6 @@
 ## TileFlags
 ### 字段 (1)
 
-- `int value__`（整数 值__）(偏移: 0x0)
-
 ---
 
 ## TileHandler
@@ -17781,8 +12557,6 @@
 ## TileHandler.CutMode
 ### 字段 (1)
 
-- `int value__`（整数 值__）(偏移: 0x0)
-
 ---
 
 ## TileHandler.CuttingResult
@@ -17847,33 +12621,13 @@
 
 ---
 
-## Tonemapping
-**继承**: VolumeComponent, IPostProcessComponent（体积组件, I后处理组件）
-
-### 字段 (1)
-
-- `TonemappingModeParameter mode`（Tonemapping模式Parameter mode）(偏移: 0x1C)
-
-### 方法 (2)
-
-- `bool IsActive()`
-  （布尔值 是否激活的（））
-- `bool IsTileCompatible()`
-  （布尔值 是否瓦片兼容（））
-
----
-
 ## TonemappingMode
 ### 字段 (1)
-
-- `int value__`（整数 值__）(偏移: 0x0)
 
 ---
 
 ## TraceLevel
 ### 字段 (1)
-
-- `int value__`（整数 值__）(偏移: 0x0)
 
 ---
 
@@ -17905,14 +12659,10 @@
 
 ### 方法 (8)
 
-- `void OnValidate()`
-  （void 验证时（））
 - `void UpdateHierarchy()`
   （void 更新Hierarchy（））
 - `void UpdateData()`
   （void 更新数据（））
-- `string ToString()`
-  （字符串 转字符串（））
 
 ---
 
@@ -17929,51 +12679,10 @@
 ## VFXHierarchyAttributeMapBinder.RadiusMode
 ### 字段 (1)
 
-- `int value__`（整数 值__）(偏移: 0x0)
-
 ---
 
 ## VFXSpawnerLoopState
 ### 字段 (1)
-
-- `int value__`（整数 值__）(偏移: 0x0)
-
----
-
-## VFXSpawnerState
-**继承**: IDisposable（可释放接口）
-
-### 字段 (2)
-
-- `IntPtr m_Ptr`（整数指针 m_指针）(偏移: 0x8)
-- `bool m_Owner`（bool m_Owner）(偏移: 0xC)
-
-### 方法 (16)
-
-- `void SetWrapValue(IntPtr ptr)`
-  （void 集合Wrap值（整数Ptr ptr））
-- `void Release()`
-  （void 释放（））
-- `void Finalize()`
-  （void 终结（））
-- `void Dispose()`
-  （void 释放（））
-- `void Internal_Destroy(IntPtr ptr)`
-  （void 内部_销毁（整数指针 ptr））
-- `bool get_playing()`
-  （bool get_playing（））
-- `void set_playing(bool value)`
-  （void set_playing（bool value））
-- `float get_spawnCount()`
-  （float get_spawn数量（））
-- `void set_spawnCount(float value)`
-  （void set_spawn数量（float value））
-- `float get_deltaTime()`
-  （浮点数 获取_增量时间（））
-- `float get_totalTime()`
-  （float get_total时间（））
-- `void set_totalTime(float value)`
-  （void set_total时间（float value））
 
 ---
 
@@ -18056,9 +12765,6 @@
 **继承**: AnimSFX（动画SFX）
 
 ### 字段 (2)
-
-- `Texture baseTex`（纹理 baseTex）(偏移: 0x3C)
-- `Texture blastTex`（纹理 blastTex）(偏移: 0x40)
 
 ### 方法 (1)
 
@@ -18176,11 +12882,6 @@
 
 ### 方法 (3)
 
-- `void Invoke(AudioSampleProvider provider, uint sampleFrameCount)`
-  （void Invoke（音频Sample提供者 provider, uint sampleFrameCount））
-- `void EndInvoke(IAsyncResult result)`
-  （void 结束调用（I异步结果 result））
-
 ---
 
 ## AudioSettings
@@ -18205,11 +12906,6 @@
 **继承**: MulticastDelegate（多播委托）
 
 ### 方法 (3)
-
-- `void Invoke(bool deviceWasChanged)`
-  （void Invoke（bool deviceWasChanged））
-- `void EndInvoke(IAsyncResult result)`
-  （void 结束调用（I异步结果 result））
 
 ---
 
@@ -18259,36 +12955,6 @@
   （void 移除（））
 - `void OnLifeEnd()`
   （void 生命结束时（））
-
----
-
-## Buffer
-### 方法 (12)
-
-- `bool InternalBlockCopy(Array src, int srcOffsetBytes, Array dst, int dstOffsetBytes, int byteCount)`
-  （bool 内部的Block复制（数组 src, int srcOffsetBytes, 数组 dst, int dstOffsetBytes, int byteCount））
-- `int IndexOfByte(byte* src, byte value, int index, int count)`
-  （int 索引OfByte（byte* src, byte value, int index, int count））
-- `int _ByteLength(Array array)`
-  （int _ByteLength（数组 array））
-- `void ZeroMemory(byte* src, long len)`
-  （void ZeroMemory（byte* src, long len））
-- `void Memcpy(byte[] dest, int destIndex, byte* src, int srcIndex, int len)`
-  （void Memcpy（byte[] dest, int destIndex, byte* src, int srcIndex, int len））
-- `void Memcpy(byte* pDest, int destIndex, byte[] src, int srcIndex, int len)`
-  （void Memcpy（byte* pDest, int destIndex, byte[] src, int srcIndex, int len））
-- `int ByteLength(Array array)`
-  （int ByteLength（数组 array））
-- `void BlockCopy(Array src, int srcOffset, Array dst, int dstOffset, int count)`
-  （void Block复制（数组 src, int srcOffset, 数组 dst, int dstOffset, int count））
-- `void memcpy4(byte* dest, byte* src, int size)`
-  （void memcpy4（byte* dest, byte* src, int size））
-- `void memcpy2(byte* dest, byte* src, int size)`
-  （void memcpy2（byte* dest, byte* src, int size））
-- `void memcpy1(byte* dest, byte* src, int size)`
-  （void memcpy1（byte* dest, byte* src, int size））
-- `void Memcpy(byte* dest, byte* src, int size)`
-  （void Memcpy（byte* dest, byte* src, int size））
 
 ---
 
@@ -18344,8 +13010,6 @@
 
 ### 方法 (4)
 
-- `void Update()`
-  （void 更新（））
 - `void SetFadeDuration(float inTime, float outTime)`
   （void 集合Fade持续时间（float inTime, float outTime））
 - `void SetJudgeFunction(Func<bool> func)`
@@ -18392,136 +13056,8 @@
 
 ---
 
-## CommandBuffer
-**继承**: IDisposable（可释放接口）
-
-### 字段 (1)
-
-- `IntPtr m_Ptr`（整数指针 m_指针）(偏移: 0x8)
-
-### 方法 (116)
-
-- `void Internal_SetSinglePassStereo(SinglePassStereoMode mode)`
-  （void Internal_集合单个PassStereo（单个PassStereo模式 mode））
-- `IntPtr InitBuffer()`
-  （整数Ptr 初始化缓冲区（））
-- `void WaitOnGPUFence_Internal(IntPtr fencePtr, SynchronisationStageFlags stage)`
-  （void WaitOnGPUFence_内部的（整数Ptr fencePtr, SynchronisationStageFlags stage））
-- `void ReleaseBuffer()`
-  （void Release缓冲区（））
-- `void set_name(string value)`
-  （void 设置_名称（字符串 value））
-- `void Clear()`
-  （void 清除（））
-- `void Internal_DrawOcclusionMesh(RectInt normalizedCamViewport)`
-  （void Internal_DrawOcclusion网格（Rect整数 normalizedCamViewport））
-- `void SetViewport(Rect pixelRect)`
-  （void 集合Viewport（Rect pixelRect））
-- `void EnableScissorRect(Rect scissor)`
-  （void 启用ScissorRect（Rect scissor））
-- `void DisableScissorRect()`
-  （void 禁用ScissorRect（））
-- `void ReleaseTemporaryRT(int nameID)`
-  （void Release临时的RT（int nameID））
-- `void ClearRenderTarget(bool clearDepth, bool clearColor, Color backgroundColor, float depth)`
-  （void 清除Render目标（bool clearDepth, bool clearColor, 颜色 backgroundColor, float depth））
-- `void ClearRenderTarget(bool clearDepth, bool clearColor, Color backgroundColor)`
-  （void 清除Render目标（bool clearDepth, bool clearColor, 颜色 backgroundColor））
-- `void SetGlobalFloat(int nameID, float value)`
-  （void 集合全局的浮点数（int nameID, float value））
-- `void SetGlobalInt(int nameID, int value)`
-  （void 集合全局的整数（int nameID, int value））
-- `void SetGlobalVector(int nameID, Vector4 value)`
-  （void 集合全局的向量（int nameID, Vector4 value））
-- `void SetGlobalColor(int nameID, Color value)`
-  （void 集合全局的颜色（int nameID, 颜色 value））
-- `void SetGlobalMatrix(int nameID, Matrix4x4 value)`
-  （void 集合全局的矩阵（int nameID, Matrix4x4 value））
-- `void SetViewProjectionMatrices(Matrix4x4 view, Matrix4x4 proj)`
-  （void 集合视图ProjectionMatrices（Matrix4x4 view, Matrix4x4 proj））
-- `void SetExecutionFlags(CommandBufferExecutionFlags flags)`
-  （void 集合ExecutionFlags（Command缓冲区ExecutionFlags flags））
-- `bool ValidateAgainstExecutionFlags(CommandBufferExecutionFlags requiredFlags, CommandBufferExecutionFlags invalidFlags)`
-  （bool 验证AgainstExecutionFlags（Command缓冲区ExecutionFlags requiredFlags, Command缓冲区ExecutionFlags invalidFlags））
-- `void SetGlobalVectorArray(int nameID, Vector4[] values)`
-  （void 集合全局的向量数组（int nameID, Vector4[] values））
-- `void SetGlobalMatrixArray(int nameID, Matrix4x4[] values)`
-  （void 集合全局的矩阵数组（int nameID, Matrix4x4[] values））
-- `void SetLateLatchProjectionMatrices(Matrix4x4[] projectionMat)`
-  （void 集合延迟LatchProjectionMatrices（Matrix4x4[] projectionMat））
-- `void UnmarkLateLatchMatrix(CameraLateLatchMatrixType matrixPropertyType)`
-  （void Unmark延迟Latch矩阵（摄像机延迟Latch矩阵类型 matrixPropertyType））
-- `void SetGlobalBufferInternal(int nameID, ComputeBuffer value)`
-  （void 集合全局的缓冲区内部的（int nameID, Compute缓冲区 value））
-- `void BeginSample(string name)`
-  （void BeginSample（string name））
-- `void EndSample(string name)`
-  （void 结束Sample（string name））
-- `void BeginSample(CustomSampler sampler)`
-  （void BeginSample（自定义的Sampler sampler））
-- `void EndSample(CustomSampler sampler)`
-  （void 结束Sample（自定义的Sampler sampler））
-- `void BeginSample_CustomSampler(CustomSampler sampler)`
-  （void BeginSample_自定义的Sampler（自定义的Sampler sampler））
-- `void EndSample_CustomSampler(CustomSampler sampler)`
-  （void 结束Sample_自定义的Sampler（自定义的Sampler sampler））
-- `void SetGlobalConstantBufferInternal(ComputeBuffer buffer, int nameID, int offset, int size)`
-  （void 集合全局的Constant缓冲区内部的（Compute缓冲区 buffer, int nameID, int offset, int size））
-- `void SetInstanceMultiplier(uint multiplier)`
-  （void 集合实例Multiplier（uint multiplier））
-- `void SetRenderTarget(RenderTargetIdentifier rt)`
-  （void 集合Render目标（Render目标Identifier rt））
-- `void SetRenderTarget(RenderTargetIdentifier rt, RenderBufferLoadAction loadAction, RenderBufferStoreAction storeAction)`
-  （void 集合Render目标（Render目标Identifier rt, Render缓冲区加载动作 loadAction, Render缓冲区商店动作 storeAction））
-- `void SetRenderTarget(RenderTargetIdentifier rt, RenderBufferLoadAction colorLoadAction, RenderBufferStoreAction colorStoreAction, RenderBufferLoadAction depthLoadAction, RenderBufferStoreAction depthStoreAction)`
-  （void 集合Render目标（Render目标Identifier rt, Render缓冲区加载动作 colorLoadAction, Render缓冲区商店动作 colorStoreAction, Render缓冲区加载动作 depthLoadAction, Render缓冲区商店动作 depthStoreAction））
-- `void SetRenderTarget(RenderTargetIdentifier rt, int mipLevel, CubemapFace cubemapFace, int depthSlice)`
-  （void 集合Render目标（Render目标Identifier rt, int mipLevel, CubemapFace cubemapFace, int depthSlice））
-- `void SetRenderTarget(RenderTargetIdentifier color, RenderTargetIdentifier depth)`
-  （void 集合Render目标（Render目标Identifier color, Render目标Identifier depth））
-- `void SetRenderTarget(RenderTargetIdentifier color, RenderTargetIdentifier depth, int mipLevel, CubemapFace cubemapFace, int depthSlice)`
-  （void 集合Render目标（Render目标Identifier color, Render目标Identifier depth, int mipLevel, CubemapFace cubemapFace, int depthSlice））
-- `void SetRenderTarget(RenderTargetIdentifier color, RenderBufferLoadAction colorLoadAction, RenderBufferStoreAction colorStoreAction, RenderTargetIdentifier depth, RenderBufferLoadAction depthLoadAction, RenderBufferStoreAction depthStoreAction)`
-  （void 集合Render目标（Render目标Identifier color, Render缓冲区加载动作 colorLoadAction, Render缓冲区商店动作 colorStoreAction, Render目标Identifier depth, Render缓冲区加载动作 depthLoadAction, Render缓冲区商店动作 depthStoreAction））
-- `void SetRenderTarget(RenderTargetIdentifier[] colors, RenderTargetIdentifier depth, int mipLevel, CubemapFace cubemapFace, int depthSlice)`
-  （void 集合Render目标（Render目标Identifier[] colors, Render目标Identifier depth, int mipLevel, CubemapFace cubemapFace, int depthSlice））
-- `void SetRenderTargetSingle_Internal(RenderTargetIdentifier rt, RenderBufferLoadAction colorLoadAction, RenderBufferStoreAction colorStoreAction, RenderBufferLoadAction depthLoadAction, RenderBufferStoreAction depthStoreAction)`
-  （void 集合Render目标Single_内部的（Render目标Identifier rt, Render缓冲区加载动作 colorLoadAction, Render缓冲区商店动作 colorStoreAction, Render缓冲区加载动作 depthLoadAction, Render缓冲区商店动作 depthStoreAction））
-- `void SetRenderTargetColorDepth_Internal(RenderTargetIdentifier color, RenderTargetIdentifier depth, RenderBufferLoadAction colorLoadAction, RenderBufferStoreAction colorStoreAction, RenderBufferLoadAction depthLoadAction, RenderBufferStoreAction depthStoreAction, RenderTargetFlags flags)`
-  （void 集合Render目标颜色Depth_内部的（Render目标Identifier color, Render目标Identifier depth, Render缓冲区加载动作 colorLoadAction, Render缓冲区商店动作 colorStoreAction, Render缓冲区加载动作 depthLoadAction, Render缓冲区商店动作 depthStoreAction, Render目标Flags flags））
-- `void SetRenderTargetMultiSubtarget(RenderTargetIdentifier[] colors, RenderTargetIdentifier depth, RenderBufferLoadAction[] colorLoadActions, RenderBufferStoreAction[] colorStoreActions, RenderBufferLoadAction depthLoadAction, RenderBufferStoreAction depthStoreAction, int mipLevel, CubemapFace cubemapFace, int depthSlice)`
-  （void 集合Render目标多个Subtarget（Render目标Identifier[] colors, Render目标Identifier depth, Render缓冲区加载Action[] colorLoadActions, Render缓冲区商店Action[] colorStoreActions, Render缓冲区加载动作 depthLoadAction, Render缓冲区商店动作 depthStoreAction, int mipLevel, CubemapFace cubemapFace, int depthSlice））
-- `void SetComputeBufferData(ComputeBuffer buffer, Array data)`
-  （void 集合Compute缓冲区数据（Compute缓冲区 buffer, 数组 data））
-- `void Finalize()`
-  （void 终结（））
-- `void Dispose()`
-  （void 释放（））
-- `void Dispose(bool disposing)`
-  （void 释放（布尔值 正在释放））
-- `void Release()`
-  （void 释放（））
-- `void DrawOcclusionMesh(RectInt normalizedCamViewport)`
-  （void DrawOcclusion网格（Rect整数 normalizedCamViewport））
-- `void Blit(RenderTargetIdentifier source, RenderTargetIdentifier dest)`
-  （void Blit（Render目标Identifier source, Render目标Identifier dest））
-- `void SetGlobalVector(string name, Vector4 value)`
-  （void 集合全局的向量（string name, Vector4 value））
-- `void SetGlobalVectorArray(string propertyName, Vector4[] values)`
-  （void 集合全局的向量数组（string propertyName, Vector4[] values））
-- `void SetGlobalBuffer(int nameID, ComputeBuffer value)`
-  （void 集合全局的缓冲区（int nameID, Compute缓冲区 value））
-- `void SetGlobalConstantBuffer(ComputeBuffer buffer, int nameID, int offset, int size)`
-  （void 集合全局的Constant缓冲区（Compute缓冲区 buffer, int nameID, int offset, int size））
-- `void SetSinglePassStereo(SinglePassStereoMode mode)`
-  （void 集合单个PassStereo（单个PassStereo模式 mode））
-
----
-
 ## CommandBufferExecutionFlags
 ### 字段 (1)
-
-- `int value__`（整数 值__）(偏移: 0x0)
 
 ---
 
@@ -18601,9 +13137,6 @@
 
 ### 方法 (1)
 
-- `int GetHashCode()`
-  （整数 获取哈希码（））
-
 ---
 
 ## ComputeBufferHandle
@@ -18625,8 +13158,6 @@
 
 ## ComputeBufferMode
 ### 字段 (1)
-
-- `int value__`（整数 值__）(偏移: 0x0)
 
 ---
 
@@ -18650,8 +13181,6 @@
 
 ## ComputeBufferType
 ### 字段 (1)
-
-- `int value__`（整数 值__）(偏移: 0x0)
 
 ---
 
@@ -18817,8 +13346,6 @@
   （void set_display持久的Runtime界面（bool value））
 - `void RefreshEditor()`
   （void 刷新Editor（））
-- `void Reset()`
-  （void 重置（））
 - `void ReDrawOnScreenDebug()`
   （void ReDrawOn屏幕的Debug（））
 - `void RegisterData(IDebugData data)`
@@ -18866,8 +13393,6 @@
 
 ### 方法 (6)
 
-- `void Reset()`
-  （void 重置（））
 - `void InternalReset()`
   （void 内部的重置（））
 - `void InternalInitialize(byte* byteStart, char* charEnd)`
@@ -18896,8 +13421,6 @@
   （bool Fallback（byte[] bytesUnknown, int index））
 - `char GetNextChar()`
   （字符 获取下一个字符（））
-- `void Reset()`
-  （void 重置（））
 - `int InternalFallback(byte[] bytes, byte* pBytes)`
   （int 内部的Fallback（byte[] bytes, byte* pBytes））
 
@@ -18905,8 +13428,6 @@
 
 ## DeferredLights.GBufferHandles
 ### 字段 (1)
-
-- `int value__`（整数 值__）(偏移: 0x0)
 
 ---
 
@@ -19052,8 +13573,6 @@
   （int 初始化（ZlibCodec codec, Compression等级 level, int bits, CompressionStrategy compressionStrategy））
 - `int Initialize(ZlibCodec codec, CompressionLevel level, int windowBits, int memLevel, CompressionStrategy strategy)`
   （int 初始化（ZlibCodec codec, Compression等级 level, int windowBits, int memLevel, CompressionStrategy strategy））
-- `void Reset()`
-  （void 重置（））
 - `void SetDeflater()`
   （void 集合Deflater（））
 - `int Deflate(FlushType flush)`
@@ -19161,8 +13680,6 @@
 
 - `void Work()`
   （void 工作（））
-- `void LateUpdate()`
-  （void 延迟更新（））
 - `void TryRecycle(bool roundRecycle)`
   （void TryRecycle（bool roundRecycle））
 - `void Recycle(bool roundRecycle)`
@@ -19227,8 +13744,6 @@
 
 ### 方法 (6)
 
-- `void Reset()`
-  （void 重置（））
 - `void InternalReset()`
   （void 内部的重置（））
 - `void InternalInitialize(char* charStart, char* charEnd, EncoderNLS encoder, bool setEncoder)`
@@ -19263,8 +13778,6 @@
   （bool 移动上一个（））
 - `int get_Remaining()`
   （int get_Remaining（））
-- `void Reset()`
-  （void 重置（））
 
 ---
 
@@ -19396,8 +13909,6 @@
 
 ### 方法 (13)
 
-- `void Start()`
-  （void 开始（））
 - `void OnStoreDefaultLocalState()`
   （void On商店默认的本地的状态（））
 - `void OnFixTransforms()`
@@ -19459,8 +13970,6 @@
 
 ### 方法 (2)
 
-- `void LateUpdate()`
-  （void 延迟更新（））
 - `void UpdatePosition()`
   （void 更新Position（））
 
@@ -19483,32 +13992,6 @@
 
 ## FullBodyBipedEffector
 ### 字段 (1)
-
-- `int value__`（整数 值__）(偏移: 0x0)
-
----
-
-## GBufferPass
-**继承**: ScriptableRenderPass（可脚本化渲染通道）
-
-### 字段 (11)
-
-- `ShaderTagId s_ShaderTagLit`（着色器标签Id s_着色器标签Lit）(偏移: 0x0)
-- `ShaderTagId s_ShaderTagSimpleLit`（着色器标签Id s_着色器标签SimpleLit）(偏移: 0x4)
-- `ShaderTagId s_ShaderTagUnlit`（着色器标签Id s_着色器标签Unlit）(偏移: 0x8)
-- `ShaderTagId s_ShaderTagUniversalGBuffer`（着色器标签Id s_着色器标签UniversalG缓冲区）(偏移: 0xC)
-- `ShaderTagId s_ShaderTagUniversalMaterialType`（着色器标签Id s_着色器标签Universal材质类型）(偏移: 0x10)
-- `ProfilingSampler m_ProfilingSampler`（性能分析采样器 m_性能分析采样器）(偏移: 0x54)
-- `DeferredLights m_DeferredLights`（DeferredLights m_DeferredLights）(偏移: 0x58)
-- `ShaderTagId[] m_ShaderTagValues`（着色器标签Id[] m_着色器标签Values）(偏移: 0x5C)
-- `RenderStateBlock[] m_RenderStateBlocks`（Render状态Block[] m_Render状态Blocks）(偏移: 0x60)
-- `FilteringSettings m_FilteringSettings`（过滤设置 m_过滤设置）(偏移: 0x64)
-- `RenderStateBlock m_RenderStateBlock`（Render状态Block m_Render状态Block）(偏移: 0x7C)
-
-### 方法 (3)
-
-- `void OnCameraCleanup(CommandBuffer cmd)`
-  （void 摄像机清理时（命令缓冲区 cmd））
 
 ---
 
@@ -19578,8 +14061,6 @@
   （bool get_game回合Over（））
 - `void set_gameRoundOver(bool value)`
   （void set_game回合Over（bool value））
-- `void Start()`
-  （void 开始（））
 - `bool TryGetAce(Player player)`
   （bool Try获取王牌（玩家 player））
 - `void ResetRound(float delay = 0)`
@@ -19636,28 +14117,6 @@
 
 ---
 
-## HUD_Nano6_BuffIcon
-**继承**: RecyclableObject（可回收对象）
-
-### 字段 (3)
-
-- `Image image`（图像 image）(偏移: 0x30)
-- `Vector3 targetPos`（三维向量 targetPos）(偏移: 0x34)
-- `bool isRadar`（bool isRadar）(偏移: 0x40)
-
-### 方法 (4)
-
-- `void SetSprite(Sprite sprite, bool isRadar)`
-  （void 集合精灵（精灵 sprite, bool isRadar））
-- `void SetBornPosAndTartgetPos(Vector3 born, Vector3 target)`
-  （void 集合出生PosAndTartgetPos（三维向量 born, 三维向量 target））
-- `void Work()`
-  （void 工作（））
-- `void Recycle(bool roundRecycle)`
-  （void 回收（布尔值 循环回收））
-
----
-
 ## IKEffector
 ### 字段 (31)
 
@@ -19676,7 +14135,6 @@
 - `Transform planeBone3`（变换 planeBone3）(偏移: 0x54)
 - `Quaternion planeRotationOffset`（Quaternion planeRotationOffset）(偏移: 0x58)
 - `float posW`（float posW）(偏移: 0x68)
-- `float rotW`（float rotW）(偏移: 0x6C)
 - `Vector3[] localPositions`（Vector3[] localPositions）(偏移: 0x70)
 - `bool usePlaneNodes`（bool usePlaneNodes）(偏移: 0x74)
 - `Quaternion animatedPlaneRotation`（Quaternion animatedPlaneRotation）(偏移: 0x78)
@@ -19759,8 +14217,6 @@
 
 ## InflateManager.InflateManagerMode
 ### 字段 (1)
-
-- `int value__`（整数 值__）(偏移: 0x0)
 
 ---
 
@@ -19859,8 +14315,6 @@
   （bool Fallback（byte[] bytesUnknown, int index））
 - `char GetNextChar()`
   （字符 获取下一个字符（））
-- `void Reset()`
-  （void 重置（））
 - `int InternalFallback(byte[] bytes, byte* pBytes)`
   （int 内部的Fallback（byte[] bytes, byte* pBytes））
 - `char TryBestFit(byte[] bytesCheck)`
@@ -19893,8 +14347,6 @@
   （bool 移动上一个（））
 - `int get_Remaining()`
   （int get_Remaining（））
-- `void Reset()`
-  （void 重置（））
 - `char TryBestFit(char cUnknown)`
   （char TryBestFit（char cUnknown））
 
@@ -20246,14 +14698,10 @@
 ## RenderBufferLoadAction
 ### 字段 (1)
 
-- `int value__`（整数 值__）(偏移: 0x0)
-
 ---
 
 ## RenderBufferStoreAction
 ### 字段 (1)
-
-- `int value__`（整数 值__）(偏移: 0x0)
 
 ---
 
@@ -20261,9 +14709,6 @@
 **继承**: RenderGraphResourceRegistry.RenderGraphResource<ComputeBufferDesc, ComputeBuffer>（RenderGraph资源Registry.RenderGraphResource<Compute缓冲区Desc, ComputeBuffer>）
 
 ### 方法 (1)
-
-- `string GetName()`
-  （字符串 获取名称（））
 
 ---
 
@@ -20582,7 +15027,6 @@
 
 ### 字段 (2)
 
-- `AudioClip[] clips`（音频Clip[] clips）(偏移: 0xC)
 - `int priority`（整数 优先级）(偏移: 0x10)
 
 ### 方法 (1)
@@ -20594,7 +15038,6 @@
 
 ### 字段 (4)
 
-- `AudioClip[] clips`（音频Clip[] clips）(偏移: 0xC)
 - `float minDistance`（float min距离）(偏移: 0x10)
 - `float maxDistance`（float max距离）(偏移: 0x14)
 - `int priority`（整数 优先级）(偏移: 0x18)
@@ -20717,22 +15160,16 @@
   （void 更新求解器（））
 - `void FixTransforms()`
   （void 修复变换（））
-- `void Start()`
-  （void 开始（））
 - `bool get_animatePhysics()`
   （bool get_animate物理（））
 - `void Initiate()`
   （void 启动（））
-- `void Update()`
-  （void 更新（））
 - `void FindAnimatorRecursive(Transform t, bool findInChildren)`
   （void 查找动画器Recursive（变换 t, bool findInChildren））
 - `bool get_isAnimated()`
   （bool get_isAnimated（））
 - `void FixedUpdate()`
   （void 固定更新（））
-- `void LateUpdate()`
-  （void 延迟更新（））
 - `void UpdateSolverExternal()`
   （void 更新Solver外部的（））
 
@@ -20828,8 +15265,6 @@
   （bool Fallback（byte[] bytesUnknown, int index））
 - `char GetNextChar()`
   （字符 获取下一个字符（））
-- `void Reset()`
-  （void 重置（））
 - `int InternalFallback(byte[] bytes, byte* pBytes)`
   （int 内部的Fallback（byte[] bytes, byte* pBytes））
 
@@ -20837,8 +15272,6 @@
 
 ## UltimateResourceFallbackLocation
 ### 字段 (1)
-
-- `int value__`（整数 值__）(偏移: 0x0)
 
 ---
 
@@ -20928,8 +15361,6 @@
   （string get_数量属性（））
 - `void set_CountProperty(string value)`
   （void set_数量属性（string value））
-- `string ToString()`
-  （字符串 转字符串（））
 
 ---
 
@@ -20951,11 +15382,6 @@
 
 ### 方法 (5)
 
-- `void Reset()`
-  （void 重置（））
-- `string ToString()`
-  （字符串 转字符串（））
-
 ---
 
 ## VFXEnabledBinder
@@ -20973,53 +15399,11 @@
   （字符串 获取_属性（））
 - `void set_Property(string value)`
   （void 设置_属性（字符串 value））
-- `string ToString()`
-  （字符串 转字符串（））
 
 ---
 
 ## VFXEnabledBinder.Check
 ### 字段 (1)
-
-- `int value__`（整数 值__）(偏移: 0x0)
-
----
-
-## VFXEventAttribute
-**继承**: IDisposable（可释放接口）
-
-### 字段 (3)
-
-- `IntPtr m_Ptr`（整数指针 m_指针）(偏移: 0x8)
-- `bool m_Owner`（bool m_Owner）(偏移: 0xC)
-- `VisualEffectAsset m_VfxAsset`（Visual特效资产 m_Vfx资产）(偏移: 0x10)
-
-### 方法 (18)
-
-- `IntPtr Internal_Create()`
-  （整数Ptr Internal_创建（））
-- `void Release()`
-  （void 释放（））
-- `void Finalize()`
-  （void 终结（））
-- `void Dispose()`
-  （void 释放（））
-- `void Internal_Destroy(IntPtr ptr)`
-  （void 内部_销毁（整数指针 ptr））
-- `void SetBool(int nameID, bool b)`
-  （void 集合布尔值（int nameID, bool b））
-- `void SetInt(int nameID, int i)`
-  （void 集合整数（int nameID, int i））
-- `void SetUint(int nameID, uint i)`
-  （void 集合Uint（int nameID, uint i））
-- `void SetFloat(int nameID, float f)`
-  （void 集合浮点数（int nameID, float f））
-- `void SetVector2(int nameID, Vector2 v)`
-  （void 集合二维向量（int nameID, 二维向量 v））
-- `void SetVector3(int nameID, Vector3 v)`
-  （void 集合三维向量（int nameID, 三维向量 v））
-- `void SetVector4(int nameID, Vector4 v)`
-  （void 集合Vector4（int nameID, Vector4 v））
 
 ---
 
@@ -21034,8 +15418,6 @@
 
 ### 方法 (4)
 
-- `void OnValidate()`
-  （void 验证时（））
 - `void UpdateCacheEventAttribute()`
   （void 更新缓存事件Attribute（））
 
@@ -21088,8 +15470,6 @@
   （string get_Radius属性（））
 - `void set_RadiusProperty(string value)`
   （void set_Radius属性（string value））
-- `string ToString()`
-  （字符串 转字符串（））
 
 ---
 
@@ -21116,9 +15496,6 @@
 - `int count`（整数 数量）(偏移: 0x24)
 
 ### 方法 (5)
-
-- `string ToString()`
-  （字符串 转字符串（））
 
 ---
 
@@ -21156,8 +15533,6 @@
   （字符串 获取_属性（））
 - `void set_Property(string value)`
   （void 设置_属性（字符串 value））
-- `string ToString()`
-  （字符串 转字符串（））
 
 ---
 
@@ -21172,9 +15547,6 @@
 
 ### 方法 (4)
 
-- `string ToString()`
-  （字符串 转字符串（））
-
 ---
 
 ## VFXPropertyBinder
@@ -21188,16 +15560,10 @@
 
 ### 方法 (10)
 
-- `void OnValidate()`
-  （void 验证时（））
 - `void SafeDestroy(Object toDelete)`
   （void Safe销毁（对象 toDelete））
 - `void Reload()`
   （void 换弹（））
-- `void Reset()`
-  （void 重置（））
-- `void LateUpdate()`
-  （void 延迟更新（））
 - `void ClearPropertyBinders()`
   （void 清除属性Binders（））
 - `void ClearParameterBinders()`
@@ -21235,67 +15601,10 @@
 ## VFXVisibilityEventBinder.Activation
 ### 字段 (1)
 
-- `int value__`（整数 值__）(偏移: 0x0)
-
 ---
 
 ## VideoAudioOutputMode
 ### 字段 (1)
-
-- `int value__`（整数 值__）(偏移: 0x0)
-
----
-
-## VisualEffect
-**继承**: Behaviour（行为）
-
-### 字段 (2)
-
-- `VFXEventAttribute m_cachedEventAttribute`（VFX事件Attribute m_cached事件Attribute）(偏移: 0xC)
-- `Action<VFXOutputEventArgs> outputEventReceived`（Action<VFXOutput事件Args> output事件Received）(偏移: 0x10)
-
-### 方法 (34)
-
-- `bool HasBool(int nameID)`
-  （bool 是否有布尔值（int nameID））
-- `bool HasInt(int nameID)`
-  （bool 是否有整数（int nameID））
-- `bool HasUInt(int nameID)`
-  （bool 是否有U整数（int nameID））
-- `bool HasFloat(int nameID)`
-  （bool 是否有浮点数（int nameID））
-- `bool HasVector3(int nameID)`
-  （bool 是否有三维向量（int nameID））
-- `bool HasVector4(int nameID)`
-  （bool 是否有Vector4（int nameID））
-- `void SetBool(int nameID, bool b)`
-  （void 集合布尔值（int nameID, bool b））
-- `void SetInt(int nameID, int i)`
-  （void 集合整数（int nameID, int i））
-- `void SetUInt(int nameID, uint i)`
-  （void 集合U整数（int nameID, uint i））
-- `void SetFloat(int nameID, float f)`
-  （void 集合浮点数（int nameID, float f））
-- `void SetVector3(int nameID, Vector3 v)`
-  （void 集合三维向量（int nameID, 三维向量 v））
-- `void SetVector4(int nameID, Vector4 v)`
-  （void 集合Vector4（int nameID, Vector4 v））
-- `float GetFloat(int nameID)`
-  （float 获取浮点数（int nameID））
-- `bool HasUInt(string name)`
-  （bool 是否有U整数（string name））
-- `bool HasFloat(string name)`
-  （bool 是否有浮点数（string name））
-- `bool HasVector4(string name)`
-  （bool 是否有Vector4（string name））
-- `void SetUInt(string name, uint i)`
-  （void 集合U整数（string name, uint i））
-- `void SetFloat(string name, float f)`
-  （void 集合浮点数（string name, float f））
-- `void SetVector4(string name, Vector4 v)`
-  （void 集合Vector4（string name, Vector4 v））
-- `void SetBool(string name, bool b)`
-  （void 集合布尔值（string name, bool b））
 
 ---
 
@@ -21376,76 +15685,6 @@
 
 - `int PlayEventID`（int 播放事件ID）(偏移: 0x0)
 - `int StopEventID`（int 停止事件ID）(偏移: 0x4)
-
----
-
-## VolumeManager
-### 字段 (5)
-
-- `Lazy<VolumeManager> s_Instance`（Lazy<VolumeManager> s_实例）(偏移: 0x0)
-- `List<Volume> m_Volumes`（List<Volume> m_Volumes）(偏移: 0x14)
-- `List<VolumeComponent> m_ComponentsDefaultState`（List<VolumeComponent> m_Components默认的状态）(偏移: 0x1C)
-- `List<Collider> m_TempColliders`（List<Collider> m_TempColliders）(偏移: 0x20)
-- `VolumeStack m_DefaultStack`（Volume栈 m_默认的栈）(偏移: 0x24)
-
-### 方法 (25)
-
-- `VolumeManager get_instance()`
-  （Volume管理器 get_instance（））
-- `VolumeStack get_stack()`
-  （Volume栈 get_stack（））
-- `void set_stack(VolumeStack value)`
-  （void set_stack（Volume栈 value））
-- `IEnumerable<Type> get_baseComponentTypes()`
-  （IEnumerable<Type> get_base组件Types（））
-- `void set_baseComponentTypes(IEnumerable<Type> value)`
-  （void set_base组件Types（IEnumerable<Type> value））
-- `Type[] get_baseComponentTypeArray()`
-  （Type[] get_base组件类型数组（））
-- `void set_baseComponentTypeArray(Type[] value)`
-  （void set_base组件类型数组（Type[] value））
-- `VolumeStack CreateStack()`
-  （Volume栈 创建栈（））
-- `void ResetMainStack()`
-  （void 重置主要的栈（））
-- `void DestroyStack(VolumeStack stack)`
-  （void 销毁栈（Volume栈 stack））
-- `void ReloadBaseTypes()`
-  （void 换弹基础Types（））
-- `void Register(Volume volume, int layer)`
-  （void Register（Volume volume, int layer））
-- `void Unregister(Volume volume, int layer)`
-  （void Unregister（Volume volume, int layer））
-- `void SetLayerDirty(int layer)`
-  （void 集合层Dirty（int layer））
-- `void UpdateVolumeLayer(Volume volume, int prevLayer, int newLayer)`
-  （void 更新Volume层（Volume volume, int prevLayer, int newLayer））
-- `void OverrideData(VolumeStack stack, List<VolumeComponent> components, float interpFactor)`
-  （void 重写数据（Volume栈 stack, List<VolumeComponent> components, float interpFactor））
-- `void ReplaceData(VolumeStack stack, List<VolumeComponent> components)`
-  （void Replace数据（Volume栈 stack, List<VolumeComponent> components））
-- `void CheckBaseTypes()`
-  （void 检查基础Types（））
-- `void CheckStack(VolumeStack stack)`
-  （void 检查栈（Volume栈 stack））
-- `void Update(Transform trigger, LayerMask layerMask)`
-  （void 更新（变换 trigger, 层掩码 layerMask））
-- `void Update(VolumeStack stack, Transform trigger, LayerMask layerMask)`
-  （void 更新（Volume栈 stack, 变换 trigger, 层掩码 layerMask））
-- `Volume[] GetVolumes(LayerMask layerMask)`
-  （Volume[] 获取Volumes（层掩码 layerMask））
-- `List<Volume> GrabVolumes(LayerMask mask)`
-  （List<Volume> GrabVolumes（层掩码 mask））
-- `void SortByPriority(List<Volume> volumes)`
-  （void SortByPriority（List<Volume> volumes））
-- `bool IsVolumeRenderedByCamera(Volume volume, Camera camera)`
-  （bool 是否VolumeRenderedBy摄像机（Volume volume, 摄像机 camera））
-
----
-
-# 游戏类定义 (Part 5/21)
-
-共 200 个类 (总序号 801 - 1000)
 
 ---
 
@@ -21746,8 +15985,6 @@
   （void RotateCW（））
 - `void Legalize(TriangulationPoint oPoint, TriangulationPoint nPoint)`
   （void Legalize（TriangulationPoint oPoint, TriangulationPoint nPoint））
-- `string ToString()`
-  （字符串 转字符串（））
 - `void MarkConstrainedEdge(int index)`
   （void MarkConstrainedEdge（int index））
 - `void MarkConstrainedEdge(TriangulationPoint p, TriangulationPoint q)`
@@ -21776,8 +16013,6 @@
 ## Direction
 ### 字段 (1)
 
-- `int value__`（整数 值__）(偏移: 0x0)
-
 ---
 
 ## DirectionalLight
@@ -21797,8 +16032,6 @@
 
 ## DirectorWrapMode
 ### 字段 (1)
-
-- `int value__`（整数 值__）(偏移: 0x0)
 
 ---
 
@@ -21877,8 +16110,6 @@
   （DirectoryInfo[] 获取Directories（））
 - `DirectoryInfo[] GetDirectories(string searchPattern)`
   （DirectoryInfo[] 获取Directories（string searchPattern））
-- `string ToString()`
-  （字符串 转字符串（））
 - `void CheckPath(string path)`
   （void 检查路径（string path））
 
@@ -21886,8 +16117,6 @@
 
 ## DistanceMetric
 ### 字段 (1)
-
-- `int value__`（整数 值__）(偏移: 0x0)
 
 ---
 
@@ -21924,14 +16153,10 @@
 ## DrivenTransformProperties
 ### 字段 (1)
 
-- `int value__`（整数 值__）(偏移: 0x0)
-
 ---
 
 ## DynamicResUpscaleFilter
 ### 字段 (1)
-
-- `byte value__`（字节 值__）(偏移: 0x0)
 
 ---
 
@@ -22010,268 +16235,6 @@
 
 ---
 
-## HUD_ChatBox
-**继承**: Singleton<HUD_ChatBox>（Singleton<HUD_ChatBox>）
-
-### 字段 (15)
-
-- `InputField inputField`（输入Field inputField）(偏移: 0xC)
-- `RectTransform msgMask`（Rect变换 msg掩码）(偏移: 0x10)
-- `float tempMsgMaskHeight`（float tempMsg掩码高度）(偏移: 0x14)
-- `Text msgText`（文本 msg文本）(偏移: 0x18)
-- `Text tempMsgText`（文本 tempMsg文本）(偏移: 0x1C)
-- `bool firstMsg`（bool firstMsg）(偏移: 0x20)
-- `Queue<HUD_ChatBox.MsgMaskRectData> maskDataQueue`（Queue<HUD_ChatBox.Msg掩码RectData> mask数据队列）(偏移: 0x24)
-- `string color_JoinGame`（string color_Join游戏）(偏移: 0x0)
-- `string color_ExitGame`（string color_Exit游戏）(偏移: 0x4)
-- `string color_Radio`（string color_Radio）(偏移: 0x8)
-- `string color_System`（string color_系统）(偏移: 0xC)
-- `string color_Normal`（string color_法线）(偏移: 0x10)
-- `string color_Teammate`（string color_Teammate）(偏移: 0x14)
-- `string color_VIP`（string color_VIP）(偏移: 0x18)
-- `string[] gameTip`（string[] gameTip）(偏移: 0x28)
-
-### 方法 (14)
-
-- `void PlayerController_FocusHUD_Listenner(ref string hud)`
-  （void 玩家控制器_聚焦HUD_监听器（引用 字符串 hud））
-- `void Update()`
-  （void 更新（））
-- `void AddSimpleMsg(string color, string msg)`
-  （void 添加SimpleMsg（string color, string msg））
-- `void MsgMaskHeightUpdate()`
-  （void Msg掩码高度更新（））
-- `void MsgMaskHeightSetting()`
-  （void Msg掩码高度设置（））
-- `void OnPlayerJoinGame(Player newPlayer)`
-  （void On玩家Join游戏（玩家 newPlayer））
-- `void SetVisible(bool visible)`
-  （void 设置可见（布尔值 visible））
-- `void TryGetWpnCommand(int wpnIndex)`
-  （void Try获取武器Command（int wpnIndex））
-- `void TryBecomeGhostBlade()`
-  （void TryBecome幽灵刀锋（））
-- `void TryBecomeArmoredTerminator()`
-  （void TryBecomeArmoredTerminator（））
-- `void TryBecomeMasterHero()`
-  （void TryBecomeMaster英雄（））
-- `void GameTip()`
-  （void 游戏Tip（））
-
----
-
-## HUD_ChatBox.Channel
-### 字段 (1)
-
-- `int value__`（整数 值__）(偏移: 0x0)
-
----
-
-## HUD_ChatBox.MsgMaskRectData
-### 字段 (2)
-
-- `float time`（float time）(偏移: 0x0)
-- `float height`（浮点数 高度）(偏移: 0x4)
-
----
-
-## HUD_Crosshair
-**继承**: Singleton<HUD_Crosshair>（Singleton<HUD_Crosshair>）
-
-### 字段 (14)
-
-- `RectTransform sniperCross`（Rect变换 sniperCross）(偏移: 0xC)
-- `Image sniperCrossBackGround`（图像 sniperCross后地面）(偏移: 0x10)
-- `RectTransform hitRect`（Rect变换 hitRect）(偏移: 0x14)
-- `float nextHitAnimAllowedTime`（float next命中动画Allowed时间）(偏移: 0x0)
-- `bool hideCrosshair`（bool hide准星）(偏移: 0x4)
-- `Player player`（玩家 player）(偏移: 0x18)
-- `GameObject[] allCrosshair`（游戏Object[] all准星）(偏移: 0x1C)
-- `RectTransform crosshair1_horizontal`（Rect变换 crosshair1_horizontal）(偏移: 0x20)
-- `RectTransform crosshair1_vertical`（Rect变换 crosshair1_vertical）(偏移: 0x24)
-- `HUD_Crosshair.Type curCrosshairType`（HUD_Crosshair.类型 cur准星类型）(偏移: 0x28)
-- `Text[] zoomTargetTexts`（Text[] zoom目标Texts）(偏移: 0x2C)
-- `List<RaycastHit> zoomRaycastTemp`（List<RaycastHit> zoomRaycastTemp）(偏移: 0x30)
-- `Color color_ZoomTeammate`（颜色 color_瞄准Teammate）(偏移: 0x8)
-- `Color color_ZoomEnemy`（颜色 color_瞄准Enemy）(偏移: 0x18)
-
-### 方法 (10)
-
-- `void Start()`
-  （void 开始（））
-- `void Update()`
-  （void 更新（））
-- `void ZoomTargetNameUpdate()`
-  （void 瞄准目标名称更新（））
-- `void SetSniperCrossVisible(bool visible)`
-  （void 集合狙击Cross可见的（bool visible））
-- `void DamageEvent(ref DamageEventData eventData)`
-  （void 伤害事件（ref DamageEventData eventData））
-- `void FocusPlayerChangeEvent(Player oldPlayer, Player newPlayer)`
-  （void 聚焦玩家Change事件（玩家 oldPlayer, 玩家 newPlayer））
-- `void SetType(HUD_Crosshair.Type crosshairType)`
-  （void 集合类型（HUD_Crosshair.类型 crosshairType））
-
----
-
-## HUD_Crosshair.Type
-### 字段 (1)
-
-- `int value__`（整数 值__）(偏移: 0x0)
-
----
-
-## HUD_Nano4T_BoxTimer
-**继承**: SimpleHudBase（SimpleHud基础）
-
-### 字段 (1)
-
-- `Text timerText`（文本 timer文本）(偏移: 0x10)
-
-### 方法 (3)
-
-- `void MyPlayerInit(Player myPlayer)`
-  （void My玩家初始化（玩家 myPlayer））
-
----
-
-## HUD_PlayerRect
-**继承**: RecyclableObject（可回收对象）
-
-### 字段 (3)
-
-- `RectTransform rect`（矩形变换 rect）(偏移: 0x30)
-- `Image image`（图像 image）(偏移: 0x34)
-- `Sprite[] asset`（Sprite[] asset）(偏移: 0x38)
-
-### 方法 (2)
-
-- `void SetPos(int id, bool left)`
-  （void 集合Pos（int id, bool left））
-
----
-
-## HUD_PlayerRect.Type
-### 字段 (1)
-
-- `int value__`（整数 值__）(偏移: 0x0)
-
----
-
-## HUD_ProjectionID
-**继承**: Singleton<HUD_ProjectionID>（Singleton<HUD_ProjectionID>）
-
-### 字段 (4)
-
-- `RectTransform canvasRect`（Rect变换 canvasRect）(偏移: 0xC)
-- `HUD_KillerSign killerSign`（HUD_击杀者标志 killer标志）(偏移: 0x10)
-- `GameObject supplyBoxPrefab`（游戏对象 supplyBox预制体）(偏移: 0x14)
-- `NameKeyPool pool`（名称键池 pool）(偏移: 0x18)
-
-### 方法 (4)
-
-- `void SetKiller(Transform killer)`
-  （void 集合击杀者（变换 killer））
-- `void AddSupplyBox(SupplyBox supplyBox)`
-  （void 添加SupplyBox（SupplyBox supplyBox））
-
----
-
-## HUD_ProjectionSign
-**继承**: RecyclableObject（可回收对象）
-
-### 字段 (6)
-
-- `Image image`（图像 image）(偏移: 0x30)
-- `RectTransform rect`（矩形变换 rect）(偏移: 0x34)
-- `Text distanceText`（文本 distance文本）(偏移: 0x38)
-- `Transform bindTransform`（变换 bind变换）(偏移: 0x3C)
-- `Vector3 offset`（三维向量 偏移）(偏移: 0x40)
-- `float showRange`（float show范围）(偏移: 0x4C)
-
-### 方法 (6)
-
-- `void Update()`
-  （void 更新（））
-- `void SetGraphVisible(bool visible)`
-  （void 集合Graph可见的（bool visible））
-- `void Recycle(bool roundRecycle)`
-  （void 回收（布尔值 循环回收））
-- `bool GetVisible()`
-  （bool 获取可见的（））
-- `void Bind(Transform bind)`
-  （void Bind（变换 bind））
-- `void SetSprtie(Sprite spr)`
-  （void 集合Sprtie（精灵 spr））
-
----
-
-## HUD_RadarIcon_SupplyBox
-**继承**: HUD_RadarIcon（HUD_雷达图标）
-
-### 字段 (4)
-
-- `SupplyBox.Type supplyBoxType`（SupplyBox.类型 supplyBox类型）(偏移: 0x4C)
-- `Sprite yellow`（精灵 yellow）(偏移: 0x50)
-- `Sprite red`（精灵 red）(偏移: 0x54)
-- `Sprite blue`（精灵 blue）(偏移: 0x58)
-
-### 方法 (3)
-
-- `void Update()`
-  （void 更新（））
-- `bool IsVisible()`
-  （布尔值 是否可见（））
-- `void Bind(SupplyBox supplyBox)`
-  （void Bind（SupplyBox supplyBox））
-
----
-
-## HUD_SupplyBoxSign
-**继承**: HUD_ProjectionSign（HUD_投影标志）
-
-### 字段 (4)
-
-- `SupplyBox.Type supplyBoxType`（SupplyBox.类型 supplyBox类型）(偏移: 0x50)
-- `Sprite yellow`（精灵 yellow）(偏移: 0x54)
-- `Sprite red`（精灵 red）(偏移: 0x58)
-- `Sprite blue`（精灵 blue）(偏移: 0x5C)
-
-### 方法 (3)
-
-- `void Update()`
-  （void 更新（））
-- `bool GetVisible()`
-  （bool 获取可见的（））
-- `void Bind(SupplyBox supplyBox)`
-  （void Bind（SupplyBox supplyBox））
-
----
-
-## HUD_UpgradeBoxTip
-**继承**: MonoBehaviour（MonoBehaviour行为）
-
-### 字段 (5)
-
-- `GameObject background`（游戏对象 background）(偏移: 0xC)
-- `Text text`（文本 text）(偏移: 0x10)
-- `Team tipTeam`（队伍 tip队伍）(偏移: 0x14)
-- `float arriveTime`（float arrive时间）(偏移: 0x18)
-- `float closeTime`（float close时间）(偏移: 0x1C)
-
-### 方法 (7)
-
-- `void MyPlayer_team_Listenner(Team team)`
-  （void MyPlayer_team_Listenner（队伍 team））
-- `void Update()`
-  （void 更新（））
-- `void Show(float arriveTime, Team tipTeam)`
-  （void 显示（float arriveTime, 队伍 tipTeam））
-- `void Close()`
-  （void 关闭（））
-
----
-
 ## HableCurve.DirectParams
 ### 字段 (8)
 
@@ -22328,7 +16291,6 @@
 
 ### 字段 (3)
 
-- `AnimationCurve aroundCenterOfMass`（动画Curve around中心OfMass）(偏移: 0x40)
 - `HitReaction.HitPointBone.BoneLink[] boneLinks`（命中Reaction.命中PointBone.BoneLink[] boneLinks）(偏移: 0x44)
 - `Rigidbody rigidbody`（刚体 rigidbody）(偏移: 0x48)
 
@@ -22365,8 +16327,6 @@
 
 ### 字段 (3)
 
-- `AnimationCurve offsetInForceDirection`（动画Curve offsetIn强制方向）(偏移: 0x40)
-- `AnimationCurve offsetInUpDirection`（动画Curve offsetIn上方向）(偏移: 0x44)
 - `HitReaction.HitPointEffector.EffectorLink[] effectorLinks`（命中Reaction.命中PointEffector.EffectorLink[] effectorLinks）(偏移: 0x48)
 
 ### 方法 (3)
@@ -22436,8 +16396,6 @@
 ## InputField.LineType
 ### 字段 (1)
 
-- `int value__`（整数 值__）(偏移: 0x0)
-
 ---
 
 ## IntPoint
@@ -22448,10 +16406,6 @@
 
 ### 方法 (4)
 
-- `bool Equals(object obj)`
-  （布尔值 等于（对象 obj））
-- `int GetHashCode()`
-  （整数 获取哈希码（））
 - `bool op_Equality(IntPoint a, IntPoint b)`
   （bool op_Equality（整数Point a, 整数Point b））
 - `bool op_Inequality(IntPoint a, IntPoint b)`
@@ -22481,10 +16435,6 @@
   （bool op_Equality（整数Rect a, 整数Rect b））
 - `bool op_Inequality(IntRect a, IntRect b)`
   （bool op_Inequality（整数Rect a, 整数Rect b））
-- `bool Equals(object obj)`
-  （布尔值 等于（对象 obj））
-- `int GetHashCode()`
-  （整数 获取哈希码（））
 - `IntRect Intersection(IntRect a, IntRect b)`
   （整数Rect Intersection（整数Rect a, 整数Rect b））
 - `bool Intersects(IntRect a, IntRect b)`
@@ -22495,8 +16445,6 @@
   （整数Rect ExpandToContain（int x, int y））
 - `IntRect Expand(int range)`
   （整数Rect Expand（int range））
-- `string ToString()`
-  （字符串 转字符串（））
 - `void DebugDraw(GraphTransform transform, Color color)`
   （void DebugDraw（Graph变换 transform, 颜色 color））
 
@@ -22514,8 +16462,6 @@
 
 ## Light2D.PointLightQuality
 ### 字段 (1)
-
-- `int value__`（整数 值__）(偏移: 0x0)
 
 ---
 
@@ -22597,24 +16543,15 @@
 
 ### 方法 (1)
 
-- `void Update()`
-  （void 更新（））
-
----
-
 ---
 
 ## MoveDirection
 ### 字段 (1)
 
-- `int value__`（整数 值__）(偏移: 0x0)
-
 ---
 
 ## MovementPlane
 ### 字段 (1)
-
-- `int value__`（整数 值__）(偏移: 0x0)
 
 ---
 
@@ -22686,10 +16623,6 @@
   （模糊的Quaternion op_Implicit（Quaternion value））
 - `Quaternion op_Implicit(ObscuredQuaternion value)`
   （Quaternion op_Implicit（模糊的Quaternion value））
-- `int GetHashCode()`
-  （整数 获取哈希码（））
-- `string ToString()`
-  （字符串 转字符串（））
 - `string ToString(string format)`
   （字符串 转字符串（字符串 格式））
 
@@ -22768,10 +16701,6 @@
   （二维向量 op_Implicit（模糊的二维向量 value））
 - `Vector3 op_Implicit(ObscuredVector2 value)`
   （三维向量 op_Implicit（模糊的二维向量 value））
-- `int GetHashCode()`
-  （整数 获取哈希码（））
-- `string ToString()`
-  （字符串 转字符串（））
 - `string ToString(string format)`
   （字符串 转字符串（字符串 格式））
 
@@ -22846,10 +16775,6 @@
   （二维向量整数 op_Implicit（模糊的二维向量整数 value））
 - `Vector2 op_Implicit(ObscuredVector2Int value)`
   （二维向量 op_Implicit（模糊的二维向量整数 value））
-- `int GetHashCode()`
-  （整数 获取哈希码（））
-- `string ToString()`
-  （字符串 转字符串（））
 
 ---
 
@@ -22958,12 +16883,6 @@
   （bool op_Inequality（三维向量 lhs, 模糊的三维向量 rhs））
 - `bool op_Inequality(ObscuredVector3 lhs, Vector3 rhs)`
   （bool op_Inequality（模糊的三维向量 lhs, 三维向量 rhs））
-- `bool Equals(object other)`
-  （布尔值 等于（对象 other））
-- `int GetHashCode()`
-  （整数 获取哈希码（））
-- `string ToString()`
-  （字符串 转字符串（））
 - `string ToString(string format)`
   （字符串 转字符串（字符串 格式））
 
@@ -23069,12 +16988,6 @@
   （bool op_Inequality（三维向量整数 lhs, 模糊的三维向量整数 rhs））
 - `bool op_Inequality(ObscuredVector3Int lhs, Vector3Int rhs)`
   （bool op_Inequality（模糊的三维向量整数 lhs, 三维向量整数 rhs））
-- `bool Equals(object other)`
-  （布尔值 等于（对象 other））
-- `int GetHashCode()`
-  （整数 获取哈希码（））
-- `string ToString()`
-  （字符串 转字符串（））
 - `string ToString(string format)`
   （字符串 转字符串（字符串 格式））
 
@@ -23161,8 +17074,6 @@
 ## PipelineDebugLevel
 ### 字段 (1)
 
-- `int value__`（整数 值__）(偏移: 0x0)
-
 ---
 
 ## Plane
@@ -23181,8 +17092,6 @@
   （浮点数 获取_距离（））
 - `bool Raycast(Ray ray, out float enter)`
   （bool Raycast（Ray ray, out float enter））
-- `string ToString()`
-  （字符串 转字符串（））
 - `string ToString(string format, IFormatProvider formatProvider)`
   （字符串 转字符串（字符串 格式, I格式化提供者 formatProvider））
 
@@ -23556,22 +17465,16 @@
   （游戏对象 get_pointerPress（））
 - `void set_pointerPress(GameObject value)`
   （void set_pointerPress（游戏对象 value））
-- `string ToString()`
-  （字符串 转字符串（））
 
 ---
 
 ## PointerEventData.FramePressState
 ### 字段 (1)
 
-- `int value__`（整数 值__）(偏移: 0x0)
-
 ---
 
 ## PointerEventData.InputButton
 ### 字段 (1)
-
-- `int value__`（整数 值__）(偏移: 0x0)
 
 ---
 
@@ -23608,8 +17511,6 @@
   （bool 是否指针Over游戏对象（int pointerId））
 - `void ClearSelection()`
   （void 清除Selection（））
-- `string ToString()`
-  （字符串 转字符串（））
 - `void DeselectIfSelectionChanged(GameObject currentOverGo, BaseEventData pointerEvent)`
   （void 取消选择IfSelectionChanged（游戏对象 currentOverGo, 基础事件数据 pointerEvent））
 
@@ -23667,8 +17568,6 @@
   （类型 Resolve（类型 type））
 - `StringBuilder Append(StringBuilder sb)`
   （字符串构建器 Append（字符串构建器 sb））
-- `string ToString()`
-  （字符串 转字符串（））
 
 ---
 
@@ -23783,14 +17682,6 @@
   （Quaternion Normalize（Quaternion q））
 - `Quaternion get_normalized()`
   （Quaternion get_normalized（））
-- `int GetHashCode()`
-  （整数 获取哈希码（））
-- `bool Equals(object other)`
-  （布尔值 等于（对象 other））
-- `bool Equals(Quaternion other)`
-  （bool Equals（Quaternion other））
-- `string ToString()`
-  （字符串 转字符串（））
 - `string ToString(string format)`
   （字符串 转字符串（字符串 格式））
 - `string ToString(string format, IFormatProvider formatProvider)`
@@ -23810,9 +17701,6 @@
 - `Vector3 dynamicLookAtWorldPosition`（三维向量 dynamicLookAt世界的Position）(偏移: 0x18)
 
 ### 方法 (1)
-
-- `void Reset()`
-  （void 重置（））
 
 ---
 
@@ -23878,8 +17766,6 @@
   （void set_direction（三维向量 value））
 - `Vector3 GetPoint(float distance)`
   （三维向量 获取Point（float distance））
-- `string ToString()`
-  （字符串 转字符串（））
 - `string ToString(string format, IFormatProvider formatProvider)`
   （字符串 转字符串（字符串 格式, I格式化提供者 formatProvider））
 
@@ -23887,8 +17773,6 @@
 
 ## RayDirection
 ### 字段 (1)
-
-- `int value__`（整数 值__）(偏移: 0x0)
 
 ---
 
@@ -23986,8 +17870,6 @@
 ## RaycastModifier.Quality
 ### 字段 (1)
 
-- `int value__`（整数 值__）(偏移: 0x0)
-
 ---
 
 ## RaycastResult
@@ -24015,8 +17897,6 @@
   （布尔值 获取_是否有效（））
 - `void Clear()`
   （void 清除（））
-- `string ToString()`
-  （字符串 转字符串（））
 
 ---
 
@@ -24125,14 +18005,6 @@
   （bool op_Inequality（Rect lhs, Rect rhs））
 - `bool op_Equality(Rect lhs, Rect rhs)`
   （bool op_Equality（Rect lhs, Rect rhs））
-- `int GetHashCode()`
-  （整数 获取哈希码（））
-- `bool Equals(object other)`
-  （布尔值 等于（对象 other））
-- `bool Equals(Rect other)`
-  （bool Equals（Rect other））
-- `string ToString()`
-  （字符串 转字符串（））
 - `string ToString(string format, IFormatProvider formatProvider)`
   （字符串 转字符串（字符串 格式, I格式化提供者 formatProvider））
 
@@ -24166,12 +18038,8 @@
   （整数 获取_高度（））
 - `void set_height(int value)`
   （void 设置_高度（整数 value））
-- `string ToString()`
-  （字符串 转字符串（））
 - `string ToString(string format, IFormatProvider formatProvider)`
   （字符串 转字符串（字符串 格式, I格式化提供者 formatProvider））
-- `bool Equals(RectInt other)`
-  （bool Equals（Rect整数 other））
 
 ---
 
@@ -24230,8 +18098,6 @@
 
 - `void Finalize()`
   （void 终结（））
-- `string ToString()`
-  （字符串 转字符串（））
 - `string ToString(string format, IFormatProvider formatProvider)`
   （字符串 转字符串（字符串 格式, I格式化提供者 formatProvider））
 - `void Destroy()`
@@ -24301,9 +18167,6 @@
 - `bool snapping`（布尔值 吸附）(偏移: 0x0)
 
 ### 方法 (1)
-
-- `void Reset()`
-  （void 重置（））
 
 ---
 
@@ -24382,17 +18245,12 @@
 ## RectTransform.Axis
 ### 字段 (1)
 
-- `int value__`（整数 值__）(偏移: 0x0)
-
 ---
 
 ## RectTransform.ReapplyDrivenProperties
 **继承**: MulticastDelegate（多播委托）
 
 ### 方法 (3)
-
-- `void EndInvoke(IAsyncResult result)`
-  （void 结束调用（I异步结果 result））
 
 ---
 
@@ -24534,8 +18392,6 @@
   （RenderPipeline 内部的创建Pipeline（））
 - `string[] get_renderingLayerMaskNames()`
   （string[] get_rendering层掩码Names（））
-- `void OnValidate()`
-  （void 验证时（））
 
 ---
 
@@ -24607,8 +18463,6 @@
   （int 变换Block（byte[] inputBuffer, int inputOffset, int inputCount, byte[] outputBuffer, int outputOffset））
 - `byte[] TransformFinalBlock(byte[] inputBuffer, int inputOffset, int inputCount)`
   （byte[] 变换FinalBlock（byte[] inputBuffer, int inputOffset, int inputCount））
-- `void Reset()`
-  （void 重置（））
 - `int EncryptData(byte[] inputBuffer, int inputOffset, int inputCount, ref byte[] outputBuffer, int outputOffset, PaddingMode paddingMode, bool fLast)`
   （int Encrypt数据（byte[] inputBuffer, int inputOffset, int inputCount, ref byte[] outputBuffer, int outputOffset, Padding模式 paddingMode, bool fLast））
 - `int DecryptData(byte[] inputBuffer, int inputOffset, int inputCount, ref byte[] outputBuffer, int outputOffset, PaddingMode paddingMode, bool fLast)`
@@ -24635,14 +18489,10 @@
 ## RijndaelManagedTransformMode
 ### 字段 (1)
 
-- `int value__`（整数 值__）(偏移: 0x0)
-
 ---
 
 ## RotateMode
 ### 字段 (1)
-
-- `int value__`（整数 值__）(偏移: 0x0)
 
 ---
 
@@ -24685,7 +18535,6 @@
 ### 字段 (2)
 
 - `float twistLimit`（float twistLimit）(偏移: 0x2C)
-- `AnimationCurve spline`（动画Curve spline）(偏移: 0x30)
 
 ### 方法 (7)
 
@@ -24726,9 +18575,6 @@
 - `RenderPipelineAsset renderPipelineAsset`（RenderPipeline资产 renderPipeline资产）(偏移: 0xC)
 
 ### 方法 (2)
-
-- `void OnValidate()`
-  （void 验证时（））
 
 ---
 
@@ -24835,8 +18681,6 @@
   （void 拖拽时（指针事件数据 eventData））
 - `void SetContentAnchoredPosition(Vector2 position)`
   （void 集合ContentAnchoredPosition（二维向量 position））
-- `void LateUpdate()`
-  （void 延迟更新（））
 - `void UpdatePrevData()`
   （void 更新Prev数据（））
 - `Vector2 get_normalizedPosition()`
@@ -25159,11 +19003,6 @@
 
 ### 方法 (3)
 
-- `void Invoke(TimeCheatingDetector.OnlineTimeResult result)`
-  （void Invoke（时间CheatingDetector.Online时间Result result））
-- `void EndInvoke(IAsyncResult result)`
-  （void 结束调用（I异步结果 result））
-
 ---
 
 ## TimeCheatingDetector.OnlineTimeResult
@@ -25178,8 +19017,6 @@
 
 - `void SetTime(double secondsUtc)`
   （void 集合时间（double secondsUtc））
-- `string ToString()`
-  （字符串 转字符串（））
 
 ---
 
@@ -25222,8 +19059,6 @@
   （int get_outputTrack数量（））
 - `int get_rootTrackCount()`
   （int get_rootTrack数量（））
-- `void OnValidate()`
-  （void 验证时（））
 - `float GetValidFramerate(float framerate)`
   （float 获取ValidFramerate（float framerate））
 - `TrackAsset GetRootTrack(int index)`
@@ -25282,8 +19117,6 @@
 ## TimelineAsset.DurationMode
 ### 字段 (1)
 
-- `int value__`（整数 值__）(偏移: 0x0)
-
 ---
 
 ## TimelineAsset.EditorSettings
@@ -25327,12 +19160,9 @@
 - `double m_EaseOutDuration`（double m_EaseOut持续时间）(偏移: 0x48)
 - `double m_BlendInDuration`（double m_BlendIn持续时间）(偏移: 0x50)
 - `double m_BlendOutDuration`（double m_BlendOut持续时间）(偏移: 0x58)
-- `AnimationCurve m_MixInCurve`（动画Curve m_MixInCurve）(偏移: 0x60)
-- `AnimationCurve m_MixOutCurve`（动画Curve m_MixOutCurve）(偏移: 0x64)
 - `TimelineClip.BlendCurveMode m_BlendInCurveMode`（TimelineClip.BlendCurve模式 m_BlendInCurve模式）(偏移: 0x68)
 - `TimelineClip.BlendCurveMode m_BlendOutCurveMode`（TimelineClip.BlendCurve模式 m_BlendOutCurve模式）(偏移: 0x6C)
 - `List<string> m_ExposedParameterNames`（List<string> m_ExposedParameterNames）(偏移: 0x70)
-- `AnimationClip m_AnimationCurves`（动画弹匣 m_动画Curves）(偏移: 0x74)
 - `bool m_Recordable`（bool m_Recordable）(偏移: 0x78)
 - `TimelineClip.ClipExtrapolation m_PostExtrapolationMode`（TimelineClip.弹匣Extrapolation m_PostExtrapolation模式）(偏移: 0x7C)
 - `TimelineClip.ClipExtrapolation m_PreExtrapolationMode`（TimelineClip.弹匣Extrapolation m_PreExtrapolation模式）(偏移: 0x80)
@@ -25382,13 +19212,11 @@
   （bool get_hasBlendIn（））
 - `bool get_hasBlendOut()`
   （bool get_hasBlendOut（））
-- `AnimationCurve get_mixInCurve()`
   （动画Curve get_mixInCurve（））
 - `void set_mixInCurve(AnimationCurve value)`
   （void set_mixInCurve（动画Curve value））
 - `double get_mixInDuration()`
   （double get_mixIn持续时间（））
-- `AnimationCurve get_mixOutCurve()`
   （动画Curve get_mixOutCurve（））
 - `void set_mixOutCurve(AnimationCurve value)`
   （void set_mixOutCurve（动画Curve value））
@@ -25408,9 +19236,7 @@
   （float EvaluateMixOut（double time））
 - `float EvaluateMixIn(double time)`
   （float EvaluateMixIn（double time））
-- `AnimationCurve GetDefaultMixInCurve()`
   （动画Curve 获取默认的MixInCurve（））
-- `AnimationCurve GetDefaultMixOutCurve()`
   （动画Curve 获取默认的MixOutCurve（））
 - `double ToLocalTime(double time)`
   （double To本地的时间（double time））
@@ -25428,8 +19254,6 @@
   （double get_extrapolated开始（））
 - `double get_extrapolatedDuration()`
   （double get_extrapolated持续时间（））
-- `string ToString()`
-  （字符串 转字符串（））
 - `void UpdateDirty(double oldValue, double newValue)`
   （void 更新Dirty（double oldValue, double newValue））
 
@@ -25438,14 +19262,10 @@
 ## TimelineClip.BlendCurveMode
 ### 字段 (1)
 
-- `int value__`（整数 值__）(偏移: 0x0)
-
 ---
 
 ## TimelineClip.ClipExtrapolation
 ### 字段 (1)
-
-- `int value__`（整数 值__）(偏移: 0x0)
 
 ---
 
@@ -25658,8 +19478,6 @@
   （对象 获取_当前（））
 - `bool MoveNext()`
   （布尔值 移动下一个（））
-- `void Reset()`
-  （void 重置（））
 
 ---
 
@@ -25735,8 +19553,6 @@
   （List<DTSweepConstraint> get_Edges（））
 - `void set_Edges(List<DTSweepConstraint> value)`
   （void set_Edges（List<DTSweepConstraint> value））
-- `string ToString()`
-  （字符串 转字符串（））
 - `void AddEdge(DTSweepConstraint e)`
   （void 添加Edge（DTSweepConstraint e））
 - `bool get_HasEdges()`
@@ -25834,8 +19650,6 @@
 
 ### 方法 (5)
 
-- `void Update()`
-  （void 更新（））
 - `void Myself()`
   （void Myself（））
 - `void OnRegisterBtnDown()`
@@ -25888,83 +19702,6 @@
   （Quaternion SafeFromToRotation（三维向量 v1, 三维向量 v2, 三维向量 up））
 - `Vector3 SlerpWithReferenceUp(Vector3 vA, Vector3 vB, float t, Vector3 up)`
   （三维向量 SlerpWith引用上（三维向量 vA, 三维向量 vB, float t, 三维向量 up））
-
----
-
-## UniversalRenderPipeline
-**继承**: RenderPipeline（RenderPipeline）
-
-### 字段 (10)
-
-- `XRSystem m_XRSystem`（XR系统 m_XR系统）(偏移: 0x0)
-- `Vector4 k_DefaultLightPosition`（Vector4 k_默认的光照Position）(偏移: 0x4)
-- `Vector4 k_DefaultLightColor`（Vector4 k_默认的光照颜色）(偏移: 0x14)
-- `Vector4 k_DefaultLightAttenuation`（Vector4 k_默认的光照Attenuation）(偏移: 0x24)
-- `Vector4 k_DefaultLightSpotDirection`（Vector4 k_默认的光照Spot方向）(偏移: 0x34)
-- `Vector4 k_DefaultLightsProbeChannel`（Vector4 k_默认的LightsProbeChannel）(偏移: 0x44)
-- `List<Vector4> m_ShadowBiasData`（List<Vector4> m_ShadowBias数据）(偏移: 0x54)
-- `List<XRDisplaySubsystem> displaySubsystemList`（List<XRDisplaySubsystem> displaySubsystem列表）(偏移: 0x58)
-- `Comparison<Camera> cameraComparison`（Comparison<Camera> cameraComparison）(偏移: 0xC)
-- `Lightmapping.RequestLightsDelegate lightsDelegate`（Lightmapping.请求Lights委托 lights委托）(偏移: 0x5C)
-
-### 方法 (34)
-
-- `float get_maxShadowBias()`
-  （float get_maxShadowBias（））
-- `float get_minRenderScale()`
-  （float get_minRender缩放（））
-- `float get_maxRenderScale()`
-  （float get_maxRender缩放（））
-- `int get_maxPerObjectLights()`
-  （int get_maxPer对象Lights（））
-- `int get_maxVisibleAdditionalLights()`
-  （int get_max可见的AdditionalLights（））
-- `void Dispose(bool disposing)`
-  （void 释放（布尔值 正在释放））
-- `bool TryGetCullingParameters(CameraData cameraData, out ScriptableCullingParameters cullingParams)`
-  （bool Try获取CullingParameters（摄像机数据 cameraData, out ScriptableCullingParameters cullingParams））
-- `void UpdateVolumeFramework(Camera camera, UniversalAdditionalCameraData additionalCameraData)`
-  （void 更新VolumeFramework（摄像机 camera, UniversalAdditional摄像机数据 additionalCameraData））
-- `bool CheckPostProcessForDepth(in CameraData cameraData)`
-  （bool 检查Post处理For深度（in CameraData cameraData））
-- `void SetSupportedRenderingFeatures()`
-  （void 集合SupportedRenderingFeatures（））
-- `void InitializeCameraData(Camera camera, UniversalAdditionalCameraData additionalCameraData, bool resolveFinalTarget, out CameraData cameraData)`
-  （void 初始化摄像机数据（摄像机 camera, UniversalAdditional摄像机数据 additionalCameraData, bool resolveFinalTarget, out CameraData cameraData））
-- `void InitializeStackedCameraData(Camera baseCamera, UniversalAdditionalCameraData baseAdditionalCameraData, ref CameraData cameraData)`
-  （void 初始化Stacked摄像机数据（摄像机 baseCamera, UniversalAdditional摄像机数据 baseAdditionalCameraData, ref CameraData cameraData））
-- `void InitializeAdditionalCameraData(Camera camera, UniversalAdditionalCameraData additionalCameraData, bool resolveFinalTarget, ref CameraData cameraData)`
-  （void 初始化Additional摄像机数据（摄像机 camera, UniversalAdditional摄像机数据 additionalCameraData, bool resolveFinalTarget, ref CameraData cameraData））
-- `void InitializeRenderingData(UniversalRenderPipelineAsset settings, ref CameraData cameraData, ref CullingResults cullResults, bool anyPostProcessingEnabled, out RenderingData renderingData)`
-  （void 初始化Rendering数据（UniversalRenderPipeline资产 settings, ref CameraData cameraData, ref CullingResults cullResults, bool anyPostProcessingEnabled, out RenderingData renderingData））
-- `void InitializeShadowData(UniversalRenderPipelineAsset settings, NativeArray<VisibleLight> visibleLights, bool mainLightCastShadows, bool additionalLightsCastShadows, out ShadowData shadowData)`
-  （void 初始化Shadow数据（UniversalRenderPipeline资产 settings, NativeArray<可见的Light> visibleLights, bool mainLightCastShadows, bool additionalLightsCastShadows, out ShadowData shadowData））
-- `void InitializePostProcessingData(UniversalRenderPipelineAsset settings, out PostProcessingData postProcessingData)`
-  （void 初始化PostProcessing数据（UniversalRenderPipeline资产 settings, out PostProcessingData postProcessingData））
-- `void InitializeLightData(UniversalRenderPipelineAsset settings, NativeArray<VisibleLight> visibleLights, int mainLightIndex, out LightData lightData)`
-  （void 初始化光照数据（UniversalRenderPipeline资产 settings, NativeArray<可见的Light> visibleLights, int mainLightIndex, out LightData lightData））
-- `PerObjectData GetPerObjectLightFlags(int additionalLightsCount)`
-  （Per对象数据 获取Per对象光照Flags（int additionalLightsCount））
-- `int GetMainLightIndex(UniversalRenderPipelineAsset settings, NativeArray<VisibleLight> visibleLights)`
-  （int 获取主要的光照索引（UniversalRenderPipeline资产 settings, NativeArray<可见的Light> visibleLights））
-- `bool IsGameCamera(Camera camera)`
-  （bool 是否游戏摄像机（摄像机 camera））
-- `bool IsStereoEnabled(Camera camera)`
-  （bool 是否Stereo启用的（摄像机 camera））
-- `UniversalRenderPipelineAsset get_asset()`
-  （UniversalRenderPipeline资产 get_asset（））
-- `bool IsMultiPassStereoEnabled(Camera camera)`
-  （bool 是否多个PassStereo启用的（摄像机 camera））
-- `XRDisplaySubsystem GetFirstXRDisplaySubsystem()`
-  （XRDisplaySubsystem 获取第一个XRDisplaySubsystem（））
-- `bool IsRunningHololens(CameraData cameraData)`
-  （bool 是否RunningHololens（摄像机数据 cameraData））
-- `void SortCameras(Camera[] cameras)`
-  （void SortCameras（Camera[] cameras））
-- `void GetLightAttenuationAndSpotDirection(LightType lightType, float lightRange, Matrix4x4 lightLocalToWorldMatrix, float spotAngle, Nullable<float> innerSpotAngle, out Vector4 lightAttenuation, out Vector4 lightSpotDir)`
-  （void 获取光照AttenuationAndSpot方向（光照类型 lightType, float lightRange, Matrix4x4 lightLocalToWorldMatrix, float spotAngle, Nullable<float> innerSpotAngle, out Vector4 lightAttenuation, out Vector4 lightSpotDir））
-- `void InitializeLightConstants_Common(NativeArray<VisibleLight> lights, int lightIndex, out Vector4 lightPos, out Vector4 lightColor, out Vector4 lightAttenuation, out Vector4 lightSpotDir, out Vector4 lightOcclusionProbeChannel)`
-  （void 初始化光照Constants_Common（NativeArray<可见的Light> lights, int lightIndex, out Vector4 lightPos, out Vector4 lightColor, out Vector4 lightAttenuation, out Vector4 lightSpotDir, out Vector4 lightOcclusionProbeChannel））
 
 ---
 
@@ -26021,167 +19758,6 @@
 
 ---
 
-## UniversalRenderPipelineAsset
-**继承**: RenderPipelineAsset, ISerializationCallbackReceiver（RenderPipeline资产, ISerialization回调Receiver）
-
-### 字段 (46)
-
-- `Shader m_DefaultShader`（着色器 m_默认的着色器）(偏移: 0xC)
-- `ScriptableRenderer[] m_Renderers`（ScriptableRenderer[] m_Renderers）(偏移: 0x10)
-- `int k_AssetVersion`（int k_资产Version）(偏移: 0x14)
-- `int k_AssetPreviousVersion`（int k_资产上一个Version）(偏移: 0x18)
-- `RendererType m_RendererType`（渲染器类型 m_渲染器类型）(偏移: 0x1C)
-- `ScriptableRendererData m_RendererData`（Scriptable渲染器数据 m_渲染器数据）(偏移: 0x20)
-- `ScriptableRendererData[] m_RendererDataList`（Scriptable渲染器Data[] m_渲染器数据列表）(偏移: 0x24)
-- `int m_DefaultRendererIndex`（int m_默认的渲染器索引）(偏移: 0x28)
-- `bool m_RequireDepthTexture`（bool m_Require深度纹理）(偏移: 0x2C)
-- `bool m_RequireOpaqueTexture`（bool m_Require不透明的纹理）(偏移: 0x2D)
-- `Downsampling m_OpaqueDownsampling`（Downsampling m_不透明的Downsampling）(偏移: 0x30)
-- `bool m_SupportsTerrainHoles`（bool m_SupportsTerrainHoles）(偏移: 0x34)
-- `StoreActionsOptimization m_StoreActionsOptimization`（商店ActionsOptimization m_商店ActionsOptimization）(偏移: 0x38)
-- `bool m_SupportsHDR`（bool m_SupportsHDR）(偏移: 0x3C)
-- `MsaaQuality m_MSAA`（MsaaQuality m_MSAA）(偏移: 0x40)
-- `float m_RenderScale`（float m_Render缩放）(偏移: 0x44)
-- `LightRenderingMode m_MainLightRenderingMode`（光照Rendering模式 m_主要的光照Rendering模式）(偏移: 0x48)
-- `bool m_MainLightShadowsSupported`（bool m_主要的光照ShadowsSupported）(偏移: 0x4C)
-- `ShadowResolution m_MainLightShadowmapResolution`（ShadowResolution m_主要的光照ShadowmapResolution）(偏移: 0x50)
-- `LightRenderingMode m_AdditionalLightsRenderingMode`（光照Rendering模式 m_AdditionalLightsRendering模式）(偏移: 0x54)
-- `int m_AdditionalLightsPerObjectLimit`（int m_AdditionalLightsPer对象Limit）(偏移: 0x58)
-- `bool m_AdditionalLightShadowsSupported`（bool m_Additional光照ShadowsSupported）(偏移: 0x5C)
-- `ShadowResolution m_AdditionalLightsShadowmapResolution`（ShadowResolution m_AdditionalLightsShadowmapResolution）(偏移: 0x60)
-- `float m_ShadowDistance`（float m_Shadow距离）(偏移: 0x64)
-- `int m_ShadowCascadeCount`（int m_ShadowCascade数量）(偏移: 0x68)
-- `float m_Cascade2Split`（float m_Cascade2Split）(偏移: 0x6C)
-- `Vector2 m_Cascade3Split`（二维向量 m_Cascade3Split）(偏移: 0x70)
-- `Vector3 m_Cascade4Split`（三维向量 m_Cascade4Split）(偏移: 0x78)
-- `float m_ShadowDepthBias`（float m_Shadow深度Bias）(偏移: 0x84)
-- `float m_ShadowNormalBias`（float m_Shadow法线Bias）(偏移: 0x88)
-- `bool m_SoftShadowsSupported`（bool m_SoftShadowsSupported）(偏移: 0x8C)
-- `bool m_UseSRPBatcher`（bool m_UseSRPBatcher）(偏移: 0x8D)
-- `bool m_SupportsDynamicBatching`（bool m_Supports动态的Batching）(偏移: 0x8E)
-- `bool m_MixedLightingSupported`（bool m_MixedLightingSupported）(偏移: 0x8F)
-- `PipelineDebugLevel m_DebugLevel`（PipelineDebug等级 m_Debug等级）(偏移: 0x90)
-- `bool m_UseAdaptivePerformance`（bool m_UseAdaptivePerformance）(偏移: 0x94)
-- `ColorGradingMode m_ColorGradingMode`（颜色Grading模式 m_颜色Grading模式）(偏移: 0x98)
-- `int m_ColorGradingLutSize`（int m_颜色GradingLut大小）(偏移: 0x9C)
-- `ShadowQuality m_ShadowType`（ShadowQuality m_Shadow类型）(偏移: 0xA0)
-- `bool m_LocalShadowsSupported`（bool m_本地的ShadowsSupported）(偏移: 0xA4)
-- `ShadowResolution m_LocalShadowsAtlasResolution`（ShadowResolution m_本地的ShadowsAtlasResolution）(偏移: 0xA8)
-- `int m_MaxPixelLights`（int m_最大PixelLights）(偏移: 0xAC)
-- `ShadowResolution m_ShadowAtlasResolution`（ShadowResolution m_ShadowAtlasResolution）(偏移: 0xB0)
-- `ShaderVariantLogLevel m_ShaderVariantLogLevel`（着色器变异体Log等级 m_着色器变异体Log等级）(偏移: 0xB4)
-- `VolumeFrameworkUpdateMode m_VolumeFrameworkUpdateMode`（VolumeFramework更新模式 m_VolumeFramework更新模式）(偏移: 0xB8)
-- `ShadowCascadesOption m_ShadowCascades`（ShadowCascadesOption m_ShadowCascades）(偏移: 0xBC)
-
-### 方法 (79)
-
-- `RenderPipeline CreatePipeline()`
-  （RenderPipeline 创建Pipeline（））
-- `void OnValidate()`
-  （void 验证时（））
-- `Downsampling get_opaqueDownsampling()`
-  （Downsampling get_opaqueDownsampling（））
-- `bool get_supportsTerrainHoles()`
-  （bool get_supportsTerrainHoles（））
-- `StoreActionsOptimization get_storeActionsOptimization()`
-  （商店ActionsOptimization get_storeActionsOptimization（））
-- `void set_storeActionsOptimization(StoreActionsOptimization value)`
-  （void set_storeActionsOptimization（商店ActionsOptimization value））
-- `bool get_supportsHDR()`
-  （bool get_supportsHDR（））
-- `void set_supportsHDR(bool value)`
-  （void set_supportsHDR（bool value））
-- `int get_msaaSampleCount()`
-  （int get_msaaSample数量（））
-- `void set_msaaSampleCount(int value)`
-  （void set_msaaSample数量（int value））
-- `float get_renderScale()`
-  （float get_render缩放（））
-- `void set_renderScale(float value)`
-  （void set_render缩放（float value））
-- `LightRenderingMode get_mainLightRenderingMode()`
-  （光照Rendering模式 get_main光照Rendering模式（））
-- `bool get_supportsMainLightShadows()`
-  （bool get_supports主要的光照Shadows（））
-- `int get_mainLightShadowmapResolution()`
-  （int get_main光照ShadowmapResolution（））
-- `LightRenderingMode get_additionalLightsRenderingMode()`
-  （光照Rendering模式 get_additionalLightsRendering模式（））
-- `int get_maxAdditionalLightsCount()`
-  （int get_maxAdditionalLights数量（））
-- `void set_maxAdditionalLightsCount(int value)`
-  （void set_maxAdditionalLights数量（int value））
-- `bool get_supportsAdditionalLightShadows()`
-  （bool get_supportsAdditional光照Shadows（））
-- `int get_additionalLightsShadowmapResolution()`
-  （int get_additionalLightsShadowmapResolution（））
-- `float get_shadowDistance()`
-  （float get_shadow距离（））
-- `void set_shadowDistance(float value)`
-  （void set_shadow距离（float value））
-- `int get_shadowCascadeCount()`
-  （int get_shadowCascade数量（））
-- `void set_shadowCascadeCount(int value)`
-  （void set_shadowCascade数量（int value））
-- `float get_cascade2Split()`
-  （float get_cascade2Split（））
-- `Vector2 get_cascade3Split()`
-  （二维向量 get_cascade3Split（））
-- `Vector3 get_cascade4Split()`
-  （三维向量 get_cascade4Split（））
-- `float get_shadowDepthBias()`
-  （float get_shadow深度Bias（））
-- `void set_shadowDepthBias(float value)`
-  （void set_shadow深度Bias（float value））
-- `float get_shadowNormalBias()`
-  （float get_shadow法线Bias（））
-- `void set_shadowNormalBias(float value)`
-  （void set_shadow法线Bias（float value））
-- `bool get_supportsSoftShadows()`
-  （bool get_supportsSoftShadows（））
-- `bool get_supportsDynamicBatching()`
-  （bool get_supports动态的Batching（））
-- `void set_supportsDynamicBatching(bool value)`
-  （void set_supports动态的Batching（bool value））
-- `bool get_supportsMixedLighting()`
-  （bool get_supportsMixedLighting（））
-- `VolumeFrameworkUpdateMode get_volumeFrameworkUpdateMode()`
-  （VolumeFramework更新模式 get_volumeFramework更新模式（））
-- `PipelineDebugLevel get_debugLevel()`
-  （PipelineDebug等级 get_debug等级（））
-- `bool get_useSRPBatcher()`
-  （bool get_useSRPBatcher（））
-- `void set_useSRPBatcher(bool value)`
-  （void set_useSRPBatcher（bool value））
-- `ColorGradingMode get_colorGradingMode()`
-  （颜色Grading模式 get_colorGrading模式（））
-- `void set_colorGradingMode(ColorGradingMode value)`
-  （void set_colorGrading模式（颜色Grading模式 value））
-- `int get_colorGradingLutSize()`
-  （int get_colorGradingLut大小（））
-- `void set_colorGradingLutSize(int value)`
-  （void set_colorGradingLut大小（int value））
-- `bool get_useAdaptivePerformance()`
-  （bool get_useAdaptivePerformance（））
-- `void set_useAdaptivePerformance(bool value)`
-  （void set_useAdaptivePerformance（bool value））
-- `void OnBeforeSerialize()`
-  （void 序列化前（））
-- `void OnAfterDeserialize()`
-  （void 反序列化后（））
-- `float ValidateShadowBias(float value)`
-  （float 验证ShadowBias（float value））
-- `int ValidatePerObjectLights(int value)`
-  （int 验证Per对象Lights（int value））
-- `float ValidateRenderScale(float value)`
-  （float 验证Render缩放（float value））
-- `ShadowCascadesOption get_shadowCascadeOption()`
-  （ShadowCascadesOption get_shadowCascadeOption（））
-- `void set_shadowCascadeOption(ShadowCascadesOption value)`
-  （void set_shadowCascadeOption（ShadowCascadesOption value））
-
----
-
 ## UnmanagedFunctionPointerAttribute
 **继承**: Attribute（属性）
 
@@ -26211,12 +19787,8 @@
   （字符串 获取_属性（））
 - `void set_Property(string value)`
   （void 设置_属性（字符串 value））
-- `void OnValidate()`
-  （void 验证时（））
 - `void UpdateSubProperties()`
   （void 更新子属性（））
-- `string ToString()`
-  （字符串 转字符串（））
 
 ---
 
@@ -26251,19 +19823,13 @@
   （string get_目标命中（））
 - `void set_TargetHit(string value)`
   （void set_目标命中（string value））
-- `void OnValidate()`
-  （void 验证时（））
 - `void UpdateSubProperties()`
   （void 更新子属性（））
-- `string ToString()`
-  （字符串 转字符串（））
 
 ---
 
 ## VFXRaycastBinder.Space
 ### 字段 (1)
-
-- `int value__`（整数 值__）(偏移: 0x0)
 
 ---
 
@@ -26283,14 +19849,10 @@
   （字符串 获取_属性（））
 - `void set_Property(string value)`
   （void 设置_属性（字符串 value））
-- `void OnValidate()`
-  （void 验证时（））
 - `void UpdateSubProperties()`
   （void 更新子属性（））
 - `float GetSphereColliderScale(Vector3 scale)`
   （float 获取Sphere碰撞器缩放（三维向量 scale））
-- `string ToString()`
-  （字符串 转字符串（））
 
 ---
 
@@ -26311,12 +19873,8 @@
   （字符串 获取_属性（））
 - `void set_Property(string value)`
   （void 设置_属性（字符串 value））
-- `void OnValidate()`
-  （void 验证时（））
 - `void UpdateSubProperties()`
   （void 更新子属性（））
-- `string ToString()`
-  （字符串 转字符串（））
 
 ---
 
@@ -26350,18 +19908,10 @@
   （void Normalize（））
 - `Vector2 get_normalized()`
   （二维向量 get_normalized（））
-- `string ToString()`
-  （字符串 转字符串（））
 - `string ToString(string format)`
   （字符串 转字符串（字符串 格式））
 - `string ToString(string format, IFormatProvider formatProvider)`
   （字符串 转字符串（字符串 格式, I格式化提供者 formatProvider））
-- `int GetHashCode()`
-  （整数 获取哈希码（））
-- `bool Equals(object other)`
-  （布尔值 等于（对象 other））
-- `bool Equals(Vector2 other)`
-  （bool Equals（二维向量 other））
 - `float Dot(Vector2 lhs, Vector2 rhs)`
   （float Dot（二维向量 lhs, 二维向量 rhs））
 - `float get_magnitude()`
@@ -26449,14 +19999,6 @@
   （bool op_Equality（二维向量整数 lhs, 二维向量整数 rhs））
 - `bool op_Inequality(Vector2Int lhs, Vector2Int rhs)`
   （bool op_Inequality（二维向量整数 lhs, 二维向量整数 rhs））
-- `bool Equals(object other)`
-  （布尔值 等于（对象 other））
-- `bool Equals(Vector2Int other)`
-  （bool Equals（二维向量整数 other））
-- `int GetHashCode()`
-  （整数 获取哈希码（））
-- `string ToString()`
-  （字符串 转字符串（））
 - `string ToString(string format, IFormatProvider formatProvider)`
   （字符串 转字符串（字符串 格式, I格式化提供者 formatProvider））
 - `Vector2Int get_zero()`
@@ -26547,12 +20089,6 @@
   （void 缩放（三维向量 scale））
 - `Vector3 Cross(Vector3 lhs, Vector3 rhs)`
   （三维向量 Cross（三维向量 lhs, 三维向量 rhs））
-- `int GetHashCode()`
-  （整数 获取哈希码（））
-- `bool Equals(object other)`
-  （布尔值 等于（对象 other））
-- `bool Equals(Vector3 other)`
-  （bool Equals（三维向量 other））
 - `Vector3 Reflect(Vector3 inDirection, Vector3 inNormal)`
   （三维向量 Reflect（三维向量 inDirection, 三维向量 inNormal））
 - `Vector3 Normalize(Vector3 value)`
@@ -26619,8 +20155,6 @@
   （bool op_Equality（三维向量 lhs, 三维向量 rhs））
 - `bool op_Inequality(Vector3 lhs, Vector3 rhs)`
   （bool op_Inequality（三维向量 lhs, 三维向量 rhs））
-- `string ToString()`
-  （字符串 转字符串（））
 - `string ToString(string format)`
   （字符串 转字符串（字符串 格式））
 - `string ToString(string format, IFormatProvider formatProvider)`
@@ -26671,14 +20205,6 @@
   （bool op_Equality（三维向量整数 lhs, 三维向量整数 rhs））
 - `bool op_Inequality(Vector3Int lhs, Vector3Int rhs)`
   （bool op_Inequality（三维向量整数 lhs, 三维向量整数 rhs））
-- `bool Equals(object other)`
-  （布尔值 等于（对象 other））
-- `bool Equals(Vector3Int other)`
-  （bool Equals（三维向量整数 other））
-- `int GetHashCode()`
-  （整数 获取哈希码（））
-- `string ToString()`
-  （字符串 转字符串（））
 - `string ToString(string format)`
   （字符串 转字符串（字符串 格式））
 - `string ToString(string format, IFormatProvider formatProvider)`
@@ -26746,12 +20272,6 @@
   （void 设置_项（整数 index, 浮点数 value））
 - `Vector4 Lerp(Vector4 a, Vector4 b, float t)`
   （Vector4 Lerp（Vector4 a, Vector4 b, float t））
-- `int GetHashCode()`
-  （整数 获取哈希码（））
-- `bool Equals(object other)`
-  （布尔值 等于（对象 other））
-- `bool Equals(Vector4 other)`
-  （bool Equals（Vector4 other））
 - `Vector4 Normalize(Vector4 a)`
   （Vector4 Normalize（Vector4 a））
 - `Vector4 get_normalized()`
@@ -26788,8 +20308,6 @@
   （三维向量 op_Implicit（Vector4 v））
 - `Vector4 op_Implicit(Vector2 v)`
   （Vector4 op_Implicit（二维向量 v））
-- `string ToString()`
-  （字符串 转字符串（））
 - `string ToString(string format, IFormatProvider formatProvider)`
   （字符串 转字符串（字符串 格式, I格式化提供者 formatProvider））
 
@@ -26955,9 +20473,6 @@
 
 ### 方法 (1)
 
-- `void Reset()`
-  （void 重置（））
-
 ---
 
 ## WPN_BoxingKing
@@ -26976,20 +20491,12 @@
 
 - `void Init()`
   （void 初始化（））
-- `void SetValidOwner()`
-  （void 设置有效所有者（））
-- `void RemoveFromOldOwner()`
-  （void 从旧所有者移除（））
 - `void Deploy(bool noSelectAnim = False)`
   （void 部署（布尔值 无选择动画 = 假））
-- `void Update()`
-  （void 更新（））
 - `bool Kick(Player player)`
   （bool Kick（玩家 player））
 - `bool Rotate(Player player)`
   （bool Rotate（玩家 player））
 - `bool Fly(Player player)`
   （bool Fly（玩家 player））
-
-
 
