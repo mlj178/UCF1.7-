@@ -1,0 +1,1247 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>CF射击游戏 - 核心修改重点类详细定义</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}body{font-family:'Segoe UI','Microsoft YaHei',sans-serif;background:#0a0e17;color:#e0e0e0;overflow-x:hidden}.container{max-width:1600px;margin:0 auto;padding:20px}h1{text-align:center;font-size:28px;color:#00d4ff;margin-bottom:8px;text-shadow:0 0 20px rgba(0,212,255,0.3)}.subtitle{text-align:center;color:#888;margin-bottom:30px;font-size:14px}.legend{display:flex;justify-content:center;gap:20px;margin-bottom:25px;flex-wrap:wrap}.legend-item{display:flex;align-items:center;gap:6px;font-size:12px}.legend-color{width:16px;height:16px;border-radius:3px}.tabs{display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap}.tab-btn{padding:10px 20px;background:#1a1f2e;border:1px solid #2a3040;border-radius:8px;color:#e0e0e0;cursor:pointer;font-size:14px;transition:all 0.3s}.tab-btn:hover{background:#2a3040}.tab-btn.active{background:#00d4ff;color:#0a0e17;border-color:#00d4ff;font-weight:bold}.tab-content{display:none}.tab-content.active{display:block}.class-card{background:linear-gradient(135deg,#1a1f2e 0%,#141824 100%);border:1px solid #2a3040;border-radius:10px;padding:16px;margin-bottom:12px;transition:all 0.3s}.class-card:hover{border-color:#00d4ff;box-shadow:0 0 15px rgba(0,212,255,0.15);transform:translateY(-2px)}.class-header{display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap}.class-name{font-size:16px;font-weight:bold;color:#00d4ff}.class-parent{font-size:12px;color:#888;background:#1a2030;padding:2px 8px;border-radius:4px}.class-section{margin-bottom:8px}.class-section-title{font-size:12px;color:#ff9800;font-weight:bold;margin-bottom:4px;text-transform:uppercase;letter-spacing:1px}.field-item{font-size:12px;padding:2px 0;color:#b0b8c8;line-height:1.6}.field-type{color:#4fc3f7}.field-offset{color:#666;font-size:10px}.field-cn{color:#81c784;font-style:italic}.method-item{font-size:12px;padding:2px 0;color:#b0b8c8;line-height:1.6}.method-return{color:#ce93d8}.method-name{color:#fff176}.method-cn{color:#81c784;font-style:italic}
+</style>
+</head>
+<body>
+<div class="container">
+<h1>🎮 CF射击游戏 - 核心修改重点类详细定义</h1>
+<p class="subtitle">Core Modification Classes - 基于DeepSeek分析提取的34个核心类</p>
+<div class="legend">
+<div class="legend-item"><div class="legend-color" style="background:#1a237e"></div> 玩家与角色核心</div>
+<div class="legend-item"><div class="legend-color" style="background:#b71c1c"></div> 武器与战斗核心</div>
+<div class="legend-item"><div class="legend-color" style="background:#4a148c"></div> 增益与技能核心</div>
+<div class="legend-item"><div class="legend-color" style="background:#006064"></div> AI系统核心</div>
+<div class="legend-item"><div class="legend-color" style="background:#1b5e20"></div> 游戏管理与地图核心</div>
+</div>
+
+<div class="tabs">
+<button class="tab-btn active" onclick="switchTab('tab-0')">玩家与角色核心</button><button class="tab-btn " onclick="switchTab('tab-1')">武器与战斗核心</button><button class="tab-btn " onclick="switchTab('tab-2')">增益与技能核心</button><button class="tab-btn " onclick="switchTab('tab-3')">AI系统核心</button><button class="tab-btn " onclick="switchTab('tab-4')">游戏管理与地图核心</button>
+</div>
+
+<div id="tab-0" class="tab-content active">
+<div class="class-card" style="border-left:4px solid #1a237e">
+<div class="class-header"><span class="class-name">Player</span><span class="class-parent">: Entity</span></div>
+<div class="class-section"><div class="class-section-title">Fields 字段 (33)</div>
+<div class="field-item"><span class="field-type">float</span> defaultMoveSpeed</div>
+<div class="field-item"><span class="field-type">float</span> playerHeight</div>
+<div class="field-item"><span class="field-type">float</span> crouchSubHeight</div>
+<div class="field-item"><span class="field-type">float</span> mapCmrHeight</div>
+<div class="field-item"><span class="field-type">float</span> mapCmrCrouchSubHeight</div>
+<div class="field-item"><span class="field-type">Vector3</span> playerGravity</div>
+<div class="field-item"><span class="field-type">PlayerCameraManager</span> cameraManager</div>
+<div class="field-item"><span class="field-type">Vector2</span> cameraRotation</div>
+<div class="field-item"><span class="field-type">Recoil</span> recoil</div>
+<div class="field-item"><span class="field-type">List<CharacterModel></span> characters</div>
+<div class="field-item"><span class="field-type">EffectObj</span> bulletEffect</div>
+<div class="field-item"><span class="field-type">Action</span> JumpPost_Listener</div>
+<div class="field-item"><span class="field-type">float</span> jumpDropSndNextPlayTime</div>
+<div class="field-item"><span class="field-type">float</span> lastFallTime</div>
+<div class="field-item"><span class="field-type">float</span> heightBeforeFloat</div>
+<div class="field-item"><span class="field-type">float</span> startMoveTime</div>
+<div class="field-item"><span class="field-type">float</span> airVelControlEndTime</div>
+<div class="field-item"><span class="field-type">PropertyModifier</span> Modifier_MoveSpeedRatio</div>
+<div class="field-item"><span class="field-type">ClientData</span> clientData</div>
+<div class="field-item"><span class="field-type">NanoRoleSelect</span> nanoRoleSelect</div>
+<div class="field-item"><span class="field-type">Nano4T_Data</span> nano4TData</div>
+<div class="field-item"><span class="field-type">PlayerSkills</span> skills</div>
+<div class="field-item"><span class="field-type">Coroutine</span> respawn_Coroutine</div>
+<div class="field-item"><span class="field-type">Action<Player></span> StartRespawn_Listener</div>
+<div class="field-item"><span class="field-type">Player.RespawnType</span> respawnType</div>
+<div class="field-item"><span class="field-type">Action<Player></span> NextRespawnInRound_Listener</div>
+<div class="field-item"><span class="field-type">float</span> nextRegenTime</div>
+<div class="field-item"><span class="field-type">MapTrigger</span> mapTrigger</div>
+<div class="field-item"><span class="field-type">bool</span> Buff_CameraRotDisabled</div>
+<div class="field-item"><span class="field-type">RefBool</span> CameraRotDisabled_BuffUpdater</div>
+<div class="field-item"><span class="field-type">RefBool</span> JumpDisabled_BuffUpdater</div>
+<div class="field-item"><span class="field-type">bool</span> Buff_InfinityAmmo</div>
+<div class="field-item"><span class="field-type">RefBool</span> InfinityAmmo_BuffUpdater</div>
+</div>
+
+<div class="class-section"><div class="class-section-title">Methods 方法 (122)</div>
+<div class="method-item"><span class="method-return">Vector3</span> <span class="method-name">get_mapCameraPos</span>()</div>
+<div class="method-item"><span class="method-return">Vector3</span> <span class="method-name">get_mapCameraForward</span>()</div>
+<div class="method-item"><span class="method-return">Transform</span> <span class="method-name">get_characterContainer</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">set_characterContainer</span>(Transform value)</div>
+<div class="method-item"><span class="method-return">CharacterModel</span> <span class="method-name">get_currentCharacter</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">set_currentCharacter</span>(CharacterModel value)</div>
+<div class="method-item"><span class="method-return">Vector3</span> <span class="method-name">get_footPos</span>()</div>
+<div class="method-item"><span class="method-return">bool</span> <span class="method-name">get_autonomousJump</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">set_autonomousJump</span>(bool value)</div>
+<div class="method-item"><span class="method-return">bool</span> <span class="method-name">get_isGrounded</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">set_isGrounded</span>(bool value)</div>
+<div class="method-item"><span class="method-return">string</span> <span class="method-name">get_groundMatName</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">set_groundMatName</span>(string value)</div>
+<div class="method-item"><span class="method-return">float</span> <span class="method-name">get_fallTime</span>()</div>
+<div class="method-item"><span class="method-return">bool</span> <span class="method-name">get_canControlVelInAir</span>()</div>
+<div class="method-item"><span class="method-return">Vector3</span> <span class="method-name">get_velocity</span>()</div>
+<div class="method-item"><span class="method-return">float</span> <span class="method-name">get_MoveSpeedRatio</span>()</div>
+<div class="method-item"><span class="method-return">PlayerVelocity</span> <span class="method-name">get_velData</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">set_velData</span>(PlayerVelocity value)</div>
+<div class="method-item"><span class="method-return">PlayerData</span> <span class="method-name">get_playerData</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">set_playerData</span>(PlayerData value)</div>
+<div class="method-item"><span class="method-return">PlayerInput</span> <span class="method-name">get_input</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">set_input</span>(PlayerInput value)</div>
+<div class="method-item"><span class="method-return">PlayerWeapons</span> <span class="method-name">get_wpns</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">set_wpns</span>(PlayerWeapons value)</div>
+<div class="method-item"><span class="method-return">WeaponBag</span> <span class="method-name">get_weaponBag</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">set_weaponBag</span>(WeaponBag value)</div>
+<div class="method-item"><span class="method-return">PlayerMdlInfo</span> <span class="method-name">get_modelInfo</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">set_modelInfo</span>(PlayerMdlInfo value)</div>
+<div class="method-item"><span class="method-return">bool</span> <span class="method-name">get_isSniper</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">set_isSniper</span>(bool value)</div>
+<div class="method-item"><span class="method-return">Vector3</span> <span class="method-name">get_spawnPos</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">set_spawnPos</span>(Vector3 value)</div>
+<div class="method-item"><span class="method-return">bool</span> <span class="method-name">get_isRespawning</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">set_isRespawning</span>(bool value)</div>
+<div class="method-item"><span class="method-return">bool</span> <span class="method-name">get_isMyPlayer</span>()</div>
+<div class="method-item"><span class="method-return">bool</span> <span class="method-name">get_isFocusPlayer</span>()</div>
+<div class="method-item"><span class="method-return">bool</span> <span class="method-name">get_isFocusPlayerInPV</span>()</div>
+<div class="method-item"><span class="method-return">bool</span> <span class="method-name">get_isNanoGhost</span>()</div>
+<div class="method-item"><span class="method-return">float</span> <span class="method-name">get_crouchDuration</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">set_crouchDuration</span>(float value)</div>
+<div class="method-item"><span class="method-return">bool</span> <span class="method-name">get_isCrouching</span>()</div>
+<div class="method-item"><span class="method-return">bool</span> <span class="method-name">get_walking</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">set_walking</span>(bool value)</div>
+<div class="method-item"><span class="method-return">ObscuredInt</span> <span class="method-name">get_nanoClothCount</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">set_nanoClothCount</span>(ObscuredInt value)</div>
+<div class="method-item"><span class="method-return">KeyInputState</span> <span class="method-name">get_input_Interact</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">set_input_Interact</span>(KeyInputState value)</div>
+<div class="method-item"><span class="method-return">WPN_Gun.AmmoData</span> <span class="method-name">get_mapGunAmmo1</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">set_mapGunAmmo1</span>(WPN_Gun.AmmoData value)</div>
+<div class="method-item"><span class="method-return">WPN_Gun.AmmoData</span> <span class="method-name">get_mapGunAmmo2</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">set_mapGunAmmo2</span>(WPN_Gun.AmmoData value)</div>
+<div class="method-item"><span class="method-return">Transform</span> <span class="method-name">get_climbStair</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">set_climbStair</span>(Transform value)</div>
+<div class="method-item"><span class="method-return">bool</span> <span class="method-name">get_isClimbing</span>()</div>
+<div class="method-item"><span class="method-return">bool</span> <span class="method-name">get_Buff_JumpDisabled</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">set_Buff_JumpDisabled</span>(bool value)</div>
+<div class="method-item"><span class="method-return">string</span> <span class="method-name">get_nickName</span>()</div>
+<div class="method-item"><span class="method-return">int</span> <span class="method-name">get_level</span>()</div>
+<div class="method-item"><span class="method-return">int</span> <span class="method-name">get_vipLevel</span>()</div>
+<div class="method-item"><span class="method-return">int</span> <span class="method-name">get_kill</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">set_kill</span>(int value)</div>
+<div class="method-item"><span class="method-return">int</span> <span class="method-name">get_death</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">set_death</span>(int value)</div>
+<div class="method-item"><span class="method-return">int</span> <span class="method-name">get_survival</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">set_survival</span>(int value)</div>
+<div class="method-item"><span class="method-return">int</span> <span class="method-name">get_score</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">set_score</span>(int value)</div>
+<div class="method-item"><span class="method-return">HUD_Role.AceSign</span> <span class="method-name">get_aceSign</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">set_aceSign</span>(HUD_Role.AceSign value)</div>
+<div class="method-item"><span class="method-return">NanoRole</span> <span class="method-name">get_nanoRole</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">set_nanoRole</span>(NanoRole value)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">FixedUpdate</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">UpdateGroundMatName</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">CharacterModelSetting</span>()</div>
+<div class="method-item"><span class="method-return">bool</span> <span class="method-name">SetExistentCharacter</span>(string name)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">SetCharacter</span>(CharacterModel character)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">UpdateModelColor</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">PhysicalUpdate</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">SetGroundState</span>(bool newState)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">OnJumpBtnDown</span>()</div>
+<div class="method-item"><span class="method-return">float</span> <span class="method-name">GetMoveSpeed</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">MoveByLocalDirection</span>(int x, int z)</div>
+<div class="method-item"><span class="method-return">Vector2</span> <span class="method-name">GetCameraRotation</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">AddCameraRotation</span>(float x, float y)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">UpdateCameraRotaion</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">LookAt</span>(Vector3 dir)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">SetWeapon</span>(Weapon weapon)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">RecoilShootPostureCheck</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">OnEntityHurt</span>(DamageEventData eventData)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">OnEntityDeath</span>(DeathEventData eventData)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">ClearMapObject</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">DropWeaponAfterDeath</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">SendFireInTheHoleRadio</span>(WeaponClass wpnClass)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">RemoveFromTeamList</span>(bool onlyAliveList)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">AddToTeamList</span>(bool isAliveList)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">Respawn</span>(float respawnTime, float invisibleTime = 1)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">BreakRespawnCoroutine</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">Spawn</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">OnGameRoundEnd</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">SetPos</span>(Vector3 pos)</div>
+<div class="method-item"><span class="method-return">bool</span> <span class="method-name">SelectWeaponBag</span>(int index = -1)</div>
+<div class="method-item"><span class="method-return">bool</span> <span class="method-name">TryPickUpWeapon</span>(Weapon wpn)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">SetCrouchState</span>(bool crouch)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">SetWalkState</span>(bool walk)</div>
+<div class="method-item"><span class="method-return">bool</span> <span class="method-name">TrySubSkillHPCost</span>(int cost)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">BreakStopTime</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">NanoGhostHPRegen</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">SetNanoClothCount</span>(int count)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">AddNanoClothCount</span>(int count)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">SetInteractInput</span>(KeyInputState state)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">FillMapGunAmmo</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">OnTriggerEnter</span>(Collider other)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">OnTriggerExit</span>(Collider other)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">Speak</span>(string msg, HUD_ChatBox.Channel channel = 0)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">UpdateAce</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">ResetDropSndTime</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">UpdateFallTime</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">UpdateRunState</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">UpdateBuffProperty</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">AddNextRespawnInvincible</span>(float time)</div>
+<div class="method-item"><span class="method-return">Transform</span> <span class="method-name">GetVisibleHitBox</span>(Ray viewRay)</div>
+</div>
+
+</div>
+<div class="class-card" style="border-left:4px solid #1a237e">
+<div class="class-header"><span class="class-name">Entity</span><span class="class-parent">: MonoBehaviour</span></div>
+<div class="class-section"><div class="class-section-title">Fields 字段 (7)</div>
+<div class="field-item"><span class="field-type">float</span> baseMoveSpeed</div>
+<div class="field-item"><span class="field-type">bool</span> isGhostEntity</div>
+<div class="field-item"><span class="field-type">bool</span> isNoHitFeedback</div>
+<div class="field-item"><span class="field-type">List<Buff></span> buffs</div>
+<div class="field-item"><span class="field-type">Ref2Float</span> SpeedPenalty_BuffUpdater</div>
+<div class="field-item"><span class="field-type">Ref2Float</span> DamageRate_BuffUpdater</div>
+<div class="field-item"><span class="field-type">RefBool</span> Invincible_BuffUpdater</div>
+</div>
+
+<div class="class-section"><div class="class-section-title">Methods 方法 (35)</div>
+<div class="method-item"><span class="method-return">float</span> <span class="method-name">get_speedPenalty</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">set_speedPenalty</span>(float value)</div>
+<div class="method-item"><span class="method-return">float</span> <span class="method-name">get_damageRate</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">set_damageRate</span>(float value)</div>
+<div class="method-item"><span class="method-return">bool</span> <span class="method-name">get_isInvincible</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">set_isInvincible</span>(bool value)</div>
+<div class="method-item"><span class="method-return">HealthData</span> <span class="method-name">get_healthData</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">set_healthData</span>(HealthData value)</div>
+<div class="method-item"><span class="method-return">bool</span> <span class="method-name">get_isDead</span>()</div>
+<div class="method-item"><span class="method-return">bool</span> <span class="method-name">get_isBlackList</span>()</div>
+<div class="method-item"><span class="method-return">bool</span> <span class="method-name">get_isGlobalRisk</span>()</div>
+<div class="method-item"><span class="method-return">Team</span> <span class="method-name">get_team</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">set_team</span>(Team value)</div>
+<div class="method-item"><span class="method-return">Animator</span> <span class="method-name">get_characterAnimator</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">set_characterAnimator</span>(Animator value)</div>
+<div class="method-item"><span class="method-return">CharacterController</span> <span class="method-name">get_characterController</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">set_characterController</span>(CharacterController value)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">SetTeam</span>(Team newTeam)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">RemoveFromTeamList</span>(bool onlyAliveList)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">AddToTeamList</span>(bool isAliveList)</div>
+<div class="method-item"><span class="method-return">int</span> <span class="method-name">GetLocalDirection</span>(Vector3 point, bool inverse = False)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">Spawn</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">OnEntityHurt</span>(DamageEventData eventData)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">OnEntityDeath</span>(DeathEventData eventData)</div>
+<div class="method-item"><span class="method-return">Buff</span> <span class="method-name">AddSpeedPenalty</span>(float penalty, float time, string buffName = "Simple")</div>
+<div class="method-item"><span class="method-return">Buff</span> <span class="method-name">SetDamageRate</span>(float subRate, float time)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">RemoveBuff</span>(string buffName)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">CleanAllBuff</span>(int priority = 0)</div>
+<div class="method-item"><span class="method-return">Buff</span> <span class="method-name">FindBuff</span>(string buffName)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">AddBuff</span>(Buff newBuff)</div>
+<div class="method-item"><span class="method-return">Buff</span> <span class="method-name">TryAddBuff</span>(string buffName, float duration, Func<Buff> buffCreater)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">UpdateBuff</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">UpdateBuffProperty</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">SetGhostEntityState</span>(bool isGhost)</div>
+<div class="method-item"><span class="method-return">Transform</span> <span class="method-name">GetVisibleHitBox</span>(Ray viewRay)</div>
+</div>
+
+</div>
+<div class="class-card" style="border-left:4px solid #1a237e">
+<div class="class-header"><span class="class-name">PlayerSkills</span></div>
+<div class="class-section"><div class="class-section-title">Fields 字段 (2)</div>
+<div class="field-item"><span class="field-type">Skill[]</span> all</div>
+<div class="field-item"><span class="field-type">Player</span> owner</div>
+</div>
+
+<div class="class-section"><div class="class-section-title">Methods 方法 (4)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">Owner_LifeState_Listenner</span>(bool isSpawn)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">TryUse</span>(SkillKey slot)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">Remove</span>(string skillName)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">Remove</span>(SkillKey key)</div>
+</div>
+
+</div>
+<div class="class-card" style="border-left:4px solid #1a237e">
+<div class="class-header"><span class="class-name">PlayerWeapons</span></div>
+<div class="class-section"><div class="class-section-title">Fields 字段 (16)</div>
+<div class="field-item"><span class="field-type">Player</span> owner</div>
+<div class="field-item"><span class="field-type">List<Weapon></span> all</div>
+<div class="field-item"><span class="field-type">Weapon</span> inUse</div>
+<div class="field-item"><span class="field-type">Weapon[]</span> current</div>
+<div class="field-item"><span class="field-type">Weapon[]</span> normal</div>
+<div class="field-item"><span class="field-type">Weapon[]</span> special</div>
+<div class="field-item"><span class="field-type">Weapon</span> temporaryWpn</div>
+<div class="field-item"><span class="field-type">Weapon</span> F_KeyWpn</div>
+<div class="field-item"><span class="field-type">Weapon</span> mapWpn</div>
+<div class="field-item"><span class="field-type">bool</span> rapidChange</div>
+<div class="field-item"><span class="field-type">bool</span> runState</div>
+<div class="field-item"><span class="field-type">bool</span> interactDisabled</div>
+<div class="field-item"><span class="field-type">float</span> movePenalty</div>
+<div class="field-item"><span class="field-type">PropertyModifier</span> Modifier_ReloadSpeed</div>
+<div class="field-item"><span class="field-type">PropertyModifier</span> Modifier_KnifeRange</div>
+<div class="field-item"><span class="field-type">PropertyModifier</span> Modifier_KnifeSpeed</div>
+</div>
+
+<div class="class-section"><div class="class-section-title">Methods 方法 (21)</div>
+<div class="method-item"><span class="method-return">int</span> <span class="method-name">get_curSlot</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">set_curSlot</span>(int value)</div>
+<div class="method-item"><span class="method-return">float</span> <span class="method-name">get_ReloadSpeed</span>()</div>
+<div class="method-item"><span class="method-return">float</span> <span class="method-name">get_KnifeRange</span>()</div>
+<div class="method-item"><span class="method-return">float</span> <span class="method-name">get_KnifeSpeed</span>()</div>
+<div class="method-item"><span class="method-return">bool</span> <span class="method-name">get_isInfinityAmmo</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">AutoSelect</span>()</div>
+<div class="method-item"><span class="method-return">int</span> <span class="method-name">GetValidSlot</span>()</div>
+<div class="method-item"><span class="method-return">bool</span> <span class="method-name">SelectLast</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">SelectLastOrAutoSelect</span>()</div>
+<div class="method-item"><span class="method-return">bool</span> <span class="method-name">Select</span>(int slot)</div>
+<div class="method-item"><span class="method-return">bool</span> <span class="method-name">SelectByMouseRoll</span>(bool forward)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">SetWeapon</span>(Weapon weapon)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">SelectFKeyWeapon</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">RemoveAll</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">Remove</span>(Weapon weapon, bool recycle = True)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">SetCurrentWeapon</span>(int slot, Weapon wpn)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">FillMainWeaponAmmo</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">FillAllGunAmmo</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">GiveUpWeapon</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">GiveUpWeapon</span>(int slot, bool death)</div>
+</div>
+
+</div>
+<div class="class-card" style="border-left:4px solid #1a237e">
+<div class="class-header"><span class="class-name">PlayerVelocity</span></div>
+<div class="class-section"><div class="class-section-title">Fields 字段 (4)</div>
+<div class="field-item"><span class="field-type">Player</span> owner</div>
+<div class="field-item"><span class="field-type">Vector3</span> velocity</div>
+<div class="field-item"><span class="field-type">PlayerVelocity.VelLockType</span> lockType</div>
+<div class="field-item"><span class="field-type">float</span> velUnlockTime</div>
+</div>
+
+<div class="class-section"><div class="class-section-title">Methods 方法 (21)</div>
+<div class="method-item"><span class="method-return">float</span> <span class="method-name">get_x</span>()</div>
+<div class="method-item"><span class="method-return">float</span> <span class="method-name">get_y</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">set_y</span>(float value)</div>
+<div class="method-item"><span class="method-return">float</span> <span class="method-name">get_z</span>()</div>
+<div class="method-item"><span class="method-return">Vector3</span> <span class="method-name">get_direction</span>()</div>
+<div class="method-item"><span class="method-return">Vector3</span> <span class="method-name">get_horizontalDir</span>()</div>
+<div class="method-item"><span class="method-return">bool</span> <span class="method-name">get_isVelUnlock</span>()</div>
+<div class="method-item"><span class="method-return">Vector3Int</span> <span class="method-name">get_tryMoveDir</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">set_tryMoveDir</span>(Vector3Int value)</div>
+<div class="method-item"><span class="method-return">bool</span> <span class="method-name">get_isTryMoving</span>()</div>
+<div class="method-item"><span class="method-return">bool</span> <span class="method-name">get_dashOnGround</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">set_dashOnGround</span>(bool value)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">Limit</span>(float speed)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">ClearGravity</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">ClearVelocity</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">SetMapDash</span>(Vector3 vel, float duration, bool isHorizontal)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">SetDash</span>(float speed, float duration, bool dashOnGround)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">LockVelocity</span>(float lockTime)</div>
+<div class="method-item"><span class="method-return">Vector3Int</span> <span class="method-name">GetDashDirection</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">Update</span>(int x, int z)</div>
+<div class="method-item"><span class="method-return">bool</span> <span class="method-name">ShouldMoveOnGround</span>()</div>
+</div>
+
+</div>
+<div class="class-card" style="border-left:4px solid #1a237e">
+<div class="class-header"><span class="class-name">PlayerCameraManager</span><span class="class-parent">: MonoBehaviour</span></div>
+<div class="class-section"><div class="class-section-title">Fields 字段 (15)</div>
+<div class="field-item"><span class="field-type">CinemachineVirtualCamera</span> mapCamera</div>
+<div class="field-item"><span class="field-type">Camera</span> modelCamera</div>
+<div class="field-item"><span class="field-type">int</span> activeCullingMask</div>
+<div class="field-item"><span class="field-type">Transform</span> modelContainer</div>
+<div class="field-item"><span class="field-type">Vector3</span> modelDelayPos</div>
+<div class="field-item"><span class="field-type">float</span> zoomFovScale</div>
+<div class="field-item"><span class="field-type">string</span> zoomAnimId</div>
+<div class="field-item"><span class="field-type">string</span> skillZoomId</div>
+<div class="field-item"><span class="field-type">float</span> knifeHit_Value</div>
+<div class="field-item"><span class="field-type">Coroutine</span> knifeHit_Coroutine</div>
+<div class="field-item"><span class="field-type">Vector3</span> modelRightHandScale</div>
+<div class="field-item"><span class="field-type">float</span> modelDefaultFOV</div>
+<div class="field-item"><span class="field-type">float</span> extraMapFov</div>
+<div class="field-item"><span class="field-type">float</span> extraPvFov</div>
+<div class="field-item"><span class="field-type">PlayerCameraManager.FovZoomInfo</span> fovZoomInfo</div>
+</div>
+
+<div class="class-section"><div class="class-section-title">Methods 方法 (13)</div>
+<div class="method-item"><span class="method-return">Transform</span> <span class="method-name">get_modelCameraTransform</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">set_mapFOV</span>(float value)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">set_modelFOV</span>(float value)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">set_modelVisible</span>(bool value)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">set_focus</span>(bool value)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">SetModelDelayPos</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">AddModelDelayPos</span>(float delay)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">CameraFovSetting</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">SetRotation</span>(float angle)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">LookAt</span>(Vector3 dir)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">PlayKnifeHitStunShake</span>(bool isBigshot)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">SetFovBuffInfo</span>(PlayerCameraManager.FovZoomInfo info)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">FovZommBuffEndEvent</span>()</div>
+</div>
+
+</div>
+<div class="class-card" style="border-left:4px solid #1a237e">
+<div class="class-header"><span class="class-name">NanoRoleExpand</span></div>
+
+<div class="class-section"><div class="class-section-title">Methods 方法 (15)</div>
+<div class="method-item"><span class="method-return">string</span> <span class="method-name">GetName</span>(NanoRole role)</div>
+<div class="method-item"><span class="method-return">bool</span> <span class="method-name">IsSoldierOrSavior</span>(NanoRole role)</div>
+<div class="method-item"><span class="method-return">bool</span> <span class="method-name">LikeGuard</span>(NanoRole role)</div>
+<div class="method-item"><span class="method-return">bool</span> <span class="method-name">IsHuman</span>(NanoRole role)</div>
+<div class="method-item"><span class="method-return">bool</span> <span class="method-name">IsHero</span>(NanoRole role)</div>
+<div class="method-item"><span class="method-return">bool</span> <span class="method-name">IsNormalHero</span>(NanoRole role)</div>
+<div class="method-item"><span class="method-return">bool</span> <span class="method-name">IsMasterHero</span>(NanoRole role)</div>
+<div class="method-item"><span class="method-return">bool</span> <span class="method-name">IsNanoGhost</span>(NanoRole role)</div>
+<div class="method-item"><span class="method-return">bool</span> <span class="method-name">IsNormalNanoGhost</span>(NanoRole role)</div>
+<div class="method-item"><span class="method-return">bool</span> <span class="method-name">IsTerminator</span>(NanoRole role)</div>
+<div class="method-item"><span class="method-return">bool</span> <span class="method-name">IsNormalTerminator</span>(NanoRole role)</div>
+<div class="method-item"><span class="method-return">bool</span> <span class="method-name">IsMasterTerminator</span>(NanoRole role)</div>
+<div class="method-item"><span class="method-return">Team</span> <span class="method-name">GetTeam</span>(NanoRole role)</div>
+<div class="method-item"><span class="method-return">bool</span> <span class="method-name">ShouldRemoveAllWpn</span>(NanoRole role)</div>
+<div class="method-item"><span class="method-return">bool</span> <span class="method-name">CanUseGun</span>(NanoRole role)</div>
+</div>
+
+</div>
+</div><div id="tab-1" class="tab-content ">
+<div class="class-card" style="border-left:4px solid #b71c1c">
+<div class="class-header"><span class="class-name">Weapon</span><span class="class-parent">: CFAnimator</span></div>
+<div class="class-section"><div class="class-section-title">Fields 字段 (18)</div>
+<div class="field-item"><span class="field-type">WeaponData</span> data</div>
+<div class="field-item"><span class="field-type">List<RaycastHit></span> shootHitTemp</div>
+<div class="field-item"><span class="field-type">List<DamageEventData></span> damageEventTemp</div>
+<div class="field-item"><span class="field-type">List<Weapon.KnifeHitData></span> knifeHitTemp</div>
+<div class="field-item"><span class="field-type">float</span> knifeRangeMultiplier</div>
+<div class="field-item"><span class="field-type">ObscuredBool</span> moveDisabled</div>
+<div class="field-item"><span class="field-type">ObscuredBool</span> jumpDisabled</div>
+<div class="field-item"><span class="field-type">ObscuredBool</span> crouchDisabled</div>
+<div class="field-item"><span class="field-type">ObscuredBool</span> changeWpnDisabled</div>
+<div class="field-item"><span class="field-type">ObscuredBool</span> forceWalk</div>
+<div class="field-item"><span class="field-type">ObscuredBool</span> cameraRotDisabled</div>
+<div class="field-item"><span class="field-type">Vector3</span> charOffset</div>
+<div class="field-item"><span class="field-type">MapGun</span> bindMapTrigger</div>
+<div class="field-item"><span class="field-type">bool</span> newWpnTag</div>
+<div class="field-item"><span class="field-type">Action<bool></span> Deploy_Listener</div>
+<div class="field-item"><span class="field-type">Action</span> Setter_AmmoBG</div>
+<div class="field-item"><span class="field-type">Action<Player></span> NewValidOwner_Listener</div>
+<div class="field-item"><span class="field-type">Action<Player></span> RemoveFromOwner_Listener</div>
+</div>
+
+<div class="class-section"><div class="class-section-title">Methods 方法 (48)</div>
+<div class="method-item"><span class="method-return">bool</span> <span class="method-name">get_isUsing</span>()</div>
+<div class="method-item"><span class="method-return">bool</span> <span class="method-name">get_isMyWeapon</span>()</div>
+<div class="method-item"><span class="method-return">bool</span> <span class="method-name">get_isDead</span>()</div>
+<div class="method-item"><span class="method-return">bool</span> <span class="method-name">get_fireBtnPressed</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">set_fireBtnPressed</span>(bool value)</div>
+<div class="method-item"><span class="method-return">bool</span> <span class="method-name">get_isMapGun</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">UpdateDisabledSetting</span>(PlayerWeapons wpns)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">Init</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">OnGenerateFromOwner</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">Recycle</span>(bool roundRecycle)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">Deploy</span>(bool noSelectAnim = False)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">UnDeploy</span>(bool temporary = False)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">ResetModeChange</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">PlayerViewSetting</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">SynchronizeHand</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">AnimSpeedSetting</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">CrosshairSetting</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">SetMoveSpeedPenalty</span>(float penalty)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">SetCharacterAnim</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">OnSelectedFromWeaponPool</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">OnFireBtnDown</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">OnFireBtnPressed</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">OnFireBtnUnPressed</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">OnSpecialBtnDown</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">OnSpecialBtnPressed</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">OnSpecialBtnUnPressed</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">OnReloadBtnDown</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">OnJumpBtnDown</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">SetTrigger</span>(string name)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">ResetTrigger</span>(string name)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">SetBool</span>(string name, bool value)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">SetInteger</span>(string name, int value)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">CrossFadeInFixedTime</span>(string name, float time)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">Play</span>(string animName, float normalizedTime)</div>
+<div class="method-item"><span class="method-return">KnifeAttackData</span> <span class="method-name">GetKnifeAttackData</span>(int attackIndex)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">CallKnifeAttack</span>(int attackIndex, DamageBodyRatio damageBodyRatio)</div>
+<div class="method-item"><span class="method-return">int</span> <span class="method-name">GetKnifeAttackSprIndex</span>(int attackIndex)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">TriggerDmgEventAndClear</span>()</div>
+<div class="method-item"><span class="method-return">bool</span> <span class="method-name">ShouldDamage</span>(Entity target)</div>
+<div class="method-item"><span class="method-return">bool</span> <span class="method-name">GiveUp</span>(bool death = True)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">BotControl</span>(Bot bot)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">PlayCharacterShootAnim</span>()</div>
+<div class="method-item"><span class="method-return">string</span> <span class="method-name">GetWpnName</span>()</div>
+<div class="method-item"><span class="method-return">WpnSpriteAsset</span> <span class="method-name">GetWpnSpriteAsset</span>()</div>
+<div class="method-item"><span class="method-return">CharWpnAnimData</span> <span class="method-name">GetCharWpnAnimData</span>()</div>
+<div class="method-item"><span class="method-return">bool</span> <span class="method-name">CanGetInfinityAmmo</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">RemoveThisWeapon</span>()</div>
+<div class="method-item"><span class="method-return">bool</span> <span class="method-name">ConsumeAmmo</span>()</div>
+</div>
+
+</div>
+<div class="class-card" style="border-left:4px solid #b71c1c">
+<div class="class-header"><span class="class-name">WPN_Gun</span><span class="class-parent">: Weapon</span></div>
+<div class="class-section"><div class="class-section-title">Fields 字段 (13)</div>
+<div class="field-item"><span class="field-type">WeaponData_Gun</span> realData</div>
+<div class="field-item"><span class="field-type">bool</span> shouldSetFireSpeed</div>
+<div class="field-item"><span class="field-type">Func<bool></span> ReloadCheck_Listener</div>
+<div class="field-item"><span class="field-type">float</span> lastShootTime</div>
+<div class="field-item"><span class="field-type">int</span> recoilDataID</div>
+<div class="field-item"><span class="field-type">Func<bool></span> Getter_FireDisabled</div>
+<div class="field-item"><span class="field-type">int</span> fireAnim</div>
+<div class="field-item"><span class="field-type">float</span> nextAllowedShootTime</div>
+<div class="field-item"><span class="field-type">ParticleSystem</span> gunFire</div>
+<div class="field-item"><span class="field-type">int</span> knifeAttackCount</div>
+<div class="field-item"><span class="field-type">int</span> knifeAttackAnim</div>
+<div class="field-item"><span class="field-type">int</span> zoomActionCount</div>
+<div class="field-item"><span class="field-type">int</span> lastZoomIndex</div>
+</div>
+
+<div class="class-section"><div class="class-section-title">Methods 方法 (56)</div>
+<div class="method-item"><span class="method-return">bool</span> <span class="method-name">get_isSemiGun</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">set_isSemiGun</span>(bool value)</div>
+<div class="method-item"><span class="method-return">WPN_Gun.AmmoData</span> <span class="method-name">get_ammoData</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">set_ammoData</span>(WPN_Gun.AmmoData value)</div>
+<div class="method-item"><span class="method-return">WPN_Gun.SemiGunFireLinkState</span> <span class="method-name">get_semiGunFireLinkState</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">set_semiGunFireLinkState</span>(WPN_Gun.SemiGunFireLinkState value)</div>
+<div class="method-item"><span class="method-return">bool</span> <span class="method-name">get_isSniper</span>()</div>
+<div class="method-item"><span class="method-return">int</span> <span class="method-name">get_zoomIndex</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">set_zoomIndex</span>(int value)</div>
+<div class="method-item"><span class="method-return">bool</span> <span class="method-name">get_nextZoomReady</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">set_nextZoomReady</span>(bool value)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">OnAnimationEnd</span>(string animName, string animTag)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">OnAnimationExit</span>(string animName, string animTag)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">Init</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">OnGenerateFromOwner</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">AmmoSetting</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">Deploy</span>(bool noSelectAnim = False)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">AnimSpeedSetting</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">UpdateAnimSpeed_Reload</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">UnDeploy</span>(bool temporary = False)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">SetBasicRecoilData</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">SetRecoilData</span>(int index = 0)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">GunFireChecking</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">OnReloadBtnDown</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">TryReload</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">OnSpecialBtnDown</span>()</div>
+<div class="method-item"><span class="method-return">bool</span> <span class="method-name">CanReload</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">Reload</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">ReloadOver</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">PreReloadOver</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">FillAmmo</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">AddAmmo</span>(int count)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">Damage</span>(Ray ray)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">PlayGunFire</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">StopGunFire</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">KnifeAttackEvent</span>(int index)</div>
+<div class="method-item"><span class="method-return">KnifeAttackData</span> <span class="method-name">GetKnifeAttackData</span>(int attackIndex)</div>
+<div class="method-item"><span class="method-return">int</span> <span class="method-name">GetKnifeAttackSprIndex</span>(int attackIndex)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">StartKnifeAttack</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">OnKnifeAttackExit</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">GenerateBullet</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">UseZoom</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">CloseZoom</span>(bool rapidly = False)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">OnFireAnimExit</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">GunShoot</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">GunShoot_NoCheck</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">GunShoot_Logic</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">GunShootFunction</span>()</div>
+<div class="method-item"><span class="method-return">bool</span> <span class="method-name">ConsumeAmmo</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">TryReloadNextFrame</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">BreakAutomaticGunFire</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">AutomaticGunStopFire</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">BotControl</span>(Bot bot)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">SniperBotControl</span>(Bot bot)</div>
+<div class="method-item"><span class="method-return">bool</span> <span class="method-name">CanGetInfinityAmmo</span>()</div>
+<div class="method-item"><span class="method-return">bool</span> <span class="method-name">GiveUp</span>(bool death = True)</div>
+</div>
+
+</div>
+<div class="class-card" style="border-left:4px solid #b71c1c">
+<div class="class-header"><span class="class-name">WPN_Gun.AmmoData</span></div>
+<div class="class-section"><div class="class-section-title">Fields 字段 (5)</div>
+<div class="field-item"><span class="field-type">ObscuredInt</span> clip</div>
+<div class="field-item"><span class="field-type">ObscuredInt</span> ammo</div>
+<div class="field-item"><span class="field-type">ObscuredInt</span> maxClip</div>
+<div class="field-item"><span class="field-type">ObscuredInt</span> maxAmmo</div>
+<div class="field-item"><span class="field-type">bool</span> isBuff</div>
+</div>
+
+<div class="class-section"><div class="class-section-title">Methods 方法 (11)</div>
+<div class="method-item"><span class="method-return">bool</span> <span class="method-name">get_isMaxClip</span>()</div>
+<div class="method-item"><span class="method-return">bool</span> <span class="method-name">get_isEmptyClip</span>()</div>
+<div class="method-item"><span class="method-return">bool</span> <span class="method-name">get_isEmptyAmmo</span>()</div>
+<div class="method-item"><span class="method-return">bool</span> <span class="method-name">get_canReload</span>()</div>
+<div class="method-item"><span class="method-return">bool</span> <span class="method-name">get_isAllEmpty</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">Reload</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">Fill</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">AddAmmoByMultiplier</span>(int count)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">AddClip</span>(int count)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">Recover</span>(float rate)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">BindHUD</span>()</div>
+</div>
+
+</div>
+<div class="class-card" style="border-left:4px solid #b71c1c">
+<div class="class-header"><span class="class-name">WPN_Knife</span><span class="class-parent">: Weapon</span></div>
+<div class="class-section"><div class="class-section-title">Fields 字段 (2)</div>
+<div class="field-item"><span class="field-type">float</span> combo1_AnimSpeed</div>
+<div class="field-item"><span class="field-type">string</span> AnimTag_KnifeAttack</div>
+</div>
+
+<div class="class-section"><div class="class-section-title">Methods 方法 (11)</div>
+<div class="method-item"><span class="method-return">WeaponData_Knife</span> <span class="method-name">get_realData</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">Init</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">OnSpecialBtnDown</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">PlayKnifeAttackAnim</span>(WPN_Knife.KnifeAttackType type)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">AnimSpeedSetting</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">OnAnimationEnd</span>(string animName, string animTag)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">OnKnifeAttackAnimEnd</span>(string animName)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">KnifeAttackEvent</span>(int index)</div>
+<div class="method-item"><span class="method-return">KnifeAttackData</span> <span class="method-name">GetKnifeAttackData</span>(int attackIndex)</div>
+<div class="method-item"><span class="method-return">bool</span> <span class="method-name">GiveUp</span>(bool death = True)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">BotControl</span>(Bot bot)</div>
+</div>
+
+</div>
+<div class="class-card" style="border-left:4px solid #b71c1c">
+<div class="class-header"><span class="class-name">WPN_GRENADE</span><span class="class-parent">: WPN_Missile</span></div>
+<div class="class-section"><div class="class-section-title">Fields 字段 (9)</div>
+<div class="field-item"><span class="field-type">float</span> expRange</div>
+<div class="field-item"><span class="field-type">float</span> expDamage</div>
+<div class="field-item"><span class="field-type">float</span> expDmgFactorByDistance</div>
+<div class="field-item"><span class="field-type">bool</span> ignoreWall</div>
+<div class="field-item"><span class="field-type">GameObject</span> expEffectPrefab</div>
+<div class="field-item"><span class="field-type">string</span> expSoundName</div>
+<div class="field-item"><span class="field-type">bool</span> expWhenTouchSth</div>
+<div class="field-item"><span class="field-type">bool</span> isExped</div>
+<div class="field-item"><span class="field-type">Action<Entity></span> CauseDamage_Listener</div>
+</div>
+
+<div class="class-section"><div class="class-section-title">Methods 方法 (8)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">OnCollisionEnter</span>(Collision collision)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">OnTriggerEnter</span>(Collider other)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">Work</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">OnLifeTimerEnd</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">TryExplosion</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">Damage</span>()</div>
+<div class="method-item"><span class="method-return">DamageEventData</span> <span class="method-name">GetBasicDamageEventData</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">SetMissileData</span>(MissileData missileData)</div>
+</div>
+
+</div>
+<div class="class-card" style="border-left:4px solid #b71c1c">
+<div class="class-header"><span class="class-name">WeaponData_Gun</span><span class="class-parent">: WeaponData</span></div>
+<div class="class-section"><div class="class-section-title">Fields 字段 (39)</div>
+<div class="field-item"><span class="field-type">int</span> clip</div>
+<div class="field-item"><span class="field-type">int</span> ammo</div>
+<div class="field-item"><span class="field-type">int</span> clip_Nano</div>
+<div class="field-item"><span class="field-type">int</span> ammo_Nano</div>
+<div class="field-item"><span class="field-type">string</span> shotSoundName</div>
+<div class="field-item"><span class="field-type">float</span> shotsPerMinute</div>
+<div class="field-item"><span class="field-type">float</span> fireAnimMultiplier</div>
+<div class="field-item"><span class="field-type">float</span> reloadAnimRatio</div>
+<div class="field-item"><span class="field-type">string</span> reloadAnimName_C</div>
+<div class="field-item"><span class="field-type">bool</span> shootBullet</div>
+<div class="field-item"><span class="field-type">Vector3</span> bulletFxPos_L</div>
+<div class="field-item"><span class="field-type">Vector3</span> bulletFxPos_R</div>
+<div class="field-item"><span class="field-type">PostureFloat[]</span> perturbMin</div>
+<div class="field-item"><span class="field-type">PostureFloat[]</span> perturbMax</div>
+<div class="field-item"><span class="field-type">ChangeMovingRealSize</span> changeMovingRealSize</div>
+<div class="field-item"><span class="field-type">DelayOneShootData</span> delayOneShootTime</div>
+<div class="field-item"><span class="field-type">AmmoRecoverAndDecay[]</span> shotReactYaw</div>
+<div class="field-item"><span class="field-type">AmmoRecoverAndDecay[]</span> shotReactPitch</div>
+<div class="field-item"><span class="field-type">PostureFloat[]</span> detailPerturbShot</div>
+<div class="field-item"><span class="field-type">PostureFloat[]</span> detailReactPitchShot</div>
+<div class="field-item"><span class="field-type">PostureFloat[]</span> detailReactYawShot</div>
+<div class="field-item"><span class="field-type">PostureFloat[]</span> fullReactYaw</div>
+<div class="field-item"><span class="field-type">PostureFloat[]</span> fullReactPitch</div>
+<div class="field-item"><span class="field-type">SideReactDirect</span> sideReactDirect</div>
+<div class="field-item"><span class="field-type">AmmoRecoverAndDecay[]</span> cameraYawAndPitch</div>
+<div class="field-item"><span class="field-type">float</span> range</div>
+<div class="field-item"><span class="field-type">float</span> ammoDamage</div>
+<div class="field-item"><span class="field-type">float</span> damageVariantionFactor</div>
+<div class="field-item"><span class="field-type">float</span> damageFactorByDistance</div>
+<div class="field-item"><span class="field-type">float</span> wallShotDamageRatio</div>
+<div class="field-item"><span class="field-type">DamageBodyRatio</span> damageBodyRatio</div>
+<div class="field-item"><span class="field-type">KnifeAttackData[]</span> knifeAttacks</div>
+<div class="field-item"><span class="field-type">string</span> knifeAnimName</div>
+<div class="field-item"><span class="field-type">string</span> knifeHitSoundName</div>
+<div class="field-item"><span class="field-type">DamageBodyRatio</span> knifeDamageBodyRatio</div>
+<div class="field-item"><span class="field-type">ZoomAction</span> zoomAcion</div>
+<div class="field-item"><span class="field-type">float</span> zoomInMoveSpeedPenalty</div>
+<div class="field-item"><span class="field-type">bool</span> giveUpDisable</div>
+<div class="field-item"><span class="field-type">bool</span> deathDropDisable</div>
+</div>
+
+<div class="class-section"><div class="class-section-title">Methods 方法 (2)</div>
+<div class="method-item"><span class="method-return">float</span> <span class="method-name">get_shootIntervalTime</span>()</div>
+<div class="method-item"><span class="method-return">Sprite</span> <span class="method-name">GetKillMsgIcon</span>(int index)</div>
+</div>
+
+</div>
+<div class="class-card" style="border-left:4px solid #b71c1c">
+<div class="class-header"><span class="class-name">DamageEventData</span></div>
+<div class="class-section"><div class="class-section-title">Fields 字段 (14)</div>
+<div class="field-item"><span class="field-type">Entity</span> attacker</div>
+<div class="field-item"><span class="field-type">Entity</span> victim</div>
+<div class="field-item"><span class="field-type">float</span> damage</div>
+<div class="field-item"><span class="field-type">Vector3</span> origin</div>
+<div class="field-item"><span class="field-type">Vector3</span> hitPos</div>
+<div class="field-item"><span class="field-type">string</span> hitTag</div>
+<div class="field-item"><span class="field-type">string</span> hitSndName</div>
+<div class="field-item"><span class="field-type">string</span> hitEffect</div>
+<div class="field-item"><span class="field-type">bool</span> wallThrough</div>
+<div class="field-item"><span class="field-type">DamageType</span> type</div>
+<div class="field-item"><span class="field-type">DamageTag</span> damageTag</div>
+<div class="field-item"><span class="field-type">int</span> wpnIndex</div>
+<div class="field-item"><span class="field-type">int</span> wpnSprIndex</div>
+<div class="field-item"><span class="field-type">bool</span> ignoreDmgRate</div>
+</div>
+
+<div class="class-section"><div class="class-section-title">Methods 方法 (3)</div>
+<div class="method-item"><span class="method-return">Sprite</span> <span class="method-name">get_killMsgIcon</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">TakePlace</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">Print</span>()</div>
+</div>
+
+</div>
+<div class="class-card" style="border-left:4px solid #b71c1c">
+<div class="class-header"><span class="class-name">DeathEventData</span></div>
+<div class="class-section"><div class="class-section-title">Fields 字段 (11)</div>
+<div class="field-item"><span class="field-type">Entity</span> killer</div>
+<div class="field-item"><span class="field-type">Entity</span> dead</div>
+<div class="field-item"><span class="field-type">bool</span> wallThrough</div>
+<div class="field-item"><span class="field-type">DamageType</span> damageType</div>
+<div class="field-item"><span class="field-type">Vector3</span> damageOrigin</div>
+<div class="field-item"><span class="field-type">SpecialKillType</span> specialKill</div>
+<div class="field-item"><span class="field-type">NanoKillType</span> nanoKill</div>
+<div class="field-item"><span class="field-type">bool</span> revenge</div>
+<div class="field-item"><span class="field-type">DamageTag</span> damageTag</div>
+<div class="field-item"><span class="field-type">int</span> wpnIndex</div>
+<div class="field-item"><span class="field-type">int</span> wpnSprIndex</div>
+</div>
+
+<div class="class-section"><div class="class-section-title">Methods 方法 (3)</div>
+<div class="method-item"><span class="method-return">Sprite</span> <span class="method-name">get_killMsgIcon</span>()</div>
+<div class="method-item"><span class="method-return">bool</span> <span class="method-name">get_isVVIP</span>()</div>
+<div class="method-item"><span class="method-return">string</span> <span class="method-name">get_wpnName</span>()</div>
+</div>
+
+</div>
+<div class="class-card" style="border-left:4px solid #b71c1c">
+<div class="class-header"><span class="class-name">DamageBodyRatio</span></div>
+<div class="class-section"><div class="class-section-title">Fields 字段 (9)</div>
+<div class="field-item"><span class="field-type">float</span> brainRatio</div>
+<div class="field-item"><span class="field-type">float</span> headRatio</div>
+<div class="field-item"><span class="field-type">float</span> neckRatio</div>
+<div class="field-item"><span class="field-type">float</span> chestRatio</div>
+<div class="field-item"><span class="field-type">float</span> abdomenRatio</div>
+<div class="field-item"><span class="field-type">float</span> armRatio</div>
+<div class="field-item"><span class="field-type">float</span> handRatio</div>
+<div class="field-item"><span class="field-type">float</span> legRatio</div>
+<div class="field-item"><span class="field-type">float</span> footRatio</div>
+</div>
+
+<div class="class-section"><div class="class-section-title">Methods 方法 (1)</div>
+<div class="method-item"><span class="method-return">float</span> <span class="method-name">Get</span>(string tag, float damage)</div>
+</div>
+
+</div>
+<div class="class-card" style="border-left:4px solid #b71c1c">
+<div class="class-header"><span class="class-name">Recoil</span><span class="class-parent">: OffsetModifier</span></div>
+<div class="class-section"><div class="class-section-title">Fields 字段 (22)</div>
+<div class="field-item"><span class="field-type">AimIK</span> aimIK</div>
+<div class="field-item"><span class="field-type">bool</span> aimIKSolvedLast</div>
+<div class="field-item"><span class="field-type">Recoil.Handedness</span> handedness</div>
+<div class="field-item"><span class="field-type">bool</span> twoHanded</div>
+<div class="field-item"><span class="field-type">float</span> magnitudeRandom</div>
+<div class="field-item"><span class="field-type">Vector3</span> rotationRandom</div>
+<div class="field-item"><span class="field-type">Vector3</span> handRotationOffset</div>
+<div class="field-item"><span class="field-type">float</span> blendTime</div>
+<div class="field-item"><span class="field-type">Recoil.RecoilOffset[]</span> offsets</div>
+<div class="field-item"><span class="field-type">Quaternion</span> rotationOffset</div>
+<div class="field-item"><span class="field-type">float</span> magnitudeMlp</div>
+<div class="field-item"><span class="field-type">float</span> endTime</div>
+<div class="field-item"><span class="field-type">Quaternion</span> handRotation</div>
+<div class="field-item"><span class="field-type">Quaternion</span> secondaryHandRelativeRotation</div>
+<div class="field-item"><span class="field-type">Quaternion</span> randomRotation</div>
+<div class="field-item"><span class="field-type">float</span> length</div>
+<div class="field-item"><span class="field-type">bool</span> initiated</div>
+<div class="field-item"><span class="field-type">float</span> blendWeight</div>
+<div class="field-item"><span class="field-type">float</span> w</div>
+<div class="field-item"><span class="field-type">Quaternion</span> primaryHandRotation</div>
+<div class="field-item"><span class="field-type">bool</span> handRotationsSet</div>
+<div class="field-item"><span class="field-type">Vector3</span> aimIKAxis</div>
+</div>
+
+<div class="class-section"><div class="class-section-title">Methods 方法 (8)</div>
+<div class="method-item"><span class="method-return">bool</span> <span class="method-name">get_isFinished</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">SetHandRotations</span>(Quaternion leftHandRotation, Quaternion rightHandRotation)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">Fire</span>(float magnitude)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">OnModifyOffset</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">AfterFBBIK</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">AfterAimIK</span>()</div>
+<div class="method-item"><span class="method-return">Transform</span> <span class="method-name">get_primaryHand</span>()</div>
+<div class="method-item"><span class="method-return">Transform</span> <span class="method-name">get_secondaryHand</span>()</div>
+</div>
+
+</div>
+<div class="class-card" style="border-left:4px solid #b71c1c">
+<div class="class-header"><span class="class-name">InfinityAmmoBuff</span><span class="class-parent">: Buff</span></div>
+
+<div class="class-section"><div class="class-section-title">Methods 方法 (2)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">BuffUpdater</span>(ref bool value)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">OnLifeEnd</span>()</div>
+</div>
+
+</div>
+</div><div id="tab-2" class="tab-content ">
+<div class="class-card" style="border-left:4px solid #4a148c">
+<div class="class-header"><span class="class-name">Buff</span></div>
+<div class="class-section"><div class="class-section-title">Fields 字段 (4)</div>
+<div class="field-item"><span class="field-type">Action</span> timeOutAction</div>
+<div class="field-item"><span class="field-type">Action</span> removeAction</div>
+<div class="field-item"><span class="field-type">Action</span> lifeEndAction</div>
+<div class="field-item"><span class="field-type">int</span> priority</div>
+</div>
+
+<div class="class-section"><div class="class-section-title">Methods 方法 (10)</div>
+<div class="method-item"><span class="method-return">string</span> <span class="method-name">get_name</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">set_name</span>(string value)</div>
+<div class="method-item"><span class="method-return">Entity</span> <span class="method-name">get_owner</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">set_owner</span>(Entity value)</div>
+<div class="method-item"><span class="method-return">float</span> <span class="method-name">get_endTime</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">set_endTime</span>(float value)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">Refreshime</span>(float duration)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">TimeOut</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">Remove</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">OnLifeEnd</span>()</div>
+</div>
+
+</div>
+<div class="class-card" style="border-left:4px solid #4a148c">
+<div class="class-header"><span class="class-name">Skill_Common</span><span class="class-parent">: Skill</span></div>
+<div class="class-section"><div class="class-section-title">Fields 字段 (2)</div>
+<div class="field-item"><span class="field-type">float</span> coldFinishTime</div>
+<div class="field-item"><span class="field-type">float</span> coldTime</div>
+</div>
+
+<div class="class-section"><div class="class-section-title">Methods 方法 (9)</div>
+<div class="method-item"><span class="method-return">bool</span> <span class="method-name">get_isColdFinish</span>()</div>
+<div class="method-item"><span class="method-return">bool</span> <span class="method-name">get_isCanUse</span>()</div>
+<div class="method-item"><span class="method-return">int</span> <span class="method-name">GetSpriteIndex</span>()</div>
+<div class="method-item"><span class="method-return">bool</span> <span class="method-name">TryUse</span>(Player player)</div>
+<div class="method-item"><span class="method-return">bool</span> <span class="method-name">BasicCheck</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">OnPlayerReSpawn</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">OnSetOnPlayer</span>(Player player)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">StartCold</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">EndCold</span>()</div>
+</div>
+
+</div>
+<div class="class-card" style="border-left:4px solid #4a148c">
+<div class="class-header"><span class="class-name">SpeedBuff</span><span class="class-parent">: Buff</span></div>
+<div class="class-section"><div class="class-section-title">Fields 字段 (1)</div>
+<div class="field-item"><span class="field-type">float</span> moveSpeedPenalty</div>
+</div>
+
+<div class="class-section"><div class="class-section-title">Methods 方法 (2)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">SpeedPenaltyBuffUpdate</span>(ref float speedUp, ref float speedDown)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">OnLifeEnd</span>()</div>
+</div>
+
+</div>
+<div class="class-card" style="border-left:4px solid #4a148c">
+<div class="class-header"><span class="class-name">DamageRateBuff</span><span class="class-parent">: Buff</span></div>
+<div class="class-section"><div class="class-section-title">Fields 字段 (1)</div>
+<div class="field-item"><span class="field-type">float</span> damageRate</div>
+</div>
+
+<div class="class-section"><div class="class-section-title">Methods 方法 (2)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">DamageRateBuffUpdate</span>(ref float damageUp, ref float damageDown)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">OnLifeEnd</span>()</div>
+</div>
+
+</div>
+<div class="class-card" style="border-left:4px solid #4a148c">
+<div class="class-header"><span class="class-name">InvincibleBuff</span><span class="class-parent">: Buff</span></div>
+<div class="class-section"><div class="class-section-title">Fields 字段 (1)</div>
+<div class="field-item"><span class="field-type">bool</span> ignoreAttack</div>
+</div>
+
+<div class="class-section"><div class="class-section-title">Methods 方法 (2)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">Owner_Invincible_BuffUpdater</span>(ref bool value)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">OnLifeEnd</span>()</div>
+</div>
+
+</div>
+<div class="class-card" style="border-left:4px solid #4a148c">
+<div class="class-header"><span class="class-name">StunGrenadeBuff</span><span class="class-parent">: SpeedBuff</span></div>
+<div class="class-section"><div class="class-section-title">Fields 字段 (1)</div>
+<div class="field-item"><span class="field-type">string</span> BuffName</div>
+</div>
+
+<div class="class-section"><div class="class-section-title">Methods 方法 (2)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">BuffUpdater</span>(ref bool value)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">OnLifeEnd</span>()</div>
+</div>
+
+</div>
+<div class="class-card" style="border-left:4px solid #4a148c">
+<div class="class-header"><span class="class-name">TransparentBuff</span><span class="class-parent">: Buff</span></div>
+<div class="class-section"><div class="class-section-title">Fields 字段 (2)</div>
+<div class="field-item"><span class="field-type">float</span> cvAlpha</div>
+<div class="field-item"><span class="field-type">float</span> pvAlpha</div>
+</div>
+
+<div class="class-section"><div class="class-section-title">Methods 方法 (2)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">ModelInfo_Getter_Alpha</span>(ref float cv, ref float pv)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">OnLifeEnd</span>()</div>
+</div>
+
+</div>
+</div><div id="tab-3" class="tab-content ">
+<div class="class-card" style="border-left:4px solid #006064">
+<div class="class-header"><span class="class-name">Bot</span><span class="class-parent">: MonoBehaviour</span></div>
+<div class="class-section"><div class="class-section-title">Fields 字段 (41)</div>
+<div class="field-item"><span class="field-type">float</span> Cos10</div>
+<div class="field-item"><span class="field-type">float</span> Cos30</div>
+<div class="field-item"><span class="field-type">float</span> Cos45</div>
+<div class="field-item"><span class="field-type">BotAbility</span> ability</div>
+<div class="field-item"><span class="field-type">BotEnemyInfo</span> enemyInfo</div>
+<div class="field-item"><span class="field-type">bool</span> faceToEnemy</div>
+<div class="field-item"><span class="field-type">int</span> nextTargetCheckIndex</div>
+<div class="field-item"><span class="field-type">float</span> nextCheckEnemyInViewTime</div>
+<div class="field-item"><span class="field-type">float</span> nextAttackTime</div>
+<div class="field-item"><span class="field-type">int</span> knifeAttackType</div>
+<div class="field-item"><span class="field-type">float</span> knifeAttackEndTime</div>
+<div class="field-item"><span class="field-type">float</span> watchOutEndTime</div>
+<div class="field-item"><span class="field-type">Vector3</span> watchOutPos</div>
+<div class="field-item"><span class="field-type">bool</span> stopAllBot</div>
+<div class="field-item"><span class="field-type">List<BotActionBase></span> actionList</div>
+<div class="field-item"><span class="field-type">Bot.ZoomDirectionGetter</span> Getter_ZoomDirection</div>
+<div class="field-item"><span class="field-type">CrabStep</span> crabStepAction</div>
+<div class="field-item"><span class="field-type">Saunter</span> saunterAction</div>
+<div class="field-item"><span class="field-type">float</span> nextSelectWpnTime</div>
+<div class="field-item"><span class="field-type">List<int></span> selectWpnActionList</div>
+<div class="field-item"><span class="field-type">RefInt</span> Getter_WeaponSlot</div>
+<div class="field-item"><span class="field-type">float</span> nextUseSkillCheckTime</div>
+<div class="field-item"><span class="field-type">AlternativePath</span> alternative</div>
+<div class="field-item"><span class="field-type">Path</span> path</div>
+<div class="field-item"><span class="field-type">GraphNode</span> gNode_Nearset</div>
+<div class="field-item"><span class="field-type">GraphNode</span> gNode_Next</div>
+<div class="field-item"><span class="field-type">int</span> nextPathVectorID</div>
+<div class="field-item"><span class="field-type">Vector3</span> lastStartPoint</div>
+<div class="field-item"><span class="field-type">Vector3</span> nextPathPos</div>
+<div class="field-item"><span class="field-type">Vector3</span> dirToNextNode</div>
+<div class="field-item"><span class="field-type">float</span> nextFindPathTime</div>
+<div class="field-item"><span class="field-type">PathInterpolator</span> interpolator</div>
+<div class="field-item"><span class="field-type">RefPosition</span> Destination_Listener</div>
+<div class="field-item"><span class="field-type">GraphNode</span> nextJumpStartNode</div>
+<div class="field-item"><span class="field-type">Bot_JumpLink.Link</span> nextJumpLink</div>
+<div class="field-item"><span class="field-type">float</span> nextJumpTime</div>
+<div class="field-item"><span class="field-type">float</span> blockedTime</div>
+<div class="field-item"><span class="field-type">float</span> crouchEndTime</div>
+<div class="field-item"><span class="field-type">List<Bot></span> hangoutList</div>
+<div class="field-item"><span class="field-type">int</span> maxHangoutCount</div>
+<div class="field-item"><span class="field-type">ObscuredBool</span> hangoutTag</div>
+</div>
+
+<div class="class-section"><div class="class-section-title">Methods 方法 (50)</div>
+<div class="method-item"><span class="method-return">bool</span> <span class="method-name">get_isDead</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">set_abilityLevel</span>(float value)</div>
+<div class="method-item"><span class="method-return">Player</span> <span class="method-name">get_thisPlayer</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">set_thisPlayer</span>(Player value)</div>
+<div class="method-item"><span class="method-return">Vector3</span> <span class="method-name">get_cameraPos</span>()</div>
+<div class="method-item"><span class="method-return">Vector3</span> <span class="method-name">get_cameraFoward</span>()</div>
+<div class="method-item"><span class="method-return">Entity</span> <span class="method-name">get_tryFindEnemy</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">set_tryFindEnemy</span>(Entity value)</div>
+<div class="method-item"><span class="method-return">bool</span> <span class="method-name">get_isStopped</span>()</div>
+<div class="method-item"><span class="method-return">Seeker</span> <span class="method-name">get_seeker</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">set_seeker</span>(Seeker value)</div>
+<div class="method-item"><span class="method-return">float</span> <span class="method-name">get_pathLength</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">set_pathLength</span>(float value)</div>
+<div class="method-item"><span class="method-return">NanoGuard</span> <span class="method-name">get_nanoGuard</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">set_nanoGuard</span>(NanoGuard value)</div>
+<div class="method-item"><span class="method-return">bool</span> <span class="method-name">get_isArriveJumpStartNode</span>()</div>
+<div class="method-item"><span class="method-return">bool</span> <span class="method-name">get_canJump</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">InitHangOutCount</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">OnDrawGizmosSelected</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">UpdateNearestGraphNode</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">PathSetting</span>()</div>
+<div class="method-item"><span class="method-return">bool</span> <span class="method-name">IsPosInReachDistance</span>(Vector3 pos)</div>
+<div class="method-item"><span class="method-return">bool</span> <span class="method-name">IsPosInReachDistance</span>(Vector3 pos, float distance)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">OnPathComplete</span>(Path newPath)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">Move</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">JumpCheck</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">Jump</span>(float delay = 0)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">TryCrouch</span>()</div>
+<div class="method-item"><span class="method-return">Vector2Int</span> <span class="method-name">GetMoveStateByDir</span>(Vector3 targetDir)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">CameraRotation</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">OnLifeStateChange</span>(bool isAlive)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">TakeDamageEvent</span>(ref DamageEventData eventData)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">SpawnDelayEvent</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">OnEnterNanoGuardArea</span>(Bot_NanoGuardArea enterArea)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">OnExitNanoGuardArea</span>(Bot_NanoGuardArea exitAarea)</div>
+<div class="method-item"><span class="method-return">IEnumerator</span> <span class="method-name">FindAttackTarget</span>()</div>
+<div class="method-item"><span class="method-return">bool</span> <span class="method-name">TrySetAttackTarget</span>(Entity target)</div>
+<div class="method-item"><span class="method-return">bool</span> <span class="method-name">CheckHitBox</span>(Entity target)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">CheckAttackTarget</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">UseWeapon</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">SelectWeapon</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">AddSelectWpnAction</span>(int slot)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">UseSkill</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">OnNanoRoleChange</span>(NanoRole oldRole, NanoRole newRole)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">UpdateAction</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">OnNanoRoleTableTypeChange</span>(NanoRoleSelect.Type tableType)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">OnPlayerSetSkill</span>(Skill newSkill)</div>
+<div class="method-item"><span class="method-return">bool</span> <span class="method-name">IsPathLengthToEnemyLess</span>(float length)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">UpdateGhostEntityState</span>()</div>
+<div class="method-item"><span class="method-return">Vector3</span> <span class="method-name">GetZoomDirectionByPos</span>(Vector3 pos)</div>
+</div>
+
+</div>
+<div class="class-card" style="border-left:4px solid #006064">
+<div class="class-header"><span class="class-name">BotAbility</span></div>
+
+<div class="class-section"><div class="class-section-title">Methods 方法 (15)</div>
+<div class="method-item"><span class="method-return">float</span> <span class="method-name">get_zoomSpeed</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">set_zoomSpeed</span>(float value)</div>
+<div class="method-item"><span class="method-return">float</span> <span class="method-name">get_shootAccuracy</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">set_shootAccuracy</span>(float value)</div>
+<div class="method-item"><span class="method-return">float</span> <span class="method-name">get_recoilControl_X</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">set_recoilControl_X</span>(float value)</div>
+<div class="method-item"><span class="method-return">float</span> <span class="method-name">get_recoilControlRange_X</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">set_recoilControlRange_X</span>(float value)</div>
+<div class="method-item"><span class="method-return">float</span> <span class="method-name">get_randomRecoilControl_X</span>()</div>
+<div class="method-item"><span class="method-return">float</span> <span class="method-name">get_recoilControl_Y</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">set_recoilControl_Y</span>(float value)</div>
+<div class="method-item"><span class="method-return">float</span> <span class="method-name">get_recoilControlRange_Y</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">set_recoilControlRange_Y</span>(float value)</div>
+<div class="method-item"><span class="method-return">float</span> <span class="method-name">get_randomRecoilControl_Y</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">SetAbility</span>(float ability)</div>
+</div>
+
+</div>
+<div class="class-card" style="border-left:4px solid #006064">
+<div class="class-header"><span class="class-name">BotEnemyInfo</span></div>
+<div class="class-section"><div class="class-section-title">Fields 字段 (9)</div>
+<div class="field-item"><span class="field-type">Bot</span> bot</div>
+<div class="field-item"><span class="field-type">Entity</span> enemy</div>
+<div class="field-item"><span class="field-type">float</span> findTime</div>
+<div class="field-item"><span class="field-type">float</span> lastLostTime</div>
+<div class="field-item"><span class="field-type">Transform</span> hitBox</div>
+<div class="field-item"><span class="field-type">BotEnemyInfo.DistanceControl</span> distanceControl</div>
+<div class="field-item"><span class="field-type">float</span> distanceControlChangeTime</div>
+<div class="field-item"><span class="field-type">bool</span> isClosing</div>
+<div class="field-item"><span class="field-type">float</span> nextCheckVisibleTime</div>
+</div>
+
+<div class="class-section"><div class="class-section-title">Methods 方法 (16)</div>
+<div class="method-item"><span class="method-return">float</span> <span class="method-name">get_lostEnemyTime</span>()</div>
+<div class="method-item"><span class="method-return">bool</span> <span class="method-name">get_haveEnemy</span>()</div>
+<div class="method-item"><span class="method-return">bool</span> <span class="method-name">get_isPlayer</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">set_isPlayer</span>(bool value)</div>
+<div class="method-item"><span class="method-return">Vector3</span> <span class="method-name">get_enemyPos</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">set_enemyPos</span>(Vector3 value)</div>
+<div class="method-item"><span class="method-return">float</span> <span class="method-name">get_distance</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">set_distance</span>(float value)</div>
+<div class="method-item"><span class="method-return">Vector3</span> <span class="method-name">get_dirToEnemy</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">set_dirToEnemy</span>(Vector3 value)</div>
+<div class="method-item"><span class="method-return">Vector3</span> <span class="method-name">get_dirToHitBox</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">set_dirToHitBox</span>(Vector3 value)</div>
+<div class="method-item"><span class="method-return">float</span> <span class="method-name">get_dotToHitBox</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">CalGunDistanceControl</span>(float wpnShotDistance)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">CalKnifeDistanceControl</span>()</div>
+<div class="method-item"><span class="method-return">bool</span> <span class="method-name">ShouldWaitKnifeAttack</span>()</div>
+</div>
+
+</div>
+<div class="class-card" style="border-left:4px solid #006064">
+<div class="class-header"><span class="class-name">BotSkillBase</span><span class="class-parent">: BotActionBase</span></div>
+<div class="class-section"><div class="class-section-title">Fields 字段 (2)</div>
+<div class="field-item"><span class="field-type">SkillKey</span> skillKey</div>
+<div class="field-item"><span class="field-type">float</span> nextCheckTime</div>
+</div>
+
+<div class="class-section"><div class="class-section-title">Methods 方法 (2)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">DoAction</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">AddNextCheckTime</span>(float min, float max)</div>
+</div>
+
+</div>
+</div><div id="tab-4" class="tab-content ">
+<div class="class-card" style="border-left:4px solid #1b5e20">
+<div class="class-header"><span class="class-name">GameManager</span><span class="class-parent">: Singleton</span></div>
+<div class="class-section"><div class="class-section-title">Fields 字段 (38)</div>
+<div class="field-item"><span class="field-type">GameObject</span> playerPrefab</div>
+<div class="field-item"><span class="field-type">GameObject</span> botPrefab</div>
+<div class="field-item"><span class="field-type">Player</span> myPlayer</div>
+<div class="field-item"><span class="field-type">GameMode</span> gameMode</div>
+<div class="field-item"><span class="field-type">WeaponLimited</span> weaponLimited</div>
+<div class="field-item"><span class="field-type">bool</span> revengeEnable</div>
+<div class="field-item"><span class="field-type">GameObject</span> gameModePrefab</div>
+<div class="field-item"><span class="field-type">List<Entity></span> entityBL_Alive</div>
+<div class="field-item"><span class="field-type">List<Entity></span> entityGR_Alive</div>
+<div class="field-item"><span class="field-type">Player[]</span> allPlayers</div>
+<div class="field-item"><span class="field-type">List<Player></span> playersBL</div>
+<div class="field-item"><span class="field-type">List<Player></span> playersBL_Alive</div>
+<div class="field-item"><span class="field-type">List<Player></span> playersGR</div>
+<div class="field-item"><span class="field-type">List<Player></span> playersGR_Alive</div>
+<div class="field-item"><span class="field-type">WeaponAsset</span> weaponAsset</div>
+<div class="field-item"><span class="field-type">CharacterAsset</span> characterAsset</div>
+<div class="field-item"><span class="field-type">NameKeyPool</span> characterPool</div>
+<div class="field-item"><span class="field-type">NameKeyPool</span> weaponPool</div>
+<div class="field-item"><span class="field-type">GameManager.DamageEvent</span> DamageEvent_InvalidCheck_Observers</div>
+<div class="field-item"><span class="field-type">GameManager.DamageEvent</span> DamageEvent_PreCal_Observers</div>
+<div class="field-item"><span class="field-type">GameManager.DamageEvent</span> DamageEvent_PostCal_Observers</div>
+<div class="field-item"><span class="field-type">GameManager.DamageEvent</span> DamageEvent_Post_Observers</div>
+<div class="field-item"><span class="field-type">GameManager.DeathEvent</span> DeathEvent_Observers</div>
+<div class="field-item"><span class="field-type">GameManager.DeathEvent</span> DeathEvent_ForGameRule</div>
+<div class="field-item"><span class="field-type">GameManager.SpecialKillChecker</span> firstAndLastKillChecker</div>
+<div class="field-item"><span class="field-type">Action<Player></span> NewPlayerJoinEvent_Observers</div>
+<div class="field-item"><span class="field-type">Action<Player></span> PlayerSpawnEvent_Observers</div>
+<div class="field-item"><span class="field-type">Action<Player></span> MyPlayerJoinEvent_Observers</div>
+<div class="field-item"><span class="field-type">Action<Player></span> MyPlayerSpawnEvent_Observers</div>
+<div class="field-item"><span class="field-type">GameManager.DamageEvent</span> MyPlayerCasueDamageEvent_Observers</div>
+<div class="field-item"><span class="field-type">GameManager.DamageEvent</span> MyPlayerGetDamageEvent_Observers</div>
+<div class="field-item"><span class="field-type">GameManager.DeathEvent</span> MyPlayerKillEvent_Observers</div>
+<div class="field-item"><span class="field-type">GameManager.DeathEvent</span> MyPlayerDeathEvent_Observers</div>
+<div class="field-item"><span class="field-type">Action</span> NewGameRoundStart_Observer</div>
+<div class="field-item"><span class="field-type">Action<Weapon></span> GetGrenadeFromBag_Observer</div>
+<div class="field-item"><span class="field-type">List<RecyclableObject></span> recyclableObjects</div>
+<div class="field-item"><span class="field-type">float</span> dropWpnRecycleTime</div>
+<div class="field-item"><span class="field-type">int</span> playerCameraChanger</div>
+</div>
+
+<div class="class-section"><div class="class-section-title">Methods 方法 (32)</div>
+<div class="method-item"><span class="method-return">Team</span> <span class="method-name">get_myJoinTeam</span>()</div>
+<div class="method-item"><span class="method-return">bool</span> <span class="method-name">get_isNanoMode</span>()</div>
+<div class="method-item"><span class="method-return">int</span> <span class="method-name">get_playerCount_BL</span>()</div>
+<div class="method-item"><span class="method-return">int</span> <span class="method-name">get_alivePlayerCount_BL</span>()</div>
+<div class="method-item"><span class="method-return">int</span> <span class="method-name">get_playerCount_GR</span>()</div>
+<div class="method-item"><span class="method-return">int</span> <span class="method-name">get_alivePlayerCount_GR</span>()</div>
+<div class="method-item"><span class="method-return">Player</span> <span class="method-name">get_ace</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">set_ace</span>(Player value)</div>
+<div class="method-item"><span class="method-return">bool</span> <span class="method-name">get_gameRoundOver</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">set_gameRoundOver</span>(bool value)</div>
+<div class="method-item"><span class="method-return">bool</span> <span class="method-name">TryGetAce</span>(Player player)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">ResetRound</span>(float delay = 0)</div>
+<div class="method-item"><span class="method-return">IEnumerator</span> <span class="method-name">RestRoundCoroutine</span>(float delay)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">AddPlayers</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">Test</span>()</div>
+<div class="method-item"><span class="method-return">Player</span> <span class="method-name">AddPlayer</span>(bool isBot, Team team)</div>
+<div class="method-item"><span class="method-return">int</span> <span class="method-name">GetSparePlayerIndex</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">LoadWeapon</span>(WeaponAsset asset)</div>
+<div class="method-item"><span class="method-return">Weapon</span> <span class="method-name">GiveWeapon</span>(Player player, int weaponIndex, bool autoGiveUp, bool autoSelect)</div>
+<div class="method-item"><span class="method-return">Weapon</span> <span class="method-name">GiveWeaponByBag</span>(Player player, int weaponIndex)</div>
+<div class="method-item"><span class="method-return">Weapon</span> <span class="method-name">GetWeapon</span>(int weaponIndex)</div>
+<div class="method-item"><span class="method-return">bool</span> <span class="method-name">GetWpnData</span>(int weaponIndex, out WeaponData data)</div>
+<div class="method-item"><span class="method-return">string</span> <span class="method-name">GetWpnName</span>(int weaponIndex)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">SetCharacter</span>(Player player, string characterName)</div>
+<div class="method-item"><span class="method-return">CharacterModel</span> <span class="method-name">GetCharacter</span>(string characterName)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">TakeDamage</span>(DamageEventData data)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">DeathEventBroadcast</span>(DeathEventData eventData)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">ReturnLobby</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">GameRoundEnd</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">AddRecyclableObject</span>(RecyclableObject obj)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">RemoveRecyclableObject</span>(RecyclableObject obj)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">ClearRecyclableObject</span>()</div>
+</div>
+
+</div>
+<div class="class-card" style="border-left:4px solid #1b5e20">
+<div class="class-header"><span class="class-name">MapManager</span><span class="class-parent">: Singleton</span></div>
+<div class="class-section"><div class="class-section-title">Fields 字段 (19)</div>
+<div class="field-item"><span class="field-type">SpawnPointDictionary</span> pointDic</div>
+<div class="field-item"><span class="field-type">SpawnPoint[]</span> SP_BL</div>
+<div class="field-item"><span class="field-type">SpawnPoint[]</span> SP_GR</div>
+<div class="field-item"><span class="field-type">SpawnPoint[]</span> SP_Netural</div>
+<div class="field-item"><span class="field-type">SpawnPoint[]</span> SP_SupplyBox</div>
+<div class="field-item"><span class="field-type">SpawnPoint[]</span> SP_RedBox</div>
+<div class="field-item"><span class="field-type">SpawnPoint[]</span> SP_BlueBox</div>
+<div class="field-item"><span class="field-type">int</span> SPID_BL</div>
+<div class="field-item"><span class="field-type">int</span> SPID_GR</div>
+<div class="field-item"><span class="field-type">int</span> SPID_Netural</div>
+<div class="field-item"><span class="field-type">List<int></span> IDList_SupplyBox</div>
+<div class="field-item"><span class="field-type">List<int></span> IDList_RedBox</div>
+<div class="field-item"><span class="field-type">List<int></span> IDList_BlueBox</div>
+<div class="field-item"><span class="field-type">int</span> mapGunIndex</div>
+<div class="field-item"><span class="field-type">Vector2Int</span> mapGunAmmo</div>
+<div class="field-item"><span class="field-type">bool</span> knifeHitStun</div>
+<div class="field-item"><span class="field-type">Texture2D</span> minimap</div>
+<div class="field-item"><span class="field-type">Vector3</span> radarOriginPos</div>
+<div class="field-item"><span class="field-type">float</span> pixelPerDistance</div>
+</div>
+
+<div class="class-section"><div class="class-section-title">Methods 方法 (6)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">MapGunInit</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">NewGameRoundStart</span>()</div>
+<div class="method-item"><span class="method-return">SpawnPoint</span> <span class="method-name">GetSpawnPoint</span>(Team team)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">OnDrawGizmos</span>()</div>
+<div class="method-item"><span class="method-return">int</span> <span class="method-name">GetSupplyBoxPoint</span>(out SpawnPoint point, SupplyBox.Type type)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">ReleaseSupplyBoxPoint</span>(int index, SupplyBox.Type boxType)</div>
+</div>
+
+</div>
+<div class="class-card" style="border-left:4px solid #1b5e20">
+<div class="class-header"><span class="class-name">SpawnPoint</span></div>
+
+
+</div>
+<div class="class-card" style="border-left:4px solid #1b5e20">
+<div class="class-header"><span class="class-name">MapGun</span><span class="class-parent">: MapTrigger</span></div>
+<div class="class-section"><div class="class-section-title">Fields 字段 (9)</div>
+<div class="field-item"><span class="field-type">Sprite</span> otherOccupiedTip</div>
+<div class="field-item"><span class="field-type">GameObject</span> leg</div>
+<div class="field-item"><span class="field-type">BoxCollider</span> legCollider</div>
+<div class="field-item"><span class="field-type">Transform</span> setPos</div>
+<div class="field-item"><span class="field-type">Player</span> occupier</div>
+<div class="field-item"><span class="field-type">Weapon</span> weapon</div>
+<div class="field-item"><span class="field-type">Vector3</span> defaultEuler</div>
+<div class="field-item"><span class="field-type">Vector3</span> wpnPos</div>
+<div class="field-item"><span class="field-type">Vector3</span> wpnEuler</div>
+</div>
+
+<div class="class-section"><div class="class-section-title">Methods 方法 (8)</div>
+<div class="method-item"><span class="method-return">QVModel</span> <span class="method-name">get_weaponMdl</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">set_weaponMdl</span>(QVModel value)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">Active</span>(Player player)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">OnPlayerExit</span>(Player player)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">OnMapWpnRecycle</span>()</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">ResetEuler</span>()</div>
+<div class="method-item"><span class="method-return">bool</span> <span class="method-name">CanInteract</span>()</div>
+<div class="method-item"><span class="method-return">Sprite</span> <span class="method-name">GetTipSprite</span>()</div>
+</div>
+
+</div>
+<div class="class-card" style="border-left:4px solid #1b5e20">
+<div class="class-header"><span class="class-name">SupplyBox</span><span class="class-parent">: RecyclableObject</span></div>
+<div class="class-section"><div class="class-section-title">Fields 字段 (5)</div>
+<div class="field-item"><span class="field-type">SupplyBox.Type</span> type</div>
+<div class="field-item"><span class="field-type">int</span> occupiedPosID</div>
+<div class="field-item"><span class="field-type">List<SupplyBox></span> BoxList_Yellow</div>
+<div class="field-item"><span class="field-type">List<SupplyBox></span> BoxList_Red</div>
+<div class="field-item"><span class="field-type">List<SupplyBox></span> BoxList_Blue</div>
+</div>
+
+<div class="class-section"><div class="class-section-title">Methods 方法 (11)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">OnTriggerStay</span>(Collider other)</div>
+<div class="method-item"><span class="method-return">bool</span> <span class="method-name">CanPickUp</span>(Player player)</div>
+<div class="method-item"><span class="method-return">bool</span> <span class="method-name">CanPickUpRedBox</span>(Player player)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">SetPos</span>(int index, SpawnPoint point)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">Recycle</span>(bool roundRecycle)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">Work</span>()</div>
+<div class="method-item"><span class="method-return">List<SupplyBox></span> <span class="method-name">GetBoxList</span>(SupplyBox.Type boxType)</div>
+<div class="method-item"><span class="method-return">SupplyBox</span> <span class="method-name">GetRandomBox</span>(SupplyBox.Type boxType)</div>
+<div class="method-item"><span class="method-return">SupplyBox</span> <span class="method-name">GetNearestBox</span>(SupplyBox.Type boxType, Vector3 pos)</div>
+<div class="method-item"><span class="method-return">void</span> <span class="method-name">ClearBoxList</span>()</div>
+<div class="method-item"><span class="method-return">SupplyBox.Type</span> <span class="method-name">GetBoxType</span>()</div>
+</div>
+
+</div>
+</div>
+
+</div>
+
+<script>
+function switchTab(tabId){
+    document.querySelectorAll('.tab-content').forEach(t=>t.classList.remove('active'));
+    document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+    document.getElementById(tabId).classList.add('active');
+    event.target.classList.add('active');
+}
+</script>
+</body>
+</html>
