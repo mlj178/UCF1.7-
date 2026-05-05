@@ -60,7 +60,8 @@
 
     var gm = null;
     var mm = null;
-    var spawn = null;
+    // 硬编码 SP_GR(潜伏者/佣兵)出生点坐标 — 不依赖 MM 读取
+    var spawn = { x: 13.6, y: 14.1, z: 0.1 };
     var ntp = false;
     var tn = 0;
 
@@ -179,16 +180,6 @@
         L('i', '');
         L('i', '╔══ 传送 #' + tn + ' ══╗');
         getGM(); getMM();
-        if (!spawn && mm) {
-            try {
-                var arr = mm.add(O.MM_SP_GR).readPointer();
-                var len = (arr && !arr.isNull()) ? arr.add(0xC).readU32() : 0;
-                if (len > 0) { var p = arr.add(0x10); spawn = { x: p.readFloat(), y: p.add(4).readFloat(), z: p.add(8).readFloat() }; }
-                if (!spawn) { arr = mm.add(O.MM_SP_BL).readPointer(); len = (arr && !arr.isNull()) ? arr.add(0xC).readU32() : 0;
-                    if (len > 0) { var p = arr.add(0x10); spawn = { x: p.readFloat(), y: p.add(4).readFloat(), z: p.add(8).readFloat() }; } }
-            } catch(e) {}
-        }
-        if (!spawn) spawn = { x: 0, y: 0, z: 0 };
         if (!gm || !mm) { L('e', 'GM/MM 未就绪'); return; }
 
         L('i', '出生点: (' + spawn.x.toFixed(1) + ',' + spawn.y.toFixed(1) + ',' + spawn.z.toFixed(1) + ')');
@@ -258,16 +249,6 @@
     setTimeout(function() {
         if (!gm) { L('i', '⏳ 尝试获取 GM...'); getGM(); }
         if (!mm) { getMM(); }
-        if (!spawn && mm) {
-            try {
-                var arr = mm.add(O.MM_SP_GR).readPointer();
-                var len = (arr && !arr.isNull()) ? arr.add(0xC).readU32() : 0;
-                if (len > 0) { var p = arr.add(0x10); spawn = { x: p.readFloat(), y: p.add(4).readFloat(), z: p.add(8).readFloat() }; }
-                if (!spawn) { arr = mm.add(O.MM_SP_BL).readPointer(); len = (arr && !arr.isNull()) ? arr.add(0xC).readU32() : 0;
-                    if (len > 0) { var p = arr.add(0x10); spawn = { x: p.readFloat(), y: p.add(4).readFloat(), z: p.add(8).readFloat() }; } }
-                if (spawn) L('i', '  出生点: (' + spawn.x.toFixed(1) + ',' + spawn.y.toFixed(1) + ',' + spawn.z.toFixed(1) + ')');
-            } catch(e) {}
-        }
     }, 3000);
 
     L('i', '安装 MapGunInit...');
@@ -275,14 +256,7 @@
         Interceptor.attach(B.add(R.MM_MapGun), { onEnter: function(a) {
             if (mm) return;
             mm = a[0]; L('i', '✅ MM: ' + mm);
-            try {
-                var arr = mm.add(O.MM_SP_GR).readPointer();
-                var len = (arr && !arr.isNull()) ? arr.add(0xC).readU32() : 0;
-                if (len > 0) { var p = arr.add(0x10); spawn = { x: p.readFloat(), y: p.add(4).readFloat(), z: p.add(8).readFloat() }; }
-                if (!spawn) { arr = mm.add(O.MM_SP_BL).readPointer(); len = (arr && !arr.isNull()) ? arr.add(0xC).readU32() : 0;
-                    if (len > 0) { var p = arr.add(0x10); spawn = { x: p.readFloat(), y: p.add(4).readFloat(), z: p.add(8).readFloat() }; } }
-                L('i', '  出生点: ' + (spawn ? '(' + spawn.x.toFixed(1) + ',' + spawn.y.toFixed(1) + ',' + spawn.z.toFixed(1) + ')' : '无'));
-            } catch(e) {}
+            L('i', '  出生点坐标: (' + spawn.x.toFixed(1) + ',' + spawn.y.toFixed(1) + ',' + spawn.z.toFixed(1) + ') - 硬编码 SP_GR');
         }});
         L('i', 'OK');
     } catch(e) { L('e', 'MapGunInit failed'); }
@@ -291,14 +265,13 @@
     try {
         Interceptor.attach(B.add(R.P_Update), { onEnter: function(a) {
             if (!ntp) return; ntp = false;
-            if (!gm || !mm || !spawn) { L('w', '未就绪'); return; }
+            if (!gm || !mm) { L('w', '未就绪'); return; }
             executeTeleport();
         }});
         L('i', 'OK');
     } catch(e) { L('e', 'Player.Update failed'); }
 
     function teleportSinglePlayer(pp, label) {
-        if (!spawn) { L('w', '出生点未就绪'); return; }
         try {
             if (isMy(pp, ptr(0))) { L('i', label + ' → 自己, 跳过'); return; }
             if (isHuman(pp)) { L('i', label + ' → 真人, 跳过'); return; }
@@ -323,7 +296,6 @@
         teleport: function() {
             getGM(); getMM();
             if (!gm || !mm) { L('w', 'GM/MM 未就绪'); return 'ERR'; }
-            if (!spawn) spawn = { x: 0, y: 0, z: 0 };
             ntp = true; L('i', '★ ★ ★ 传送 ★ ★ ★'); return 'OK';
         },
         status: function() {
