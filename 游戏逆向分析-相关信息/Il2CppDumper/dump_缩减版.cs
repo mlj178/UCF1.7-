@@ -1,4 +1,4 @@
-ï»¿internal class <Module> 
+internal class <Module> 
 {}
 [CompilerGeneratedAttribute] 
 internal sealed class <>f__AnonymousType0<<message>j__TPar> 
@@ -973,6 +973,229 @@ public class CannotUnloadAppDomainException : SystemException
 }
 
 public sealed class ConsoleCancelEventHandler : MulticastDelegate 
+public struct Char : IComparable, IConvertible, IComparable<char>, IEquatable<char> // TypeDefIndex: 152
+{
+	// Fields
+	internal char m_value;
+	public const char MaxValue = '\xffff';
+	public const char MinValue = '\x0';
+	private static readonly byte[] categoryForLatin1;
+	internal const int UNICODE_PLANE00_END = 65535;
+	internal const int UNICODE_PLANE01_START = 65536;
+	internal const int UNICODE_PLANE16_END = 1114111;
+	internal const int HIGH_SURROGATE_START = 55296;
+	internal const int LOW_SURROGATE_END = 57343;
+	// Methods
+	private static bool IsLatin1(char ch) { }
+	private static bool IsAscii(char ch) { }
+	private static UnicodeCategory GetLatin1UnicodeCategory(char ch) { }
+	public override int GetHashCode() { }
+	public override bool Equals(object obj) { }
+	public bool Equals(char obj) { }
+	public int CompareTo(object value) { }
+	public int CompareTo(char value) { }
+	public override string ToString() { }
+	public string ToString(IFormatProvider provider) { }
+	public static string ToString(char c) { }
+	public static char Parse(string s) { }
+	public static bool IsDigit(char c) { }
+	internal static bool CheckLetter(UnicodeCategory uc) { }
+	public static bool IsLetter(char c) { }
+	private static bool IsWhiteSpaceLatin1(char c) { }
+	public static bool IsWhiteSpace(char c) { }
+	public static bool IsUpper(char c) { }
+	public static bool IsLower(char c) { }
+	internal static bool CheckLetterOrDigit(UnicodeCategory uc) { }
+	public static bool IsLetterOrDigit(char c) { }
+	public static char ToUpper(char c, CultureInfo culture) { }
+	public static char ToUpper(char c) { }
+	public static char ToUpperInvariant(char c) { }
+	public static char ToLower(char c, CultureInfo culture) { }
+	public static char ToLower(char c) { }
+	public static char ToLowerInvariant(char c) { }
+	public TypeCode GetTypeCode() { }
+	private bool System.IConvertible.ToBoolean(IFormatProvider provider) { }
+	private char System.IConvertible.ToChar(IFormatProvider provider) { }
+	private sbyte System.IConvertible.ToSByte(IFormatProvider provider) { }
+	private byte System.IConvertible.ToByte(IFormatProvider provider) { }
+	private short System.IConvertible.ToInt16(IFormatProvider provider) { }
+	private ushort System.IConvertible.ToUInt16(IFormatProvider provider) { }
+	private int System.IConvertible.ToInt32(IFormatProvider provider) { }
+	private uint System.IConvertible.ToUInt32(IFormatProvider provider) { }
+	private long System.IConvertible.ToInt64(IFormatProvider provider) { }
+	private ulong System.IConvertible.ToUInt64(IFormatProvider provider) { }
+	private float System.IConvertible.ToSingle(IFormatProvider provider) { }
+	private double System.IConvertible.ToDouble(IFormatProvider provider) { }
+	private Decimal System.IConvertible.ToDecimal(IFormatProvider provider) { }
+	private DateTime System.IConvertible.ToDateTime(IFormatProvider provider) { }
+	private object System.IConvertible.ToType(Type type, IFormatProvider provider) { }
+	internal static bool CheckNumber(UnicodeCategory uc) { }
+	public static bool IsNumber(char c) { }
+	public static bool IsSurrogate(char c) { }
+	public static bool IsSurrogate(string s, int index) { }
+	public static UnicodeCategory GetUnicodeCategory(char c) { }
+	public static UnicodeCategory GetUnicodeCategory(string s, int index) { }
+	public static bool IsHighSurrogate(char c) { }
+	public static bool IsHighSurrogate(string s, int index) { }
+	public static bool IsLowSurrogate(char c) { }
+	public static bool IsSurrogatePair(char highSurrogate, char lowSurrogate) { }
+	public static int ConvertToUtf32(char highSurrogate, char lowSurrogate) { }
+	private static void .cctor() { }
+}
+// Namespace: System
+[ComVisibleAttribute]
+[Serializable]
+public sealed class CharEnumerator : IEnumerator, ICloneable, IEnumerator<char>, IDisposable // TypeDefIndex: 153
+{
+	// Fields
+	private string str;
+	private int index;
+	private char currentElement;
+	// Properties
+	private object System.Collections.IEnumerator.Current { get; }
+	public char Current { get; }
+	// Methods
+	internal void .ctor(string str) { }
+	public object Clone() { }
+	public bool MoveNext() { }
+	public void Dispose() { }
+	private object System.Collections.IEnumerator.get_Current() { }
+	public char get_Current() { }
+	public void Reset() { }
+	internal void .ctor() { }
+}
+// Namespace: System
+[AttributeUsageAttribute]
+[ComVisibleAttribute]
+[Serializable]
+public sealed class CLSCompliantAttribute : Attribute // TypeDefIndex: 154
+{
+	// Fields
+	private bool m_compliant;
+	// Methods
+	public void .ctor(bool isCompliant) { }
+}
+// Namespace: System
+public sealed class ConsoleCancelEventHandler : MulticastDelegate // TypeDefIndex: 155
+{
+	// Methods
+public enum ConsoleColor // TypeDefIndex: 157
+{
+	// Fields
+	public int value__;
+	public const ConsoleColor Black = 0;
+	public const ConsoleColor DarkBlue = 1;
+	public const ConsoleColor DarkGreen = 2;
+	public const ConsoleColor DarkCyan = 3;
+	public const ConsoleColor DarkRed = 4;
+	public const ConsoleColor DarkMagenta = 5;
+	public const ConsoleColor DarkYellow = 6;
+	public const ConsoleColor Gray = 7;
+	public const ConsoleColor DarkGray = 8;
+	public const ConsoleColor Blue = 9;
+	public const ConsoleColor Green = 10;
+	public const ConsoleColor Cyan = 11;
+	public const ConsoleColor Red = 12;
+	public const ConsoleColor Magenta = 13;
+	public const ConsoleColor Yellow = 14;
+	public const ConsoleColor White = 15;
+}
+// Namespace: System
+public enum ConsoleKey // TypeDefIndex: 158
+{
+	// Fields
+	public int value__;
+	public const ConsoleKey Backspace = 8;
+	public const ConsoleKey Tab = 9;
+	public const ConsoleKey Clear = 12;
+	public const ConsoleKey Enter = 13;
+	public const ConsoleKey Pause = 19;
+	public const ConsoleKey Escape = 27;
+	public const ConsoleKey Spacebar = 32;
+	public const ConsoleKey PageUp = 33;
+	public const ConsoleKey PageDown = 34;
+	public const ConsoleKey End = 35;
+	public const ConsoleKey Home = 36;
+	public const ConsoleKey LeftArrow = 37;
+	public const ConsoleKey UpArrow = 38;
+	public const ConsoleKey RightArrow = 39;
+	public const ConsoleKey DownArrow = 40;
+	public const ConsoleKey Select = 41;
+	public const ConsoleKey Print = 42;
+	public const ConsoleKey Execute = 43;
+	public const ConsoleKey PrintScreen = 44;
+	public const ConsoleKey Insert = 45;
+	public const ConsoleKey Delete = 46;
+	public const ConsoleKey Help = 47;
+	public const ConsoleKey D0 = 48;
+	public const ConsoleKey D1 = 49;
+	public const ConsoleKey D2 = 50;
+	public const ConsoleKey D3 = 51;
+	public const ConsoleKey D4 = 52;
+	public const ConsoleKey D5 = 53;
+	public const ConsoleKey D6 = 54;
+	public const ConsoleKey D7 = 55;
+	public const ConsoleKey D8 = 56;
+	public const ConsoleKey D9 = 57;
+	public const ConsoleKey A = 65;
+	public const ConsoleKey B = 66;
+	public const ConsoleKey C = 67;
+	public const ConsoleKey D = 68;
+	public const ConsoleKey E = 69;
+	public const ConsoleKey F = 70;
+	public const ConsoleKey G = 71;
+	public const ConsoleKey H = 72;
+	public const ConsoleKey I = 73;
+	public const ConsoleKey J = 74;
+	public const ConsoleKey K = 75;
+	public const ConsoleKey L = 76;
+	public const ConsoleKey M = 77;
+	public const ConsoleKey N = 78;
+	public const ConsoleKey O = 79;
+	public const ConsoleKey P = 80;
+	public const ConsoleKey Q = 81;
+	public const ConsoleKey R = 82;
+	public const ConsoleKey S = 83;
+	public const ConsoleKey T = 84;
+	public const ConsoleKey U = 85;
+	public const ConsoleKey V = 86;
+	public const ConsoleKey W = 87;
+	public const ConsoleKey X = 88;
+	public const ConsoleKey Y = 89;
+	public const ConsoleKey Z = 90;
+	public const ConsoleKey LeftWindows = 91;
+	public const ConsoleKey RightWindows = 92;
+	public const ConsoleKey Applications = 93;
+	public const ConsoleKey Sleep = 95;
+	public const ConsoleKey NumPad0 = 96;
+	public const ConsoleKey NumPad1 = 97;
+	public const ConsoleKey NumPad2 = 98;
+	public const ConsoleKey NumPad3 = 99;
+	public const ConsoleKey NumPad4 = 100;
+	public const ConsoleKey NumPad5 = 101;
+	public const ConsoleKey NumPad6 = 102;
+	public const ConsoleKey NumPad7 = 103;
+	public const ConsoleKey NumPad8 = 104;
+	public const ConsoleKey NumPad9 = 105;
+	public const ConsoleKey Multiply = 106;
+	public const ConsoleKey Add = 107;
+	public const ConsoleKey Separator = 108;
+	public const ConsoleKey Subtract = 109;
+	public const ConsoleKey Decimal = 110;
+	public const ConsoleKey Divide = 111;
+	public const ConsoleKey F1 = 112;
+	public const ConsoleKey F2 = 113;
+	public const ConsoleKey F3 = 114;
+	public const ConsoleKey F4 = 115;
+	public const ConsoleKey F5 = 116;
+	public const ConsoleKey F6 = 117;
+	public const ConsoleKey F7 = 118;
+	public const ConsoleKey F8 = 119;
+	public const ConsoleKey F9 = 120;
+	public const ConsoleKey F10 = 121;
+	public const ConsoleKey F11 = 122;
+	public const ConsoleKey F12 = 123;
+	public const ConsoleKey F13 = 124;
 {
 	public void .ctor(object object, IntPtr method) { }
 [Serializable]
@@ -1228,8 +1451,8 @@ public struct Double : IComparable, IFormattable, IConvertible, IComparable<doub
 	public const double MinValue = -1.7976931348623157E+308;
 	public const double MaxValue = 1.7976931348623157E+308;
 	public const double Epsilon = 5E-324;
-	public const double NegativeInfinity = -éˆ­?
-	public const double PositiveInfinity = éˆ­?
+	public const double NegativeInfinity = -âˆ?
+	public const double PositiveInfinity = âˆ?
 	public const double NaN = NaN;
 	internal static double NegativeZero; 
 [Serializable]
@@ -1978,8 +2201,8 @@ public struct Single : IComparable, IFormattable, IConvertible, IComparable<floa
 	public const float MinValue = -3.4028235E+38;
 	public const float Epsilon = 1E-45;
 	public const float MaxValue = 3.4028235E+38;
-	public const float PositiveInfinity = éˆ­?
-	public const float NegativeInfinity = -éˆ­?
+	public const float PositiveInfinity = âˆ?
+	public const float NegativeInfinity = -âˆ?
 	public const float NaN = NaN;
 [ComVisibleAttribute] 
 [Serializable]
@@ -6321,19 +6544,19 @@ public sealed class DateTimeFormatInfo : ICloneable, IFormatProvider
 	private const string invariantTimeSeparator = ":";
 	internal const string IgnorablePeriod = ".";
 	internal const string IgnorableComma = ",";
-	internal const string CJKYearSuff = "éªž?;
-	internal const string CJKMonthSuff = "éˆ?;
-	internal const string CJKDaySuff = "éƒ?;
-	internal const string KoreanYearSuff = "é›²?;
-	internal const string KoreanMonthSuff = "éž—?;
-	internal const string KoreanDaySuff = "éžš?;
-	internal const string KoreanHourSuff = "éž?;
-	internal const string KoreanMinuteSuff = "æ”µ?;
-	internal const string KoreanSecondSuff = "é½‘?;
-	internal const string CJKHourSuff = "é…?;
-	internal const string ChineseHourSuff = "éƒ?;
-	internal const string CJKMinuteSuff = "é’?;
-	internal const string CJKSecondSuff = "ç»‰?;
+	internal const string CJKYearSuff = "å¹?;
+	internal const string CJKMonthSuff = "æœ?;
+	internal const string CJKDaySuff = "æ—?;
+	internal const string KoreanYearSuff = "ë…?;
+	internal const string KoreanMonthSuff = "ì›?;
+	internal const string KoreanDaySuff = "ì?;
+	internal const string KoreanHourSuff = "ì‹?;
+	internal const string KoreanMinuteSuff = "ë¶?;
+	internal const string KoreanSecondSuff = "ì´?;
+	internal const string CJKHourSuff = "æ™?;
+	internal const string ChineseHourSuff = "æ—?;
+	internal const string CJKMinuteSuff = "åˆ?;
+	internal const string CJKSecondSuff = "ç§?;
 	internal const string LocalTimeMark = "T";
 	internal const string KoreanLangName = "ko";
 	internal const string JapaneseLangName = "ja";
@@ -32121,7 +32344,7 @@ internal static class Debugger.Sequence
 public static class Debugger 
 {
 	private static int _logPriority; 
-	private const string _LogPrefix = "<color=#0099bc><b>DOTWEEN éˆ»?</b></color>";
+	private const string _LogPrefix = "<color=#0099bc><b>DOTWEEN â–?</b></color>";
 	public static int logPriority { get; }
 [CompilerGeneratedAttribute] 
 private sealed class DOTweenComponent.<WaitForCompletion>d__17 : IEnumerator<object>, IEnumerator, IDisposable 
