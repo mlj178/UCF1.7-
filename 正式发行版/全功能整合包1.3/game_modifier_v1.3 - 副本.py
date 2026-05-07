@@ -617,6 +617,10 @@ FRIDA_JS = r"""
         enabled = false;
         sendLog('info', '剑气化丝', '已禁用');
         sendStatus('range', false);
+      },
+      setRange: function(multiplier) {
+        KNIFE_RANGE_MULTIPLIER = multiplier;
+        sendLog('info', '剑气化丝', '攻击距离倍率已更新: ' + multiplier + 'x');
       }
     };
   })();
@@ -1332,6 +1336,8 @@ FRIDA_JS = r"""
       } else if (featureName === 'gravity_config') {
         // gravity_config: { g, j, m }
         gravityJumpModule.setconfig(enable.g, enable.j, enable.m);
+      } else if (featureName === 'range_config') {
+        rangeModule.setRange(enable);
       } else if (modules[featureName]) {
         var actionText = enable ? '已开启' : '已关闭';
         sendLog('success', '系统', featureName + ' ' + actionText);
@@ -1377,6 +1383,10 @@ FRIDA_JS = r"""
     },
     resetRound: function() {
       return JSON.stringify(roundSkipModule.reset());
+    },
+    setRange: function(multiplier) {
+      rangeModule.setRange(multiplier);
+      return JSON.stringify({ ok: true });
     }
   };
 
@@ -1398,15 +1408,18 @@ class GameModifierApp(ctk.CTk):
     def __init__(self):
         super().__init__()
         self.title("游戏修改器控制台 - 全功能整合包 v1.3")
-        self.geometry("800x920+10+10")
-        self.resizable(False, False)
-        self.minsize(800, 920)
+        self.geometry("700x750+10+10")
+        self.resizable(True, True)
+        self.attributes('-topmost', True)
+        self.attributes('-alpha', 0.92)
         self.session = None
         self.script = None
         self._connecting = False
         self._ready = False
         self._lock = threading.Lock()
         self._stop = False
+        self._collapsed = False
+        self._saved_geometry = "700x750+10+10"
         self._pid = None
         self._features = {
             'knife': False,
@@ -1421,6 +1434,7 @@ class GameModifierApp(ctk.CTk):
         }
         self._knife_speed = 5.0
         self._movespeed = 3.0
+        self._range_mult = 50.0
         self._gravity = 1.0
         self._jump = 1.0
         self._gravity_mode = 'player_only'
@@ -1430,20 +1444,27 @@ class GameModifierApp(ctk.CTk):
         self.protocol("WM_DELETE_WINDOW", self._on_close)
 
         self._build_ui()
-        self._log("游戏修改器控制台 v1.3 — 全功能整合包（新增轻重力/高跳 + 回合跳过）")
+        self._log("游戏修改器控制台 v1.3 — 全功能整合包")
         self._log("正在检测游戏进程...")
 
         threading.Thread(target=self._auto_connect_bg, daemon=True).start()
         threading.Thread(target=self._monitor_connection, daemon=True).start()
 
     def _build_ui(self):
-        # ── 顶部：状态栏 ──
+        # 说明文字自动匹配高度：15号字体、两列卡片宽约290px，每行约18个中文字
+        def _dh(s): return 28 if len(s) <= 18 else (38 if len(s) <= 30 else 48)
+
+        # ── 顶部：状态栏 + 折叠按钮 ──
         self.status_frame = ctk.CTkFrame(self, corner_radius=8, fg_color="#2b2b2b")
         self.status_frame.pack(fill="x", padx=12, pady=(12, 6))
         self.status_dot = ctk.CTkLabel(self.status_frame, text="⚫", font=("Arial", 18))
         self.status_dot.pack(side="left", padx=(12, 4))
         self.status_label = ctk.CTkLabel(self.status_frame, text="等待游戏启动...", font=("Microsoft YaHei", 14))
         self.status_label.pack(side="left", padx=4)
+        self.collapse_btn = ctk.CTkButton(self.status_frame, text="▼ 折叠界面", width=100, height=28,
+                                            font=("Microsoft YaHei", 12), command=self._toggle_collapse,
+                                            fg_color="#3a3a3a", hover_color="#555555")
+        self.collapse_btn.pack(side="right", padx=(4, 8))
         self.pid_label = ctk.CTkLabel(self.status_frame, text="", font=("Microsoft YaHei", 11), text_color="#888")
         self.pid_label.pack(side="right", padx=12)
 
@@ -1455,169 +1476,161 @@ class GameModifierApp(ctk.CTk):
                                        font=("Microsoft YaHei", 11), text_color="#ffcc00", wraplength=760)
         self.hint_label.pack(padx=8, pady=4)
 
-        # ── 功能选择区（使用 Scrollable 框架以容纳所有功能）─
-        self.sel_scroll = ctk.CTkScrollableFrame(self, corner_radius=8, height=700)
-        self.sel_scroll.pack(fill="x", padx=12, pady=4)
+        # ── 功能选择区｜分类选项卡 ──
+        self.tab_view = ctk.CTkTabview(self, corner_radius=8)
+        self.tab_view.pack(fill="both", padx=12, pady=4, expand=True)
+        tab_weapon = self.tab_view.add("武器")
+        tab_player = self.tab_view.add("人物属性")
+        tab_other = self.tab_view.add("其他")
 
-        # ========== 原有功能 1: 快刀 ==========
-        knife_frame = ctk.CTkFrame(self.sel_scroll, corner_radius=6, fg_color="#3a1a1a")
-        knife_frame.pack(fill="x", padx=4, pady=(4, 4))
+        # 每个选项卡内嵌可滚动容器
+        tab_weapon_scroll = ctk.CTkScrollableFrame(tab_weapon, corner_radius=0, fg_color="transparent")
+        tab_weapon_scroll.pack(fill="both", expand=True, padx=2, pady=2)
+        tab_player_scroll = ctk.CTkScrollableFrame(tab_player, corner_radius=0, fg_color="transparent")
+        tab_player_scroll.pack(fill="both", expand=True, padx=2, pady=2)
+        tab_other_scroll = ctk.CTkScrollableFrame(tab_other, corner_radius=0, fg_color="transparent")
+        tab_other_scroll.pack(fill="both", expand=True, padx=2, pady=2)
+
+        # ===================== 武器 Tab =====================
+        # 两列网格布局
+        for i in range(2):
+            tab_weapon_scroll.grid_columnconfigure(i, weight=1, uniform="wcol")
+
+        def make_card(parent, row, col, colspan, color):
+            f = ctk.CTkFrame(parent, corner_radius=6, fg_color=color)
+            f.grid(row=row, column=col, columnspan=colspan, sticky="ew", padx=3, pady=3)
+            return f
+
+        knife_frame = make_card(tab_weapon_scroll, 0, 0, 1, "#3a1a1a")
         top1 = ctk.CTkFrame(knife_frame, fg_color="transparent")
         top1.pack(fill="x", padx=8, pady=(6, 0))
         ctk.CTkLabel(top1, text="🔪 快刀", font=("Microsoft YaHei", 15, "bold"),
                      text_color="#ff6666").pack(side="left", padx=4)
-        self.knife_speed_var = ctk.StringVar(value="5")
-        self.knife_speed_combo = ctk.CTkComboBox(top1, values=["3", "5", "10"],
-                                                  variable=self.knife_speed_var,
-                                                  font=("Microsoft YaHei", 12),
-                                                  height=30, width=100, state="readonly",
-                                                  command=self._on_knife_speed_change)
-        self.knife_speed_combo.pack(side="left", padx=8)
-        ctk.CTkLabel(top1, text="x 速度", font=("Microsoft YaHei", 11),
-                     text_color="#cc8888").pack(side="left")
+        self.knife_speed_var = ctk.DoubleVar(value=5.0)
+        self.knife_slider = ctk.CTkSlider(top1, from_=1.0, to=10.0,
+                                            variable=self.knife_speed_var, number_of_steps=90,
+                                            command=self._on_knife_speed_change, width=90)
+        self.knife_slider.pack(side="left", padx=4)
+        self.knife_speed_label = ctk.CTkLabel(top1, text="5.0x", font=("Microsoft YaHei", 11),
+                                                text_color="#cc8888", width=35)
+        self.knife_speed_label.pack(side="left")
         self.knife_switch = ctk.CTkSwitch(top1, text="", font=("Microsoft YaHei", 12),
                                            width=50, command=lambda: self._toggle_feature('knife'))
-        self.knife_switch.pack(side="right", padx=12)
-        desc1 = ctk.CTkTextbox(knife_frame, font=("Microsoft YaHei", 20), height=88,
+        self.knife_switch.pack(side="right", padx=6)
+        desc1 = ctk.CTkTextbox(knife_frame, font=("Microsoft YaHei", 15), height=_dh("提升近战挥刀速度"),
                                 fg_color="#2a1010", text_color="#cc9999", wrap="word")
         desc1.pack(fill="x", padx=8, pady=(2, 6))
-        desc1.insert("0.0", "【说明】提升近战武器挥刀速度。3x~10x=刀锋如电，疾速连击。仅对玩家生效。")
+        desc1.insert("0.0", "提升近战挥刀速度")
         desc1.configure(state="disabled")
 
-        # ========== 原有功能 2: 无限时间 ==========
-        time_frame = ctk.CTkFrame(self.sel_scroll, corner_radius=6, fg_color="#1a2a1a")
-        time_frame.pack(fill="x", padx=4, pady=4)
-        top2 = ctk.CTkFrame(time_frame, fg_color="transparent")
-        top2.pack(fill="x", padx=8, pady=(6, 0))
-        ctk.CTkLabel(top2, text="⏰ 无限时间", font=("Microsoft YaHei", 15, "bold"),
-                     text_color="#66ff66").pack(side="left", padx=4)
-        self.time_switch = ctk.CTkSwitch(top2, text="", font=("Microsoft YaHei", 12),
-                                          width=50, command=lambda: self._toggle_feature('time'))
-        self.time_switch.pack(side="right", padx=12)
-        desc2 = ctk.CTkTextbox(time_frame, font=("Microsoft YaHei", 20), height=88,
-                                fg_color="#0e1a0e", text_color="#99dd99", wrap="word")
-        desc2.pack(fill="x", padx=8, pady=(2, 6))
-        desc2.insert("0.0", "【说明】锁定游戏时间为 99:59，永不结束。适用于所有限时模式，无需担心时间耗尽。")
-        desc2.configure(state="disabled")
-
-        # ========== 原有功能 3: 无后座力 ==========
-        recoil_frame = ctk.CTkFrame(self.sel_scroll, corner_radius=6, fg_color="#1a1a3a")
-        recoil_frame.pack(fill="x", padx=4, pady=4)
+        recoil_frame = make_card(tab_weapon_scroll, 0, 1, 1, "#1a1a3a")
         top3 = ctk.CTkFrame(recoil_frame, fg_color="transparent")
         top3.pack(fill="x", padx=8, pady=(6, 0))
         ctk.CTkLabel(top3, text="🎯 无后座力", font=("Microsoft YaHei", 15, "bold"),
                      text_color="#6688ff").pack(side="left", padx=4)
         self.recoil_switch = ctk.CTkSwitch(top3, text="", font=("Microsoft YaHei", 12),
                                             width=50, command=lambda: self._toggle_feature('recoil'))
-        self.recoil_switch.pack(side="right", padx=12)
-        desc3 = ctk.CTkTextbox(recoil_frame, font=("Microsoft YaHei", 20), height=88,
+        self.recoil_switch.pack(side="right", padx=6)
+        desc3 = ctk.CTkTextbox(recoil_frame, font=("Microsoft YaHei", 15), height=_dh("消除所有枪械后座力"),
                                 fg_color="#10102a", text_color="#9999dd", wrap="word")
         desc3.pack(fill="x", padx=8, pady=(2, 6))
-        desc3.insert("0.0", "【说明】消除所有枪械后座力。弹道稳如磐石，压枪不再需要，远距离连射精准无误。")
+        desc3.insert("0.0", "消除所有枪械后座力")
         desc3.configure(state="disabled")
 
-        # ========== 原有功能 4: 无限子弹 ==========
-        ammo_frame = ctk.CTkFrame(self.sel_scroll, corner_radius=6, fg_color="#3a2a1a")
-        ammo_frame.pack(fill="x", padx=4, pady=4)
+        ammo_frame = make_card(tab_weapon_scroll, 1, 0, 1, "#3a2a1a")
         top4 = ctk.CTkFrame(ammo_frame, fg_color="transparent")
         top4.pack(fill="x", padx=8, pady=(6, 0))
         ctk.CTkLabel(top4, text="🔫 无限子弹", font=("Microsoft YaHei", 15, "bold"),
                      text_color="#ffaa44").pack(side="left", padx=4)
         self.ammo_switch = ctk.CTkSwitch(top4, text="", font=("Microsoft YaHei", 12),
                                           width=50, command=lambda: self._toggle_feature('ammo'))
-        self.ammo_switch.pack(side="right", padx=12)
-        desc4 = ctk.CTkTextbox(ammo_frame, font=("Microsoft YaHei", 20), height=88,
+        self.ammo_switch.pack(side="right", padx=6)
+        desc4 = ctk.CTkTextbox(ammo_frame, font=("Microsoft YaHei", 15), height=_dh("子弹永不消耗"),
                                 fg_color="#2a1a0e", text_color="#ddbb99", wrap="word")
         desc4.pack(fill="x", padx=8, pady=(2, 6))
-        desc4.insert("0.0", "【说明】子弹永不消耗（替换 ConsumeAmmo）。射击不消耗弹匣子弹，无限火力压制。")
+        desc4.insert("0.0", "子弹永不消耗")
         desc4.configure(state="disabled")
 
-        # ========== 新增功能 5: 滑板鞋 ==========
-        move_frame = ctk.CTkFrame(self.sel_scroll, corner_radius=6, fg_color="#1a2a3a")
-        move_frame.pack(fill="x", padx=4, pady=4)
-        top5 = ctk.CTkFrame(move_frame, fg_color="transparent")
-        top5.pack(fill="x", padx=8, pady=(6, 0))
-        ctk.CTkLabel(top5, text="👟 滑板鞋", font=("Microsoft YaHei", 15, "bold"),
-                     text_color="#66aaff").pack(side="left", padx=4)
-        self.move_speed_var = ctk.StringVar(value="3")
-        self.move_speed_combo = ctk.CTkComboBox(top5, values=["3", "6"],
-                                                 variable=self.move_speed_var,
-                                                 font=("Microsoft YaHei", 12),
-                                                 height=30, width=80, state="readonly",
-                                                 command=self._on_move_speed_change)
-        self.move_speed_combo.pack(side="left", padx=8)
-        ctk.CTkLabel(top5, text="x 速度", font=("Microsoft YaHei", 11),
-                     text_color="#88aadd").pack(side="left")
-        self.move_switch = ctk.CTkSwitch(top5, text="", font=("Microsoft YaHei", 12),
-                                          width=50, command=lambda: self._toggle_feature('movespeed'))
-        self.move_switch.pack(side="right", padx=12)
-        desc5 = ctk.CTkTextbox(move_frame, font=("Microsoft YaHei", 20), height=88,
-                                fg_color="#0e1a28", text_color="#99bbdd", wrap="word")
-        desc5.pack(fill="x", padx=8, pady=(2, 6))
-        desc5.insert("0.0", "【说明】提升角色移动速度。3x=健步如飞，灵活走位；6x=如履平地，战场穿梭。仅对玩家生效。")
-        desc5.configure(state="disabled")
-
-        # ========== 新增功能 6: 无限弹匣+快速换弹 ==========
-        ammoplus_frame = ctk.CTkFrame(self.sel_scroll, corner_radius=6, fg_color="#3a1a2a")
-        ammoplus_frame.pack(fill="x", padx=4, pady=4)
+        ammoplus_frame = make_card(tab_weapon_scroll, 1, 1, 1, "#3a1a2a")
         top6 = ctk.CTkFrame(ammoplus_frame, fg_color="transparent")
         top6.pack(fill="x", padx=8, pady=(6, 0))
-        ctk.CTkLabel(top6, text="[弹匣] 无限弹匣 + 快速换弹", font=("Microsoft YaHei", 15, "bold"),
+        ctk.CTkLabel(top6, text="无限弹匣+快速换弹", font=("Microsoft YaHei", 15, "bold"),
                      text_color="#ff88cc").pack(side="left", padx=4)
-        ammoplus_font = ctk.CTkFont(family="Microsoft YaHei", size=12)
-        self.ammoplus_switch = ctk.CTkSwitch(top6, text="", font=ammoplus_font,
+        self.ammoplus_switch = ctk.CTkSwitch(top6, text="", font=("Microsoft YaHei", 12),
                                               width=50, command=lambda: self._toggle_feature('ammoplus'))
-        self.ammoplus_switch.pack(side="right", padx=12)
-        desc6 = ctk.CTkTextbox(ammoplus_frame, font=("Microsoft YaHei", 20), height=88,
+        self.ammoplus_switch.pack(side="right", padx=6)
+        desc6 = ctk.CTkTextbox(ammoplus_frame, font=("Microsoft YaHei", 15), height=_dh("无限弹匣=显示无限，换弹加快"),
                                 fg_color="#2a0e1a", text_color="#dd99bb", wrap="word")
         desc6.pack(fill="x", padx=8, pady=(2, 6))
-        desc6.insert("0.0", "【说明】无限弹匣=子弹永不耗尽，无需拾取弹药；快速换弹=换弹速度提升2倍，持续火力压制。全模式通用。")
+        desc6.insert("0.0", "弹匣显示无限，换弹速度加快")
         desc6.configure(state="disabled")
 
-        # ========== 新增功能 7: 剑气化丝 ==========
-        range_frame = ctk.CTkFrame(self.sel_scroll, corner_radius=6, fg_color="#1a2a1a")
-        range_frame.pack(fill="x", padx=4, pady=4)
+        range_frame = make_card(tab_weapon_scroll, 2, 0, 2, "#1a2a1a")
         top7 = ctk.CTkFrame(range_frame, fg_color="transparent")
         top7.pack(fill="x", padx=8, pady=(6, 0))
         ctk.CTkLabel(top7, text="⚔️ 剑气化丝", font=("Microsoft YaHei", 15, "bold"),
                      text_color="#66ff88").pack(side="left", padx=4)
-        range_font = ctk.CTkFont(family="Microsoft YaHei", size=12)
-        self.range_switch = ctk.CTkSwitch(top7, text="", font=range_font,
+        self.range_var = ctk.DoubleVar(value=50.0)
+        self.range_slider = ctk.CTkSlider(top7, from_=1.0, to=50.0,
+                                            variable=self.range_var, number_of_steps=49,
+                                            command=self._on_range_change, width=90)
+        self.range_slider.pack(side="left", padx=4)
+        self.range_label = ctk.CTkLabel(top7, text="50x", font=("Microsoft YaHei", 11),
+                                         text_color="#99dd99", width=35)
+        self.range_label.pack(side="left")
+        self.range_switch = ctk.CTkSwitch(top7, text="", font=("Microsoft YaHei", 12),
                                            width=50, command=lambda: self._toggle_feature('range'))
-        self.range_switch.pack(side="right", padx=12)
-        desc7 = ctk.CTkTextbox(range_frame, font=("Microsoft YaHei", 20), height=88,
+        self.range_switch.pack(side="right", padx=6)
+        desc7 = ctk.CTkTextbox(range_frame, font=("Microsoft YaHei", 15), height=_dh("扩大近战攻击距离"),
                                 fg_color="#0e1a0e", text_color="#99dd99", wrap="word")
         desc7.pack(fill="x", padx=8, pady=(2, 6))
-        desc7.insert("0.0", "【说明】扩大近战武器攻击距离至50倍。刀气化丝，十步杀一人，千里不留行。全模式通用，仅对玩家生效。")
+        desc7.insert("0.0", "扩大近战攻击距离")
         desc7.configure(state="disabled")
 
-        # ========== v1.2 新增功能 8: 聚怪 ==========
-        gather_frame = ctk.CTkFrame(self.sel_scroll, corner_radius=6, fg_color="#1a1a1a")
-        gather_frame.pack(fill="x", padx=4, pady=4)
-        top8 = ctk.CTkFrame(gather_frame, fg_color="transparent")
-        top8.pack(fill="x", padx=8, pady=(6, 0))
-        ctk.CTkLabel(top8, text="👾 聚怪", font=("Microsoft YaHei", 15, "bold"),
-                     text_color="#ffaa00").pack(side="left", padx=4)
-        self.gather_switch = ctk.CTkSwitch(top8, text="启用追踪", font=("Microsoft YaHei", 12),
-                                            width=50, command=lambda: self._toggle_feature('gather'))
-        self.gather_switch.pack(side="right", padx=12)
-        # 聚怪操作按钮
-        gather_btn_frame = ctk.CTkFrame(gather_frame, fg_color="transparent")
-        gather_btn_frame.pack(fill="x", padx=8, pady=(2, 2))
-        self.gather_btn = ctk.CTkButton(gather_btn_frame, text="📍 一键聚怪 — 把所有 Bot 传送到佣兵出生点",
-                                          font=("Microsoft YaHei", 14, "bold"),
-                                          height=45, command=self._gather,
-                                          fg_color="#b45309", hover_color="#92400e")
-        self.gather_btn.pack(fill="x", padx=4, pady=4)
-        desc8 = ctk.CTkTextbox(gather_frame, font=("Microsoft YaHei", 20), height=88,
-                                fg_color="#0e0e0e", text_color="#ddbb88", wrap="word")
-        desc8.pack(fill="x", padx=8, pady=(2, 6))
-        desc8.insert("0.0", "【说明】将所有 Bot（人机）传送到佣兵出生点（硬编码 SP_GR 坐标）。双路径追踪确保不漏 Bot，传送后 Bot 可自由移动。仅对 Bot 生效。")
-        desc8.configure(state="disabled")
+        # ===================== 人物属性 Tab =====================
+        for i in range(2):
+            tab_player_scroll.grid_columnconfigure(i, weight=1, uniform="pcol")
 
-        # ========== v1.3 新增功能 9: 轻重力/高跳 ==========
-        gravity_frame = ctk.CTkFrame(self.sel_scroll, corner_radius=6, fg_color="#1a1a2a")
-        gravity_frame.pack(fill="x", padx=4, pady=4)
+        move_frame = ctk.CTkFrame(tab_player_scroll, corner_radius=6, fg_color="#1a2a3a")
+        move_frame.grid(row=0, column=0, sticky="ew", padx=3, pady=3)
+        top5 = ctk.CTkFrame(move_frame, fg_color="transparent")
+        top5.pack(fill="x", padx=8, pady=(6, 0))
+        ctk.CTkLabel(top5, text="👟 滑板鞋", font=("Microsoft YaHei", 15, "bold"),
+                     text_color="#66aaff").pack(side="left", padx=4)
+        self.move_speed_var = ctk.DoubleVar(value=3.0)
+        self.move_slider = ctk.CTkSlider(top5, from_=1.0, to=6.0,
+                                           variable=self.move_speed_var, number_of_steps=50,
+                                           command=self._on_move_speed_change, width=90)
+        self.move_slider.pack(side="left", padx=4)
+        self.move_speed_label = ctk.CTkLabel(top5, text="3.0x", font=("Microsoft YaHei", 11),
+                                              text_color="#88aadd", width=35)
+        self.move_speed_label.pack(side="left")
+        self.move_switch = ctk.CTkSwitch(top5, text="", font=("Microsoft YaHei", 12),
+                                          width=50, command=lambda: self._toggle_feature('movespeed'))
+        self.move_switch.pack(side="right", padx=6)
+        desc5 = ctk.CTkTextbox(move_frame, font=("Microsoft YaHei", 15), height=_dh("提升移动速度"),
+                                fg_color="#0e1a28", text_color="#99bbdd", wrap="word")
+        desc5.pack(fill="x", padx=8, pady=(2, 6))
+        desc5.insert("0.0", "提升移动速度")
+        desc5.configure(state="disabled")
+
+        time_frame = ctk.CTkFrame(tab_player_scroll, corner_radius=6, fg_color="#1a2a1a")
+        time_frame.grid(row=0, column=1, sticky="ew", padx=3, pady=3)
+        top2 = ctk.CTkFrame(time_frame, fg_color="transparent")
+        top2.pack(fill="x", padx=8, pady=(6, 0))
+        ctk.CTkLabel(top2, text="⏰ 无限时间", font=("Microsoft YaHei", 15, "bold"),
+                     text_color="#66ff66").pack(side="left", padx=4)
+        self.time_switch = ctk.CTkSwitch(top2, text="", font=("Microsoft YaHei", 12),
+                                          width=50, command=lambda: self._toggle_feature('time'))
+        self.time_switch.pack(side="right", padx=6)
+        desc2 = ctk.CTkTextbox(time_frame, font=("Microsoft YaHei", 15), height=_dh("设定时间为99:59"),
+                                fg_color="#0e1a0e", text_color="#99dd99", wrap="word")
+        desc2.pack(fill="x", padx=8, pady=(2, 6))
+        desc2.insert("0.0", "设定时间为99:59")
+        desc2.configure(state="disabled")
+
+        gravity_frame = ctk.CTkFrame(tab_player_scroll, corner_radius=6, fg_color="#1a1a2a")
+        gravity_frame.grid(row=1, column=0, columnspan=2, sticky="ew", padx=3, pady=3)
         top9 = ctk.CTkFrame(gravity_frame, fg_color="transparent")
         top9.pack(fill="x", padx=8, pady=(6, 0))
         ctk.CTkLabel(top9, text="🌌 轻重力/高跳", font=("Microsoft YaHei", 15, "bold"),
@@ -1625,36 +1638,28 @@ class GameModifierApp(ctk.CTk):
         self.gravity_switch = ctk.CTkSwitch(top9, text="", font=("Microsoft YaHei", 12),
                                              width=50, command=lambda: self._toggle_feature('gravity'))
         self.gravity_switch.pack(side="right", padx=12)
-
-        # 重力/跳跃滑块区域
         gravity_slider_frame = ctk.CTkFrame(gravity_frame, fg_color="transparent")
         gravity_slider_frame.pack(fill="x", padx=8, pady=(4, 0))
-
-        # 重力滑块
         ctk.CTkLabel(gravity_slider_frame, text="重力:", font=("Microsoft YaHei", 11),
                      text_color="#aa88ff").pack(side="left", padx=(4, 2))
         self.gravity_var = ctk.DoubleVar(value=1.0)
         self.gravity_slider = ctk.CTkSlider(gravity_slider_frame, from_=0.0, to=1.0,
                                               variable=self.gravity_var, number_of_steps=10,
-                                              command=self._on_gravity_change, width=120)
+                                              command=self._on_gravity_change, width=100)
         self.gravity_slider.pack(side="left", padx=2)
         self.gravity_label = ctk.CTkLabel(gravity_slider_frame, text="1.0",
-                                           font=("Microsoft YaHei", 11), text_color="#aa88ff", width=30)
-        self.gravity_label.pack(side="left", padx=(2, 8))
-
-        # 跳跃滑块
+                                           font=("Microsoft YaHei", 11), text_color="#aa88ff", width=28)
+        self.gravity_label.pack(side="left", padx=(2, 6))
         ctk.CTkLabel(gravity_slider_frame, text="跳跃:", font=("Microsoft YaHei", 11),
                      text_color="#aa88ff").pack(side="left", padx=(4, 2))
         self.jump_var = ctk.DoubleVar(value=1.0)
         self.jump_slider = ctk.CTkSlider(gravity_slider_frame, from_=1.0, to=5.0,
                                            variable=self.jump_var, number_of_steps=8,
-                                           command=self._on_jump_change, width=120)
+                                           command=self._on_jump_change, width=100)
         self.jump_slider.pack(side="left", padx=2)
         self.jump_label = ctk.CTkLabel(gravity_slider_frame, text="1.0",
-                                        font=("Microsoft YaHei", 11), text_color="#aa88ff", width=30)
+                                        font=("Microsoft YaHei", 11), text_color="#aa88ff", width=28)
         self.jump_label.pack(side="left", padx=2)
-
-        # 模式选择
         gravity_mode_frame = ctk.CTkFrame(gravity_frame, fg_color="transparent")
         gravity_mode_frame.pack(fill="x", padx=8, pady=(2, 2))
         ctk.CTkLabel(gravity_mode_frame, text="生效范围:", font=("Microsoft YaHei", 11),
@@ -1666,72 +1671,137 @@ class GameModifierApp(ctk.CTk):
                                                     height=30, width=120, state="readonly",
                                                     command=self._on_gravity_mode_change)
         self.gravity_mode_combo.pack(side="left", padx=4)
-
-        desc9 = ctk.CTkTextbox(gravity_frame, font=("Microsoft YaHei", 20), height=88,
+        desc9 = ctk.CTkTextbox(gravity_frame, font=("Microsoft YaHei", 15), height=_dh("调整重力与跳跃倍率"),
                                 fg_color="#0e0e1a", text_color="#9988dd", wrap="word")
         desc9.pack(fill="x", padx=8, pady=(2, 6))
-        desc9.insert("0.0", "【说明】调整重力倍率(0.0~1.0)和跳跃高度(1.0~5.0)。重力0.5=轻如鸿毛，跳跃3x=腾空而起。可选仅自己或全部玩家。")
+        desc9.insert("0.0", "调整重力与跳跃倍率")
         desc9.configure(state="disabled")
 
-        # ========== v1.3 新增功能 10: 回合跳过 ==========
-        skip_frame = ctk.CTkFrame(self.sel_scroll, corner_radius=6, fg_color="#1a1a1a")
-        skip_frame.pack(fill="x", padx=4, pady=4)
+        # ===================== 其他 Tab =====================
+        for i in range(2):
+            tab_other_scroll.grid_columnconfigure(i, weight=1, uniform="ocol")
+
+        gather_frame = ctk.CTkFrame(tab_other_scroll, corner_radius=6, fg_color="#1a1a1a")
+        gather_frame.grid(row=0, column=0, sticky="ew", padx=3, pady=3)
+        top8 = ctk.CTkFrame(gather_frame, fg_color="transparent")
+        top8.pack(fill="x", padx=8, pady=(6, 0))
+        ctk.CTkLabel(top8, text="👾 聚怪", font=("Microsoft YaHei", 15, "bold"),
+                     text_color="#ffaa00").pack(side="left", padx=4)
+        self.gather_switch = ctk.CTkSwitch(top8, text="启用追踪", font=("Microsoft YaHei", 12),
+                                            width=50, command=lambda: self._toggle_feature('gather'))
+        self.gather_switch.pack(side="right", padx=12)
+        gather_btn_frame = ctk.CTkFrame(gather_frame, fg_color="transparent")
+        gather_btn_frame.pack(fill="x", padx=8, pady=(2, 2))
+        self.gather_btn = ctk.CTkButton(gather_btn_frame, text="📍 一键聚怪",
+                                          font=("Microsoft YaHei", 14, "bold"),
+                                          height=45, command=self._gather,
+                                          fg_color="#b45309", hover_color="#92400e")
+        self.gather_btn.pack(fill="x", padx=4, pady=4)
+        desc8 = ctk.CTkTextbox(gather_frame, font=("Microsoft YaHei", 15), height=_dh("将所有Bot传送至佣兵出生点。一般用于多人生化模式，仅对Bot生效。"),
+                                fg_color="#0e0e0e", text_color="#ddbb88", wrap="word")
+        desc8.pack(fill="x", padx=8, pady=(2, 6))
+        desc8.insert("0.0", "将所有Bot传送至佣兵出生点。一般用于多人生化模式，仅对Bot生效。")
+        desc8.configure(state="disabled")
+
+        skip_frame = ctk.CTkFrame(tab_other_scroll, corner_radius=6, fg_color="#1a1a1a")
+        skip_frame.grid(row=0, column=1, sticky="ew", padx=3, pady=3)
         top10 = ctk.CTkFrame(skip_frame, fg_color="transparent")
         top10.pack(fill="x", padx=8, pady=(6, 0))
         ctk.CTkLabel(top10, text="⏭️ 回合跳过", font=("Microsoft YaHei", 15, "bold"),
                      text_color="#ffcc00").pack(side="left", padx=4)
-        # 跳过计数
         self.skip_count_label = ctk.CTkLabel(top10, text="已跳过: 0 回合",
                                               font=("Microsoft YaHei", 11), text_color="#aaaaaa")
         self.skip_count_label.pack(side="right", padx=12)
-
-        # 跳过按钮
         skip_btn_frame = ctk.CTkFrame(skip_frame, fg_color="transparent")
         skip_btn_frame.pack(fill="x", padx=8, pady=(2, 2))
-        self.skip_round_btn = ctk.CTkButton(skip_btn_frame, text="▶ 跳过当前回合",
+        self.skip_round_btn = ctk.CTkButton(skip_btn_frame, text="▶ 跳过当前回合，第一次跳过需要点击两次",
                                               font=("Microsoft YaHei", 14, "bold"),
                                               height=45, command=self._skip_round,
                                               fg_color="#b45309", hover_color="#92400e")
         self.skip_round_btn.pack(fill="x", padx=4, pady=4)
-        desc10 = ctk.CTkTextbox(skip_frame, font=("Microsoft YaHei", 20), height=88,
+        desc10 = ctk.CTkTextbox(skip_frame, font=("Microsoft YaHei", 15), height=_dh("立即结束当前回合（可能需要等待几秒）"),
                                  fg_color="#0e0e0e", text_color="#ddbb88", wrap="word")
         desc10.pack(fill="x", padx=8, pady=(2, 6))
-        desc10.insert("0.0", "【说明】立即结束当前回合并开始下一回合。原理是将休息时间设为0:00触发原生结束流程。与无限时间功能完美兼容，暂停无限时间1秒确保写入成功。")
+        desc10.insert("0.0", "立即结束当前回合（可能需要等待几秒）")
         desc10.configure(state="disabled")
 
         # ── 连接按钮 ──
-        btn_frame = ctk.CTkFrame(self, corner_radius=8)
-        btn_frame.pack(fill="x", padx=12, pady=(2, 6))
-        self.connect_btn = ctk.CTkButton(btn_frame, text="🔗 连接游戏", font=("Microsoft YaHei", 13),
+        self.btn_frame = ctk.CTkFrame(self, corner_radius=8)
+        self.btn_frame.pack(fill="x", padx=12, pady=(2, 6))
+        self.connect_btn = ctk.CTkButton(self.btn_frame, text="🔗 连接游戏", font=("Microsoft YaHei", 13),
                                           height=40, command=self._connect, fg_color="#2a6e2a")
         self.connect_btn.pack(fill="x", padx=12, pady=10)
 
+        # ── 底部提示 ──
+        self.resize_hint = ctk.CTkLabel(self, text="↔️ 拖动边框调整大小", font=("Microsoft YaHei", 16),
+                                         text_color="#bbbbbb")
+        self.resize_hint.pack(fill="x", padx=12, pady=(2, 0))
+        self.patriot_label = ctk.CTkLabel(self, text="科技强军，请党放心，强国有我！",
+                                           font=("Microsoft YaHei", 15, "bold"),
+                                           text_color="#de2910")
+        self.patriot_label.pack(fill="x", padx=12, pady=(0, 4))
+
         # ── 日志 ──
-        log_lbl = ctk.CTkLabel(self, text="── 日志 ──", font=("Microsoft YaHei", 11), text_color="#666")
-        log_lbl.pack(anchor="w", padx=16, pady=(2, 2))
-        self.log_box = ctk.CTkTextbox(self, font=("Consolas", 11), wrap="word", height=200)
+        self.log_lbl = ctk.CTkLabel(self, text="── 日志 ──", font=("Microsoft YaHei", 11), text_color="#666")
+        self.log_lbl.pack(anchor="w", padx=16, pady=(2, 2))
+        self.log_box = ctk.CTkTextbox(self, font=("Consolas", 11), wrap="word", height=110)
         self.log_box.pack(fill="both", padx=12, pady=(2, 12), expand=True)
         self.log_box.configure(state="disabled")
 
     def _on_knife_speed_change(self, value):
         try:
-            speed = float(value)
+            speed = round(float(value), 1)
             self._knife_speed = speed
+            self.knife_speed_label.configure(text=f"{speed}x")
             if self.script:
                 self._send_toggle('knife_speed', speed)
-            self._log(f"🔪 快刀速度已切换: {speed}x")
         except:
             pass
 
     def _on_move_speed_change(self, value):
         try:
-            speed = float(value)
+            speed = round(float(value), 1)
             self._movespeed = speed
+            self.move_speed_label.configure(text=f"{speed}x")
             if self.script:
                 self._send_toggle('movespeed_speed', speed)
-            self._log(f"👟 滑板鞋速度已切换: {speed}x")
         except:
             pass
+
+    def _on_range_change(self, value):
+        try:
+            mult = round(float(value), 0)
+            self._range_mult = mult
+            self.range_label.configure(text=f"{int(mult)}x")
+            if self.script:
+                self.script.post({'type': 'toggle', 'feature': 'range_config', 'enable': mult})
+        except:
+            pass
+
+    def _toggle_collapse(self):
+        self._collapsed = not self._collapsed
+        if self._collapsed:
+            self._saved_geometry = self.geometry()
+            self.hint_frame.pack_forget()
+            self.tab_view.pack_forget()
+            self.btn_frame.pack_forget()
+            self.resize_hint.pack_forget()
+            self.patriot_label.pack_forget()
+            if hasattr(self, 'log_lbl'):
+                self.log_lbl.pack_forget()
+            self.log_box.pack_forget()
+            self.collapse_btn.configure(text="▲ 展开界面")
+            self.geometry("500x70+10+10")
+        else:
+            self.hint_frame.pack(fill="x", padx=12, pady=(2, 8))
+            self.tab_view.pack(fill="both", padx=12, pady=4, expand=True)
+            self.btn_frame.pack(fill="x", padx=12, pady=(2, 6))
+            self.resize_hint.pack(fill="x", padx=12, pady=(0, 2))
+            self.patriot_label.pack(fill="x", padx=12, pady=(0, 4))
+            self.log_lbl.pack(anchor="w", padx=16, pady=(2, 2))
+            self.log_box.pack(fill="both", padx=12, pady=(2, 12), expand=True)
+            self.collapse_btn.configure(text="▼ 折叠界面")
+            self.geometry(self._saved_geometry)
 
     def _on_gravity_change(self, value):
         try:
@@ -1883,7 +1953,7 @@ class GameModifierApp(ctk.CTk):
                 self._log(f"❌ 聚怪异常: {e}")
             finally:
                 self.after(0, lambda: self.gather_btn.configure(state="normal",
-                          text="📍 一键聚怪 — 把所有 Bot 传送到佣兵出生点"))
+                          text="📍 一键聚怪"))
 
         threading.Thread(target=do_gather, daemon=True).start()
 
@@ -1939,6 +2009,18 @@ class GameModifierApp(ctk.CTk):
         dot_map = {"green": "🟢", "yellow": "🟡", "red": "🔴", "gray": "⚫"}
         self.status_dot.configure(text=dot_map.get(color, "⚫"))
         self.status_label.configure(text=text)
+        if color == "green":
+            self.hint_frame.configure(fg_color="#1a3a1a")
+            self.hint_label.configure(text_color="#88ff88")
+            self.hint_label.configure(text="✅ 已连接！点击功能按钮开启修改")
+        elif color == "red":
+            self.hint_frame.configure(fg_color="#3a1a1a")
+            self.hint_label.configure(text_color="#ff8888")
+            self.hint_label.configure(text="连接断开，正在重连...")
+        else:
+            self.hint_frame.configure(fg_color="#2a2a00")
+            self.hint_label.configure(text_color="#ffcc00")
+            self.hint_label.configure(text="① 启动游戏 → ② 进入任意模式 → ③ 打开本工具 → ④ 开启功能开关")
 
     def _find_pid(self):
         for proc in psutil.process_iter(['pid', 'name']):
@@ -2054,9 +2136,6 @@ class GameModifierApp(ctk.CTk):
     def _on_connected(self, pid):
         self._set_status("green", "已连接")
         self.pid_label.configure(text=f"PID: {pid}")
-        self.hint_label.configure(text="✅ 已连接！点击功能按钮开启修改",
-                                   text_color="#88ff88")
-        self.hint_frame.configure(fg_color="#1a3a1a")
 
     def _cleanup(self, keep_features=False):
         try:
@@ -2084,6 +2163,8 @@ class GameModifierApp(ctk.CTk):
         self._ready = False
         self._connecting = False
         self._cleanup(keep_features=True)
+        pid_text = f"PID: {self._pid}" if self._pid else ""
+        self.after(0, lambda: self.pid_label.configure(text=pid_text))
         self.after(0, lambda: self._set_status("red", "连接断开，正在重连..."))
 
     def _monitor_connection(self):
@@ -2113,6 +2194,9 @@ class GameModifierApp(ctk.CTk):
         elif feature == 'movespeed':
             self._send_toggle('movespeed', True)
             self._send_toggle('movespeed_speed', self._movespeed)
+        elif feature == 'range':
+            self._send_toggle('range', True)
+            self.script.post({'type': 'toggle', 'feature': 'range_config', 'enable': self._range_mult})
         elif feature == 'gravity':
             self._send_toggle('gravity', True)
             self._do_send_gravity_config()

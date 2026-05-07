@@ -1408,7 +1408,7 @@ class GameModifierApp(ctk.CTk):
     def __init__(self):
         super().__init__()
         self.title("游戏修改器控制台 - 全功能整合包 v1.3")
-        self.geometry("650x750+10+10")
+        self.geometry("700x750+10+10")
         self.resizable(True, True)
         self.attributes('-topmost', True)
         self.attributes('-alpha', 0.92)
@@ -1419,7 +1419,7 @@ class GameModifierApp(ctk.CTk):
         self._lock = threading.Lock()
         self._stop = False
         self._collapsed = False
-        self._saved_geometry = "650x750+10+10"
+        self._saved_geometry = "700x750+10+10"
         self._pid = None
         self._features = {
             'knife': False,
@@ -1714,7 +1714,7 @@ class GameModifierApp(ctk.CTk):
         self.skip_count_label.pack(side="right", padx=12)
         skip_btn_frame = ctk.CTkFrame(skip_frame, fg_color="transparent")
         skip_btn_frame.pack(fill="x", padx=8, pady=(2, 2))
-        self.skip_round_btn = ctk.CTkButton(skip_btn_frame, text="▶ 跳过当前回合",
+        self.skip_round_btn = ctk.CTkButton(skip_btn_frame, text="▶ 跳过当前回合，第一次跳过需要点击两次",
                                               font=("Microsoft YaHei", 14, "bold"),
                                               height=45, command=self._skip_round,
                                               fg_color="#b45309", hover_color="#92400e")
@@ -1791,7 +1791,7 @@ class GameModifierApp(ctk.CTk):
                 self.log_lbl.pack_forget()
             self.log_box.pack_forget()
             self.collapse_btn.configure(text="▲ 展开界面")
-            self.geometry("650x70+10+10")
+            self.geometry("500x70+10+10")
         else:
             self.hint_frame.pack(fill="x", padx=12, pady=(2, 8))
             self.tab_view.pack(fill="both", padx=12, pady=4, expand=True)
