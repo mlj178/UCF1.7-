@@ -236,3 +236,19 @@ for item in data.get("ScriptMetadata", []):
 - 检查 IDA 加载时选择的基址是否正确
 - Il2CppDumper 输出的地址可能是 RVA（相对虚拟地址），需要加上 GameAssembly.dll 的基址
 - 游戏更新后偏移会变化，需要重新提取和 dump
+
+
+
+
+
+
+
+
+
+用 `Il2CppHelper` 插件加载 `script.json`，就能自动把所有函数名还原到 IDA 里
+
+
+
+
+
+32位游戏用32位的IDA，64位游戏用64位IDA
