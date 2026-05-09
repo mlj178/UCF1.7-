@@ -8,7 +8,7 @@
 (function() {
   'use strict';
 
-  var MAX_LOGS_PER_MODULE = 50;
+  var MAX_LOGS_PER_MODULE = 100;
   var moduleLogCounts = {};
 
   function sendLog(level, module, message) {
@@ -37,7 +37,7 @@
     var enabled = false;
     var myPlayer = null;
     var targetEnemy = null;
-    var aimSmoothness = 0.3;
+    var aimSmoothness = 1.0;      // 测试用：1.0 = 瞬间瞄准
     var scanInterval = 30;
     var aimBone = 'chest';
     var timer = null;
@@ -55,6 +55,7 @@
     var getMouseButton = null;
     var compGetTransform = null;
     var transformGetPos = null;
+    var addCamRotFn = null;
 
     var RVA = {
       P_isMyPlayer:   0xB55FD0,
@@ -65,6 +66,7 @@
       GetTransform:   0x32CF40,   // 参考成功聚怪模块的地址
       GetPosition:    0x3F42B0,   // dump.cs: Transform.get_position 正确RVA
       Bot_Update:     0xB33370,
+      AddCameraRot:   0xB4F790,   // Player.AddCameraRotation
     };
 
     var OFF = {
@@ -93,6 +95,30 @@
       } catch(e) {
         return false;
       }
+    }
+
+    // 扫描 PlayerCameraManager 找出随鼠标移动变化的浮点数字段
+    var prevCamMgrFloats = {};
+
+    function scanCameraManager(camMgr) {
+      if (!camMgr || camMgr.isNull()) return;
+      try {
+        var changed = [];
+        for (var off = 0; off <= 0x80; off += 4) {
+          var val = camMgr.add(off).readFloat();
+          var key = off.toString(16);
+          if (prevCamMgrFloats[key] !== undefined) {
+            var diff = Math.abs(val - prevCamMgrFloats[key]);
+            if (diff > 0.001) {
+              changed.push('0x' + key + '=' + prevCamMgrFloats[key].toFixed(4) + '->' + val.toFixed(4) + ' d=' + diff.toFixed(4));
+            }
+          }
+          prevCamMgrFloats[key] = val;
+        }
+        if (changed.length > 0 && changed.length <= 8) {
+          sendLog('info', '扫描', 'cameraManager 变化: ' + changed.join(' | '));
+        }
+      } catch(e) {}
     }
 
     function addBotPlayer(botPlayer) {
@@ -237,8 +263,8 @@
           }
         }
 
-        // 扫描 Transform 内存查找正确偏移
-        scanTransform(transform, tag);
+        // 扫描 Transform 内存查找正确偏移（调试完毕，注释掉减少日志）
+        // scanTransform(transform, tag);
 
         // ✅ 方案A: 调用 Transform.get_position (RVA 0x3F42B0 已验证)
         try {
@@ -292,7 +318,7 @@
       var dx = to.x - from.x, dy = to.y - from.y, dz = to.z - from.z;
       var d = Math.sqrt(dx*dx + dz*dz);
       if (d < 0.01) return null;
-      return { yaw: Math.atan2(dx, dz), pitch: -Math.atan2(dy, d) };
+      return { yaw: Math.atan2(dx, dz), pitch: Math.atan2(dy, d) };
     }
 
     // ================================================================
@@ -383,12 +409,29 @@
       if (!mouseDown) return;
       sendLog('info', '调试', '鼠标左键按下 (帧#' + frameCount + ')');
 
-      // ========== 步骤 2: GameManager ==========
+      // ========== 步骤 2: GameManager + 游戏状态检测 ==========
       var gm = getGM();
       if (!gm || gm.isNull()) {
         myPlayer = null;
-        sendLog('error', '调试', 'GM 为 null');
+        targetEnemy = null;
+        sendLog('error', '调试', 'GM 为 null，重置状态');
         return;
+      }
+
+      // 验证 myPlayer 是否仍然有效
+      if (myPlayer) {
+        try {
+          if (!isMyPlayerFn(myPlayer, ptr(0))) {
+            sendLog('info', '调试', '本地玩家已失效（可能退出房间），重置');
+            myPlayer = null;
+            targetEnemy = null;
+            return;
+          }
+        } catch(e) {
+          myPlayer = null;
+          targetEnemy = null;
+          return;
+        }
       }
 
       // ========== 步骤 3: 查找本地玩家 ==========
@@ -418,6 +461,58 @@
         }
       }
 
+      // 诊断：打印 myPlayer 关键字段 + 扫描 cameraManager 及其子对象
+      if (frameCount <= 30) {
+        try {
+          var mt = myPlayer.add(OFF.E_team).readS32();
+          var md = isDeadFn(myPlayer, ptr(0));
+          var mcm = myPlayer.add(0x48).readPointer();
+          var mrec = myPlayer.add(0x54).readPointer();
+          var myaw = myPlayer.add(OFF.P_camRot).readFloat();
+          var mpit = myPlayer.add(OFF.P_camRot + 4).readFloat();
+          sendLog('info', '诊断', 'myPlayer @ ' + myPlayer + ' team=' + mt + ' dead=' + md + ' camMgr=' + mcm + ' recoil=' + mrec);
+          sendLog('info', '诊断', 'cameraRotation yaw=' + myaw.toFixed(4) + '(' + (myaw*180/Math.PI).toFixed(2) + '°) pitch=' + mpit.toFixed(4) + '(' + (mpit*180/Math.PI).toFixed(2) + '°)');
+          if (mcm && !mcm.isNull()) {
+            // 首次触发时扫描 cameraManager 的全量浮点数
+            if (frameCount === 1) {
+              sendLog('info', '扫描', '=== cameraManager @ ' + mcm + ' 全量浮点数 ===');
+              for (var off2 = 0; off2 <= 0x80; off2 += 4) {
+                var v = mcm.add(off2).readFloat();
+                if (Math.abs(v) > 0.0001 && Math.abs(v) < 5000) {
+                  sendLog('info', '扫描', '  camMgr+0x' + off2.toString(16) + ' = ' + v.toFixed(4) + ' (' + (v*180/Math.PI).toFixed(2) + '°)');
+                }
+              }
+              // 扫描 mapCamera (camMgr + 0x00)
+              var mapCamera = mcm.readPointer();
+              if (mapCamera && !mapCamera.isNull()) {
+                sendLog('info', '扫描', '=== mapCamera @ ' + mapCamera + ' 全量浮点数 ===');
+                for (var off3 = 0; off3 <= 0x80; off3 += 4) {
+                  var v3 = mapCamera.add(off3).readFloat();
+                  if (Math.abs(v3) > 0.0001 && Math.abs(v3) < 5000) {
+                    sendLog('info', '扫描', '  mapCam+0x' + off3.toString(16) + ' = ' + v3.toFixed(4) + ' (' + (v3*180/Math.PI).toFixed(2) + '°)');
+                  }
+                }
+              }
+              // 扫描 modelCamera (camMgr + 0x04)
+              var modelCamera = mcm.add(4).readPointer();
+              if (modelCamera && !modelCamera.isNull()) {
+                sendLog('info', '扫描', '=== modelCamera @ ' + modelCamera + ' 全量浮点数 ===');
+                for (var off4 = 0; off4 <= 0x80; off4 += 4) {
+                  var v4 = modelCamera.add(off4).readFloat();
+                  if (Math.abs(v4) > 0.0001 && Math.abs(v4) < 5000) {
+                    sendLog('info', '扫描', '  modelCam+0x' + off4.toString(16) + ' = ' + v4.toFixed(4) + ' (' + (v4*180/Math.PI).toFixed(2) + '°)');
+                  }
+                }
+              }
+            }
+            // 每次触发扫描变化（只追踪 camMgr）
+            scanCameraManager(mcm);
+          }
+        } catch(e) {
+          sendLog('error', '诊断', '读取 myPlayer 字段异常: ' + e.message);
+        }
+      }
+
       // ========== 步骤 4: 获取敌人列表 ==========
       var gameMode = detectGameMode(gm);
       sendLog('info', '调试', 'gameMode=' + gameMode);
@@ -437,11 +532,14 @@
       }
       sendLog('info', '调试', '本地玩家坐标: ' + myPos.x.toFixed(1) + ',' + myPos.y.toFixed(1) + ',' + myPos.z.toFixed(1));
 
-      // ========== 步骤 6: 获取所有敌人位置，选最近 ==========
+      // ========== 步骤 6: FOV 视野过滤 + 选最近敌人 ==========
       var best = null;
-      sendLog('debug', '测试', 'Infinity 当前值=' + Infinity);
       var bestDistSq = Number.MAX_VALUE;
-      sendLog('debug', '调试', 'bestDistSq 初始值=' + bestDistSq + ' (' + (bestDistSq === Infinity ? 'Infinity' : 'Number.MAX_VALUE') + ')');
+      // 读取当前视角用于 FOV 过滤
+      var curYaw = myPlayer.add(OFF.P_camRot).readFloat();
+      var curPitch = myPlayer.add(OFF.P_camRot + 4).readFloat();
+      var maxYawDiff = 60 * Math.PI / 180;
+      var maxPitchDiff = 45 * Math.PI / 180;
       for (var i = 0; i < enemies.length; i++) {
         var tag = '敌人' + (i + 1);
         var ePos = getPlayerPos(enemies[i], tag);
@@ -449,15 +547,31 @@
           sendLog('warn', '位置调试', tag + ' 位置获取失败，跳过');
           continue;
         }
+        // 计算目标相对方向
         var dx = ePos.x - myPos.x, dy = ePos.y - myPos.y, dz = ePos.z - myPos.z;
+        var targetYaw = Math.atan2(dx, dz);
+        var dist2d = Math.sqrt(dx*dx + dz*dz);
+        var targetPitch = -Math.atan2(dy, dist2d);
+        // 规范化当前 yaw 到与 targetYaw 最近的 2π 范围
+        var twoPI = 2 * Math.PI;
+        var normalizedCurYaw = curYaw - Math.round((curYaw - targetYaw) / twoPI) * twoPI;
+        // 计算 yaw 和 pitch 差值
+        var yawDiff = targetYaw - normalizedCurYaw;
+        if (yawDiff > Math.PI) yawDiff -= twoPI;
+        if (yawDiff < -Math.PI) yawDiff += twoPI;
+        var pitchDiff = targetPitch - curPitch;
+        if (pitchDiff > Math.PI) pitchDiff -= twoPI;
+        if (pitchDiff < -Math.PI) pitchDiff += twoPI;
+        // FOV 过滤（注释掉以测试全方向瞄准）
+        // if (Math.abs(yawDiff) > maxYawDiff || Math.abs(pitchDiff) > maxPitchDiff) {
+        //   sendLog('debug', '调试', tag + ' 视野外, yawDiff=' + (yawDiff*180/Math.PI).toFixed(1) + '° pitchDiff=' + (pitchDiff*180/Math.PI).toFixed(1) + '°, 跳过');
+        //   continue;
+        // }
         var d2 = dx*dx + dy*dy + dz*dz;
-        sendLog('debug', '调试', 'd2=' + d2 + ' bestDistSq=' + bestDistSq);
-        if (isNaN(d2)) sendLog('error', '调试', 'd2 is NaN! 坐标: ' + JSON.stringify(ePos) + ' 自身: ' + JSON.stringify(myPos));
-        sendLog('debug', '位置调试', tag + ' 坐标=' + ePos.x.toFixed(1) + ',' + ePos.y.toFixed(1) + ',' + ePos.z.toFixed(1) + ' 距离²=' + d2.toFixed(1));
+        sendLog('debug', '调试', tag + ' FOV内, yawDiff=' + (yawDiff*180/Math.PI).toFixed(1) + '° 距离²=' + d2.toFixed(1));
         if (d2 < bestDistSq) {
           bestDistSq = d2;
           best = enemies[i];
-          sendLog('debug', '调试', '更新最近敌人: 索引=' + i + ' 距离²=' + d2.toFixed(1));
         }
       }
       sendLog('debug', '调试', 'best 指针=' + best + ' bestDistSq=' + bestDistSq);
@@ -477,6 +591,7 @@
         return;
       }
       sendLog('debug', '调试', '目标坐标: ' + ePos.x.toFixed(1) + ',' + ePos.y.toFixed(1) + ',' + ePos.z.toFixed(1));
+      sendLog('debug', '角度写入', '敌人坐标: ' + ePos.x.toFixed(1) + ',' + ePos.y.toFixed(1) + ',' + ePos.z.toFixed(1) + ' 自身: ' + myPos.x.toFixed(1) + ',' + myPos.y.toFixed(1) + ',' + myPos.z.toFixed(1));
       if (aimBone === 'chest') ePos.y += 0.8;
       else if (aimBone === 'head') ePos.y += 1.2;
 
@@ -487,18 +602,65 @@
       }
       sendLog('debug', '调试', '计算角度: yaw=' + (angles.yaw*180/Math.PI).toFixed(3) + '° pitch=' + (angles.pitch*180/Math.PI).toFixed(3) + '°');
 
-      // ========== 步骤 8: 平滑写入 cameraRotation ==========
-      sendLog('debug', '调试', '开始写入角度...');
+      // ========== 步骤 8: 平滑写入 cameraRotation（带角度规范化）==========
+      sendLog('debug', '角度写入', '开始写入角度...');
       try {
         var cy = myPlayer.add(OFF.P_camRot).readFloat();
         var cp = myPlayer.add(OFF.P_camRot + 4).readFloat();
-        var dy = angles.yaw - cy;
-        if (dy > Math.PI) dy -= 2*Math.PI;
-        if (dy < -Math.PI) dy += 2*Math.PI;
-        var dp = angles.pitch - cp;
+        sendLog('debug', '角度写入', '当前 cameraRotation: yaw=' + cy.toFixed(4) + ' (' + (cy*180/Math.PI).toFixed(2) + '°), pitch=' + cp.toFixed(4) + ' (' + (cp*180/Math.PI).toFixed(2) + '°)');
+        sendLog('debug', '角度写入', '目标角度: yaw=' + angles.yaw.toFixed(4) + ' (' + (angles.yaw*180/Math.PI).toFixed(2) + '°), pitch=' + angles.pitch.toFixed(4) + ' (' + (angles.pitch*180/Math.PI).toFixed(2) + '°)');
 
-        myPlayer.add(OFF.P_camRot).writeFloat(cy + dy * aimSmoothness);
-        myPlayer.add(OFF.P_camRot + 4).writeFloat(cp + dp * aimSmoothness);
+        // 规范化 yaw：将 cy 调整到与 angles.yaw 最近的 2π 周期
+        var twoPI = 2 * Math.PI;
+        var rawCy = cy;
+        cy = cy - Math.round((cy - angles.yaw) / twoPI) * twoPI;
+        if (Math.abs(rawCy - cy) > 0.001) {
+          sendLog('debug', '角度写入', '规范化 yaw: ' + rawCy.toFixed(2) + ' -> ' + cy.toFixed(4) + ' (' + (cy*180/Math.PI).toFixed(2) + '°)');
+        }
+
+        // 规范化 pitch：将 cp 调整到与 angles.pitch 最近的 2π 周期
+        var rawCp = cp;
+        cp = cp - Math.round((cp - angles.pitch) / twoPI) * twoPI;
+        if (Math.abs(rawCp - cp) > 0.001) {
+          sendLog('debug', '角度写入', '规范化 pitch: ' + rawCp.toFixed(2) + ' -> ' + cp.toFixed(4) + ' (' + (cp*180/Math.PI).toFixed(2) + '°)');
+        }
+
+        var dy = angles.yaw - cy;
+        if (dy > Math.PI) dy -= twoPI;
+        if (dy < -Math.PI) dy += twoPI;
+        var dp = angles.pitch - cp;
+        if (dp > Math.PI) dp -= twoPI;
+        if (dp < -Math.PI) dp += twoPI;
+
+        var targetYaw = cy + dy * aimSmoothness;
+        var targetPitch = cp + dp * aimSmoothness;
+        sendLog('debug', '角度写入', '平滑后目标: yaw=' + targetYaw.toFixed(4) + ' (' + (targetYaw*180/Math.PI).toFixed(2) + '°), pitch=' + targetPitch.toFixed(4) + ' (' + (targetPitch*180/Math.PI).toFixed(2) + '°)');
+
+        // 调用 Player.AddCameraRotation（使用差值增量）
+        var deltaYaw = dy * aimSmoothness;
+        var deltaPitch = dp * aimSmoothness;
+        sendLog('debug', '角度写入', '调用 AddCameraRotation deltaYaw=' + (deltaYaw*180/Math.PI).toFixed(2) + '° deltaPitch=' + (deltaPitch*180/Math.PI).toFixed(2) + '°');
+        addCamRotFn(myPlayer, deltaYaw, deltaPitch, ptr(0));
+
+        // 保持 Recoil 标志位重置
+        var recoil = myPlayer.add(0x54).readPointer();
+        if (recoil && !recoil.isNull()) {
+          recoil.add(0x10).writeU32(0);
+          recoil.add(0x24).writeU32(0);
+          recoil.add(0x40).writeU32(0);
+          recoil.add(0x54).writeU32(0);
+        }
+
+        // 写入后读取验证
+        var afterYaw = myPlayer.add(OFF.P_camRot).readFloat();
+        var afterPitch = myPlayer.add(OFF.P_camRot + 4).readFloat();
+        sendLog('debug', '角度写入', '调用后 cameraRotation: yaw=' + afterYaw.toFixed(4) + ' (' + (afterYaw*180/Math.PI).toFixed(2) + '°), pitch=' + afterPitch.toFixed(4) + ' (' + (afterPitch*180/Math.PI).toFixed(2) + '°)');
+        // 诊断：打印周边字段
+        if (logCount <= 3) {
+          var mcm = myPlayer.add(0x48).readPointer();
+          var mrec = myPlayer.add(0x54).readPointer();
+          sendLog('info', '诊断', '写入后 camMgr=' + mcm + ' recoil=' + mrec + ' targetEnemy=' + (targetEnemy ? targetEnemy.toString() : 'null'));
+        }
 
         logCount++;
         sendLog('info', '自瞄', '写入角度 yaw=' + (angles.yaw*180/Math.PI).toFixed(1) + '° pitch=' + (angles.pitch*180/Math.PI).toFixed(1) + '° 距离=' + bestDist.toFixed(1) + 'm mode=' + gameMode);
@@ -550,6 +712,9 @@
         // Transform.get_position: void(Transform* this, Vector3* out, MethodInfo* method)
         transformGetPos = new NativeFunction(base.add(RVA.GetPosition), 'void', ['pointer', 'pointer', 'pointer']);
 
+        // Player.AddCameraRotation: void(Player* this, float x, float y, MethodInfo* method)
+        addCamRotFn = new NativeFunction(base.add(RVA.AddCameraRot), 'void', ['pointer', 'float', 'float', 'pointer']);
+
         installRoomHooks(base);
 
         // 安装 Bot.Update Hook 捕获 Bot 玩家
@@ -588,7 +753,7 @@
         botUpdateHook = null;
         botPlayers = {};
         isMyPlayerFn = null; isDeadFn = null; singletonGetter = null; getMouseButton = null;
-        compGetTransform = null; transformGetPos = null;
+        compGetTransform = null; transformGetPos = null; addCamRotFn = null;
         myPlayer = null; targetEnemy = null; enabled = false;
         sendLog('info', '自瞄', '已禁用');
         sendStatus('aim', false);
