@@ -1,5 +1,5 @@
 // ====================================================================
-// 自瞄模块 v2 — 基于 UnityCrossFire.dll 逆向方案（BUG修复版 + 射线检测优化）
+// 自瞄模块 v2 — 基于 UnityCrossFire.dll 逆向方案（BUG修复版）
 // 参考: 02-小工具dll逆向分析 copy.md
 //
 // 核心思路（完全还原 DLL 方案）:
@@ -14,14 +14,12 @@
 //   9. 重置标志（防游戏拉回准星）
 //
 // 🐛 BUG FIX LIST:
-//   FIX #1: getGM() 获取方式 — 必须先读 MethodInfo 指针
+//   FIX #1: getGM() 获取方式 — 必须先用 0xE1CE64 读 MethodInfo 指针
 //   FIX #2: 标志重置 — 用 characterContainer(0x58) 而非 recoil(0x54)
 //   FIX #3: readList() — 用 List._size(0x0C) 而非 Array.length
 //   FIX #4: 新增独立 log 通道 — console.log 保证日志可观测
 //
-// 🚀 射线检测优化:
-//   - 检查顺序: 距离 → 粗筛FOV → 射线检测 → 精确FOV
-//   - 默认关闭，可通过配置开启
+// RVA 来源: dump.cs + script.json (Il2CppDumper)
 // ====================================================================
 (function() {
   'use strict';
@@ -72,6 +70,8 @@
   // RVA 常量
   // ================================================================
   var RVA = {
+    SingletonGet:                    0x4A8170,   // Singleton<GameManager>.get_instance
+    GM_Singleton_MethodInfo:         0xE1CE64,   // MethodInfo* 元数据指针
     Component_get_transform:         0x32CF40,   // Transform* (Component*, MethodInfo*)
     Transform_get_position:          0x3F42B0,   // Vector3* (Vector3* ret, Transform*, MethodInfo*)
     Player_get_isMyPlayer:           0xB55FD0,   // bool (Player*, MethodInfo*)
@@ -79,7 +79,7 @@
     Entity_get_team:                 0x1E0070,   // Team/int32 (Entity*, MethodInfo*)
     Player_AddCameraRotation:        0xB4F790,   // void (Player*, float x, float y, MethodInfo*)
     Input_GetMouseButton:            0xACFB20,   // bool (int32 button, MethodInfo*)
-    Physics_Linecast:                0xAB9D20,   // bool (Vector3 start, Vector3 end, int32 layerMask, MethodInfo*)
+    Physics_Linecast:                0xAB9B80,   // bool (Vector3 start, Vector3 end, int32 layerMask, MethodInfo*)
   };
 
   // ================================================================
@@ -147,13 +147,13 @@
       smoothness:      1.0,    // 1.0 = 瞬间瞄准
       maxAimDistance:  200.0,
       maxAngleFOV:     30.0,
-      visibilityCheck: false,  // 🚀 默认关闭射线检测，可通过配置开启
+      visibilityCheck: false,
       autoAim:         false,  // false=按按键才瞄, true=一直瞄
       debugLog:        true,   // true=输出详细调试日志
     };
 
     // ——— NativeFunction 缓存 ———
-    var singletonGetter = null;     // Singleton<GameManager>.get_instance
+    var singletonGetter = null;
     var compGetTransform = null;
     var transformGetPos = null;
     var isMyPlayerFn = null;
@@ -169,43 +169,28 @@
     var debugTimer = null;
 
     // ================================================================
-    // 获取 GameManager 单例（参考 lock-health 成功方案）
+    // FIX #1: 修正 GM 获取方式
+    // 现有成功脚本模式:
+    //   1. 从 0xE1CE64 读 MethodInfo* 指针
+    //   2. 传给 0x4A8170 的函数去拿实例
     // ================================================================
     function getGM() {
       try {
         var base = getGameAssembly().base;
-        var mi = base.add(0xE1CE64).readPointer();
+        var mi = base.add(RVA.GM_Singleton_MethodInfo).readPointer();
         if (mi.isNull()) {
+          console.log('[GM] MethodInfo 指针为空，尝试直接调用');
           return singletonGetter(ptr(0));
         }
         var gm = singletonGetter(mi);
-        if (gm.isNull()) return null;
+        if (gm.isNull()) {
+          console.log('[GM] 返回为空');
+          return null;
+        }
         return gm;
       } catch(e) {
+        console.log('[GM] 获取失败: ' + e.message);
         return null;
-      }
-    }
-
-    // ================================================================
-    // 房间切换 Hook
-    // ================================================================
-    function installRoomHooks(base) {
-      var addrs = [0xAEE370, 0xAF5B30];
-      for (var i = 0; i < addrs.length; i++) {
-        try {
-          (function(addr) {
-            var h = Interceptor.attach(base.add(addr), {
-              onEnter: function() {
-                myPlayer = null;
-                targetEnemy = null;
-                cachedTarget = null;
-                frameCount = 0;
-                console.log('[状态] 🔄 房间切换，状态重置');
-              }
-            });
-            roomHooks.push(h);
-          })(addrs[i]);
-        } catch(e) {}
       }
     }
 
@@ -216,6 +201,10 @@
       var mod = getGameAssembly();
       if (!mod) return false;
       var base = mod.base;
+
+      try {
+        singletonGetter = new NativeFunction(base.add(RVA.SingletonGet), 'pointer', ['pointer']);
+      } catch(e) { console.log('[初始化] singletonGetter 失败: ' + e.message); return false; }
 
       try {
         compGetTransform = new NativeFunction(base.add(RVA.Component_get_transform), 'pointer', ['pointer', 'pointer']);
@@ -246,22 +235,10 @@
       } catch(e) { console.log('[初始化] getMouseBtnFn 失败: ' + e.message); getMouseBtnFn = null; }
 
       try {
-        linecastFn = new NativeFunction(base.add(RVA.Physics_Linecast), 'bool', ['pointer', 'pointer', 'int32', 'int32', 'pointer']);
-// 参数说明: start (Vector3*), end (Vector3*), layerMask, queryTriggerInteraction, method
-        // 测试调用：传入空指针看是否会崩溃（可选）
-        console.log('[初始化] linecastFn 已加载，地址=' + base.add(RVA.Physics_Linecast));
+        linecastFn = new NativeFunction(base.add(RVA.Physics_Linecast), 'bool', ['pointer', 'pointer', 'int32', 'pointer']);
       } catch(e) { console.log('[初始化] linecastFn 失败: ' + e.message); linecastFn = null; }
 
       console.log('[初始化] 全部 NativeFunction 就绪');
-
-      // 初始化 Singleton<GameManager>.get_instance
-      try {
-        singletonGetter = new NativeFunction(base.add(0x4A8170), 'pointer', ['pointer']);
-      } catch(e) {
-        console.log('[初始化] singletonGetter 失败: ' + e.message);
-        return false;
-      }
-
       return true;
     }
 
@@ -380,42 +357,20 @@
       while (a < -Math.PI) a += 2 * Math.PI;
       return a;
     }
-    
-    function checkVisibility(from, to) { 
-      if (!linecastFn) { 
-        if (CONFIG.debugLog && frameCount < 3) 
-          console.log('[射线] ❌ linecastFn 为空，默认可见'); 
-        return true; 
-      } 
-      try { 
-        var start = Memory.alloc(12); 
-        start.writeFloat(from.x); 
-        start.add(4).writeFloat(from.y); 
-        start.add(8).writeFloat(from.z); 
-     
-        var end = Memory.alloc(12); 
-        end.writeFloat(to.x); 
-        end.add(4).writeFloat(to.y); 
-        end.add(8).writeFloat(to.z); 
-     
-        var layerMask = -1;               // 所有层 
-        var queryTriggerInteraction = 0;  // 忽略触发器 
-        var method = ptr(0);              // MethodInfo* 
-     
-        var hitAnything = linecastFn(start, end, layerMask, queryTriggerInteraction, method); 
-        var visible = !hitAnything; 
-     
-        if (CONFIG.debugLog && frameCount < 20) { 
-          console.log('[射线] 起点=(' + from.x.toFixed(1) + ',' + from.y.toFixed(1) + ',' + from.z.toFixed(1) + 
-                      ') 终点=(' + to.x.toFixed(1) + ',' + to.y.toFixed(1) + ',' + to.z.toFixed(1) + 
-                      ') 碰撞=' + hitAnything + ' 可见=' + visible); 
-        } 
-        return visible; 
-      } catch(e) { 
-        if (CONFIG.debugLog && frameCount < 3) 
-          console.log('[射线] 异常: ' + e.message); 
-        return true; 
-      } 
+
+    function checkVisibility(from, to) {
+      if (!linecastFn) return true;
+      try {
+        var buf1 = Memory.alloc(12);
+        buf1.writeFloat(from.x);
+        buf1.add(4).writeFloat(from.y);
+        buf1.add(8).writeFloat(from.z);
+        var buf2 = Memory.alloc(12);
+        buf2.writeFloat(to.x);
+        buf2.add(4).writeFloat(to.y);
+        buf2.add(8).writeFloat(to.z);
+        return !linecastFn(buf1, buf2, -1, ptr(0));
+      } catch(e) { return true; }
     }
 
     // ——— 目标缓存（成功脚本的 dword_1005A6C8 模式） ———
@@ -424,7 +379,7 @@
     var scanPitchDeg = 0;
 
     // ================================================================
-    // 目标扫描器（优化顺序：距离 → 粗筛FOV → 射线检测 → 精确FOV）
+    // 目标扫描器（成功脚本模式: 独立定时器，仅选目标，不写角度）
     // ================================================================
     function targetScanner() {
       if (!enabled) return;
@@ -471,39 +426,29 @@
           var team = getTeamFn ? getTeamFn(p, ptr(0)) : p.add(OFF.E_team).readS32();
           if (team === myTeam) continue;
 
-          // 1. 获取目标骨骼位置
           var targetPos = getBonePos(p, CONFIG.aimBone);
           if (!targetPos) continue;
 
-          // 2. 距离检查（廉价）
-          var dx = targetPos.x - myPos.x;
-          var dy = targetPos.y - myPos.y;
-          var dz = targetPos.z - myPos.z;
-          var dist = Math.sqrt(dx*dx + dy*dy + dz*dz);
-          if (dist > CONFIG.maxAimDistance) continue;
 
-          // 3. 粗筛角度 FOV（扩大 20°，避免频繁射线检测）
-          var targetYawDeg = Math.atan2(dx, dz) * 180.0 / Math.PI;
-          var targetPitchDeg = Math.atan2(dy, Math.sqrt(dx*dx + dz*dz)) * 180.0 / Math.PI;
-          var yawDiffRaw = targetYawDeg - scanYawDeg;
-          var pitchDiffRaw = targetPitchDeg - scanPitchDeg;
-          if (yawDiffRaw > 180) yawDiffRaw -= 360;
-          if (yawDiffRaw < -180) yawDiffRaw += 360;
-          if (pitchDiffRaw > 180) pitchDiffRaw -= 360;
-          if (pitchDiffRaw < -180) pitchDiffRaw += 360;
-          var rawAngleDeg = Math.sqrt(yawDiffRaw*yawDiffRaw + pitchDiffRaw*pitchDiffRaw);
-          // 粗筛阈值 = 最大FOV + 20°
-          var coarseFOV = CONFIG.maxAngleFOV + 20.0;
-          if (rawAngleDeg > coarseFOV) continue;
-
-          // 4. 🚀 射线检测（仅当启用时，较昂贵，放在最后）
+          // 🚀 射线检测（穿墙判断）
           if (CONFIG.visibilityCheck) {
             if (!checkVisibility(myPos, targetPos)) {
               continue;   // 墙体遮挡，跳过该敌人
             }
           }
 
-          // 5. 精确角度差（用于最终选择最佳目标）
+          var dx = targetPos.x - myPos.x;
+          var dy = targetPos.y - myPos.y;
+          var dz = targetPos.z - myPos.z;
+          var dist = Math.sqrt(dx*dx + dy*dy + dz*dz);
+          if (dist > CONFIG.maxAimDistance) continue;
+
+      
+
+          // 全部用度计算（和成功脚本一致）
+          var targetYawDeg = Math.atan2(dx, dz) * 180.0 / Math.PI;
+          var targetPitchDeg = Math.atan2(dy, Math.sqrt(dx*dx + dz*dz)) * 180.0 / Math.PI;
+
           var yawDiff = targetYawDeg - scanYawDeg;
           var pitchDiff = targetPitchDeg - scanPitchDeg;
           if (yawDiff > 180) yawDiff -= 360;
@@ -511,6 +456,7 @@
           if (pitchDiff > 180) pitchDiff -= 360;
           if (pitchDiff < -180) pitchDiff += 360;
           var angleDeg = Math.sqrt(yawDiff*yawDiff + pitchDiff*pitchDiff);
+
           if (angleDeg > CONFIG.maxAngleFOV) continue;
 
           if (angleDeg < bestAngleDeg) {
@@ -540,13 +486,14 @@
     }
 
     // ================================================================
-    // DLL 方案: 写角度到内存
+    // DLL 方案: 写角度到内存（成功脚本模式: 只有按键检测+写入）
     // ================================================================
     function writeAimbot() {
       if (!enabled || !myPlayer || !cachedTarget) return;
 
       try {
         // 检测用户是否主动转动了视角（与扫描时的视角对比）
+        // 如果用户自己转视角超过 FOV/2，释放目标重新扫描
         var curYawDeg = myPlayer.add(OFF.P_cameraRotation).readFloat();
         var curPitchDeg = myPlayer.add(OFF.P_cameraRotation + 4).readFloat();
         var userYawDelta = curYawDeg - scanYawDeg;
@@ -631,7 +578,8 @@
     }
 
     // ================================================================
-    // 调试扫描（每 2 秒输出完整数据）
+    // 调试扫描（每 2 秒输出一次完整数据，无需按键）
+    // 用于验证: 坐标读取是否正确、角度计算是否正确
     // ================================================================
     function debugScan() {
       if (!CONFIG.debugLog || !enabled) return;
@@ -639,6 +587,7 @@
       var gm = getGM();
       if (!gm || gm.isNull()) return;
 
+      // 找本地玩家
       if (!myPlayer || myPlayer.isNull()) {
         var all = getAllPlayers(gm);
         for (var i = 0; i < all.length; i++) {
@@ -647,6 +596,7 @@
         if (!myPlayer) return;
       }
 
+      // 自己位置
       var myPos = getBonePos(myPlayer, BONE.CHEST);
       if (!myPos) return;
 
@@ -658,6 +608,7 @@
       console.log('[调试] 我的坐标: (' + myPos.x.toFixed(1) + ', ' + myPos.y.toFixed(1) + ', ' + myPos.z.toFixed(1) + ')');
       console.log('[调试] 当前视角: yaw=' + curYawDeg.toFixed(2) + '°  pitch=' + curPitchDeg.toFixed(2) + '°');
 
+      // 遍历敌人
       var allPlayers = getAllPlayers(gm);
       var myTeam = 0;
       try {
@@ -702,6 +653,7 @@
           var targetYawDeg = angles.yaw * 180.0 / Math.PI;
           var targetPitchDeg = angles.pitch * 180.0 / Math.PI;
 
+          // 当前视角直接是度, 目标角度转度后比较
           var yawDiffDeg = targetYawDeg - curYawDeg;
           var pitchDiffDeg = targetPitchDeg - curPitchDeg;
           if (yawDiffDeg > 180) yawDiffDeg -= 360;
@@ -709,15 +661,19 @@
           if (pitchDiffDeg > 180) pitchDiffDeg -= 360;
           if (pitchDiffDeg < -180) pitchDiffDeg += 360;
           var fovDeg = Math.sqrt(yawDiffDeg*yawDiffDeg + pitchDiffDeg*pitchDiffDeg);
-
-          // 临时去掉 visibilityCheck 的限制，强制测试射线检测
-          var visible = checkVisibility(myPos, enemyPos);
+          var targetYawRad = angles.yaw;
+          var targetPitchRad = angles.pitch;
+          var curYawRad = curYawDeg * Math.PI / 180.0;
+          var curPitchRad = curPitchDeg * Math.PI / 180.0;
+          var yawDiffRad = normalizeAngle(targetYawRad - curYawRad);
+          var pitchDiffRad = normalizeAngle(targetPitchRad - curPitchRad);
 
           console.log('[调试] 敌人#' + i + ' ptr=' + enemies[i] +
             ' 坐标=(' + enemyPos.x.toFixed(1) + ', ' + enemyPos.y.toFixed(1) + ', ' + enemyPos.z.toFixed(1) + ')' +
-            ' 距离=' + dist.toFixed(1) + 'm' +
-            ' 可见=' + visible);
+            ' 距离=' + dist.toFixed(1) + 'm');
           console.log('[调试]   → 目标: ' + targetYawDeg.toFixed(1) + '° 当前: ' + curYawDeg.toFixed(1) + '° 差: ' + yawDiffDeg.toFixed(1) + '° FOV=' + fovDeg.toFixed(1) + '°');
+          console.log('[调试]   → 验证: atan2(dx=' + dx.toFixed(1) + ', dz=' + dz.toFixed(1) + ')=' + targetYawDeg.toFixed(1) + '°' +
+            '  atan2(dy=' + dy.toFixed(1) + ', hDist=' + Math.sqrt(dx*dx+dz*dz).toFixed(1) + ')=' + targetPitchDeg.toFixed(1) + '°');
         } catch(e) {
           console.log('[调试] 敌人#' + i + ' 异常: ' + e.message);
         }
@@ -768,18 +724,19 @@
 
         installRoomHooks(mod.base);
 
-        aimTimer = setInterval(aimLoop, 16);
-        scanTimer = setInterval(targetScanner, 30);
+        aimTimer = setInterval(aimLoop, 16);         // 按键检测+写角度
+        scanTimer = setInterval(targetScanner, 30); // 目标扫描
         if (CONFIG.debugLog) {
           debugTimer = setInterval(debugScan, 2000);
+          console.log('[自瞄] 📊 调试扫描已启动（每2秒输出一次）');
         }
-
         enabled = true;
         console.log('[自瞄] ✅ 已启用 (触发键=' + CONFIG.aimKey +
           ' 平滑=' + CONFIG.smoothness +
           ' FOV=' + CONFIG.maxAngleFOV + '°' +
-          ' 距离=' + CONFIG.maxAimDistance + 'm)');
-        console.log('[自瞄] 💡 进入游戏房间后，按鼠标左键(开枪)触发自瞄');
+          ' 距离=' + CONFIG.maxAimDistance + 'm' +
+          ' debugLog=' + CONFIG.debugLog + ')');
+        console.log('[自瞄] 💡 按鼠标左键(开枪)触发自瞄，查看控制台输出数据验证');
         sendLog('success', '自瞄', '已启用');
         sendStatus('自瞄', true);
       },
