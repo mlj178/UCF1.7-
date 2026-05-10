@@ -247,6 +247,13 @@ class AimAssistApp(ctk.CTk):
             self.after(0, self._enable_controls)
             self._safe_log("自瞄模块待命，开启开关即可使用")
 
+            # 默认开启可见性检测（Physics.Linecast）
+            try:
+                self.script.exports.aim_set_config('{"visibilityCheck": true}')
+                self._safe_log("可见性检测已开启")
+            except Exception as e:
+                self._safe_log("设置可见性检测失败: " + str(e))
+
             # 启动状态轮询
             self._start_status_polling()
 

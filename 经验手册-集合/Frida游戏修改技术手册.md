@@ -716,55 +716,6 @@ Player.UnlockInfiniteAmmo.invoke(playerInstance);
 
 所以，你的代码依然是**Native 层的内存/返回值修改**，而不是 IL2CPP 层的方法调用。
 
-
-
-
-
-
-
-
-
-
-
-
-
-### 4.5 调试技巧
-
-```javascript
-// 1. 打印指针信息
-console.log("[+] Pointer: " + ptr);
-console.log("[+] IsNull: " + ptr.isNull());
-
-// 2. 检查指针可读性
-function isReadablePointer(p) {
-    if (!p || p.isNull()) return false;
-    try {
-        return Process.findRangeByAddress(p) !== null;
-    } catch (e) {
-        return false;
-    }
-}
-
-// 3. 限制日志输出
-var logCount = 0;
-var logLimit = 20;
-
-if (logCount < logLimit) {
-    console.log("[Log " + (logCount+1) + "] ...");
-    logCount++;
-}
-```
-
----
-
-## 五、打包发布流程
-
-### 5.1 创建 Python 启动器
-
-### 5.2 创建打包脚本
-
-### 5.3 执行打包
-
 ---
 
 ## 六、常见问题与解决方案
@@ -803,37 +754,14 @@ if (logCount < logLimit) {
 | **限制日志输出** | 避免日志刷屏影响性能 |
 | **检查指针有效性** | 避免空指针崩溃 |
 | **使用 RVA 地址** | 游戏更新后只需更新地址 |
-| **查看 dump.cs** | 理解类结构和字段偏移 |
-
-7.3 内存修改
-
-| 操作 | 方法 | 注意事项 |
-|------|------|---------|
-| **读取 float** | `ptr.add(offset).readFloat()` | 确认偏移正确 |
-| **写入 float** | `ptr.add(offset).writeFloat(value)` | 确认类型匹配 |
-| **读取 int** | `ptr.add(offset).readInt()` | 注意符号 |
-| **写入 int** | `ptr.add(offset).writeInt(value)` | 注意范围 |
+|                        |                        |
 
 
 
 ### 8.5 常用 Frida API
 
 ```javascript
-// 进程
-Process.findModuleByName("GameAssembly.dll")
-Process.enumerateModules()
-Process.enumerateRanges('r--')
 
-// 内存
-ptr.add(offset).readFloat()
-ptr.add(offset).writeFloat(value)
-ptr.add(offset).readInt()
-ptr.add(offset).writeInt(value)
-
-// 拦截器
-Interceptor.attach(address, { onEnter, onLeave })
-Interceptor.replace(address, callback)
-Interceptor.revert(address)
 
 // NativeFunction
 var func = new NativeFunction(address, returnType, argTypes)
@@ -843,3 +771,15 @@ func(arg1, arg2, ...)
 var callback = new NativeCallback(function (...) { ... }, returnType, argTypes)
 ```
 
+| 特性     | NativeFunction                         | NativeCallback                                    |
+| -------- | -------------------------------------- | ------------------------------------------------- |
+| 数据流向 | JS 发起调用                            | Native 发起调用                                   |
+| 本质     | 它是 JS 里的一个函数对象               | 它是 Native 内存里的一个指针                      |
+| 谁在运行 | JS 引擎在跑，但去执行了内存里的机器码  | 机器码在跑，但跳转到了 JS 引擎去执行逻辑          |
+| 常见用途 | 主动调用游戏函数、系统 API             | 替换函数实现、Hook 回调、伪造返回值               |
+| 你的代码 | 你之前的脚本里用得少（除非主动调函数） | 你一直在用！ (`Interceptor.replace` 的第二个参数) |
+
+NativeFunction 就像 “遥控器”。
+你（JS）手里拿着遥控器，按下按钮，电视（Native）就开始工作。是你控制它。
+NativeCallback 就像 “接线员”。
+你（JS）坐在电话机旁，把自己的号码留给客户（Native）。客户有事了（函数被调用），就会打电话给你，让你处理。是它控制你。
