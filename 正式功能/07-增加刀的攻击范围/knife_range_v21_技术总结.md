@@ -55,23 +55,7 @@ onLeave: function(retval) {
 
 ---
 
-## 二、闪退原因分析（通过日志逐一排除）
 
-### 闪退 1：v12 — args[0] 写坏武器对象
-
-**现象**：挥刀 ~8 次后 "Process terminated"
-
-**根因**：
-
-```javascript
-// v12 错误写法
-onEnter:  this.retbuf = args[0];   // 以为是 retbuf
-onLeave:  this.retbuf.add(0x4).writeFloat(...);  // 写到武器对象内部
-```
-
-Frida 在某些版本会剥离 IL2CPP 32-bit struct return 的隐藏 retbuf 参数，导致 `args[0]` 实际是 `WPN_Knife*`（this 指针）。向 `this + 0x4` 反复写入浮点数，逐步损坏武器对象内部字段，积累到 ~8 次后对象崩溃。
-
-**修复**：用 `retval`（Frida 保证指向返回结构体）替代 `args[0]`。
 
 ### 闪退 2：v14 — 初始化期间调 NativeFunction
 
@@ -97,41 +81,7 @@ onEnter: function(args) {
 
 **根因**：`Interceptor.attach` 的 `onLeave` 运行在 Frida 线程，调用 NativeFunction 会跨线程执行游戏代码，产生竞态条件。v18 每刀都在 `onLeave` 中调 `isMyPlayerFn(candidate)`，12 次后触发内存访问冲突。
 
-**修复**：v19 改用 replace + 纯指针比较，但在第一次 onLeave 中仍有一次 `isMyPlayerFn` 调用（用于捕获 myPlayer），导致 10 次后仍崩。
 
-**最终修复**（v21）：将 `isMyPlayer` 调用完全移出 attach 的回调，放到 replace 的 NativeCallback 中（游戏线程安全）。attach 的 onLeave 只做 `owner.equals(myPlayer)` 纯指针比较。
-
-### 闪退 4：v12/v14/v15/v18/v19 — 双 Hook 竞态
-
-**现象**：所有带基类 Hook（`Weapon.GetKnifeAttackData` 0xB79008）的版本都闪退
-
-**根因**（v20 验证）：
-
-```
-[近战] retval=0xceea10  ← 同一个缓冲区
-[近战] retval区域: base=0xcd4000 size=180224 prot=rw-
-```
-
-WPN_Knife 和 Weapon 两个 Hook 的 `onLeave` 共用同一个 retval 缓冲区（0xceea10）。两个 Hook 同时在该内存上读写 → 竞态条件 → 内存损坏 → 闪退。
-
-**v20 验证**：去掉基类 Hook，只保留 WPN_Knife Hook，零崩溃。
-
-**修复**：只保留一个主 Hook（0xB63EC0），去掉基类兜底 Hook。
-
----
-
-## 三、闪退原因汇总
-
-| 版本 | 崩溃点 | 根因 | 修复 |
-|------|--------|------|------|
-| v12 | ~8刀后 | `args[0]` 写坏了 WPN_Knife 对象 | 用 `retval` |
-| v14 | 初始化期间 | onEnter 调 `isMyWeapon`，武器未就绪 | 不在 onEnter 调 NativeFunction |
-| v17 | 无效果 | `Interceptor.replace` 签名不匹配，函数未被调用 | 回到 `attach` |
-| v18 | ~12刀后 | onLeave 中调 `isMyPlayer`，跨线程 | 移到 replace 中 |
-| v19 | ~10刀后 | onLeave 中一次 `isMyPlayer` 调用 + 双 Hook 竞态 | replace捕获 + 单Hook |
-| v20 | 零崩溃 | ✅ 单Hook + 纯指针比较 | — |
-
----
 
 ## 四、全模式应用方法
 
@@ -205,3 +155,162 @@ onLeave: owner == myPlayer ?
     ↓
 KnifeAttackData 返回给调用者 → 攻击判定使用修改后的 range
 ```
+
+
+
+
+
+
+
+
+
+
+
+# 近战距离修改器 v22 脚本分析
+
+## 1. 概述
+
+`knife_range_v22.js` 用于修改本地玩家的近战攻击范围（刀距）。  
+脚本采用 **Hook 获取攻击数据** 的方式，在游戏读取近战攻击属性（伤害、范围、角度）时，拦截并放大 `range` 值，从而达到超远刀距的效果。
+
+版本 v22 的特殊点在于：  
+- 将原有的 `Interceptor.replace` 改为 `Interceptor.attach`，以便与同时使用 `replace` 的 **快刀脚本（speed_knife_v16）** 兼容共存。  
+- 通过监听 `get_KnifeSpeed` 的调用捕获本地玩家的 `Player` 指针，而非自行遍历查找。
+
+---
+
+## 2. 关键内存地址
+
+### 2.1 函数 RVA
+
+| 函数                           | RVA      | 说明                                         |
+| ------------------------------ | -------- | -------------------------------------------- |
+| `Player.get_isMyPlayer`        | 0xB55FD0 | 判断 Player 是否为本地玩家                   |
+| `PlayerWeapons.get_KnifeSpeed` | 0xB170A0 | 获取刀速，用于捕获 `myPlayer`                |
+| `WPN_Knife.GetKnifeAttackData` | 0xB63EC0 | 获取指定刀攻击类型的数据（伤害、范围、角度） |
+
+### 2.2 数据字段偏移
+
+| 偏移   | 所属                     | 描述                                                 |
+| ------ | ------------------------ | ---------------------------------------------------- |
+| `0x8`  | `PlayerWeapons` 实例     | 指向所属 Player 的指针                               |
+| `0x30` | `WPN_Knife` 实例（推测） | 指向所属 Player 的指针（脚本中 `this.owner` 的来源） |
+| `+0x0` | `KnifeAttackData` 返回值 | 伤害（damage）                                       |
+| `+0x4` | `KnifeAttackData` 返回值 | 范围（range）                                        |
+| `+0x8` | `KnifeAttackData` 返回值 | 角度（angle）                                        |
+
+> `KnifeAttackData` 结构是游戏用于描述每一次刀击属性的数据块，由 `GetKnifeAttackData` 返回其指针。
+
+---
+
+## 3. 模块逻辑详解
+
+### 3.1 环境初始化
+
+```javascript
+var mod = Process.findModuleByName('GameAssembly.dll');
+var base = mod.base;
+var isMyPlayerFn = new NativeFunction(base.add(0xB55FD0), 'bool', ['pointer']);
+var myPlayer = null;
+var myPlayerFound = false;
+```
+
+- 获取 GameAssembly 基址，并实例化 `isMyPlayer` 判官函数。  
+- 全局变量 `myPlayer` 用于存储本地玩家的地址，`myPlayerFound` 控制只捕获一次。
+
+### 3.2 捕获本地玩家指针
+
+```javascript
+Interceptor.attach(base.add(0xB170A0), { // get_KnifeSpeed
+    onLeave: function(retval) {
+        if (myPlayerFound) return;
+        var owner = this._self.add(0x8).readPointer();
+        if (owner && !owner.isNull() && isMyPlayerFn(owner)) {
+            myPlayer = owner;
+            myPlayerFound = true;
+        }
+    }
+});
+```
+
+- `get_KnifeSpeed` 函数签名为 `float get_KnifeSpeed(void* self)`，其中 `self` 是 `PlayerWeapons` 实例。  
+- 从 `self + 0x8` 得到 `PlayerWeapons` 的持有者 Player 指针。  
+- 通过 `isMyPlayer` 判断后，将 `myPlayer` 设置为本地玩家地址。  
+- 采用 `attach` 而非 `replace`，避免与快刀脚本共存时发生冲突（两个脚本不能同时 `replace` 同一个函数）。
+
+### 3.3 Hook `GetKnifeAttackData` 并修改范围
+
+```javascript
+Interceptor.attach(base.add(0xB63EC0), { // WPN_Knife.GetKnifeAttackData
+    onEnter: function(args) {
+        this.wpnSelf = args[1];   // WPN_Knife 实例
+        this.attackIdx = args[2].toInt32(); // 攻击类型索引
+        this.owner = args[1].add(0x30).readPointer(); // 所属 Player
+    },
+    onLeave: function(retval) {
+        // 读取原始数据
+        var dmg = retval.add(0x0).readFloat();
+        var orig = retval.add(0x4).readFloat();
+        var ang = retval.add(0x8).readFloat();
+        
+        // 校验 owner 是否为 myPlayer
+        var isOwnerMine = myPlayerFound &&
+            this.owner && !this.owner.isNull() &&
+            this.owner.equals(myPlayer);
+        if (!isOwnerMine) return; // 非本地玩家，跳过修改
+        
+        // 合法性检查
+        if (!(orig > 0.3 && orig < 500)) return;
+        
+        // 修改范围 = 原范围 × 倍数
+        retval.add(0x4).writeFloat(orig * KNIFE_RANGE_MULTIPLIER);
+    }
+});
+```
+
+**关键流程**：
+
+1. **onEnter** 记录武器实例和所属 Player。
+2. **onLeave** 中，从 `retval` 指向的结构体读取原始攻击数据。
+3. 通过对比 `owner` 与 `myPlayer` 确保只修改本地玩家。
+4. 对原始范围进行倍数放大（默认 50 倍），写回原地址。
+5. 使用 `attach` 而非 `replace`，原函数仍然正常返回，脚本只是在函数返回后劫持数据。
+
+### 3.4 房间切换重置
+
+```javascript
+var cleanupAddrs = [0xAFAA40, 0xAF5B30, 0xAF15D0];
+for (var i = 0; i < cleanupAddrs.length; i++) {
+    Interceptor.attach(base.add(cleanupAddrs[i]), {
+        onEnter: function() {
+            myPlayer = null;
+            myPlayerFound = false;
+            callCount = 0;
+            rangeLogCount = 0;
+        }
+    });
+}
+```
+
+- 在几个可能触发“房间/回合结束”的函数上挂接，重置全局状态，确保新游戏能重新捕获本地玩家。
+
+---
+
+## 4. 与其他脚本的兼容
+
+以往的版本可能直接 `replace` 了 `get_KnifeSpeed` 或 `GetKnifeAttackData`，但如果快刀脚本（v16）已经 `replace` 了 `get_KnifeSpeed`，两个 `replace` 就会冲突。  
+v22 改为 **全部使用 attach**，`get_KnifeSpeed` 只用于观察，不修改其返回值；`GetKnifeAttackData` 也只是在返回值上做手脚，不影响原函数执行。这样就能与使用 `replace` 的快刀脚本同时注入而不会崩溃。
+
+---
+
+## 5. 总结
+
+| 条目     | 说明                                                         |
+| -------- | ------------------------------------------------------------ |
+| 目标     | 修改本地玩家的刀距，实现超远攻击                             |
+| 原理     | Hook `GetKnifeAttackData`，在其返回值中放大 `range` 字段     |
+| 关键函数 | `PlayerWeapons.get_KnifeSpeed`（用于取 myPlayer）、`WPN_Knife.GetKnifeAttackData` |
+| 关键偏移 | `PlayerWeapons + 0x8` → Player；`KnifeAttackData + 0x4` → range |
+| 特色     | 完全使用 `Interceptor.attach`，可与其他 `replace` 脚本共存   |
+| 生命周期 | 监听回合结束函数，重置 myPlayer，确保新回合正常生效          |
+
