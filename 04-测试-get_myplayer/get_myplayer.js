@@ -1,6 +1,3 @@
-// get_myplayer.js - 获取玩家及相关实例地址 (完整版)
-// 功能：自动打印所有玩家相关类的实例地址
-
 (function () {
     'use strict';
 
@@ -9,808 +6,1216 @@
     }
 
     var gameAssembly = Process.findModuleByName("GameAssembly.dll");
-    
     if (!gameAssembly) {
         sendLog('error', '系统', '未找到 GameAssembly.dll');
         return;
     }
 
     sendLog('info', '系统', 'GameAssembly.dll: base=' + gameAssembly.base);
-
     var base = gameAssembly.base;
-    
-    function readPointerSafe(addr) {
+
+    function readPtr(addr) {
         try {
             if (!addr || addr.isNull()) return null;
-            return addr.readPointer();
-        } catch (e) {
-            return null;
-        }
+            var v = addr.readPointer();
+            return (v && !v.isNull()) ? v : null;
+        } catch (e) { return null; }
     }
 
-    function readIntSafe(addr) {
+    function readI32(addr) {
         try {
             if (!addr || addr.isNull()) return null;
             return addr.readS32();
-        } catch (e) {
-            return null;
-        }
+        } catch (e) { return null; }
     }
 
-    function readFloatSafe(addr) {
+    function readF32(addr) {
         try {
             if (!addr || addr.isNull()) return null;
             return addr.readFloat();
-        } catch (e) {
-            return null;
-        }
+        } catch (e) { return null; }
     }
 
-    function readStringSafe(addr) {
-        try {
-            if (!addr || addr.isNull()) return null;
-            var strPtr = addr.readPointer();
-            if (!strPtr || strPtr.isNull()) return null;
-            var len = strPtr.add(-4).readS32();
-            if (len < 0 || len > 100) return null;
-            return strPtr.readUtf8String(len);
-        } catch (e) {
-            return null;
-        }
-    }
-
-    function readU8Safe(addr) {
+    function readU8(addr) {
         try {
             if (!addr || addr.isNull()) return null;
             return addr.readU8();
-        } catch (e) {
-            return null;
-        }
+        } catch (e) { return null; }
     }
+
+    function readStr(addr) {
+        try {
+            if (!addr || addr.isNull()) return null;
+            var p = addr.readPointer();
+            if (!p || p.isNull()) return null;
+            var len = p.add(-4).readS32();
+            if (len < 0 || len > 200) return null;
+            return p.readUtf8String(len);
+        } catch (e) { return null; }
+    }
+
+    function hex(n) { return '0x' + n.toString(16).toUpperCase(); }
+    function pad(s, n) { return (s || '').toString().padEnd(n, ' '); }
 
     var RVA_PLAYER_IS_MY = 0xB55FD0;
 
-    var myPlayerAddress = null;
+    var myPlayerPtr = null;
     var allPlayers = {};
+    var inst = {};
 
-    var instances = {};
-
-    sendLog('info', '系统', '开始 Hook 相关函数...');
+    sendLog('info', '系统', '开始 Hook Player$$get_isMyPlayer ...');
 
     try {
-        var addrPlayerIsMy = base.add(RVA_PLAYER_IS_MY);
-        var originalIsMy = new NativeFunction(addrPlayerIsMy, 'bool', ['pointer', 'pointer']);
-        
-        Interceptor.replace(addrPlayerIsMy, new NativeCallback(function (playerPtr, methodInfo) {
+        var addrIsMy = base.add(RVA_PLAYER_IS_MY);
+        var origIsMy = new NativeFunction(addrIsMy, 'bool', ['pointer', 'pointer']);
+
+        Interceptor.replace(addrIsMy, new NativeCallback(function (playerPtr, methodInfo) {
             try {
-                var result = originalIsMy(playerPtr, methodInfo);
-                
+                var result = origIsMy(playerPtr, methodInfo);
                 if (playerPtr && !playerPtr.isNull()) {
                     allPlayers[playerPtr.toString()] = result;
-                    
-                    if (result && !myPlayerAddress) {
-                        myPlayerAddress = playerPtr;
-                        instances.player = playerPtr;
-                        instances.entity = playerPtr;
-                        setTimeout(function() {
-                            printAllInstances(playerPtr);
-                        }, 1000);
+                    if (result && !myPlayerPtr) {
+                        myPlayerPtr = playerPtr;
+                        inst.player = playerPtr;
+                        setTimeout(function () { printAll(playerPtr); }, 1500);
                     }
                 }
-                
                 return result;
-            } catch (e) {
-                return false;
-            }
+            } catch (e) { return false; }
         }, 'bool', ['pointer', 'pointer']));
 
-        sendLog('success', 'Hook', 'Player$$get_isMyPlayer');
+        sendLog('success', 'Hook', 'Player$$get_isMyPlayer OK');
     } catch (e) {
         sendLog('error', 'Hook', 'Player$$get_isMyPlayer 失败: ' + e);
     }
 
-    function printAllInstances(playerPtr) {
+    function printAll(pp) {
         sendLog('info', '', '');
-        sendLog('success', '╔══════════════════════════════════════════════════════════════════════╗', '');
-        sendLog('success', '║                         玩家实例地址汇总                              ║', '');
-        sendLog('success', '╚══════════════════════════════════════════════════════════════════════╝', '');
+        sendLog('success', '╔══════════════════════════════════════════════════════════════════════════╗', '');
+        sendLog('success', '║                    玩家实例地址汇总 (偏移已修正)                         ║', '');
+        sendLog('success', '╚══════════════════════════════════════════════════════════════════════════╝', '');
 
-        collectPlayerClass(playerPtr);
-        collectEntityClass(playerPtr);
-        collectPlayerWeaponsClass();
-        collectClientDataClass();
-        collectPlayerDataClass();
-        collectWeaponClass();
-        collectRecoilClass();
-        collectPlayerCameraManagerClass();
-        collectPlayerSkillsClass();
-        collectNano4TDataClass();
-        collectNanoRoleSelectClass();
-        collectWeaponBagClass();
-        collectPlayerInputClass();
-        collectHealthDataClass();
-        collectBuffClass();
-        collectBotClass(playerPtr);
-        collectWeaponDataClasses();
+        collectEntity(pp);
+        collectPlayer(pp);
+        collectClientData(pp);
+        collectPlayerData(pp);
+        collectPlayerInput(pp);
+        collectPlayerWeapons(pp);
+        collectWeaponBag(pp);
+        collectPlayerSkills(pp);
+        collectNanoRoleSelect(pp);
+        collectNano4TData(pp);
+        collectPlayerCameraManager(pp);
+        collectRecoil(pp);
+        collectHealthData(pp);
+        collectBuffList(pp);
+        collectBot(pp);
+        collectCharacterEffect(pp);
+        collectNano4TAttribute();
+        collectNano4TAttributeAsset();
+        collectSkillArray();
+        collectCurrentWeapon();
+        collectWeaponData();
+        collectWeaponDataGun();
+        collectWeaponDataKnife();
+        collectWDSubclasses();
+        collectWpnComponents();
+        collectSingletons();
+        collectStructs();
 
         printSummary();
     }
 
-    function collectPlayerClass(playerPtr) {
+    function collectEntity(pp) {
         sendLog('info', '', '');
-        sendLog('info', '┌────────────────────────────────────────────────────────────────────┐', '');
-        sendLog('info', '│  【Player 类】 - 玩家核心类                                        │', '');
-        sendLog('info', '├────────────────────────────────────────────────────────────────────┤', '');
-        sendLog('success', '│  实例地址: ' + playerPtr, '');
+        sendLog('info', '┌──────────────────────────────────────────────────────────────────────────┐', '');
+        sendLog('info', '│  【Entity 类】 实体基类 (Player 继承此类)                                │', '');
+        sendLog('info', '├──────────────────────────────────────────────────────────────────────────┤', '');
+        sendLog('success', '│  实例地址: ' + pp + ' (与Player相同)', '');
 
-        var fields = [
-            { offset: 0x10, type: 'PlayerCameraManager', key: 'cameraManager' },
-            { offset: 0x18, type: 'Recoil', key: 'recoil' },
-            { offset: 0x50, type: 'PropertyModifier', key: 'modifierMoveSpeed' },
-            { offset: 0x58, type: 'PlayerVelocity', key: 'velData' },
-            { offset: 0x60, type: 'NanoRoleSelect', key: 'nanoRoleSelect' },
-            { offset: 0x68, type: 'Nano4T_Data', key: 'nano4TData' },
-            { offset: 0x6C, type: 'PlayerSkills', key: 'playerSkills' },
-            { offset: 0x70, type: 'WeaponBag', key: 'weaponBag' },
-            { offset: 0x78, type: 'PlayerInput', key: 'playerInput' },
-            { offset: 0x80, type: 'PlayerData', key: 'playerData' },
-            { offset: 0x88, type: 'ClientData', key: 'clientData' },
-            { offset: 0x90, type: 'PlayerWeapons', key: 'playerWeapons' },
-            { offset: 0x98, type: 'WPN_Gun.AmmoData', key: 'mapGunAmmo1' },
-            { offset: 0xA0, type: 'WPN_Gun.AmmoData', key: 'mapGunAmmo2' }
-        ];
+        var v;
+        v = readF32(pp.add(0xC));
+        if (v !== null) sendLog('info', '│  [0x0C] baseMoveSpeed (float)       → ' + v, '');
 
-        fields.forEach(function(field) {
-            var fieldPtr = readPointerSafe(playerPtr.add(field.offset));
-            if (fieldPtr && !fieldPtr.isNull()) {
-                instances[field.key] = fieldPtr;
-                sendLog('info', '│  [0x' + padHex(field.offset) + '] ' + padRight(field.type, 24) + ' → ' + fieldPtr, '');
+        v = readF32(pp.add(0x10));
+        if (v !== null) sendLog('info', '│  [0x10] speedPenalty (float)        → ' + v, '');
+
+        v = readF32(pp.add(0x14));
+        if (v !== null) sendLog('info', '│  [0x14] damageRate (float)          → ' + v, '');
+
+        v = readU8(pp.add(0x18));
+        if (v !== null) sendLog('info', '│  [0x18] isInvincible (bool)         → ' + (v ? 'true' : 'false'), '');
+
+        v = readPtr(pp.add(0x1C));
+        if (v) { inst.healthData = v; sendLog('success', '│  [0x1C] HealthData                  → ' + v, ''); }
+
+        v = readI32(pp.add(0x20));
+        if (v !== null) sendLog('info', '│  [0x20] team (int)                  → ' + v + (v === 0 ? ' (黑名单)' : ' (保卫者)'), '');
+
+        v = readPtr(pp.add(0x28));
+        if (v) sendLog('info', '│  [0x28] characterAnimator           → ' + v, '');
+
+        v = readPtr(pp.add(0x2C));
+        if (v) sendLog('info', '│  [0x2C] characterController         → ' + v, '');
+
+        v = readU8(pp.add(0x30));
+        if (v !== null) sendLog('info', '│  [0x30] isGhostEntity (bool)        → ' + (v ? 'true' : 'false'), '');
+
+        v = readPtr(pp.add(0x34));
+        if (v) { inst.buffs = v; sendLog('success', '│  [0x34] buffs (List<Buff>)          → ' + v, ''); }
+
+        sendLog('info', '└──────────────────────────────────────────────────────────────────────────┘', '');
+    }
+
+    function collectPlayer(pp) {
+        sendLog('info', '', '');
+        sendLog('info', '┌──────────────────────────────────────────────────────────────────────────┐', '');
+        sendLog('info', '│  【Player 类】 玩家核心类 (继承Entity)                                   │', '');
+        sendLog('info', '├──────────────────────────────────────────────────────────────────────────┤', '');
+        sendLog('success', '│  实例地址: ' + pp, '');
+
+        var v;
+        v = readPtr(pp.add(0x48));
+        if (v) { inst.cameraManager = v; sendLog('success', '│  [0x48] PlayerCameraManager         → ' + v, ''); }
+
+        v = readPtr(pp.add(0x54));
+        if (v) { inst.recoil = v; sendLog('success', '│  [0x54] Recoil                      → ' + v, ''); }
+
+        v = readPtr(pp.add(0x58));
+        if (v) sendLog('info', '│  [0x58] characterContainer (Transform) → ' + v, '');
+
+        v = readPtr(pp.add(0x5C));
+        if (v) sendLog('info', '│  [0x5C] currentCharacter (CharacterModel) → ' + v, '');
+
+        v = readU8(pp.add(0x70));
+        if (v !== null) sendLog('info', '│  [0x70] isGrounded (bool)           → ' + (v ? 'true' : 'false'), '');
+
+        v = readPtr(pp.add(0x8C));
+        if (v) sendLog('info', '│  [0x8C] Modifier_MoveSpeedRatio     → ' + v, '');
+
+        v = readPtr(pp.add(0x90));
+        if (v) { inst.velData = v; sendLog('info', '│  [0x90] PlayerVelocity (velData)    → ' + v, ''); }
+
+        v = readPtr(pp.add(0x94));
+        if (v) { inst.clientData = v; sendLog('success', '│  [0x94] ClientData                  → ' + v, ''); }
+
+        v = readPtr(pp.add(0x98));
+        if (v) { inst.playerData = v; sendLog('success', '│  [0x98] PlayerData                  → ' + v, ''); }
+
+        v = readPtr(pp.add(0x9C));
+        if (v) { inst.playerInput = v; sendLog('success', '│  [0x9C] PlayerInput                 → ' + v, ''); }
+
+        v = readPtr(pp.add(0xA0));
+        if (v) { inst.playerWeapons = v; sendLog('success', '│  [0xA0] PlayerWeapons (wpns)        → ' + v, ''); }
+
+        v = readPtr(pp.add(0xA4));
+        if (v) { inst.weaponBag = v; sendLog('success', '│  [0xA4] WeaponBag                   → ' + v, ''); }
+
+        v = readPtr(pp.add(0xA8));
+        if (v) { inst.nanoRoleSelect = v; sendLog('success', '│  [0xA8] NanoRoleSelect              → ' + v, ''); }
+
+        v = readPtr(pp.add(0xAC));
+        if (v) { inst.nano4TData = v; sendLog('success', '│  [0xAC] Nano4T_Data                 → ' + v, ''); }
+
+        v = readPtr(pp.add(0xB0));
+        if (v) { inst.playerSkills = v; sendLog('success', '│  [0xB0] PlayerSkills (skills)       → ' + v, ''); }
+
+        v = readU8(pp.add(0xB8));
+        if (v !== null) sendLog('info', '│  [0xB8] isSniper (bool)             → ' + (v ? 'true' : 'false'), '');
+
+        v = readPtr(pp.add(0x108));
+        if (v) sendLog('info', '│  [0x108] mapTrigger (MapTrigger)     → ' + v, '');
+
+        sendLog('info', '└──────────────────────────────────────────────────────────────────────────┘', '');
+    }
+
+    function collectClientData(pp) {
+        var p = inst.clientData;
+        if (!p) return;
+        sendLog('info', '', '');
+        sendLog('info', '┌──────────────────────────────────────────────────────────────────────────┐', '');
+        sendLog('info', '│  【ClientData 类】 客户端数据                                            │', '');
+        sendLog('info', '├──────────────────────────────────────────────────────────────────────────┤', '');
+        sendLog('success', '│  实例地址: ' + p, '');
+
+        var v;
+        v = readI32(p.add(0x8));
+        if (v !== null) sendLog('info', '│  [0x08] defaultWpnBagID (int)       → ' + v, '');
+
+        v = readPtr(p.add(0xC));
+        if (v) sendLog('info', '│  [0x0C] wpnBags (int[][])           → ' + v, '');
+
+        v = readStr(p.add(0x10));
+        if (v) sendLog('success', '│  [0x10] nickName (string)           → ' + v, '');
+
+        v = readI32(p.add(0x14));
+        if (v !== null) sendLog('info', '│  [0x14] level (int)                 → ' + v, '');
+
+        v = readI32(p.add(0x18));
+        if (v !== null) sendLog('info', '│  [0x18] joinTeam (Team/int)         → ' + v, '');
+
+        v = readU8(p.add(0x1C));
+        if (v !== null) sendLog('info', '│  [0x1C] isBot (bool)               → ' + (v ? 'true' : 'false'), '');
+
+        v = readI32(p.add(0x20));
+        if (v !== null) sendLog('info', '│  [0x20] vipLevel (int)              → ' + v, '');
+
+        v = readI32(p.add(0x24));
+        if (v !== null) sendLog('info', '│  [0x24] character (int)             → ' + v, '');
+
+        sendLog('info', '└──────────────────────────────────────────────────────────────────────────┘', '');
+    }
+
+    function collectPlayerData(pp) {
+        var p = inst.playerData;
+        if (!p) return;
+        sendLog('info', '', '');
+        sendLog('info', '┌──────────────────────────────────────────────────────────────────────────┐', '');
+        sendLog('info', '│  【PlayerData 类】 玩家数据                                              │', '');
+        sendLog('info', '├──────────────────────────────────────────────────────────────────────────┤', '');
+        sendLog('success', '│  实例地址: ' + p, '');
+
+        var v;
+        v = readI32(p.add(0x14));
+        if (v !== null) sendLog('info', '│  [0x14] playerID (int)              → ' + v, '');
+
+        v = readStr(p.add(0x18));
+        if (v) sendLog('info', '│  [0x18] orignalCharacterName (string) → ' + v, '');
+
+        v = readI32(p.add(0x1C));
+        if (v !== null) sendLog('info', '│  [0x1C] rank (int)                  → ' + v, '');
+
+        v = readI32(p.add(0x20));
+        if (v !== null) sendLog('info', '│  [0x20] spawnCount (int)            → ' + v, '');
+
+        v = readPtr(p.add(0x4C));
+        if (v) sendLog('success', '│  [0x4C] kill (SubscribeableProperty<int>) → ' + v, '');
+
+        v = readPtr(p.add(0x50));
+        if (v) sendLog('success', '│  [0x50] death (SubscribeableProperty<int>) → ' + v, '');
+
+        v = readPtr(p.add(0x54));
+        if (v) sendLog('info', '│  [0x54] survival (SubscribeableProperty<int>) → ' + v, '');
+
+        v = readPtr(p.add(0x58));
+        if (v) sendLog('success', '│  [0x58] score (SubscribeableProperty<int>) → ' + v, '');
+
+        v = readPtr(p.add(0x5C));
+        if (v) sendLog('info', '│  [0x5C] aceSign (SubscribeableProperty<AceSign>) → ' + v, '');
+
+        v = readPtr(p.add(0x60));
+        if (v) sendLog('info', '│  [0x60] nanoRole (SubscribeableProperty<NanoRole>) → ' + v, '');
+
+        v = readPtr(p.add(0x68));
+        if (v) sendLog('info', '│  [0x68] revengeTarget (Player)      → ' + v, '');
+
+        sendLog('info', '└──────────────────────────────────────────────────────────────────────────┘', '');
+    }
+
+    function collectPlayerInput(pp) {
+        var p = inst.playerInput;
+        if (!p) return;
+        sendLog('info', '', '');
+        sendLog('info', '┌──────────────────────────────────────────────────────────────────────────┐', '');
+        sendLog('info', '│  【PlayerInput 类】 输入控制器                                           │', '');
+        sendLog('info', '├──────────────────────────────────────────────────────────────────────────┤', '');
+        sendLog('success', '│  实例地址: ' + p, '');
+
+        var v;
+        v = readI32(p.add(0x8));
+        if (v !== null) sendLog('info', '│  [0x08] RightMouse (KeyInputState)  → ' + v, '');
+
+        v = readI32(p.add(0xC));
+        if (v !== null) sendLog('info', '│  [0x0C] JumpButton (KeyInputState)  → ' + v, '');
+
+        sendLog('info', '└──────────────────────────────────────────────────────────────────────────┘', '');
+    }
+
+    function collectPlayerWeapons(pp) {
+        var p = inst.playerWeapons;
+        if (!p) return;
+        sendLog('info', '', '');
+        sendLog('info', '┌──────────────────────────────────────────────────────────────────────────┐', '');
+        sendLog('info', '│  【PlayerWeapons 类】 武器管理器                                         │', '');
+        sendLog('info', '├──────────────────────────────────────────────────────────────────────────┤', '');
+        sendLog('success', '│  实例地址: ' + p, '');
+
+        var v;
+        v = readPtr(p.add(0x8));
+        if (v) sendLog('info', '│  [0x08] owner (Player)              → ' + v, '');
+
+        v = readPtr(p.add(0xC));
+        if (v) sendLog('info', '│  [0x0C] all (List<Weapon>)          → ' + v, '');
+
+        v = readI32(p.add(0x10));
+        if (v !== null) sendLog('info', '│  [0x10] curSlot (int)               → ' + v, '');
+
+        v = readI32(p.add(0x14));
+        if (v !== null) sendLog('info', '│  [0x14] lastSlot (int)              → ' + v, '');
+
+        v = readPtr(p.add(0x18));
+        if (v) { inst.currentWeapon = v; sendLog('success', '│  [0x18] inUse (Weapon/当前武器)     → ' + v, ''); }
+
+        v = readPtr(p.add(0x1C));
+        if (v) sendLog('info', '│  [0x1C] current (Weapon[])          → ' + v, '');
+
+        v = readPtr(p.add(0x20));
+        if (v) sendLog('info', '│  [0x20] normal (Weapon[])           → ' + v, '');
+
+        v = readPtr(p.add(0x24));
+        if (v) sendLog('info', '│  [0x24] special (Weapon[])          → ' + v, '');
+
+        v = readPtr(p.add(0x28));
+        if (v) sendLog('info', '│  [0x28] temporaryWpn (Weapon)      → ' + v, '');
+
+        v = readPtr(p.add(0x2C));
+        if (v) sendLog('info', '│  [0x2C] F_KeyWpn (Weapon)          → ' + v, '');
+
+        v = readPtr(p.add(0x30));
+        if (v) sendLog('info', '│  [0x30] mapWpn (Weapon)            → ' + v, '');
+
+        v = readPtr(p.add(0x3C));
+        if (v) sendLog('info', '│  [0x3C] Modifier_ReloadSpeed       → ' + v, '');
+
+        v = readPtr(p.add(0x40));
+        if (v) sendLog('info', '│  [0x40] Modifier_KnifeRange        → ' + v, '');
+
+        v = readPtr(p.add(0x44));
+        if (v) sendLog('info', '│  [0x44] Modifier_KnifeSpeed        → ' + v, '');
+
+        sendLog('info', '└──────────────────────────────────────────────────────────────────────────┘', '');
+    }
+
+    function collectWeaponBag(pp) {
+        var p = inst.weaponBag;
+        if (!p) return;
+        sendLog('info', '', '');
+        sendLog('info', '┌──────────────────────────────────────────────────────────────────────────┐', '');
+        sendLog('info', '│  【WeaponBag 类】 武器背包                                               │', '');
+        sendLog('info', '├──────────────────────────────────────────────────────────────────────────┤', '');
+        sendLog('success', '│  实例地址: ' + p, '');
+
+        var v;
+        v = readPtr(p.add(0x8));
+        if (v) sendLog('info', '│  [0x08] disabled (ObscuredBool)     → ' + v, '');
+
+        v = readPtr(p.add(0x20));
+        if (v) sendLog('info', '│  [0x20] available (bool[])          → ' + v, '');
+
+        v = readPtr(p.add(0x24));
+        if (v) sendLog('info', '│  [0x24] weaponID (int[][])          → ' + v, '');
+
+        v = readI32(p.add(0x28));
+        if (v !== null) sendLog('info', '│  [0x28] currentBagID (int)          → ' + v, '');
+
+        sendLog('info', '└──────────────────────────────────────────────────────────────────────────┘', '');
+    }
+
+    function collectPlayerSkills(pp) {
+        var p = inst.playerSkills;
+        if (!p) return;
+        sendLog('info', '', '');
+        sendLog('info', '┌──────────────────────────────────────────────────────────────────────────┐', '');
+        sendLog('info', '│  【PlayerSkills 类】 技能管理器                                          │', '');
+        sendLog('info', '├──────────────────────────────────────────────────────────────────────────┤', '');
+        sendLog('success', '│  实例地址: ' + p, '');
+
+        var v;
+        v = readPtr(p.add(0x8));
+        if (v) { inst.skillArray = v; sendLog('info', '│  [0x08] all (Skill[])               → ' + v, ''); }
+
+        v = readPtr(p.add(0xC));
+        if (v) sendLog('info', '│  [0x0C] owner (Player)              → ' + v, '');
+
+        sendLog('info', '└──────────────────────────────────────────────────────────────────────────┘', '');
+    }
+
+    function collectNanoRoleSelect(pp) {
+        var p = inst.nanoRoleSelect;
+        if (!p) return;
+        sendLog('info', '', '');
+        sendLog('info', '┌──────────────────────────────────────────────────────────────────────────┐', '');
+        sendLog('info', '│  【NanoRoleSelect 类】 纳米角色选择器                                    │', '');
+        sendLog('info', '├──────────────────────────────────────────────────────────────────────────┤', '');
+        sendLog('success', '│  实例地址: ' + p, '');
+
+        var v;
+        v = readPtr(p.add(0x8));
+        if (v) sendLog('info', '│  [0x08] owner (Player)              → ' + v, '');
+
+        v = readI32(p.add(0xC));
+        if (v !== null) sendLog('info', '│  [0x0C] tableType (NanoRoleSelect.Type) → ' + v, '');
+
+        v = readF32(p.add(0x10));
+        if (v !== null) sendLog('info', '│  [0x10] closeTime (float)           → ' + v, '');
+
+        sendLog('info', '└──────────────────────────────────────────────────────────────────────────┘', '');
+    }
+
+    function collectNano4TData(pp) {
+        var p = inst.nano4TData;
+        if (!p) return;
+        sendLog('info', '', '');
+        sendLog('info', '┌──────────────────────────────────────────────────────────────────────────┐', '');
+        sendLog('info', '│  【Nano4T_Data 类】 纳米4T数据                                           │', '');
+        sendLog('info', '├──────────────────────────────────────────────────────────────────────────┤', '');
+        sendLog('success', '│  实例地址: ' + p, '');
+
+        var v;
+        v = readPtr(p.add(0x8));
+        if (v) sendLog('info', '│  [0x08] humanLayer (SubscribeableProperty<int>) → ' + v, '');
+
+        v = readPtr(p.add(0xC));
+        if (v) sendLog('info', '│  [0x0C] nanoLayer (SubscribeableProperty<int>) → ' + v, '');
+
+        v = readPtr(p.add(0x10));
+        if (v) sendLog('info', '│  [0x10] pickUpBoxCount (SubscribeableProperty<int>) → ' + v, '');
+
+        v = readU8(p.add(0x14));
+        if (v !== null) sendLog('info', '│  [0x14] canUseGrave (bool)          → ' + (v ? 'true' : 'false'), '');
+
+        v = readI32(p.add(0x18));
+        if (v !== null) sendLog('info', '│  [0x18] graveCount (int)            → ' + v, '');
+
+        sendLog('info', '└──────────────────────────────────────────────────────────────────────────┘', '');
+    }
+
+    function collectPlayerCameraManager(pp) {
+        var p = inst.cameraManager;
+        if (!p) return;
+        sendLog('info', '', '');
+        sendLog('info', '┌──────────────────────────────────────────────────────────────────────────┐', '');
+        sendLog('info', '│  【PlayerCameraManager 类】 相机管理器                                   │', '');
+        sendLog('info', '├──────────────────────────────────────────────────────────────────────────┤', '');
+        sendLog('success', '│  实例地址: ' + p, '');
+
+        var v;
+        v = readPtr(p.add(0xC));
+        if (v) sendLog('info', '│  [0x0C] mapCamera (CinemachineVirtualCamera) → ' + v, '');
+
+        v = readPtr(p.add(0x10));
+        if (v) sendLog('info', '│  [0x10] modelCamera (Camera)        → ' + v, '');
+
+        v = readF32(p.add(0x3C));
+        if (v !== null) sendLog('info', '│  [0x3C] modelDefaultFOV (float)     → ' + v, '');
+
+        sendLog('info', '└──────────────────────────────────────────────────────────────────────────┘', '');
+    }
+
+    function collectRecoil(pp) {
+        var p = inst.recoil;
+        if (!p) return;
+        sendLog('info', '', '');
+        sendLog('info', '┌──────────────────────────────────────────────────────────────────────────┐', '');
+        sendLog('info', '│  【Recoil 类】 后坐力控制器 (TypeDefIndex: 5559)                         │', '');
+        sendLog('info', '├──────────────────────────────────────────────────────────────────────────┤', '');
+        sendLog('success', '│  实例地址: ' + p, '');
+
+        var v;
+        v = readPtr(p.add(0xC));
+        if (v) sendLog('info', '│  [0x0C] shootPosture               → ' + v, '');
+
+        v = readF32(p.add(0x68));
+        if (v !== null) sendLog('info', '│  [0x68] addYaw (float)              → ' + v, '');
+
+        v = readF32(p.add(0x6C));
+        if (v !== null) sendLog('info', '│  [0x6C] addPitch (float)            → ' + v, '');
+
+        v = readF32(p.add(0x70));
+        if (v !== null) sendLog('info', '│  [0x70] addYaw_Target (float)       → ' + v, '');
+
+        v = readF32(p.add(0x74));
+        if (v !== null) sendLog('info', '│  [0x74] addPitch_Target (float)     → ' + v, '');
+
+        sendLog('info', '└──────────────────────────────────────────────────────────────────────────┘', '');
+    }
+
+    function collectHealthData(pp) {
+        var p = inst.healthData;
+        if (!p) return;
+        sendLog('info', '', '');
+        sendLog('info', '┌──────────────────────────────────────────────────────────────────────────┐', '');
+        sendLog('info', '│  【HealthData 类】 生命值数据                                            │', '');
+        sendLog('info', '├──────────────────────────────────────────────────────────────────────────┤', '');
+        sendLog('success', '│  实例地址: ' + p, '');
+
+        sendLog('info', '│  [0x08] currentHealth (ObscuredInt)', '');
+        sendLog('info', '│  [0x1C] maxHealth (ObscuredInt)', '');
+        sendLog('info', '│  [0x30] tempHealth (ObscuredInt)', '');
+
+        var v = readF32(p.add(0x44));
+        if (v !== null) sendLog('info', '│  [0x44] invinsibleEndTime (float)   → ' + v, '');
+
+        sendLog('info', '└──────────────────────────────────────────────────────────────────────────┘', '');
+    }
+
+    function collectBuffList(pp) {
+        var p = inst.buffs;
+        if (!p) return;
+        sendLog('info', '', '');
+        sendLog('info', '┌──────────────────────────────────────────────────────────────────────────┐', '');
+        sendLog('info', '│  【Buff 类】 Buff列表 (List<Buff>)                                       │', '');
+        sendLog('info', '├──────────────────────────────────────────────────────────────────────────┤', '');
+        sendLog('success', '│  List实例地址: ' + p, '');
+
+        var v = readI32(p.add(0x18));
+        if (v !== null) sendLog('info', '│  Buff 数量 (list._size): ' + v, '');
+
+        var itemsPtr = readPtr(p.add(0x10));
+        if (itemsPtr) {
+            var count = v || 0;
+            if (count > 0 && count < 20) {
+                for (var i = 0; i < count; i++) {
+                    var buffPtr = readPtr(itemsPtr.add(0x4 * i + 0x8));
+                    if (buffPtr) {
+                        var buffName = readStr(buffPtr.add(0x8));
+                        var endTime = readF32(buffPtr.add(0x10));
+                        sendLog('info', '│  Buff[' + i + ']: ' + buffPtr + (buffName ? ' name=' + buffName : '') + (endTime !== null ? ' endTime=' + endTime : ''), '');
+                    }
+                }
             }
-        });
+        }
+
+        sendLog('info', '└──────────────────────────────────────────────────────────────────────────┘', '');
+    }
+
+    function collectBot(pp) {
+        sendLog('info', '', '');
+        sendLog('info', '┌──────────────────────────────────────────────────────────────────────────┐', '');
+        sendLog('info', '│  【Bot 类】 Bot控制器 (MonoBehaviour, TypeDefIndex: 5095)                │', '');
+        sendLog('info', '├──────────────────────────────────────────────────────────────────────────┤', '');
+        sendLog('info', '│  Bot是独立MonoBehaviour组件，与Player挂载在同一GameObject上', '');
+        sendLog('info', '│  Player类无直接字段引用Bot，需通过GetComponent获取', '');
+        sendLog('info', '│  本地玩家(isMyPlayer=true)不会有Bot组件', '');
+
+        try {
+            var il2cpp_class_from_name = new NativeFunction(
+                Module.findExportByName('GameAssembly.dll', 'il2cpp_class_from_name'),
+                'pointer', ['pointer', 'pointer', 'pointer']
+            );
+            var il2cpp_domain_get = new NativeFunction(
+                Module.findExportByName('GameAssembly.dll', 'il2cpp_domain_get'),
+                'pointer', []
+            );
+            var il2cpp_domain_get_assemblies = new NativeFunction(
+                Module.findExportByName('GameAssembly.dll', 'il2cpp_domain_get_assemblies'),
+                'pointer', ['pointer', 'pointer']
+            );
+            var il2cpp_assembly_get_image = new NativeFunction(
+                Module.findExportByName('GameAssembly.dll', 'il2cpp_assembly_get_image'),
+                'pointer', ['pointer']
+            );
+            var il2cpp_class_get_methods = new NativeFunction(
+                Module.findExportByName('GameAssembly.dll', 'il2cpp_class_get_methods'),
+                'pointer', ['pointer', 'pointer']
+            );
+            var il2cpp_method_get_name = new NativeFunction(
+                Module.findExportByName('GameAssembly.dll', 'il2cpp_method_get_name'),
+                'pointer', ['pointer']
+            );
+
+            var domain = il2cpp_domain_get();
+            var sizePtr = Memory.alloc(4);
+            var assemblies = il2cpp_domain_get_assemblies(domain, sizePtr);
+            var asmCount = sizePtr.readU32();
+
+            var botClass = null;
+            for (var ai = 0; ai < asmCount; ai++) {
+                var image = il2cpp_assembly_get_image(assemblies.add(Process.pointerSize * ai).readPointer());
+                if (image.isNull()) continue;
+                var ns = Memory.allocUtf8String('');
+                var name = Memory.allocUtf8String('Bot');
+                var cls = il2cpp_class_from_name(image, ns, name);
+                if (!cls.isNull()) { botClass = cls; break; }
+            }
+
+            if (botClass && !botClass.isNull()) {
+                sendLog('success', '│  Bot类元数据: ' + botClass, '');
+
+                var il2cpp_class_get_static_field_data = new NativeFunction(
+                    Module.findExportByName('GameAssembly.dll', 'il2cpp_class_get_static_field_data'),
+                    'pointer', ['pointer']
+                );
+                var staticData = il2cpp_class_get_static_field_data(botClass);
+                if (!staticData.isNull()) {
+                    var stopAllBot = readU8(staticData.add(0xC));
+                    if (stopAllBot !== null) sendLog('info', '│  [静态 0xC] stopAllBot (bool)       → ' + (stopAllBot ? 'true' : 'false'), '');
+                }
+            }
+        } catch (e) {
+            sendLog('info', '│  il2cpp API调用失败: ' + e.message, '');
+        }
 
         sendLog('info', '│', '');
-        sendLog('info', '│  【Player - Buff 相关字段】', '');
-        var buffInfinityAmmo = readU8Safe(playerPtr.add(0xC8));
-        if (buffInfinityAmmo !== null) {
-            sendLog('info', '│  [0xC8] Buff_InfinityAmmo (bool) → ' + (buffInfinityAmmo ? 'true' : 'false'), '');
-        }
-        var buffJumpDisabled = readU8Safe(playerPtr.add(0xB8));
-        if (buffJumpDisabled !== null) {
-            sendLog('info', '│  [0xB8] Buff_JumpDisabled (bool) → ' + (buffJumpDisabled ? 'true' : 'false'), '');
-        }
-        var buffCameraRotDisabled = readU8Safe(playerPtr.add(0xB0));
-        if (buffCameraRotDisabled !== null) {
-            sendLog('info', '│  [0xB0] Buff_CameraRotDisabled (bool) → ' + (buffCameraRotDisabled ? 'true' : 'false'), '');
-        }
-
-        sendLog('info', '└────────────────────────────────────────────────────────────────────┘', '');
+        sendLog('info', '│  Bot实例字段参考 (仅Bot玩家有):', '');
+        sendLog('info', '│  [0x0C] ability (BotAbility struct)', '');
+        sendLog('info', '│  [0x24] thisPlayer (Player)', '');
+        sendLog('info', '│  [0x28] enemyInfo (BotEnemyInfo)', '');
+        sendLog('info', '│  [0x3C] nextAttackTime (float)', '');
+        sendLog('info', '│  [0x58] actionList (List<BotActionBase>)', '');
+        sendLog('info', '└──────────────────────────────────────────────────────────────────────────┘', '');
     }
 
-    function collectEntityClass(playerPtr) {
+    function collectNano4TAttribute() {
         sendLog('info', '', '');
-        sendLog('info', '┌────────────────────────────────────────────────────────────────────┐', '');
-        sendLog('info', '│  【Entity 类】 - 实体基类 (Player 继承此类)                        │', '');
-        sendLog('info', '├────────────────────────────────────────────────────────────────────┤', '');
-        sendLog('info', '│  实例地址: ' + playerPtr + ' (与 Player 相同)', '');
-
-        var baseMoveSpeed = readFloatSafe(playerPtr.add(0x10));
-        if (baseMoveSpeed !== null) {
-            sendLog('info', '│  [0x10] baseMoveSpeed (float)    → ' + baseMoveSpeed, '');
-        }
-
-        var healthDataPtr = readPointerSafe(playerPtr.add(0x18));
-        if (healthDataPtr && !healthDataPtr.isNull()) {
-            instances.healthData = healthDataPtr;
-            sendLog('info', '│  [0x18] HealthData              → ' + healthDataPtr, '');
-        }
-
-        var team = readIntSafe(playerPtr.add(0x20));
-        if (team !== null) {
-            sendLog('info', '│  [0x20] team (int)              → ' + team + ' (' + (team === 0 ? '黑名单' : '保卫者') + ')', '');
-        }
-
-        var isInvincible = readU8Safe(playerPtr.add(0x1C));
-        if (isInvincible !== null) {
-            sendLog('info', '│  [0x1C] isInvincible (bool)     → ' + (isInvincible ? 'true' : 'false'), '');
-        }
-
-        var buffsPtr = readPointerSafe(playerPtr.add(0x40));
-        if (buffsPtr && !buffsPtr.isNull()) {
-            instances.buffs = buffsPtr;
-            sendLog('info', '│  [0x40] buffs (List<Buff>)      → ' + buffsPtr, '');
-        }
-
-        sendLog('info', '└────────────────────────────────────────────────────────────────────┘', '');
+        sendLog('info', '┌──────────────────────────────────────────────────────────────────────────┐', '');
+        sendLog('info', '│  【Nano4T_Attribute 类】 纳米4T属性 (TypeDefIndex: 5223)                 │', '');
+        sendLog('info', '├──────────────────────────────────────────────────────────────────────────┤', '');
+        sendLog('info', '│  Nano4T_Attribute为普通class(非MonoBehaviour)，通过Nano4T_AttributeAsset引用', '');
+        sendLog('info', '│  字段: [0x08] attributeName (string)', '');
+        sendLog('info', '│  字段: [0x0C] id (int)', '');
+        sendLog('info', '│  字段: [0x10] image (Sprite)', '');
+        sendLog('info', '│  字段: [0x14] description (string)', '');
+        sendLog('info', '│  常量: Gene=0, Terminator=1, Upgrade=2, Strong=3, Armor=4, Nail=5,', '');
+        sendLog('info', '│        InfectExp=6, Hot=7, EvilBox=8, Grave=9, Savior=10, KillNano=11,', '');
+        sendLog('info', '│        Grenade=12, Supply=13, Ammo=14, Reload=15, Shield=16, SPAgent=17,', '');
+        sendLog('info', '│        HeroBox=18, Critical=19', '');
+        sendLog('info', '│  静态字段: None (Nano4T_Attribute) @ 0x0', '');
+        sendLog('info', '└──────────────────────────────────────────────────────────────────────────┘', '');
     }
 
-    function collectPlayerWeaponsClass() {
-        if (!instances.playerWeapons) return;
-
+    function collectNano4TAttributeAsset() {
         sendLog('info', '', '');
-        sendLog('info', '┌────────────────────────────────────────────────────────────────────┐', '');
-        sendLog('info', '│  【PlayerWeapons 类】 - 武器管理器                                 │', '');
-        sendLog('info', '├────────────────────────────────────────────────────────────────────┤', '');
-        sendLog('success', '│  实例地址: ' + instances.playerWeapons, '');
+        sendLog('info', '┌──────────────────────────────────────────────────────────────────────────┐', '');
+        sendLog('info', '│  【Nano4T_AttributeAsset 类】 纳米4T属性资源 (ScriptableObject, TDI:5227)│', '');
+        sendLog('info', '├──────────────────────────────────────────────────────────────────────────┤', '');
+        sendLog('info', '│  ScriptableObject，通过Resources.Load加载，非Player直接引用', '');
+        sendLog('info', '│  字段: [0x0C] normalRound (Group struct)', '');
+        sendLog('info', '│  字段: [0x10] battleRound (Group struct)', '');
+        sendLog('info', '│  字段: [0x14] attributes (Nano4T_Attribute[])', '');
+        sendLog('info', '│  字段: [0x18] SkillBtn_GoldShield (GameObject)', '');
+        sendLog('info', '│  字段: [0x1C] SFX_GoldShield (GameObject)', '');
+        sendLog('info', '│  字段: [0x20] FX_GoldShield (GameObject)', '');
+        sendLog('info', '│  内嵌结构体 Group: [0x08] nano (RandomItem), [0x0C] human (RandomItem)', '');
+        sendLog('info', '└──────────────────────────────────────────────────────────────────────────┘', '');
+    }
 
-        var fields = [
-            { offset: 0x10, type: 'Player (owner)' },
-            { offset: 0x18, type: 'List<Weapon> (all)' },
-            { offset: 0x20, type: 'int (curSlot)' },
-            { offset: 0x24, type: 'int (lastSlot)' },
-            { offset: 0x28, type: 'Weapon (inUse/当前武器)', key: 'currentWeapon' },
-            { offset: 0x30, type: 'Weapon[] (current)' },
-            { offset: 0x38, type: 'Weapon[] (normal)' },
-            { offset: 0x40, type: 'Weapon[] (special)' },
-            { offset: 0x48, type: 'Weapon (temporaryWpn)' },
-            { offset: 0x50, type: 'Weapon (F_KeyWpn)' },
-            { offset: 0x58, type: 'Weapon (mapWpn)' },
-            { offset: 0x68, type: 'PropertyModifier (ReloadSpeed)' },
-            { offset: 0x70, type: 'PropertyModifier (KnifeRange)' },
-            { offset: 0x78, type: 'PropertyModifier (KnifeSpeed)' }
-        ];
+    function collectSkillArray() {
+        var p = inst.playerSkills;
+        if (!p) return;
+        sendLog('info', '', '');
+        sendLog('info', '┌──────────────────────────────────────────────────────────────────────────┐', '');
+        sendLog('info', '│  【Skill 类】 技能 (abstract class, TypeDefIndex: 5486)                  │', '');
+        sendLog('info', '├──────────────────────────────────────────────────────────────────────────┤', '');
 
-        fields.forEach(function(field) {
+        var v;
+        v = readPtr(p.add(0x8));
+        if (v) {
+            inst.skillArray = v;
+            sendLog('success', '│  [0x08] all (Skill[])              → ' + v, '');
+
             try {
-                if (field.type.indexOf('int') >= 0) {
-                    var val = readIntSafe(instances.playerWeapons.add(field.offset));
-                    if (val !== null) {
-                        sendLog('info', '│  [0x' + padHex(field.offset) + '] ' + padRight(field.type, 28) + ' → ' + val, '');
-                    }
-                } else {
-                    var fieldPtr = readPointerSafe(instances.playerWeapons.add(field.offset));
-                    if (fieldPtr && !fieldPtr.isNull()) {
-                        if (field.key) {
-                            instances[field.key] = fieldPtr;
-                            sendLog('success', '│  [0x' + padHex(field.offset) + '] ' + padRight(field.type, 28) + ' → ' + fieldPtr, '');
-                        } else {
-                            sendLog('info', '│  [0x' + padHex(field.offset) + '] ' + padRight(field.type, 28) + ' → ' + fieldPtr, '');
+                var arrLen = v.add(0x18).readS32();
+                if (arrLen >= 0 && arrLen < 10) {
+                    var arrData = v.add(0x20).readPointer();
+                    if (arrData && !arrData.isNull()) {
+                        for (var i = 0; i < arrLen; i++) {
+                            var skillPtr = readPtr(arrData.add(4 * i));
+                            if (skillPtr) {
+                                var skillName = readStr(skillPtr.add(0x8));
+                                var skillBtn = readPtr(skillPtr.add(0xC));
+                                var disabled = readU8(skillPtr.add(0x10));
+                                sendLog('info', '│    Skill[' + i + ']: ' + skillPtr +
+                                    (skillName ? ' name=' + skillName : '') +
+                                    ' disabled=' + (disabled ? 'true' : 'false'), '');
+                            }
                         }
                     }
                 }
-            } catch (e) {}
-        });
-
-        sendLog('info', '└────────────────────────────────────────────────────────────────────┘', '');
-    }
-
-    function collectClientDataClass() {
-        if (!instances.clientData) return;
-
-        sendLog('info', '', '');
-        sendLog('info', '┌────────────────────────────────────────────────────────────────────┐', '');
-        sendLog('info', '│  【ClientData 类】 - 客户端数据                                    │', '');
-        sendLog('info', '├────────────────────────────────────────────────────────────────────┤', '');
-        sendLog('success', '│  实例地址: ' + instances.clientData, '');
-
-        var fields = [
-            { offset: 0x10, name: 'defaultWpnBagID', type: 'int' },
-            { offset: 0x18, name: 'nickName', type: 'string' },
-            { offset: 0x20, name: 'level', type: 'int' },
-            { offset: 0x24, name: 'joinTeam', type: 'int' },
-            { offset: 0x28, name: 'isBot', type: 'bool' },
-            { offset: 0x2C, name: 'vipLevel', type: 'int' },
-            { offset: 0x30, name: 'character', type: 'int' }
-        ];
-
-        fields.forEach(function(field) {
-            try {
-                if (field.type === 'string') {
-                    var val = readStringSafe(instances.clientData.add(field.offset));
-                    if (val) {
-                        sendLog('success', '│  [0x' + padHex(field.offset) + '] ' + padRight(field.name, 20) + ' (string) → ' + val, '');
-                    }
-                } else if (field.type === 'int') {
-                    var val = readIntSafe(instances.clientData.add(field.offset));
-                    if (val !== null) {
-                        sendLog('info', '│  [0x' + padHex(field.offset) + '] ' + padRight(field.name, 20) + ' (int)   → ' + val, '');
-                    }
-                } else if (field.type === 'bool') {
-                    var val = readU8Safe(instances.clientData.add(field.offset));
-                    if (val !== null) {
-                        sendLog('info', '│  [0x' + padHex(field.offset) + '] ' + padRight(field.name, 20) + ' (bool)  → ' + (val ? 'true' : 'false'), '');
-                    }
-                }
-            } catch (e) {}
-        });
-
-        sendLog('info', '└────────────────────────────────────────────────────────────────────┘', '');
-    }
-
-    function collectPlayerDataClass() {
-        if (!instances.playerData) return;
-
-        sendLog('info', '', '');
-        sendLog('info', '┌────────────────────────────────────────────────────────────────────┐', '');
-        sendLog('info', '│  【PlayerData 类】 - 玩家数据                                      │', '');
-        sendLog('info', '├────────────────────────────────────────────────────────────────────┤', '');
-        sendLog('success', '│  实例地址: ' + instances.playerData, '');
-
-        var fields = [
-            { offset: 0x10, name: 'playerID', type: 'int' },
-            { offset: 0x14, name: 'rank', type: 'int' },
-            { offset: 0x18, name: 'spawnCount', type: 'int' },
-            { offset: 0x40, name: 'kill', type: 'SubscribeableProperty<int>' },
-            { offset: 0x48, name: 'death', type: 'SubscribeableProperty<int>' },
-            { offset: 0x50, name: 'score', type: 'SubscribeableProperty<int>' },
-            { offset: 0x58, name: 'aceSign', type: 'SubscribeableProperty<AceSign>' },
-            { offset: 0x60, name: 'nanoRole', type: 'SubscribeableProperty<NanoRole>' },
-            { offset: 0x80, name: 'revengeTarget', type: 'Player' }
-        ];
-
-        fields.forEach(function(field) {
-            try {
-                if (field.type === 'int') {
-                    var val = readIntSafe(instances.playerData.add(field.offset));
-                    if (val !== null) {
-                        sendLog('info', '│  [0x' + padHex(field.offset) + '] ' + padRight(field.name, 16) + ' (' + padRight(field.type, 28) + ') → ' + val, '');
-                    }
-                } else {
-                    var val = readPointerSafe(instances.playerData.add(field.offset));
-                    if (val && !val.isNull()) {
-                        sendLog('info', '│  [0x' + padHex(field.offset) + '] ' + padRight(field.name, 16) + ' (' + padRight(field.type, 28) + ') → ' + val, '');
-                    }
-                }
-            } catch (e) {}
-        });
-
-        sendLog('info', '└────────────────────────────────────────────────────────────────────┘', '');
-    }
-
-    function collectWeaponClass() {
-        if (!instances.currentWeapon) return;
-
-        sendLog('info', '', '');
-        sendLog('info', '┌────────────────────────────────────────────────────────────────────┐', '');
-        sendLog('info', '│  【Weapon / WPN_Gun 类】 - 当前武器                                │', '');
-        sendLog('info', '├────────────────────────────────────────────────────────────────────┤', '');
-        sendLog('success', '│  实例地址: ' + instances.currentWeapon, '');
-
-        var fields = [
-            { offset: 0x10, name: 'owner', type: 'Player' },
-            { offset: 0x18, name: 'data', type: 'WeaponData', key: 'weaponData' },
-            { offset: 0x28, name: 'realData', type: 'WeaponData_Gun', key: 'weaponDataGun' },
-            { offset: 0x30, name: 'ammoData', type: 'WPN_Gun.AmmoData', key: 'ammoData' },
-            { offset: 0x38, name: 'ReloadCheck_Listener', type: 'Func<bool>' },
-            { offset: 0x40, name: 'lastShootTime', type: 'float' },
-            { offset: 0x44, name: 'recoilDataID', type: 'int' },
-            { offset: 0x50, name: 'nextAllowedShootTime', type: 'float' }
-        ];
-
-        fields.forEach(function(field) {
-            try {
-                if (field.type === 'float') {
-                    var val = readFloatSafe(instances.currentWeapon.add(field.offset));
-                    if (val !== null) {
-                        sendLog('info', '│  [0x' + padHex(field.offset) + '] ' + padRight(field.name, 24) + ' (float) → ' + val, '');
-                    }
-                } else if (field.type === 'int') {
-                    var val = readIntSafe(instances.currentWeapon.add(field.offset));
-                    if (val !== null) {
-                        sendLog('info', '│  [0x' + padHex(field.offset) + '] ' + padRight(field.name, 24) + ' (int)   → ' + val, '');
-                    }
-                } else {
-                    var val = readPointerSafe(instances.currentWeapon.add(field.offset));
-                    if (val && !val.isNull()) {
-                        if (field.key) instances[field.key] = val;
-                        sendLog('info', '│  [0x' + padHex(field.offset) + '] ' + padRight(field.name, 24) + ' (' + field.type + ') → ' + val, '');
-                    }
-                }
-            } catch (e) {}
-        });
-
-        if (instances.ammoData) {
-            sendLog('info', '│', '');
-            sendLog('info', '│  【WPN_Gun.AmmoData 子类】', '');
-            var clipAmmo = readIntSafe(instances.ammoData.add(0x10));
-            var totalAmmo = readIntSafe(instances.ammoData.add(0x14));
-            if (clipAmmo !== null) {
-                sendLog('info', '│        [0x10] clipAmmo (int)    → ' + clipAmmo, '');
+            } catch (e) {
+                sendLog('info', '│  Skill数组遍历失败: ' + e.message, '');
             }
-            if (totalAmmo !== null) {
-                sendLog('info', '│        [0x14] totalAmmo (int)   → ' + totalAmmo, '');
-            }
+        } else {
+            sendLog('info', '│  all (Skill[]) 为空', '');
         }
 
-        sendLog('info', '└────────────────────────────────────────────────────────────────────┘', '');
+        v = readPtr(p.add(0xC));
+        if (v) sendLog('info', '│  [0x0C] owner (Player)             → ' + v, '');
+
+        sendLog('info', '│', '');
+        sendLog('info', '│  Skill基类字段: [0x08] name, [0x0C] skillBtn, [0x10] disabled', '');
+        sendLog('info', '│  Skill子类: SkillKnife, Skill_Grenade, Skill_SentryGun 等', '');
+        sendLog('info', '└──────────────────────────────────────────────────────────────────────────┘', '');
     }
 
-    function collectRecoilClass() {
-        if (!instances.recoil) return;
-
+    function collectCharacterEffect(pp) {
         sendLog('info', '', '');
-        sendLog('info', '┌────────────────────────────────────────────────────────────────────┐', '');
-        sendLog('info', '│  【Recoil 类】 - 后坐力控制器                                      │', '');
-        sendLog('info', '├────────────────────────────────────────────────────────────────────┤', '');
-        sendLog('success', '│  实例地址: ' + instances.recoil, '');
-
-        var shootPosture = readIntSafe(instances.recoil.add(0x10));
-        if (shootPosture !== null) {
-            sendLog('info', '│  [0x10] shootPosture (int)      → ' + shootPosture, '');
-        }
-
-        var addYaw = readFloatSafe(instances.recoil.add(0x40));
-        var addPitch = readFloatSafe(instances.recoil.add(0x44));
-        if (addYaw !== null) {
-            sendLog('info', '│  [0x40] addYaw (float)          → ' + addYaw, '');
-        }
-        if (addPitch !== null) {
-            sendLog('info', '│  [0x44] addPitch (float)        → ' + addPitch, '');
-        }
-
-        var shoot = readU8Safe(instances.recoil.add(0xB0));
-        if (shoot !== null) {
-            sendLog('info', '│  [0xB0] shoot (bool)            → ' + (shoot ? 'true' : 'false'), '');
-        }
-
-        sendLog('info', '└────────────────────────────────────────────────────────────────────┘', '');
+        sendLog('info', '┌──────────────────────────────────────────────────────────────────────────┐', '');
+        sendLog('info', '│  【CharacterEffect 类】 角色特效 (MonoBehaviour, TypeDefIndex: 5125)    │', '');
+        sendLog('info', '├──────────────────────────────────────────────────────────────────────────┤', '');
+        sendLog('info', '│  CharacterEffect是独立MonoBehaviour组件，与Player挂载在同一GameObject', '');
+        sendLog('info', '│  Player类无直接字段引用CharacterEffect，需通过GetComponent获取', '');
+        sendLog('info', '│', '');
+        sendLog('info', '│  实例字段参考:', '');
+        sendLog('info', '│  [0x0C] datas (FxData[])', '');
+        sendLog('info', '│  [0x10] owner (Player)', '');
+        sendLog('info', '│  [0x14] fxList (List<EffectObj>)', '');
+        sendLog('info', '│  [0x18] isFxEnable (bool)', '');
+        sendLog('info', '└──────────────────────────────────────────────────────────────────────────┘', '');
     }
 
-    function collectPlayerCameraManagerClass() {
-        if (!instances.cameraManager) return;
+    function collectCurrentWeapon() {
+        var p = inst.currentWeapon;
+        if (!p) return;
+        sendLog('info', '', '');
+        sendLog('info', '┌──────────────────────────────────────────────────────────────────────────┐', '');
+        sendLog('info', '│  【Weapon 类】 当前武器基类 (继承CFAnimator)                             │', '');
+        sendLog('info', '├──────────────────────────────────────────────────────────────────────────┤', '');
+        sendLog('success', '│  实例地址: ' + p, '');
+
+        var v;
+        v = readPtr(p.add(0x68));
+        if (v) { inst.weaponData = v; sendLog('success', '│  [0x68] data (WeaponData)           → ' + v, ''); }
+
+        v = readU8(p.add(0x78));
+        if (v !== null) sendLog('info', '│  [0x78] fireBtnPressed (bool)       → ' + (v ? 'true' : 'false'), '');
+
+        v = readPtr(p.add(0xD0));
+        if (v) { inst.mapGun = v; sendLog('info', '│  [0xD0] bindMapTrigger (MapGun)     → ' + v, ''); }
 
         sendLog('info', '', '');
-        sendLog('info', '┌────────────────────────────────────────────────────────────────────┐', '');
-        sendLog('info', '│  【PlayerCameraManager 类】 - 相机管理器                          │', '');
-        sendLog('info', '├────────────────────────────────────────────────────────────────────┤', '');
-        sendLog('success', '│  实例地址: ' + instances.cameraManager, '');
+        sendLog('info', '│  【WPN_Gun 类】 枪械 (继承Weapon, TypeDefIndex: 5577)', '');
+        v = readPtr(p.add(0xEC));
+        if (v) { inst.weaponDataGun = v; sendLog('success', '│  [0xEC] realData (WeaponData_Gun)   → ' + v, ''); }
 
-        var fields = [
-            { offset: 0x10, name: 'mapCamera', type: 'CinemachineVirtualCamera' },
-            { offset: 0x18, name: 'modelCamera', type: 'Camera' },
-            { offset: 0x20, name: 'modelContainer', type: 'Transform' },
-            { offset: 0x38, name: 'zoomFovScale', type: 'float' },
-            { offset: 0x50, name: 'extraMapFov', type: 'float' },
-            { offset: 0x54, name: 'extraPvFov', type: 'float' }
+        v = readU8(p.add(0xF0));
+        if (v !== null) sendLog('info', '│  [0xF0] isSemiGun (bool)            → ' + (v ? 'true' : 'false'), '');
+
+        v = readPtr(p.add(0xF4));
+        if (v) { inst.ammoData = v; sendLog('success', '│  [0xF4] ammoData (WPN_Gun.AmmoData) → ' + v, ''); }
+
+        v = readF32(p.add(0xFC));
+        if (v !== null) sendLog('info', '│  [0xFC] lastShootTime (float)       → ' + v, '');
+
+        v = readI32(p.add(0x100));
+        if (v !== null) sendLog('info', '│  [0x100] recoilDataID (int)         → ' + v, '');
+
+        v = readF32(p.add(0x110));
+        if (v !== null) sendLog('success', '│  [0x110] nextAllowedShootTime (float) → ' + v, '');
+
+        v = readI32(p.add(0x124));
+        if (v !== null) sendLog('info', '│  [0x124] zoomIndex (int)            → ' + v, '');
+
+        sendLog('info', '', '');
+        sendLog('info', '│  【WPN_Knife 类】 近战武器 (继承Weapon, TypeDefIndex: 5580)', '');
+        v = readF32(p.add(0xEC));
+        if (v !== null) sendLog('info', '│  [0xEC] combo1_AnimSpeed (float)    → ' + v, '');
+
+        sendLog('info', '└──────────────────────────────────────────────────────────────────────────┘', '');
+    }
+
+    function collectWeaponData() {
+        var p = inst.weaponData;
+        if (!p) return;
+        sendLog('info', '', '');
+        sendLog('info', '┌──────────────────────────────────────────────────────────────────────────┐', '');
+        sendLog('info', '│  【WeaponData 类】 武器数据基类 (ScriptableObject)                       │', '');
+        sendLog('info', '├──────────────────────────────────────────────────────────────────────────┤', '');
+        sendLog('success', '│  实例地址: ' + p, '');
+
+        var v;
+        v = readI32(p.add(0xC));
+        if (v !== null) sendLog('info', '│  [0x0C] wpnIndex (int)              → ' + v, '');
+
+        v = readI32(p.add(0x10));
+        if (v !== null) sendLog('info', '│  [0x10] wpnClass (WeaponClass/int)  → ' + v, '');
+
+        v = readStr(p.add(0x14));
+        if (v) sendLog('info', '│  [0x14] weaponName (string)         → ' + v, '');
+
+        v = readPtr(p.add(0x18));
+        if (v) sendLog('info', '│  [0x18] viewData (PlayerViewData)   → ' + v, '');
+
+        v = readPtr(p.add(0x4C));
+        if (v) { inst.wpnSpriteAsset = v; sendLog('info', '│  [0x4C] spriteAsset (WpnSpriteAsset) → ' + v, ''); }
+
+        v = readI32(p.add(0x8C));
+        if (v !== null) sendLog('info', '│  [0x8C] targetSlot (int)            → ' + v, '');
+
+        v = readF32(p.add(0xA0));
+        if (v !== null) sendLog('info', '│  [0xA0] moveSpeedPenalty (float)    → ' + v, '');
+
+        v = readPtr(p.add(0xB4));
+        if (v) sendLog('info', '│  [0xB4] components (ComponentData)  → ' + v, '');
+
+        sendLog('info', '└──────────────────────────────────────────────────────────────────────────┘', '');
+    }
+
+    function collectWeaponDataGun() {
+        var p = inst.weaponDataGun;
+        if (!p) return;
+        sendLog('info', '', '');
+        sendLog('info', '┌──────────────────────────────────────────────────────────────────────────┐', '');
+        sendLog('info', '│  【WeaponData_Gun 类】 枪械数据 (继承WeaponData)                         │', '');
+        sendLog('info', '├──────────────────────────────────────────────────────────────────────────┤', '');
+        sendLog('success', '│  实例地址: ' + p, '');
+
+        var v;
+        v = readI32(p.add(0xB8));
+        if (v !== null) sendLog('info', '│  [0xB8] clip (int)                  → ' + v, '');
+
+        v = readI32(p.add(0xBC));
+        if (v !== null) sendLog('info', '│  [0xBC] ammo (int)                  → ' + v, '');
+
+        v = readI32(p.add(0xC0));
+        if (v !== null) sendLog('info', '│  [0xC0] clip_Nano (int)             → ' + v, '');
+
+        v = readI32(p.add(0xC4));
+        if (v !== null) sendLog('info', '│  [0xC4] ammo_Nano (int)             → ' + v, '');
+
+        v = readF32(p.add(0xCC));
+        if (v !== null) sendLog('success', '│  [0xCC] shotsPerMinute (float)      → ' + v, '');
+
+        v = readF32(p.add(0xD0));
+        if (v !== null) sendLog('info', '│  [0xD0] fireAnimMultiplier (float)  → ' + v, '');
+
+        v = readF32(p.add(0xD4));
+        if (v !== null) sendLog('info', '│  [0xD4] reloadAnimRatio (float)     → ' + v, '');
+
+        v = readF32(p.add(0x148));
+        if (v !== null) sendLog('info', '│  [0x148] range (float)              → ' + v, '');
+
+        v = readF32(p.add(0x14C));
+        if (v !== null) sendLog('info', '│  [0x14C] ammoDamage (float)         → ' + v, '');
+
+        v = readPtr(p.add(0x180));
+        if (v) sendLog('info', '│  [0x180] knifeAttacks (KnifeAttackData[]) → ' + v, '');
+
+        sendLog('info', '└──────────────────────────────────────────────────────────────────────────┘', '');
+    }
+
+    function collectWeaponDataKnife() {
+        if (!inst.weaponData) return;
+        var p = inst.weaponData;
+        sendLog('info', '', '');
+        sendLog('info', '┌──────────────────────────────────────────────────────────────────────────┐', '');
+        sendLog('info', '│  【WeaponData_Knife 类】 近战武器数据 (继承WeaponData)                   │', '');
+        sendLog('info', '├──────────────────────────────────────────────────────────────────────────┤', '');
+
+        var v;
+        v = readStr(p.add(0xB8));
+        if (v) sendLog('info', '│  [0xB8] knifeAttackAnimName (string) → ' + v, '');
+
+        v = readPtr(p.add(0xC0));
+        if (v) sendLog('info', '│  [0xC0] knifeAttacks (KnifeAttackData[]) → ' + v, '');
+
+        sendLog('info', '└──────────────────────────────────────────────────────────────────────────┘', '');
+    }
+
+    function collectWDSubclasses() {
+        sendLog('info', '', '');
+        sendLog('info', '┌──────────────────────────────────────────────────────────────────────────┐', '');
+        sendLog('info', '│  【WeaponData 子类汇总】 WD_* 系列类                                    │', '');
+        sendLog('info', '├──────────────────────────────────────────────────────────────────────────┤', '');
+
+        var wdList = [
+            { name: 'WD_AsceticHero', parent: 'WD_SkillKnife', field: 'screenFX @ 0xF8' },
+            { name: 'WD_EvilTerminator', parent: 'WD_SkillKnife', field: 'missileData @ 0xF8' },
+            { name: 'WD_GhostBlade', parent: 'WeaponData_Knife', field: 'btlModeWpnName @ 0xF4' },
+            { name: 'WD_GrenadeGun', parent: 'WeaponData_Gun', field: 'weaponName2 @ 0x1C8, missileData @ 0x20C' },
+            { name: 'WD_MasterHero', parent: 'WD_SkillKnife', field: 'skillHitSndName @ 0xF8' },
+            { name: 'WD_MasterHunter', parent: 'WD_SkillKnife', field: '(无额外字段)' },
+            { name: 'WD_MechanicHero', parent: 'WeaponData_Knife', field: 'SkillBtn_Arcane @ 0xF4, SkillBtn_SentryGun @ 0xF8' },
+            { name: 'WD_Missile', parent: 'WeaponData', field: 'missileData @ 0xB8' },
+            { name: 'WD_RPG', parent: 'WeaponData', field: 'missileData @ 0xB8' },
+            { name: 'WD_SentryGun', parent: 'WeaponData', field: 'sentryGunPrefab @ 0xB8' },
+            { name: 'WD_SkillKnife', parent: 'WeaponData_Knife', field: 'skillBtn @ 0xF4' }
         ];
 
-        fields.forEach(function(field) {
-            try {
-                if (field.type === 'float') {
-                    var val = readFloatSafe(instances.cameraManager.add(field.offset));
-                    if (val !== null) {
-                        sendLog('info', '│  [0x' + padHex(field.offset) + '] ' + padRight(field.name, 20) + ' (float) → ' + val, '');
-                    }
-                } else {
-                    var val = readPointerSafe(instances.cameraManager.add(field.offset));
-                    if (val && !val.isNull()) {
-                        sendLog('info', '│  [0x' + padHex(field.offset) + '] ' + padRight(field.name, 20) + ' (' + field.type + ') → ' + val, '');
-                    }
-                }
-            } catch (e) {}
+        wdList.forEach(function (wd) {
+            sendLog('info', '│  ' + pad(wd.name, 22) + ' : ' + wd.parent + ' - ' + wd.field, '');
         });
 
-        sendLog('info', '└────────────────────────────────────────────────────────────────────┘', '');
+        sendLog('info', '│', '');
+        sendLog('info', '│  注: WD_* 子类实例地址与 WeaponData 相同 (多态)', '');
+        sendLog('info', '│  当前武器的 WeaponData 实际类型取决于具体武器', '');
+
+        sendLog('info', '└──────────────────────────────────────────────────────────────────────────┘', '');
     }
 
-    function collectPlayerSkillsClass() {
-        if (!instances.playerSkills) return;
-
+    function collectWpnComponents() {
         sendLog('info', '', '');
-        sendLog('info', '┌────────────────────────────────────────────────────────────────────┐', '');
-        sendLog('info', '│  【PlayerSkills 类】 - 技能管理器                                  │', '');
-        sendLog('info', '├────────────────────────────────────────────────────────────────────┤', '');
-        sendLog('success', '│  实例地址: ' + instances.playerSkills, '');
+        sendLog('info', '┌──────────────────────────────────────────────────────────────────────────┐', '');
+        sendLog('info', '│  【WPN_* 武器子类 & WpnComponent汇总】                                   │', '');
+        sendLog('info', '├──────────────────────────────────────────────────────────────────────────┤', '');
 
-        var allSkillsPtr = readPointerSafe(instances.playerSkills.add(0x10));
-        if (allSkillsPtr && !allSkillsPtr.isNull()) {
-            instances.allSkills = allSkillsPtr;
-            sendLog('info', '│  [0x10] all (Skill[])           → ' + allSkillsPtr, '');
-        }
-
-        var ownerPtr = readPointerSafe(instances.playerSkills.add(0x18));
-        if (ownerPtr && !ownerPtr.isNull()) {
-            sendLog('info', '│  [0x18] owner (Player)          → ' + ownerPtr, '');
-        }
-
-        sendLog('info', '└────────────────────────────────────────────────────────────────────┘', '');
-    }
-
-    function collectNano4TDataClass() {
-        if (!instances.nano4TData) return;
-
-        sendLog('info', '', '');
-        sendLog('info', '┌────────────────────────────────────────────────────────────────────┐', '');
-        sendLog('info', '│  【Nano4T_Data 类】 - 纳米4T数据                                   │', '');
-        sendLog('info', '├────────────────────────────────────────────────────────────────────┤', '');
-        sendLog('success', '│  实例地址: ' + instances.nano4TData, '');
-
-        var fields = [
-            { offset: 0x10, name: 'humanLayer', type: 'SubscribeableProperty<int>' },
-            { offset: 0x18, name: 'nanoLayer', type: 'SubscribeableProperty<int>' },
-            { offset: 0x20, name: 'pickUpBoxCount', type: 'SubscribeableProperty<int>' }
+        var wpnList = [
+            { name: 'WPN_Gun', parent: 'Weapon', note: '当前武器实例已打印', hasInst: true },
+            { name: 'WPN_Knife', parent: 'Weapon', note: 'combo1_AnimSpeed @ 0xEC' },
+            { name: 'WPN_MasterHero', parent: 'WPN_Knife', note: 'realData2 @ 0xF0, skill @ 0xF4' },
+            { name: 'WPN_MasterHunter', parent: 'WPN_Knife', note: 'realData2 @ 0xF0, skill @ 0xF4' },
+            { name: 'WPN_MechanicHero', parent: 'WPN_Knife', note: 'realData2 @ 0xF0, skill_Arcane @ 0xF4, skill_SentryGun @ 0xF8' },
+            { name: 'WPN_Missile', parent: 'RecyclableObject', note: 'owner @ 0x30, weaponData @ 0x38' },
+            { name: 'WPN_MiniGunAnim', parent: 'WpnComponent', note: 'wpn @ 0x0C (继承)' },
+            { name: 'WpnComponent', parent: 'MonoBehaviour', note: 'wpn @ 0x0C' }
         ];
 
-        fields.forEach(function(field) {
-            var val = readPointerSafe(instances.nano4TData.add(field.offset));
-            if (val && !val.isNull()) {
-                sendLog('info', '│  [0x' + padHex(field.offset) + '] ' + padRight(field.name, 20) + ' → ' + val, '');
-            }
+        wpnList.forEach(function (w) {
+            var tag = w.hasInst ? ' ✅' : '';
+            sendLog('info', '│  ' + pad(w.name, 22) + ' : ' + pad(w.parent, 22) + ' - ' + w.note + tag, '');
         });
 
-        sendLog('info', '└────────────────────────────────────────────────────────────────────┘', '');
+        sendLog('info', '│', '');
+        sendLog('info', '│  注: WPN_* 子类实例地址与当前武器相同 (多态)', '');
+        sendLog('info', '│  WPN_Missile 是飞行中的子弹/导弹，非玩家持有武器', '');
+
+        sendLog('info', '└──────────────────────────────────────────────────────────────────────────┘', '');
     }
 
-    function collectNanoRoleSelectClass() {
-        if (!instances.nanoRoleSelect) return;
-
+    function collectSingletons() {
         sendLog('info', '', '');
-        sendLog('info', '┌────────────────────────────────────────────────────────────────────┐', '');
-        sendLog('info', '│  【NanoRoleSelect 类】 - 纳米角色选择器                            │', '');
-        sendLog('info', '├────────────────────────────────────────────────────────────────────┤', '');
-        sendLog('success', '│  实例地址: ' + instances.nanoRoleSelect, '');
-
-        var ownerPtr = readPointerSafe(instances.nanoRoleSelect.add(0x10));
-        if (ownerPtr && !ownerPtr.isNull()) {
-            sendLog('info', '│  [0x10] owner (Player)          → ' + ownerPtr, '');
-        }
-
-        var tableType = readIntSafe(instances.nanoRoleSelect.add(0x18));
-        if (tableType !== null) {
-            sendLog('info', '│  [0x18] tableType (int)         → ' + tableType, '');
-        }
-
-        sendLog('info', '└────────────────────────────────────────────────────────────────────┘', '');
-    }
-
-    function collectWeaponBagClass() {
-        if (!instances.weaponBag) return;
-
-        sendLog('info', '', '');
-        sendLog('info', '┌────────────────────────────────────────────────────────────────────┐', '');
-        sendLog('info', '│  【WeaponBag 类】 - 武器背包                                       │', '');
-        sendLog('info', '├────────────────────────────────────────────────────────────────────┤', '');
-        sendLog('success', '│  实例地址: ' + instances.weaponBag, '');
-
-        var fields = [
-            { offset: 0x10, name: 'wpnBags', type: 'int[][]' },
-            { offset: 0x18, name: 'wpnData', type: 'WeaponData[]' }
-        ];
-
-        fields.forEach(function(field) {
-            var val = readPointerSafe(instances.weaponBag.add(field.offset));
-            if (val && !val.isNull()) {
-                sendLog('info', '│  [0x' + padHex(field.offset) + '] ' + padRight(field.name, 16) + ' (' + field.type + ') → ' + val, '');
-            }
-        });
-
-        sendLog('info', '└────────────────────────────────────────────────────────────────────┘', '');
-    }
-
-    function collectPlayerInputClass() {
-        if (!instances.playerInput) return;
-
-        sendLog('info', '', '');
-        sendLog('info', '┌────────────────────────────────────────────────────────────────────┐', '');
-        sendLog('info', '│  【PlayerInput 类】 - 输入控制器                                   │', '');
-        sendLog('info', '├────────────────────────────────────────────────────────────────────┤', '');
-        sendLog('success', '│  实例地址: ' + instances.playerInput, '');
-
-        var rightMouse = readIntSafe(instances.playerInput.add(0x10));
-        if (rightMouse !== null) {
-            sendLog('info', '│  [0x10] RightMouse (int)        → ' + rightMouse, '');
-        }
-
-        var jumpButton = readIntSafe(instances.playerInput.add(0x14));
-        if (jumpButton !== null) {
-            sendLog('info', '│  [0x14] JumpButton (int)        → ' + jumpButton, '');
-        }
-
-        sendLog('info', '└────────────────────────────────────────────────────────────────────┘', '');
-    }
-
-    function collectHealthDataClass() {
-        if (!instances.healthData) return;
-
-        sendLog('info', '', '');
-        sendLog('info', '┌────────────────────────────────────────────────────────────────────┐', '');
-        sendLog('info', '│  【HealthData 类】 - 生命值数据                                    │', '');
-        sendLog('info', '├────────────────────────────────────────────────────────────────────┤', '');
-        sendLog('success', '│  实例地址: ' + instances.healthData, '');
-
-        sendLog('info', '│  [0x10] currentHealth (ObscuredInt)', '');
-        sendLog('info', '│  [0x18] maxHealth (ObscuredInt)', '');
-        sendLog('info', '│  [0x20] tempHealth (ObscuredInt)', '');
-
-        var invinsibleEndTime = readFloatSafe(instances.healthData.add(0x28));
-        if (invinsibleEndTime !== null) {
-            sendLog('info', '│  [0x28] invinsibleEndTime (float) → ' + invinsibleEndTime, '');
-        }
-
-        sendLog('info', '└────────────────────────────────────────────────────────────────────┘', '');
-    }
-
-    function collectBuffClass() {
-        if (!instances.buffs) return;
-
-        sendLog('info', '', '');
-        sendLog('info', '┌────────────────────────────────────────────────────────────────────┐', '');
-        sendLog('info', '│  【Buff 类】 - Buff列表                                            │', '');
-        sendLog('info', '├────────────────────────────────────────────────────────────────────┤', '');
-        sendLog('success', '│  实例地址: ' + instances.buffs, '');
+        sendLog('info', '┌──────────────────────────────────────────────────────────────────────────┐', '');
+        sendLog('info', '│  【单例类汇总】 Singleton<T> 子类 - 通过il2cpp API获取实例               │', '');
+        sendLog('info', '├──────────────────────────────────────────────────────────────────────────┤', '');
 
         try {
-            var count = readIntSafe(instances.buffs.add(0x18));
-            if (count !== null) {
-                sendLog('info', '│  Buff 数量: ' + count, '');
+            var il2cpp_domain_get = new NativeFunction(
+                Module.findExportByName('GameAssembly.dll', 'il2cpp_domain_get'),
+                'pointer', []
+            );
+            var il2cpp_domain_get_assemblies = new NativeFunction(
+                Module.findExportByName('GameAssembly.dll', 'il2cpp_domain_get_assemblies'),
+                'pointer', ['pointer', 'pointer']
+            );
+            var il2cpp_assembly_get_image = new NativeFunction(
+                Module.findExportByName('GameAssembly.dll', 'il2cpp_assembly_get_image'),
+                'pointer', ['pointer']
+            );
+            var il2cpp_class_from_name = new NativeFunction(
+                Module.findExportByName('GameAssembly.dll', 'il2cpp_class_from_name'),
+                'pointer', ['pointer', 'pointer', 'pointer']
+            );
+            var il2cpp_class_get_static_field_data = new NativeFunction(
+                Module.findExportByName('GameAssembly.dll', 'il2cpp_class_get_static_field_data'),
+                'pointer', ['pointer']
+            );
+
+            var domain = il2cpp_domain_get();
+            var sizePtr = Memory.alloc(4);
+            var assemblies = il2cpp_domain_get_assemblies(domain, sizePtr);
+            var asmCount = sizePtr.readU32();
+
+            function findClass(name) {
+                for (var ai = 0; ai < asmCount; ai++) {
+                    var asmPtr = assemblies.add(Process.pointerSize * ai).readPointer();
+                    var image = il2cpp_assembly_get_image(asmPtr);
+                    if (image.isNull()) continue;
+                    var ns = Memory.allocUtf8String('');
+                    var nm = Memory.allocUtf8String(name);
+                    var cls = il2cpp_class_from_name(image, ns, nm);
+                    if (!cls.isNull()) return cls;
+                }
+                return null;
             }
-        } catch (e) {}
 
-        sendLog('info', '└────────────────────────────────────────────────────────────────────┘', '');
-    }
+            var singletons = [
+                { name: 'GameManager', tdi: 5365, instOff: 0x0, desc: '游戏管理器',
+                  fields: [
+                    { off: 0x0, name: 'myPlayer (static Player)', type: 'ptr' },
+                    { off: 0x4, name: 'gameMode (static GameMode)', type: 'i32' },
+                    { off: 0x8, name: 'weaponLimited (static WeaponLimited)', type: 'i32' },
+                    { off: 0xC, name: 'playerPrefab', type: 'ptr' },
+                    { off: 0x10, name: 'botPrefab', type: 'ptr' },
+                    { off: 0x14, name: 'entityBL_Alive (List<Entity>)', type: 'ptr' },
+                    { off: 0x18, name: 'entityGR_Alive (List<Entity>)', type: 'ptr' },
+                    { off: 0x1C, name: 'allPlayers (Player[])', type: 'ptr' },
+                    { off: 0x20, name: 'playersBL (List<Player>)', type: 'ptr' },
+                    { off: 0x28, name: 'playersGR (List<Player>)', type: 'ptr' }
+                  ]
+                },
+                { name: 'MapManager', tdi: 5371, instOff: 0x0, desc: '地图管理器',
+                  fields: [
+                    { off: 0x34, name: 'mapGunIndex (int)', type: 'i32' },
+                    { off: 0x38, name: 'knifeHitStun (bool)', type: 'u8' },
+                    { off: 0x3C, name: 'minimap (Texture2D)', type: 'ptr' }
+                  ]
+                },
+                { name: 'PlayerController', tdi: 5408, instOff: 0x0, desc: '玩家控制器',
+                  fields: [
+                    { off: 0xC, name: 'focusHUD (string)', type: 'ptr' },
+                    { off: 0x10, name: 'lastPressWTime (float)', type: 'f32' }
+                  ]
+                }
+            ];
 
-    function collectBotClass(playerPtr) {
-        sendLog('info', '', '');
-        sendLog('info', '┌────────────────────────────────────────────────────────────────────┐', '');
-        sendLog('info', '│  【Bot 类】 - Bot控制器 (如果是Bot)                                │', '');
-        sendLog('info', '├────────────────────────────────────────────────────────────────────┤', '');
+            singletons.forEach(function (sg) {
+                sendLog('info', '│', '');
+                sendLog('info', '│  ── ' + sg.name + ' (Singleton<' + sg.name + '>, TDI:' + sg.tdi + ') ──', '');
 
-        try {
-            var botPtr = readPointerSafe(playerPtr.add(0xF8));
-            if (botPtr && !botPtr.isNull()) {
-                instances.bot = botPtr;
-                sendLog('success', '│  实例地址: ' + botPtr, '');
-
-                var abilityPtr = readPointerSafe(botPtr.add(0x10));
-                if (abilityPtr && !abilityPtr.isNull()) {
-                    instances.botAbility = abilityPtr;
-                    sendLog('info', '│  [0x10] ability (BotAbility)    → ' + abilityPtr, '');
+                var cls = findClass(sg.name);
+                if (!cls) {
+                    sendLog('info', '│  类未找到', '');
+                    return;
                 }
 
-                var thisPlayerPtr = readPointerSafe(botPtr.add(0x28));
-                if (thisPlayerPtr && !thisPlayerPtr.isNull()) {
-                    sendLog('info', '│  [0x28] thisPlayer (Player)     → ' + thisPlayerPtr, '');
+                var staticData = il2cpp_class_get_static_field_data(cls);
+                if (staticData.isNull()) {
+                    sendLog('info', '│  静态字段数据为空', '');
+                    return;
                 }
-            } else {
-                sendLog('info', '│  (当前玩家不是Bot，无Bot实例)', '');
-            }
+
+                var instPtr = readPtr(staticData.add(sg.instOff));
+                if (instPtr) {
+                    inst[sg.name.charAt(0).toLowerCase() + sg.name.slice(1)] = instPtr;
+                    sendLog('success', '│  实例地址: ' + instPtr, '');
+
+                    sg.fields.forEach(function (f) {
+                        if (f.type === 'ptr') {
+                            var v = readPtr(instPtr.add(f.off));
+                            if (v) sendLog('info', '│    [0x' + f.off.toString(16).toUpperCase() + '] ' + pad(f.name, 36) + ' → ' + v, '');
+                        } else if (f.type === 'i32') {
+                            var v = readI32(instPtr.add(f.off));
+                            if (v !== null) sendLog('info', '│    [0x' + f.off.toString(16).toUpperCase() + '] ' + pad(f.name, 36) + ' → ' + v, '');
+                        } else if (f.type === 'f32') {
+                            var v = readF32(instPtr.add(f.off));
+                            if (v !== null) sendLog('info', '│    [0x' + f.off.toString(16).toUpperCase() + '] ' + pad(f.name, 36) + ' → ' + v, '');
+                        } else if (f.type === 'u8') {
+                            var v = readU8(instPtr.add(f.off));
+                            if (v !== null) sendLog('info', '│    [0x' + f.off.toString(16).toUpperCase() + '] ' + pad(f.name, 36) + ' → ' + (v ? 'true' : 'false'), '');
+                        }
+                    });
+                } else {
+                    sendLog('info', '│  实例未创建 (可能尚未进入游戏)', '');
+                }
+            });
+
         } catch (e) {
-            sendLog('info', '│  (当前玩家不是Bot，无Bot实例)', '');
+            sendLog('info', '│  il2cpp API调用失败: ' + e.message, '');
         }
 
-        sendLog('info', '└────────────────────────────────────────────────────────────────────┘', '');
+        sendLog('info', '└──────────────────────────────────────────────────────────────────────────┘', '');
     }
 
-    function collectWeaponDataClasses() {
-        if (!instances.weaponDataGun) return;
-
+    function collectStructs() {
         sendLog('info', '', '');
-        sendLog('info', '┌────────────────────────────────────────────────────────────────────┐', '');
-        sendLog('info', '│  【WeaponData_Gun 类】 - 枪械数据                                  │', '');
-        sendLog('info', '├────────────────────────────────────────────────────────────────────┤', '');
-        sendLog('success', '│  实例地址: ' + instances.weaponDataGun, '');
+        sendLog('info', '┌──────────────────────────────────────────────────────────────────────────┐', '');
+        sendLog('info', '│  【结构体汇总】 嵌入式值类型 (无独立实例地址)                            │', '');
+        sendLog('info', '├──────────────────────────────────────────────────────────────────────────┤', '');
 
-        var fields = [
-            { offset: 0x18, name: 'clip', type: 'int' },
-            { offset: 0x1C, name: 'ammo', type: 'int' },
-            { offset: 0x20, name: 'clip_Nano', type: 'int' },
-            { offset: 0x24, name: 'ammo_Nano', type: 'int' },
-            { offset: 0x2C, name: 'shotsPerMinute', type: 'float' },
-            { offset: 0x30, name: 'fireAnimMultiplier', type: 'float' },
-            { offset: 0x34, name: 'reloadAnimRatio', type: 'float' },
-            { offset: 0x80, name: 'range', type: 'float' },
-            { offset: 0x84, name: 'ammoDamage', type: 'float' },
-            { offset: 0xB8, name: 'zoomAction', type: 'ZoomAction', key: 'zoomAction' }
+        var structs = [
+            { name: 'BotAbility', parent: 'Bot.ability @ 0x0C', fields: 'zoomSpeed@0x0, shootAccuracy@0x4, recoilControl_X@0x8, recoilControlRange_X@0xC, recoilControl_Y@0x10, recoilControlRange_Y@0x14' },
+            { name: 'ZoomAction', parent: 'WeaponData_Gun', fields: 'openTime@0x0, closeTime@0x4, datas[]@0x8, closeZoomWhenShoot@0xC' },
+            { name: 'ZoomAction.ZoomData', parent: 'ZoomAction.datas[]', fields: 'type@0x0, fovScale@0x4, sprite@0x8' },
+            { name: 'KnifeAttackData', parent: 'WeaponData_Gun.knifeAttacks[]', fields: 'damage@0x0, range@0x4, angle@0x8, hitStun@0xC' },
+            { name: 'MissileData', parent: 'WD_EvilTerminator等', fields: 'clip@0x0, ammo@0x4, damage@0xC, range@0x10, velocity@0x18' },
+            { name: 'PlayerViewData', parent: 'WeaponData.viewData @ 0x18', fields: 'position@0x0, eulerAngle@0xC, FOV@0x30' },
+            { name: 'WpnSpriteAsset', parent: 'WeaponData.spriteAsset @ 0x4C', fields: 'background@0x0, effect@0x14, killMsgIcon@0x28' }
         ];
 
-        fields.forEach(function(field) {
-            try {
-                if (field.type === 'int') {
-                    var val = readIntSafe(instances.weaponDataGun.add(field.offset));
-                    if (val !== null) {
-                        sendLog('info', '│  [0x' + padHex(field.offset) + '] ' + padRight(field.name, 20) + ' (int)   → ' + val, '');
-                    }
-                } else if (field.type === 'float') {
-                    var val = readFloatSafe(instances.weaponDataGun.add(field.offset));
-                    if (val !== null) {
-                        sendLog('info', '│  [0x' + padHex(field.offset) + '] ' + padRight(field.name, 20) + ' (float) → ' + val, '');
-                    }
-                } else {
-                    var val = readPointerSafe(instances.weaponDataGun.add(field.offset));
-                    if (val && !val.isNull()) {
-                        if (field.key) instances[field.key] = val;
-                        sendLog('info', '│  [0x' + padHex(field.offset) + '] ' + padRight(field.name, 20) + ' (' + field.type + ') → ' + val, '');
-                    }
-                }
-            } catch (e) {}
+        structs.forEach(function (s) {
+            sendLog('info', '│  ' + pad(s.name, 24) + ' ← ' + pad(s.parent, 28), '');
+            sendLog('info', '│    字段: ' + s.fields, '');
         });
 
-        sendLog('info', '└────────────────────────────────────────────────────────────────────┘', '');
+        sendLog('info', '│', '');
+        sendLog('info', '│  【枚举类型汇总】 (无实例地址)', '');
+        sendLog('info', '│  NanoRole: Soldier=0, NanoGhost=1, Hulk=2, Nurse=3, Assassin=4, ...', '');
+        sendLog('info', '│  WeaponLimited: None=0, Knife=1, HandGun=2, Sniper=3', '');
+        sendLog('info', '│  NanoRoleSelect.Type: None=0, Normal=1, Hero=2, Terminator=3', '');
+        sendLog('info', '│  WeaponSlot: None=-1, Main=0, Secondary=1, Knife=2, Throw=3, C4=4', '');
+
+        sendLog('info', '│', '');
+        sendLog('info', '│  【静态类汇总】 (无实例)', '');
+        sendLog('info', '│  WpnDataExpand: 静态扩展方法类 (IsMainWeapon, IsThrowWeapon, GetSlotID)', '');
+        sendLog('info', '│  WeaponSlot: 常量类 (Main=0, Secondary=1, Knife=2, Throw=3, C4=4)', '');
+        sendLog('info', '│  NanoRoleExpand: 静态扩展方法类 (GetName, IsSoldierOrSavior, LikeGuard)', '');
+
+        sendLog('info', '│', '');
+        sendLog('info', '│  【dump.cs中未找到的类】', '');
+        sendLog('info', '│  Cheat.Choice, BaseCheat.Function, Cheat.Parent,', '');
+        sendLog('info', '│  Cheat.Radio, Cheat.Switch, CustomEvent.GameManager', '');
+        sendLog('info', '│  (可能为内部类/已移除/名称不同/仅存在于特定版本)', '');
+
+        sendLog('info', '└──────────────────────────────────────────────────────────────────────────┘', '');
     }
 
     function printSummary() {
         sendLog('info', '', '');
-        sendLog('success', '╔══════════════════════════════════════════════════════════════════════╗', '');
-        sendLog('success', '║                         实例地址汇总表                               ║', '');
-        sendLog('success', '╠══════════════════════════════════════════════════════════════════════╣', '');
+        sendLog('success', '╔══════════════════════════════════════════════════════════════════════════╗', '');
+        sendLog('success', '║                         实例地址汇总表                                   ║', '');
+        sendLog('success', '╠══════════════════════════════════════════════════════════════════════════╣', '');
 
-        var summary = [
-            { name: 'Player', key: 'player', desc: '玩家实例' },
-            { name: 'Entity', key: 'entity', desc: '实体基类' },
-            { name: 'ClientData', key: 'clientData', desc: '客户端数据' },
-            { name: 'PlayerData', key: 'playerData', desc: '玩家数据' },
-            { name: 'PlayerInput', key: 'playerInput', desc: '输入控制' },
-            { name: 'PlayerWeapons', key: 'playerWeapons', desc: '武器管理器' },
-            { name: 'WeaponBag', key: 'weaponBag', desc: '武器背包' },
-            { name: 'PlayerSkills', key: 'playerSkills', desc: '技能管理' },
-            { name: 'NanoRoleSelect', key: 'nanoRoleSelect', desc: '纳米角色选择' },
-            { name: 'Nano4T_Data', key: 'nano4TData', desc: '纳米4T数据' },
-            { name: 'PlayerCameraManager', key: 'cameraManager', desc: '相机管理' },
-            { name: 'Recoil', key: 'recoil', desc: '后坐力' },
-            { name: 'HealthData', key: 'healthData', desc: '生命值数据' },
-            { name: 'Buff列表', key: 'buffs', desc: 'Buff列表' },
-            { name: '当前武器', key: 'currentWeapon', desc: 'Weapon/WPN_Gun' },
-            { name: 'AmmoData', key: 'ammoData', desc: '弹药数据' },
-            { name: 'WeaponData', key: 'weaponData', desc: '武器数据' },
-            { name: 'WeaponData_Gun', key: 'weaponDataGun', desc: '枪械数据' },
-            { name: 'Bot', key: 'bot', desc: 'Bot控制器' },
-            { name: 'BotAbility', key: 'botAbility', desc: 'Bot能力' }
+        var rows = [
+            { cat: '核心', name: 'Player', key: 'player', desc: '玩家实例' },
+            { cat: '核心', name: 'Entity', key: 'player', desc: '实体基类(同Player)' },
+            { cat: '核心', name: 'ClientData', key: 'clientData', desc: '客户端数据' },
+            { cat: '核心', name: 'PlayerData', key: 'playerData', desc: '玩家数据' },
+            { cat: '核心', name: 'PlayerInput', key: 'playerInput', desc: '输入控制' },
+            { cat: '武器', name: 'PlayerWeapons', key: 'playerWeapons', desc: '武器管理器' },
+            { cat: '武器', name: 'WeaponBag', key: 'weaponBag', desc: '武器背包' },
+            { cat: '武器', name: 'Weapon (当前)', key: 'currentWeapon', desc: '当前武器' },
+            { cat: '武器', name: 'WeaponData', key: 'weaponData', desc: '武器数据' },
+            { cat: '武器', name: 'WeaponData_Gun', key: 'weaponDataGun', desc: '枪械数据' },
+            { cat: '武器', name: 'AmmoData', key: 'ammoData', desc: '弹药数据' },
+            { cat: '武器', name: 'MapGun', key: 'mapGun', desc: '地图枪' },
+            { cat: '技能', name: 'PlayerSkills', key: 'playerSkills', desc: '技能管理' },
+            { cat: '技能', name: 'Skill[]', key: 'skillArray', desc: '技能数组' },
+            { cat: '技能', name: 'NanoRoleSelect', key: 'nanoRoleSelect', desc: '纳米角色选择' },
+            { cat: '技能', name: 'Nano4T_Data', key: 'nano4TData', desc: '纳米4T数据' },
+            { cat: '视觉', name: 'PlayerCameraManager', key: 'cameraManager', desc: '相机管理' },
+            { cat: '视觉', name: 'Recoil', key: 'recoil', desc: '后坐力' },
+            { cat: '生命', name: 'HealthData', key: 'healthData', desc: '生命值数据' },
+            { cat: '生命', name: 'Buff列表', key: 'buffs', desc: 'List<Buff>' },
+            { cat: '单例', name: 'GameManager', key: 'gameManager', desc: '游戏管理器' },
+            { cat: '单例', name: 'MapManager', key: 'mapManager', desc: '地图管理器' },
+            { cat: '单例', name: 'PlayerController', key: 'playerController', desc: '玩家控制器' }
         ];
 
-        summary.forEach(function(item) {
-            var addr = instances[item.key];
+        var lastCat = '';
+        rows.forEach(function (r) {
+            if (r.cat !== lastCat) {
+                sendLog('info', '║  ── ' + r.cat + ' ──', '');
+                lastCat = r.cat;
+            }
+            var addr = inst[r.key];
             if (addr) {
-                sendLog('info', '║  ' + padRight(item.name, 20) + ' │ ' + padRight(item.desc, 12) + ' │ ' + addr, '');
+                sendLog('info', '║  ' + pad(r.name, 22) + ' │ ' + pad(r.desc, 14) + ' │ ' + addr, '');
             }
         });
 
-        sendLog('success', '╚══════════════════════════════════════════════════════════════════════╝', '');
+        sendLog('success', '╚══════════════════════════════════════════════════════════════════════════╝', '');
     }
 
-    function padHex(num) {
-        return num.toString(16).toUpperCase().padStart(2, '0');
-    }
+    globalThis.getPlayer = function () { return inst.player; };
+    globalThis.getClientData = function () { return inst.clientData; };
+    globalThis.getPlayerData = function () { return inst.playerData; };
+    globalThis.getPlayerWeapons = function () { return inst.playerWeapons; };
+    globalThis.getCurrentWeapon = function () { return inst.currentWeapon; };
+    globalThis.getAmmoData = function () { return inst.ammoData; };
+    globalThis.getRecoil = function () { return inst.recoil; };
+    globalThis.getCameraManager = function () { return inst.cameraManager; };
+    globalThis.getHealthData = function () { return inst.healthData; };
+    globalThis.getPlayerSkills = function () { return inst.playerSkills; };
+    globalThis.getWeaponData = function () { return inst.weaponDataGun; };
+    globalThis.getGameManager = function () { return inst.gameManager; };
+    globalThis.getMapManager = function () { return inst.mapManager; };
+    globalThis.getPlayerController = function () { return inst.playerController; };
+    globalThis.getInstances = function () { return inst; };
 
-    function padRight(str, len) {
-        if (!str) str = '';
-        return str.toString().padEnd(len, ' ');
-    }
-
-    function listAllPlayers() {
+    globalThis.listAll = function () {
         sendLog('info', '', '');
         sendLog('info', '══════════════════════════════════════════════════════════════', '');
         sendLog('info', '                    所有 Player 实例列表                       ', '');
         sendLog('info', '══════════════════════════════════════════════════════════════', '');
-        
-        var playerKeys = Object.keys(allPlayers);
-        sendLog('info', '共 ' + playerKeys.length + ' 个 Player 实例:', '');
-        
-        playerKeys.forEach(function(key) {
-            var isMy = allPlayers[key] ? '✅ [玩家]' : '❌ [Bot]';
-            sendLog(allPlayers[key] ? 'success' : 'info', '  ' + key + ' ' + isMy, '');
+        var keys = Object.keys(allPlayers);
+        sendLog('info', '共 ' + keys.length + ' 个 Player 实例:', '');
+        keys.forEach(function (k) {
+            var isMy = allPlayers[k] ? '✅ [玩家]' : '❌ [Bot]';
+            sendLog(allPlayers[k] ? 'success' : 'info', '  ' + k + ' ' + isMy, '');
         });
-    }
-
-    globalThis.getPlayer = function () { return instances.player; };
-    globalThis.getClientData = function () { return instances.clientData; };
-    globalThis.getPlayerData = function () { return instances.playerData; };
-    globalThis.getPlayerWeapons = function () { return instances.playerWeapons; };
-    globalThis.getCurrentWeapon = function () { return instances.currentWeapon; };
-    globalThis.getAmmoData = function () { return instances.ammoData; };
-    globalThis.getRecoil = function () { return instances.recoil; };
-    globalThis.getCameraManager = function () { return instances.cameraManager; };
-    globalThis.getHealthData = function () { return instances.healthData; };
-    globalThis.getPlayerSkills = function () { return instances.playerSkills; };
-    globalThis.getWeaponData = function () { return instances.weaponDataGun; };
-    globalThis.getBot = function () { return instances.bot; };
-    globalThis.getBotAbility = function () { return instances.botAbility; };
-
-    globalThis.listAll = listAllPlayers;
+    };
 
     globalThis.refresh = function () {
-        if (instances.player) {
-            printAllInstances(instances.player);
+        if (inst.player) {
+            printAll(inst.player);
         } else {
             sendLog('warn', '刷新', '尚未捕获玩家地址');
         }
     };
 
-    globalThis.getInstances = function () {
-        return instances;
-    };
-
-    sendLog('success', '系统', '✅ 脚本已加载');
+    sendLog('success', '系统', '✅ 脚本已加载 (偏移已根据dump.cs修正)');
     sendLog('info', '系统', '进入游戏后自动打印实例地址');
-    sendLog('info', '系统', '命令: listAll() - 列出所有 Player 实例');
+    sendLog('info', '系统', '命令: listAll() - 列出所有Player实例');
     sendLog('info', '系统', '命令: refresh() - 刷新当前玩家信息');
     sendLog('info', '系统', '命令: getInstances() - 获取所有实例对象');
 })();
