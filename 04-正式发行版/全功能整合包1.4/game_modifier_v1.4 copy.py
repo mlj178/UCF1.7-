@@ -10,6 +10,7 @@ import time
 import psutil
 import json
 import os
+import sys
 import winsound
 import keyboard
 import pygame
@@ -17,8 +18,16 @@ import pygame
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
 
+# 获取应用根目录（兼容脚本和 exe 两种运行方式）
+if getattr(sys, 'frozen', False):
+    APP_DIR = os.path.dirname(sys.executable)
+    RESOURCE_DIR = sys._MEIPASS
+else:
+    APP_DIR = os.path.dirname(os.path.abspath(__file__))
+    RESOURCE_DIR = APP_DIR
+
 # 数据存储目录
-DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
+DATA_DIR = os.path.join(APP_DIR, "data")
 if not os.path.exists(DATA_DIR):
     os.makedirs(DATA_DIR)
 
@@ -29,7 +38,7 @@ FEATURES_INFO = {
     'recoil': {'name': '无后座力', 'icon': '🎯', 'category': 'weapon'},
     'ammo': {'name': '无限子弹', 'icon': '🔫', 'category': 'weapon'},
     'movespeed': {'name': '滑板鞋', 'icon': '👟', 'category': 'player'},
-    'ammoplus': {'name': '无限弹匣', 'icon': '📦', 'category': 'weapon'},
+    'ammoplus': {'name': '快速换弹', 'icon': '⚡', 'category': 'weapon'},
     'range': {'name': '剑气化丝', 'icon': '⚔️', 'category': 'weapon'},
     'gather': {'name': '聚怪', 'icon': '👾', 'category': 'other'},
     'gravity': {'name': '轻重力', 'icon': '🌌', 'category': 'player'},
@@ -448,42 +457,27 @@ FRIDA_JS = r"""
   })();
 
   // ====================================================================
-  // 模块 6: 无限弹匣 + 快速换弹
-  // 原理: 1) 替换 get_isInfinityAmmo 始终返回 true
-  //       2) 替换 get_ReloadSpeed 为本地玩家返回2倍加速值
+  // 模块 6: 快速换弹
+  // 原理: 替换 get_ReloadSpeed，为本地玩家返回2倍加速
   // ====================================================================
-  var ammoPlusModule = (function() {
+  var reloadSpeedModule = (function() {
     var enabled = false;
-    var getIsInfinityAmmoAddr = null;
     var getReloadSpeedAddr = null;
     var isMyPlayer = null;
     var reloadLogCount = 0;
-    var ammoLogCount = 0;
 
     return {
       enable: function() {
         if (enabled) return;
         var mod = getGameAssembly();
-        if (!mod) { sendLog('error', '无限弹匣', '无 GameAssembly.dll'); return; }
+        if (!mod) { sendLog('error', '快速换弹', '无 GameAssembly.dll'); return; }
 
         var base = mod.base;
-        getIsInfinityAmmoAddr = base.add(0xB17120);
         getReloadSpeedAddr = base.add(0xB170E0);
         isMyPlayer = new NativeFunction(base.add(0xB55FD0), 'bool', ['pointer']);
-
         reloadLogCount = 0;
-        ammoLogCount = 0;
 
-        sendLog('info', '无限弹匣', 'get_isInfinityAmmo @ ' + getIsInfinityAmmoAddr);
-        sendLog('info', '无限弹匣', 'get_ReloadSpeed @ ' + getReloadSpeedAddr);
-
-        Interceptor.replace(getIsInfinityAmmoAddr, new NativeCallback(function(self) {
-          ammoLogCount++;
-          if (ammoLogCount <= 5) {
-            sendLog('info', '无限弹匣', '返回 true (调用#' + ammoLogCount + ')');
-          }
-          return 1;
-        }, 'int', ['pointer']));
+        sendLog('info', '快速换弹', 'get_ReloadSpeed @ ' + getReloadSpeedAddr);
 
         Interceptor.replace(getReloadSpeedAddr, new NativeCallback(function(self) {
           try {
@@ -492,7 +486,7 @@ FRIDA_JS = r"""
             if (isMyPlayer(owner)) {
               reloadLogCount++;
               if (reloadLogCount <= 5) {
-                sendLog('info', '无限弹匣', '本地玩家换弹加速 2.0x (#' + reloadLogCount + ')');
+                sendLog('info', '快速换弹', '本地玩家换弹加速 2.0x (#' + reloadLogCount + ')');
               }
               return 2.0;
             }
@@ -503,18 +497,16 @@ FRIDA_JS = r"""
         }, 'float', ['pointer']));
 
         enabled = true;
-        sendLog('success', '无限弹匣', '已启用 — 无限子弹 + 2x快速换弹');
+        sendLog('success', '快速换弹', '已启用 — 2x快速换弹');
         sendStatus('ammoplus', true);
       },
       disable: function() {
         if (!enabled) return;
-        if (getIsInfinityAmmoAddr) { try { Interceptor.revert(getIsInfinityAmmoAddr); } catch(e) {} }
         if (getReloadSpeedAddr) { try { Interceptor.revert(getReloadSpeedAddr); } catch(e) {} }
-        getIsInfinityAmmoAddr = null;
         getReloadSpeedAddr = null;
         isMyPlayer = null;
         enabled = false;
-        sendLog('info', '无限弹匣', '已禁用');
+        sendLog('info', '快速换弹', '已禁用');
         sendStatus('ammoplus', false);
       }
     };
@@ -2145,7 +2137,7 @@ FRIDA_JS = r"""
     recoil: recoilModule,
     ammo: ammoModule,
     movespeed: moveSpeedModule,
-    ammoplus: ammoPlusModule,
+    ammoplus: reloadSpeedModule,
     range: rangeModule,
     gather: gatherModule,
     gravity: gravityJumpModule,
@@ -2224,7 +2216,7 @@ FRIDA_JS = r"""
 
   sendLog('info', '系统', '游戏修改器 Agent v1.3 已加载');
   sendLog('info', '系统', '原有功能: 快刀v16 | 无限时间 | 无后座力v14 | 无限子弹plan4');
-  sendLog('info', '系统', 'v1.1新增: 滑板鞋3x/6x | 无限弹匣+快速换弹 | 剑气化丝50x');
+  sendLog('info', '系统', 'v1.1新增: 滑板鞋3x/6x | 快速换弹 | 剑气化丝50x');
   sendLog('info', '系统', 'v1.2新增: 聚怪功能');
   sendLog('info', '系统', 'v1.3新增: 轻重力/高跳 | 回合跳过');
   sendLog('info', '系统', '快刀支持速度切换: 3x / 5x / 10x');
@@ -2444,10 +2436,10 @@ class GameModifierApp(ctk.CTk):
             '子弹永不消耗', title_color="#E5B73B"
         )
 
-        # 无限弹匣卡片
+        # 快速换弹卡片
         ammoplus_frame, self.ammoplus_switch, _ = make_feature_card(
-            tab_weapon_scroll, 1, 1, 1, "#3a1a2a", 'ammoplus', '📦', '无限弹匣+快速换弹',
-            '弹匣显示无限，换弹速度加快', title_color="#D4AF37"
+            tab_weapon_scroll, 1, 1, 1, "#3a1a2a", 'ammoplus', '⚡', '快速换弹',
+            '换弹速度加快', title_color="#D4AF37"
         )
 
         # 剑气化丝卡片
@@ -3232,7 +3224,7 @@ class GameModifierApp(ctk.CTk):
         if not self._sound_enabled:
             return
         try:
-            sound_path = r"d:\trae_project\UCF1.7修改大全\04-正式发行版\全功能整合包1.4\音效1.MP3"
+            sound_path = os.path.join(RESOURCE_DIR, "音效1.MP3")
             if os.path.exists(sound_path) and self._audio_initialized:
                 sound = pygame.mixer.Sound(sound_path)
                 if self._sound_channel:
@@ -3347,7 +3339,7 @@ class GameModifierApp(ctk.CTk):
         
         # 赞赏码
         ctk.CTkLabel(about_frame, text="\n微信赞赏码:", font=("Microsoft YaHei", 12)).pack(pady=4)
-        donate_image_path = r"d:\trae_project\UCF1.7修改大全\04-正式发行版\全功能整合包1.4\微信赞赏码.png"
+        donate_image_path = os.path.join(RESOURCE_DIR, "微信赞赏码.png")
         if os.path.exists(donate_image_path):
             try:
                 donate_image = Image.open(donate_image_path)
