@@ -165,6 +165,7 @@
 
     // ——— 定时器 ———
     var aimTimer = null;
+    var scanTimer = null;
     var debugTimer = null;
 
     // ================================================================
@@ -372,76 +373,145 @@
       } catch(e) { return true; }
     }
 
-    // ================================================================
-    // 目标选择（角度最近 + FOV 限制）
-    // calcAngles 返回弧度, 内存 cameraRotation 存度
-    // 比较时: 当前角度(度→弧度) vs 目标角度(弧度)
-    // ================================================================
-    function selectTarget(myPos, enemies) {
-      var best = null;
-      var bestAngleDist = Infinity;
-      var maxAngleRad = CONFIG.maxAngleFOV > 0 ? CONFIG.maxAngleFOV * Math.PI / 180.0 : Infinity;
+    // ——— 目标缓存（成功脚本的 dword_1005A6C8 模式） ———
+    var cachedTarget = null;
+    var scanYawDeg = 0;    // 扫描时的视角，用于检测用户是否主动转视角
+    var scanPitchDeg = 0;
 
-      for (var i = 0; i < enemies.length; i++) {
+    // ================================================================
+    // 目标扫描器（成功脚本模式: 独立定时器，仅选目标，不写角度）
+    // ================================================================
+    function targetScanner() {
+      if (!enabled) return;
+
+      var gm = getGM();
+      if (!gm || gm.isNull()) return;
+
+      if (!myPlayer || myPlayer.isNull()) {
+        var all = getAllPlayers(gm);
+        for (var i = 0; i < all.length; i++) {
+          try { if (isMyPlayerFn(all[i], ptr(0))) { myPlayer = all[i]; break; } } catch(e) {}
+        }
+        if (!myPlayer) { cachedTarget = null; return; }
+      }
+
+      try {
+        if (!isMyPlayerFn(myPlayer, ptr(0))) { myPlayer = null; cachedTarget = null; return; }
+      } catch(e) { myPlayer = null; cachedTarget = null; return; }
+
+      try { if (isDeadFn(myPlayer, ptr(0))) return; } catch(e) { return; }
+
+      var myPos = getBonePos(myPlayer, BONE.CHEST);
+      if (!myPos) return;
+
+      // 保存扫描时的视角（用于检测用户是否主动转视角）
+      scanYawDeg = myPlayer.add(OFF.P_cameraRotation).readFloat();
+      scanPitchDeg = myPlayer.add(OFF.P_cameraRotation + 4).readFloat();
+
+      var allPlayers = getAllPlayers(gm);
+      var myTeam = 0;
+      try {
+        if (getTeamFn) myTeam = getTeamFn(myPlayer, ptr(0));
+        else myTeam = myPlayer.add(OFF.E_team).readS32();
+      } catch(e) {}
+
+      var best = null;
+      var bestAngleDeg = 999999;
+
+      for (var i = 0; i < allPlayers.length; i++) {
+        var p = allPlayers[i];
         try {
-          var targetPos = getBonePos(enemies[i], CONFIG.aimBone);
+          if (p.equals(myPlayer)) continue;
+          if (isDeadFn(p, ptr(0))) continue;
+          var team = getTeamFn ? getTeamFn(p, ptr(0)) : p.add(OFF.E_team).readS32();
+          if (team === myTeam) continue;
+
+          var targetPos = getBonePos(p, CONFIG.aimBone);
           if (!targetPos) continue;
+
+
+          // 🚀 射线检测（穿墙判断）
+          if (CONFIG.visibilityCheck) {
+            if (!checkVisibility(myPos, targetPos)) {
+              continue;   // 墙体遮挡，跳过该敌人
+            }
+          }
 
           var dx = targetPos.x - myPos.x;
           var dy = targetPos.y - myPos.y;
           var dz = targetPos.z - myPos.z;
-          var dist3D = Math.sqrt(dx*dx + dy*dy + dz*dz);
-          if (dist3D > CONFIG.maxAimDistance) continue;
+          var dist = Math.sqrt(dx*dx + dy*dy + dz*dz);
+          if (dist > CONFIG.maxAimDistance) continue;
 
-          if (CONFIG.visibilityCheck) {
-            var eyePos = { x: myPos.x, y: myPos.y + 1.5, z: myPos.z };
-            if (!checkVisibility(eyePos, targetPos)) continue;
-          }
+      
 
-          var angles = calcAngles(myPos, targetPos);  // 弧度
-          if (!angles) continue;
+          // 全部用度计算（和成功脚本一致）
+          var targetYawDeg = Math.atan2(dx, dz) * 180.0 / Math.PI;
+          var targetPitchDeg = Math.atan2(dy, Math.sqrt(dx*dx + dz*dz)) * 180.0 / Math.PI;
 
-          // 内存 cameraRotation 存度 → 转弧度后比较
-          var curYawDeg = myPlayer.add(OFF.P_cameraRotation).readFloat();
-          var curPitchDeg = myPlayer.add(OFF.P_cameraRotation + 4).readFloat();
-          var curYawRad = curYawDeg * Math.PI / 180.0;
-          var curPitchRad = curPitchDeg * Math.PI / 180.0;
-          var yawDiff = normalizeAngle(angles.yaw - curYawRad);
-          var pitchDiff = normalizeAngle(angles.pitch - curPitchRad);
-          var angleDist = Math.sqrt(yawDiff*yawDiff + pitchDiff*pitchDiff);
+          var yawDiff = targetYawDeg - scanYawDeg;
+          var pitchDiff = targetPitchDeg - scanPitchDeg;
+          if (yawDiff > 180) yawDiff -= 360;
+          if (yawDiff < -180) yawDiff += 360;
+          if (pitchDiff > 180) pitchDiff -= 360;
+          if (pitchDiff < -180) pitchDiff += 360;
+          var angleDeg = Math.sqrt(yawDiff*yawDiff + pitchDiff*pitchDiff);
 
-          if (angleDist > maxAngleRad) continue;
+          if (angleDeg > CONFIG.maxAngleFOV) continue;
 
-          if (angleDist < bestAngleDist) {
-            bestAngleDist = angleDist;
+          if (angleDeg < bestAngleDeg) {
+            bestAngleDeg = angleDeg;
             best = {
-              player: enemies[i],
+              player: p,
               pos: targetPos,
-              angles: angles,      // 保留弧度, writeAngles 中转度
-              angleDist: angleDist,
-              dist3D: dist3D,
+              targetYawDeg: targetYawDeg,
+              targetPitchDeg: targetPitchDeg,
+              angleDeg: angleDeg,
+              dist: dist,
             };
           }
-        } catch(e) {}
+        } catch(e) {
+          if (frameCount < 5) console.log('[扫描] 敌人#' + i + ' 异常: ' + e.message);
+        }
       }
-      return best;
+
+      if (best) {
+        cachedTarget = best;
+        if (frameCount < 5) {
+          console.log('[扫描] ✅ 目标: yaw=' + best.targetYawDeg.toFixed(1) + '° pitch=' + best.targetPitchDeg.toFixed(1) + '° 角差=' + best.angleDeg.toFixed(1) + '° 距离=' + best.dist.toFixed(1) + 'm');
+        }
+      } else {
+        cachedTarget = null;
+      }
     }
 
     // ================================================================
-    // 写入角度 + 重置标志
-    // DLL 方案: 目标(rad→度) → 当前(度) → 写内存(度)
+    // DLL 方案: 写角度到内存（成功脚本模式: 只有按键检测+写入）
     // ================================================================
-    function writeAngles(targetAngles) {
-      if (!myPlayer || !targetAngles) return;
+    function writeAimbot() {
+      if (!enabled || !myPlayer || !cachedTarget) return;
 
       try {
-        // 目标角度: 弧度→度 (DLL: atan2(...) * 180/PI)
-        var targetYawDeg = targetAngles.yaw * 180.0 / Math.PI;
-        var targetPitchDeg = targetAngles.pitch * 180.0 / Math.PI;
-
-        // 当前角度: 内存中就是度
+        // 检测用户是否主动转动了视角（与扫描时的视角对比）
+        // 如果用户自己转视角超过 FOV/2，释放目标重新扫描
         var curYawDeg = myPlayer.add(OFF.P_cameraRotation).readFloat();
         var curPitchDeg = myPlayer.add(OFF.P_cameraRotation + 4).readFloat();
+        var userYawDelta = curYawDeg - scanYawDeg;
+        var userPitchDelta = curPitchDeg - scanPitchDeg;
+        if (userYawDelta > 180) userYawDelta -= 360;
+        if (userYawDelta < -180) userYawDelta += 360;
+        if (userPitchDelta > 180) userPitchDelta -= 360;
+        if (userPitchDelta < -180) userPitchDelta += 360;
+        var userAngleDelta = Math.sqrt(userYawDelta*userYawDelta + userPitchDelta*userPitchDelta);
+
+        // 如果用户主动转了超过 FOV 的一半，释放目标让 scanner 重新选
+        if (userAngleDelta > CONFIG.maxAngleFOV * 0.5) {
+          cachedTarget = null;
+          return;
+        }
+
+        var targetYawDeg = cachedTarget.targetYawDeg;
+        var targetPitchDeg = cachedTarget.targetPitchDeg;
 
         // 平滑: cur + (target-cur) * factor (度空间)
         var finalYawDeg = targetYawDeg;
@@ -457,11 +527,11 @@
           finalPitchDeg = curPitchDeg + pitchDiff * CONFIG.smoothness;
         }
 
-        // DLL Step 9: 直接写内存 (度)
+        // DLL: 直接写内存 (度)
         myPlayer.add(OFF.P_cameraRotation).writeFloat(finalYawDeg);
         myPlayer.add(OFF.P_cameraRotation + 4).writeFloat(finalPitchDeg);
 
-        // DLL Step 10: 重置 Recoil 标志
+        // DLL: 重置 Recoil 标志
         var recoil = myPlayer.add(OFF.P_recoil).readPointer();
         if (recoil && !recoil.isNull()) {
           recoil.add(0x10).writeU32(0);
@@ -471,15 +541,40 @@
         }
 
         frameCount++;
-        if (frameCount <= 10) {
-          console.log('[自瞄] ✅ #' + frameCount +
-            ' 目标=' + targetYawDeg.toFixed(1) + '°/' + targetPitchDeg.toFixed(1) + '°' +
-            ' 当前=' + curYawDeg.toFixed(1) + '°/' + curPitchDeg.toFixed(1) + '°' +
-            ' 写入=' + finalYawDeg.toFixed(1) + '°/' + finalPitchDeg.toFixed(1) + '°');
+        if (frameCount <= 5) {
+          console.log('[自瞄] ✅ 写入 #' + frameCount + ' 目标=' + targetYawDeg.toFixed(1) + '°/' + targetPitchDeg.toFixed(1) + '° 当前=' + curYawDeg.toFixed(1) + '°/' + curPitchDeg.toFixed(1) + '°');
         }
       } catch(e) {
         console.log('[自瞄] 写入异常: ' + e.message);
       }
+    }
+
+    // ================================================================
+    // 自瞄主循环（仅按键检测 + 调用 writeAimbot）
+    // ================================================================
+    var diagCount = 0;
+
+    function aimLoop() {
+      if (!enabled) return;
+
+      if (!CONFIG.autoAim) {
+        if (!getMouseBtnFn) {
+          if (frameCount === 0) console.log('[自瞄] ❌ getMouseBtnFn 未初始化');
+          return;
+        }
+        try {
+          var btnDown = getMouseBtnFn(CONFIG.aimKey, ptr(0));
+          if (!btnDown) return;
+        } catch(e) {
+          if (diagCount < 3) { diagCount++; console.log('[自瞄] ❌ getMouseBtnFn 异常: ' + e.message); }
+          return;
+        }
+      }
+
+      if (!myPlayer) return;
+      if (!cachedTarget) return;
+
+      writeAimbot();
     }
 
     // ================================================================
@@ -588,138 +683,6 @@
     }
 
     // ================================================================
-    // 自瞄主循环（每 16ms 运行一次，仅按键触发时写入角度）
-    // ================================================================
-    var diagCount = 0;
-
-    function aimLoop() {
-      if (!enabled) return;
-
-      // ——— Step 1: 触发检测 ———
-      if (!CONFIG.autoAim) {
-        if (!getMouseBtnFn) {
-          if (frameCount === 0) console.log('[自瞄] ❌ getMouseBtnFn 未初始化');
-          return;
-        }
-        try {
-          var btnDown = getMouseBtnFn(CONFIG.aimKey, ptr(0));
-          if (!btnDown) return;  // 鼠标左键未按下，直接返回
-        } catch(e) {
-          if (diagCount < 3) { diagCount++; console.log('[自瞄] ❌ getMouseBtnFn 异常: ' + e.message); }
-          return;
-        }
-        if (frameCount === 0) console.log('[自瞄] ✅ Step1 通过: 鼠标左键已按下');
-      }
-
-      // ——— Step 2: 获取 GameManager ———
-      var gm = getGM();
-      if (!gm || gm.isNull()) {
-        if (frameCount === 0) console.log('[自瞄] ❌ Step2 失败: getGM 返回空');
-        return;
-      }
-      if (frameCount === 0) console.log('[自瞄] ✅ Step2 通过: GM=' + gm);
-
-      // ——— Step 3: 获取本地玩家 ———
-      if (!myPlayer || myPlayer.isNull()) {
-        var all = getAllPlayers(gm);
-        console.log('[自瞄] 初次: 玩家总数=' + all.length);
-        for (var i = 0; i < all.length; i++) {
-          try {
-            if (isMyPlayerFn(all[i], ptr(0))) {
-              myPlayer = all[i];
-              console.log('[自瞄] ✅ 找到本地玩家 @ ' + myPlayer);
-              break;
-            }
-          } catch(e) {
-            if (diagCount < 3) { diagCount++; console.log('[自瞄] isMyPlayerFn #' + i + ' 异常: ' + e.message); }
-          }
-        }
-        if (!myPlayer) {
-          console.log('[自瞄] ❌ Step3 失败: 未找到本地玩家');
-          return;
-        }
-      }
-
-      try {
-        if (!isMyPlayerFn(myPlayer, ptr(0))) {
-          console.log('[自瞄] 本地玩家失效，重置');
-          myPlayer = null;
-          targetEnemy = null;
-          return;
-        }
-      } catch(e) {
-        if (diagCount < 3) { diagCount++; console.log('[自瞄] isMyPlayerFn 验证异常: ' + e.message); }
-        myPlayer = null;
-        return;
-      }
-
-      try {
-        if (isDeadFn(myPlayer, ptr(0))) {
-          if (frameCount === 0) console.log('[自瞄] ⏸ 玩家已死亡');
-          return;
-        }
-      } catch(e) {
-        if (diagCount < 3) { diagCount++; console.log('[自瞄] isDeadFn 异常: ' + e.message); }
-        return;
-      }
-      if (frameCount === 0) console.log('[自瞄] ✅ Step3 通过: 存活');
-
-      // ——— Step 4: 获取自身位置 ———
-      var myPos = getBonePos(myPlayer, BONE.CHEST);
-      if (!myPos) {
-        if (frameCount === 0) console.log('[自瞄] ❌ Step4 失败: 无法获取自身位置');
-        return;
-      }
-      if (frameCount === 0) console.log('[自瞄] ✅ Step4 通过: 我的坐标=(' + myPos.x.toFixed(1) + ',' + myPos.y.toFixed(1) + ',' + myPos.z.toFixed(1) + ')');
-
-      // ——— Step 4: 遍历敌人 ———
-      var allPlayers = getAllPlayers(gm);
-      var myTeam = 0;
-      try {
-        if (getTeamFn) myTeam = getTeamFn(myPlayer, ptr(0));
-        else myTeam = myPlayer.add(OFF.E_team).readS32();
-      } catch(e) {}
-
-      var enemies = [];
-      for (var i = 0; i < allPlayers.length; i++) {
-        var p = allPlayers[i];
-        try {
-          if (p.equals(myPlayer)) continue;
-          if (isDeadFn(p, ptr(0))) continue;
-          var team = getTeamFn ? getTeamFn(p, ptr(0)) : p.add(OFF.E_team).readS32();
-          if (team === myTeam) continue;
-          enemies.push(p);
-        } catch(e) {}
-      }
-
-      if (enemies.length === 0) {
-        if (frameCount === 0) console.log('[自瞄] ❌ Step4: 没有敌人');
-        return;
-      }
-      if (frameCount === 0) console.log('[自瞄] ✅ Step4: 敌人=' + enemies.length + '个');
-
-      // ——— Step 5~7: 目标选择 + 写入 ———
-      var best = selectTarget(myPos, enemies);
-      if (!best) {
-        if (frameCount === 0) console.log('[自瞄] ❌ Step5~7: selectTarget 无匹配目标 (FOV=' + CONFIG.maxAngleFOV + '° 距离=' + CONFIG.maxAimDistance + 'm)');
-        return;
-      }
-      if (frameCount === 0) console.log('[自瞄] ✅ Step5~7: 选择目标 角度差=' + (best.angleDist*180/Math.PI).toFixed(2) + '° 距离=' + best.dist3D.toFixed(1) + 'm');
-
-      targetEnemy = best.player;
-
-      if (frameCount <= 5) {
-        console.log('[自瞄] 🔫 锁定 ptr=' + best.player +
-          ' 敌坐标=(' + best.pos.x.toFixed(1) + ',' + best.pos.y.toFixed(1) + ',' + best.pos.z.toFixed(1) + ')' +
-          ' 距离=' + best.dist3D.toFixed(1) + 'm' +
-          ' 目标角=' + (best.angles.yaw*180/Math.PI).toFixed(1) + '°/' + (best.angles.pitch*180/Math.PI).toFixed(1) + '°');
-      }
-
-      // ——— Step 8~10: 写入角度 ———
-      writeAngles(best.angles);
-    }
-
-    // ================================================================
     // 房间切换 Hook
     // ================================================================
     function installRoomHooks(base) {
@@ -761,7 +724,8 @@
 
         installRoomHooks(mod.base);
 
-        aimTimer = setInterval(aimLoop, 16);
+        aimTimer = setInterval(aimLoop, 16);         // 按键检测+写角度
+        scanTimer = setInterval(targetScanner, 30); // 目标扫描
         if (CONFIG.debugLog) {
           debugTimer = setInterval(debugScan, 2000);
           console.log('[自瞄] 📊 调试扫描已启动（每2秒输出一次）');
@@ -780,6 +744,7 @@
       disable: function() {
         if (!enabled) return;
         if (aimTimer) { clearInterval(aimTimer); aimTimer = null; }
+        if (scanTimer) { clearInterval(scanTimer); scanTimer = null; }
         if (debugTimer) { clearInterval(debugTimer); debugTimer = null; }
         for (var i = 0; i < roomHooks.length; i++) {
           try { roomHooks[i].detach(); } catch(e) {}
@@ -830,7 +795,7 @@
         console.log('[自瞄] 配置更新: ' + JSON.stringify(cfg));
       },
 
-      getTarget: function() { return targetEnemy; },
+      getTarget: function() { return cachedTarget ? cachedTarget.player : null; },
       getConfig: function() {
         return {
           smoothness: CONFIG.smoothness,
