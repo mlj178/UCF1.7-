@@ -21,12 +21,10 @@
     var getShootIntervalTimeAddr = base.add(0xB78EF0);      // WeaponData_Gun.get_shootIntervalTime
     var recoilOnGunShotAddr = base.add(0xB19980);           // Recoil.OnGunShot
     var recoilGetCurrentPerturbAddr = base.add(0xB19420);   // Recoil.GetCurrentPerturb
-    var gunFireCheckingAddr = base.add(0xB62050);           // WPN_Gun.GunFireChecking
 
     console.log("[+] get_shootIntervalTime @ " + getShootIntervalTimeAddr);
     console.log("[+] Recoil.OnGunShot @ " + recoilOnGunShotAddr);
     console.log("[+] Recoil.GetCurrentPerturb @ " + recoilGetCurrentPerturbAddr);
-    console.log("[+] GunFireChecking @ " + gunFireCheckingAddr);
 
     var shootIntervalCallCount = 0;
     var recoilOnGunShotCallCount = 0;
@@ -93,66 +91,7 @@
     }, "float", ["pointer"]));
 
     // ==========================================
-    // 方案3: Hook GunFireChecking - 把半自动武器改成全自动
-    // ==========================================
-    // 这个函数控制射击检查逻辑，区分半自动和全自动武器
-    // WPN_Gun.GunFireChecking 检查 isSemiGun 和 semiGunFireLinkState
-    // 我们修改 isSemiGun 标志为 false，实现半自动改全自动
-    var gunFireCheckingCallCount = 0;
-    var originalGunFireChecking = Interceptor.replace(gunFireCheckingAddr, new NativeCallback(function(self) {
-        try {
-            gunFireCheckingCallCount++;
-            if (gunFireCheckingCallCount <= 10) {
-                console.log("[GunFireChecking] Called #" + gunFireCheckingCallCount);
-            }
-            
-            // WPN_Gun 内存布局：
-            // +0x7B isMine (bool) - 玩家所有权标志
-            // +0xF0 isSemiGun (bool) - 半自动标志
-            // +0xF4 semiGunFireLinkState - 半自动射击链接状态
-            
-            var isMine = self.add(0x7B).readU8();
-            if (isMine) {
-                // 将半自动标志设为 false，让武器变成全自动
-                var isSemiGun = self.add(0xF0).readU8();
-                if (isSemiGun) {
-                    self.add(0xF0).writeU8(0);
-                    if (gunFireCheckingCallCount <= 10) {
-                        console.log("[GunFireChecking] Converted semi-auto to full-auto (isSemiGun: 1 -> 0)");
-                    }
-                }
-                
-                // 重置半自动射击链接状态（防止半自动逻辑触发）
-                self.add(0xF4).writeU8(0);
-            }
-            
-            // 调用原始函数
-            return originalGunFireChecking(self);
-        } catch(e) {
-            console.log("[ERROR GunFireChecking] " + e.message);
-            return 0;
-        }
-    }, "int", ["pointer"]));
-
-    // ==========================================
-    // 方案4: 持续锁定扩散字段为0
-    // ==========================================
-    // 通过定期扫描 Recoil 实例，将 perturbMin 和 perturbMax 字段设为0
-    // Recoil 内存布局：
-    // +0x10 perturbMin (PostureFloat)
-    // +0x24 perturbMax (PostureFloat)
-    
-    var recoilScanInterval = setInterval(function() {
-        try {
-            // 扫描 Recoil 实例（通过已知的 Recoil 类型信息）
-            // 这里我们通过 Hook WPN_Gun.GunShoot_NoCheck 来获取 Recoil 实例
-        } catch(e) {
-            console.log("[ERROR Recoil Scan] " + e.message);
-        }
-    }, 1000);
-
-    // ==========================================
-    // 方案5: Hook GunShoot_NoCheck - 修改装填速度和扩散字段
+    // 方案4: Hook GunShoot_NoCheck - 修改装填速度和扩散字段
     // ==========================================
     // 这是所有枪械的共同射击入口
     // 在这里我们可以访问武器实例，修改装填速度和扩散字段
@@ -243,7 +182,6 @@
     console.log("[+] Features:");
     console.log("    - Instant fire rate (all gun types: primary, secondary, grenade launcher, RPG)");
     console.log("    - Zero bullet spread (OnGunShot blocked + GetCurrentPerturb returns 0)");
-    console.log("    - Semi-auto to full-auto conversion (FAL, AT4, pistols)");
     console.log("    - Fast reload (reloadAnimRatio set to 5.0)");
     console.log("    - Player-only modification (isMine check)");
     console.log("[+] Testing: Fire any weapon and check console output");

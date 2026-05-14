@@ -115,11 +115,7 @@
         collectNano4TAttributeAsset();
         collectSkillArray();
         collectCurrentWeapon();
-        collectWeaponData();
         collectWeaponDataGun();
-        collectWeaponDataKnife();
-        collectWDSubclasses();
-        collectWpnComponents();
         collectSingletons();
         collectStructs();
 
@@ -804,160 +800,89 @@
         sendLog('info', '└──────────────────────────────────────────────────────────────────────────┘', '');
     }
 
-    function collectWeaponData() {
-        var p = inst.weaponData;
-        if (!p) return;
-        sendLog('info', '', '');
-        sendLog('info', '┌──────────────────────────────────────────────────────────────────────────┐', '');
-        sendLog('info', '│  【WeaponData 类】 武器数据基类 (ScriptableObject)                       │', '');
-        sendLog('info', '├──────────────────────────────────────────────────────────────────────────┤', '');
-        sendLog('success', '│  实例地址: ' + p, '');
-
-        var v;
-        v = readI32(p.add(0xC));
-        if (v !== null) sendLog('info', '│  [0x0C] wpnIndex (int)              → ' + v, '');
-
-        v = readI32(p.add(0x10));
-        if (v !== null) sendLog('info', '│  [0x10] wpnClass (WeaponClass/int)  → ' + v, '');
-
-        v = readStr(p.add(0x14));
-        if (v) sendLog('info', '│  [0x14] weaponName (string)         → ' + v, '');
-
-        v = readPtr(p.add(0x18));
-        if (v) sendLog('info', '│  [0x18] viewData (PlayerViewData)   → ' + v, '');
-
-        v = readPtr(p.add(0x4C));
-        if (v) { inst.wpnSpriteAsset = v; sendLog('info', '│  [0x4C] spriteAsset (WpnSpriteAsset) → ' + v, ''); }
-
-        v = readI32(p.add(0x8C));
-        if (v !== null) sendLog('info', '│  [0x8C] targetSlot (int)            → ' + v, '');
-
-        v = readF32(p.add(0xA0));
-        if (v !== null) sendLog('info', '│  [0xA0] moveSpeedPenalty (float)    → ' + v, '');
-
-        v = readPtr(p.add(0xB4));
-        if (v) sendLog('info', '│  [0xB4] components (ComponentData)  → ' + v, '');
-
-        sendLog('info', '└──────────────────────────────────────────────────────────────────────────┘', '');
-    }
-
     function collectWeaponDataGun() {
-        var p = inst.weaponDataGun;
-        if (!p) return;
         sendLog('info', '', '');
         sendLog('info', '┌──────────────────────────────────────────────────────────────────────────┐', '');
-        sendLog('info', '│  【WeaponData_Gun 类】 枪械数据 (继承WeaponData)                         │', '');
-        sendLog('info', '├──────────────────────────────────────────────────────────────────────────┤', '');
-        sendLog('success', '│  实例地址: ' + p, '');
-
-        var v;
-        v = readI32(p.add(0xB8));
-        if (v !== null) sendLog('info', '│  [0xB8] clip (int)                  → ' + v, '');
-
-        v = readI32(p.add(0xBC));
-        if (v !== null) sendLog('info', '│  [0xBC] ammo (int)                  → ' + v, '');
-
-        v = readI32(p.add(0xC0));
-        if (v !== null) sendLog('info', '│  [0xC0] clip_Nano (int)             → ' + v, '');
-
-        v = readI32(p.add(0xC4));
-        if (v !== null) sendLog('info', '│  [0xC4] ammo_Nano (int)             → ' + v, '');
-
-        v = readF32(p.add(0xCC));
-        if (v !== null) sendLog('success', '│  [0xCC] shotsPerMinute (float)      → ' + v, '');
-
-        v = readF32(p.add(0xD0));
-        if (v !== null) sendLog('info', '│  [0xD0] fireAnimMultiplier (float)  → ' + v, '');
-
-        v = readF32(p.add(0xD4));
-        if (v !== null) sendLog('info', '│  [0xD4] reloadAnimRatio (float)     → ' + v, '');
-
-        v = readF32(p.add(0x148));
-        if (v !== null) sendLog('info', '│  [0x148] range (float)              → ' + v, '');
-
-        v = readF32(p.add(0x14C));
-        if (v !== null) sendLog('info', '│  [0x14C] ammoDamage (float)         → ' + v, '');
-
-        v = readPtr(p.add(0x180));
-        if (v) sendLog('info', '│  [0x180] knifeAttacks (KnifeAttackData[]) → ' + v, '');
-
-        sendLog('info', '└──────────────────────────────────────────────────────────────────────────┘', '');
-    }
-
-    function collectWeaponDataKnife() {
-        if (!inst.weaponData) return;
-        var p = inst.weaponData;
-        sendLog('info', '', '');
-        sendLog('info', '┌──────────────────────────────────────────────────────────────────────────┐', '');
-        sendLog('info', '│  【WeaponData_Knife 类】 近战武器数据 (继承WeaponData)                   │', '');
+        sendLog('info', '│  【WeaponData_Gun 类】 玩家背包所有枪械数据                              │', '');
         sendLog('info', '├──────────────────────────────────────────────────────────────────────────┤', '');
 
-        var v;
-        v = readStr(p.add(0xB8));
-        if (v) sendLog('info', '│  [0xB8] knifeAttackAnimName (string) → ' + v, '');
+        var p = inst.playerWeapons;
+        if (!p) {
+            sendLog('info', '│  PlayerWeapons 未初始化', '');
+            sendLog('info', '└──────────────────────────────────────────────────────────────────────────┘', '');
+            return;
+        }
 
-        v = readPtr(p.add(0xC0));
-        if (v) sendLog('info', '│  [0xC0] knifeAttacks (KnifeAttackData[]) → ' + v, '');
+        var wpnCount = 0;
+        var wpnDataGunSet = {};
 
-        sendLog('info', '└──────────────────────────────────────────────────────────────────────────┘', '');
-    }
+        function processWeaponArray(arrPtr, arrName) {
+            if (!arrPtr) return;
+            try {
+                var count = arrPtr.add(0x18).readS32();
+                if (count <= 0 || count > 20) return;
+                
+                sendLog('info', '│  [' + arrName + '] 长度: ' + count, '');
+                
+                for (var i = 0; i < count; i++) {
+                    var wpnPtr = readPtr(arrPtr.add(0x20).add(i * 4));
+                    if (!wpnPtr || wpnPtr.isNull()) continue;
 
-    function collectWDSubclasses() {
-        sendLog('info', '', '');
-        sendLog('info', '┌──────────────────────────────────────────────────────────────────────────┐', '');
-        sendLog('info', '│  【WeaponData 子类汇总】 WD_* 系列类                                    │', '');
-        sendLog('info', '├──────────────────────────────────────────────────────────────────────────┤', '');
+                    var wpnDataGun = readPtr(wpnPtr.add(0xEC));
+                    if (!wpnDataGun || wpnDataGun.isNull()) continue;
+                    
+                    var wpnDataGunStr = wpnDataGun.toString();
+                    if (wpnDataGunSet[wpnDataGunStr]) continue;
+                    wpnDataGunSet[wpnDataGunStr] = true;
+                    wpnCount++;
 
-        var wdList = [
-            { name: 'WD_AsceticHero', parent: 'WD_SkillKnife', field: 'screenFX @ 0xF8' },
-            { name: 'WD_EvilTerminator', parent: 'WD_SkillKnife', field: 'missileData @ 0xF8' },
-            { name: 'WD_GhostBlade', parent: 'WeaponData_Knife', field: 'btlModeWpnName @ 0xF4' },
-            { name: 'WD_GrenadeGun', parent: 'WeaponData_Gun', field: 'weaponName2 @ 0x1C8, missileData @ 0x20C' },
-            { name: 'WD_MasterHero', parent: 'WD_SkillKnife', field: 'skillHitSndName @ 0xF8' },
-            { name: 'WD_MasterHunter', parent: 'WD_SkillKnife', field: '(无额外字段)' },
-            { name: 'WD_MechanicHero', parent: 'WeaponData_Knife', field: 'SkillBtn_Arcane @ 0xF4, SkillBtn_SentryGun @ 0xF8' },
-            { name: 'WD_Missile', parent: 'WeaponData', field: 'missileData @ 0xB8' },
-            { name: 'WD_RPG', parent: 'WeaponData', field: 'missileData @ 0xB8' },
-            { name: 'WD_SentryGun', parent: 'WeaponData', field: 'sentryGunPrefab @ 0xB8' },
-            { name: 'WD_SkillKnife', parent: 'WeaponData_Knife', field: 'skillBtn @ 0xF4' }
-        ];
+                    var wpnName = '';
+                    try {
+                        var wpnNamePtr = wpnDataGun.add(0x14).readPointer();
+                        if (wpnNamePtr && !wpnNamePtr.isNull()) {
+                            var nameLen = wpnNamePtr.add(-4).readS32();
+                            if (nameLen > 0 && nameLen < 200) {
+                                wpnName = wpnNamePtr.readUtf8String(nameLen);
+                            }
+                        }
+                    } catch (e) {}
 
-        wdList.forEach(function (wd) {
-            sendLog('info', '│  ' + pad(wd.name, 22) + ' : ' + wd.parent + ' - ' + wd.field, '');
-        });
+                    sendLog('success', '│  [' + wpnCount + '] Weapon: ' + wpnPtr + ' | WeaponData_Gun: ' + wpnDataGun + (wpnName ? ' | ' + wpnName : ''), '');
+                }
+            } catch (e) {
+                sendLog('info', '│  [' + arrName + '] 遍历失败: ' + e.message, '');
+            }
+        }
 
-        sendLog('info', '│', '');
-        sendLog('info', '│  注: WD_* 子类实例地址与 WeaponData 相同 (多态)', '');
-        sendLog('info', '│  当前武器的 WeaponData 实际类型取决于具体武器', '');
+        processWeaponArray(readPtr(p.add(0x1C)), 'current');
+        processWeaponArray(readPtr(p.add(0x20)), 'normal');
+        processWeaponArray(readPtr(p.add(0x24)), 'special');
 
-        sendLog('info', '└──────────────────────────────────────────────────────────────────────────┘', '');
-    }
+        var allList = readPtr(p.add(0xC));
+        if (allList) {
+            try {
+                var allCount = allList.add(0x18).readS32();
+                if (allCount > 0 && allCount <= 50) {
+                    var allData = allList.add(0x1C).readPointer();
+                    if (allData && !allData.isNull()) {
+                        var arrPtr = Memory.alloc(4);
+                        arrPtr.writePointer(allData);
+                        var wrapper = Memory.alloc(0x20);
+                        wrapper.writePointer(arrPtr);
+                        wrapper.add(0x18).writeS32(allCount);
+                        processWeaponArray(wrapper, 'all');
+                    }
+                }
+            } catch (e) {
+                sendLog('info', '│  [all] 遍历失败: ' + e.message, '');
+            }
+        }
 
-    function collectWpnComponents() {
-        sendLog('info', '', '');
-        sendLog('info', '┌──────────────────────────────────────────────────────────────────────────┐', '');
-        sendLog('info', '│  【WPN_* 武器子类 & WpnComponent汇总】                                   │', '');
-        sendLog('info', '├──────────────────────────────────────────────────────────────────────────┤', '');
-
-        var wpnList = [
-            { name: 'WPN_Gun', parent: 'Weapon', note: '当前武器实例已打印', hasInst: true },
-            { name: 'WPN_Knife', parent: 'Weapon', note: 'combo1_AnimSpeed @ 0xEC' },
-            { name: 'WPN_MasterHero', parent: 'WPN_Knife', note: 'realData2 @ 0xF0, skill @ 0xF4' },
-            { name: 'WPN_MasterHunter', parent: 'WPN_Knife', note: 'realData2 @ 0xF0, skill @ 0xF4' },
-            { name: 'WPN_MechanicHero', parent: 'WPN_Knife', note: 'realData2 @ 0xF0, skill_Arcane @ 0xF4, skill_SentryGun @ 0xF8' },
-            { name: 'WPN_Missile', parent: 'RecyclableObject', note: 'owner @ 0x30, weaponData @ 0x38' },
-            { name: 'WPN_MiniGunAnim', parent: 'WpnComponent', note: 'wpn @ 0x0C (继承)' },
-            { name: 'WpnComponent', parent: 'MonoBehaviour', note: 'wpn @ 0x0C' }
-        ];
-
-        wpnList.forEach(function (w) {
-            var tag = w.hasInst ? ' ✅' : '';
-            sendLog('info', '│  ' + pad(w.name, 22) + ' : ' + pad(w.parent, 22) + ' - ' + w.note + tag, '');
-        });
-
-        sendLog('info', '│', '');
-        sendLog('info', '│  注: WPN_* 子类实例地址与当前武器相同 (多态)', '');
-        sendLog('info', '│  WPN_Missile 是飞行中的子弹/导弹，非玩家持有武器', '');
+        if (wpnCount === 0) {
+            sendLog('info', '│  未找到 WeaponData_Gun 实例', '');
+        } else {
+            sendLog('success', '│  共找到 ' + wpnCount + ' 个 WeaponData_Gun 实例', '');
+        }
 
         sendLog('info', '└──────────────────────────────────────────────────────────────────────────┘', '');
     }
