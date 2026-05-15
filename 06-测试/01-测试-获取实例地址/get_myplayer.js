@@ -110,14 +110,12 @@
         collectHealthData(pp);
         collectBuffList(pp);
         collectBot(pp);
+        collectSkillCommonInstances(pp);
         collectCharacterEffect(pp);
         collectNano4TAttribute();
         collectNano4TAttributeAsset();
         collectSkillArray();
         collectCurrentWeapon();
-        collectWeaponDataGun();
-        collectSingletons();
-        collectStructs();
 
         printSummary();
     }
@@ -701,12 +699,11 @@
             sendLog('success', '│  [0x08] all (Skill[])              → ' + v, '');
 
             try {
-                var arrLen = v.add(0x18).readS32();
+                // 32-bit Il2Cpp 数组布局: [+0x00]klass(4) [+0x04]monitor(4) [+0x08]bounds(4) [+0x0C]max_length(4), 元素从 +0x10 开始
+                var arrLen = v.add(0x0C).readS32();
                 if (arrLen >= 0 && arrLen < 10) {
-                    var arrData = v.add(0x20).readPointer();
-                    if (arrData && !arrData.isNull()) {
-                        for (var i = 0; i < arrLen; i++) {
-                            var skillPtr = readPtr(arrData.add(4 * i));
+                    for (var i = 0; i < arrLen; i++) {
+                        var skillPtr = readPtr(v.add(0x10 + 4 * i));
                             if (skillPtr) {
                                 var skillName = readStr(skillPtr.add(0x8));
                                 var skillBtn = readPtr(skillPtr.add(0xC));
@@ -717,8 +714,7 @@
                             }
                         }
                     }
-                }
-            } catch (e) {
+                } catch (e) {
                 sendLog('info', '│  Skill数组遍历失败: ' + e.message, '');
             }
         } else {
@@ -731,6 +727,64 @@
         sendLog('info', '│', '');
         sendLog('info', '│  Skill基类字段: [0x08] name, [0x0C] skillBtn, [0x10] disabled', '');
         sendLog('info', '│  Skill子类: SkillKnife, Skill_Grenade, Skill_SentryGun 等', '');
+        sendLog('info', '└──────────────────────────────────────────────────────────────────────────┘', '');
+    }
+
+    function collectSkillCommonInstances(pp) {
+        sendLog('info', '', '');
+        sendLog('info', '┌──────────────────────────────────────────────────────────────────────────┐', '');
+        sendLog('info', '│  【Skill_Common 类】 通用技能 (TypeDefIndex: 5487, 继承Skill)            │', '');
+        sendLog('info', '├──────────────────────────────────────────────────────────────────────────┤', '');
+
+        var ps = inst.playerSkills;
+        if (!ps) { sendLog('info', '│  PlayerSkills 为空, 无法扫描', ''); sendLog('info', '└──────────────────────────────────────────────────────────────────────────┘', ''); return; }
+
+        var arr = readPtr(ps.add(0x8));
+        if (!arr) { sendLog('info', '│  Skill[] 数组为空', ''); sendLog('info', '└──────────────────────────────────────────────────────────────────────────┘', ''); return; }
+
+        // 32-bit Il2Cpp 数组: [klass(4)][monitor(4)][bounds(4)][max_length(4)] 元素从 +0x10 开始
+        var len = readI32(arr.add(0x0C));
+        if (!len || len <= 0 || len > 20) { sendLog('info', '│  数组长度异常: ' + len, ''); sendLog('info', '└──────────────────────────────────────────────────────────────────────────┘', ''); return; }
+
+        sendLog('success', '│  Skill[] 总数: ' + len, '');
+
+        inst.skillCommonList = [];
+        var found = 0;
+        for (var i = 0; i < len; i++) {
+            var sp = readPtr(arr.add(0x10 + 4 * i));
+            if (!sp) continue;
+
+            var sn = readStr(sp.add(0x8));
+            var disabled = readU8(sp.add(0x10));
+
+            // Skill_Common 特有字段: coldFinishTime at +0x1C, coldTime at +0x24
+            var coldFinish = readF32(sp.add(0x1C));
+            var coldTime = readF32(sp.add(0x24));
+            var isSkillCommon = (coldFinish !== null || coldTime !== null);
+
+            if (isSkillCommon) {
+                sendLog('success', '│  ── Skill_Common[' + found + '] ─────────────────────────', '');
+                sendLog('success', '│  实例地址 : ' + sp, '');
+                sendLog('info', '│  skillName : ' + (sn || 'null'), '');
+                sendLog('info', '│  coldTime  : ' + (coldTime !== null ? coldTime.toFixed(2) + 's' : 'null'), '');
+                sendLog('info', '│  coldFinish: ' + (coldFinish !== null ? coldFinish.toFixed(3) : 'null'), '');
+                sendLog('info', '│  disabled  : ' + (disabled ? 'true' : 'false'), '');
+
+                inst.skillCommonList.push({ ptr: sp, name: sn, coldTime: coldTime, coldFinish: coldFinish });
+                found++;
+            } else {
+                sendLog('info', '│  [跳过] ' + sp + ' name=' + (sn || 'null') + ' (非Skill_Common)', '');
+            }
+        }
+
+        if (found === 0) {
+            sendLog('warn', '│  未找到 Skill_Common 实例', '');
+        } else {
+            sendLog('success', '│  共找到 ' + found + ' 个 Skill_Common 实例', '');
+        }
+        // 将 Skill_Common 地址映射到汇总表用字段
+        inst.skillCommon0 = (inst.skillCommonList[0] || {}).ptr || null;
+        inst.skillCommon1 = (inst.skillCommonList[1] || {}).ptr || null;
         sendLog('info', '└──────────────────────────────────────────────────────────────────────────┘', '');
     }
 
@@ -800,260 +854,6 @@
         sendLog('info', '└──────────────────────────────────────────────────────────────────────────┘', '');
     }
 
-    function collectWeaponDataGun() {
-        sendLog('info', '', '');
-        sendLog('info', '┌──────────────────────────────────────────────────────────────────────────┐', '');
-        sendLog('info', '│  【WeaponData_Gun 类】 玩家背包所有枪械数据                              │', '');
-        sendLog('info', '├──────────────────────────────────────────────────────────────────────────┤', '');
-
-        var p = inst.playerWeapons;
-        if (!p) {
-            sendLog('info', '│  PlayerWeapons 未初始化', '');
-            sendLog('info', '└──────────────────────────────────────────────────────────────────────────┘', '');
-            return;
-        }
-
-        var wpnCount = 0;
-        var wpnDataGunSet = {};
-
-        function processWeaponArray(arrPtr, arrName) {
-            if (!arrPtr) return;
-            try {
-                var count = arrPtr.add(0x18).readS32();
-                if (count <= 0 || count > 20) return;
-                
-                sendLog('info', '│  [' + arrName + '] 长度: ' + count, '');
-                
-                for (var i = 0; i < count; i++) {
-                    var wpnPtr = readPtr(arrPtr.add(0x20).add(i * 4));
-                    if (!wpnPtr || wpnPtr.isNull()) continue;
-
-                    var wpnDataGun = readPtr(wpnPtr.add(0xEC));
-                    if (!wpnDataGun || wpnDataGun.isNull()) continue;
-                    
-                    var wpnDataGunStr = wpnDataGun.toString();
-                    if (wpnDataGunSet[wpnDataGunStr]) continue;
-                    wpnDataGunSet[wpnDataGunStr] = true;
-                    wpnCount++;
-
-                    var wpnName = '';
-                    try {
-                        var wpnNamePtr = wpnDataGun.add(0x14).readPointer();
-                        if (wpnNamePtr && !wpnNamePtr.isNull()) {
-                            var nameLen = wpnNamePtr.add(-4).readS32();
-                            if (nameLen > 0 && nameLen < 200) {
-                                wpnName = wpnNamePtr.readUtf8String(nameLen);
-                            }
-                        }
-                    } catch (e) {}
-
-                    sendLog('success', '│  [' + wpnCount + '] Weapon: ' + wpnPtr + ' | WeaponData_Gun: ' + wpnDataGun + (wpnName ? ' | ' + wpnName : ''), '');
-                }
-            } catch (e) {
-                sendLog('info', '│  [' + arrName + '] 遍历失败: ' + e.message, '');
-            }
-        }
-
-        processWeaponArray(readPtr(p.add(0x1C)), 'current');
-        processWeaponArray(readPtr(p.add(0x20)), 'normal');
-        processWeaponArray(readPtr(p.add(0x24)), 'special');
-
-        var allList = readPtr(p.add(0xC));
-        if (allList) {
-            try {
-                var allCount = allList.add(0x18).readS32();
-                if (allCount > 0 && allCount <= 50) {
-                    var allData = allList.add(0x1C).readPointer();
-                    if (allData && !allData.isNull()) {
-                        var arrPtr = Memory.alloc(4);
-                        arrPtr.writePointer(allData);
-                        var wrapper = Memory.alloc(0x20);
-                        wrapper.writePointer(arrPtr);
-                        wrapper.add(0x18).writeS32(allCount);
-                        processWeaponArray(wrapper, 'all');
-                    }
-                }
-            } catch (e) {
-                sendLog('info', '│  [all] 遍历失败: ' + e.message, '');
-            }
-        }
-
-        if (wpnCount === 0) {
-            sendLog('info', '│  未找到 WeaponData_Gun 实例', '');
-        } else {
-            sendLog('success', '│  共找到 ' + wpnCount + ' 个 WeaponData_Gun 实例', '');
-        }
-
-        sendLog('info', '└──────────────────────────────────────────────────────────────────────────┘', '');
-    }
-
-    function collectSingletons() {
-        sendLog('info', '', '');
-        sendLog('info', '┌──────────────────────────────────────────────────────────────────────────┐', '');
-        sendLog('info', '│  【单例类汇总】 Singleton<T> 子类 - 通过il2cpp API获取实例               │', '');
-        sendLog('info', '├──────────────────────────────────────────────────────────────────────────┤', '');
-
-        try {
-            var il2cpp_domain_get = new NativeFunction(
-                Module.findExportByName('GameAssembly.dll', 'il2cpp_domain_get'),
-                'pointer', []
-            );
-            var il2cpp_domain_get_assemblies = new NativeFunction(
-                Module.findExportByName('GameAssembly.dll', 'il2cpp_domain_get_assemblies'),
-                'pointer', ['pointer', 'pointer']
-            );
-            var il2cpp_assembly_get_image = new NativeFunction(
-                Module.findExportByName('GameAssembly.dll', 'il2cpp_assembly_get_image'),
-                'pointer', ['pointer']
-            );
-            var il2cpp_class_from_name = new NativeFunction(
-                Module.findExportByName('GameAssembly.dll', 'il2cpp_class_from_name'),
-                'pointer', ['pointer', 'pointer', 'pointer']
-            );
-            var il2cpp_class_get_static_field_data = new NativeFunction(
-                Module.findExportByName('GameAssembly.dll', 'il2cpp_class_get_static_field_data'),
-                'pointer', ['pointer']
-            );
-
-            var domain = il2cpp_domain_get();
-            var sizePtr = Memory.alloc(4);
-            var assemblies = il2cpp_domain_get_assemblies(domain, sizePtr);
-            var asmCount = sizePtr.readU32();
-
-            function findClass(name) {
-                for (var ai = 0; ai < asmCount; ai++) {
-                    var asmPtr = assemblies.add(Process.pointerSize * ai).readPointer();
-                    var image = il2cpp_assembly_get_image(asmPtr);
-                    if (image.isNull()) continue;
-                    var ns = Memory.allocUtf8String('');
-                    var nm = Memory.allocUtf8String(name);
-                    var cls = il2cpp_class_from_name(image, ns, nm);
-                    if (!cls.isNull()) return cls;
-                }
-                return null;
-            }
-
-            var singletons = [
-                { name: 'GameManager', tdi: 5365, instOff: 0x0, desc: '游戏管理器',
-                  fields: [
-                    { off: 0x0, name: 'myPlayer (static Player)', type: 'ptr' },
-                    { off: 0x4, name: 'gameMode (static GameMode)', type: 'i32' },
-                    { off: 0x8, name: 'weaponLimited (static WeaponLimited)', type: 'i32' },
-                    { off: 0xC, name: 'playerPrefab', type: 'ptr' },
-                    { off: 0x10, name: 'botPrefab', type: 'ptr' },
-                    { off: 0x14, name: 'entityBL_Alive (List<Entity>)', type: 'ptr' },
-                    { off: 0x18, name: 'entityGR_Alive (List<Entity>)', type: 'ptr' },
-                    { off: 0x1C, name: 'allPlayers (Player[])', type: 'ptr' },
-                    { off: 0x20, name: 'playersBL (List<Player>)', type: 'ptr' },
-                    { off: 0x28, name: 'playersGR (List<Player>)', type: 'ptr' }
-                  ]
-                },
-                { name: 'MapManager', tdi: 5371, instOff: 0x0, desc: '地图管理器',
-                  fields: [
-                    { off: 0x34, name: 'mapGunIndex (int)', type: 'i32' },
-                    { off: 0x38, name: 'knifeHitStun (bool)', type: 'u8' },
-                    { off: 0x3C, name: 'minimap (Texture2D)', type: 'ptr' }
-                  ]
-                },
-                { name: 'PlayerController', tdi: 5408, instOff: 0x0, desc: '玩家控制器',
-                  fields: [
-                    { off: 0xC, name: 'focusHUD (string)', type: 'ptr' },
-                    { off: 0x10, name: 'lastPressWTime (float)', type: 'f32' }
-                  ]
-                }
-            ];
-
-            singletons.forEach(function (sg) {
-                sendLog('info', '│', '');
-                sendLog('info', '│  ── ' + sg.name + ' (Singleton<' + sg.name + '>, TDI:' + sg.tdi + ') ──', '');
-
-                var cls = findClass(sg.name);
-                if (!cls) {
-                    sendLog('info', '│  类未找到', '');
-                    return;
-                }
-
-                var staticData = il2cpp_class_get_static_field_data(cls);
-                if (staticData.isNull()) {
-                    sendLog('info', '│  静态字段数据为空', '');
-                    return;
-                }
-
-                var instPtr = readPtr(staticData.add(sg.instOff));
-                if (instPtr) {
-                    inst[sg.name.charAt(0).toLowerCase() + sg.name.slice(1)] = instPtr;
-                    sendLog('success', '│  实例地址: ' + instPtr, '');
-
-                    sg.fields.forEach(function (f) {
-                        if (f.type === 'ptr') {
-                            var v = readPtr(instPtr.add(f.off));
-                            if (v) sendLog('info', '│    [0x' + f.off.toString(16).toUpperCase() + '] ' + pad(f.name, 36) + ' → ' + v, '');
-                        } else if (f.type === 'i32') {
-                            var v = readI32(instPtr.add(f.off));
-                            if (v !== null) sendLog('info', '│    [0x' + f.off.toString(16).toUpperCase() + '] ' + pad(f.name, 36) + ' → ' + v, '');
-                        } else if (f.type === 'f32') {
-                            var v = readF32(instPtr.add(f.off));
-                            if (v !== null) sendLog('info', '│    [0x' + f.off.toString(16).toUpperCase() + '] ' + pad(f.name, 36) + ' → ' + v, '');
-                        } else if (f.type === 'u8') {
-                            var v = readU8(instPtr.add(f.off));
-                            if (v !== null) sendLog('info', '│    [0x' + f.off.toString(16).toUpperCase() + '] ' + pad(f.name, 36) + ' → ' + (v ? 'true' : 'false'), '');
-                        }
-                    });
-                } else {
-                    sendLog('info', '│  实例未创建 (可能尚未进入游戏)', '');
-                }
-            });
-
-        } catch (e) {
-            sendLog('info', '│  il2cpp API调用失败: ' + e.message, '');
-        }
-
-        sendLog('info', '└──────────────────────────────────────────────────────────────────────────┘', '');
-    }
-
-    function collectStructs() {
-        sendLog('info', '', '');
-        sendLog('info', '┌──────────────────────────────────────────────────────────────────────────┐', '');
-        sendLog('info', '│  【结构体汇总】 嵌入式值类型 (无独立实例地址)                            │', '');
-        sendLog('info', '├──────────────────────────────────────────────────────────────────────────┤', '');
-
-        var structs = [
-            { name: 'BotAbility', parent: 'Bot.ability @ 0x0C', fields: 'zoomSpeed@0x0, shootAccuracy@0x4, recoilControl_X@0x8, recoilControlRange_X@0xC, recoilControl_Y@0x10, recoilControlRange_Y@0x14' },
-            { name: 'ZoomAction', parent: 'WeaponData_Gun', fields: 'openTime@0x0, closeTime@0x4, datas[]@0x8, closeZoomWhenShoot@0xC' },
-            { name: 'ZoomAction.ZoomData', parent: 'ZoomAction.datas[]', fields: 'type@0x0, fovScale@0x4, sprite@0x8' },
-            { name: 'KnifeAttackData', parent: 'WeaponData_Gun.knifeAttacks[]', fields: 'damage@0x0, range@0x4, angle@0x8, hitStun@0xC' },
-            { name: 'MissileData', parent: 'WD_EvilTerminator等', fields: 'clip@0x0, ammo@0x4, damage@0xC, range@0x10, velocity@0x18' },
-            { name: 'PlayerViewData', parent: 'WeaponData.viewData @ 0x18', fields: 'position@0x0, eulerAngle@0xC, FOV@0x30' },
-            { name: 'WpnSpriteAsset', parent: 'WeaponData.spriteAsset @ 0x4C', fields: 'background@0x0, effect@0x14, killMsgIcon@0x28' }
-        ];
-
-        structs.forEach(function (s) {
-            sendLog('info', '│  ' + pad(s.name, 24) + ' ← ' + pad(s.parent, 28), '');
-            sendLog('info', '│    字段: ' + s.fields, '');
-        });
-
-        sendLog('info', '│', '');
-        sendLog('info', '│  【枚举类型汇总】 (无实例地址)', '');
-        sendLog('info', '│  NanoRole: Soldier=0, NanoGhost=1, Hulk=2, Nurse=3, Assassin=4, ...', '');
-        sendLog('info', '│  WeaponLimited: None=0, Knife=1, HandGun=2, Sniper=3', '');
-        sendLog('info', '│  NanoRoleSelect.Type: None=0, Normal=1, Hero=2, Terminator=3', '');
-        sendLog('info', '│  WeaponSlot: None=-1, Main=0, Secondary=1, Knife=2, Throw=3, C4=4', '');
-
-        sendLog('info', '│', '');
-        sendLog('info', '│  【静态类汇总】 (无实例)', '');
-        sendLog('info', '│  WpnDataExpand: 静态扩展方法类 (IsMainWeapon, IsThrowWeapon, GetSlotID)', '');
-        sendLog('info', '│  WeaponSlot: 常量类 (Main=0, Secondary=1, Knife=2, Throw=3, C4=4)', '');
-        sendLog('info', '│  NanoRoleExpand: 静态扩展方法类 (GetName, IsSoldierOrSavior, LikeGuard)', '');
-
-        sendLog('info', '│', '');
-        sendLog('info', '│  【dump.cs中未找到的类】', '');
-        sendLog('info', '│  Cheat.Choice, BaseCheat.Function, Cheat.Parent,', '');
-        sendLog('info', '│  Cheat.Radio, Cheat.Switch, CustomEvent.GameManager', '');
-        sendLog('info', '│  (可能为内部类/已移除/名称不同/仅存在于特定版本)', '');
-
-        sendLog('info', '└──────────────────────────────────────────────────────────────────────────┘', '');
-    }
-
     function printSummary() {
         sendLog('info', '', '');
         sendLog('success', '╔══════════════════════════════════════════════════════════════════════════╗', '');
@@ -1070,20 +870,17 @@
             { cat: '武器', name: 'WeaponBag', key: 'weaponBag', desc: '武器背包' },
             { cat: '武器', name: 'Weapon (当前)', key: 'currentWeapon', desc: '当前武器' },
             { cat: '武器', name: 'WeaponData', key: 'weaponData', desc: '武器数据' },
-            { cat: '武器', name: 'WeaponData_Gun', key: 'weaponDataGun', desc: '枪械数据' },
             { cat: '武器', name: 'AmmoData', key: 'ammoData', desc: '弹药数据' },
-            { cat: '武器', name: 'MapGun', key: 'mapGun', desc: '地图枪' },
             { cat: '技能', name: 'PlayerSkills', key: 'playerSkills', desc: '技能管理' },
             { cat: '技能', name: 'Skill[]', key: 'skillArray', desc: '技能数组' },
+            { cat: '技能', name: 'Skill_Common[0]', key: 'skillCommon0', desc: '通用技能0' },
+            { cat: '技能', name: 'Skill_Common[1]', key: 'skillCommon1', desc: '通用技能1' },
             { cat: '技能', name: 'NanoRoleSelect', key: 'nanoRoleSelect', desc: '纳米角色选择' },
             { cat: '技能', name: 'Nano4T_Data', key: 'nano4TData', desc: '纳米4T数据' },
             { cat: '视觉', name: 'PlayerCameraManager', key: 'cameraManager', desc: '相机管理' },
             { cat: '视觉', name: 'Recoil', key: 'recoil', desc: '后坐力' },
             { cat: '生命', name: 'HealthData', key: 'healthData', desc: '生命值数据' },
-            { cat: '生命', name: 'Buff列表', key: 'buffs', desc: 'List<Buff>' },
-            { cat: '单例', name: 'GameManager', key: 'gameManager', desc: '游戏管理器' },
-            { cat: '单例', name: 'MapManager', key: 'mapManager', desc: '地图管理器' },
-            { cat: '单例', name: 'PlayerController', key: 'playerController', desc: '玩家控制器' }
+            { cat: '生命', name: 'Buff列表', key: 'buffs', desc: 'List<Buff>' }
         ];
 
         var lastCat = '';
@@ -1111,6 +908,8 @@
     globalThis.getCameraManager = function () { return inst.cameraManager; };
     globalThis.getHealthData = function () { return inst.healthData; };
     globalThis.getPlayerSkills = function () { return inst.playerSkills; };
+    globalThis.getSkillCommonList = function () { return inst.skillCommonList || []; };
+    globalThis.getSkillCommon = function (index) { return (inst.skillCommonList || [])[index] || null; };
     globalThis.getWeaponData = function () { return inst.weaponDataGun; };
     globalThis.getGameManager = function () { return inst.gameManager; };
     globalThis.getMapManager = function () { return inst.mapManager; };
