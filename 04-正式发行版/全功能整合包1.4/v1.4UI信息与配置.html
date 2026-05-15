@@ -1,0 +1,780 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+    <title>游戏修改器 v1.4 - UI 完整规格文档（组件属性详情版）</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: #0f0f1a;
+            font-family: 'Segoe UI', 'Microsoft YaHei', system-ui, sans-serif;
+            color: #e4e4f0;
+            padding: 24px 32px;
+        }
+
+        .app-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            margin-bottom: 40px;
+        }
+
+        /* 左侧结构树 */
+        .structure-panel {
+            flex: 2;
+            min-width: 300px;
+            background: #1e1e2a;
+            border-radius: 24px;
+            overflow: hidden;
+            border: 1px solid #2e2e3e;
+            box-shadow: 0 12px 28px rgba(0, 0, 0, 0.5);
+        }
+
+        .structure-header {
+            background: #252536;
+            padding: 16px 20px;
+            border-bottom: 1px solid #3a3a4e;
+        }
+
+        .tree-view {
+            padding: 12px 8px 20px 8px;
+            max-height: 700px;
+            overflow-y: auto;
+        }
+
+        .tree-node {
+            list-style: none;
+            margin-left: 0;
+        }
+
+        .tree-node li {
+            list-style: none;
+            margin: 4px 0;
+        }
+
+        .node-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            border-radius: 14px;
+            background: #252532;
+            cursor: pointer;
+            transition: 0.2s;
+            border-left: 3px solid transparent;
+        }
+
+        .node-item:hover {
+            background: #32324a;
+            transform: translateX(3px);
+        }
+
+        .node-item.active {
+            background: #2d4b6e;
+            border-left-color: #5dade2;
+        }
+
+        .node-icon {
+            font-size: 1.2rem;
+            width: 28px;
+        }
+
+        .node-name {
+            flex: 1;
+            font-weight: 500;
+        }
+
+        .node-badge {
+            background: #3a3a4e;
+            border-radius: 30px;
+            padding: 2px 8px;
+            font-size: 0.7rem;
+        }
+
+        .children-wrapper {
+            margin-left: 28px;
+            padding-left: 8px;
+            border-left: 1px dashed #3a3a55;
+        }
+
+        /* 中间详情面板 */
+        .detail-panel {
+            flex: 1.8;
+            min-width: 320px;
+            background: #1a1a26;
+            border-radius: 24px;
+            border: 1px solid #2e2e42;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .detail-header {
+            background: #222232;
+            padding: 16px 20px;
+            border-radius: 24px 24px 0 0;
+            border-bottom: 1px solid #3a3a4e;
+        }
+
+        .detail-content {
+            padding: 20px;
+            flex: 1;
+            overflow-y: auto;
+            line-height: 1.5;
+        }
+
+        .prop-group {
+            margin-bottom: 18px;
+            border-bottom: 1px solid #2a2a3a;
+            padding-bottom: 12px;
+        }
+
+        .prop-title {
+            font-weight: 700;
+            color: #b3c7ff;
+            margin-bottom: 8px;
+            font-size: 0.9rem;
+        }
+
+        .prop-grid {
+            display: grid;
+            grid-template-columns: 120px 1fr;
+            gap: 8px 12px;
+            font-size: 0.85rem;
+        }
+
+        .prop-label {
+            color: #9b9bcf;
+        }
+
+        .prop-value {
+            color: #ddddf5;
+            font-family: monospace;
+            word-break: break-word;
+        }
+
+        /* 右侧规格面板 */
+        .spec-panel {
+            flex: 1.2;
+            min-width: 260px;
+            background: #141422;
+            border-radius: 24px;
+            border: 1px solid #2e2e46;
+        }
+
+        .spec-header {
+            background: #20202e;
+            padding: 16px 20px;
+            border-radius: 24px 24px 0 0;
+            border-bottom: 1px solid #3a3a50;
+        }
+
+        .spec-content {
+            padding: 20px;
+            overflow-y: auto;
+            max-height: 700px;
+            font-size: 0.85rem;
+        }
+
+        .spec-card {
+            background: #1e1e2c;
+            border-radius: 16px;
+            padding: 12px;
+            margin-bottom: 14px;
+        }
+
+        .spec-card-title {
+            font-weight: 700;
+            color: #8fb4ff;
+            margin-bottom: 6px;
+        }
+
+        .spec-line {
+            font-family: monospace;
+            font-size: 0.75rem;
+            color: #bbb;
+            margin: 4px 0;
+        }
+
+        .docs-area {
+            margin-top: 30px;
+            background: #15151f;
+            border-radius: 28px;
+            border: 1px solid #2c2c40;
+            overflow: hidden;
+        }
+
+        .docs-tabs {
+            display: flex;
+            background: #20202c;
+            border-bottom: 1px solid #2e2e44;
+        }
+
+        .tab-btn {
+            background: transparent;
+            border: none;
+            padding: 14px 24px;
+            font-size: 1rem;
+            font-weight: 500;
+            color: #aaaac8;
+            cursor: pointer;
+            flex: 1;
+            transition: 0.2s;
+        }
+
+        .tab-btn.active {
+            color: #5dade2;
+            border-bottom: 2px solid #5dade2;
+            background: #181824;
+        }
+
+        .docs-content {
+            padding: 24px 28px;
+            max-height: 460px;
+            overflow-y: auto;
+            font-size: 0.9rem;
+            line-height: 1.55;
+        }
+
+        .code-block {
+            background: #0c0c14;
+            padding: 12px 16px;
+            border-radius: 16px;
+            font-family: monospace;
+            font-size: 0.8rem;
+            border-left: 3px solid #5dade2;
+            margin: 12px 0;
+            overflow-x: auto;
+        }
+
+        hr {
+            border-color: #2a2a3a;
+            margin: 16px 0;
+        }
+
+        footer {
+            text-align: center;
+            font-size: 0.75rem;
+            margin-top: 40px;
+            opacity: 0.6;
+        }
+    </style>
+</head>
+<body>
+<div class="app-container">
+    <!-- 左侧树形结构 -->
+    <div class="structure-panel">
+        <div class="structure-header">
+            <h2>📐 UI 三层架构 · v1.4</h2>
+            <div style="font-size: 0.7rem;">整体框架 → 分支模块 → 基础组件</div>
+        </div>
+        <div class="tree-view" id="uiTree"></div>
+    </div>
+
+    <!-- 中间详情面板（显示组件详细规格） -->
+    <div class="detail-panel">
+        <div class="detail-header">
+            <h3>🔍 组件详细规格</h3>
+            <div style="font-size: 0.7rem;">点击左侧组件，查看完整属性数据</div>
+        </div>
+        <div class="detail-content" id="detailContent">
+            <div style="color:#aaa; text-align:center;">✨ 请点击左侧任意组件</div>
+        </div>
+    </div>
+
+    <!-- 右侧全局规格参考 -->
+    <div class="spec-panel">
+        <div class="spec-header">
+            <h3>📊 全局规格参考</h3>
+            <div style="font-size: 0.7rem;">窗口/卡片/设置页关键数值</div>
+        </div>
+        <div class="spec-content" id="globalSpec">
+            <!-- 动态填充全局规格概要 -->
+        </div>
+    </div>
+</div>
+
+<div class="docs-area">
+    <div class="docs-tabs">
+        <button class="tab-btn active" data-tab="impl">📋 v1.4 UI 实施方案</button>
+        <button class="tab-btn" data-tab="guide">🧩 扩展指南 · 风格统一与可维护性</button>
+    </div>
+    <div class="docs-content" id="docsContent"></div>
+</div>
+<footer>数据源自 game_modifier_v1.4.py 代码分析 | 组件详情包含完整属性数值（尺寸/颜色/字体/间距/圆角/滑块范围等）</footer>
+
+<script>
+    // ============================================================
+    // 组件规格数据（包含每个组件的详细属性）
+    // 结构与树节点一一对应，方便展示
+    // ============================================================
+    const specsLibrary = {
+        "主窗口 (CTk)": {
+            desc: "游戏修改器主窗口，承载所有UI区域。支持折叠、置顶、半透明。",
+            location: "__init__() + _build_ui()",
+            callback: "无直接回调",
+            props: {
+                "初始尺寸": "700x750",
+                "最小/折叠尺寸": "500x70",
+                "可缩放": "True (resizable=True)",
+                "置顶": "True (attributes('-topmost'))",
+                "透明度": "0.92",
+                "背景主题": "dark (customtkinter 暗色)"
+            }
+        },
+        "状态栏 status_frame": {
+            desc: "显示连接状态、PID、折叠按钮和设置按钮。始终可见（折叠时保留）。",
+            location: "_build_ui() 中 status_frame",
+            callback: "折叠按钮 → _toggle_collapse；设置按钮 → _show_settings",
+            props: {
+                "背景色": "#2b2b2b",
+                "圆角": "8",
+                "内边距": "padx=12, pady=(12,6)",
+                "指示灯字体": "Arial 18px",
+                "状态文字字体": "Microsoft YaHei 14px",
+                "按钮样式": "fg_color #3a3a3a, hover #555, 宽100/高28"
+            }
+        },
+        "提示条 hint_frame": {
+            desc: "动态提示操作步骤，未连接/已连接/断开时颜色变化。",
+            location: "_build_ui()",
+            callback: "状态变更时由 _set_status 修改颜色",
+            props: {
+                "未连接背景": "#2a2a00",
+                "已连接背景": "#1a3a1a",
+                "断开背景": "#3a1a1a",
+                "文字颜色": "#ffcc00 / #88ff88 / #ff8888",
+                "字体": "Microsoft YaHei 11px",
+                "wraplength": "760"
+            }
+        },
+        "功能选项卡 CTkTabview": {
+            desc: "三个标签页：武器、人物属性、其他。内部使用滚动框架，2列网格布局。",
+            location: "tab_view = ctk.CTkTabview",
+            callback: "无",
+            props: {
+                "圆角": "8",
+                "内边距": "padx=12, pady=4",
+                "选项卡标签": "武器/人物属性/其他",
+                "滚动框架": "CTkScrollableFrame, fg_color='transparent'",
+                "网格列数": "2, 等宽 uniform"
+            }
+        },
+        "武器选项卡": {
+            desc: "包含7个武器相关功能卡片：快刀、无后座力、无限子弹、快速换弹、剑气化丝、自瞄、射速变快。",
+            location: "tab_weapon_scroll",
+            callback: "卡片独立回调",
+            props: {
+                "网格布局": "2列",
+                "卡片间距": "padx=3, pady=3",
+                "卡片数量": "7"
+            }
+        },
+        "快刀卡片": {
+            desc: "调节近战挥刀速度，实时生效。",
+            location: "make_feature_card + _on_knife_speed_change",
+            callback: "滑块回调 _on_knife_speed_change; 开关 _toggle_feature('knife')",
+            props: {
+                "滑块范围": "1.0 ~ 10.0",
+                "滑块步长": "0.1 (number_of_steps=90)",
+                "默认值": "5.0",
+                "显示格式": "x.x 倍",
+                "标题颜色": "#FFB347"
+            }
+        },
+        "无后座力卡片": {
+            desc: "消除枪械后座力。",
+            location: "make_feature_card",
+            callback: "_toggle_feature('recoil')",
+            props: { "无滑块": true, "标题颜色": "#6A9FB5" }
+        },
+        "无限子弹卡片": {
+            desc: "子弹永不消耗。",
+            location: "make_feature_card",
+            callback: "_toggle_feature('ammo')",
+            props: { "标题颜色": "#E5B73B" }
+        },
+        "快速换弹卡片": {
+            desc: "换弹速度加快为2倍。",
+            location: "make_feature_card",
+            callback: "_toggle_feature('ammoplus')",
+            props: { "标题颜色": "#D4AF37" }
+        },
+        "剑气化丝卡片": {
+            desc: "扩大近战攻击距离（倍率）。",
+            location: "make_feature_card + _on_range_change",
+            callback: "滑块 _on_range_change 发送 range_config",
+            props: {
+                "滑块范围": "1 ~ 50 (整数步长)",
+                "默认值": "50",
+                "显示格式": "整数x",
+                "标题颜色": "#AF69EF"
+            }
+        },
+        "自瞄卡片": {
+            desc: "自动瞄准敌方玩家。",
+            location: "make_feature_card",
+            callback: "_toggle_feature('aim')",
+            props: { "标题颜色": "#FF6B6B" }
+        },
+        "射速变快卡片": {
+            desc: "大幅提升枪械射速。",
+            location: "make_feature_card",
+            callback: "_toggle_feature('speedgun')",
+            props: { "标题颜色": "#FFD93D" }
+        },
+        "人物属性选项卡": {
+            desc: "滑板鞋、无限时间、轻重力/高跳、金刚不坏。",
+            location: "tab_player_scroll",
+            props: { "网格": "2列，轻重力跨列", "卡片数量": "4" }
+        },
+        "滑板鞋卡片": {
+            desc: "提升移动速度倍数。",
+            location: "make_feature_card + _on_move_speed_change",
+            callback: "滑块 _on_move_speed_change, 开关 _toggle_feature('movespeed')",
+            props: {
+                "滑块范围": "1.0 ~ 6.0",
+                "步长": "0.1 (number_of_steps=50)",
+                "默认值": "3.0",
+                "标题颜色": "#5FAD56"
+            }
+        },
+        "无限时间卡片": {
+            desc: "锁定游戏时间为99:59。",
+            location: "make_feature_card",
+            callback: "_toggle_feature('time')",
+            props: { "标题颜色": "#4C9F9F" }
+        },
+        "轻重力/高跳卡片": {
+            desc: "重力系数(0~1)、跳跃倍率(1~5)、生效范围下拉框。",
+            location: "手动构建 gravity_frame",
+            callback: "_on_gravity_change, _on_jump_change, _on_gravity_mode_change",
+            props: {
+                "重力滑块": "0.0 ~ 1.0, 步长0.1",
+                "跳跃滑块": "1.0 ~ 5.0, 步长0.5",
+                "生效范围": "仅自己(player_only) / 全部玩家(all)",
+                "标题颜色": "#F4A261"
+            }
+        },
+        "金刚不坏卡片": {
+            desc: "角色受到攻击时不会受伤（免疫枪伤）。",
+            location: "make_feature_card",
+            callback: "_toggle_feature('godmode')",
+            props: { "标题颜色": "#E74C3C" }
+        },
+        "其他选项卡": {
+            desc: "聚怪、回合跳过、天机傀儡。",
+            location: "tab_other_scroll",
+            props: { "网格": "2列，部分跨列" }
+        },
+        "聚怪卡片": {
+            desc: "将所有Bot传送至佣兵出生点。需要先启用追踪开关。",
+            location: "gather_frame + _gather",
+            callback: "开关: _toggle_feature('gather'); 按钮: _gather() 调用 exports.gather",
+            props: {
+                "聚怪按钮颜色": "#b45309 / hover #92400e",
+                "按钮高度": "45",
+                "描述": "多人生化模式专用"
+            }
+        },
+        "回合跳过卡片": {
+            desc: "立即结束当前回合（需等待几秒），显示累计跳过次数。",
+            location: "skip_frame + _skip_round",
+            callback: "按钮调用 _skip_round → exports.roundskip",
+            props: {
+                "跳过次数标签": "动态更新",
+                "按钮文字": "▶ 跳过当前回合，第一次跳过需要点击两次",
+                "按钮样式": "同聚怪"
+            }
+        },
+        "天机傀儡卡片": {
+            desc: "玩家由人机控制，化身机器傀儡。重新进房间生效。",
+            location: "make_feature_card",
+            callback: "_toggle_feature('isbot')",
+            props: { "标题颜色": "#00D4FF" }
+        },
+        "连接按钮区 btn_frame": {
+            desc: "连接游戏按钮，触发Frida附加进程。",
+            location: "_build_ui + _connect",
+            callback: "_connect_bg → _do_connect",
+            props: {
+                "按钮背景": "#2a6e2a",
+                "按钮高度": "40",
+                "字体": "Microsoft YaHei 13px"
+            }
+        },
+        "底部提示区": {
+            desc: "调整大小提示 + 爱国标语。",
+            location: "resize_hint + patriot_label",
+            props: {
+                "resize_hint文字": "↔️ 拖动边框调整大小",
+                "爱国标语": "科技强军，请党放心，强国有我！",
+                "标语颜色": "#de2910",
+                "字体": "15px bold"
+            }
+        },
+        "日志区 log_area": {
+            desc: "显示运行日志，自动滚动，只读。",
+            location: "log_box, _log_ui",
+            props: {
+                "字体": "Consolas 11px",
+                "高度": "110",
+                "状态": "disabled (只读)",
+                "自动滚动": "see('end')"
+            }
+        },
+        "设置窗口 settings_window": {
+            desc: "独立设置窗口，管理音效、快捷键和关于信息。",
+            location: "_show_settings 方法",
+            callback: "各选项卡内部交互",
+            props: {
+                "尺寸": "500x600",
+                "可缩放": "False",
+                "置顶": "True",
+                "模态": "grab_set()",
+                "选项卡": "音效 / 快捷键 / 关于"
+            }
+        }
+    };
+
+    // 补充设置窗口内子页面的规格（在全局规格右侧展示，但为了让组件详情也有，添加到库中）
+    specsLibrary["设置窗口 - 音效选项卡"] = {
+        desc: "音效开关和音量调节。",
+        location: "_show_settings → sound_tab",
+        callback: "_set_sound_enabled, _set_sound_volume",
+        props: {
+            "开关": "启用音效，默认True",
+            "音量滑块": "0~100，保存至settings.json",
+            "音效文件": "音效1.MP3 (pygame)，备用Beep"
+        }
+    };
+    specsLibrary["设置窗口 - 快捷键选项卡"] = {
+        desc: "绑定Ctrl+数字键快速切换功能或一键聚怪。",
+        location: "_show_settings → hotkey_tab",
+        callback: "_set_hotkey, _remove_hotkey, _setup_hotkeys",
+        props: {
+            "绑定键位": "Ctrl+0 ~ Ctrl+9",
+            "存储文件": "data/hotkeys.json",
+            "下拉选项": "未绑定 + 所有FEATURES_INFO",
+            "全局监听": "keyboard库"
+        }
+    };
+    specsLibrary["设置窗口 - 关于选项卡"] = {
+        desc: "版本、作者、联系方式、赞赏码。",
+        location: "_show_settings → about_tab",
+        callback: "_open_bilibili (webbrowser)",
+        props: {
+            "版本": "v1.4",
+            "作者": "挂呱呱呱",
+            "QQ群": "1095388251",
+            "B站链接": "https://space.bilibili.com/481324794",
+            "赞赏码图片": "微信赞赏码.png (225x225)"
+        }
+    };
+    specsLibrary["折叠效果"] = {
+        desc: "折叠按钮触发界面压缩，仅保留状态栏。",
+        location: "_toggle_collapse",
+        callback: "折叠/展开",
+        props: {
+            "折叠后尺寸": "500x70",
+            "隐藏区域": "提示条、选项卡、连接区、底部区、日志区",
+            "展开恢复": "原几何(700x750)"
+        }
+    };
+
+    // ========== 构建左侧树 (与规格关联) ==========
+    const uiTreeData = {
+        name: "主窗口 (CTk)",
+        icon: "🪟",
+        type: "整体框架",
+        children: [
+            { name: "状态栏 status_frame", icon: "📊", type: "分支模块", children: [] },
+            { name: "提示条 hint_frame", icon: "💡", type: "分支模块", children: [] },
+            { name: "功能选项卡 CTkTabview", icon: "🗂️", type: "分支模块", children: [
+                { name: "武器选项卡", icon: "🔫", type: "分支模块", children: [
+                    { name: "快刀卡片", icon: "🔪", type: "基础组件" },
+                    { name: "无后座力卡片", icon: "🎯", type: "基础组件" },
+                    { name: "无限子弹卡片", icon: "🔫", type: "基础组件" },
+                    { name: "快速换弹卡片", icon: "⚡", type: "基础组件" },
+                    { name: "剑气化丝卡片", icon: "⚔️", type: "基础组件" },
+                    { name: "自瞄卡片", icon: "🎯", type: "基础组件" },
+                    { name: "射速变快卡片", icon: "⚡", type: "基础组件" }
+                ] },
+                { name: "人物属性选项卡", icon: "🧑", type: "分支模块", children: [
+                    { name: "滑板鞋卡片", icon: "👟", type: "基础组件" },
+                    { name: "无限时间卡片", icon: "⏰", type: "基础组件" },
+                    { name: "轻重力/高跳卡片", icon: "🌌", type: "基础组件" },
+                    { name: "金刚不坏卡片", icon: "🛡️", type: "基础组件" }
+                ] },
+                { name: "其他选项卡", icon: "⚙️", type: "分支模块", children: [
+                    { name: "聚怪卡片", icon: "👾", type: "基础组件" },
+                    { name: "回合跳过卡片", icon: "⏭️", type: "基础组件" },
+                    { name: "天机傀儡卡片", icon: "🧠", type: "基础组件" }
+                ] }
+            ] },
+            { name: "连接按钮区 btn_frame", icon: "🔗", type: "分支模块", children: [] },
+            { name: "底部提示区", icon: "📌", type: "分支模块", children: [] },
+            { name: "日志区 log_area", icon: "📜", type: "分支模块", children: [] },
+            { name: "设置窗口 settings_window", icon: "⚙️", type: "分支模块", children: [] },
+            { name: "折叠效果", icon: "📁", type: "分支模块", children: [] }
+        ]
+    };
+
+    function buildTree(node, container) {
+        const li = document.createElement('li');
+        const div = document.createElement('div');
+        div.className = 'node-item';
+        div.setAttribute('data-name', node.name);
+        div.innerHTML = `
+            <span class="node-icon">${node.icon || '📁'}</span>
+            <span class="node-name">${node.name}</span>
+            <span class="node-badge">${node.type || (node.children ? '分支' : '组件')}</span>
+        `;
+        li.appendChild(div);
+        if (node.children && node.children.length) {
+            const ul = document.createElement('ul');
+            ul.className = 'children-wrapper';
+            node.children.forEach(child => buildTree(child, ul));
+            li.appendChild(ul);
+        }
+        container.appendChild(li);
+    }
+
+    const treeRoot = document.getElementById('uiTree');
+    const rootUl = document.createElement('ul');
+    rootUl.className = 'tree-node';
+    buildTree(uiTreeData, rootUl);
+    treeRoot.appendChild(rootUl);
+
+    // 显示组件详情（含规格）
+    function showComponentDetail(compName) {
+        const spec = specsLibrary[compName];
+        if (!spec) {
+            document.getElementById('detailContent').innerHTML = `<div style="color:#aaa;">未找到组件 "${compName}" 的详细规格，请检查数据。</div>`;
+            return;
+        }
+        let propsHtml = '';
+        for (const [k, v] of Object.entries(spec.props)) {
+            propsHtml += `<div class="prop-grid"><div class="prop-label">${k}</div><div class="prop-value">${v}</div></div>`;
+        }
+        const html = `
+            <div class="prop-group">
+                <div class="prop-title">📖 功能描述</div>
+                <div class="prop-value">${spec.desc}</div>
+            </div>
+            <div class="prop-group">
+                <div class="prop-title">📍 代码位置</div>
+                <div class="prop-value"><code>${spec.location}</code></div>
+            </div>
+            <div class="prop-group">
+                <div class="prop-title">⚡ 交互回调</div>
+                <div class="prop-value">${spec.callback || '—'}</div>
+            </div>
+            <div class="prop-group">
+                <div class="prop-title">📐 详细属性参数</div>
+                ${propsHtml || '<div class="prop-value">无额外属性</div>'}
+            </div>
+        `;
+        document.getElementById('detailContent').innerHTML = html;
+    }
+
+    // 右侧全局规格
+    function renderGlobalSpec() {
+        const globalHtml = `
+            <div class="spec-card"><div class="spec-card-title">🪟 主窗口</div>
+            <div class="spec-line">尺寸: 700x750 (可缩放) → 折叠后: 500x70</div>
+            <div class="spec-line">透明度: 0.92 | 置顶: True</div>
+            </div>
+            <div class="spec-card"><div class="spec-card-title">📇 标准卡片</div>
+            <div class="spec-line">背景: #3a3a3a / 悬停 #4a4a4a | 圆角6 | 边框 #555 1px</div>
+            <div class="spec-line">标题字体: 15px bold | 描述框高度自适应(28~48px)</div>
+            <div class="spec-line">滑块: 快刀1-10/滑板鞋1-6/重力0-1/跳跃1-5/剑气1-50</div>
+            </div>
+            <div class="spec-card"><div class="spec-card-title">⚙️ 设置窗口</div>
+            <div class="spec-line">尺寸500x600, 不可缩放, 置顶, 模态</div>
+            <div class="spec-line">音效: 开关 + 音量0-100 | 快捷键: Ctrl+0~9 | 关于: 版本/B站/赞赏码</div>
+            </div>
+            <div class="spec-card"><div class="spec-card-title">📜 日志区</div>
+            <div class="spec-line">Consolas 11px, 高度110, 只读自动滚动</div>
+            </div>
+            <div class="spec-card"><div class="spec-card-title">📂 数据持久化</div>
+            <div class="spec-line">data/hotkeys.json, data/settings.json</div>
+            </div>
+        `;
+        document.getElementById('globalSpec').innerHTML = globalHtml;
+    }
+
+    // 节点点击绑定
+    function bindClickEvents() {
+        const items = document.querySelectorAll('.node-item');
+        items.forEach(item => {
+            item.addEventListener('click', (e) => {
+                e.stopPropagation();
+                items.forEach(n => n.classList.remove('active'));
+                item.classList.add('active');
+                const nameElem = item.querySelector('.node-name');
+                if (nameElem) showComponentDetail(nameElem.innerText.trim());
+            });
+        });
+    }
+
+    // 下方文档切换
+    function setupDocsTabs() {
+        const implHtml = `
+            <h4>✅ v1.4 UI 具体实施方案</h4>
+            <p><strong>整体框架</strong>：主窗口 CTk 700x750，alpha 0.92。折叠时将非状态栏区域 pack_forget，窗口改为500x70，展开时恢复原几何。</p>
+            <p><strong>卡片系统</strong>：make_feature_card 统一生成圆角卡片，支持悬停高亮、点击卡片区域触发开关。滑块使用 CTkSlider 并绑定 trace 更新标签。</p>
+            <p><strong>分类选项卡</strong>：CTkTabview + CTkScrollableFrame，2列等宽网格。每个卡片独立管理状态。</p>
+            <p><strong>设置窗口</strong>：独立 Toplevel，三选项卡：音效(开关+音量滑块)、快捷键(Ctrl+数字下拉绑定)、关于(版本/B站/赞赏码)。</p>
+            <p><strong>日志系统</strong>：CTkTextbox 只读，_log 方法统一输出并自动滚动。</p>
+            <hr>
+            <h4>📊 关键数值汇总</h4>
+            <ul><li>主窗口: 700x750 / 折叠 500x70</li><li>卡片圆角6, 边框1px #555, 内边距8px</li><li>滑块步长: 快刀90步, 滑板鞋50步, 重力10步, 跳跃8步</li><li>日志高度110, 字体 Consolas 11</li><li>设置窗口 500x600, 赞赏码图片 225x225</li></ul>
+        `;
+        const guideHtml = `
+            <h4>🧩 后续添加功能：保持风格一致性与可维护性</h4>
+            <div class="code-block">
+                /* 扩展规范 */<br>
+                1. 新增功能优先使用 make_feature_card，传入 icon/name/desc/滑块参数等。<br>
+                2. 复杂布局参照轻重力卡片，保留边框圆角悬停及点击切换主功能。<br>
+                3. 所有开关调用 _toggle_feature，滑块回调需发送配置到 Frida。<br>
+                4. 快捷键：只需在 _hotkeys 中添加映射，_setup_hotkeys 自动绑定。<br>
+                5. 音效：开关/快捷键触发时调用 _play_sound()。<br>
+                6. 数据持久化：沿用 data/ 目录 JSON 存储扩展配置。<br>
+                7. JS 模块需实现 enable/disable 并注册到 modules 对象。<br>
+                8. 折叠行为扩展：新增区域需在 _toggle_collapse 中添加 pack_forget/pack 逻辑。<br>
+            </div>
+            <p><strong>视觉一致性</strong>：所有卡片背景使用深色系(#3a3a3a)，重要功能深红/深绿；标题色按类别区分（武器暖色、人物冷色、其他中性）。</p>
+        `;
+        const docDiv = document.getElementById('docsContent');
+        docDiv.innerHTML = implHtml;
+        const tabs = document.querySelectorAll('.tab-btn');
+        tabs.forEach(btn => {
+            btn.addEventListener('click', () => {
+                tabs.forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                docDiv.innerHTML = btn.getAttribute('data-tab') === 'impl' ? implHtml : guideHtml;
+            });
+        });
+    }
+
+    window.onload = () => {
+        renderGlobalSpec();
+        bindClickEvents();
+        setupDocsTabs();
+        // 默认高亮并展示主窗口详情
+        const firstNode = document.querySelector('.node-item');
+        if (firstNode) {
+            firstNode.classList.add('active');
+            const firstName = firstNode.querySelector('.node-name').innerText.trim();
+            showComponentDetail(firstName);
+        }
+    };
+</script>
+</body>
+</html>

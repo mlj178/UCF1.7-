@@ -31,6 +31,51 @@
         } catch (e) { return null; }
     }
 
+    /** frida-il2cpp-bridge 的 Il2Cpp.perform 为异步；在 Frida 脚本里同步等待其完成 */
+    function syncIl2CppPerform(block) {
+        if (typeof Il2Cpp === 'undefined' || typeof Il2Cpp.perform !== 'function') {
+            return block();
+        }
+        var st = { done: false, error: null, result: null };
+        var finish = function () { st.done = true; };
+        try {
+            var p = Il2Cpp.perform(function () {
+                st.result = block();
+            });
+            if (p && typeof p.then === 'function') {
+                p.then(finish).catch(function (e) {
+                    st.error = e;
+                    finish();
+                });
+            } else {
+                st.result = p;
+                st.done = true;
+            }
+        } catch (e) {
+            st.error = e;
+            st.done = true;
+        }
+        for (var i = 0; i < 4000 && !st.done; i++) {
+            Thread.sleep(0.01);
+        }
+        if (!st.done) {
+            throw new Error('Il2Cpp.perform 超时(约40s)，IL2CPP 可能未初始化');
+        }
+        if (st.error) {
+            throw st.error;
+        }
+        return st.result;
+    }
+
+    function il2cppValueToJs(v) {
+        if (v === null || v === undefined) return '';
+        if (typeof v === 'string') return v;
+        try {
+            if (v.content !== undefined && v.content !== null) return '' + v.content;
+        } catch (e0) {}
+        try { return '' + v; } catch (e1) { return ''; }
+    }
+
     function onReady() {
         var RVA_PLAYER_IS_MY = 0xB55FD0;
         var myPlayerPtr = null;
@@ -81,24 +126,99 @@
             }
         }
 
-        function method2_il2cppBridge(inst) {
+        function wrapClientDataInstance(klass, ptr) {
+            if (!ptr) return null;
+            if (typeof ptr.method === 'function' || typeof ptr.field === 'function') {
+                return ptr;
+            }
+            var raw = ptr;
             try {
-                if (typeof Il2Cpp === 'undefined') {
-                    return { ok: false, msg: 'Il2Cpp Bridge 插件不可用' };
+                if (ptr.isNull && ptr.isNull()) return null;
+            } catch (eNull) {}
+            if (ptr.handle !== undefined && ptr.handle) {
+                raw = ptr.handle;
+            }
+            try {
+                if (klass && typeof klass.from === 'function') {
+                    return klass.from(raw);
                 }
-                var clientDataClass = Il2Cpp.Domain.assembly('Assembly-CSharp').image.class('ClientData');
-                var mine = clientDataClass.field('mine').value;
-                if (mine && !mine.isNull()) {
-                    var nickname = mine.field('nickName').value;
-                    return { ok: true, value: nickname.toString(), via: 'mine' };
+            } catch (e0) {}
+            try {
+                return new Il2Cpp.Object(raw);
+            } catch (e1) {}
+            return null;
+        }
+
+        function readNicknameFromBridgeObject(obj) {
+            if (!obj) return { ok: false, msg: '对象为空' };
+            try {
+                var m = obj.method && obj.method('get_nickName');
+                if (m && typeof m.invoke === 'function') {
+                    var r = m.invoke();
+                    return { ok: true, value: il2cppValueToJs(r), via: 'get_nickName()' };
                 }
-                var cd = inst.clientData;
-                if (cd) {
-                    var obj = new Il2Cpp.Object(cd);
-                    var nickname = obj.field('nickName').value;
-                    return { ok: true, value: nickname.toString(), via: 'directWrap' };
+            } catch (e0) {}
+            try {
+                var f = obj.field && obj.field('nickName');
+                if (f) {
+                    return { ok: true, value: il2cppValueToJs(f.value), via: 'field.nickName' };
                 }
-                return { ok: false, msg: 'ClientData.mine 为空，且 inst.clientData 未捕获' };
+            } catch (e1) {}
+            try {
+                var bf = obj.field && obj.field('<nickName>k__BackingField');
+                if (bf) {
+                    return { ok: true, value: il2cppValueToJs(bf.value), via: 'backingField' };
+                }
+            } catch (e2) {}
+            return { ok: false, msg: 'get_nickName / nickName 字段均不可用' };
+        }
+
+        function method2_il2cppBridge(inst) {
+            if (typeof Il2Cpp === 'undefined') {
+                return { ok: false, msg: 'Il2Cpp Bridge 插件不可用' };
+            }
+            try {
+                return syncIl2CppPerform(function () {
+                    var domain = Il2Cpp.domain || Il2Cpp.Domain;
+                    if (!domain || typeof domain.assembly !== 'function') {
+                        return { ok: false, msg: 'Il2Cpp.domain 不可用（请确认 frida-il2cpp-bridge 版本与用法）' };
+                    }
+                    var asm = domain.assembly('Assembly-CSharp');
+                    if (!asm || !asm.image) {
+                        return { ok: false, msg: '找不到程序集 Assembly-CSharp' };
+                    }
+                    var clientDataClass = asm.image.class('ClientData');
+                    if (!clientDataClass) {
+                        return { ok: false, msg: '找不到类 ClientData' };
+                    }
+
+                    try {
+                        var mineField = clientDataClass.field('mine');
+                        if (mineField) {
+                            var mineRaw = mineField.value;
+                            var mineObj = wrapClientDataInstance(clientDataClass, mineRaw);
+                            if (!mineObj && mineRaw && typeof mineRaw.field === 'function') {
+                                mineObj = mineRaw;
+                            }
+                            if (mineObj) {
+                                var rMine = readNicknameFromBridgeObject(mineObj);
+                                if (rMine.ok) return rMine;
+                            }
+                        }
+                    } catch (eMine) {}
+
+                    var cd = inst.clientData;
+                    if (!cd || cd.isNull()) {
+                        return { ok: false, msg: 'ClientData.mine 无效且 inst.clientData 未捕获' };
+                    }
+                    var instObj = wrapClientDataInstance(clientDataClass, cd);
+                    if (!instObj) {
+                        return { ok: false, msg: '无法将 ClientData 指针包装为 Il2Cpp.Object' };
+                    }
+                    var rInst = readNicknameFromBridgeObject(instObj);
+                    if (rInst.ok) return rInst;
+                    return { ok: false, msg: rInst.msg || '实例读取失败' };
+                });
             } catch (e) {
                 return { ok: false, msg: e.toString() };
             }
@@ -114,11 +234,36 @@
                 var addr = base.add(RVA_GET_NICKNAME);
                 Interceptor.attach(addr, {
                     onEnter: function (args) {
-                        this.self = inst.clientData && args[0].equals(inst.clientData);
+                        var cd = inst.clientData;
+                        if (inst.player && !inst.player.isNull()) {
+                            var live = readPtr(inst.player.add(0x94));
+                            if (live) cd = live;
+                        }
+                        this.filterCd = cd;
+                        this.strAtField = cd ? readPtr(cd.add(0x10)) : null;
+                        this.a0 = args[0];
+                        this.a1 = args[1];
+                        this.self = false;
+                        if (!cd || cd.isNull()) return;
+                        if (this.a0.equals(cd)) {
+                            this.self = true;
+                            return;
+                        }
+                        if (this.a1 && !this.a1.isNull() && this.a1.equals(cd)) {
+                            this.self = true;
+                        }
                     },
                     onLeave: function (retval) {
-                        if (!this.self) return;
                         if (!retval || retval.isNull()) return;
+                        var cd = this.filterCd;
+                        var viaThis = this.self;
+                        var viaStr = false;
+                        try {
+                            if (this.strAtField && !this.strAtField.isNull() && retval.equals(this.strAtField)) {
+                                viaStr = true;
+                            }
+                        } catch (e0) {}
+                        if (!viaThis && !viaStr) return;
                         try {
                             var len = retval.add(0x08).readS32();
                             if (len < 0 || len > 500) return;
