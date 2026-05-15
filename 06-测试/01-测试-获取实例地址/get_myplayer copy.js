@@ -110,7 +110,6 @@
         collectHealthData(pp);
         collectBuffList(pp);
         collectBot(pp);
-        collectSkillCommonInstances(pp);
         collectCharacterEffect(pp);
         collectNano4TAttribute();
         collectNano4TAttributeAsset();
@@ -699,11 +698,12 @@
             sendLog('success', '│  [0x08] all (Skill[])              → ' + v, '');
 
             try {
-                // 32-bit Il2Cpp 数组布局: [+0x00]klass(4) [+0x04]monitor(4) [+0x08]bounds(4) [+0x0C]max_length(4), 元素从 +0x10 开始
-                var arrLen = v.add(0x0C).readS32();
+                var arrLen = v.add(0x18).readS32();
                 if (arrLen >= 0 && arrLen < 10) {
-                    for (var i = 0; i < arrLen; i++) {
-                        var skillPtr = readPtr(v.add(0x10 + 4 * i));
+                    var arrData = v.add(0x20).readPointer();
+                    if (arrData && !arrData.isNull()) {
+                        for (var i = 0; i < arrLen; i++) {
+                            var skillPtr = readPtr(arrData.add(4 * i));
                             if (skillPtr) {
                                 var skillName = readStr(skillPtr.add(0x8));
                                 var skillBtn = readPtr(skillPtr.add(0xC));
@@ -714,7 +714,8 @@
                             }
                         }
                     }
-                } catch (e) {
+                }
+            } catch (e) {
                 sendLog('info', '│  Skill数组遍历失败: ' + e.message, '');
             }
         } else {
@@ -727,64 +728,6 @@
         sendLog('info', '│', '');
         sendLog('info', '│  Skill基类字段: [0x08] name, [0x0C] skillBtn, [0x10] disabled', '');
         sendLog('info', '│  Skill子类: SkillKnife, Skill_Grenade, Skill_SentryGun 等', '');
-        sendLog('info', '└──────────────────────────────────────────────────────────────────────────┘', '');
-    }
-
-    function collectSkillCommonInstances(pp) {
-        sendLog('info', '', '');
-        sendLog('info', '┌──────────────────────────────────────────────────────────────────────────┐', '');
-        sendLog('info', '│  【Skill_Common 类】 通用技能 (TypeDefIndex: 5487, 继承Skill)            │', '');
-        sendLog('info', '├──────────────────────────────────────────────────────────────────────────┤', '');
-
-        var ps = inst.playerSkills;
-        if (!ps) { sendLog('info', '│  PlayerSkills 为空, 无法扫描', ''); sendLog('info', '└──────────────────────────────────────────────────────────────────────────┘', ''); return; }
-
-        var arr = readPtr(ps.add(0x8));
-        if (!arr) { sendLog('info', '│  Skill[] 数组为空', ''); sendLog('info', '└──────────────────────────────────────────────────────────────────────────┘', ''); return; }
-
-        // 32-bit Il2Cpp 数组: [klass(4)][monitor(4)][bounds(4)][max_length(4)] 元素从 +0x10 开始
-        var len = readI32(arr.add(0x0C));
-        if (!len || len <= 0 || len > 20) { sendLog('info', '│  数组长度异常: ' + len, ''); sendLog('info', '└──────────────────────────────────────────────────────────────────────────┘', ''); return; }
-
-        sendLog('success', '│  Skill[] 总数: ' + len, '');
-
-        inst.skillCommonList = [];
-        var found = 0;
-        for (var i = 0; i < len; i++) {
-            var sp = readPtr(arr.add(0x10 + 4 * i));
-            if (!sp) continue;
-
-            var sn = readStr(sp.add(0x8));
-            var disabled = readU8(sp.add(0x10));
-
-            // Skill_Common 特有字段: coldFinishTime at +0x1C, coldTime at +0x24
-            var coldFinish = readF32(sp.add(0x1C));
-            var coldTime = readF32(sp.add(0x24));
-            var isSkillCommon = (coldFinish !== null || coldTime !== null);
-
-            if (isSkillCommon) {
-                sendLog('success', '│  ── Skill_Common[' + found + '] ─────────────────────────', '');
-                sendLog('success', '│  实例地址 : ' + sp, '');
-                sendLog('info', '│  skillName : ' + (sn || 'null'), '');
-                sendLog('info', '│  coldTime  : ' + (coldTime !== null ? coldTime.toFixed(2) + 's' : 'null'), '');
-                sendLog('info', '│  coldFinish: ' + (coldFinish !== null ? coldFinish.toFixed(3) : 'null'), '');
-                sendLog('info', '│  disabled  : ' + (disabled ? 'true' : 'false'), '');
-
-                inst.skillCommonList.push({ ptr: sp, name: sn, coldTime: coldTime, coldFinish: coldFinish });
-                found++;
-            } else {
-                sendLog('info', '│  [跳过] ' + sp + ' name=' + (sn || 'null') + ' (非Skill_Common)', '');
-            }
-        }
-
-        if (found === 0) {
-            sendLog('warn', '│  未找到 Skill_Common 实例', '');
-        } else {
-            sendLog('success', '│  共找到 ' + found + ' 个 Skill_Common 实例', '');
-        }
-        // 将 Skill_Common 地址映射到汇总表用字段
-        inst.skillCommon0 = (inst.skillCommonList[0] || {}).ptr || null;
-        inst.skillCommon1 = (inst.skillCommonList[1] || {}).ptr || null;
         sendLog('info', '└──────────────────────────────────────────────────────────────────────────┘', '');
     }
 
@@ -873,8 +816,6 @@
             { cat: '武器', name: 'AmmoData', key: 'ammoData', desc: '弹药数据' },
             { cat: '技能', name: 'PlayerSkills', key: 'playerSkills', desc: '技能管理' },
             { cat: '技能', name: 'Skill[]', key: 'skillArray', desc: '技能数组' },
-            { cat: '技能', name: 'Skill_Common[0]', key: 'skillCommon0', desc: '通用技能0' },
-            { cat: '技能', name: 'Skill_Common[1]', key: 'skillCommon1', desc: '通用技能1' },
             { cat: '技能', name: 'NanoRoleSelect', key: 'nanoRoleSelect', desc: '纳米角色选择' },
             { cat: '技能', name: 'Nano4T_Data', key: 'nano4TData', desc: '纳米4T数据' },
             { cat: '视觉', name: 'PlayerCameraManager', key: 'cameraManager', desc: '相机管理' },
@@ -908,8 +849,6 @@
     globalThis.getCameraManager = function () { return inst.cameraManager; };
     globalThis.getHealthData = function () { return inst.healthData; };
     globalThis.getPlayerSkills = function () { return inst.playerSkills; };
-    globalThis.getSkillCommonList = function () { return inst.skillCommonList || []; };
-    globalThis.getSkillCommon = function (index) { return (inst.skillCommonList || [])[index] || null; };
     globalThis.getWeaponData = function () { return inst.weaponDataGun; };
     globalThis.getGameManager = function () { return inst.gameManager; };
     globalThis.getMapManager = function () { return inst.mapManager; };
