@@ -109,6 +109,7 @@ dump.cs（理解结构） → script.json（获取地址） → Frida 脚本（H
 
   - 永久保存，关机还在。
   - **CPU 不直接读磁盘**。
+  - IDA看的是硬盘dll
 
 ### 2. 内存（内存条）
 
@@ -121,7 +122,7 @@ dump.cs（理解结构） → script.json（获取地址） → Frida 脚本（H
   ：
 
   - 临时运行，关闭游戏就消失。
-  - CE、IDA、Frida 看的**全是内存里的东西**，不看磁盘。
+  - CE、Frida 看的**全是内存里的东西**，不看磁盘。
 
 ------
 
@@ -244,10 +245,6 @@ dump.cs（理解结构） → script.json（获取地址） → Frida 脚本（H
   - 显示的 **VA** 是假的、默认计算的（IDA 给 DLL 预设了一个固定基址 `0x10000000`，算出来的虚拟地址）。
   - **不是游戏运行时的真实内存地址**。
 
-> **对应你的代码**：
-> `dump.cs` 里的 `RVA: 0xA0470`、`VA: 0x100A0470`
-> → 这个 VA 就是 IDA 静态解析磁盘 DLL 时算的默认值，和游戏运行无关！
-
 #### 一句话总结（必记）
 
 - **磁盘 DLL**：IDA 静态分析用 → 拿 RVA、字段偏移
@@ -270,17 +267,11 @@ dump.cs（理解结构） → script.json（获取地址） → Frida 脚本（H
 
 - **来源**：GameAssembly.dll 硬盘文件本身
 - **作用**：让 IDA 能显示出整齐的地址，方便你看代码逻辑
-- 计算：
-  - 你 `dump.cs` 里的 `VA: 0x100A0470`
-  - `= 0x10000000 + RVA 0xA0470`
-  - → 这是 IDA 算的假 VA，游戏运行时不存在！
-- **特点**：每次打开 DLL 都不变，和游戏运行无关
 
 **2. 运行时基址 Base（内存真实地址，真的）**
 
 - **来源**：游戏启动后，Windows/Linux 系统随机分配
 - **载体**：就是加载到内存的 GameAssembly.dll
-- 
 - **特点**：每次开游戏都会变，这才是你真正要用的基址
 
 #### 实战举例（对应你的代码）
@@ -295,8 +286,6 @@ VA: 0x100A0470 （= 0x10000000 + 0xA0470，IDA假VA）
 **游戏运行时真实计算：**
 假设系统给 GameAssembly.dll 分配的真实运行基址是：
 `0x7FF6A0000000`
-
-
 
 → 这个地址，才是 CE 按 Ctrl+G 能跳转到的真实内存地址。
 
@@ -396,23 +385,13 @@ Native和IL2CPP的区别
 
 | 维度     | Native 层 Hook (你的代码)                                    | IL2CPP 专属 Hook (frida-il2cpp-bridge)                       |
 | -------- | ------------------------------------------------------------ | ------------------------------------------------------------ |
-| 操作方式 | “修路”：直接修改内存地址上的机器码。                         | “拦车”：通过类名和方法名找到函数再修改。                     |
+| 操作方式 | 直接修改内存地址上的机器码。                                 | 通过类名和方法名找到函数再修改。                             |
 | 代码特征 | 硬编码 `0xAF6930` 这样的数字，使用 `Interceptor.attach`。    | 使用 `Il2Cpp.domain.assembly(...).class(...)`。              |
 | 优点     | 性能极高，通用性强（任何 C++/游戏都能用），体积小（不需要加载额外的 bridge 库）。 | 开发简单，不用算偏移，直接用 C# 的类名/方法名，可读性强（一眼看出是 Hook 哪个函数）。 |
 | 缺点     | 维护困难（游戏一更新，`0xAF6930` 地址就变了，脚本就废了），参数难猜（需要懂汇编看参数在哪个寄存器）。 | 性能稍低（有 JS 到 C# 的转换开销），依赖库（必须安装 `frida-il2cpp-bridge`），体积大。 |
 | 适用场景 | 游戏外挂/破解（追求稳定和性能）、底层驱动开发、游戏版本固定时。 | Unity 逆向学习、快速原型开发、游戏版本经常变动时。           |
 
 
-
-## Frida 类与对象操作（对接 dump.cs 类）
-
-IL2CPP 是 C# 编译的，所以 Frida 可以直接操作**C# 类、实例、对象**
-
-### 1. 核心操作
-
-- 获取程序集：`Il2Cpp.domain.assembly("Assembly-CSharp")`
-- 获取类：`image.class("PlayerData")`
-- 查找类实例：`Il2Cpp.collect()`（遍历游戏中所有类实例）
 
 
 
@@ -434,12 +413,6 @@ IL2CPP 是 C# 编译的，所以 Frida 可以直接操作**C# 类、实例、对
 | 适用场景 | 修改自己的血量、子弹、速度 | 修改全服的时间       |
 
 
-
-这是一个非常实用的进阶技巧。在 Frida 中直接读写内存（Native 层操作），本质上就是把 Cheat Engine (CE) 的“手动修改内存”功能自动化了。
-
-这种写法完全脱离了高级语言的束缚，直接操纵内存地址，**性能极高且通用**。
-
-以下是将你提供的内容整理为 Markdown 格式，专门用于**Frida 内存读写（对接 CE 内存修改）**的实战指南：
 
 ------
 
@@ -473,8 +446,6 @@ IL2CPP 是 C# 编译的，所以 Frida 可以直接操作**C# 类、实例、对
 
 
 
-这是一份整理好的 Markdown 格式内容，详细解释了为什么在 64 位系统中必须使用多级指针（多级页表），并补充了具体的计算细节以增强说服力。
-
 ------
 
 ### 🧐 为什么会有多级指针（多级页表）？
@@ -487,59 +458,95 @@ IL2CPP 是 C# 编译的，所以 Frida 可以直接操作**C# 类、实例、对
 
 #### 2. 64位系统的“灾难”（必须用多级指针）
 
-------
-
-#### 
 
 
+# Interceptor.attach vs replace：修改返回值代码对比
 
-
-
-### 4.2 
-
-| 方法 | 用途 | 性能 | 适用场景 |
-|------|------|------|---------|
-| `Interceptor.attach` | 监听函数调用 | 中 | 调试、日志 |
-| `Interceptor.replace` | 替换函数实现 | 优 | 修改行为、跳过函数 |
-
-#### 4.2.1 Interceptor.attach（监听）
+## 方法一：使用 `Interceptor.attach`（在 `onLeave` 中修改返回值）
 
 ```javascript
-Interceptor.attach(ADDR_TARGET, {
-    onEnter: function (args) {
-        // 函数进入时
-        console.log("[+] Enter: " + args[0]);
-    },
-    onLeave: function (retval) {
-        // 函数返回时
-        console.log("[+] Leave: " + retval);
+const base = Module.findBaseAddress("GameAssembly.dll");
+const addrIsCooldown = base.add(0x123456);
+
+Interceptor.attach(addrIsCooldown, {
+    onLeave: function(retval) {
+        // 原始函数已经执行完毕，retval 指向返回值
+        // 无论原函数返回什么，强制改为 false (0)
+        retval.replace(ptr(0));
+        console.log("IsCooldown 返回值已被 attach 修改为 false");
     }
 });
 ```
 
-#### 4.2.2 Interceptor.replace（替换）
+**特点：**
+
+- ✅ **原函数仍然执行**，可能产生副作用（如更新内部状态）。
+- ✅ **只能修改返回值**，无法修改参数（因为 getter 无参数）。
+- ✅ **开销较小**，适合高频调用。
+
+**执行流程：**
+`调用方 → 原始 IsCooldown 执行 → 返回原始值 → onLeave 修改返回值 → 调用方收到 false`
+
+------
+
+## 方法二：使用 `Interceptor.replace`（完全替换函数）
+
+### 2.1 不调用原函数，直接返回 false
 
 ```javascript
-// 保存原函数
-var OriginalFunc = new NativeFunction(
-    ADDR_TARGET,
-    "void",  // 返回类型
-    ["pointer", "pointer"]  // 参数类型
-);
+const base = Module.findBaseAddress("GameAssembly.dll");
+const addrIsCooldown = base.add(0x123456);
 
-// 替换函数
-Interceptor.replace(
-    ADDR_TARGET,
-    new NativeCallback(function (thisPtr, methodInfo) {
-        // 自定义逻辑
-        
-        // 可选：调用原函数
-        // OriginalFunc(thisPtr, methodInfo);
-        
-        // 或跳过原函数（直接返回）
-    }, "void", ["pointer", "pointer"])
-);
+Interceptor.replace(addrIsCooldown, new NativeCallback(function(skillPtr) {
+    // 完全不执行原始函数，直接返回 false
+    console.log("IsCooldown 被 replace 替换，直接返回 false");
+    return false;
+}, 'bool', ['pointer']));
 ```
+
+**特点：**
+
+- ❌ **原始函数不执行**，完全被跳过。
+- ✅ **可以任意修改参数**（虽然本例没有）。
+- ✅ **可以任意决定返回值**。
+- ⚠️ **开销较大**（需要 JS ↔ Native 转换）。
+
+### 2.2 调用原函数，但修改返回值
+
+```javascript
+const base = Module.findBaseAddress("GameAssembly.dll");
+const addrIsCooldown = base.add(0x123456);
+const origIsCooldown = new NativeFunction(addrIsCooldown, 'bool', ['pointer']);
+
+Interceptor.replace(addrIsCooldown, new NativeCallback(function(skillPtr) {
+    var original = origIsCooldown(skillPtr);
+    // 如果原函数返回 true，改为 false；否则保持不变
+    var result = original ? false : original;
+    console.log(`原返回值=${original}, 修改后=${result}`);
+    return result;
+}, 'bool', ['pointer']));
+```
+
+**特点：**
+
+- ✅ **原始函数仍会执行**（因为手动调用了 `origIsCooldown`）。
+- ✅ **可以修改返回值**。
+- ⚠️ **开销更大**（两次 Native → JS → Native 来回）。
+
+------
+
+## 对比总结（含代码行为）
+
+| 特性               | `attach` (`onLeave`)                | `replace` (不调原函数) | `replace` (调原函数)           |
+| ------------------ | ----------------------------------- | ---------------------- | ------------------------------ |
+| **修改返回值**     | ✅ `retval.replace(ptr(0))`          | ✅ `return false`       | ✅ `return modified`            |
+| **修改参数**       | ❌ (getter 无参，但即使有参也只能读) | ✅ 可在回调中直接改     | ✅ 可在回调中改后再调原函数     |
+| **原函数是否执行** | ✅ 总是执行                          | ❌ 不执行               | ✅ 手动调用后执行               |
+| **典型用途**       | 轻量修改返回值、监控                | 完全替换逻辑、绕过检查 | 需要原函数副作用但又想改返回值 |
+| **性能开销**       | 低                                  | 中                     | 高                             |
+| **对调用方透明性** | 透明（原函数仍运行）                | 完全透明（原函数消失） | 半透明（原函数仍运行但被包裹） |
+
+
 
 #### Interceptor.replace 的更多用法
 
@@ -554,14 +561,6 @@ Interceptor.replace(
 - **场景**：绕过VIP检查、修改金币数量、改变物品等级。
 - **示例**：假设一个函数 `checkIsVIP()` 返回 `true` 或 `false`。
 
-```javascript
-Interceptor.replace(ADDR_CHECK_IS_VIP, new NativeCallback(function () {
-    console.log("[*] 游戏正在检查是否为VIP...");
-    // 无论原函数逻辑如何，我们永远返回 true
-    return 1; // 在C语言中，1通常代表true
-}, 'int', [])); // 返回值类型是'int'，没有参数
-```
-
 ------
 
 #### 2. 链接并调用原始函数 (功能增强)
@@ -571,55 +570,17 @@ Interceptor.replace(ADDR_CHECK_IS_VIP, new NativeCallback(function () {
 - **场景**：获取一个计算结果，然后对其进行加倍或修改。
 - **关键**：在替换前，先用 `NativeFunction` 保存原始函数的指针。
 
-```javascript
-// 1. 首先，保存原始函数的地址和定义
-var originalFunc = new NativeFunction(ADDR_TARGET, 'int', ['int', 'int']);
-
-// 2. 然后，用 replace 替换它
-Interceptor.replace(ADDR_TARGET, new NativeCallback(function (arg1, arg2) {
-    // 3. 在新函数里，主动调用原始函数
-    var originalResult = originalFunc(arg1, arg2);
-    console.log("[*] 原始函数返回值: " + originalResult);
-    
-    // 4. 修改返回值，例如：将结果乘以2
-    var newResult = originalResult * 2;
-    return newResult;
-}, 'int', ['int', 'int']));
-```
-
-
-
 这是 Frida 逆向中非常爽的一个环节——**“主动调用”**。
-
-如果说 Hook 是“被动防守”（等游戏调用了我再拦截），那么主动调用就是“主动进攻”（我命令游戏执行某个功能）。
 
 ------
 
 ### 六、Frida 方法调用（主动调用游戏函数）
 
 > **核心概念**：不仅能 Hook 函数，还能**主动调用**游戏里的任何函数。
->
-> **应用场景**：
->
-> - **主动回血**：直接调用 `AddHp(9999)`，而不是修改内存数值。
-> - **主动加 Buff**：直接调用 `ApplyBuff(无敌)`。
-> - **主动解锁道具**：直接调用 `UnlockItem(神器)`。
 
 #### 1. 核心代码示例
 
 假设我们要主动调用 `PlayerData` 类中的 `AddHp` 方法，给自己增加 999 点血量。
-
-```javascript
-// 1. 获取目标方法
-// 类似于拿到了“加血”这个功能的句柄
-const addHpMethod = PlayerData.method("AddHp");
-
-// 2. 主动调用 (Invoke)
-// 参数说明：
-// - playerInstance: 调用者实例（也就是“谁”要加血，通常是 this 指针）
-// - 999: 方法参数（加多少血）
-addHpMethod.invoke(playerInstance, 999); 
-```
 
 #### 2. 两种方式对比（Native vs IL2CPP）
 
@@ -638,17 +599,9 @@ addHpMethod.invoke(playerInstance, 999);
 - **实例存在**：调用非静态方法时，必须确保 `playerInstance`（调用者）是有效的。如果游戏还没开始，实例为空，调用会失败。
 - **返回值**：`invoke` 可能会有返回值（比如 `true` 表示加血成功），记得接收处理。
 
-### 
 
-主动调用的实战反面案例
 
-参考我game_modifier_v1.3.py的代码，是否采用了主动调用。
 
-但答案是：**不是**。
-
-虽然在自然语言中我们说“开启 Buff”或“调用技能”，但在你提供的代码（Native 层 Hook）中，这两个功能**依然是通过“修改内存数值”实现的**，而不是通过“主动调用函数”实现的。
-
-我们来拆解一下这两个模块的代码，看看它们为什么是“修改数值”而不是“主动调用”：
 
 ### 1. 无限弹匣 + 快速换弹 (Module 6)
 
@@ -667,7 +620,9 @@ Interceptor.replace(getReloadSpeedAddr, new NativeCallback(function(self) {
 ```
 
 - **发生了什么？**
-  游戏内部有一个逻辑：“如果 `get_isInfinityAmmo()` 返回 `true`，我就显示无限子弹”。另一个逻辑是：“把 `get_ReloadSpeed()` 的返回值拿来当换弹速度”。
+  游戏内部有一个逻辑：“如果 `get_isInfinityAmmo()` 返回 `true`，我就显示无限子弹”。
+- 
+- 另一个逻辑是：“把 `get_ReloadSpeed()` 的返回值拿来当换弹速度”。
   你的代码**并没有**去调用“解锁弹匣”的函数，也没有调用“加速换弹”的函数。你只是**欺骗**了游戏，让这两个**查询函数**永远返回你想要的数值（`true` 和 `2.0`）
 
 ### 2. 滑板鞋 (Module 5)
@@ -712,48 +667,6 @@ Player.UnlockInfiniteAmmo.invoke(playerInstance);
 | **滑板鞋**                | **Hook & Return** (拦截并篡改返回值) | **被动欺骗** (游戏问你时撒谎)         |
 | **主动调用 (你之前问的)** | **Method.Invoke** (直接执行函数)     | **主动出击** (不等游戏问，直接改数据) |
 
-所以，你的代码依然是**Native 层的内存/返回值修改**，而不是 IL2CPP 层的方法调用。
-
----
-
-## 六、常见问题与解决方案
-
-### 6.1 游戏崩溃
-
-**症状**：注入后游戏秒退
-
-### 6.2 掉帧严重
-
-**症状**：注入后游戏帧率下降 30%+
-
-**原因**：使用了 `Interceptor.attach` 而非 `replace`
-
-### 6.3 换房间失效
-
-**症状**：第一局有效，换房间后失效
-
-**原因**：缓存的指针失效，新对象未识别
-
-**解决方案**：
-
-```javascript
-// ✅ 使用缓存策略
-```
-
----
-
-## 七、最佳实践
-
-### 7.1 脚本开发
-
-| 实践 | 说明 |
-|------|------|
-| **优先使用 `replace`** | 性能优于 `attach` |
-| **限制日志输出** | 避免日志刷屏影响性能 |
-| **检查指针有效性** | 避免空指针崩溃 |
-| **使用 RVA 地址** | 游戏更新后只需更新地址 |
-|                        |                        |
-
 
 
 ### 8.5 常用 Frida API
@@ -781,3 +694,16 @@ NativeFunction 就像 “遥控器”。
 你（JS）手里拿着遥控器，按下按钮，电视（Native）就开始工作。是你控制它。
 NativeCallback 就像 “接线员”。
 你（JS）坐在电话机旁，把自己的号码留给客户（Native）。客户有事了（函数被调用），就会打电话给你，让你处理。是它控制你。
+
+
+
+
+
+
+
+
+
+
+
+
+

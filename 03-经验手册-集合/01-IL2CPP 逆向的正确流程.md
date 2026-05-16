@@ -123,13 +123,5 @@ Il2CppDumper 输出的 `script.json` 可以配合 IDA Python 脚本批量重命�
 
 
 
-### Q：dump.cs 里的偏移地址和 IDA 里对不上？
-
-- 检查 IDA 加载时选择的基址是否正确
-- Il2CppDumper 输出的地址可能是 RVA（相对虚拟地址），需要加上 GameAssembly.dll 的基址
-- 游戏更新后偏移会变化，需要重新提取和 dump
-
-
-
 
 
