@@ -168,9 +168,24 @@
     });
 
     sendLog('info', '分类', '═══════════════════════════════════════════════════════════');
-    sendLog('info', '分类', '【GameManager.DamageEvent】(伤害事件委托) GameManager: ' + (gameManager ? gameManager : 'null'));
+    sendLog('info', '分类', '【GameManager.DamageEvent】(伤害事件委托类)');
     
+    var damageEventClass = null;
     var damageEventInvalidCheck = readPtr(base.add(0xE226A8));
+    if (damageEventInvalidCheck) {
+        var vtable = readPtr(damageEventInvalidCheck);
+        if (vtable) {
+            damageEventClass = readPtr(vtable);
+            sendLog('success', 'DamageEvent', '  GameManager.DamageEvent (类地址) → ' + damageEventClass);
+            sendLog('info', 'DamageEvent', '    vtable=' + vtable + ', TypeDefIndex=5361');
+        }
+    }
+    if (!damageEventClass) {
+        sendLog('warning', 'DamageEvent', '  GameManager.DamageEvent (类地址) → 无法获取');
+    }
+    
+    sendLog('info', 'DamageEvent', '  ─────────────────────────────────────────────────────');
+    
     if (damageEventInvalidCheck) {
         sendLog('success', 'DamageEvent', '  DamageEvent_InvalidCheck_Observers (无效检查) → ' + damageEventInvalidCheck);
         var target = readPtr(damageEventInvalidCheck.add(0x4));
@@ -225,9 +240,24 @@
     }
 
     sendLog('info', '分类', '═══════════════════════════════════════════════════════════');
-    sendLog('info', '分类', '【GameManager.DeathEvent】(死亡事件委托) GameManager: ' + (gameManager ? gameManager : 'null'));
+    sendLog('info', '分类', '【GameManager.DeathEvent】(死亡事件委托类)');
     
+    var deathEventClass = null;
     var deathEvent = readPtr(base.add(0xE226B8));
+    if (deathEvent) {
+        var vtable = readPtr(deathEvent);
+        if (vtable) {
+            deathEventClass = readPtr(vtable);
+            sendLog('success', 'DeathEvent', '  GameManager.DeathEvent (类地址) → ' + deathEventClass);
+            sendLog('info', 'DeathEvent', '    vtable=' + vtable + ', TypeDefIndex=5362');
+        }
+    }
+    if (!deathEventClass) {
+        sendLog('warning', 'DeathEvent', '  GameManager.DeathEvent (类地址) → 无法获取');
+    }
+    
+    sendLog('info', 'DeathEvent', '  ─────────────────────────────────────────────────────');
+    
     if (deathEvent) {
         sendLog('success', 'DeathEvent', '  DeathEvent_Observers (死亡事件) → ' + deathEvent);
         var target = readPtr(deathEvent.add(0x4));
