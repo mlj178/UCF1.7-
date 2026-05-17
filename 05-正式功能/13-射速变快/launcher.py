@@ -51,7 +51,7 @@ class LauncherUI:
         self.script_entry.pack(side=tk.LEFT, padx=5)
         
         script_dir = os.path.dirname(os.path.abspath(__file__))
-        script_path = os.path.join(script_dir, "speed_gun_universal.js")
+        script_path = os.path.join(script_dir, "AAAAA-speed_gun_universal.js")
         self.script_entry.insert(0, script_path)
         
         btn_frame = ttk.Frame(main_frame)
