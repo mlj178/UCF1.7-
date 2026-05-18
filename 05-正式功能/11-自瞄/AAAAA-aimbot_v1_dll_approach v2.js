@@ -424,7 +424,8 @@
           if (p.equals(myPlayer)) continue;
           if (isDeadFn(p, ptr(0))) continue;
           var team = getTeamFn ? getTeamFn(p, ptr(0)) : p.add(OFF.E_team).readS32();
-          if (team === myTeam) continue;
+          var isEnemy = (myTeam === 2) || (team === 2) || (myTeam !== team);
+          if (!isEnemy) continue;
 
           var targetPos = getBonePos(p, CONFIG.aimBone);
           if (!targetPos) continue;

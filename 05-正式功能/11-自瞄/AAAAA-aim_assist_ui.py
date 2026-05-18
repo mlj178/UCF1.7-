@@ -18,7 +18,7 @@ ctk.set_default_color_theme("blue")
 
 # 固定路径：脚本和 UI 在同一目录
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-JS_FILE = os.path.join(BASE_DIR, "aimbot_v1_dll_approach v2.js")
+JS_FILE = os.path.join(BASE_DIR, "AAAAA-aimbot_v1_dll_approach v2.js")
 
 COLOR_GREEN = "#2ecc71"
 COLOR_RED = "#e74c3c"
