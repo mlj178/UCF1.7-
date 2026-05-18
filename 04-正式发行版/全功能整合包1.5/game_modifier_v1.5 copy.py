@@ -46,7 +46,8 @@ FEATURES_INFO = {
     'aim': {'name': '自瞄', 'icon': '🎯', 'category': 'weapon'},
     'godmode': {'name': '金刚不坏', 'icon': '🛡️', 'category': 'player'},
     'speedgun': {'name': '射速变快', 'icon': '⚡', 'category': 'weapon'},
-    'isbot': {'name': '天机傀儡', 'icon': '🧠', 'category': 'other'}
+    'isbot': {'name': '天机傀儡', 'icon': '🧠', 'category': 'other'},
+    'skillcd': {'name': '技能无冷却', 'icon': '✨', 'category': 'player'}
 }
 
 FRIDA_JS = r"""
@@ -336,58 +337,77 @@ FRIDA_JS = r"""
   // ====================================================================
   var ammoModule = (function() {
     var enabled = false;
-    var consumeAmmoAddr = null;
-    var consumeBaseAddr = null;
-    var callbackConsume = null;
-    var callbackBase = null;
+    var hooks = [];
 
     return {
       enable: function() {
         if (enabled) return;
-        var mod = getGameAssembly();
-        if (!mod) { sendLog('error', '无限子弹', '无 GameAssembly.dll'); return; }
-
+        var mod = Process.findModuleByName('GameAssembly.dll');
+        if (!mod) { sendLog('error', '无限子弹', 'GameAssembly.dll 未找到'); return; }
         var base = mod.base;
-        consumeAmmoAddr = base.add(0xB61140);
-        consumeBaseAddr = base.add(0xB6C310);
 
-        sendLog('info', '无限子弹', 'WPN_Gun.ConsumeAmmo @ ' + consumeAmmoAddr);
-        sendLog('info', '无限子弹', 'Weapon.ConsumeAmmo @ ' + consumeBaseAddr);
-
+        // === 替换 WPN_Gun.ConsumeAmmo ===
         try {
-          callbackConsume = new NativeCallback(function(thisPtr, methodInfo) {
+          var addrConsumeAmmo = base.add(0xB61140);
+          Interceptor.replace(addrConsumeAmmo, new NativeCallback(function(thisPtr, methodInfo) {
             return 1;
-          }, 'bool', ['pointer', 'pointer']);
-
-          Interceptor.replace(consumeAmmoAddr, callbackConsume);
-          sendLog('success', '无限子弹', '已替换 WPN_Gun.ConsumeAmmo');
+          }, 'bool', ['pointer', 'pointer']));
+          hooks.push({ type: 'replace', addr: addrConsumeAmmo });
+          sendLog('info', '无限子弹', 'WPN_Gun.ConsumeAmmo 已替换');
         } catch (e) {
-          sendLog('error', '无限子弹', '替换 WPN_Gun.ConsumeAmmo 失败: ' + e.message);
+          sendLog('error', '无限子弹', '替换 WPN_Gun.ConsumeAmmo 失败: ' + e);
         }
 
+        // === 替换 Weapon.ConsumeAmmo（基类，兜底） ===
         try {
-          callbackBase = new NativeCallback(function(thisPtr, methodInfo) {
+          var addrConsumeBase = base.add(0xB6C310);
+          Interceptor.replace(addrConsumeBase, new NativeCallback(function(thisPtr, methodInfo) {
             return 1;
-          }, 'bool', ['pointer', 'pointer']);
-
-          Interceptor.replace(consumeBaseAddr, callbackBase);
-          sendLog('success', '无限子弹', '已替换 Weapon.ConsumeAmmo');
+          }, 'bool', ['pointer', 'pointer']));
+          hooks.push({ type: 'replace', addr: addrConsumeBase });
+          sendLog('info', '无限子弹', 'Weapon.ConsumeAmmo 已替换');
         } catch (e) {
-          sendLog('info', '无限子弹', '替换 Weapon.ConsumeAmmo 失败(可忽略): ' + e.message);
+          sendLog('info', '无限子弹', '替换 Weapon.ConsumeAmmo 失败: ' + e);
+        }
+
+        // === RPG/AT4 无限子弹 ===
+        try {
+          var addrRpgFire = base.add(0xB670A0);
+          var addrRpgFillAmmo = base.add(0xB67070);
+          var rpgFillAmmoFn = new NativeFunction(addrRpgFillAmmo, 'void', ['pointer', 'pointer']);
+          
+          Interceptor.attach(addrRpgFire, {
+            onEnter: function(args) {
+              try {
+                var self = args[0];
+                if (self && !self.isNull()) {
+                  rpgFillAmmoFn(self, ptr(0));
+                }
+              } catch (e) {}
+            }
+          });
+          hooks.push({ type: 'attach', addr: addrRpgFire });
+          sendLog('info', '无限子弹', 'RPG/AT4 无限子弹已启用');
+        } catch (e) {
+          sendLog('error', '无限子弹', 'RPG/AT4 初始化失败: ' + e);
         }
 
         enabled = true;
-        sendLog('success', '无限子弹', 'plan4 已启用 (Zero ammo consumption)');
+        sendLog('success', '无限子弹', '已启用 (Zero ammo consumption)');
         sendStatus('ammo', true);
       },
       disable: function() {
         if (!enabled) return;
-        if (consumeAmmoAddr) { try { Interceptor.revert(consumeAmmoAddr); } catch(e) {} }
-        if (consumeBaseAddr) { try { Interceptor.revert(consumeBaseAddr); } catch(e) {} }
-        callbackConsume = null;
-        callbackBase = null;
-        consumeAmmoAddr = null;
-        consumeBaseAddr = null;
+        for (var i = 0; i < hooks.length; i++) {
+          try {
+            if (hooks[i].type === 'replace') {
+              Interceptor.revert(hooks[i].addr);
+            } else {
+              hooks[i].addr.detach();
+            }
+          } catch(e) {}
+        }
+        hooks = [];
         enabled = false;
         sendLog('info', '无限子弹', '已禁用');
         sendStatus('ammo', false);
@@ -1562,7 +1582,8 @@ FRIDA_JS = r"""
           if (p.equals(myPlayer)) continue;
           if (isDeadFn(p, ptr(0))) continue;
           var team = getTeamFn ? getTeamFn(p, ptr(0)) : p.add(OFF_AIM.E_team).readS32();
-          if (team === myTeam) continue;
+          var isEnemy = (myTeam === 2) || (team === 2) || (myTeam !== team);
+          if (!isEnemy) continue;
 
           var targetPos = getBonePos(p, CONFIG.aimBone);
           if (!targetPos) continue;
@@ -1733,14 +1754,31 @@ FRIDA_JS = r"""
     var refreshTimer = null;
     var cachedMyPlayer = null;
     var isMyPlayerFn = null;
+    var isDeadFn = null;
+    var singletonGetter = null;
 
-    var RVA_GOD = {
-      Player_get_isMyPlayer: 0xB55FD0,
-      Entity_OnEntityHurt:   0xB3F470,
+    var RVA = {
+      SingletonGet:                    0x4A8170,
+      GM_Singleton_MethodInfo:         0xE1CE64,
+      Player_get_isMyPlayer:           0xB55FD0,
+      Entity_get_isDead:               0xB400E0,
+      Entity_get_team:                 0x1E0070,
+      Entity_OnEntityHurt:             0xB3F470,
+      Component_get_transform:         0x32CF40,
+      Transform_get_position:          0x3F42B0,
     };
 
-    var OFF_GOD = {
-      Dmg_type: 0x08,
+    var OFF = {
+      GM_allPlayers:      0x1C,
+      GM_playersBL:       0x20,
+      GM_playersGR:       0x28,
+      E_team:             0x20,
+      Arr_len:            0x0C,
+      Arr_data:           0x10,
+      List_items:         0x08,
+      List_size:          0x0C,
+      ptrSize:            4,
+      Dmg_type:           0x08,
     };
 
     function initNativeFunctions() {
@@ -1748,58 +1786,122 @@ FRIDA_JS = r"""
       if (!mod) return false;
       var base = mod.base;
       try {
-        isMyPlayerFn = new NativeFunction(base.add(RVA_GOD.Player_get_isMyPlayer), 'bool', ['pointer', 'pointer']);
-      } catch(e) { return false; }
+        singletonGetter = new NativeFunction(base.add(RVA.SingletonGet), 'pointer', ['pointer']);
+      } catch(e) { sendLog('error', 'HP', 'singletonGetter 失败: ' + e.message); return false; }
+      try {
+        isMyPlayerFn = new NativeFunction(base.add(RVA.Player_get_isMyPlayer), 'bool', ['pointer', 'pointer']);
+      } catch(e) { sendLog('error', 'HP', 'isMyPlayerFn 失败: ' + e.message); return false; }
+      try {
+        isDeadFn = new NativeFunction(base.add(RVA.Entity_get_isDead), 'bool', ['pointer', 'pointer']);
+      } catch(e) { sendLog('error', 'HP', 'isDeadFn 失败: ' + e.message); return false; }
+      sendLog('success', 'HP', 'NativeFunction 全部就绪');
       return true;
+    }
+
+    function getGM() {
+      try {
+        var base = getGameAssembly().base;
+        var mi = base.add(RVA.GM_Singleton_MethodInfo).readPointer();
+        if (mi.isNull()) return singletonGetter(ptr(0));
+        var gm = singletonGetter(mi);
+        if (gm.isNull()) return null;
+        return gm;
+      } catch(e) { return null; }
+    }
+
+    function readList(listPtr) {
+      var result = [];
+      if (!listPtr || listPtr.isNull()) return result;
+      try {
+        var items = listPtr.add(OFF.List_items).readPointer();
+        if (!items || items.isNull()) return result;
+        var count = listPtr.add(OFF.List_size).readS32();
+        for (var i = 0; i < count; i++) {
+          var elem = items.add(OFF.Arr_data + i * OFF.ptrSize).readPointer();
+          if (elem && !elem.isNull()) result.push(elem);
+        }
+      } catch(e) {}
+      return result;
+    }
+
+    function readArray(arrPtr) {
+      var result = [];
+      if (!arrPtr || arrPtr.isNull()) return result;
+      try {
+        var len = arrPtr.add(OFF.Arr_len).readU32();
+        for (var i = 0; i < len; i++) {
+          var elem = arrPtr.add(OFF.Arr_data + i * OFF.ptrSize).readPointer();
+          if (elem && !elem.isNull()) result.push(elem);
+        }
+      } catch(e) {}
+      return result;
+    }
+
+    function isValidPlayer(pp) {
+      if (!pp || pp.isNull()) return false;
+      try {
+        var team = pp.add(OFF.E_team).readS32();
+        return (team === 0 || team === 1 || team === 2);
+      } catch(e) { return false; }
+    }
+
+    function getAllPlayers(gm) {
+      var map = {};
+      var arr = readArray(gm.add(OFF.GM_allPlayers).readPointer());
+      for (var i = 0; i < arr.length; i++) {
+        if (isValidPlayer(arr[i])) map[arr[i].toString()] = arr[i];
+      }
+      var bl = readList(gm.add(OFF.GM_playersBL).readPointer());
+      for (var i = 0; i < bl.length; i++) {
+        if (isValidPlayer(bl[i])) map[bl[i].toString()] = bl[i];
+      }
+      var gr = readList(gm.add(OFF.GM_playersGR).readPointer());
+      for (var i = 0; i < gr.length; i++) {
+        if (isValidPlayer(gr[i])) map[gr[i].toString()] = gr[i];
+      }
+      return Object.values(map);
     }
 
     function findMyPlayer() {
       try {
-        var gm = null;
-        try {
-          var base = getGameAssembly().base;
-          var mi = base.add(0xE1CE64).readPointer();
-          var sg = new NativeFunction(base.add(0x4A8170), 'pointer', ['pointer']);
-          gm = sg(mi);
-        } catch(e) {}
+        var gm = getGM();
         if (!gm || gm.isNull()) return null;
-
-        var ap = gm.add(0x1C).readPointer();
-        if (!ap || ap.isNull()) return null;
-        var len = ap.add(0x0C).readU32();
-        for (var i = 0; i < len; i++) {
-          var pp = ap.add(0x10 + i * 8).readPointer();
-          if (pp && !pp.isNull()) {
-            try { if (isMyPlayerFn(pp, ptr(0))) return pp; } catch(e) {}
-          }
+        var all = getAllPlayers(gm);
+        for (var i = 0; i < all.length; i++) {
+          try { if (isMyPlayerFn(all[i], ptr(0))) return all[i]; } catch(e) {}
         }
       } catch(e) {}
       return null;
     }
 
     function installHooks(base) {
-      var entityHurtAddr = base.add(RVA_GOD.Entity_OnEntityHurt);
-
+      var entityHurtAddr = base.add(RVA.Entity_OnEntityHurt);
+      var diagCount = 0;
       var hookHandler = {
         onEnter: function(args) {
           var entity = args[0];
           if (!entity || entity.isNull()) return;
           if (!cachedMyPlayer || cachedMyPlayer.isNull()) return;
-          if (!entity.equals(cachedMyPlayer)) return;
-
-          var espPtr = ptr(this.context.esp.toString());
-          var structStart = espPtr.add(8);
-          var typeFieldAddr = structStart.add(OFF_GOD.Dmg_type);
-          typeFieldAddr.writeS32(4);
+          var isMyPlayer = entity.equals(cachedMyPlayer);
+          if (isMyPlayer) {
+            var espPtr = ptr(this.context.esp.toString());
+            var structStart = espPtr.add(8);
+            var typeFieldAddr = structStart.add(OFF.Dmg_type);
+            var oldType = typeFieldAddr.readS32();
+            typeFieldAddr.writeS32(4);
+            if (moduleLogCounts['HP'] < 30) {
+              sendLog('info', 'HP', '玩家掉血已拦截! (oldType=' + oldType + ')');
+            }
+          }
         }
       };
-
       hurtHook = Interceptor.attach(entityHurtAddr, hookHandler);
-
+      sendLog('success', 'HP', 'Entity_OnEntityHurt Hook 已安装 (RVA: 0xB3F470)');
+      var playerHurtAddr = base.add(0xB516B0);
       try {
-        var playerHurtAddr = base.add(0xB516B0);
         playerHurtHook = Interceptor.attach(playerHurtAddr, hookHandler);
-      } catch(e) {}
+        sendLog('success', 'HP', 'Player_OnEntityHurt 兜底Hook已安装 (RVA: 0xB516B0)');
+      } catch(e) { sendLog('warn', 'HP', 'Player_OnEntityHurt Hook失败: ' + e.message + ' (不影响)'); }
     }
 
     function startRefresh() {
@@ -1809,7 +1911,24 @@ FRIDA_JS = r"""
           var found = findMyPlayer();
           if (found && !found.isNull()) {
             cachedMyPlayer = found;
+            sendLog('info', 'HP', '已找到玩家: ' + found);
           }
+        }
+        if (cachedMyPlayer && !cachedMyPlayer.isNull()) {
+          try {
+            var gm = getGM();
+            if (gm && !gm.isNull()) {
+              var all = getAllPlayers(gm);
+              var found = false;
+              for (var i = 0; i < all.length; i++) {
+                if (all[i].equals(cachedMyPlayer)) { found = true; break; }
+              }
+              if (!found) {
+                sendLog('info', 'HP', '玩家已离开（房间切换），重置');
+                cachedMyPlayer = null;
+              }
+            }
+          } catch(e) { cachedMyPlayer = null; }
         }
       }, 2000);
     }
@@ -1823,15 +1942,23 @@ FRIDA_JS = r"""
 
     return {
       enable: function() {
-        if (enabled) return;
+        if (enabled) {
+          sendLog('info', 'HP', '无敌模式已启用，跳过');
+          return;
+        }
         var mod = getGameAssembly();
         if (!mod) { sendLog('error', 'HP', '未找到 GameAssembly.dll'); return; }
         if (!initNativeFunctions()) { sendLog('error', 'HP', 'NativeFunction 初始化失败'); return; }
         cachedMyPlayer = findMyPlayer();
+        if (cachedMyPlayer) {
+          sendLog('info', 'HP', '已找到玩家: ' + cachedMyPlayer);
+        } else {
+          sendLog('info', 'HP', '等待玩家出现（自动刷新中）...');
+        }
         installHooks(mod.base);
         startRefresh();
         enabled = true;
-        sendLog('success', 'HP', '金刚不坏已启用');
+        sendLog('success', 'HP', '无敌模式已启用!');
         sendStatus('godmode', true);
       },
       disable: function() {
@@ -1841,12 +1968,16 @@ FRIDA_JS = r"""
         stopRefresh();
         cachedMyPlayer = null;
         enabled = false;
-        sendLog('info', 'HP', '金刚不坏已禁用');
+        sendLog('info', 'HP', '无敌模式已禁用');
         sendStatus('godmode', false);
       },
       isEnabled: function() { return enabled; },
       getStatus: function() {
-        return { enabled: enabled, myPlayer: cachedMyPlayer ? cachedMyPlayer.toString() : null };
+        return {
+          enabled: enabled,
+          hookInstalled: hurtHook !== null,
+          myPlayer: cachedMyPlayer ? cachedMyPlayer.toString() : null,
+        };
       }
     };
   })();
@@ -1857,14 +1988,10 @@ FRIDA_JS = r"""
   var speedGunModule = (function() {
     var enabled = false;
     var hooks = [];
-    var weaponProcessedMap = {};
-
-    var RVA_SPEED = {
-      getShootIntervalTime:      0xB78EF0,
-      recoilOnGunShot:           0xB19980,
-      recoilGetCurrentPerturb:   0xB19420,
-      gunShootNoCheck:           0xB621F0,
-    };
+    var isMyWeaponFn = null;
+    var getCharAnim = null;
+    var setAnimSpeed = null;
+    var isPlayerShooting = false;
 
     return {
       enable: function() {
@@ -1874,66 +2001,191 @@ FRIDA_JS = r"""
         var base = mod.base;
 
         try {
-          Interceptor.replace(base.add(RVA_SPEED.getShootIntervalTime), new NativeCallback(function(self, method) {
-            return 0.01;
-          }, "float", ["pointer", "pointer"]));
-          hooks.push({ addr: base.add(RVA_SPEED.getShootIntervalTime), type: 'replace' });
-        } catch(e) {}
+          isMyWeaponFn = new NativeFunction(base.add(0xB6E1D0), "bool", ["pointer", "pointer"]);
+          getCharAnim = new NativeFunction(base.add(0xB35310), "pointer", ["pointer", "pointer"]);
+          setAnimSpeed = new NativeFunction(base.add(0xAA8C30), "void", ["pointer", "float", "pointer"]);
+        } catch(e) {
+          sendLog('error', '射速', 'NativeFunction 初始化失败: ' + e.message);
+          return;
+        }
 
+        // 1) WPN_Gun.AnimSpeedSetting — 枪械(背包)动画加速
         try {
-          Interceptor.replace(base.add(RVA_SPEED.recoilOnGunShot), new NativeCallback(function(self) {
-          }, "void", ["pointer"]));
-          hooks.push({ addr: base.add(RVA_SPEED.recoilOnGunShot), type: 'replace' });
-        } catch(e) {}
-
-        try {
-          Interceptor.replace(base.add(RVA_SPEED.recoilGetCurrentPerturb), new NativeCallback(function(self) {
-            return 0.0;
-          }, "float", ["pointer"]));
-          hooks.push({ addr: base.add(RVA_SPEED.recoilGetCurrentPerturb), type: 'replace' });
-        } catch(e) {}
-
-        try {
-          Interceptor.attach(base.add(RVA_SPEED.gunShootNoCheck), {
-            onEnter: function(args) {
+          hooks.push(Interceptor.attach(base.add(0xB60B00), {
+            onEnter: function(args) { this.self = args[0]; },
+            onLeave: function(retVal) {
+              if (!this.self) return;
               try {
-                var self = args[0];
-                var isMine = self.add(0x7B).readU8();
-                var weaponAddr = ptr(self).toString();
-
-                if (!isMine) return;
-                if (weaponProcessedMap[weaponAddr]) return;
-
-                weaponProcessedMap[weaponAddr] = true;
-
-                var realData = self.add(0xEC).readPointer();
-                if (!realData.isNull()) {
-                  var reloadAnimRatioPtr = realData.add(0xD4);
-                  var currentReloadRatio = reloadAnimRatioPtr.readFloat();
-                  if (currentReloadRatio > 0 && currentReloadRatio < 100) {
-                    reloadAnimRatioPtr.writeFloat(5.0);
-                  }
-
-                  var perturbMinPtr = realData.add(0xF8).readPointer();
-                  var perturbMaxPtr = realData.add(0xFC).readPointer();
-
-                  if (!perturbMinPtr.isNull()) {
-                    for (var i = 0; i < 5; i++) {
-                      perturbMinPtr.add(i * 4).writeFloat(0.0);
-                    }
-                  }
-
-                  if (!perturbMaxPtr.isNull()) {
-                    for (var i = 0; i < 5; i++) {
-                      perturbMaxPtr.add(i * 4).writeFloat(0.0);
-                    }
+                if (isMyWeaponFn(this.self, ptr(0))) {
+                  var anim = getCharAnim(this.self, ptr(0));
+                  if (!anim.isNull()) {
+                    setAnimSpeed(anim, 10.0, ptr(0));
                   }
                 }
               } catch(e) {}
             }
-          });
-          hooks.push({ addr: base.add(RVA_SPEED.gunShootNoCheck), type: 'attach' });
-        } catch(e) {}
+          }));
+        } catch(e) { sendLog('warn', '射速', 'WPN_Gun.AnimSpeedSetting Hook失败: ' + e.message); }
+
+        // 1.5) WPN_RPG.AnimSpeedSetting — RPG/AT4 动画加速
+        try {
+          hooks.push(Interceptor.attach(base.add(0xB66CA0), {
+            onEnter: function(args) { this.self = args[0]; },
+            onLeave: function(retVal) {
+              if (!this.self) return;
+              try {
+                if (isMyWeaponFn(this.self, ptr(0))) {
+                  var anim = getCharAnim(this.self, ptr(0));
+                  if (!anim.isNull()) {
+                    setAnimSpeed(anim, 10.0, ptr(0));
+                  }
+                }
+              } catch(e) {}
+            }
+          }));
+        } catch(e) { sendLog('warn', '射速', 'WPN_RPG.AnimSpeedSetting Hook失败: ' + e.message); }
+
+        // 1.6) WPN_GrenadeGun.AnimSpeedSetting — 榴弹枪动画加速
+        try {
+          hooks.push(Interceptor.attach(base.add(0xB5F7A0), {
+            onEnter: function(args) {
+              this.self = args[0];
+              try {
+                if (isMyWeaponFn(this.self, ptr(0))) {
+                  var realData = this.self.add(0xEC).readPointer();
+                  if (!realData.isNull()) {
+                    realData.add(0xD0).writeFloat(10.0);
+                  }
+                }
+              } catch(e) {}
+            },
+            onLeave: function(retVal) {
+              if (!this.self) return;
+              try {
+                if (isMyWeaponFn(this.self, ptr(0))) {
+                  var anim = getCharAnim(this.self, ptr(0));
+                  if (!anim.isNull()) {
+                    setAnimSpeed(anim, 10.0, ptr(0));
+                  }
+                }
+              } catch(e) {}
+            }
+          }));
+        } catch(e) { sendLog('warn', '射速', 'WPN_GrenadeGun.AnimSpeedSetting Hook失败: ' + e.message); }
+
+        // 2) GunShoot — 清除射击间隔 + 半自动 => 全自动
+        try {
+          hooks.push(Interceptor.attach(base.add(0xB624C0), {
+            onEnter: function(args) {
+              this.self = args[0];
+              try {
+                if (isMyWeaponFn(this.self, ptr(0))) {
+                  isPlayerShooting = true;
+                }
+              } catch(e) {}
+            },
+            onLeave: function(retVal) {
+              if (!this.self) return;
+              try {
+                if (isMyWeaponFn(this.self, ptr(0))) {
+                  this.self.add(0x110).writeFloat(0.0);   // nextAllowedShootTime
+                  this.self.add(0x108).writeS32(0);       // semiGunFireLinkState = None
+                }
+              } catch(e) {}
+              isPlayerShooting = false;
+            }
+          }));
+        } catch(e) { sendLog('warn', '射速', 'GunShoot Hook失败: ' + e.message); }
+
+        // 2.5) WPN_Gun.get_isSemiGun — 半自动→全自动
+        try {
+          hooks.push(Interceptor.attach(base.add(0xB63AD0), {
+            onLeave: function(retVal) { retVal.replace(0); }
+          }));
+        } catch(e) { sendLog('warn', '射速', 'get_isSemiGun Hook失败: ' + e.message); }
+
+        // 3) WPN_Gun.OnGenerateFromOwner — 补给箱枪械创建时加速
+        try {
+          hooks.push(Interceptor.attach(base.add(0xB62900), {
+            onEnter: function(args) { this.self = args[0]; },
+            onLeave: function(retVal) {
+              if (!this.self) return;
+              try {
+                if (isMyWeaponFn(this.self, ptr(0))) {
+                  var anim = getCharAnim(this.self, ptr(0));
+                  if (!anim.isNull()) {
+                    setAnimSpeed(anim, 10.0, ptr(0));
+                  }
+                }
+              } catch(e) {}
+            }
+          }));
+        } catch(e) { sendLog('warn', '射速', 'OnGenerateFromOwner Hook失败: ' + e.message); }
+
+        // 4) WPN_RPG.OnGenerateFromOwner — 补给箱RPG/AT4创建时加速
+        try {
+          hooks.push(Interceptor.attach(base.add(0xB67740), {
+            onEnter: function(args) { this.self = args[0]; },
+            onLeave: function(retVal) {
+              if (!this.self) return;
+              try {
+                if (isMyWeaponFn(this.self, ptr(0))) {
+                  var anim = getCharAnim(this.self, ptr(0));
+                  if (!anim.isNull()) {
+                    setAnimSpeed(anim, 10.0, ptr(0));
+                  }
+                  var realData = this.self.add(0xF0).readPointer();
+                  if (!realData.isNull()) {
+                    realData.add(0xF0).writeFloat(10.0);
+                    realData.add(0xEC).writeFloat(10.0);
+                  }
+                }
+              } catch(e) {}
+            }
+          }));
+        } catch(e) { sendLog('warn', '射速', 'RPG OnGenerateFromOwner Hook失败: ' + e.message); }
+
+        // 5) WPN_RPG.OnFireBtnPressed — RPG/AT4 半自动绕过
+        try {
+          hooks.push(Interceptor.attach(base.add(0xB67700), {
+            onEnter: function(args) { this.self = args[0]; },
+            onLeave: function(retVal) {
+              if (!this.self) return;
+              try {
+                if (isMyWeaponFn(this.self, ptr(0))) {
+                  this.self.add(0xF8).writeS32(1);       // fireState = Firing
+                  var realData = this.self.add(0xF0).readPointer();
+                  if (!realData.isNull()) {
+                    realData.add(0xF0).writeFloat(10.0); // WD_RPG.fireAnimRate
+                    realData.add(0xEC).writeFloat(10.0); // WD_RPG.reloadAnimRate
+                  }
+                }
+              } catch(e) {}
+            }
+          }));
+        } catch(e) { sendLog('warn', '射速', 'RPG OnFireBtnPressed Hook失败: ' + e.message); }
+
+        // 6) Recoil.OnGunShot — 清零后坐力
+        try {
+          hooks.push(Interceptor.attach(base.add(0xB19980), {
+            onEnter: function(args) { this.self = args[0]; },
+            onLeave: function(retVal) {
+              if (!isPlayerShooting || !this.self) return;
+              this.self.add(0x68).writeFloat(0.0);
+              this.self.add(0x6C).writeFloat(0.0);
+              this.self.add(0x70).writeFloat(0.0);
+              this.self.add(0x74).writeFloat(0.0);
+              this.self.add(0xA8).writeS32(0);
+            }
+          }));
+        } catch(e) { sendLog('warn', '射速', 'Recoil.OnGunShot Hook失败: ' + e.message); }
+
+        // 7) Recoil.GetCurrentPerturb — 强制 0 扩散
+        try {
+          hooks.push(Interceptor.attach(base.add(0xB19420), {
+            onLeave: function(retVal) { retVal.replace(0.0); }
+          }));
+        } catch(e) { sendLog('warn', '射速', 'Recoil.GetCurrentPerturb Hook失败: ' + e.message); }
 
         enabled = true;
         sendLog('success', '射速', '射速变快已启用');
@@ -1942,16 +2194,9 @@ FRIDA_JS = r"""
       disable: function() {
         if (!enabled) return;
         for (var i = 0; i < hooks.length; i++) {
-          try {
-            if (hooks[i].type === 'replace') {
-              Interceptor.revert(hooks[i].addr);
-            } else {
-              hooks[i].addr.detach();
-            }
-          } catch(e) {}
+          try { hooks[i].detach(); } catch(e) {}
         }
         hooks = [];
-        weaponProcessedMap = {};
         enabled = false;
         sendLog('info', '射速', '射速变快已禁用');
         sendStatus('speedgun', false);
@@ -1961,7 +2206,187 @@ FRIDA_JS = r"""
   })();
 
   // ====================================================================
-  // 模块 14: 天机傀儡 — 修改 ClientData.isBot (v2)
+  // 模块 14: 生化模式-英雄技能无冷却
+  // ====================================================================
+  var skillCdModule = (function() {
+    var enabled = false;
+    var myPlayerPtr = null;
+    var _endColdFn = null;
+    var _noCdTimer = null;
+    var hooks = [];
+
+    function readPtr(addr) {
+        try { if (!addr || addr.isNull()) return null; var v = addr.readPointer(); return (v && !v.isNull()) ? v : null; } catch (e) { return null; }
+    }
+    function readI32(addr) { try { return addr ? addr.readS32() : null; } catch (e) { return null; } }
+    function readF32(addr) { try { return addr ? addr.readFloat() : null; } catch (e) { return null; } }
+    function readU8(addr) { try { return addr ? addr.readU8() : null; } catch (e) { return null; } }
+
+    function scanSkillSteps(pp) {
+        var ps = readPtr(pp.add(0xB0));
+        if (!ps) { sendLog('error', '技能CD', 'PlayerSkills 为空'); return; }
+        var arr = readPtr(ps.add(0x08));
+        if (!arr) { sendLog('error', '技能CD', 'Skill[] 为空'); return; }
+        var len = readI32(arr.add(0x0C));
+        if (!len || len <= 0 || len > 20) return;
+        var found = 0;
+        for (var i = 0; i < len; i++) {
+            var sp = readPtr(arr.add(0x10 + 4 * i));
+            if (!sp) continue;
+            var coldFinish = readF32(sp.add(0x1C));
+            var coldTime = readF32(sp.add(0x24));
+            if (coldFinish !== null || coldTime !== null) {
+                found++;
+            }
+        }
+        if (found > 0) {
+            sendLog('info', '技能CD', '找到 ' + found + ' 个技能');
+        }
+    }
+
+    function scanAndEndCold() {
+        if (!myPlayerPtr) return;
+        var ps = readPtr(myPlayerPtr.add(0xB0));
+        if (!ps) return;
+        var arr = readPtr(ps.add(0x08));
+        if (!arr) return;
+        var len = readI32(arr.add(0x0C));
+        if (!len || len <= 0 || len > 20) return;
+
+        var called = 0; 
+        for (var i = 0; i < len; i++) {
+            var sp = readPtr(arr.add(0x10 + 4 * i));
+            if (!sp) continue;
+            var coldFinish = readF32(sp.add(0x1C));
+            var coldTime = readF32(sp.add(0x24));
+            if (coldFinish !== null || coldTime !== null) {
+                try {
+                    _endColdFn(sp);
+                    called++;
+                } catch (e) {}
+            }
+        }
+    }
+
+    return {
+        enable: function() {
+            if (enabled) return;
+            var mod = getGameAssembly();
+            if (!mod) { sendLog('error', '技能CD', '未找到 GameAssembly.dll'); return; }
+            var base = mod.base;
+
+            // 初始化 EndCold 函数
+            try {
+                _endColdFn = new NativeFunction(base.add(0xAE1BC0), 'void', ['pointer']);
+                sendLog('info', '技能CD', 'EndCold 函数就绪 (RVA 0xAE1BC0)');
+            } catch (e) {
+                sendLog('error', '技能CD', 'EndCold 创建失败: ' + e);
+                return;
+            }
+
+            // Hook isMyPlayer 来捕获玩家指针（支持房间切换时自动更新）
+            try {
+                var addrIsMy = base.add(0xB55FD0);
+                var origIsMy = new NativeFunction(addrIsMy, 'bool', ['pointer', 'pointer']);
+                Interceptor.replace(addrIsMy, new NativeCallback(function (playerPtr, methodInfo) {
+                    try {
+                        var result = origIsMy(playerPtr, methodInfo);
+                        if (result) {
+                            // 检测指针是否变化（房间切换时会有新指针）
+                            if (!myPlayerPtr || !myPlayerPtr.equals(playerPtr)) {
+                                myPlayerPtr = playerPtr;
+                                scanSkillSteps(playerPtr);
+                                sendLog('info', '技能CD', '玩家指针已更新: ' + playerPtr);
+                            }
+                        }
+                        return result;
+                    } catch (e) { return false; }
+                }, 'bool', ['pointer', 'pointer']));
+                hooks.push({ type: 'replace', addr: addrIsMy, orig: origIsMy });
+                sendLog('success', '技能CD', 'isMyPlayer Hook OK');
+            } catch (e) { sendLog('error', '技能CD', 'isMyPlayer Hook 失败: ' + e); }
+
+            // 兜底 Hook Player.Update 来捕获玩家（支持房间切换时自动更新）
+            try {
+                var addrUpdate = base.add(0xB551D0);
+                hooks.push(Interceptor.attach(addrUpdate, {
+                    onEnter: function (args) {
+                        var p = args[0];
+                        if (!p || p.isNull()) return;
+                        var cd = readPtr(p.add(0x94));
+                        if (!cd) return;
+                        if (readU8(cd.add(0x1C))) return;
+                        // 检测指针是否变化
+                        if (!myPlayerPtr || !myPlayerPtr.equals(p)) {
+                            myPlayerPtr = p;
+                            scanSkillSteps(p);
+                        }
+                    }
+                }));
+                sendLog('success', '技能CD', 'Player.Update Hook OK');
+            } catch (e) { sendLog('warn', '技能CD', 'Player.Update Hook 失败: ' + e); }
+
+            // 兜底 Hook get_nickName 来捕获玩家（支持房间切换时自动更新）
+            try {
+                var addrNick = base.add(0xB50810);
+                hooks.push(Interceptor.attach(addrNick, {
+                    onEnter: function (args) {
+                        var p = args[0];
+                        if (!p || p.isNull()) return;
+                        var cd = readPtr(p.add(0x94));
+                        if (!cd) return;
+                        if (readU8(cd.add(0x1C))) return;
+                        // 检测指针是否变化
+                        if (!myPlayerPtr || !myPlayerPtr.equals(p)) {
+                            myPlayerPtr = p;
+                            scanSkillSteps(p);
+                        }
+                    }
+                }));
+                sendLog('success', '技能CD', 'get_nickName Hook OK');
+            } catch (e) { sendLog('warn', '技能CD', 'get_nickName Hook 失败: ' + e); }
+
+            // 立即执行一次，然后设置定时器
+            scanAndEndCold();
+            _noCdTimer = setInterval(scanAndEndCold, 200);
+
+            enabled = true;
+            sendLog('success', '技能CD', '已开启 — 每 200ms 调用 EndCold()');
+            sendStatus('skillcd', true);
+        },
+        disable: function() {
+            if (!enabled) return;
+
+            // 还原所有 Hook
+            for (var i = 0; i < hooks.length; i++) {
+                try {
+                    if (hooks[i].type === 'replace') {
+                        Interceptor.revert(hooks[i].addr);
+                    } else {
+                        hooks[i].detach();
+                    }
+                } catch(e) {}
+            }
+            hooks = [];
+
+            // 清理定时器
+            if (_noCdTimer) {
+                clearInterval(_noCdTimer);
+                _noCdTimer = null;
+            }
+
+            // 重置状态
+            myPlayerPtr = null;
+            enabled = false;
+            sendLog('info', '技能CD', '已关闭');
+            sendStatus('skillcd', false);
+        },
+        isEnabled: function() { return enabled; }
+    };
+  })();
+
+  // ====================================================================
+  // 模块 15: 天机傀儡 — 修改 ClientData.isBot (v2)
   // ====================================================================
   var isBotModule = (function() {
     var enabled = false;
@@ -2146,11 +2571,12 @@ FRIDA_JS = r"""
     aim: aimModule,
     godmode: godModeModule,
     speedgun: speedGunModule,
-    isbot: isBotModule
+    isbot: isBotModule,
+    skillcd: skillCdModule
   };
 
   // ====================================================================
-  // 模块 14: 多人生化特性选择器 (Nano4T)
+  // 模块 16: 多人生化特性选择器 (Nano4T)
   // ====================================================================
   var nano4tModule = (function() {
     var nano4tBase = null;
@@ -2418,7 +2844,7 @@ class GameModifierApp(ctk.CTk):
     def __init__(self):
         super().__init__()
         self.title("游戏修改器控制台 - 全功能整合包 v1.5")
-        self.geometry("600x700+10+10")
+        self.geometry("610x700+10+10")
         self.resizable(True, True)
         self.attributes('-topmost', True)
         self.attributes('-alpha', 0.92)
@@ -2444,7 +2870,8 @@ class GameModifierApp(ctk.CTk):
             'aim': False,
             'godmode': False,
             'speedgun': False,
-            'isbot': False
+            'isbot': False,
+            'skillcd': False
         }
         self._knife_speed = 5.0
         self._movespeed = 3.0
@@ -2471,8 +2898,9 @@ class GameModifierApp(ctk.CTk):
         
         # nano4t 多人生化特性选择器状态
         self._nano4t_ready = False
-        self._nano4t_wanted_ghost = 9
-        self._nano4t_wanted_human = 19
+        _nano4t_cfg = self._load_nano4t_selector()
+        self._nano4t_wanted_ghost = _nano4t_cfg.get('ghost', 9)
+        self._nano4t_wanted_human = _nano4t_cfg.get('human', 19)
         self._nano4t_current_ghost = -1
         self._nano4t_current_human = -1
         self._nano4t_log_errors = False  # 仅手动点击按钮时输出错误日志
@@ -2598,13 +3026,13 @@ class GameModifierApp(ctk.CTk):
         nano4t_ghost_frame.grid_propagate(False)
         ctk.CTkLabel(nano4t_ghost_frame, text="👻 幽灵方特性", font=("Microsoft YaHei", 14, "bold"),
                      text_color="#ff6666").pack(anchor="w", padx=12, pady=(6,2))
-        self.nano4t_ghost_var = ctk.StringVar(value="9: 不死契约")
+        self.nano4t_ghost_var = ctk.StringVar(value=f"{self._nano4t_wanted_ghost}: {self.NANO4T_ATTRS[self._nano4t_wanted_ghost][0]}")
         self.nano4t_ghost_combo = ctk.CTkComboBox(nano4t_ghost_frame, values=[f"{i}: {self.NANO4T_ATTRS[i][0]}" for i in range(10)],
                                            variable=self.nano4t_ghost_var, font=("Microsoft YaHei", 13),
                                            dropdown_font=("Microsoft YaHei", 12), height=34, state="readonly",
                                            command=self._nano4t_on_ghost_select)
         self.nano4t_ghost_combo.pack(fill="x", padx=12, pady=(4,2))
-        self.nano4t_ghost_desc = ctk.CTkLabel(nano4t_ghost_frame, text="效果: " + self.NANO4T_ATTRS[9][1],
+        self.nano4t_ghost_desc = ctk.CTkLabel(nano4t_ghost_frame, text="效果: " + self.NANO4T_ATTRS[self._nano4t_wanted_ghost][1],
                                        font=("Microsoft YaHei", 11), text_color="#cc8888")
         self.nano4t_ghost_desc.pack(anchor="w", padx=12, pady=(2,6))
         
@@ -2614,13 +3042,13 @@ class GameModifierApp(ctk.CTk):
         nano4t_human_frame.grid_propagate(False)
         ctk.CTkLabel(nano4t_human_frame, text="🛡️ 人类方特性", font=("Microsoft YaHei", 14, "bold"),
                      text_color="#6688ff").pack(anchor="w", padx=12, pady=(6,2))
-        self.nano4t_human_var = ctk.StringVar(value="19: 致命攻击")
+        self.nano4t_human_var = ctk.StringVar(value=f"{self._nano4t_wanted_human}: {self.NANO4T_ATTRS[self._nano4t_wanted_human][0]}")
         self.nano4t_human_combo = ctk.CTkComboBox(nano4t_human_frame, values=[f"{i}: {self.NANO4T_ATTRS[i][0]}" for i in range(10,20)],
                                            variable=self.nano4t_human_var, font=("Microsoft YaHei", 13),
                                            dropdown_font=("Microsoft YaHei", 12), height=34, state="readonly",
                                            command=self._nano4t_on_human_select)
         self.nano4t_human_combo.pack(fill="x", padx=12, pady=(4,2))
-        self.nano4t_human_desc = ctk.CTkLabel(nano4t_human_frame, text="效果: " + self.NANO4T_ATTRS[19][1],
+        self.nano4t_human_desc = ctk.CTkLabel(nano4t_human_frame, text="效果: " + self.NANO4T_ATTRS[self._nano4t_wanted_human][1],
                                        font=("Microsoft YaHei", 11), text_color="#8888cc")
         self.nano4t_human_desc.pack(anchor="w", padx=12, pady=(2,6))
         
@@ -2819,6 +3247,12 @@ class GameModifierApp(ctk.CTk):
         godmode_frame, self.godmode_switch, _ = make_feature_card(
             tab_player_scroll, 2, 0, 2, "#3a1a1a", 'godmode', '🛡️', '金刚不坏',
             '角色受到攻击时不会受伤（只免疫枪伤）', title_color="#E74C3C"
+        )
+
+        # 技能无冷却卡片
+        skillcd_frame, self.skillcd_switch, _ = make_feature_card(
+            tab_player_scroll, 3, 0, 1, "#3a2a3a", 'skillcd', '✨', '技能无冷却',
+            '生化模式，所有技能无冷却', title_color="#A855F7"
         )
 
         # ===================== 其他 Tab =====================
@@ -3040,7 +3474,8 @@ class GameModifierApp(ctk.CTk):
             'aim': self.aim_switch,
             'godmode': self.godmode_switch,
             'speedgun': self.speedgun_switch,
-            'isbot': self.isbot_switch
+            'isbot': self.isbot_switch,
+            'skillcd': self.skillcd_switch
         }
         switch_map[feature].configure(variable=ctk.BooleanVar(value=False))
 
@@ -3059,7 +3494,8 @@ class GameModifierApp(ctk.CTk):
             'aim': self.aim_switch,
             'godmode': self.godmode_switch,
             'speedgun': self.speedgun_switch,
-            'isbot': self.isbot_switch
+            'isbot': self.isbot_switch,
+            'skillcd': self.skillcd_switch
         }
         switch = switch_map[feature]
         if enabled:
@@ -3455,6 +3891,29 @@ class GameModifierApp(ctk.CTk):
         except Exception as e:
             self._log(f"❌ 保存快捷键失败: {e}")
     
+    # ==================== Nano-4T 多人生化BUFF选择保存 ====================
+    def _load_nano4t_selector(self):
+        path = os.path.join(DATA_DIR, "Nano-4T-selector.json")
+        if os.path.exists(path):
+            try:
+                with open(path, 'r', encoding='utf-8') as f:
+                    return json.load(f)
+            except:
+                pass
+        return {'ghost': 9, 'human': 19}
+    
+    def _save_nano4t_selector(self):
+        path = os.path.join(DATA_DIR, "Nano-4T-selector.json")
+        try:
+            data = {
+                'ghost': self._nano4t_wanted_ghost,
+                'human': self._nano4t_wanted_human
+            }
+            with open(path, 'w', encoding='utf-8') as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            self._log(f"❌ 保存多人生化BUFF选择失败: {e}")
+    
     def _set_hotkey(self, position, feature_id):
         # 先移除该位置的旧绑定
         old_feature = self._hotkeys.get(position)
@@ -3682,7 +4141,7 @@ class GameModifierApp(ctk.CTk):
         about_frame = ctk.CTkScrollableFrame(about_tab, corner_radius=0)
         about_frame.pack(fill="both", expand=True, padx=4, pady=4)
         
-        ctk.CTkLabel(about_frame, text="游戏修改器控制台", font=("Microsoft YaHei", 18, "bold")).pack(pady=(12, 4))
+        ctk.CTkLabel(about_frame, text="游戏修改器控制台 - 全功能整合包 v1.5", font=("Microsoft YaHei", 18, "bold")).pack(pady=(12, 4))
         ctk.CTkLabel(about_frame, text="版本: v1.5", font=("Microsoft YaHei", 12)).pack(pady=2)
         ctk.CTkLabel(about_frame, text="作者: 挂呱呱呱", font=("Microsoft YaHei", 12)).pack(pady=2)
         
@@ -3737,13 +4196,17 @@ class GameModifierApp(ctk.CTk):
         gid = int(value.split(":")[0])
         self.nano4t_ghost_desc.configure(text="效果: " + self.NANO4T_ATTRS[gid][1])
         self._nano4t_wanted_ghost = gid
-        self._nano4t_refresh_next_label()
+        self._save_nano4t_selector()
+        if self._nano4t_ready:
+            self.nano4t_next_label.configure(text="💡 请点击「应用」按钮生效")
 
     def _nano4t_on_human_select(self, value):
         hid = int(value.split(":")[0])
         self.nano4t_human_desc.configure(text="效果: " + self.NANO4T_ATTRS[hid][1])
         self._nano4t_wanted_human = hid
-        self._nano4t_refresh_next_label()
+        self._save_nano4t_selector()
+        if self._nano4t_ready:
+            self.nano4t_next_label.configure(text="💡 请点击「应用」按钮生效")
 
     def _nano4t_refresh_next_label(self):
         if self._nano4t_ready:
@@ -3764,7 +4227,7 @@ class GameModifierApp(ctk.CTk):
         self.nano4t_apply_btn.configure(state="normal", fg_color="#2563eb")
         self._log(f"✅ [多人生化] 已就绪！共 {count} 种特性")
         self._log("[多人生化] 用法: 下拉选择 → 点击应用 → 下一回合自动生效")
-        self._nano4t_refresh_next_label()
+        self.nano4t_next_label.configure(text="💡 请选择特性后点击「应用」按钮")
         threading.Thread(target=self._nano4t_get_current_bg, daemon=True).start()
         threading.Thread(target=self._nano4t_auto_getcurrent_bg, daemon=True).start()
 

@@ -16,7 +16,7 @@ ctk.set_appearance_mode("Dark")
 ctk.set_default_color_theme("blue")
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-JS_FILE = os.path.join(BASE_DIR, "godmode_hp.js")
+JS_FILE = os.path.join(BASE_DIR, "AAAAA-godmode_hp.js")
 
 COLOR_GREEN = "#2ecc71"
 COLOR_RED = "#e74c3c"
