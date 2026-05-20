@@ -22,7 +22,7 @@ ctk.set_default_color_theme("blue")
 # 获取应用根目录（兼容脚本和 exe 两种运行方式）
 if getattr(sys, 'frozen', False):
     APP_DIR = os.path.dirname(sys.executable)
-    RESOURCE_DIR = sys._MEIPASS
+    RESOURCE_DIR = os.path.join(sys._MEIPASS, "资源")
 else:
     APP_DIR = os.path.dirname(os.path.abspath(__file__))
     RESOURCE_DIR = os.path.join(APP_DIR, "资源")
