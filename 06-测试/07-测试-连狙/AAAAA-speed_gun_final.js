@@ -1,13 +1,13 @@
 (function() {
-    console.log("[*] speed_gun_final (Player Only)");
+    console.log("[*] speed_gun_final (Player Only) - Fixed Version");
 
     var mod = Process.findModuleByName("GameAssembly.dll");
     if (!mod) { console.log("[-] GameAssembly.dll not found!"); return; }
     var base = mod.base;
 
-    var isMyWeaponFn = new NativeFunction(base.add(0xB6E1D0), "bool", ["pointer", "pointer"]);
-    var getCharAnim  = new NativeFunction(base.add(0xB35310), "pointer", ["pointer", "pointer"]);
-    var setAnimSpeed = new NativeFunction(base.add(0xAA8C30), "void", ["pointer", "float", "pointer"]);
+    var isMyWeaponFn = new NativeFunction(base.add(0xB6E1D0), "bool", ["pointer"]);
+    var getCharAnim  = new NativeFunction(base.add(0xB35310), "pointer", ["pointer"]);
+    var setAnimSpeed = new NativeFunction(base.add(0xAA8C30), "void", ["pointer", "float"]);
 
     var isPlayerShooting = false;
 
@@ -19,10 +19,10 @@
         onLeave: function(retVal) {
             if (!this.self) return;
             try {
-                if (isMyWeaponFn(this.self, ptr(0))) {
-                    var anim = getCharAnim(this.self, ptr(0));
+                if (isMyWeaponFn(this.self)) {
+                    var anim = getCharAnim(this.self);
                     if (!anim.isNull()) {
-                        setAnimSpeed(anim, 10.0, ptr(0));
+                        setAnimSpeed(anim, 10.0);
                     }
                 }
             } catch(e) {}
@@ -37,10 +37,10 @@
         onLeave: function(retVal) {
             if (!this.self) return;
             try {
-                if (isMyWeaponFn(this.self, ptr(0))) {
-                    var anim = getCharAnim(this.self, ptr(0));
+                if (isMyWeaponFn(this.self)) {
+                    var anim = getCharAnim(this.self);
                     if (!anim.isNull()) {
-                        setAnimSpeed(anim, 10.0, ptr(0));
+                        setAnimSpeed(anim, 10.0);
                     }
                 }
             } catch(e) {}
@@ -52,10 +52,10 @@
         onEnter: function(args) {
             this.self = args[0];
             try {
-                if (isMyWeaponFn(this.self, ptr(0))) {
+                if (isMyWeaponFn(this.self)) {
                     var realData = this.self.add(0xEC).readPointer();
                     if (!realData.isNull()) {
-                        realData.add(0xD0).writeFloat(10.0); // fireAnimMultiplier
+                        realData.add(0xD0).writeFloat(10.0);
                     }
                 }
             } catch(e) {}
@@ -63,10 +63,10 @@
         onLeave: function(retVal) {
             if (!this.self) return;
             try {
-                if (isMyWeaponFn(this.self, ptr(0))) {
-                    var anim = getCharAnim(this.self, ptr(0));
+                if (isMyWeaponFn(this.self)) {
+                    var anim = getCharAnim(this.self);
                     if (!anim.isNull()) {
-                        setAnimSpeed(anim, 10.0, ptr(0));
+                        setAnimSpeed(anim, 10.0);
                     }
                 }
             } catch(e) {}
@@ -85,12 +85,31 @@
         }
     }
 
-    // ====== 2) GunShoot — 清除射击间隔 + 半自动 => 全自动 ======
+    // ====== 2) GunShoot_Logic — 射击逻辑核心，清除所有限制 ======
+    Interceptor.attach(base.add(0xB62170), {
+        onEnter: function(args) {
+            this.self = args[0];
+            try {
+                if (isMyWeaponFn(this.self)) {
+                    this.self.add(0x110).writeFloat(0.0);
+                    this.self.add(0x108).writeS32(0);
+                    this.self.add(0xF1).writeU8(1);
+                    var realData = this.self.add(0xEC).readPointer();
+                    if (!realData.isNull()) {
+                        realData.add(0xCC).writeFloat(9999.0);
+                        realData.add(0xD0).writeFloat(10.0);
+                    }
+                }
+            } catch(e) {}
+        }
+    });
+
+    // ====== 2.5) GunShoot — 清除射击间隔 + 半自动 => 全自动 ======
     Interceptor.attach(base.add(0xB624C0), {
         onEnter: function(args) {
             this.self = args[0];
             try {
-                if (isMyWeaponFn(this.self, ptr(0))) {
+                if (isMyWeaponFn(this.self)) {
                     isPlayerShooting = true;
                     logWpn(this.self, "GunShoot.enter");
                 }
@@ -99,16 +118,22 @@
         onLeave: function(retVal) {
             if (!this.self) return;
             try {
-                if (isMyWeaponFn(this.self, ptr(0))) {
-                    this.self.add(0x110).writeFloat(0.0);   // nextAllowedShootTime
-                    this.self.add(0x108).writeS32(0);       // semiGunFireLinkState = None
+                if (isMyWeaponFn(this.self)) {
+                    this.self.add(0x110).writeFloat(0.0);
+                    this.self.add(0x108).writeS32(0);
+                    this.self.add(0xF1).writeU8(1);
+                    var realData = this.self.add(0xEC).readPointer();
+                    if (!realData.isNull()) {
+                        realData.add(0xCC).writeFloat(9999.0);
+                        realData.add(0xD0).writeFloat(10.0);
+                    }
                 }
             } catch(e) {}
             isPlayerShooting = false;
         }
     });
 
-    // ====== 2.5) WPN_Gun.get_isSemiGun — 半自动→全自动（不写内存，不影响 RPG 的 realData 指针）======
+    // ====== 2.6) WPN_Gun.get_isSemiGun — 半自动→全自动 ======
     Interceptor.attach(base.add(0xB63AD0), {
         onEnter: function(args) {
             logWpn(args[0], "get_isSemiGun");
@@ -118,7 +143,19 @@
         }
     });
 
-    // ====== 3) WPN_Gun.OnGenerateFromOwner — 补给箱枪械创建时加速 ======
+    // ====== 2.7) WPN_Gun.OnFireBtnPressed — 按下扳机时强制自动模式 ======
+    Interceptor.attach(base.add(0xB6CDA0), {
+        onEnter: function(args) {
+            var self = args[0];
+            try {
+                if (isMyWeaponFn(self)) {
+                    self.add(0xF0).writeU8(0);
+                }
+            } catch(e) {}
+        }
+    });
+
+    // ====== 3) WPN_Gun.OnGenerateFromOwner — 补给箱枪械创建时加速 + 禁用射击后关镜 ======
     Interceptor.attach(base.add(0xB62900), {
         onEnter: function(args) {
             this.self = args[0];
@@ -127,13 +164,41 @@
         onLeave: function(retVal) {
             if (!this.self) return;
             try {
-                if (isMyWeaponFn(this.self, ptr(0))) {
-                    var anim = getCharAnim(this.self, ptr(0));
+                if (isMyWeaponFn(this.self)) {
+                    var anim = getCharAnim(this.self);
                     if (!anim.isNull()) {
-                        setAnimSpeed(anim, 10.0, ptr(0));
+                        setAnimSpeed(anim, 10.0);
+                    }
+                    var realData = this.self.add(0xEC).readPointer();
+                    if (!realData.isNull()) {
+                        realData.add(0x1BC).writeU8(0);
                     }
                 }
             } catch(e) {}
+        }
+    });
+
+    // ====== 3.5) WPN_Gun.PlayCharacterShootAnim — 播放射击动画时加速 ======
+    Interceptor.attach(base.add(0xB6CDD0), {
+        onEnter: function(args) {
+            var self = args[0];
+            try {
+                if (isMyWeaponFn(self)) {
+                    var anim = getCharAnim(self);
+                    if (!anim.isNull()) {
+                        setAnimSpeed(anim, 10.0);
+                    }
+                }
+            } catch(e) {}
+        }
+    });
+
+    // ====== 3.6) WPN_Gun.CloseZoom — 阻止射击后自动关镜 ======
+    Interceptor.attach(base.add(0xB60F00), {
+        onEnter: function(args) {
+            if (isPlayerShooting) {
+                args[1] = ptr(0);
+            }
         }
     });
 
@@ -142,14 +207,24 @@
         onEnter: function(args) {
             this.self = args[0];
             logWpn(this.self, "RPG.OnGenerateFromOwner");
+            try {
+                var isMy = isMyWeaponFn(this.self);
+                console.log("[TEST] RPG.OnGenerateFromOwner isMyWeapon = " + isMy);
+                var realData = this.self.add(0xF0).readPointer();
+                console.log("[TEST] RPG.OnGenerateFromOwner realData = " + realData);
+            } catch(e) {
+                console.log("[TEST] RPG.OnGenerateFromOwner ERROR: " + e);
+            }
         },
         onLeave: function(retVal) {
             if (!this.self) return;
             try {
-                if (isMyWeaponFn(this.self, ptr(0))) {
-                    var anim = getCharAnim(this.self, ptr(0));
+                var isMy = isMyWeaponFn(this.self);
+                console.log("[TEST] RPG.OnGenerateFromOwner onLeave isMyWeapon = " + isMy);
+                if (isMy) {
+                    var anim = getCharAnim(this.self);
                     if (!anim.isNull()) {
-                        setAnimSpeed(anim, 10.0, ptr(0));
+                        setAnimSpeed(anim, 10.0);
                     }
                     console.log("[DBG] RPG.OnGenerateFromOwner DONE @" + this.self);
                 }
@@ -166,14 +241,14 @@
         onLeave: function(retVal) {
             if (!this.self) return;
             try {
-                if (isMyWeaponFn(this.self, ptr(0))) {
+                if (isMyWeaponFn(this.self)) {
                     console.log("[DBG] RPG.OnFireBtnPressed FIRING @" + this.self);
-                    this.self.add(0xF8).writeS32(1);       // fireState = Firing (保持触发)
+                    this.self.add(0xF8).writeS32(1);
                     var realData = this.self.add(0xF0).readPointer();
                     console.log("[DBG] RPG realData = " + realData);
                     if (!realData.isNull()) {
-                        realData.add(0xF0).writeFloat(10.0); // WD_RPG.fireAnimRate
-                        realData.add(0xEC).writeFloat(10.0); // WD_RPG.reloadAnimRate
+                        realData.add(0xF0).writeFloat(10.0);
+                        realData.add(0xEC).writeFloat(10.0);
                         console.log("[DBG] RPG fireAnimRate/reloadAnimRate set to 10.0");
                     }
                 }
@@ -204,9 +279,11 @@
     });
 
     console.log("[+] Loaded:");
+    console.log("    - NativeFunction params fixed");
     console.log("    - Anim speed x10 (player only)");
     console.log("    - Infinite fire rate (player only)");
     console.log("    - Semi-auto \u2192 full-auto (sniper/pistol/RPG, player only)");
     console.log("    - No recoil (player only)");
     console.log("    - No spread (all)");
+    console.log("    - Sniper zoom maintained after shoot");
 })();
