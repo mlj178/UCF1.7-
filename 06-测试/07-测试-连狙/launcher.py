@@ -1,5 +1,5 @@
-# launcher.py - 终极武器修改启动器
-# 功能：UI界面启动 Frida 脚本，实现射速+无扩散+装填速度+半自动改全自动
+# launcher.py - 终极武器修改启动器 (模块化版本)
+# 功能：UI界面启动 Frida 脚本，支持独立功能开关
 
 import tkinter as tk
 from tkinter import ttk, scrolledtext, messagebox
@@ -7,12 +7,13 @@ import frida
 import psutil
 import threading
 import os
+import re
 
 class LauncherUI:
     def __init__(self, root):
         self.root = root
-        self.root.title("终极武器修改 - Launcher")
-        self.root.geometry("700x500")
+        self.root.title("终极武器修改 - Launcher (模块化)")
+        self.root.geometry("750x600")
         self.root.resizable(True, True)
         
         self.session = None
@@ -54,6 +55,30 @@ class LauncherUI:
         script_path = os.path.join(script_dir, "AAAAA-speed_gun_final.js")
         self.script_entry.insert(0, script_path)
         
+        feature_frame = ttk.LabelFrame(main_frame, text="功能开关", padding="10")
+        feature_frame.pack(fill=tk.X, pady=10)
+        
+        self.feature_vars = {}
+        features = [
+            ("animSpeed", "动画加速 x10", True),
+            ("infiniteFireRate", "无限射速", True),
+            ("semiToFullAuto", "半自动 → 全自动", True),
+            ("noRecoil", "无后坐力", True),
+            ("noSpread", "无扩散", True),
+            ("keepZoom", "狙击镜保持", True),
+        ]
+        
+        row_frame = None
+        for i, (key, label, default) in enumerate(features):
+            if i % 3 == 0:
+                row_frame = ttk.Frame(feature_frame)
+                row_frame.pack(fill=tk.X, pady=2)
+            
+            var = tk.BooleanVar(value=default)
+            self.feature_vars[key] = var
+            cb = ttk.Checkbutton(row_frame, text=label, variable=var, width=18)
+            cb.pack(side=tk.LEFT, padx=10, pady=2)
+        
         btn_frame = ttk.Frame(main_frame)
         btn_frame.pack(fill=tk.X, pady=10)
         
@@ -65,10 +90,13 @@ class LauncherUI:
         
         ttk.Button(btn_frame, text="清空日志", command=self.clear_log, width=15).pack(side=tk.LEFT, padx=5)
         
+        ttk.Button(btn_frame, text="全选", command=self.select_all_features, width=10).pack(side=tk.LEFT, padx=5)
+        ttk.Button(btn_frame, text="全不选", command=self.deselect_all_features, width=10).pack(side=tk.LEFT, padx=5)
+        
         log_frame = ttk.LabelFrame(main_frame, text="日志输出", padding="10")
         log_frame.pack(fill=tk.BOTH, expand=True)
         
-        self.log_text = scrolledtext.ScrolledText(log_frame, height=15, font=("Consolas", 10))
+        self.log_text = scrolledtext.ScrolledText(log_frame, height=12, font=("Consolas", 10))
         self.log_text.pack(fill=tk.BOTH, expand=True)
         
         self.status_var = tk.StringVar(value="就绪")
@@ -77,6 +105,14 @@ class LauncherUI:
         
         if self.auto_var.get():
             self.root.after(1000, self.auto_connect)
+            
+    def select_all_features(self):
+        for var in self.feature_vars.values():
+            var.set(True)
+            
+    def deselect_all_features(self):
+        for var in self.feature_vars.values():
+            var.set(False)
             
     def find_process(self):
         pid = self._find_pid()
@@ -139,15 +175,27 @@ class LauncherUI:
         self.stop_btn.config(state=tk.NORMAL)
         self.status_var.set("连接中...")
         
-        thread = threading.Thread(target=self._do_connect, args=(pid, script_path), daemon=True)
+        config = {key: var.get() for key, var in self.feature_vars.items()}
+        
+        thread = threading.Thread(target=self._do_connect, args=(pid, script_path, config), daemon=True)
         thread.start()
         
-    def _do_connect(self, pid, script_path):
+    def _generate_js_code(self, script_path, config):
+        with open(script_path, 'r', encoding='utf-8') as f:
+            js_code = f.read()
+        
+        for key, value in config.items():
+            pattern = rf'{key}:\s*(true|false)'
+            replacement = f'{key}: {str(value).lower()}'
+            js_code = re.sub(pattern, replacement, js_code)
+        
+        return js_code
+        
+    def _do_connect(self, pid, script_path, config):
         try:
             self.log(f"[*] 正在连接进程 PID: {pid}...")
             
-            with open(script_path, 'r', encoding='utf-8') as f:
-                js_code = f.read()
+            js_code = self._generate_js_code(script_path, config)
             
             self.session = frida.attach(pid)
             self.script = self.session.create_script(js_code)
@@ -162,11 +210,18 @@ class LauncherUI:
             self.script.load()
             
             self.log("[+] ✅ 已连接到游戏进程！")
-            self.log("[+] 功能已启用：")
-            self.log("    - 无限射速（所有枪械）")
-            self.log("    - 无扩散")
-            self.log("    - 半自动改全自动（FAL, AT4, 手枪）")
-            self.log("    - 快速装填")
+            self.log("[+] 已启用功能：")
+            for key, var in self.feature_vars.items():
+                status = "✅" if var.get() else "❌"
+                feature_names = {
+                    "animSpeed": "动画加速",
+                    "infiniteFireRate": "无限射速",
+                    "semiToFullAuto": "半自动→全自动",
+                    "noRecoil": "无后坐力",
+                    "noSpread": "无扩散",
+                    "keepZoom": "狙击镜保持"
+                }
+                self.log(f"    {status} {feature_names.get(key, key)}")
             self.root.after(0, lambda: self.status_var.set("已连接"))
             
         except frida.ProcessNotFoundError:

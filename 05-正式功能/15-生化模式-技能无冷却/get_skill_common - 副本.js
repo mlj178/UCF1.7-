@@ -158,7 +158,7 @@
             }
         }
         if (called > 0) {
-            sendLog('success', '无CD', '已调用 EndCold × ' + called);
+            sendLog('success', '技能无冷却', '已调用 EndCold × ' + called);
         }
     }
 
@@ -168,7 +168,7 @@
     globalThis.noCd = function (enable) {
         if (enable) {
             if (_noCdTimer) return;
-            sendLog('success', '无CD', '✅ 已开启 — 每 200ms 调用 EndCold()');
+            sendLog('success', '技能无冷却', '✅ 已开启 — 每 200ms 调用 EndCold()');
             // 先立即执行一次
             scanAndEndCold();
             _noCdTimer = setInterval(scanAndEndCold, 200);

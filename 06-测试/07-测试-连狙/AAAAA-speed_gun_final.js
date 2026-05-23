@@ -1,5 +1,5 @@
 (function() {
-    console.log("[*] speed_gun_final (Player Only) - Fixed Version");
+    console.log("[*] speed_gun_final - Modular Version with Feature Toggles");
 
     var mod = Process.findModuleByName("GameAssembly.dll");
     if (!mod) { console.log("[-] GameAssembly.dll not found!"); return; }
@@ -11,279 +11,453 @@
 
     var isPlayerShooting = false;
 
-    // ====== 1) WPN_Gun.AnimSpeedSetting — 枪械(背包)动画加速 ======
-    Interceptor.attach(base.add(0xB60B00), {
-        onEnter: function(args) {
-            this.self = args[0];
-        },
-        onLeave: function(retVal) {
-            if (!this.self) return;
-            try {
-                if (isMyWeaponFn(this.self)) {
-                    var anim = getCharAnim(this.self);
-                    if (!anim.isNull()) {
-                        setAnimSpeed(anim, 10.0);
-                    }
-                }
-            } catch(e) {}
+    var CONFIG = {
+        animSpeed: true,
+        infiniteFireRate: true,
+        semiToFullAuto: true,
+        noRecoil: true,
+        noSpread: true,
+        keepZoom: true
+    };
+
+    function isSafePointer(ptr) {
+        if (!ptr || ptr.isNull()) {
+            return false;
         }
-    });
-
-    // ====== 1.5) WPN_RPG.AnimSpeedSetting — RPG/AT4 动画加速 ======
-    Interceptor.attach(base.add(0xB66CA0), {
-        onEnter: function(args) {
-            this.self = args[0];
-        },
-        onLeave: function(retVal) {
-            if (!this.self) return;
-            try {
-                if (isMyWeaponFn(this.self)) {
-                    var anim = getCharAnim(this.self);
-                    if (!anim.isNull()) {
-                        setAnimSpeed(anim, 10.0);
-                    }
-                }
-            } catch(e) {}
-        }
-    });
-
-    // ====== 1.6) WPN_GrenadeGun.AnimSpeedSetting — 榴弹枪动画加速 ======
-    Interceptor.attach(base.add(0xB5F7A0), {
-        onEnter: function(args) {
-            this.self = args[0];
-            try {
-                if (isMyWeaponFn(this.self)) {
-                    var realData = this.self.add(0xEC).readPointer();
-                    if (!realData.isNull()) {
-                        realData.add(0xD0).writeFloat(10.0);
-                    }
-                }
-            } catch(e) {}
-        },
-        onLeave: function(retVal) {
-            if (!this.self) return;
-            try {
-                if (isMyWeaponFn(this.self)) {
-                    var anim = getCharAnim(this.self);
-                    if (!anim.isNull()) {
-                        setAnimSpeed(anim, 10.0);
-                    }
-                }
-            } catch(e) {}
-        }
-    });
-
-    var weaponSet = {};
-
-    function logWpn(self, tag) {
-        var addr = self.toString();
-        if (!weaponSet[addr]) {
-            weaponSet[addr] = true;
-            var rdp = self.add(0xF0).readPointer();
-            var dataPtr = self.add(0x68).readPointer();
-            console.log("[DBG " + tag + "] NEW weapon @" + addr + " data=" + dataPtr + " +0xF0_val=" + rdp);
+        try {
+            ptr.readU8();
+            return true;
+        } catch(e) {
+            return false;
         }
     }
 
-    // ====== 2) GunShoot_Logic — 射击逻辑核心，清除所有限制 ======
-    Interceptor.attach(base.add(0xB62170), {
-        onEnter: function(args) {
-            this.self = args[0];
-            try {
-                if (isMyWeaponFn(this.self)) {
-                    this.self.add(0x110).writeFloat(0.0);
-                    this.self.add(0x108).writeS32(0);
-                    this.self.add(0xF1).writeU8(1);
-                    var realData = this.self.add(0xEC).readPointer();
-                    if (!realData.isNull()) {
-                        realData.add(0xCC).writeFloat(9999.0);
-                        realData.add(0xD0).writeFloat(10.0);
-                    }
-                }
-            } catch(e) {}
-        }
+    var lastHookName = "";
+    var lastHookTime = 0;
+    var hookCallCount = {};
+
+    function printBacktrace(ctx) {
+    }
+
+    function logHookEnter(hookName, self) {
+        lastHookName = hookName + ".enter";
+    }
+
+    function logHookLeave(hookName) {
+    }
+
+    function logHookError(hookName, e, ctx) {
+    }
+
+    Process.setExceptionHandler(function(details) {
+        return false;
     });
 
-    // ====== 2.5) GunShoot — 清除射击间隔 + 半自动 => 全自动 ======
     Interceptor.attach(base.add(0xB624C0), {
         onEnter: function(args) {
             this.self = args[0];
+            this.hookName = "GunShoot";
             try {
+                logHookEnter(this.hookName, this.self);
+                if (!isSafePointer(this.self)) {
+                    return;
+                }
                 if (isMyWeaponFn(this.self)) {
                     isPlayerShooting = true;
-                    logWpn(this.self, "GunShoot.enter");
                 }
-            } catch(e) {}
+            } catch(e) {
+                logHookError(this.hookName + ".onEnter", e, this.context);
+            }
         },
         onLeave: function(retVal) {
-            if (!this.self) return;
             try {
+                if (!this.self) {
+                    logHookLeave(this.hookName);
+                    return;
+                }
                 if (isMyWeaponFn(this.self)) {
-                    this.self.add(0x110).writeFloat(0.0);
-                    this.self.add(0x108).writeS32(0);
-                    this.self.add(0xF1).writeU8(1);
-                    var realData = this.self.add(0xEC).readPointer();
-                    if (!realData.isNull()) {
-                        realData.add(0xCC).writeFloat(9999.0);
-                        realData.add(0xD0).writeFloat(10.0);
+                    if (CONFIG.infiniteFireRate) {
+                        this.self.add(0x110).writeFloat(0.0);
+                        this.self.add(0x108).writeS32(0);
+                        this.self.add(0xF1).writeU8(1);
+                        var realData = this.self.add(0xEC).readPointer();
+                        if (!realData.isNull()) {
+                            realData.add(0xCC).writeFloat(9999.0);
+                            realData.add(0xD0).writeFloat(10.0);
+                        }
                     }
                 }
-            } catch(e) {}
+                logHookLeave(this.hookName);
+            } catch(e) {
+                logHookError(this.hookName + ".onLeave", e, this.context);
+            }
             isPlayerShooting = false;
         }
     });
 
-    // ====== 2.6) WPN_Gun.get_isSemiGun — 半自动→全自动 ======
-    Interceptor.attach(base.add(0xB63AD0), {
-        onEnter: function(args) {
-            logWpn(args[0], "get_isSemiGun");
-        },
-        onLeave: function(retVal) {
-            retVal.replace(0);
-        }
-    });
-
-    // ====== 2.7) WPN_Gun.OnFireBtnPressed — 按下扳机时强制自动模式 ======
-    Interceptor.attach(base.add(0xB6CDA0), {
-        onEnter: function(args) {
-            var self = args[0];
-            try {
-                if (isMyWeaponFn(self)) {
-                    self.add(0xF0).writeU8(0);
-                }
-            } catch(e) {}
-        }
-    });
-
-    // ====== 3) WPN_Gun.OnGenerateFromOwner — 补给箱枪械创建时加速 + 禁用射击后关镜 ======
-    Interceptor.attach(base.add(0xB62900), {
-        onEnter: function(args) {
-            this.self = args[0];
-            logWpn(this.self, "Gun.OnGenerateFromOwner");
-        },
-        onLeave: function(retVal) {
-            if (!this.self) return;
-            try {
-                if (isMyWeaponFn(this.self)) {
-                    var anim = getCharAnim(this.self);
-                    if (!anim.isNull()) {
-                        setAnimSpeed(anim, 10.0);
+    if (CONFIG.animSpeed) {
+        Interceptor.attach(base.add(0xB60B00), {
+            onEnter: function(args) {
+                this.self = args[0];
+                this.hookName = "WPN_Gun.AnimSpeedSetting";
+                try {
+                    logHookEnter(this.hookName, this.self);
+                    if (!isSafePointer(this.self)) {
+                        return;
                     }
-                    var realData = this.self.add(0xEC).readPointer();
-                    if (!realData.isNull()) {
-                        realData.add(0x1BC).writeU8(0);
+                    } catch(e) {}
+            },
+            onLeave: function(retVal) {
+                try {
+                    if (!this.self) {
+                        logHookLeave(this.hookName);
+                        return;
                     }
-                }
-            } catch(e) {}
-        }
-    });
-
-    // ====== 3.5) WPN_Gun.PlayCharacterShootAnim — 播放射击动画时加速 ======
-    Interceptor.attach(base.add(0xB6CDD0), {
-        onEnter: function(args) {
-            var self = args[0];
-            try {
-                if (isMyWeaponFn(self)) {
-                    var anim = getCharAnim(self);
-                    if (!anim.isNull()) {
-                        setAnimSpeed(anim, 10.0);
+                    if (isMyWeaponFn(this.self)) {
+                        var anim = getCharAnim(this.self);
+                        if (!anim.isNull()) {
+                            setAnimSpeed(anim, 10.0);
+                        }
                     }
+                    logHookLeave(this.hookName);
+                } catch(e) {
+                    logHookError(this.hookName, e, this.context);
                 }
-            } catch(e) {}
-        }
-    });
-
-    // ====== 3.6) WPN_Gun.CloseZoom — 阻止射击后自动关镜 ======
-    Interceptor.attach(base.add(0xB60F00), {
-        onEnter: function(args) {
-            if (isPlayerShooting) {
-                args[1] = ptr(0);
             }
-        }
-    });
+        });
 
-    // ====== 4) WPN_RPG.OnGenerateFromOwner — 补给箱RPG/AT4创建时加速 ======
-    Interceptor.attach(base.add(0xB67740), {
-        onEnter: function(args) {
-            this.self = args[0];
-            logWpn(this.self, "RPG.OnGenerateFromOwner");
-            try {
-                var isMy = isMyWeaponFn(this.self);
-                console.log("[TEST] RPG.OnGenerateFromOwner isMyWeapon = " + isMy);
-                var realData = this.self.add(0xF0).readPointer();
-                console.log("[TEST] RPG.OnGenerateFromOwner realData = " + realData);
-            } catch(e) {
-                console.log("[TEST] RPG.OnGenerateFromOwner ERROR: " + e);
+        Interceptor.attach(base.add(0xB66CA0), {
+            onEnter: function(args) {
+                this.self = args[0];
+                this.hookName = "WPN_RPG.AnimSpeedSetting";
+                try {
+                    logHookEnter(this.hookName, this.self);
+                    if (!isSafePointer(this.self)) {
+                        return;
+                    }
+                } catch(e) {}
+            },
+            onLeave: function(retVal) {
+                try {
+                    if (!this.self) {
+                        logHookLeave(this.hookName);
+                        return;
+                    }
+                    if (isMyWeaponFn(this.self)) {
+                        var anim = getCharAnim(this.self);
+                        if (!anim.isNull()) {
+                            setAnimSpeed(anim, 10.0);
+                        }
+                    }
+                    logHookLeave(this.hookName);
+                } catch(e) {
+                    logHookError(this.hookName, e, this.context);
+                }
             }
-        },
-        onLeave: function(retVal) {
-            if (!this.self) return;
-            try {
-                var isMy = isMyWeaponFn(this.self);
-                console.log("[TEST] RPG.OnGenerateFromOwner onLeave isMyWeapon = " + isMy);
-                if (isMy) {
-                    var anim = getCharAnim(this.self);
-                    if (!anim.isNull()) {
-                        setAnimSpeed(anim, 10.0);
+        });
+
+        Interceptor.attach(base.add(0xB5F7A0), {
+            onEnter: function(args) {
+                this.self = args[0];
+                this.hookName = "WPN_GrenadeGun.AnimSpeedSetting";
+                try {
+                    logHookEnter(this.hookName, this.self);
+                    if (!isSafePointer(this.self)) {
+                        return;
                     }
-                    console.log("[DBG] RPG.OnGenerateFromOwner DONE @" + this.self);
-                }
-            } catch(e) {}
-        }
-    });
-
-    // ====== 5) WPN_RPG.OnFireBtnPressed — RPG/AT4 半自动绕过 ======
-    Interceptor.attach(base.add(0xB67700), {
-        onEnter: function(args) {
-            this.self = args[0];
-            logWpn(this.self, "RPG.OnFireBtnPressed");
-        },
-        onLeave: function(retVal) {
-            if (!this.self) return;
-            try {
-                if (isMyWeaponFn(this.self)) {
-                    console.log("[DBG] RPG.OnFireBtnPressed FIRING @" + this.self);
-                    this.self.add(0xF8).writeS32(1);
-                    var realData = this.self.add(0xF0).readPointer();
-                    console.log("[DBG] RPG realData = " + realData);
-                    if (!realData.isNull()) {
-                        realData.add(0xF0).writeFloat(10.0);
-                        realData.add(0xEC).writeFloat(10.0);
-                        console.log("[DBG] RPG fireAnimRate/reloadAnimRate set to 10.0");
+                    if (isMyWeaponFn(this.self)) {
+                        var realData = this.self.add(0xEC).readPointer();
+                        if (!realData.isNull()) {
+                            realData.add(0xD0).writeFloat(10.0);
+                        }
                     }
+                } catch(e) {
+                    logHookError(this.hookName + ".onEnter", e, this.context);
                 }
-            } catch(e) {}
-        }
-    });
+            },
+            onLeave: function(retVal) {
+                try {
+                    if (!this.self) {
+                        logHookLeave(this.hookName);
+                        return;
+                    }
+                    if (isMyWeaponFn(this.self)) {
+                        var anim = getCharAnim(this.self);
+                        if (!anim.isNull()) {
+                            setAnimSpeed(anim, 10.0);
+                        }
+                    }
+                    logHookLeave(this.hookName);
+                } catch(e) {
+                    logHookError(this.hookName + ".onLeave", e, this.context);
+                }
+            }
+        });
 
-    // ====== 6) Recoil.OnGunShot — 清零后坐力 ======
-    Interceptor.attach(base.add(0xB19980), {
-        onEnter: function(args) {
-            this.self = args[0];
-        },
-        onLeave: function(retVal) {
-            if (!isPlayerShooting || !this.self) return;
-            this.self.add(0x68).writeFloat(0.0);
-            this.self.add(0x6C).writeFloat(0.0);
-            this.self.add(0x70).writeFloat(0.0);
-            this.self.add(0x74).writeFloat(0.0);
-            this.self.add(0xA8).writeS32(0);
-        }
-    });
+        Interceptor.attach(base.add(0xB62900), {
+            onEnter: function(args) {
+                this.self = args[0];
+                this.hookName = "WPN_Gun.OnGenerateFromOwner";
+                try {
+                    logHookEnter(this.hookName, this.self);
+                    if (!isSafePointer(this.self)) {
+                        return;
+                    }
+                } catch(e) {
+                    logHookError(this.hookName + ".onEnter", e, this.context);
+                }
+            },
+            onLeave: function(retVal) {
+                try {
+                    if (!this.self) {
+                        logHookLeave(this.hookName);
+                        return;
+                    }
+                    if (isMyWeaponFn(this.self)) {
+                        var anim = getCharAnim(this.self);
+                        if (!anim.isNull()) {
+                            setAnimSpeed(anim, 10.0);
+                        }
+                        if (CONFIG.keepZoom) {
+                            var realData = this.self.add(0xEC).readPointer();
+                            if (!realData.isNull()) {
+                                realData.add(0x1BC).writeU8(0);
+                            }
+                        }
+                    }
+                    logHookLeave(this.hookName);
+                } catch(e) {
+                    logHookError(this.hookName + ".onLeave", e, this.context);
+                }
+            }
+        });
 
-    // ====== 7) Recoil.GetCurrentPerturb — 强制 0 扩散 ======
-    Interceptor.attach(base.add(0xB19420), {
-        onLeave: function(retVal) {
-            retVal.replace(0.0);
-        }
-    });
+        Interceptor.attach(base.add(0xB6CDD0), {
+            onEnter: function(args) {
+                this.self = args[0];
+                this.hookName = "WPN_Gun.PlayCharacterShootAnim";
+                try {
+                    logHookEnter(this.hookName, this.self);
+                    if (!isSafePointer(this.self)) {
+                        return;
+                    }
+                    if (isMyWeaponFn(this.self)) {
+                        var anim = getCharAnim(this.self);
+                        if (!anim.isNull()) {
+                            setAnimSpeed(anim, 10.0);
+                        }
+                    }
+                    logHookLeave(this.hookName);
+                } catch(e) {
+                    logHookError(this.hookName, e, this.context);
+                }
+            }
+        });
 
-    console.log("[+] Loaded:");
-    console.log("    - NativeFunction params fixed");
-    console.log("    - Anim speed x10 (player only)");
-    console.log("    - Infinite fire rate (player only)");
-    console.log("    - Semi-auto \u2192 full-auto (sniper/pistol/RPG, player only)");
-    console.log("    - No recoil (player only)");
-    console.log("    - No spread (all)");
-    console.log("    - Sniper zoom maintained after shoot");
+        Interceptor.attach(base.add(0xB67740), {
+            onEnter: function(args) {
+                this.self = args[0];
+                this.hookName = "WPN_RPG.OnGenerateFromOwner";
+                try {
+                    logHookEnter(this.hookName, this.self);
+                    if (!isSafePointer(this.self)) {
+                        return;
+                    }
+                } catch(e) {
+                    logHookError(this.hookName + ".onEnter", e, this.context);
+                }
+            },
+            onLeave: function(retVal) {
+                try {
+                    if (!this.self) {
+                        logHookLeave(this.hookName);
+                        return;
+                    }
+                    if (isMyWeaponFn(this.self)) {
+                        var anim = getCharAnim(this.self);
+                        if (!anim.isNull()) {
+                            setAnimSpeed(anim, 10.0);
+                        }
+                    }
+                    logHookLeave(this.hookName);
+                } catch(e) {
+                    logHookError(this.hookName + ".onLeave", e, this.context);
+                }
+            }
+        });
+    }
+
+    if (CONFIG.infiniteFireRate) {
+        Interceptor.attach(base.add(0xB62170), {
+            onEnter: function(args) {
+                this.self = args[0];
+                this.hookName = "GunShoot_Logic";
+                try {
+                    logHookEnter(this.hookName, this.self);
+                    if (!isSafePointer(this.self)) {
+                        return;
+                    }
+                    if (isMyWeaponFn(this.self)) {
+                        this.self.add(0x110).writeFloat(0.0);
+                        this.self.add(0x108).writeS32(0);
+                        this.self.add(0xF1).writeU8(1);
+                        var realData = this.self.add(0xEC).readPointer();
+                        if (!realData.isNull()) {
+                            realData.add(0xCC).writeFloat(9999.0);
+                            realData.add(0xD0).writeFloat(10.0);
+                        }
+                    }
+                } catch(e) {
+                    logHookError(this.hookName, e, this.context);
+                }
+            }
+        });
+    }
+
+    if (CONFIG.semiToFullAuto) {
+        Interceptor.attach(base.add(0xB63AD0), {
+            onEnter: function(args) {
+                this.self = args[0];
+                this.hookName = "WPN_Gun.get_isSemiGun";
+                try {
+                    logHookEnter(this.hookName, this.self);
+                    if (!isSafePointer(this.self)) {
+                        return;
+                    }
+                } catch(e) {
+                    logHookError(this.hookName + ".onEnter", e, this.context);
+                }
+            },
+            onLeave: function(retVal) {
+                try {
+                    if (this.self && isMyWeaponFn(this.self)) {
+                        retVal.replace(0);
+                    }
+                    logHookLeave(this.hookName);
+                } catch(e) {
+                    logHookError(this.hookName + ".onLeave", e, this.context);
+                }
+            }
+        });
+
+        Interceptor.attach(base.add(0xB6CDA0), {
+            onEnter: function(args) {
+                var self = args[0];
+                if (!isSafePointer(self)) {
+                    return;
+                }
+                try {
+                    if (isMyWeaponFn(self)) {
+                        self.add(0xF0).writeU8(0);
+                    }
+                } catch(e) {}
+            }
+        });
+
+        Interceptor.attach(base.add(0xB67700), {
+            onEnter: function(args) {
+                this.self = args[0];
+                this.hookName = "WPN_RPG.OnFireBtnPressed";
+                try {
+                    logHookEnter(this.hookName, this.self);
+                } catch(e) {
+                    logHookError(this.hookName + ".onEnter", e, this.context);
+                }
+            },
+            onLeave: function(retVal) {
+                try {
+                    if (!this.self || !isSafePointer(this.self)) {
+                        logHookLeave(this.hookName);
+                        return;
+                    }
+                    if (isMyWeaponFn(this.self)) {
+                        this.self.add(0xF8).writeS32(1);
+                        var realData = this.self.add(0xF0).readPointer();
+                        if (!realData.isNull()) {
+                            realData.add(0xF0).writeFloat(10.0);
+                            realData.add(0xEC).writeFloat(10.0);
+                        }
+                    }
+                    logHookLeave(this.hookName);
+                } catch(e) {
+                    logHookError(this.hookName + ".onLeave", e, this.context);
+                }
+            }
+        });
+    }
+
+    if (CONFIG.noRecoil) {
+        Interceptor.attach(base.add(0xB19980), {
+            onEnter: function(args) {
+                this.self = args[0];
+                this.hookName = "Recoil.OnGunShot";
+                try {
+                    logHookEnter(this.hookName, this.self);
+                    if (!isSafePointer(this.self)) {
+                        return;
+                    }
+                } catch(e) {}
+            },
+            onLeave: function(retVal) {
+                try {
+                    if (!isPlayerShooting || !this.self) {
+                        logHookLeave(this.hookName);
+                        return;
+                    }
+                    this.self.add(0x68).writeFloat(0.0);
+                    this.self.add(0x6C).writeFloat(0.0);
+                    this.self.add(0x70).writeFloat(0.0);
+                    this.self.add(0x74).writeFloat(0.0);
+                    this.self.add(0xA8).writeS32(0);
+                    logHookLeave(this.hookName);
+                } catch(e) {
+                    logHookError(this.hookName + ".onLeave", e, this.context);
+                }
+            }
+        });
+    }
+
+    if (CONFIG.noSpread) {
+        var perturbCallCount = 0;
+        Interceptor.replace(base.add(0xB19420), new NativeCallback(function(self) {
+            perturbCallCount++;
+            if (!isSafePointer(self)) {
+                return 0.0;
+            }
+            if (!isMyWeaponFn(self)) {
+                var originalFn = new NativeFunction(base.add(0xB19420), 'float', ['pointer']);
+                return originalFn(self);
+            }
+            return 0.0;
+        }, 'float', ['pointer']));
+    }
+
+    if (CONFIG.keepZoom) {
+        Interceptor.attach(base.add(0xB60F00), {
+            onEnter: function(args) {
+                this.self = args[0];
+                this.hookName = "WPN_Gun.CloseZoom";
+                try {
+                    logHookEnter(this.hookName, this.self);
+                    if (!isSafePointer(this.self)) {
+                        return;
+                    }
+                    if (isPlayerShooting) {
+                        args[1] = ptr(0);
+                    }
+                    logHookLeave(this.hookName);
+                } catch(e) {
+                    logHookError(this.hookName, e, this.context);
+                }
+            }
+        });
+    }
+
+    console.log("[+] Loaded with feature toggles:");
+    console.log("    - Anim Speed x10: " + (CONFIG.animSpeed ? "ON" : "OFF"));
+    console.log("    - Infinite Fire Rate: " + (CONFIG.infiniteFireRate ? "ON" : "OFF"));
+    console.log("    - Semi-auto → Full-auto: " + (CONFIG.semiToFullAuto ? "ON" : "OFF"));
+    console.log("    - No Recoil: " + (CONFIG.noRecoil ? "ON" : "OFF"));
+    console.log("    - No Spread: " + (CONFIG.noSpread ? "ON" : "OFF"));
+    console.log("    - Keep Zoom: " + (CONFIG.keepZoom ? "ON" : "OFF"));
 })();
