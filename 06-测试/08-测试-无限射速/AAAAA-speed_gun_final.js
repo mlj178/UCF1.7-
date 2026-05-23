@@ -14,10 +14,8 @@
     var CONFIG = {
         animSpeed: true,
         infiniteFireRate: true,
-        semiToFullAuto: true,
         noRecoil: true,
-        noSpread: true,
-        keepZoom: true
+        noSpread: true
     };
 
     function isSafePointer(ptr) {
@@ -105,7 +103,7 @@
                     if (!isSafePointer(this.self)) {
                         return;
                     }
-                    } catch(e) {}
+                } catch(e) {}
             },
             onLeave: function(retVal) {
                 try {
@@ -218,12 +216,6 @@
                         if (!anim.isNull()) {
                             setAnimSpeed(anim, 10.0);
                         }
-                        if (CONFIG.keepZoom) {
-                            var realData = this.self.add(0xEC).readPointer();
-                            if (!realData.isNull()) {
-                                realData.add(0x1BC).writeU8(0);
-                            }
-                        }
                     }
                     logHookLeave(this.hookName);
                 } catch(e) {
@@ -314,77 +306,7 @@
         });
     }
 
-    if (CONFIG.semiToFullAuto) {
-        Interceptor.attach(base.add(0xB63AD0), {
-            onEnter: function(args) {
-                this.self = args[0];
-                this.hookName = "WPN_Gun.get_isSemiGun";
-                try {
-                    logHookEnter(this.hookName, this.self);
-                    if (!isSafePointer(this.self)) {
-                        return;
-                    }
-                } catch(e) {
-                    logHookError(this.hookName + ".onEnter", e, this.context);
-                }
-            },
-            onLeave: function(retVal) {
-                try {
-                    if (this.self && isMyWeaponFn(this.self)) {
-                        retVal.replace(0);
-                    }
-                    logHookLeave(this.hookName);
-                } catch(e) {
-                    logHookError(this.hookName + ".onLeave", e, this.context);
-                }
-            }
-        });
 
-        Interceptor.attach(base.add(0xB6CDA0), {
-            onEnter: function(args) {
-                var self = args[0];
-                if (!isSafePointer(self)) {
-                    return;
-                }
-                try {
-                    if (isMyWeaponFn(self)) {
-                        self.add(0xF0).writeU8(0);
-                    }
-                } catch(e) {}
-            }
-        });
-
-        Interceptor.attach(base.add(0xB67700), {
-            onEnter: function(args) {
-                this.self = args[0];
-                this.hookName = "WPN_RPG.OnFireBtnPressed";
-                try {
-                    logHookEnter(this.hookName, this.self);
-                } catch(e) {
-                    logHookError(this.hookName + ".onEnter", e, this.context);
-                }
-            },
-            onLeave: function(retVal) {
-                try {
-                    if (!this.self || !isSafePointer(this.self)) {
-                        logHookLeave(this.hookName);
-                        return;
-                    }
-                    if (isMyWeaponFn(this.self)) {
-                        this.self.add(0xF8).writeS32(1);
-                        var realData = this.self.add(0xF0).readPointer();
-                        if (!realData.isNull()) {
-                            realData.add(0xF0).writeFloat(10.0);
-                            realData.add(0xEC).writeFloat(10.0);
-                        }
-                    }
-                    logHookLeave(this.hookName);
-                } catch(e) {
-                    logHookError(this.hookName + ".onLeave", e, this.context);
-                }
-            }
-        });
-    }
 
     if (CONFIG.noRecoil) {
         Interceptor.attach(base.add(0xB19980), {
@@ -432,32 +354,9 @@
         }, 'float', ['pointer']));
     }
 
-    if (CONFIG.keepZoom) {
-        Interceptor.attach(base.add(0xB60F00), {
-            onEnter: function(args) {
-                this.self = args[0];
-                this.hookName = "WPN_Gun.CloseZoom";
-                try {
-                    logHookEnter(this.hookName, this.self);
-                    if (!isSafePointer(this.self)) {
-                        return;
-                    }
-                    if (isPlayerShooting) {
-                        args[1] = ptr(0);
-                    }
-                    logHookLeave(this.hookName);
-                } catch(e) {
-                    logHookError(this.hookName, e, this.context);
-                }
-            }
-        });
-    }
-
     console.log("[+] Loaded with feature toggles:");
     console.log("    - Anim Speed x10: " + (CONFIG.animSpeed ? "ON" : "OFF"));
     console.log("    - Infinite Fire Rate: " + (CONFIG.infiniteFireRate ? "ON" : "OFF"));
-    console.log("    - Semi-auto → Full-auto: " + (CONFIG.semiToFullAuto ? "ON" : "OFF"));
     console.log("    - No Recoil: " + (CONFIG.noRecoil ? "ON" : "OFF"));
     console.log("    - No Spread: " + (CONFIG.noSpread ? "ON" : "OFF"));
-    console.log("    - Keep Zoom: " + (CONFIG.keepZoom ? "ON" : "OFF"));
 })();

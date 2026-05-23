@@ -1,0 +1,89 @@
+// gravity.js - 轻重力/高跳 (Gravity + Jump Modifier)
+// 通过定时器遍历玩家列表，修改 velocity.y 实现重力缩放和高跳
+
+modules.gravity = (function() {
+  var enabled = false;
+  var isMyPlayer = null;
+  var state = { enabled: false, mode: 'player_only', gravityScale: 1.0, jumpScale: 1.0 };
+  var gm = null, timer = null, gmHook = null, singletonGetter = null;
+  var loopCount = 0, lastLogTime = 0, playerState = {};
+
+  function hasGm() { if (!gm) return false; try { var v = gm.add(0x1C).readPointer(); return v && !v.isNull(); } catch(e) { return false; } }
+
+  function tryGetGM() {
+    if (gm) return;
+    try { var methodInfo = getGameAssembly().base.add(0xE1CE64).readPointer(); var temp = singletonGetter(methodInfo); if (temp && !temp.isNull()) { gm = temp; playerState = {}; } } catch(e) {}
+  }
+
+  function loop() {
+    if (!state.enabled) return;
+    if (!hasGm()) { tryGetGM(); if (!hasGm()) { gm = null; playerState = {}; return; } }
+    try {
+      var ap = gm.add(0x1C).readPointer();
+      if (!ap || ap.isNull()) return;
+      var total = ap.add(0xC).readU32();
+      if (total < 1 || total > 64) return;
+      loopCount++;
+      for (var i = 0; i < total; i++) {
+        var pp = ap.add(0x10 + i * 8).readPointer();
+        if (!pp || pp.isNull()) continue;
+        if (state.mode !== 'all' && !isMyPlayer(pp)) continue;
+        var key = pp.toString();
+        var isGrounded = pp.add(0x70).readU8() !== 0;
+        var vd = pp.add(0x90).readPointer();
+        if (!vd || vd.isNull()) continue;
+        var curY = vd.add(0x10).readFloat();
+        var prev = playerState[key]; var lastGrounded = prev ? prev.lastGrounded : true;
+        if (lastGrounded && !isGrounded && curY > 0.1 && state.jumpScale !== 1.0) vd.add(0x10).writeFloat(curY * state.jumpScale);
+        if (curY < -0.1 && state.gravityScale < 1.0) vd.add(0x10).writeFloat(curY * state.gravityScale);
+        playerState[key] = { lastGrounded: isGrounded };
+      }
+      var now = Date.now();
+      if (now - lastLogTime > 4000) {
+        lastLogTime = now;
+        for (var i = 0; i < total; i++) { var ppp = ap.add(0x10 + i * 8).readPointer(); if (ppp && !ppp.isNull() && isMyPlayer(ppp)) { var pvd = ppp.add(0x90).readPointer(); if (pvd) { var vy = pvd.add(0x10).readFloat(); var pg = ppp.add(0x70).readU8() !== 0; sendLog('info', '轻重力', 'vy=' + vy.toFixed(3) + ' gnd=' + pg + ' grav=' + state.gravityScale.toFixed(2) + ' jump=' + state.jumpScale.toFixed(2)); } break; } }
+      }
+    } catch(_) {}
+  }
+
+  return {
+    enable: function() {
+      if (enabled) return;
+      var mod = getGameAssembly();
+      if (!mod) { sendLog('error', '轻重力', '无 GameAssembly.dll'); return; }
+      var base = mod.base;
+      isMyPlayer = new NativeFunction(base.add(0xB55FD0), 'bool', ['pointer']);
+      singletonGetter = new NativeFunction(base.add(0x4A8170), 'pointer', ['pointer']);
+      try { gmHook = Interceptor.attach(base.add(0xAF9A90), { onEnter: function(args) { var newGm = args[0]; if (newGm && !newGm.isNull()) { gm = newGm; playerState = {}; } } }); } catch(e) {}
+      tryGetGM();
+      timer = setInterval(loop, 50);
+      state.enabled = true; enabled = true;
+      sendLog('success', '轻重力', '已启用 (重力=' + state.gravityScale.toFixed(1) + ', 跳跃=' + state.jumpScale.toFixed(1) + ', 模式=' + state.mode + ')');
+      sendStatus('gravity', true);
+    },
+    disable: function() {
+      if (!enabled) return;
+      if (timer) { clearInterval(timer); timer = null; }
+      if (gmHook) { try { gmHook.detach(); } catch(e) {} gmHook = null; }
+      state.enabled = false; gm = null; playerState = {}; enabled = false;
+      sendLog('info', '轻重力', '已禁用');
+      sendStatus('gravity', false);
+    },
+    setconfig: function(g, j, m) {
+      state.mode = m || 'player_only'; state.gravityScale = g; state.jumpScale = j;
+      if (state.gravityScale < 0) state.gravityScale = 0; if (state.gravityScale > 1) state.gravityScale = 1;
+      if (state.jumpScale < 1.0) state.jumpScale = 1.0; if (state.jumpScale > 5.0) state.jumpScale = 5.0;
+      if (enabled) { state.enabled = (state.gravityScale < 1.0 || state.jumpScale !== 1.0); } else { state.enabled = false; }
+      sendLog('info', '轻重力', '配置已更新: 重力=' + state.gravityScale.toFixed(1) + ', 跳跃=' + state.jumpScale.toFixed(1) + ', 模式=' + state.mode);
+      return { ok: true };
+    },
+    resetall: function() {
+      state.enabled = false; state.gravityScale = 1.0; state.jumpScale = 1.0;
+      if (timer) { clearInterval(timer); timer = null; }
+      if (gmHook) { try { gmHook.detach(); } catch(e) {} gmHook = null; }
+      gm = null; playerState = {}; enabled = false;
+      sendLog('info', '轻重力', '已重置'); sendStatus('gravity', false); return { ok: true };
+    },
+    getstatus: function() { return { enabled: state.enabled, gravityScale: state.gravityScale, jumpScale: state.jumpScale, haveGM: hasGm() }; }
+  };
+})();

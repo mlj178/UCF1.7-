@@ -62,10 +62,8 @@ class LauncherUI:
         features = [
             ("animSpeed", "动画加速 x10", True),
             ("infiniteFireRate", "无限射速", True),
-            ("semiToFullAuto", "半自动 → 全自动", True),
             ("noRecoil", "无后坐力", True),
             ("noSpread", "无扩散", True),
-            ("keepZoom", "狙击镜保持", True),
         ]
         
         row_frame = None

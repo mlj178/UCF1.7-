@@ -65,7 +65,32 @@ console.log("[*] ======================================");
     try { Interceptor.attach(ADDR_NANO_START, { onEnter: onRoomSwitch }); } catch (e) {}
     console.log("[+] Room hooks installed (monitor only)");
 
+    // === RPG/AT4 无限子弹（WPN_RPG 不走 ConsumeAmmo，需单独处理） ===
+    // WPN_RPG.FillAmmo  (0xB67070): 填满 clip+ammo 到满值
+    // WPN_RPG.Fire      (0xB670A0): RPG/AT4 发射函数，内部内联操作 ObscuredInt 扣弹
+    // 原理: 在 Fire() 扣弹前先填满，扣完后还是满的
+    var ADDR_RPG_FIRE     = base.add(0xB670A0);
+    var ADDR_RPG_FILLAMMO = base.add(0xB67070);
+
+    var rpgFillAmmo = new NativeFunction(ADDR_RPG_FILLAMMO, "void", ["pointer", "pointer"]);
+
+    Interceptor.attach(ADDR_RPG_FIRE, {
+        onEnter: function(args) {
+            try {
+                var self = args[0];
+                if (self && !self.isNull()) {
+                    rpgFillAmmo(self, ptr(0));
+                }
+            } catch (e) {
+                console.log("[RPG Ammo] Error: " + e);
+            }
+        }
+    });
+    console.log("[+] RPG/AT4 infinite ammo via FillAmmo on Fire() (0xB670A0)");
+
     console.log("\n[+] PLAN4 ACTIVE — Zero ammo consumption");
-    console.log("[+] No state, no cache, no memory leaks");
-    console.log("[!] Note: Reload animation will NOT trigger");
+    console.log("[+]   - WPN_Gun.ConsumeAmmo replaced (0xB61140)");
+    console.log("[+]   - Weapon.ConsumeAmmo base fallback (0xB6C310)");
+    console.log("[+]   - RPG/AT4 FillAmmo on Fire enter (0xB67070)");
+    console.log("[!] Note: Reload animation will NOT trigger for guns");
 })();
