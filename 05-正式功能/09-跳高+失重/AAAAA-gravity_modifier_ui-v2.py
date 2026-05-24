@@ -11,15 +11,8 @@ ctk.set_appearance_mode("Dark")
 ctk.set_default_color_theme("blue")
 
 GRAVITY_OPTIONS = [
-    ("正常 (-20)", 1.0),
-    ("低重力 (-10)", 0.5),
-    ("无重力 (0)", 0.0),
-]
-
-JUMP_OPTIONS = [
-    ("正常 (1x)", 1.0),
-    ("3倍 (3x)", 3.0),
-    ("5倍 (5x)", 5.0),
+    ("正常 (1.0)", 1.0),
+    ("低重力 (0.5)", 0.5),
 ]
 
 
@@ -80,12 +73,14 @@ class GravityModifierApp(ctk.CTk):
         ctk.CTkLabel(self.jump_frame, text="▲ 跳跃高度",
                      font=ctk.CTkFont(size=14, weight="bold")).pack(pady=4)
 
-        self.jump_var = ctk.StringVar(value="1.0")
-        for text, val in JUMP_OPTIONS:
-            row = ctk.CTkFrame(self.jump_frame, fg_color="transparent")
-            row.pack(pady=2, fill="x")
-            ctk.CTkRadioButton(row, text=text, variable=self.jump_var,
-                               value=str(val), command=self.on_jump_change).pack(side="left", padx=15)
+        self.jump_slider = ctk.CTkSlider(self.jump_frame, from_=1.0, to=2.0,
+                                          number_of_steps=100, command=self.on_jump_slider_change)
+        self.jump_slider.set(1.0)
+        self.jump_slider.pack(pady=5, fill="x", padx=15)
+
+        self.jump_value_label = ctk.CTkLabel(self.jump_frame, text="当前: 1.00x",
+                                              font=ctk.CTkFont(size=12))
+        self.jump_value_label.pack(pady=2)
 
         # === 作用范围 ===
         self.mode_frame = ctk.CTkFrame(self.main_frame)
@@ -98,6 +93,23 @@ class GravityModifierApp(ctk.CTk):
                            value="player_only").pack(side="left", padx=8)
         ctk.CTkRadioButton(self.mode_frame, text="玩家+BOT", variable=self.mode_var,
                            value="all").pack(side="left", padx=8)
+
+        # === 空中控制 ===
+        self.air_frame = ctk.CTkFrame(self.main_frame)
+        self.air_frame.pack(pady=8, padx=15, fill="x")
+
+        ctk.CTkLabel(self.air_frame, text="✈ 空中控制",
+                     font=ctk.CTkFont(size=14, weight="bold")).pack(pady=4)
+
+        self.air_jump_var = ctk.IntVar(value=0)
+        self.air_move_var = ctk.IntVar(value=0)
+
+        air_row = ctk.CTkFrame(self.air_frame, fg_color="transparent")
+        air_row.pack(pady=2, fill="x")
+        ctk.CTkCheckBox(air_row, text="空中跳跃 (空中可连续跳)",
+                        variable=self.air_jump_var).pack(side="left", padx=15)
+        ctk.CTkCheckBox(air_row, text="空中移动 (空中可WASD)",
+                        variable=self.air_move_var).pack(side="left", padx=15)
 
         # === 按钮 ===
         self.btn_frame = ctk.CTkFrame(self.main_frame)
@@ -134,8 +146,9 @@ class GravityModifierApp(ctk.CTk):
     def on_gravity_change(self):
         self.gravity_scale = float(self.gravity_var.get())
 
-    def on_jump_change(self):
-        self.jump_scale = float(self.jump_var.get())
+    def on_jump_slider_change(self, value):
+        self.jump_scale = round(value, 2)
+        self.jump_value_label.configure(text="当前: " + f"{self.jump_scale:.2f}x")
 
     def connect_to_game(self):
         try:
@@ -152,7 +165,7 @@ class GravityModifierApp(ctk.CTk):
             self._safe_log("进程: " + game_process.name)
             self.session = self.device.attach(game_process.pid)
 
-            js_path = os.path.join(os.path.dirname(__file__), "AAA-gravity_modifier-v8.js")
+            js_path = os.path.join(os.path.dirname(__file__), "AAAAA-gravity_modifier-v8.js")
             with open(js_path, 'r', encoding='utf-8') as f:
                 js_code = f.read()
 
@@ -185,14 +198,16 @@ class GravityModifierApp(ctk.CTk):
             mode = self.mode_var.get()
             gs = self.gravity_scale
             js = self.jump_scale
-            self.log("应用: 重力=" + str(gs) + " 跳跃=" + str(js) + "x 模式=" + mode)
+            aj = bool(self.air_jump_var.get())
+            am = bool(self.air_move_var.get())
+            self.log("应用: 重力=" + str(gs) + " 跳跃=" + str(js) + "x 模式=" + mode + " 空中跳=" + str(aj) + " 空中移动=" + str(am))
 
             r = self.script.exports_sync.installhook()
             if not r.get('ok'):
                 self.log("初始化失败")
                 return
 
-            r = self.script.exports_sync.setconfig(gs, js, mode)
+            r = self.script.exports_sync.setconfig(gs, js, mode, aj, am)
             if r.get('ok'):
                 self.log("✓ 已生效 (退出房间重新进入无需重启)")
             else:
@@ -206,6 +221,13 @@ class GravityModifierApp(ctk.CTk):
             return
         try:
             self.script.exports_sync.resetall()
+            self.gravity_var.set("1.0")
+            self.jump_slider.set(1.0)
+            self.jump_value_label.configure(text="当前: 1.00x")
+            self.gravity_scale = 1.0
+            self.jump_scale = 1.0
+            self.air_jump_var.set(0)
+            self.air_move_var.set(0)
             self.log("✓ 已重置")
         except Exception as e:
             self.log("重置失败: " + str(e))
