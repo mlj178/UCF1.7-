@@ -10,7 +10,9 @@
         enabled: false,
         mode: 'player_only',
         gravityScale: 1.0,
-        jumpScale: 1.0
+        jumpScale: 1.0,
+        airJump: false,
+        airMove: false
     };
     var gm = null;
     var timer = null;
@@ -70,6 +72,22 @@
                     vd.add(0x10).writeFloat(curY * state.gravityScale);
                 }
 
+                if (state.airMove && !isGrounded) {
+                    pp.add(0x88).writeFloat(999999.0);
+                }
+
+                if (state.airJump && !isGrounded) {
+                    try {
+                        var playerInput = pp.add(0x9C).readPointer();
+                        if (playerInput && !playerInput.isNull()) {
+                            var jumpBtnState = playerInput.add(0xC).readInt();
+                            if (jumpBtnState === 2) {
+                                vd.add(0x10).writeFloat(10.0);
+                            }
+                        }
+                    } catch(_) {}
+                }
+
                 playerState[key] = { lastGrounded: isGrounded };
             }
 
@@ -86,7 +104,7 @@
                     if (pvd) {
                         var vy = pvd.add(0x10).readFloat();
                         var pg = playerPP.add(0x70).readU8() !== 0;
-                        send('vy=' + vy.toFixed(3) + ' gnd=' + pg + ' grav=' + state.gravityScale.toFixed(2) + ' jump=' + state.jumpScale.toFixed(2));
+                        send('vy=' + vy.toFixed(3) + ' gnd=' + pg + ' grav=' + state.gravityScale.toFixed(2) + ' jump=' + state.jumpScale.toFixed(2) + ' airJ=' + state.airJump + ' airM=' + state.airMove);
                     }
                 }
             }
@@ -100,15 +118,17 @@
             return { ok: true };
         },
 
-        setconfig: function(gravityScale, jumpScale, mode) {
+        setconfig: function(gravityScale, jumpScale, mode, airJump, airMove) {
             state.mode = mode || 'player_only';
             state.gravityScale = gravityScale;
             state.jumpScale = jumpScale;
+            state.airJump = !!airJump;
+            state.airMove = !!airMove;
             if (state.gravityScale < 0) state.gravityScale = 0;
             if (state.gravityScale > 1) state.gravityScale = 1;
             if (state.jumpScale < 1.0) state.jumpScale = 1.0;
-            if (state.jumpScale > 5.0) state.jumpScale = 5.0;
-            state.enabled = (state.gravityScale < 1.0 || state.jumpScale !== 1.0);
+            if (state.jumpScale > 2.0) state.jumpScale = 2.0;
+            state.enabled = (state.gravityScale < 1.0 || state.jumpScale !== 1.0 || state.airJump || state.airMove);
             return { ok: true };
         },
 
@@ -116,16 +136,36 @@
             state.enabled = false;
             state.gravityScale = 1.0;
             state.jumpScale = 1.0;
+            state.airJump = false;
+            state.airMove = false;
             return { ok: true };
         },
 
         getstatus: function() {
-            return { enabled: state.enabled, gravityScale: state.gravityScale, jumpScale: state.jumpScale, haveGM: hasGm() };
+            return { enabled: state.enabled, gravityScale: state.gravityScale, jumpScale: state.jumpScale, airJump: state.airJump, airMove: state.airMove, haveGM: hasGm() };
         },
 
         startmonitor: function() { return { ok: true }; },
         stopmonitor: function() { return { ok: true }; }
     };
+
+    // Hook OnJumpBtnDown - force isGrounded=true when airJump enabled
+    try {
+        Interceptor.attach(base.add(0xB51780), {
+            onEnter: function(args) {
+                if (!state.airJump || !state.enabled) return;
+                try {
+                    var pp = args[0];
+                    if (pp && !pp.isNull()) {
+                        var grounded = pp.add(0x70).readU8();
+                        if (!grounded) {
+                            pp.add(0x70).writeU8(1);
+                        }
+                    }
+                } catch(_) {}
+            }
+        });
+    } catch(e) {}
 
     // Capture GM - always update, reset playerState on change
     try {

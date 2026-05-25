@@ -16,6 +16,7 @@
         keepZoom: true,
         noRecoil: true,
         noSpread: true,
+        fastFireRate: false,
         animSpeed: true
     };
 
@@ -26,6 +27,21 @@
         try {
             ptr.readU8();
             return true;
+        } catch(e) {
+            return false;
+        }
+    }
+
+    function safeIsMyWeapon(weapon) {
+        if (!isSafePointer(weapon)) {
+            return false;
+        }
+        try {
+            var addr = weapon.and(0xFFFFFFFF);
+            if (addr.compare(0x10000) < 0) {
+                return false;
+            }
+            return isMyWeaponFn(weapon);
         } catch(e) {
             return false;
         }
@@ -74,7 +90,7 @@
                 if (!isSafePointer(this.self)) {
                     return;
                 }
-                if (isMyWeaponFn(this.self)) {
+                if (safeIsMyWeapon(this.self)) {
                     isPlayerShooting = true;
                 }
             } catch(e) {
@@ -87,15 +103,25 @@
                     logHookLeave(this.hookName);
                     return;
                 }
-                if (isMyWeaponFn(this.self) && isGunWeapon(this.self)) {
-                    this.self.add(0x110).writeFloat(0.0);
-                    this.self.add(0x108).writeS32(0);
-                    this.self.add(0xF1).writeU8(1);
-                    var realData = this.self.add(0xEC).readPointer();
-                    if (!realData.isNull()) {
-                        realData.add(0xCC).writeFloat(9999.0);
-                        realData.add(0xD0).writeFloat(10.0);
-                        if (CONFIG.keepZoom) {
+                if (safeIsMyWeapon(this.self) && isGunWeapon(this.self)) {
+                    if (CONFIG.fastFireRate) {
+                        this.self.add(0x110).writeFloat(0.0);
+                        this.self.add(0x108).writeS32(0);
+                        this.self.add(0xF1).writeU8(1);
+                        var realData = this.self.add(0xEC).readPointer();
+                        if (!realData.isNull()) {
+                            realData.add(0xCC).writeFloat(9999.0);
+                        }
+                    }
+                    if (CONFIG.animSpeed) {
+                        var realData = this.self.add(0xEC).readPointer();
+                        if (!realData.isNull()) {
+                            realData.add(0xD0).writeFloat(10.0);
+                        }
+                    }
+                    if (CONFIG.keepZoom) {
+                        var realData = this.self.add(0xEC).readPointer();
+                        if (!realData.isNull()) {
                             realData.add(0x1BC).writeU8(0);
                         }
                     }
@@ -108,7 +134,7 @@
         }
     });
 
-    if (CONFIG.keepZoom || CONFIG.animSpeed) {
+    if (CONFIG.keepZoom || CONFIG.animSpeed || CONFIG.fastFireRate) {
         Interceptor.attach(base.add(0xB62900), {
             onEnter: function(args) {
                 this.self = args[0];
@@ -128,7 +154,16 @@
                         logHookLeave(this.hookName);
                         return;
                     }
-                    if (isMyWeaponFn(this.self) && isGunWeapon(this.self)) {
+                    if (safeIsMyWeapon(this.self) && isGunWeapon(this.self)) {
+                        if (CONFIG.fastFireRate) {
+                            this.self.add(0x110).writeFloat(0.0);
+                            this.self.add(0x108).writeS32(0);
+                            this.self.add(0xF1).writeU8(1);
+                            var realData = this.self.add(0xEC).readPointer();
+                            if (!realData.isNull()) {
+                                realData.add(0xCC).writeFloat(9999.0);
+                            }
+                        }
                         if (CONFIG.keepZoom) {
                             var realData = this.self.add(0xEC).readPointer();
                             if (!realData.isNull()) {
@@ -136,7 +171,7 @@
                             }
                         }
                     }
-                    if (isMyWeaponFn(this.self)) {
+                    if (safeIsMyWeapon(this.self)) {
                         if (CONFIG.animSpeed) {
                             var anim = getCharAnim(this.self);
                             if (!anim.isNull()) {
@@ -168,7 +203,7 @@
             },
             onLeave: function(retVal) {
                 try {
-                    if (this.self && isMyWeaponFn(this.self)) {
+                    if (this.self && safeIsMyWeapon(this.self)) {
                         retVal.replace(0);
                     }
                     logHookLeave(this.hookName);
@@ -185,7 +220,7 @@
                     return;
                 }
                 try {
-                    if (isMyWeaponFn(self) && isGunWeapon(self)) {
+                    if (safeIsMyWeapon(self) && isGunWeapon(self)) {
                         self.add(0xF0).writeU8(0);
                     }
                 } catch(e) {}
@@ -208,7 +243,7 @@
                         logHookLeave(this.hookName);
                         return;
                     }
-                    if (isMyWeaponFn(this.self)) {
+                    if (safeIsMyWeapon(this.self)) {
                         this.self.add(0xF8).writeS32(1);
                         var realData = this.self.add(0xF0).readPointer();
                         if (!realData.isNull()) {
@@ -234,7 +269,7 @@
                     if (!isSafePointer(this.self)) {
                         return;
                     }
-                    if (isMyWeaponFn(this.self)) {
+                    if (safeIsMyWeapon(this.self)) {
                         args[1] = ptr(0);
                     }
                     logHookLeave(this.hookName);
@@ -283,7 +318,7 @@
             if (!isSafePointer(self)) {
                 return 0.0;
             }
-            if (!isMyWeaponFn(self)) {
+            if (!safeIsMyWeapon(self)) {
                 var originalFn = new NativeFunction(base.add(0xB19420), 'float', ['pointer']);
                 return originalFn(self);
             }
@@ -309,7 +344,7 @@
                         logHookLeave(this.hookName);
                         return;
                     }
-                    if (isMyWeaponFn(this.self)) {
+                    if (safeIsMyWeapon(this.self)) {
                         var anim = getCharAnim(this.self);
                         if (!anim.isNull()) {
                             setAnimSpeed(anim, 10.0);
@@ -339,7 +374,7 @@
                         logHookLeave(this.hookName);
                         return;
                     }
-                    if (isMyWeaponFn(this.self)) {
+                    if (safeIsMyWeapon(this.self)) {
                         var anim = getCharAnim(this.self);
                         if (!anim.isNull()) {
                             setAnimSpeed(anim, 10.0);
@@ -361,7 +396,7 @@
                     if (!isSafePointer(this.self)) {
                         return;
                     }
-                    if (isMyWeaponFn(this.self)) {
+                    if (safeIsMyWeapon(this.self)) {
                         var realData = this.self.add(0xEC).readPointer();
                         if (!realData.isNull()) {
                             realData.add(0xD0).writeFloat(10.0);
@@ -377,7 +412,7 @@
                         logHookLeave(this.hookName);
                         return;
                     }
-                    if (isMyWeaponFn(this.self)) {
+                    if (safeIsMyWeapon(this.self)) {
                         var anim = getCharAnim(this.self);
                         if (!anim.isNull()) {
                             setAnimSpeed(anim, 10.0);
@@ -399,7 +434,7 @@
                     if (!isSafePointer(this.self)) {
                         return;
                     }
-                    if (isMyWeaponFn(this.self)) {
+                    if (safeIsMyWeapon(this.self)) {
                         var anim = getCharAnim(this.self);
                         if (!anim.isNull()) {
                             setAnimSpeed(anim, 10.0);
@@ -411,7 +446,9 @@
                 }
             }
         });
+    }
 
+    if (CONFIG.animSpeed || CONFIG.fastFireRate) {
         Interceptor.attach(base.add(0xB67740), {
             onEnter: function(args) {
                 this.self = args[0];
@@ -431,10 +468,21 @@
                         logHookLeave(this.hookName);
                         return;
                     }
-                    if (isMyWeaponFn(this.self)) {
-                        var anim = getCharAnim(this.self);
-                        if (!anim.isNull()) {
-                            setAnimSpeed(anim, 10.0);
+                    if (safeIsMyWeapon(this.self)) {
+                        if (CONFIG.fastFireRate) {
+                            this.self.add(0x110).writeFloat(0.0);
+                            this.self.add(0x108).writeS32(0);
+                            this.self.add(0xF1).writeU8(1);
+                            var realData = this.self.add(0xEC).readPointer();
+                            if (!realData.isNull()) {
+                                realData.add(0xCC).writeFloat(9999.0);
+                            }
+                        }
+                        if (CONFIG.animSpeed) {
+                            var anim = getCharAnim(this.self);
+                            if (!anim.isNull()) {
+                                setAnimSpeed(anim, 10.0);
+                            }
                         }
                     }
                     logHookLeave(this.hookName);
@@ -473,7 +521,7 @@
                 return;
             }
             
-            if (!isMyWeaponFn(weapon)) {
+            if (!safeIsMyWeapon(weapon)) {
                 console.log("[-] Not player weapon, skip init");
                 return;
             }
@@ -499,24 +547,31 @@
                 console.log("[+] SemiToFullAuto initialized on startup");
             }
             
-            weapon.add(0x110).writeFloat(0.0);
-            weapon.add(0x108).writeS32(0);
-            weapon.add(0xF1).writeU8(1);
-            realData.add(0xCC).writeFloat(9999.0);
-            realData.add(0xD0).writeFloat(10.0);
-            console.log("[+] FireRate and AnimSpeed initialized on startup");
+            if (CONFIG.fastFireRate) {
+                weapon.add(0x110).writeFloat(0.0);
+                weapon.add(0x108).writeS32(0);
+                weapon.add(0xF1).writeU8(1);
+                realData.add(0xCC).writeFloat(9999.0);
+                console.log("[+] FireRate initialized on startup");
+            }
+            
+            if (CONFIG.animSpeed) {
+                realData.add(0xD0).writeFloat(10.0);
+                console.log("[+] AnimSpeed initialized on startup");
+            }
             
         } catch(e) {
             console.log("[-] initWeaponOnStartup error: " + e);
         }
     }
 
-    initWeaponOnStartup();
+    // initWeaponOnStartup(); // 已禁用：启动时游戏未完全初始化，会导致 access violation
 
     console.log("[+] Loaded with feature toggles:");
     console.log("    - Semi-auto → Full-auto: " + (CONFIG.semiToFullAuto ? "ON" : "OFF"));
     console.log("    - Keep Zoom: " + (CONFIG.keepZoom ? "ON" : "OFF"));
     console.log("    - No Recoil: " + (CONFIG.noRecoil ? "ON" : "OFF"));
     console.log("    - No Spread: " + (CONFIG.noSpread ? "ON" : "OFF"));
+    console.log("    - Fast Fire Rate: " + (CONFIG.fastFireRate ? "ON" : "OFF"));
     console.log("    - Anim Speed x10: " + (CONFIG.animSpeed ? "ON" : "OFF"));
 })();

@@ -64,6 +64,7 @@ class LauncherUI:
             ("keepZoom", "狙击镜保持", True),
             ("noRecoil", "无后坐力", True),
             ("noSpread", "无散射", True),
+            ("fastFireRate", "射速加快", False),
             ("animSpeed", "动画加速 x10", True),
         ]
         
@@ -213,12 +214,12 @@ class LauncherUI:
             for key, var in self.feature_vars.items():
                 status = "✅" if var.get() else "❌"
                 feature_names = {
-                    "animSpeed": "动画加速",
-                    "infiniteFireRate": "无限射速",
                     "semiToFullAuto": "半自动→全自动",
+                    "keepZoom": "狙击镜保持",
                     "noRecoil": "无后坐力",
-                    "noSpread": "无扩散",
-                    "keepZoom": "狙击镜保持"
+                    "noSpread": "无散射",
+                    "fastFireRate": "射速加快",
+                    "animSpeed": "动画加速"
                 }
                 self.log(f"    {status} {feature_names.get(key, key)}")
             self.root.after(0, lambda: self.status_var.set("已连接"))
