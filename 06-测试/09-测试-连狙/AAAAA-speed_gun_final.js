@@ -159,9 +159,10 @@
                             this.self.add(0x110).writeFloat(0.0);
                             this.self.add(0x108).writeS32(0);
                             this.self.add(0xF1).writeU8(1);
-                            var realData = this.self.add(0xEC).readPointer();
+                            var realData = this.self.add(0xF0).readPointer();
                             if (!realData.isNull()) {
-                                realData.add(0xCC).writeFloat(9999.0);
+                                realData.add(0xF0).writeFloat(10.0);
+                                realData.add(0xEC).writeFloat(10.0);
                             }
                         }
                         if (CONFIG.keepZoom) {
