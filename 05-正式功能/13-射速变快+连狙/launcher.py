@@ -12,12 +12,13 @@ class LauncherUI:
     def __init__(self, root):
         self.root = root
         self.root.title("终极武器修改 - Launcher")
-        self.root.geometry("700x500")
+        self.root.geometry("700x600")
         self.root.resizable(True, True)
         
         self.session = None
         self.script = None
         self.is_running = False
+        self.speed_multiplier = 1.0
         
         self.setup_ui()
         
@@ -25,7 +26,7 @@ class LauncherUI:
         main_frame = ttk.Frame(self.root, padding="10")
         main_frame.pack(fill=tk.BOTH, expand=True)
         
-        title_label = ttk.Label(main_frame, text="🔫 终极武器修改工具", font=("Arial", 14, "bold"))
+        title_label = ttk.Label(main_frame, text="终极武器修改工具", font=("Arial", 14, "bold"))
         title_label.pack(pady=(0, 10))
         
         input_frame = ttk.LabelFrame(main_frame, text="配置", padding="10")
@@ -54,13 +55,43 @@ class LauncherUI:
         script_path = os.path.join(script_dir, "AAAAA-speed_gun_final.js")
         self.script_entry.insert(0, script_path)
         
+        speed_frame = ttk.LabelFrame(main_frame, text="速度控制", padding="10")
+        speed_frame.pack(fill=tk.X, pady=(0, 10))
+        
+        speed_control_frame = ttk.Frame(speed_frame)
+        speed_control_frame.pack(fill=tk.X, pady=5)
+        
+        ttk.Label(speed_control_frame, text="速度倍率:").pack(side=tk.LEFT)
+        
+        self.speed_var = tk.DoubleVar(value=1.0)
+        self.speed_slider = ttk.Scale(
+            speed_control_frame, 
+            from_=0.1, 
+            to=5.0, 
+            variable=self.speed_var,
+            orient=tk.HORIZONTAL,
+            length=300,
+            command=self.on_speed_change
+        )
+        self.speed_slider.pack(side=tk.LEFT, padx=10)
+        
+        self.speed_label = ttk.Label(speed_control_frame, text="1.0x", width=8)
+        self.speed_label.pack(side=tk.LEFT)
+        
+        ttk.Button(speed_control_frame, text="重置", command=self.reset_speed, width=8).pack(side=tk.LEFT, padx=10)
+        
+        speed_info_frame = ttk.Frame(speed_frame)
+        speed_info_frame.pack(fill=tk.X, pady=5)
+        
+        ttk.Label(speed_info_frame, text="说明: 滑块控制射速和动画速度的倍率 (0.1x ~ 5.0x)", foreground="gray").pack(side=tk.LEFT)
+        
         btn_frame = ttk.Frame(main_frame)
         btn_frame.pack(fill=tk.X, pady=10)
         
-        self.start_btn = ttk.Button(btn_frame, text="▶ 启动", command=self.start_script, width=15)
+        self.start_btn = ttk.Button(btn_frame, text="启动", command=self.start_script, width=15)
         self.start_btn.pack(side=tk.LEFT, padx=5)
         
-        self.stop_btn = ttk.Button(btn_frame, text="⏹ 停止", command=self.stop_script, width=15, state=tk.DISABLED)
+        self.stop_btn = ttk.Button(btn_frame, text="停止", command=self.stop_script, width=15, state=tk.DISABLED)
         self.stop_btn.pack(side=tk.LEFT, padx=5)
         
         ttk.Button(btn_frame, text="清空日志", command=self.clear_log, width=15).pack(side=tk.LEFT, padx=5)
@@ -77,6 +108,27 @@ class LauncherUI:
         
         if self.auto_var.get():
             self.root.after(1000, self.auto_connect)
+            
+    def on_speed_change(self, value):
+        self.speed_multiplier = float(value)
+        self.speed_label.config(text=f"{self.speed_multiplier:.1f}x")
+        
+        if self.script and self.is_running:
+            try:
+                self.script.post({"type": "set_speed", "multiplier": self.speed_multiplier})
+            except Exception as e:
+                self.log(f"[-] 发送速度参数失败: {e}")
+                
+    def reset_speed(self):
+        self.speed_var.set(1.0)
+        self.speed_multiplier = 1.0
+        self.speed_label.config(text="1.0x")
+        
+        if self.script and self.is_running:
+            try:
+                self.script.post({"type": "set_speed", "multiplier": 1.0})
+            except:
+                pass
             
     def find_process(self):
         pid = self._find_pid()
@@ -161,19 +213,22 @@ class LauncherUI:
             self.script.on('message', on_message)
             self.script.load()
             
-            self.log("[+] ✅ 已连接到游戏进程！")
+            self.script.post({"type": "set_speed", "multiplier": self.speed_multiplier})
+            
+            self.log("[+] 已连接到游戏进程！")
             self.log("[+] 功能已启用：")
             self.log("    - 无限射速（所有枪械）")
             self.log("    - 无扩散")
             self.log("    - 半自动改全自动（FAL, AT4, 手枪）")
             self.log("    - 快速装填")
+            self.log(f"    - 当前速度倍率: {self.speed_multiplier:.1f}x")
             self.root.after(0, lambda: self.status_var.set("已连接"))
             
         except frida.ProcessNotFoundError:
-            self.log("[-] ❌ 进程不存在或已退出")
+            self.log("[-] 进程不存在或已退出")
             self.root.after(0, self.on_script_end)
         except Exception as e:
-            self.log(f"[-] ❌ 连接失败: {e}")
+            self.log(f"[-] 连接失败: {e}")
             self.root.after(0, self.on_script_end)
             
     def stop_script(self):
