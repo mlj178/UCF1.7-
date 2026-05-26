@@ -110,7 +110,7 @@
     // 层值来: IDA反编译 LayerConstant..cctor() @0x10AE7CD0
     //   Environment=0  AirWall=2  HitBox=3  Water=4  Entity=7
     //   LM_OnlyEnvironment = 1<<0 = 1 (只有墙体,不含玩家HitBox/Entity)
-    LAYER_WALL:        1,      // Physics.Linecast layerMask: 只检测墙体
+    LAYER_WALL:        25,     // LM_GunShoot = Environment(1) + Water(16) + HitBox(8), 游戏开枪检测用
 
     // 指针大小
     ptrSize:            4,
@@ -155,6 +155,7 @@
       visibilityCheck: true,   // 默认开启：只有可见敌人才瞄准
       autoAim:         false,  // false=按按键才瞄, true=一直瞄
       debugLog:        true,   // true=输出详细调试日志
+      vischeckDll:     'D:\\trae_project\\ucf1.7-modifier\\05-正式功能\\11-自瞄\\vischeck.dll',
     };
 
     // ——— NativeFunction 缓存 ———
@@ -236,9 +237,14 @@
         getMouseBtnFn = new NativeFunction(base.add(RVA.Input_GetMouseButton), 'bool', ['int32', 'pointer']);
       } catch(e) { console.log('[初始化] getMouseBtnFn 失败: ' + e.message); getMouseBtnFn = null; }
 
+      // ——— 可见性检测: 加载辅助 DLL (编译时自动处理 Vector3 按值传参) ———
       try {
-        linecastFn = new NativeFunction(base.add(RVA.Physics_Linecast), 'bool', ['pointer', 'pointer', 'int32', 'pointer']);
-      } catch(e) { console.log('[初始化] linecastFn 失败: ' + e.message); linecastFn = null; }
+        var visMod = Module.load(CONFIG.vischeckDll);
+        var setFn = new NativeFunction(visMod.findExportByName('SetLinecast'), 'void', ['pointer']);
+        setFn(base.add(RVA.Physics_Linecast));
+        linecastFn = new NativeFunction(visMod.findExportByName('CheckVisible'), 'bool', ['pointer', 'pointer', 'int32']);
+        console.log('[初始化] vischeck.dll 已加载, Linecast=0x' + RVA.Physics_Linecast.toString(16));
+      } catch(e) { console.log('[初始化] vischeck.dll 失败: ' + e.message); linecastFn = null; }
 
       console.log('[初始化] 全部 NativeFunction 就绪');
       return true;
@@ -375,7 +381,7 @@
         buf2.writeFloat(to.x);
         buf2.add(4).writeFloat(to.y);
         buf2.add(8).writeFloat(to.z);
-        var hit = linecastFn(buf1, buf2, OFF.LAYER_WALL, ptr(0));  // LM_OnlyEnvironment=1, 只检测墙体
+        var hit = linecastFn(buf1, buf2, OFF.LAYER_WALL);  // vischeck.dll: CheckVisible(float* from, float* to, int mask) → bool
         if (_visLogCount < 10) { console.log('[可见性] Linecast: hit=' + hit + ' layerMask=' + OFF.LAYER_WALL); _visLogCount++; }
         return !hit;  // hit=true → 有墙体遮挡 → 不可见
       } catch(e) {
