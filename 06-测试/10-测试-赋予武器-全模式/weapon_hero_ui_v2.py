@@ -400,6 +400,15 @@ class WeaponHeroUI(ctk.CTk):
         
         self.refresh_weapon_list()
 
+    def _safe_call(self, func):
+        try:
+            if self._initialized:
+                self.after(0, func)
+            else:
+                func()
+        except RuntimeError:
+            pass
+
     def start_auto_connect(self):
         def connect_thread():
             while not self.is_connected:
@@ -415,25 +424,25 @@ class WeaponHeroUI(ctk.CTk):
         threading.Thread(target=connect_thread, daemon=True).start()
 
     def connect_to_game(self, pid):
-        def connect():
-            try:
-                self.session = frida.attach(pid)
-                with open(JS_FILE, 'r', encoding='utf-8') as f:
-                    script_code = f.read()
+        try:
+            self.session = frida.attach(pid)
+            with open(JS_FILE, 'r', encoding='utf-8') as f:
+                script_code = f.read()
 
-                self.script = self.session.create_script(script_code)
-                self.script.on('message', self.on_message)
-                self.script.load()
+            self.script = self.session.create_script(script_code)
+            self.script.on('message', self.on_message)
+            self.script.load()
 
-                self.is_connected = True
-                self.after(0, lambda: self.update_status(f"✅ 已连接到 {GAME_PROCESS_NAME} (PID: {pid})", COLOR_GREEN))
-                self.log(f"[SUCCESS] 已连接到游戏进程: {GAME_PROCESS_NAME} (PID: {pid})")
+            self.is_connected = True
+            self._safe_call(lambda: self.update_status(f"✅ 已连接到 {GAME_PROCESS_NAME} (PID: {pid})", COLOR_GREEN))
+            self._safe_call(lambda: self.log(f"[SUCCESS] 已连接到游戏进程: {GAME_PROCESS_NAME} (PID: {pid})"))
 
-            except Exception as e:
-                self.after(0, lambda: self.update_status(f"❌ 连接失败: {e}", COLOR_RED))
-                self.log(f"[ERROR] 连接失败: {e}")
-
-        threading.Thread(target=connect, daemon=True).start()
+        except Exception as e:
+            self.is_connected = False
+            self.script = None
+            self.session = None
+            self._safe_call(lambda: self.update_status(f"❌ 连接失败: {e}", COLOR_RED))
+            self._safe_call(lambda: self.log(f"[ERROR] 连接失败: {e}"))
 
     def update_status(self, text, color):
         self.status_label.configure(text=text, text_color=color)
@@ -455,10 +464,14 @@ class WeaponHeroUI(ctk.CTk):
                 level = payload.get('level', 'info').upper()
                 module = payload.get('module', 'Unknown')
                 msg = payload.get('message', '')
-                if self._initialized:
-                    self.after(0, lambda: self.log(f"[{level}][{module}] {msg}"))
+                self._safe_call(lambda: self.log(f"[{level}][{module}] {msg}"))
+            elif payload['type'] == 'giveWeaponResult':
+                task_id = payload.get('taskId', '?')
+                success = payload.get('success', False)
+                if success:
+                    self._safe_call(lambda tid=task_id: self.log(f"[SUCCESS] ✅ 武器赋予成功! (taskId={tid})"))
                 else:
-                    print(f"[{level}][{module}] {msg}")
+                    self._safe_call(lambda tid=task_id: self.log(f"[ERROR] ❌ 武器赋予失败 (taskId={tid})"))
 
     def give_weapon(self):
         if not self.is_connected:
@@ -477,7 +490,7 @@ class WeaponHeroUI(ctk.CTk):
             self.log("[ERROR] 武器ID必须是数字")
 
     def give_weapon_by_id(self, weapon_id):
-        if not self.is_connected:
+        if not self.is_connected or not self.script:
             self.log("[ERROR] 未连接到游戏")
             return
 
@@ -488,11 +501,31 @@ class WeaponHeroUI(ctk.CTk):
 
         def call():
             try:
+                if not self.script or not self.is_connected:
+                    self._safe_call(lambda: self.log("[ERROR] 脚本已断开，请重新连接"))
+                    return
                 result = self.script.exports_sync.giveweapon(weapon_id, auto_giveup, auto_select)
-                self.after(0, lambda r=result: self.log(f"[SUCCESS] 武器赋予结果: {r}"))
+                if isinstance(result, str) and result.startswith('pending:'):
+                    task_id = result.split(':')[1]
+                    self._safe_call(lambda tid=task_id: self.log(f"[INFO] ⏳ 任务已入队 (taskId={tid})，等待主线程执行..."))
+                else:
+                    self._safe_call(lambda r=result: self.log(f"[SUCCESS] 武器赋予结果: {r}"))
+            except frida.InvalidOperationError:
+                self.is_connected = False
+                self.script = None
+                self.session = None
+                self._safe_call(lambda: self.update_status("⏳ 连接已断开，等待重连...", COLOR_ORANGE))
+                self._safe_call(lambda: self.log("[ERROR] Frida会话已失效，请重新连接"))
             except Exception as ex:
                 error_msg = str(ex)
-                self.after(0, lambda msg=error_msg: self.log(f"[ERROR] 武器赋予失败: {msg}"))
+                if "script has been destroyed" in error_msg:
+                    self.is_connected = False
+                    self.script = None
+                    self.session = None
+                    self._safe_call(lambda: self.update_status("⏳ 连接已断开，等待重连...", COLOR_ORANGE))
+                    self._safe_call(lambda: self.log("[ERROR] 脚本已销毁，请重新连接"))
+                else:
+                    self._safe_call(lambda msg=error_msg: self.log(f"[ERROR] 武器赋予失败: {msg}"))
 
         threading.Thread(target=call, daemon=True).start()
 
@@ -502,14 +535,23 @@ class WeaponHeroUI(ctk.CTk):
         self.log("[INFO] 日志已清空")
 
     def disconnect(self):
-        if self.script:
-            self.script.unload()
-        if self.session:
-            self.session.detach()
+        try:
+            if self.script:
+                self.script.unload()
+        except:
+            pass
+        try:
+            if self.session:
+                self.session.detach()
+        except:
+            pass
 
         self.is_connected = False
+        self.script = None
+        self.session = None
         self.update_status("⏳ 等待连接...", COLOR_ORANGE)
-        self.log("[INFO] 已断开连接")
+        self.log("[INFO] 已断开连接，将在2秒后自动重连...")
+        self.after(2000, self.start_auto_connect)
 
 
 if __name__ == "__main__":
