@@ -107,6 +107,11 @@
     List_items:         0x08,   // T[] _items
     List_size:          0x0C,   // int _size  ← 实际元素数量！
 
+    // 层值来: IDA反编译 LayerConstant..cctor() @0x10AE7CD0
+    //   Environment=0  AirWall=2  HitBox=3  Water=4  Entity=7
+    //   LM_OnlyEnvironment = 1<<0 = 1 (只有墙体,不含玩家HitBox/Entity)
+    LAYER_WALL:        1,      // Physics.Linecast layerMask: 只检测墙体
+
     // 指针大小
     ptrSize:            4,
   };
@@ -147,7 +152,7 @@
       smoothness:      1.0,    // 1.0 = 瞬间瞄准
       maxAimDistance:  200.0,
       maxAngleFOV:     30.0,
-      visibilityCheck: false,
+      visibilityCheck: true,   // 默认开启：只有可见敌人才瞄准
       autoAim:         false,  // false=按按键才瞄, true=一直瞄
       debugLog:        true,   // true=输出详细调试日志
     };
@@ -179,17 +184,14 @@
         var base = getGameAssembly().base;
         var mi = base.add(RVA.GM_Singleton_MethodInfo).readPointer();
         if (mi.isNull()) {
-          console.log('[GM] MethodInfo 指针为空，尝试直接调用');
           return singletonGetter(ptr(0));
         }
         var gm = singletonGetter(mi);
         if (gm.isNull()) {
-          console.log('[GM] 返回为空');
           return null;
         }
         return gm;
       } catch(e) {
-        console.log('[GM] 获取失败: ' + e.message);
         return null;
       }
     }
@@ -358,8 +360,12 @@
       return a;
     }
 
+    var _visLogCount = 0;
     function checkVisibility(from, to) {
-      if (!linecastFn) return true;
+      if (!linecastFn) {
+        if (_visLogCount < 3) { console.log('[可见性] linecastFn 未初始化! 返回可见(跳过检测)'); _visLogCount++; }
+        return true;
+      }
       try {
         var buf1 = Memory.alloc(12);
         buf1.writeFloat(from.x);
@@ -369,8 +375,13 @@
         buf2.writeFloat(to.x);
         buf2.add(4).writeFloat(to.y);
         buf2.add(8).writeFloat(to.z);
-        return !linecastFn(buf1, buf2, -1, ptr(0));
-      } catch(e) { return true; }
+        var hit = linecastFn(buf1, buf2, OFF.LAYER_WALL, ptr(0));  // LM_OnlyEnvironment=1, 只检测墙体
+        if (_visLogCount < 10) { console.log('[可见性] Linecast: hit=' + hit + ' layerMask=' + OFF.LAYER_WALL); _visLogCount++; }
+        return !hit;  // hit=true → 有墙体遮挡 → 不可见
+      } catch(e) {
+        if (_visLogCount < 3) { console.log('[可见性] Linecast异常: ' + e.message); _visLogCount++; }
+        return true;  // 异常时默认可见(不跳过)
+      }
     }
 
     // ——— 目标缓存（成功脚本的 dword_1005A6C8 模式） ———
@@ -421,6 +432,7 @@
       for (var i = 0; i < allPlayers.length; i++) {
         var p = allPlayers[i];
         try {
+          if (!p || p.isNull()) continue;
           if (p.equals(myPlayer)) continue;
           if (isDeadFn(p, ptr(0))) continue;
           var team = getTeamFn ? getTeamFn(p, ptr(0)) : p.add(OFF.E_team).readS32();
@@ -669,7 +681,9 @@
           var yawDiffRad = normalizeAngle(targetYawRad - curYawRad);
           var pitchDiffRad = normalizeAngle(targetPitchRad - curPitchRad);
 
-          console.log('[调试] 敌人#' + i + ' ptr=' + enemies[i] +
+          var visResult = checkVisibility(myPos, enemyPos);
+          var visible = visResult ? '[可见]' : '[遮挡]';
+          console.log('[调试] 敌人#' + i + ' ptr=' + enemies[i] + ' ' + visible +
             ' 坐标=(' + enemyPos.x.toFixed(1) + ', ' + enemyPos.y.toFixed(1) + ', ' + enemyPos.z.toFixed(1) + ')' +
             ' 距离=' + dist.toFixed(1) + 'm');
           console.log('[调试]   → 目标: ' + targetYawDeg.toFixed(1) + '° 当前: ' + curYawDeg.toFixed(1) + '° 差: ' + yawDiffDeg.toFixed(1) + '° FOV=' + fovDeg.toFixed(1) + '°');
