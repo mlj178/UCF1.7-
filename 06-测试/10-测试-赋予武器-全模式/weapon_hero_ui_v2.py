@@ -1,13 +1,14 @@
 # ============================================================
-# weapon_hero_ui_v2.py - 武器赋予与英雄变身UI（修正版）
+# weapon_hero_ui_v2.py - 武器赋予与英雄变身UI（重构版）
 #
-# 功能：
+# 功能:
 #   - 武器和英雄统一通过武器ID赋予
-#   - 可视化武器列表
-#   - 搜索和筛选功能
-#   - 参考AAAAA-ui_template.py模板
+#   - 按类型分区展示武器列表
+#   - 网格卡片布局（每行6个）
+#   - 类型差异化配色
+#   - 复活自动恢复武器功能（使用Player.Spawn Hook）
 #
-# 游戏进程：UnityCrossFire.exe
+# 游戏进程: UnityCrossFire.exe
 # ============================================================
 
 import customtkinter as ctk
@@ -18,6 +19,7 @@ import time
 import os
 import sys
 from datetime import datetime
+from collections import defaultdict
 
 ctk.set_appearance_mode("Dark")
 ctk.set_default_color_theme("blue")
@@ -35,44 +37,12 @@ COLOR_DARKER = "#16213e"
 GAME_PROCESS_NAME = "UnityCrossFire.exe"
 
 WEAPON_LIST = [
-    ("5", "KNIFE", "刀", "近战"),
-    ("6", "GRENADE", "手雷", "投掷"),
-    ("11", "M4A1", "M4A1", "步枪"),
-    ("12", "AK-47", "AK-47", "步枪"),
-    ("17", "M60", "M60", "机枪"),
-    ("20", "Desert Eagle", "沙漠之鹰", "手枪"),
-    ("35", "轻型军用手斧", "轻型军用手斧", "近战"),
-    ("45", "M4A1-A", "M4A1-A", "步枪"),
-    ("53", "Desert Eagle-A", "沙漠之鹰-A", "手枪"),
-    ("56", "黄金AK-47", "黄金AK-47", "步枪"),
-    ("57", "M4A1-S", "M4A1-S", "步枪"),
-    ("60", "黄金沙漠之鹰", "黄金沙漠之鹰", "手枪"),
-    ("61", "RPK机关枪", "RPK机关枪", "机枪"),
-    ("69", "Barrett M82A1", "Barrett M82A1", "狙击"),
-    ("76", "M4A1-小鸡", "M4A1-小鸡", "步枪"),
     ("120", "NANOKNIFE", "NANOKNIFE", "近战"),
-    ("124", "M60-A", "M60-A", "机枪"),
-    ("125", "黄金M4A1", "黄金M4A1", "步枪"),
-    ("126", "生化手雷", "生化手雷", "投掷"),
-    ("176", "HULKFIST", "绿巨人拳头", "英雄"),
-    ("177", "HOSTHULKFIST", "主机绿巨人拳头", "英雄"),
-    ("178", "MASTERHULKFIST", "大师绿巨人拳头", "英雄"),
-    ("182", "MASTERNANOKNIFE", "大师NANOKNIFE", "近战"),
-    ("183", "汤姆逊冲锋枪", "汤姆逊冲锋枪", "冲锋"),
     ("195", "幽灵之刃", "幽灵之刃", "英雄"),
-    ("197", "幽灵之刃", "幽灵之刃", "英雄"),
     ("210", "诅咒娃娃手雷", "诅咒娃娃手雷", "投掷"),
-    ("223", "CRAZYKNIFE", "疯狂之刃", "近战"),
-    ("226", "幽灵之刃", "幽灵之刃", "英雄"),
+
     ("237", "圣诞M4A1", "圣诞M4A1", "步枪"),
-    ("244", "尼泊尔军刀", "尼泊尔军刀", "近战"),
-    ("255", "M4A1-T", "M4A1-T", "步枪"),
-    ("266", "M4A1-Red", "M4A1-Red", "步枪"),
-    ("289", "M4A1-樱", "M4A1-樱", "步枪"),
-    ("317", "M4A1-黑虎", "M4A1-黑虎", "步枪"),
-    ("334", "毛瑟军用手枪", "毛瑟军用手枪", "手枪"),
     ("341", "AK47-茉莉", "AK47-茉莉", "步枪"),
-    ("355", "M4A1-PINK", "M4A1-PINK", "步枪"),
     ("390", "FAL CAMO", "FAL CAMO", "步枪"),
     ("413", "AK47-万圣节", "AK47-万圣节", "步枪"),
     ("415", "M4A1-万圣节", "M4A1-万圣节", "步枪"),
@@ -85,13 +55,13 @@ WEAPON_LIST = [
     ("615", "百城M4A1", "百城M4A1", "步枪"),
     ("617", "百城AK47", "百城AK47", "步枪"),
     ("622", "M4A1-蓝水晶", "M4A1-蓝水晶", "步枪"),
-    ("660", "M4A1-狼牙", "M4A1-狼牙", "步枪"),
+
     ("672", "GrandTerminator", "大终结者", "英雄"),
     ("730", "AK47-火麒麟", "AK47-火麒麟", "步枪"),
     ("758", "Barrett-翔龙", "Barrett-翔龙", "狙击"),
     ("761", "MG3-翔龙", "MG3-翔龙", "机枪"),
     ("764", "拳击手套", "拳击手套", "近战"),
-    ("780", "M4A1-紫罗兰", "M4A1-紫罗兰", "步枪"),
+
     ("855", "M4A1-黑龙", "M4A1-黑龙", "步枪"),
     ("856", "M4A1-雷神", "M4A1-雷神", "步枪"),
     ("880", "纯金AK-47", "纯金AK-47", "步枪"),
@@ -121,16 +91,27 @@ WEAPON_LIST = [
     ("3831", "圣拳猎手", "圣拳猎手", "英雄"),
     ("3832", "虚空之刃", "虚空之刃", "英雄"),
     ("3928", "M14EBR-能量核心", "M14EBR-能量核心", "步枪"),
-    ("4270", "FAL CAMO", "FAL CAMO", "步枪"),
     ("4850", "机械英雄", "机械英雄", "英雄"),
     ("4851", "XM214重机枪", "XM214重机枪", "机枪"),
     ("4852", "奥术手榴弹", "奥术手榴弹", "投掷"),
     ("4853", "机枪守卫", "机枪守卫", "特殊"),
     ("4854", "不法终结者", "不法终结者", "英雄"),
-    ("5359", "蝴蝶刀", "蝴蝶刀", "近战"),
+
     ("5361", "蝴蝶刀-枪王排位", "蝴蝶刀-枪王排位", "近战"),
     ("5384", "斯泰尔-枪娘暗刃", "斯泰尔-枪娘暗刃", "冲锋"),
 ]
+
+TYPE_COLORS = {
+    "步枪": "#1e3a5f",
+    "英雄": "#3a1e5f",
+    "近战": "#1e5f3a",
+    "投掷": "#5f4a1e",
+    "狙击": "#1e5f5f",
+    "机枪": "#5f3a1e",
+    "冲锋": "#4a1e5f",
+    "特殊": "#3a3a3a",
+    "手枪": "#4a5f1e",
+}
 
 
 class WeaponHeroUI(ctk.CTk):
@@ -139,7 +120,7 @@ class WeaponHeroUI(ctk.CTk):
         super().__init__()
 
         self.title("武器赋予与英雄变身工具 v2.0")
-        self.geometry("1100x750")
+        self.geometry("1400x900")
         self.configure(fg_color=COLOR_DARK)
 
         self.session = None
@@ -147,8 +128,12 @@ class WeaponHeroUI(ctk.CTk):
         self.is_connected = False
         self.log_count = 0
         self.max_logs = 500
-        self.filtered_weapons = WEAPON_LIST.copy()
         self._initialized = False
+        self.auto_restore_enabled = False
+        self.current_weapon_id = None
+
+        self.weapons_by_type = self._group_weapons_by_type()
+        self.sorted_types = self._sort_types_by_count()
 
         self.setup_ui()
         self.after(100, self._mark_initialized)
@@ -157,153 +142,111 @@ class WeaponHeroUI(ctk.CTk):
     def _mark_initialized(self):
         self._initialized = True
 
+    def _group_weapons_by_type(self):
+        grouped = defaultdict(list)
+        for weapon in WEAPON_LIST:
+            weapon_id, en_name, cn_name, weapon_type = weapon
+            grouped[weapon_type].append(weapon)
+        return grouped
+
+    def _sort_types_by_count(self):
+        type_counts = [(t, len(self.weapons_by_type[t])) for t in self.weapons_by_type]
+        type_counts.sort(key=lambda x: x[1], reverse=True)
+        return [t for t, _ in type_counts]
+
     def setup_ui(self):
-        self.grid_columnconfigure(1, weight=1)
+        self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(1, weight=1)
 
-        self.setup_sidebar()
-        self.setup_main_area()
+        self.setup_header()
+        self.setup_weapon_list()
+        self.setup_log()
 
-    def setup_sidebar(self):
-        self.sidebar = ctk.CTkFrame(self, width=280, corner_radius=0, fg_color=COLOR_DARKER)
-        self.sidebar.grid(row=0, column=0, rowspan=3, sticky="nsew")
-        self.sidebar.grid_rowconfigure(6, weight=1)
+    def setup_header(self):
+        self.header_frame = ctk.CTkFrame(self, fg_color=COLOR_DARKER, corner_radius=0)
+        self.header_frame.grid(row=0, column=0, sticky="ew", padx=0, pady=0)
+        self.header_frame.grid_columnconfigure(1, weight=1)
 
         self.title_label = ctk.CTkLabel(
-            self.sidebar, 
-            text="🎮 武器赋予与英雄变身",
-            font=ctk.CTkFont(size=16, weight="bold"),
+            self.header_frame,
+            text="🎮 武器赋予与英雄变身工具 v2.0",
+            font=ctk.CTkFont(size=18, weight="bold"),
             text_color=COLOR_BLUE
         )
-        self.title_label.grid(row=0, column=0, padx=20, pady=(20, 10), sticky="ew")
+        self.title_label.grid(row=0, column=0, padx=20, pady=(15, 10), sticky="w")
 
         self.status_label = ctk.CTkLabel(
-            self.sidebar,
+            self.header_frame,
             text="⏳ 等待连接...",
             font=ctk.CTkFont(size=12),
             text_color=COLOR_ORANGE
         )
-        self.status_label.grid(row=1, column=0, padx=20, pady=5, sticky="ew")
+        self.status_label.grid(row=0, column=1, padx=20, pady=(15, 10), sticky="e")
 
-        self.quick_section = ctk.CTkFrame(self.sidebar, fg_color="transparent")
-        self.quick_section.grid(row=2, column=0, padx=20, pady=10, sticky="ew")
+        self.tools_frame = ctk.CTkFrame(self.header_frame, fg_color="transparent")
+        self.tools_frame.grid(row=1, column=0, columnspan=2, padx=20, pady=(0, 15), sticky="ew")
 
-        ctk.CTkLabel(
-            self.quick_section,
-            text="⚡ 快速赋予",
-            font=ctk.CTkFont(size=14, weight="bold"),
+        self.auto_restore_var = ctk.BooleanVar(value=False)
+        self.auto_restore_switch = ctk.CTkSwitch(
+            self.tools_frame,
+            text="复活自动恢复武器",
+            variable=self.auto_restore_var,
+            command=self.toggle_auto_restore,
+            onvalue=True,
+            offvalue=False
+        )
+        self.auto_restore_switch.pack(side="left", padx=(0, 20))
+
+        self.current_weapon_label = ctk.CTkLabel(
+            self.tools_frame,
+            text="当前武器: 无",
+            font=ctk.CTkFont(size=12),
             text_color=COLOR_GREEN
-        ).grid(row=0, column=0, columnspan=2, pady=(0, 10), sticky="w")
-
-        ctk.CTkLabel(self.quick_section, text="武器ID:").grid(row=1, column=0, pady=5, sticky="w")
-        self.weapon_id_entry = ctk.CTkEntry(self.quick_section, width=100, placeholder_text="输入武器ID")
-        self.weapon_id_entry.grid(row=1, column=1, padx=5, pady=5)
-
-        self.give_weapon_btn = ctk.CTkButton(
-            self.quick_section,
-            text="赋予武器",
-            command=self.give_weapon,
-            fg_color=COLOR_GREEN,
-            hover_color="#27ae60"
         )
-        self.give_weapon_btn.grid(row=2, column=0, columnspan=2, pady=10, sticky="ew")
-
-        self.options_frame = ctk.CTkFrame(self.quick_section, fg_color="transparent")
-        self.options_frame.grid(row=3, column=0, columnspan=2, pady=5, sticky="ew")
-
-        self.auto_giveup_var = ctk.BooleanVar(value=True)
-        self.auto_giveup_cb = ctk.CTkCheckBox(
-            self.options_frame,
-            text="自动放弃当前武器",
-            variable=self.auto_giveup_var
-        )
-        self.auto_giveup_cb.pack(side="left", padx=5)
-
-        self.auto_select_var = ctk.BooleanVar(value=True)
-        self.auto_select_cb = ctk.CTkCheckBox(
-            self.options_frame,
-            text="自动选择新武器",
-            variable=self.auto_select_var
-        )
-        self.auto_select_cb.pack(side="left", padx=5)
-
-        self.tools_section = ctk.CTkFrame(self.sidebar, fg_color="transparent")
-        self.tools_section.grid(row=3, column=0, padx=20, pady=10, sticky="ew")
-
-        ctk.CTkLabel(
-            self.tools_section,
-            text="🔧 工具",
-            font=ctk.CTkFont(size=14, weight="bold"),
-            text_color=COLOR_ORANGE
-        ).grid(row=0, column=0, columnspan=2, pady=(0, 10), sticky="w")
+        self.current_weapon_label.pack(side="left", padx=(0, 20))
 
         self.refresh_btn = ctk.CTkButton(
-            self.tools_section,
+            self.tools_frame,
             text="刷新武器列表",
             command=self.refresh_weapon_list,
             fg_color=COLOR_ORANGE,
-            hover_color="#e67e22"
+            hover_color="#e67e22",
+            width=120
         )
-        self.refresh_btn.grid(row=1, column=0, columnspan=2, pady=5, sticky="ew")
+        self.refresh_btn.pack(side="left", padx=(0, 10))
 
         self.clear_log_btn = ctk.CTkButton(
-            self.tools_section,
+            self.tools_frame,
             text="清空日志",
             command=self.clear_log,
             fg_color=COLOR_ORANGE,
-            hover_color="#e67e22"
+            hover_color="#e67e22",
+            width=100
         )
-        self.clear_log_btn.grid(row=2, column=0, columnspan=2, pady=5, sticky="ew")
+        self.clear_log_btn.pack(side="left", padx=(0, 10))
 
         self.disconnect_btn = ctk.CTkButton(
-            self.sidebar,
+            self.tools_frame,
             text="断开连接",
             command=self.disconnect,
             fg_color=COLOR_RED,
-            hover_color="#c0392b"
-        )
-        self.disconnect_btn.grid(row=7, column=0, padx=20, pady=20, sticky="ew")
-
-    def setup_main_area(self):
-        self.main_frame = ctk.CTkFrame(self, corner_radius=0, fg_color=COLOR_DARK)
-        self.main_frame.grid(row=0, column=1, rowspan=3, sticky="nsew", padx=10, pady=10)
-        self.main_frame.grid_columnconfigure(0, weight=1)
-        self.main_frame.grid_rowconfigure(1, weight=1)
-
-        self.search_frame = ctk.CTkFrame(self.main_frame, fg_color="transparent")
-        self.search_frame.grid(row=0, column=0, padx=10, pady=10, sticky="ew")
-
-        ctk.CTkLabel(
-            self.search_frame,
-            text="🔍 搜索:",
-            font=ctk.CTkFont(size=12)
-        ).pack(side="left", padx=5)
-
-        self.search_entry = ctk.CTkEntry(
-            self.search_frame,
-            width=200,
-            placeholder_text="输入武器名称或ID"
-        )
-        self.search_entry.pack(side="left", padx=5)
-        self.search_entry.bind("<KeyRelease>", self.on_search)
-
-        self.filter_var = ctk.StringVar(value="全部")
-        self.filter_menu = ctk.CTkOptionMenu(
-            self.search_frame,
-            values=["全部", "步枪", "手枪", "狙击", "机枪", "冲锋", "近战", "投掷", "英雄", "特殊"],
-            command=self.on_filter,
+            hover_color="#c0392b",
             width=100
         )
-        self.filter_menu.pack(side="left", padx=5)
+        self.disconnect_btn.pack(side="left")
 
-        self.weapon_list_frame = ctk.CTkScrollableFrame(
-            self.main_frame,
-            fg_color=COLOR_DARKER
+    def setup_weapon_list(self):
+        self.weapon_scroll_frame = ctk.CTkScrollableFrame(
+            self,
+            fg_color=COLOR_DARK
         )
-        self.weapon_list_frame.grid(row=1, column=0, padx=10, pady=(0, 10), sticky="nsew")
+        self.weapon_scroll_frame.grid(row=1, column=0, sticky="nsew", padx=10, pady=10)
 
-        self.log_frame = ctk.CTkFrame(self.main_frame, fg_color="transparent")
-        self.log_frame.grid(row=2, column=0, padx=10, pady=(0, 10), sticky="ew")
+        self.refresh_weapon_list()
+
+    def setup_log(self):
+        self.log_frame = ctk.CTkFrame(self, fg_color=COLOR_DARKER, corner_radius=0)
+        self.log_frame.grid(row=2, column=0, sticky="ew", padx=0, pady=0)
         self.log_frame.grid_columnconfigure(0, weight=1)
 
         self.log_title = ctk.CTkLabel(
@@ -312,93 +255,127 @@ class WeaponHeroUI(ctk.CTk):
             font=ctk.CTkFont(size=12, weight="bold"),
             text_color=COLOR_BLUE
         )
-        self.log_title.grid(row=0, column=0, pady=5, sticky="w")
+        self.log_title.grid(row=0, column=0, padx=20, pady=(10, 5), sticky="w")
 
         self.log_text = ctk.CTkTextbox(
             self.log_frame,
-            height=120,
+            height=100,
             font=ctk.CTkFont(family="Consolas", size=10),
             fg_color=COLOR_DARKER,
             text_color="#ecf0f1"
         )
-        self.log_text.grid(row=1, column=0, sticky="ew")
-
-        self.refresh_weapon_list()
+        self.log_text.grid(row=1, column=0, padx=20, pady=(0, 10), sticky="ew")
 
     def refresh_weapon_list(self):
-        for widget in self.weapon_list_frame.winfo_children():
+        for widget in self.weapon_scroll_frame.winfo_children():
             widget.destroy()
 
-        for weapon_id, en_name, cn_name, weapon_type in self.filtered_weapons:
-            weapon_frame = ctk.CTkFrame(
-                self.weapon_list_frame,
-                fg_color=COLOR_DARK if weapon_type != "英雄" else "#2c3e50",
-                corner_radius=5
-            )
-            weapon_frame.pack(fill="x", padx=5, pady=3)
+        for weapon_type in self.sorted_types:
+            weapons = self.weapons_by_type[weapon_type]
+            if not weapons:
+                continue
 
-            id_label = ctk.CTkLabel(
-                weapon_frame,
-                text=f"ID: {weapon_id}",
-                font=ctk.CTkFont(size=11, weight="bold"),
-                text_color=COLOR_GREEN if weapon_type != "英雄" else COLOR_RED,
-                width=70
-            )
-            id_label.pack(side="left", padx=10, pady=8)
+            type_color = TYPE_COLORS.get(weapon_type, COLOR_DARKER)
 
-            name_label = ctk.CTkLabel(
-                weapon_frame,
-                text=f"{cn_name} ({en_name})",
-                font=ctk.CTkFont(size=11),
+            type_section = ctk.CTkFrame(
+                self.weapon_scroll_frame,
+                fg_color=type_color,
+                corner_radius=8
+            )
+            type_section.pack(fill="x", padx=5, pady=(10, 5))
+
+            type_header = ctk.CTkLabel(
+                type_section,
+                text=f"【{weapon_type}】(共{len(weapons)}个)",
+                font=ctk.CTkFont(size=14, weight="bold"),
                 text_color="#ecf0f1",
                 anchor="w"
             )
-            name_label.pack(side="left", padx=5, pady=8, fill="x", expand=True)
+            type_header.pack(fill="x", padx=15, pady=(10, 5))
 
-            type_label = ctk.CTkLabel(
-                weapon_frame,
-                text=weapon_type,
-                font=ctk.CTkFont(size=10),
-                text_color=COLOR_ORANGE,
-                width=50
-            )
-            type_label.pack(side="left", padx=5, pady=8)
+            cards_frame = ctk.CTkFrame(type_section, fg_color="transparent")
+            cards_frame.pack(fill="x", padx=10, pady=(0, 10))
 
-            give_btn = ctk.CTkButton(
-                weapon_frame,
-                text="赋予",
-                width=60,
-                command=lambda id=weapon_id: self.give_weapon_by_id(id),
-                fg_color=COLOR_BLUE if weapon_type != "英雄" else COLOR_RED,
-                hover_color="#2980b9" if weapon_type != "英雄" else "#c0392b"
-            )
-            give_btn.pack(side="right", padx=10, pady=8)
+            for i, weapon in enumerate(weapons):
+                weapon_id, en_name, cn_name, w_type = weapon
+                is_hero = (w_type == "英雄")
 
-    def on_search(self, event=None):
-        search_text = self.search_entry.get().lower()
-        self.apply_filters(search_text, self.filter_var.get())
+                row = i // 6
+                col = i % 6
 
-    def on_filter(self, choice):
-        search_text = self.search_entry.get().lower()
-        self.apply_filters(search_text, choice)
+                card = ctk.CTkFrame(
+                    cards_frame,
+                    fg_color=COLOR_DARK if not is_hero else "#2c3e50",
+                    corner_radius=5
+                )
+                card.grid(row=row, column=col, padx=5, pady=5, sticky="ew")
 
-    def apply_filters(self, search_text, filter_type):
-        self.filtered_weapons = []
-        for weapon in WEAPON_LIST:
-            weapon_id, en_name, cn_name, weapon_type = weapon
-            
-            if filter_type != "全部" and weapon_type != filter_type:
-                continue
-            
-            if search_text:
-                if (search_text not in weapon_id.lower() and 
-                    search_text not in en_name.lower() and 
-                    search_text not in cn_name.lower()):
-                    continue
-            
-            self.filtered_weapons.append(weapon)
-        
-        self.refresh_weapon_list()
+                cards_frame.grid_columnconfigure(col, weight=1)
+
+                id_label = ctk.CTkLabel(
+                    card,
+                    text=f"ID: {weapon_id}",
+                    font=ctk.CTkFont(size=10, weight="bold"),
+                    text_color=COLOR_GREEN if not is_hero else COLOR_RED
+                )
+                id_label.pack(padx=5, pady=(5, 2))
+
+                name_label = ctk.CTkLabel(
+                    card,
+                    text=cn_name,
+                    font=ctk.CTkFont(size=10),
+                    text_color="#ecf0f1"
+                )
+                name_label.pack(padx=5, pady=(0, 5))
+
+                give_btn = ctk.CTkButton(
+                    card,
+                    text="赋予",
+                    width=60,
+                    height=25,
+                    command=lambda wid=weapon_id, name=cn_name: self.give_weapon_by_id(wid, name),
+                    fg_color=COLOR_BLUE if not is_hero else COLOR_RED,
+                    hover_color="#2980b9" if not is_hero else "#c0392b"
+                )
+                give_btn.pack(padx=5, pady=(0, 5))
+
+    def toggle_auto_restore(self):
+        self.auto_restore_enabled = self.auto_restore_var.get()
+        if self.auto_restore_enabled:
+            self.log("[INFO] 复活自动恢复武器已启用")
+            if self.current_weapon_id:
+                self.set_respawn_weapon(self.current_weapon_id, "当前武器")
+        else:
+            self.log("[INFO] 复活自动恢复武器已禁用")
+            self.clear_respawn_weapon()
+
+    def set_respawn_weapon(self, weapon_id, weapon_name):
+        if not self.is_connected or not self.script:
+            return
+
+        def call():
+            try:
+                if not self.script or not self.is_connected:
+                    return
+                self.script.exports_sync.setrespawnweapon(weapon_id, weapon_name)
+            except:
+                pass
+
+        threading.Thread(target=call, daemon=True).start()
+
+    def clear_respawn_weapon(self):
+        if not self.is_connected or not self.script:
+            return
+
+        def call():
+            try:
+                if not self.script or not self.is_connected:
+                    return
+                self.script.exports_sync.clearrespawnweapon()
+            except:
+                pass
+
+        threading.Thread(target=call, daemon=True).start()
 
     def _safe_call(self, func):
         try:
@@ -437,6 +414,9 @@ class WeaponHeroUI(ctk.CTk):
             self._safe_call(lambda: self.update_status(f"✅ 已连接到 {GAME_PROCESS_NAME} (PID: {pid})", COLOR_GREEN))
             self._safe_call(lambda: self.log(f"[SUCCESS] 已连接到游戏进程: {GAME_PROCESS_NAME} (PID: {pid})"))
 
+            if self.auto_restore_enabled and self.current_weapon_id:
+                self.set_respawn_weapon(self.current_weapon_id, "当前武器")
+
         except Exception as e:
             self.is_connected = False
             self.script = None
@@ -464,40 +444,46 @@ class WeaponHeroUI(ctk.CTk):
                 level = payload.get('level', 'info').upper()
                 module = payload.get('module', 'Unknown')
                 msg = payload.get('message', '')
-                self._safe_call(lambda: self.log(f"[{level}][{module}] {msg}"))
+                self._safe_call(lambda: self.log(f'[{level}][{module}] {msg}'))
             elif payload['type'] == 'giveWeaponResult':
                 task_id = payload.get('taskId', '?')
                 success = payload.get('success', False)
                 if success:
-                    self._safe_call(lambda tid=task_id: self.log(f"[SUCCESS] ✅ 武器赋予成功! (taskId={tid})"))
+                    self._safe_call(lambda tid=task_id: self.log(f'[SUCCESS] ✅ 武器赋予成功! (taskId={tid})'))
                 else:
-                    self._safe_call(lambda tid=task_id: self.log(f"[ERROR] ❌ 武器赋予失败 (taskId={tid})"))
+                    self._safe_call(lambda tid=task_id: self.log(f'[ERROR] ❌ 武器赋予失败 (taskId={tid})'))
+            elif payload['type'] == 'playerRespawned':
+                self._safe_call(lambda: self.on_player_respawn())
+            elif payload['type'] == 'playerRespawnedWithWeapon':
+                weapon_id = payload.get('weaponId')
+                weapon_name = payload.get('weaponName', '未知武器')
+                self._safe_call(lambda wid=weapon_id, wname=weapon_name: self.on_player_respawn_with_weapon(wid, wname))
 
-    def give_weapon(self):
-        if not self.is_connected:
-            self.log("[ERROR] 未连接到游戏")
-            return
+    def on_player_respawn(self):
+        if self.auto_restore_enabled and self.current_weapon_id:
+            self.log(f"[INFO] 检测到玩家复活，自动恢复武器 ID: {self.current_weapon_id}")
+            self.give_weapon_by_id(self.current_weapon_id, "自动恢复")
 
-        weapon_id_str = self.weapon_id_entry.get()
-        if not weapon_id_str:
-            self.log("[ERROR] 请输入武器ID")
-            return
+    def on_player_respawn_with_weapon(self, weapon_id, weapon_name):
+        self.log(f'[SUCCESS] 检测到玩家复活，自动赋予武器: {weapon_name} (ID: {weapon_id})')
+        self.give_weapon_by_id(weapon_id, weapon_name)
 
-        try:
-            weapon_id = int(weapon_id_str)
-            self.give_weapon_by_id(weapon_id)
-        except ValueError:
-            self.log("[ERROR] 武器ID必须是数字")
-
-    def give_weapon_by_id(self, weapon_id):
+    def give_weapon_by_id(self, weapon_id, weapon_name=""):
         if not self.is_connected or not self.script:
             self.log("[ERROR] 未连接到游戏")
             return
 
-        auto_giveup = self.auto_giveup_var.get()
-        auto_select = self.auto_select_var.get()
+        self.current_weapon_id = weapon_id
+        if weapon_name:
+            self.current_weapon_label.configure(text=f"当前武器: {weapon_name} (ID: {weapon_id})")
 
-        self.log(f"[INFO] 尝试赋予武器 ID={weapon_id} (autoGiveUp={auto_giveup}, autoSelect={auto_select})")
+        if self.auto_restore_enabled:
+            self.set_respawn_weapon(weapon_id, weapon_name)
+
+        auto_giveup = True
+        auto_select = True
+
+        self.log(f"[INFO] 尝试赋予武器 ID: {weapon_id}, 名称: {weapon_name}")
 
         def call():
             try:
