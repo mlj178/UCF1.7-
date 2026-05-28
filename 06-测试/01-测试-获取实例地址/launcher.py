@@ -53,7 +53,7 @@ class LauncherUI:
         self.script_entry.pack(side=tk.LEFT, padx=5)
         
         script_dir = os.path.dirname(os.path.abspath(__file__))
-        script_path = os.path.join(script_dir, "get_myplayer.js")
+        script_path = os.path.join(script_dir, "get_myplayer 集合-v1.3的实例.js")
         self.script_entry.insert(0, script_path)
         
         btn_frame = ttk.Frame(main_frame)
