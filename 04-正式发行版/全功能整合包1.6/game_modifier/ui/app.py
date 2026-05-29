@@ -15,6 +15,79 @@ from core.hotkey_manager import HotkeyManager
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
 
+WEAPON_LIST = [
+    ("120", "NANOKNIFE", "NANOKNIFE", "近战"),
+    ("195", "幽灵之刃", "幽灵之刃", "英雄"),
+    ("210", "诅咒娃娃手雷", "诅咒娃娃手雷", "投掷"),
+    ("237", "圣诞M4A1", "圣诞M4A1", "步枪"),
+    ("341", "AK47-茉莉", "AK47-茉莉", "步枪"),
+    ("390", "FAL CAMO", "FAL CAMO", "步枪"),
+    ("413", "AK47-万圣节", "AK47-万圣节", "步枪"),
+    ("415", "M4A1-万圣节", "M4A1-万圣节", "步枪"),
+    ("428", "圣诞AK47", "圣诞AK47", "步枪"),
+    ("540", "Terminator", "终结者", "英雄"),
+    ("585", "M4A1-战龙", "M4A1-战龙", "步枪"),
+    ("586", "Barrett-战龙", "Barrett-战龙", "狙击"),
+    ("588", "MG3-银色杀手", "MG3-银色杀手", "机枪"),
+    ("606", "M4A1-轻骑兵", "M4A1-轻骑兵", "步枪"),
+    ("615", "百城M4A1", "百城M4A1", "步枪"),
+    ("617", "百城AK47", "百城AK47", "步枪"),
+    ("622", "M4A1-蓝水晶", "M4A1-蓝水晶", "步枪"),
+    ("672", "GrandTerminator", "大终结者", "英雄"),
+    ("730", "AK47-火麒麟", "AK47-火麒麟", "步枪"),
+    ("758", "Barrett-翔龙", "Barrett-翔龙", "狙击"),
+    ("761", "MG3-翔龙", "MG3-翔龙", "机枪"),
+    ("764", "拳击手套", "拳击手套", "近战"),
+    ("855", "M4A1-黑龙", "M4A1-黑龙", "步枪"),
+    ("856", "M4A1-雷神", "M4A1-雷神", "步枪"),
+    ("880", "纯金AK-47", "纯金AK-47", "步枪"),
+    ("938", "汤姆逊-烈龙", "汤姆逊-烈龙", "冲锋"),
+    ("994", "尼泊尔-红水晶", "尼泊尔-红水晶", "近战"),
+    ("1002", "M4A1-黑骑士", "M4A1-黑骑士", "步枪"),
+    ("1003", "屠龙", "屠龙", "近战"),
+    ("1004", "AK47-苍龙", "AK47-苍龙", "步枪"),
+    ("1005", "Barrett-苍龙", "Barrett-苍龙", "狙击"),
+    ("1061", "M4A1-玫瑰精灵", "M4A1-玫瑰精灵", "步枪"),
+    ("1069", "Ghost Blade-Normal form", "幽灵之刃", "英雄"),
+    ("1070", "Armored Terminator", "装甲终结者", "英雄"),
+    ("1097", "Fear", "恐惧", "英雄"),
+    ("1168", "沙鹰-修罗", "沙鹰-修罗", "手枪"),
+    ("1508", "M4A1-死神", "M4A1-死神", "步枪"),
+    ("1621", "惨叫鸡", "惨叫鸡", "近战"),
+    ("2568", "M82A1-水枪", "M82A1-水枪", "狙击"),
+    ("2759", "M4A1-水枪", "M4A1-水枪", "步枪"),
+    ("2975", "地狱终结者", "地狱终结者", "英雄"),
+    ("2976", "终极猎手", "终极猎手", "英雄"),
+    ("2977", "震撼弹", "震撼弹", "投掷"),
+    ("2978", "FN FAL榴弹版", "FN FAL榴弹版", "步枪"),
+    ("3017", "生化手雷", "生化手雷", "投掷"),
+    ("3494", "Nano AT4", "Nano AT4", "特殊"),
+    ("3495", "时空猎手", "时空猎手", "英雄"),
+    ("3496", "钢铁终结者", "钢铁终结者", "英雄"),
+    ("3831", "圣拳猎手", "圣拳猎手", "英雄"),
+    ("3832", "虚空之刃", "虚空之刃", "英雄"),
+    ("3928", "M14EBR-能量核心", "M14EBR-能量核心", "步枪"),
+    ("4850", "机械英雄", "机械英雄", "英雄"),
+    ("4851", "XM214重机枪", "XM214重机枪", "机枪"),
+    ("4852", "奥术手榴弹", "奥术手榴弹", "投掷"),
+    ("4853", "机枪守卫", "机枪守卫", "特殊"),
+    ("4854", "不法终结者", "不法终结者", "英雄"),
+    ("5361", "蝴蝶刀-枪王排位", "蝴蝶刀-枪王排位", "近战"),
+    ("5384", "斯泰尔-枪娘暗刃", "斯泰尔-枪娘暗刃", "冲锋"),
+]
+
+TYPE_COLORS = {
+    "步枪": "#1e3a5f",
+    "英雄": "#3a1e5f",
+    "近战": "#1e5f3a",
+    "投掷": "#5f4a1e",
+    "狙击": "#1e5f5f",
+    "机枪": "#5f3a1e",
+    "冲锋": "#4a1e5f",
+    "特殊": "#3a3a3a",
+    "手枪": "#4a5f1e",
+}
+
 
 class App(ctk.CTk):
     def __init__(self):
@@ -119,6 +192,7 @@ class App(ctk.CTk):
         tab_player = self.tab_view.add("人物属性")
         tab_other = self.tab_view.add("其他")
         tab_nano4t = self.tab_view.add("多人生化Buff选择")
+        tab_weapon_giver = self.tab_view.add("赋予武器")
 
         tab_weapon_scroll = ctk.CTkScrollableFrame(tab_weapon, corner_radius=0, fg_color="transparent")
         tab_weapon_scroll.pack(fill="both", expand=True, padx=2, pady=2)
@@ -128,11 +202,14 @@ class App(ctk.CTk):
         tab_other_scroll.pack(fill="both", expand=True, padx=2, pady=2)
         tab_nano4t_scroll = ctk.CTkScrollableFrame(tab_nano4t, corner_radius=0, fg_color="transparent")
         tab_nano4t_scroll.pack(fill="both", expand=True, padx=2, pady=2)
+        tab_weapon_giver_scroll = ctk.CTkScrollableFrame(tab_weapon_giver, corner_radius=0, fg_color="transparent")
+        tab_weapon_giver_scroll.pack(fill="both", expand=True, padx=2, pady=2)
 
         self._build_weapon_tab(tab_weapon_scroll)
         self._build_player_tab(tab_player_scroll)
         self._build_other_tab(tab_other_scroll)
         self._build_nano4t_tab(tab_nano4t_scroll)
+        self._build_weapon_giver_tab(tab_weapon_giver_scroll)
 
     def _make_feature_card(self, parent, row, col, colspan, color, feature_id, icon, name, desc,
                            has_slider=False, slider_callback=None, slider_var=None, slider_range=None,
@@ -439,6 +516,83 @@ class App(ctk.CTk):
                                                   fg_color="#2a6e2a")
         self.nano4t_connect_btn.pack(side="left", padx=(6, 12), pady=8, expand=True)
 
+    def _build_weapon_giver_tab(self, scroll):
+        weapon_giver_frame = ctk.CTkFrame(scroll, corner_radius=8, fg_color="#2b2b2b")
+        weapon_giver_frame.pack(fill="x", padx=8, pady=(8, 4))
+        
+        top_frame = ctk.CTkFrame(weapon_giver_frame, fg_color="transparent")
+        top_frame.pack(fill="x", padx=8, pady=(6, 0))
+        ctk.CTkLabel(top_frame, text="🔫 武器赋予", font=("Microsoft YaHei", 16, "bold"),
+                     text_color="#FF6B6B").pack(side="left", padx=4)
+        
+        tools_frame = ctk.CTkFrame(weapon_giver_frame, fg_color="transparent")
+        tools_frame.pack(fill="x", padx=8, pady=(4, 4))
+        
+        self.respawn_weapon_var = ctk.BooleanVar(value=False)
+        self.respawn_weapon_check = ctk.CTkCheckBox(tools_frame, text="复活自动装备武器",
+                                                     font=("Microsoft YaHei", 11),
+                                                     variable=self.respawn_weapon_var,
+                                                     command=self._on_respawn_weapon_toggle)
+        self.respawn_weapon_check.pack(side="left", padx=4)
+        
+        self.current_weapon_label = ctk.CTkLabel(tools_frame, text="当前武器: 无",
+                                                  font=("Microsoft YaHei", 11), text_color="#2ecc71")
+        self.current_weapon_label.pack(side="left", padx=8)
+        
+        self._build_weapon_list(weapon_giver_frame)
+
+    def _build_weapon_list(self, parent):
+        weapons_by_type = {}
+        for weapon in WEAPON_LIST:
+            weapon_id, en_name, cn_name, weapon_type = weapon
+            if weapon_type not in weapons_by_type:
+                weapons_by_type[weapon_type] = []
+            weapons_by_type[weapon_type].append(weapon)
+        
+        type_counts = [(t, len(weapons_by_type[t])) for t in weapons_by_type]
+        type_counts.sort(key=lambda x: x[1], reverse=True)
+        sorted_types = [t for t, _ in type_counts]
+        
+        for weapon_type in sorted_types:
+            weapons = weapons_by_type[weapon_type]
+            if not weapons:
+                continue
+            
+            type_color = TYPE_COLORS.get(weapon_type, "#2b2b2b")
+            
+            type_section = ctk.CTkFrame(parent, fg_color=type_color, corner_radius=6)
+            type_section.pack(fill="x", padx=4, pady=(6, 3))
+            
+            type_header = ctk.CTkLabel(type_section, text=f"【{weapon_type}】(共{len(weapons)}个)",
+                                        font=("Microsoft YaHei", 12, "bold"), text_color="#ecf0f1", anchor="w")
+            type_header.pack(fill="x", padx=10, pady=(6, 3))
+            
+            cards_frame = ctk.CTkFrame(type_section, fg_color="transparent")
+            cards_frame.pack(fill="x", padx=6, pady=(0, 6))
+            
+            for i, weapon in enumerate(weapons):
+                weapon_id, en_name, cn_name, w_type = weapon
+                is_hero = (w_type == "英雄")
+                
+                row = i // 6
+                col = i % 6
+                
+                card = ctk.CTkFrame(cards_frame, fg_color="#1a1a2e" if not is_hero else "#2c3e50", corner_radius=4)
+                card.grid(row=row, column=col, padx=3, pady=3, sticky="ew")
+                
+                cards_frame.grid_columnconfigure(col, weight=1)
+                
+                name_label = ctk.CTkLabel(card, text=cn_name,
+                                           font=("Microsoft YaHei", 10, "bold"), text_color="#ecf0f1")
+                name_label.pack(padx=3, pady=(3, 0))
+                
+                give_btn = ctk.CTkButton(card, text="赋予", width=50, height=20,
+                                          font=("Microsoft YaHei", 9),
+                                          command=lambda wid=weapon_id, name=cn_name: self._give_weapon_by_id(wid, name),
+                                          fg_color="#3498db" if not is_hero else "#e74c3c",
+                                          hover_color="#2980b9" if not is_hero else "#c0392b")
+                give_btn.pack(padx=3, pady=(0, 3))
+
     def _build_connect_button(self):
         self.btn_frame = ctk.CTkFrame(self, corner_radius=8)
         self.btn_frame.pack(fill="x", padx=12, pady=(2, 6))
@@ -738,6 +892,98 @@ class App(ctk.CTk):
                                                                      text="▶ 跳过当前回合"))
 
         threading.Thread(target=do_skip, daemon=True).start()
+
+    def _quick_give_weapon(self, weapon_id):
+        if not self._ready:
+            self._log("⚠ 尚未连接到游戏，请先点击「连接游戏」")
+            return
+        
+        self._log(f"🔫 快速赋予武器 ID={weapon_id}...")
+        
+        def do_give_weapon():
+            try:
+                result = self._frida.call_export('giveweapon', weapon_id, True, True)
+                if result and result.get('ok'):
+                    if result.get('result', '').startswith('pending:'):
+                        self._log(f"✅ 武器赋予任务已提交，等待主线程执行...")
+                    else:
+                        self._log(f"✅ 武器赋予成功！")
+                else:
+                    self._log(f"❌ 武器赋予失败: {result.get('msg', '未知错误')}")
+            except Exception as e:
+                self._log(f"❌ 武器赋予异常: {e}")
+        
+        threading.Thread(target=do_give_weapon, daemon=True).start()
+
+    def _give_weapon_by_id(self, weapon_id, weapon_name=""):
+        if not self._ready:
+            self._log("⚠ 尚未连接到游戏，请先点击「连接游戏」")
+            return
+        
+        self.current_weapon_label.configure(text=f"当前武器: {weapon_name} (ID: {weapon_id})")
+        self._log(f"🔫 正在赋予武器: {weapon_name} (ID: {weapon_id})...")
+        
+        if self.respawn_weapon_var.get():
+            self._set_respawn_weapon(weapon_id, weapon_name)
+        
+        def do_give_weapon():
+            try:
+                result = self._frida.call_export('giveweapon', weapon_id, True, True)
+                if result and result.get('ok'):
+                    if result.get('result', '').startswith('pending:'):
+                        self._log(f"✅ 武器赋予任务已提交，等待主线程执行...")
+                    else:
+                        self._log(f"✅ 武器赋予成功: {weapon_name}")
+                else:
+                    self._log(f"❌ 武器赋予失败: {weapon_name} - {result.get('msg', '未知错误')}")
+            except Exception as e:
+                self._log(f"❌ 武器赋予异常: {e}")
+        
+        threading.Thread(target=do_give_weapon, daemon=True).start()
+
+    def _set_respawn_weapon(self, weapon_id, weapon_name):
+        if not self._ready:
+            return
+        
+        def do_set():
+            try:
+                result = self._frida.call_export('setrespawnweapon', weapon_id, weapon_name)
+                if result and result.get('ok'):
+                    self._log(f"✅ 已设置复活自动装备: {weapon_name} (ID: {weapon_id})")
+                else:
+                    self._log(f"❌ 设置复活武器失败")
+            except Exception as e:
+                self._log(f"❌ 设置复活武器失败: {e}")
+        
+        threading.Thread(target=do_set, daemon=True).start()
+
+    def _on_respawn_weapon_toggle(self):
+        if not self._ready:
+            self._log("⚠ 尚未连接到游戏，请先点击「连接游戏」")
+            return
+        
+        if self.respawn_weapon_var.get():
+            self._log("✅ 复活自动装备已启用，点击武器卡片赋予时会自动设置")
+        else:
+            self._clear_respawn_weapon()
+
+    def _clear_respawn_weapon(self):
+        if not self._ready:
+            return
+        
+        self._log("🔫 清除复活自动装备武器")
+        
+        def do_clear():
+            try:
+                result = self._frida.call_export('clearrespawnweapon')
+                if result and result.get('ok'):
+                    self._log(f"✅ 已清除复活自动装备")
+                else:
+                    self._log(f"❌ 清除失败")
+            except Exception as e:
+                self._log(f"❌ 清除异常: {e}")
+        
+        threading.Thread(target=do_clear, daemon=True).start()
 
     def _connect(self):
         if self._connecting:

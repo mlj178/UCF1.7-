@@ -4,12 +4,13 @@ import sys
 if getattr(sys, 'frozen', False):
     APP_DIR = os.path.dirname(sys.executable)
     RESOURCE_DIR = os.path.join(sys._MEIPASS, "资源")
+    SCRIPTS_DIR = os.path.join(sys._MEIPASS, "game_modifier", "scripts")
 else:
     APP_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     RESOURCE_DIR = os.path.join(os.path.dirname(APP_DIR), "资源")
+    SCRIPTS_DIR = os.path.join(APP_DIR, "scripts")
 
 DATA_DIR = os.path.join(APP_DIR, "data")
-SCRIPTS_DIR = os.path.join(APP_DIR, "scripts")
 
 if not os.path.exists(DATA_DIR):
     os.makedirs(DATA_DIR)
@@ -27,7 +28,7 @@ HOTKEY_DISPLAY_NAMES = {
     'alt+1': 'Alt+1', 'alt+2': 'Alt+2', 'alt+3': 'Alt+3',
 }
 
-HOTKEY_EXCLUDED = {'nano4t'}
+HOTKEY_EXCLUDED = {'nano4t', 'weapon_giver'}
 
 FEATURES_INFO = {
     'knife': {'name': '快刀', 'icon': '🔪', 'category': 'weapon'},
@@ -46,6 +47,7 @@ FEATURES_INFO = {
     'skillcd': {'name': '技能无冷却', 'icon': '✨', 'category': 'player'},
     'roundskip': {'name': '回合跳过', 'icon': '⏭️', 'category': 'other'},
     'nano4t': {'name': '多人生化特性', 'icon': '🧬', 'category': 'other'},
+    'weapon_giver': {'name': '武器赋予', 'icon': '🔫', 'category': 'weapon'},
 }
 
 GRAVITY_PRESETS = {
