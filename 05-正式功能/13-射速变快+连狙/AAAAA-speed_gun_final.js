@@ -217,80 +217,37 @@
         }
     });
 
-    // ====== 4) PlayerWeapons.SetWeapon — 补给箱武器立即生效（临时修改slotType）======
-    Interceptor.attach(base.add(0xB16BF0), {
-        onEnter: function(args) {
-            this.weapon = args[1];
-            this.originalSlotType = -1;
-            if (!this.weapon) return;
-            try {
-                var data = this.weapon.add(0x68).readPointer();
-                if (!data.isNull()) {
-                    var slotType = data.add(0x90).readU32();
-                    if (slotType === 1) {
-                        this.originalSlotType = slotType;
-                        data.add(0x90).writeU32(0);
-                        logWpn(this.weapon, "SetWeapon.fixSlotType");
-                    }
-                }
-            } catch(e) {}
-        },
-        onLeave: function(retVal) {
-            if (!this.weapon) return;
-            if (this.originalSlotType === -1) return;
-            try {
-                var data = this.weapon.add(0x68).readPointer();
-                if (!data.isNull()) {
-                    data.add(0x90).writeU32(this.originalSlotType);
-                }
-            } catch(e) {}
-        }
-    });
-
-    // ====== 5) WPN_RPG.OnFireBtnPressed — RPG/AT4 半自动绕过 ======
-    // 方案一：在onEnter中立即修改，确保第一发就生效
-    Interceptor.attach(base.add(0xB67700), {
+    // ====== 4) WPN_Gun.OnGenerateFromOwner — 补给箱枪械创建时加速 ======
+    Interceptor.attach(base.add(0xB62900), {
         onEnter: function(args) {
             this.self = args[0];
-            this.isMyWeapon = false;
-            logWpn(this.self, "RPG.OnFireBtnPressed");
-            try {
-                this.isMyWeapon = isMyWeaponFn(this.self, ptr(0));
-                if (this.isMyWeapon) {
-                    // 立即修改RPG状态（在射击前）
-                    this.self.add(0xF8).writeS32(1);
-                    
-                    // 立即设置realData中的动画速度
-                    var realData = this.self.add(0xF0).readPointer();
-                    if (!realData.isNull()) {
-                        realData.add(0xF0).writeFloat(10.0);
-                        realData.add(0xEC).writeFloat(10.0);
-                    }
-                    
-                    // 立即设置动画速度（在射击前）
-                    var anim = getCharAnim(this.self, ptr(0));
-                    if (!anim.isNull()) {
-                        setAnimSpeed(anim, 10.0, ptr(0));
-                    }
-                }
-            } catch(e) {}
         },
         onLeave: function(retVal) {
-            // onLeave保持为空，所有修改已在onEnter完成
-        }
-    });
-
-    // ====== 5.5) WPN_RPG.Fire — RPG/AT4 发射时确保动画速度（补给箱立即生效）======
-    Interceptor.attach(base.add(0xB670A0), {
-        onEnter: function(args) {
-            this.self = args[0];
+            if (!this.self) return;
             try {
                 if (isMyWeaponFn(this.self, ptr(0))) {
                     var anim = getCharAnim(this.self, ptr(0));
                     if (!anim.isNull()) {
                         setAnimSpeed(anim, 10.0, ptr(0));
                     }
-                    
+                }
+            } catch(e) {}
+        }
+    });
+
+    // ====== 5) WPN_RPG.OnGenerateFromOwner — 补给箱RPG/AT4创建时加速 ======
+    Interceptor.attach(base.add(0xB67740), {
+        onEnter: function(args) {
+            this.self = args[0];
+        },
+        onLeave: function(retVal) {
+            if (!this.self) return;
+            try {
+                if (isMyWeaponFn(this.self, ptr(0))) {
+                    var anim = getCharAnim(this.self, ptr(0));
+                    if (!anim.isNull()) {
+                        setAnimSpeed(anim, 10.0, ptr(0));
+                    }
                     var realData = this.self.add(0xF0).readPointer();
                     if (!realData.isNull()) {
                         realData.add(0xF0).writeFloat(10.0);
@@ -301,7 +258,27 @@
         }
     });
 
-    // ====== 6) Recoil.OnGunShot — 清零后坐力 ======
+    // ====== 6) WPN_RPG.OnFireBtnPressed — RPG/AT4 半自动绕过 ======
+    Interceptor.attach(base.add(0xB67700), {
+        onEnter: function(args) {
+            this.self = args[0];
+        },
+        onLeave: function(retVal) {
+            if (!this.self) return;
+            try {
+                if (isMyWeaponFn(this.self, ptr(0))) {
+                    this.self.add(0xF8).writeS32(1);
+                    var realData = this.self.add(0xF0).readPointer();
+                    if (!realData.isNull()) {
+                        realData.add(0xF0).writeFloat(10.0);
+                        realData.add(0xEC).writeFloat(10.0);
+                    }
+                }
+            } catch(e) {}
+        }
+    });
+
+    // ====== 7) Recoil.OnGunShot — 清零后坐力 ======
     Interceptor.attach(base.add(0xB19980), {
         onEnter: function(args) {
             this.self = args[0];
@@ -320,7 +297,7 @@
         }
     });
 
-    // ====== 7) Recoil.GetCurrentPerturb — 强制 0 扩散 ======
+    // ====== 8) Recoil.GetCurrentPerturb — 强制 0 扩散 ======
     Interceptor.attach(base.add(0xB19420), {
         onLeave: function(retVal) {
             retVal.replace(0.0);

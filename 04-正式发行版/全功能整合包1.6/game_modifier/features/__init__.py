@@ -14,3 +14,4 @@ from features.speed_gun import SpeedGunFeature
 from features.skill_cd import SkillCdFeature
 from features.is_bot import IsBotFeature
 from features.nano4t import Nano4tFeature
+from features.weapon_giver import WeaponGiverFeature

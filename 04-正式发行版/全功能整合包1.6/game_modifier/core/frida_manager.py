@@ -162,6 +162,21 @@ rpc.exports = {
   nano4thealthcheck: function() {
     if (!modules.nano4t) return JSON.stringify({ type: 'nano4t_dead' });
     return modules.nano4t.healthCheck();
+  },
+  giveweapon: function(weaponId, autoGiveUp, autoSelect) {
+    if (!modules.weapon_giver) return JSON.stringify({ ok: false, msg: '武器赋予模块未加载' });
+    var result = modules.weapon_giver.giveweapon(weaponId, autoGiveUp, autoSelect);
+    return JSON.stringify({ ok: result ? true : false, result: result });
+  },
+  setrespawnweapon: function(weaponId, weaponName) {
+    if (!modules.weapon_giver) return JSON.stringify({ ok: false });
+    var result = modules.weapon_giver.setrespawnweapon(weaponId, weaponName);
+    return JSON.stringify({ ok: result });
+  },
+  clearrespawnweapon: function() {
+    if (!modules.weapon_giver) return JSON.stringify({ ok: false });
+    var result = modules.weapon_giver.clearrespawnweapon();
+    return JSON.stringify({ ok: result });
   }
 };
 """
@@ -300,6 +315,26 @@ setTimeout(function() { getGameAssembly(); }, 100);
             self._event_bus.emit('round_skipped',
                                  count=payload.get('count', 0),
                                  from_time=payload.get('from', ''))
+
+        elif msg_type == 'giveWeaponResult':
+            task_id = payload.get('taskId', 0)
+            success = payload.get('success', False)
+            if success:
+                self._event_bus.emit('log_message', level='success', module='武器赋予',
+                                     message=f'赋予武器任务 #{task_id} 执行成功')
+            else:
+                self._event_bus.emit('log_message', level='error', module='武器赋予',
+                                     message=f'赋予武器任务 #{task_id} 执行失败')
+
+        elif msg_type == 'playerRespawned':
+            self._event_bus.emit('log_message', level='info', module='武器赋予',
+                                 message='检测到玩家复活')
+
+        elif msg_type == 'playerRespawnedWithWeapon':
+            weapon_id = payload.get('weaponId', '')
+            weapon_name = payload.get('weaponName', '')
+            self._event_bus.emit('log_message', level='success', module='武器赋予',
+                                 message=f'复活自动装备武器: {weapon_name} (ID: {weapon_id})')
 
         elif msg_type.startswith('nano4t_'):
             self._event_bus.emit('nano4t_event',
