@@ -14,7 +14,6 @@
 //
 // 使用方法：
 //   方式1（推荐）：frida -n UnityCrossFire.exe -l AAAAA-debug_isMyPlayer_isMyWeapon.js
-//   方式2（备选）：frida -p <pid> -l AAAAA-debug_isMyPlayer_isMyWeapon.js
 // ============================================================
 
 (function() {
@@ -57,30 +56,30 @@
 
     // ==================== 3. RVA地址常量 ====================
     var RVA = {
-        GameManager_TypeInfo:             0x0E2933C,   // GameManager_TypeInfo（用于读取静态字段）
-        SingletonGet:                    0x4A8170,   // Singleton<GameManager>.get_instance（用于获取实例）
-        GM_Singleton_MethodInfo:         0xE1CE64,   // MethodInfo* 元数据指针
-        Player_get_isMyPlayer:           0xB55FD0,   // bool (Player*, MethodInfo*)
-        Weapon_get_isMyWeapon:           0xB6E1D0,   // bool (Weapon*, MethodInfo*)
+        GameManager_TypeInfo:             0x0E2933C,
+        RuntimeClassInit:                0x108970,
+        Player_get_isMyPlayer:           0xB55FD0,
+        Weapon_get_isMyWeapon:           0xB6E1D0,
     };
 
     // ==================== 4. 字段偏移常量 ====================
     var OFF = {
-        GM_allPlayers:      0x1C,   // Player[]
-        GM_playersBL:       0x20,   // List<Player>
-        GM_playersGR:       0x28,   // List<Player>
-        GM_myPlayer:        0x00,   // Player (static_fields偏移)
+        GM_allPlayers:      0x1C,
+        GM_playersBL:       0x20,
+        GM_playersGR:       0x28,
+        GM_myPlayer:        0x00,
 
-        P_wpns:             0xA0,   // PlayerWeapons
-        PW_inUse:           0x18,   // Weapon (当前使用的武器)
-        PW_owner:           0x08,   // Player (PlayerWeapons的owner字段)
-        W_owner:            0x30,   // Player (Weapon的owner字段)
+        P_wpns:             0xA0,
+        PW_inUse:           0x18,
+        PW_owner:           0x08,
+        W_owner:            0x30,
 
-        Arr_len:            0x0C,   // il2cpp_array_size_t
-        Arr_data:           0x10,   // data start
-        List_items:         0x08,   // T[] _items
-        List_size:          0x0C,   // int _size
-        Klass_staticFields: 0x5C,   // static_fields指针
+        Arr_len:            0x0C,
+        Arr_data:           0x10,
+        List_items:         0x08,
+        List_size:          0x0C,
+        Klass_staticFields: 0x5C,
+        Klass_parent:       0x2C,
     };
 
     // ==================== 5. 安全读取函数 ====================
@@ -115,20 +114,20 @@
         var base = mod.base;
 
         try {
-            _nativeFuncs.singletonGetter = new NativeFunction(
-                base.add(RVA.SingletonGet), 
-                'pointer', 
+            _nativeFuncs.classInit = new NativeFunction(
+                base.add(RVA.RuntimeClassInit),
+                'void',
                 ['pointer']
             );
         } catch(e) {
-            log('error', '初始化', 'singletonGetter创建失败: ' + e.message);
+            log('error', '初始化', 'classInit创建失败: ' + e.message);
             return false;
         }
 
         try {
             _nativeFuncs.isMyPlayer = new NativeFunction(
-                base.add(RVA.Player_get_isMyPlayer), 
-                'bool', 
+                base.add(RVA.Player_get_isMyPlayer),
+                'bool',
                 ['pointer', 'pointer']
             );
         } catch(e) {
@@ -138,8 +137,8 @@
 
         try {
             _nativeFuncs.isMyWeapon = new NativeFunction(
-                base.add(RVA.Weapon_get_isMyWeapon), 
-                'bool', 
+                base.add(RVA.Weapon_get_isMyWeapon),
+                'bool',
                 ['pointer', 'pointer']
             );
         } catch(e) {
@@ -161,16 +160,47 @@
         try {
             var mod = getGameAssembly();
             if (!mod) return null;
-            var base = mod.base;
 
-            var mi = base.add(RVA.GM_Singleton_MethodInfo).readPointer();
-            if (mi.isNull()) {
-                return _nativeFuncs.singletonGetter(ptr(0));
+            var gmKlass = readPtr(mod.base.add(RVA.GameManager_TypeInfo));
+            if (!gmKlass) {
+                log('error', 'GM', '无法获取 GameManager klass');
+                return null;
             }
 
-            var gm = _nativeFuncs.singletonGetter(mi);
-            if (gm.isNull()) return null;
-            return gm;
+            var singletonDefKlass = readPtr(gmKlass.add(OFF.Klass_parent));
+            if (!singletonDefKlass) {
+                log('error', 'GM', 'parent klass 为 null');
+                return null;
+            }
+
+            var genericClass = readPtr(singletonDefKlass.add(0x30));
+            if (!genericClass) {
+                log('error', 'GM', 'generic_class 为 null');
+                return null;
+            }
+
+            var inflatedKlass = readPtr(genericClass.add(0x00));
+            if (!inflatedKlass) {
+                log('error', 'GM', 'inflated klass 为 null');
+                return null;
+            }
+
+            try {
+                _nativeFuncs.classInit(inflatedKlass);
+            } catch(e) {}
+
+            var sf = readPtr(inflatedKlass.add(OFF.Klass_staticFields));
+            if (!sf) {
+                log('error', 'GM', 'inflated klass static_fields 为 null');
+                return null;
+            }
+
+            var instance = readPtr(sf);
+            if (!instance) {
+                log('error', 'GM', 'GameManager 实例为 null（请确认已进入对局）');
+                return null;
+            }
+            return instance;
         } catch(e) {
             log('error', 'GM', '获取GameManager失败: ' + e.message);
             return null;
