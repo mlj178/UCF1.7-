@@ -1,6 +1,6 @@
 {
   "knife": {
-    "enabled": false,
+    "enabled": true,
     "slider_value": 7.2
   },
   "time": {
@@ -10,10 +10,10 @@
     "enabled": false
   },
   "ammo": {
-    "enabled": false
+    "enabled": true
   },
   "movespeed": {
-    "enabled": false,
+    "enabled": true,
     "slider_value": 3.0
   },
   "ammoplus": {
@@ -56,5 +56,8 @@
   "weapon_giver": {
     "enabled": false,
     "respawn_weapon": false
+  },
+  "esp_box": {
+    "enabled": false
   }
 }

@@ -1,0 +1,13 @@
+{
+  "id": "universal_hook",
+  "name": "Universal Hook",
+  "dll": "Universal-ImGui-Hook.dll",
+  "target_process": "UnityCrossFire.exe",
+  "pipe_name": "\\\\.\\pipe\\ucf_universal_hook",
+  "features": [
+    {
+      "id": "esp_box",
+      "name": "方框透视"
+    }
+  ]
+}

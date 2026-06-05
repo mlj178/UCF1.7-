@@ -28,7 +28,7 @@ HOTKEY_DISPLAY_NAMES = {
     'alt+1': 'Alt+1', 'alt+2': 'Alt+2', 'alt+3': 'Alt+3',
 }
 
-HOTKEY_EXCLUDED = {'nano4t', 'weapon_giver'}
+HOTKEY_EXCLUDED = {'nano4t', 'weapon_giver', 'esp_box'}
 
 FEATURES_INFO = {
     'knife': {'name': '快刀', 'icon': '🔪', 'category': 'weapon'},
@@ -48,6 +48,7 @@ FEATURES_INFO = {
     'roundskip': {'name': '回合跳过', 'icon': '⏭️', 'category': 'other'},
     'nano4t': {'name': '多人生化特性', 'icon': '🧬', 'category': 'other'},
     'weapon_giver': {'name': '武器赋予', 'icon': '🔫', 'category': 'weapon'},
+    'esp_box': {'name': '方框透视', 'icon': '📦', 'category': 'other'},
 }
 
 GRAVITY_PRESETS = {
