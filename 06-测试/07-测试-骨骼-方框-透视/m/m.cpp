@@ -8,6 +8,13 @@
 #include "imgui/imgui_impl_dx11.h"
 #include "imgui/imgui_impl_win32.h"
 
+#include "esp/esp_config.h"
+#include "esp/il2cpp_bridge.h"
+#include "esp/game_manager.h"
+#include "esp/transform_helper.h"
+#include "esp/coord_converter.h"
+#include "esp/esp_renderer.h"
+
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
 typedef HRESULT(__stdcall* PresentFn)(IDXGISwapChain*, UINT, UINT);
@@ -26,11 +33,13 @@ static HWND                    g_hWnd    = NULL;
 static volatile bool g_ImGuiInit = false;
 static volatile bool g_Shutdown  = false;
 static volatile LONG g_FrameCount = 0;
+static volatile bool g_ESPInitialized = false;
+static volatile bool g_ESPInitAttempted = false;
 
 static char  g_LogPath[MAX_PATH] = {0};
 static CRITICAL_SECTION g_LogCS;
 
-static void dbg(const char* fmt, ...) {
+extern "C" void dbg(const char* fmt, ...) {
     char buf[512];
     va_list va;
     va_start(va, fmt);
@@ -249,16 +258,31 @@ static HRESULT __stdcall hkPresent(IDXGISwapChain* pSwap, UINT sync, UINT flags)
 
                 if (g_pRTV) {
                     g_PresentStage = 16;
+                    
+                    DXGI_SWAP_CHAIN_DESC sd;
+                    pSwap->GetDesc(&sd);
+                    float width = (float)sd.BufferDesc.Width;
+                    float height = (float)sd.BufferDesc.Height;
+                    
                     UINT numVps = 1;
                     D3D11_VIEWPORT vp;
                     g_pContext->RSGetViewports(&numVps, &vp);
-                    dbg("Viewport: num=%u w=%.0f h=%.0f x=%.0f y=%.0f", numVps, vp.Width, vp.Height, vp.TopLeftX, vp.TopLeftY);
+                    
+                    if (vp.Width > 0 && vp.Height > 0) {
+                        width = vp.Width;
+                        height = vp.Height;
+                    }
+                    
+                    dbg("Viewport: num=%u w=%.0f h=%.0f x=%.0f y=%.0f (swapchain: %ux%u)", 
+                        numVps, width, height, vp.TopLeftX, vp.TopLeftY, 
+                        sd.BufferDesc.Width, sd.BufferDesc.Height);
 
                     g_PresentStage = 20;
                     ImGui::CreateContext();
                     ImGuiIO& io = ImGui::GetIO();
                     io.ConfigFlags = ImGuiConfigFlags_NoMouseCursorChange;
-                    io.DisplaySize = ImVec2(vp.Width, vp.Height);
+                    io.IniFilename = NULL;
+                    io.DisplaySize = ImVec2(width, height);
                     io.Fonts->AddFontDefault();
 
                     ImGui_ImplWin32_Init(g_hWnd);
@@ -285,14 +309,21 @@ static HRESULT __stdcall hkPresent(IDXGISwapChain* pSwap, UINT sync, UINT flags)
         ImGui_ImplDX11_NewFrame();
         ImGui_ImplWin32_NewFrame();
         ImGui::NewFrame();
+        
+        if (g_ESPInitialized) {
+            ESPRenderer::Render();
+        }
 
         ImGui::SetNextWindowPos(ImVec2(10, 10), ImGuiCond_FirstUseEver);
         ImGui::SetNextWindowSize(ImVec2(300, 200), ImGuiCond_FirstUseEver);
         ImGui::Begin("ESP Demo", NULL, ImGuiWindowFlags_NoCollapse);
         {
+            ImGui::Checkbox("Enable ESP", &ESPRenderer::s_Enabled);
+            ImGui::Separator();
             ImGui::Text("ImGui D3D11 Hook - Working!");
             ImGui::Separator();
             ImGui::Text("Frame: %d", (int)g_FrameCount);
+            ImGui::Text("ESP Init: %s", g_ESPInitialized ? "YES" : "NO");
             ImGui::Text("Stage: %d", (int)g_PresentStage);
             ImGui::Text("Device: 0x%p", g_pDevice);
             ImGui::Text("Context: 0x%p", g_pContext);
@@ -395,6 +426,56 @@ static DWORD WINAPI MainThread(LPVOID) {
     }
 
     dbg("Hook active. Waiting for game frames...");
+    
+    Sleep(3000);
+    
+    if (!g_ESPInitialized && !g_ESPInitAttempted) {
+        g_ESPInitAttempted = true;
+        dbg("[ESP] Starting initialization...");
+        
+        HMODULE gameAsm = GetModuleHandleA("GameAssembly.dll");
+        if (gameAsm) {
+            dbg("[ESP] GameAssembly.dll found at 0x%p", gameAsm);
+            
+            bool initOK = false;
+            if (IL2CPPBridge::Initialize(gameAsm)) {
+                if (GameManager::Initialize()) {
+                    if (TransformHelper::Initialize()) {
+                        if (CoordConverter::Initialize()) {
+                            initOK = true;
+                        }
+                    }
+                }
+            }
+            
+            if (initOK) {
+                g_ESPInitialized = true;
+                dbg("=== ESP System Initialized ===");
+            } else {
+                dbg("[ESP] Initialization failed");
+            }
+        } else {
+            dbg("[ESP] GameAssembly.dll not found, retrying...");
+            for (int i = 0; i < 10; i++) {
+                Sleep(1000);
+                gameAsm = GetModuleHandleA("GameAssembly.dll");
+                if (gameAsm) {
+                    dbg("[ESP] GameAssembly.dll found at 0x%p (retry %d)", gameAsm, i+1);
+                    if (IL2CPPBridge::Initialize(gameAsm)) {
+                        if (GameManager::Initialize()) {
+                            if (TransformHelper::Initialize()) {
+                                if (CoordConverter::Initialize()) {
+                                    g_ESPInitialized = true;
+                                    dbg("=== ESP System Initialized ===");
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 
     while (!g_Shutdown) {
         Sleep(250);

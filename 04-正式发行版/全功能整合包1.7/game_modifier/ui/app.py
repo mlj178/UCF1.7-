@@ -432,6 +432,10 @@ class App(ctk.CTk):
                      text_color="#a0a0a0", wraplength=280, justify="left", anchor="w").pack(
             fill="x", expand=False, padx=5, pady=5)
 
+        _, self.esp_box_switch, _ = self._make_feature_card(
+            scroll, 3, 0, 2, "#1f2937", 'esp_box', '📦', '方框透视',
+            '开启敌人方框显示，由 Universal DLL 执行', title_color="#60A5FA")
+
     def _build_nano4t_tab(self, scroll):
         self.nano4t_top_frame = ctk.CTkFrame(scroll, corner_radius=8, fg_color="#2b2b2b")
         self.nano4t_top_frame.pack(fill="x", padx=8, pady=(8, 4))
@@ -750,6 +754,29 @@ class App(ctk.CTk):
             return
 
         new_state = not self._features.get(feature_id, False)
+
+        # Special handling for esp_box (Universal DLL) - run in background thread
+        if feature_id == 'esp_box':
+            # Disable switch during operation to prevent duplicate clicks
+            switch = getattr(self, 'esp_box_switch', None)
+            if switch:
+                switch.configure(state="disabled")
+
+            def run_in_background():
+                try:
+                    feature = self._registry.get('esp_box')
+                    ok = feature.enable() if new_state else feature.disable()
+                    self._features[feature_id] = bool(ok and new_state)
+                    # Schedule UI update on main thread
+                    self.after(0, lambda: self._on_esp_box_complete(feature_id, ok))
+                except Exception as e:
+                    self.after(0, lambda: self._on_esp_box_error(feature_id, str(e)))
+
+            import threading
+            thread = threading.Thread(target=run_in_background, daemon=True)
+            thread.start()
+            return
+
         self._features[feature_id] = new_state
 
         if feature_id == 'knife':
@@ -784,6 +811,7 @@ class App(ctk.CTk):
             'gravity': self.gravity_switch, 'aim': self.aim_switch,
             'godmode': self.godmode_switch, 'speedgun': self.speedgun_switch,
             'isbot': self.isbot_switch, 'skillcd': self.skillcd_switch,
+            'esp_box': self.esp_box_switch,
         }
         switch = switch_map.get(feature_id)
         if not switch:
@@ -793,6 +821,27 @@ class App(ctk.CTk):
             switch.select()
         else:
             switch.deselect()
+
+    def _on_esp_box_complete(self, feature_id, ok):
+        """Called on main thread after ESP box operation completes."""
+        self._update_switch(feature_id)
+        self._schedule_save_state()
+        # Re-enable switch
+        switch = getattr(self, 'esp_box_switch', None)
+        if switch:
+            switch.configure(state="normal")
+        if ok:
+            self._sound.play_toggle_sound()
+
+    def _on_esp_box_error(self, feature_id, error_msg):
+        """Called on main thread if ESP box operation fails."""
+        self._log(f"⚠ 方框透视操作失败: {error_msg}")
+        self._features[feature_id] = False
+        self._update_switch(feature_id)
+        # Re-enable switch
+        switch = getattr(self, 'esp_box_switch', None)
+        if switch:
+            switch.configure(state="normal")
 
     def _on_knife_speed_change(self, value):
         self._knife_speed = round(float(value), 1)
@@ -1079,7 +1128,7 @@ class App(ctk.CTk):
             self._update_switch(feature_id)
 
     def _restore_single_feature(self, feature_id):
-        if feature_id in ('nano4t', 'roundskip'):
+        if feature_id in ('nano4t', 'roundskip', 'esp_box'):
             return
         if feature_id == 'knife':
             self._frida.send_toggle('knife', True)
@@ -1389,5 +1438,9 @@ class App(ctk.CTk):
         self._stop = True
         self._hotkey.cleanup()
         self._save_feature_state()
+        # Cleanup Universal ESP feature
+        feature = self._registry.get('esp_box')
+        if feature and hasattr(feature, 'cleanup'):
+            feature.cleanup()
         self._cleanup()
         self.destroy()
