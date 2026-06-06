@@ -44,9 +44,27 @@ echo.
 echo ==========================================
 echo   [SUCCESS] Build completed.
 echo ==========================================
-echo   Output: Release\Universal-ImGui-Hook.dll
-if exist Release\Universal-ImGui-Hook.dll (
-    for %%F in (Release\Universal-ImGui-Hook.dll) do echo   Size: %%~zF bytes
+echo   Output: Universal-ImGui-Hook.dll
+if exist Universal-ImGui-Hook.dll (
+    for %%F in (Universal-ImGui-Hook.dll) do echo   Size: %%~zF bytes
 )
+echo.
+
+echo [INFO] Deploying to game_modifier...
+set "TARGET_DIR=D:\trae_project\ucf1.7-modifier\04-正式发行版\全功能整合包1.7\game_modifier\plugins\universal_hook"
+
+if exist "Universal-ImGui-Hook.dll" (
+    copy /Y "Universal-ImGui-Hook.dll" "%TARGET_DIR%\"
+    echo [OK] Copied Universal-ImGui-Hook.dll
+)
+
+if exist "inject.exe" (
+    copy /Y "inject.exe" "%TARGET_DIR%\"
+    echo [OK] Copied inject.exe
+)
+
+echo.
+echo ==========================================
+echo   [DEPLOY COMPLETE]
 echo ==========================================
 exit /b 0

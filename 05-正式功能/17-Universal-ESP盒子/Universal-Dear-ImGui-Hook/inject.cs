@@ -43,9 +43,9 @@ public class DllInjector
     private const uint MEM_COMMIT = 0x1000;
     private const uint MEM_RESERVE = 0x2000;
     private const uint PAGE_READWRITE = 0x04;
-    private const int LIST_MODULES_32BIT = 0x02;
+    private const int LIST_MODULES_32BIT = 0x01;
 
-    private static string logFile = @"d:\trae_project\Universal-Dear-ImGui-Hook\inject_log.txt";
+    private static string logFile = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "inject_log.txt");
 
     public static void Log(string message, string level)
     {
@@ -77,6 +77,7 @@ public class DllInjector
             if (len > 0)
             {
                 string name = sb.ToString();
+                Log(string.Format("模块[{0}]: {1}", i, name), "INFO");
                 if (name.EndsWith(moduleName, StringComparison.OrdinalIgnoreCase))
                 {
                     Log(string.Format("找到 {0}: 0x{1:X}", moduleName, hModules[i].ToInt64()), "INFO");
@@ -90,41 +91,78 @@ public class DllInjector
 
     public static void Main(string[] args)
     {
-        string processName = args.Length > 0 ? args[0] : "UnityCrossFire";
-        string dllPath = args.Length > 1 ? args[1] : @"d:\trae_project\Universal-Dear-ImGui-Hook\Release\Universal-ImGui-Hook.dll";
+        string processArg = args.Length > 0 ? args[0] : "UnityCrossFire";
+        string dllPath = args.Length > 1 ? args[1] : Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Universal-ImGui-Hook.dll");
 
         try { File.AppendAllText(logFile, "\n" + new string('=', 60) + "\n"); } catch { }
 
         Log("DLL注入程序启动", "INFO");
-        Log(string.Format("目标进程: {0}", processName), "INFO");
+        Log(string.Format("目标参数: {0}", processArg), "INFO");
         Log(string.Format("DLL路径: {0}", dllPath), "INFO");
 
         if (!File.Exists(dllPath))
         {
             Log(string.Format("错误: DLL文件不存在: {0}", dllPath), "ERROR");
+            Environment.Exit(1);
             return;
         }
         Log(string.Format("DLL文件大小: {0} 字节", new FileInfo(dllPath).Length), "INFO");
 
-        Process[] processes = Process.GetProcessesByName(processName);
-        if (processes.Length == 0)
+        Process process = null;
+        int pid;
+
+        // Check if processArg is a PID (numeric)
+        if (int.TryParse(processArg, out pid))
         {
-            Log(string.Format("等待进程启动: {0}", processName), "INFO");
-            for (int i = 0; i < 60; i++)
+            Log(string.Format("按 PID 查找进程: {0}", pid), "INFO");
+            try
             {
-                System.Threading.Thread.Sleep(500);
-                processes = Process.GetProcessesByName(processName);
-                if (processes.Length > 0) break;
+                process = Process.GetProcessById(pid);
+                Log(string.Format("找到进程: PID={0}, 主窗口: '{1}'", process.Id, process.MainWindowTitle), "INFO");
             }
-            if (processes.Length == 0)
+            catch (ArgumentException)
             {
-                Log(string.Format("错误: 进程未在30秒内启动: {0}", processName), "ERROR");
+                Log(string.Format("错误: 进程 PID={0} 不存在", pid), "ERROR");
+                Environment.Exit(1);
                 return;
             }
         }
+        else
+        {
+            // Find by process name
+            string processName = processArg;
+            Log(string.Format("按进程名查找: {0}", processName), "INFO");
+            Process[] processes = Process.GetProcessesByName(processName);
+            Log(string.Format("候选进程数量: {0}", processes.Length), "INFO");
 
-        Process process = processes[0];
-        Log(string.Format("找到进程: PID={0}, 主窗口: '{1}'", process.Id, process.MainWindowTitle), "INFO");
+            if (processes.Length > 0)
+            {
+                foreach (var p in processes)
+                {
+                    Log(string.Format("候选 PID={0}, Title='{1}'", p.Id, p.MainWindowTitle), "INFO");
+                }
+            }
+
+            if (processes.Length == 0)
+            {
+                Log(string.Format("等待进程启动: {0}", processName), "INFO");
+                for (int i = 0; i < 60; i++)
+                {
+                    System.Threading.Thread.Sleep(500);
+                    processes = Process.GetProcessesByName(processName);
+                    if (processes.Length > 0) break;
+                }
+                if (processes.Length == 0)
+                {
+                    Log(string.Format("错误: 进程未在30秒内启动: {0}", processName), "ERROR");
+                    Environment.Exit(1);
+                    return;
+                }
+            }
+
+            process = processes[0];
+            Log(string.Format("选中进程: PID={0}, 主窗口: '{1}'", process.Id, process.MainWindowTitle), "INFO");
+        }
 
         IntPtr hProcess = IntPtr.Zero;
         IntPtr hThread = IntPtr.Zero;
@@ -160,20 +198,21 @@ public class DllInjector
             }
             Log(string.Format("本地 kernel32.dll: 0x{0:X}", localKernel32.ToInt64()), "INFO");
 
-            IntPtr localLoadLibrary = GetProcAddress(localKernel32, "LoadLibraryA");
+            IntPtr localLoadLibrary = GetProcAddress(localKernel32, "LoadLibraryW");
             if (localLoadLibrary == IntPtr.Zero)
             {
-                Log("错误: GetProcAddress失败", "ERROR");
-                return;
+                Log("错误: GetProcAddress(LoadLibraryW)失败", "ERROR");
+                Environment.Exit(1);
             }
-            Log(string.Format("本地 LoadLibraryA: 0x{0:X}", localLoadLibrary.ToInt64()), "INFO");
+            Log(string.Format("本地 LoadLibraryW: 0x{0:X}", localLoadLibrary.ToInt64()), "INFO");
 
             long rva = localLoadLibrary.ToInt64() - localKernel32.ToInt64();
             IntPtr remoteLoadLibrary = new IntPtr(remoteKernel32.ToInt64() + rva);
-            Log(string.Format("LoadLibraryA RVA: 0x{0:X}", rva), "INFO");
-            Log(string.Format("目标进程 LoadLibraryA: 0x{0:X}", remoteLoadLibrary.ToInt64()), "INFO");
+            Log(string.Format("LoadLibraryW RVA: 0x{0:X}", rva), "INFO");
+            Log(string.Format("目标进程 LoadLibraryW: 0x{0:X}", remoteLoadLibrary.ToInt64()), "INFO");
 
-            byte[] dllPathBytes = Encoding.ASCII.GetBytes(dllPath + "\0");
+            // Use Unicode (UTF-16) encoding for LoadLibraryW to support Chinese paths
+            byte[] dllPathBytes = Encoding.Unicode.GetBytes(dllPath + "\0");
             uint dllPathSize = (uint)dllPathBytes.Length;
             Log(string.Format("DLL路径长度: {0} 字节", dllPathSize), "INFO");
 
@@ -183,7 +222,7 @@ public class DllInjector
             {
                 int error = Marshal.GetLastWin32Error();
                 Log(string.Format("错误: VirtualAllocEx失败，错误码: {0}", error), "ERROR");
-                return;
+                Environment.Exit(1);
             }
             Log(string.Format("远程内存地址: 0x{0:X}", remoteMem.ToInt64()), "INFO");
 
@@ -194,7 +233,7 @@ public class DllInjector
             {
                 int error = Marshal.GetLastWin32Error();
                 Log(string.Format("错误: WriteProcessMemory失败，错误码: {0}", error), "ERROR");
-                return;
+                Environment.Exit(1);
             }
             Log(string.Format("写入字节数: {0}", bytesWritten), "INFO");
 
@@ -204,7 +243,7 @@ public class DllInjector
             {
                 int error = Marshal.GetLastWin32Error();
                 Log(string.Format("错误: CreateRemoteThread失败，错误码: {0}", error), "ERROR");
-                return;
+                Environment.Exit(1);
             }
             Log(string.Format("远程线程句柄: 0x{0:X}", hThread.ToInt64()), "INFO");
 
@@ -226,7 +265,7 @@ public class DllInjector
                 Log("  1. DLL与目标进程架构不匹配", "ERROR");
                 Log("  2. DllMain初始化代码有bug", "ERROR");
                 Log("  3. 缺少运行时依赖", "ERROR");
-                return;
+                Environment.Exit(1);
             }
 
             if (exitCode == 0)
@@ -236,7 +275,7 @@ public class DllInjector
                 Log("  1. DLL文件路径无效", "ERROR");
                 Log("  2. DLL依赖缺失", "ERROR");
                 Log("  3. DllMain返回FALSE", "ERROR");
-                return;
+                Environment.Exit(1);
             }
 
             Log(string.Format("DLL注入成功！基地址: 0x{0:X8}", exitCode), "SUCCESS");

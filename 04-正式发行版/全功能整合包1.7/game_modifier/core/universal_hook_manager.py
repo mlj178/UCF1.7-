@@ -55,35 +55,6 @@ kernel32.SetNamedPipeHandleState.argtypes = [
     ctypes.POINTER(ctypes.wintypes.DWORD),     # lpCollectDataTimeout
 ]
 
-kernel32.CreateEventW.restype = ctypes.wintypes.HANDLE
-kernel32.CreateEventW.argtypes = [
-    ctypes.wintypes.LPVOID,   # lpEventAttributes
-    ctypes.wintypes.BOOL,     # bManualReset
-    ctypes.wintypes.BOOL,     # bInitialState
-    ctypes.wintypes.LPCWSTR,  # lpName
-]
-
-kernel32.WaitForSingleObject.restype = ctypes.wintypes.DWORD
-kernel32.WaitForSingleObject.argtypes = [
-    ctypes.wintypes.HANDLE,  # hHandle
-    ctypes.wintypes.DWORD,   # dwMilliseconds
-]
-
-kernel32.GetOverlappedResult.restype = ctypes.wintypes.BOOL
-kernel32.GetOverlappedResult.argtypes = [
-    ctypes.wintypes.HANDLE,                    # hFile
-    ctypes.wintypes.LPVOID,                    # lpOverlapped
-    ctypes.POINTER(ctypes.wintypes.DWORD),     # lpNumberOfBytesTransferred
-    ctypes.wintypes.BOOL,                      # bWait
-]
-
-kernel32.CancelIo.restype = ctypes.wintypes.BOOL
-kernel32.CancelIo.argtypes = [ctypes.wintypes.HANDLE]
-
-INFINITE = 0xFFFFFFFF
-WAIT_OBJECT_0 = 0
-WAIT_TIMEOUT = 0x00000102
-
 
 class UniversalHookManager:
     PIPE_NAME = r"\\.\pipe\ucf_universal_hook"
@@ -126,7 +97,7 @@ class UniversalHookManager:
                 if not self._inject(pid):
                     return False
 
-            if not self._connect_pipe(timeout=5.0):
+            if not self._connect_pipe(timeout=15.0):
                 self._log("error", "Universal pipe not ready")
                 return False
 
@@ -166,13 +137,25 @@ class UniversalHookManager:
 
         self._log("info", "正在加载 Universal Hook...")
         result = subprocess.run(
-            [inject_exe, "UnityCrossFire", self._dll_path],
+            [inject_exe, str(pid), self._dll_path],
             capture_output=True,
             text=True,
             timeout=15,
         )
+
+        # Check return code first
         if result.returncode != 0:
             self._log("error", result.stderr or result.stdout or "Universal Hook 注入失败")
+            return False
+
+        # Verify output contains success marker and no error markers
+        output = result.stdout or ""
+        if "[ERROR]" in output or "LoadLibraryW返回NULL" in output:
+            self._log("error", f"DLL 加载失败: {output}")
+            return False
+
+        if "DLL注入成功" not in output:
+            self._log("error", f"注入结果未知: {output}")
             return False
 
         self._injected = True
@@ -182,13 +165,14 @@ class UniversalHookManager:
     def _connect_pipe(self, timeout):
         deadline = time.time() + timeout
         while time.time() < deadline:
+            # Use synchronous mode to match DLL's PIPE_WAIT server
             handle = kernel32.CreateFileW(
                 self.PIPE_NAME,
                 0xC0000000,  # GENERIC_READ | GENERIC_WRITE
                 0,
                 None,
                 3,  # OPEN_EXISTING
-                0,
+                0,  # No FILE_FLAG_OVERLAPPED - sync mode to match server
                 None,
             )
             if handle and handle != ctypes.wintypes.HANDLE(-1).value:
@@ -206,88 +190,30 @@ class UniversalHookManager:
         if not self._pipe:
             raise RuntimeError("pipe not connected")
 
-        if timeout_ms is None:
-            timeout_ms = self.PIPE_TIMEOUT_MS
-
         data = json.dumps(payload, separators=(",", ":")).encode("utf-8")
 
-        # Write with timeout
-        write_event = kernel32.CreateEventW(None, True, False, None)
-        if not write_event:
-            raise RuntimeError("failed to create write event")
+        # Synchronous write
+        written = ctypes.wintypes.DWORD(0)
+        ok = kernel32.WriteFile(
+            self._pipe, data, len(data), ctypes.byref(written), None
+        )
+        if not ok:
+            err = ctypes.get_last_error()
+            self._close_pipe()
+            raise RuntimeError(f"pipe write failed: {err}")
 
-        try:
-            write_overlapped = self._make_overlapped(write_event)
-            written = ctypes.wintypes.DWORD(0)
+        # Synchronous read
+        buffer = ctypes.create_string_buffer(4096)
+        read_bytes = ctypes.wintypes.DWORD(0)
+        ok = kernel32.ReadFile(
+            self._pipe, buffer, 4096, ctypes.byref(read_bytes), None
+        )
+        if not ok:
+            err = ctypes.get_last_error()
+            self._close_pipe()
+            raise RuntimeError(f"pipe read failed: {err}")
 
-            ok = kernel32.WriteFile(
-                self._pipe, data, len(data), ctypes.byref(written), ctypes.byref(write_overlapped)
-            )
-            if not ok:
-                err = ctypes.get_last_error()
-                if err != 997:  # ERROR_IO_PENDING
-                    self._close_pipe()
-                    raise RuntimeError(f"pipe write failed: {err}")
-
-                wait_result = kernel32.WaitForSingleObject(write_event, timeout_ms)
-                if wait_result != WAIT_OBJECT_0:
-                    kernel32.CancelIo(self._pipe)
-                    self._close_pipe()
-                    raise RuntimeError("pipe write timeout")
-
-                if not kernel32.GetOverlappedResult(
-                    self._pipe, ctypes.byref(write_overlapped), ctypes.byref(written), False
-                ):
-                    self._close_pipe()
-                    raise RuntimeError("pipe write result failed")
-        finally:
-            kernel32.CloseHandle(write_event)
-
-        # Read with timeout
-        read_event = kernel32.CreateEventW(None, True, False, None)
-        if not read_event:
-            raise RuntimeError("failed to create read event")
-
-        try:
-            read_overlapped = self._make_overlapped(read_event)
-            buffer = ctypes.create_string_buffer(4096)
-            read_bytes = ctypes.wintypes.DWORD(0)
-
-            ok = kernel32.ReadFile(
-                self._pipe, buffer, 4096, ctypes.byref(read_bytes), ctypes.byref(read_overlapped)
-            )
-            if not ok:
-                err = ctypes.get_last_error()
-                if err != 997:  # ERROR_IO_PENDING
-                    self._close_pipe()
-                    raise RuntimeError(f"pipe read failed: {err}")
-
-                wait_result = kernel32.WaitForSingleObject(read_event, timeout_ms)
-                if wait_result != WAIT_OBJECT_0:
-                    kernel32.CancelIo(self._pipe)
-                    self._close_pipe()
-                    raise RuntimeError("pipe read timeout")
-
-                if not kernel32.GetOverlappedResult(
-                    self._pipe, ctypes.byref(read_overlapped), ctypes.byref(read_bytes), False
-                ):
-                    self._close_pipe()
-                    raise RuntimeError("pipe read result failed")
-
-            return json.loads(buffer.raw[:read_bytes.value].decode("utf-8"))
-        finally:
-            kernel32.CloseHandle(read_event)
-
-    def _make_overlapped(self, event):
-        class OVERLAPPED(ctypes.Structure):
-            _fields_ = [
-                ("Internal", ctypes.wintypes.LPVOID),
-                ("InternalHigh", ctypes.wintypes.LPVOID),
-                ("Offset", ctypes.wintypes.DWORD),
-                ("OffsetHigh", ctypes.wintypes.DWORD),
-                ("hEvent", ctypes.wintypes.HANDLE),
-            ]
-        return OVERLAPPED(0, 0, 0, 0, event)
+        return json.loads(buffer.raw[:read_bytes.value].decode("utf-8"))
 
     def _close_pipe(self):
         if self._pipe:

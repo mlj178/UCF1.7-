@@ -1,4 +1,5 @@
 #include "stdafx.h"
+#include "esp/named_pipe_server.h"
 
 namespace mousehooks { void Init(); void Remove(); }
 
@@ -281,6 +282,10 @@ static DWORD WINAPI onAttach(LPVOID lpParameter)
 
     mousehooks::Init();
 
+    // Start named pipe server after all initialization is done
+    // This ensures the pipe server thread won't interfere with hook setup
+    NamedPipeServer::Start();
+
     DebugLog("[DllMain] Hook initialization completed.\n");
     return 0;
 }
@@ -289,6 +294,30 @@ BOOL WINAPI DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserved
 {
     switch (ul_reason_for_call) {
     case DLL_PROCESS_ATTACH:
+    {
+        // Early diagnostic: verify DllMain is called before anything else
+        // Build path next to the DLL
+        wchar_t wDiagPath[MAX_PATH] = {0};
+        HMODULE hDiagMod = NULL;
+        GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS, (LPCWSTR)DllMain, &hDiagMod);
+        if (hDiagMod && GetModuleFileNameW(hDiagMod, wDiagPath, MAX_PATH)) {
+            wchar_t* lastSlash = wcsrchr(wDiagPath, L'\\');
+            if (lastSlash) {
+                wcscpy_s(lastSlash + 1, MAX_PATH - (lastSlash + 1 - wDiagPath), L"esp_dllmain_test.txt");
+            } else {
+                wcscpy_s(wDiagPath, MAX_PATH, L"esp_dllmain_test.txt");
+            }
+        } else {
+            GetTempPathW(MAX_PATH, wDiagPath);
+            wcscat_s(wDiagPath, MAX_PATH, L"esp_dllmain_test.txt");
+        }
+        HANDLE hDiag = CreateFileW(wDiagPath, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 0, NULL);
+        if (hDiag != INVALID_HANDLE_VALUE) {
+            DWORD written;
+            const char* diagMsg = "DllMain DLL_PROCESS_ATTACH reached\n";
+            WriteFile(hDiag, diagMsg, (DWORD)strlen(diagMsg), &written, NULL);
+            CloseHandle(hDiag);
+        }
         DebugLog("[DllMain] DLL_PROCESS_ATTACH: hModule=%p\n", hModule);
         globals::mainModule = hModule;
         // Create a thread for hook setup to avoid blocking loading
@@ -304,9 +333,12 @@ BOOL WINAPI DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserved
             else DebugLog("[DllMain] Failed to create hook thread: %d\n", GetLastError());
         }
         break;
+    }
 
     case DLL_PROCESS_DETACH:
         DebugLog("[DllMain] DLL_PROCESS_DETACH. Releasing hooks and uninitializing MinHook.\n");
+        // Stop named pipe server
+        NamedPipeServer::Stop();
         switch (globals::activeBackend) {
         case globals::Backend::DX9:
             d3d9hook::release();

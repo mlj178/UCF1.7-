@@ -1,4 +1,5 @@
 #include "esp_renderer.h"
+#include "esp_state.h"
 #include "game_manager.h"
 #include "transform_helper.h"
 #include "coord_converter.h"
@@ -65,6 +66,8 @@ bool ESPRenderer::Initialize() {
 }
 
 void ESPRenderer::Render() {
+    // Check if ESP box is enabled via external control
+    if (!ESPState::Instance().IsBoxEnabled()) return;
     if (!s_Enabled || !s_Initialized) return;
 
     if (!GameManager::RefreshSession()) {
