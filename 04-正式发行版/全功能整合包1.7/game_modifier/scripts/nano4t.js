@@ -4,8 +4,9 @@
 modules.nano4t = (function() {
   var nano4tBase = null;
   var NANO4T_ATTR_PTR = {};
-  var NANO4T_WANTED_GHOST = 9;
-  var NANO4T_WANTED_HUMAN = 19;
+  var NANO4T_WANTED_GHOST = -1;  // -1表示未选择
+  var NANO4T_WANTED_HUMAN = -1;  // -1表示未选择
+  var NANO4T_ACTIVE = false;     // 激活开关
   var NANO4T_READY = false;
   var NANO4T_MODE_DESTROYED = false;
   var hookHandles = [];
@@ -47,7 +48,11 @@ modules.nano4t = (function() {
       },
       onLeave: function(retval) {
         if (NANO4T_MODE_DESTROYED) return;
+        if (!NANO4T_ACTIVE) return;  // 未激活，透传
+        
         var id = this._isNano ? NANO4T_WANTED_GHOST : NANO4T_WANTED_HUMAN;
+        if (id < 0) return;  // 未选择，透传
+        
         var p = NANO4T_ATTR_PTR[id];
         if (p && !p.isNull()) {
           try { retval.replace(p); } catch(e) {}
@@ -58,6 +63,7 @@ modules.nano4t = (function() {
       onEnter: function(args) {
         NANO4T_MODE_DESTROYED = true;
         NANO4T_READY = false;
+        NANO4T_ACTIVE = false;  // 重置激活状态
         send(JSON.stringify({ type: 'nano4t_destroyed' }));
       }
     }));
@@ -100,6 +106,7 @@ modules.nano4t = (function() {
     set: function(g, h) {
       NANO4T_WANTED_GHOST = g;
       NANO4T_WANTED_HUMAN = h;
+      NANO4T_ACTIVE = true;  // 设置时激活
       send(JSON.stringify({ type: 'nano4t_set', g: g, h: h }));
     },
     getCurrent: function() {
@@ -173,6 +180,7 @@ modules.nano4t = (function() {
       clearHooks();
       NANO4T_READY = false;
       NANO4T_MODE_DESTROYED = false;
+      NANO4T_ACTIVE = false;  // 重置激活状态
       NANO4T_ATTR_PTR = {};
       nano4tBase = null;
     }

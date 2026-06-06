@@ -127,8 +127,9 @@ class App(ctk.CTk):
 
         self._nano4t_ready = False
         _nano4t_cfg = self._load_nano4t_selector()
-        self._nano4t_wanted_ghost = _nano4t_cfg.get('ghost', 9)
-        self._nano4t_wanted_human = _nano4t_cfg.get('human', 19)
+        self._nano4t_wanted_ghost = _nano4t_cfg.get('ghost', -1)
+        self._nano4t_wanted_human = _nano4t_cfg.get('human', -1)
+        self._nano4t_activated = False  # 是否已激活
         self._nano4t_current_ghost = -1
         self._nano4t_current_human = -1
         self._nano4t_log_errors = False
@@ -471,11 +472,26 @@ class App(ctk.CTk):
                                             height=170)
         nano4t_ghost_frame.grid(row=0, column=0, sticky="nsew", padx=(8, 4), pady=(6, 4))
         nano4t_ghost_frame.grid_propagate(False)
-        ctk.CTkLabel(nano4t_ghost_frame, text="👻 幽灵方特性",
-                     font=("Microsoft YaHei", 14, "bold"), text_color="#ff6666").pack(
-            anchor="w", padx=12, pady=(6, 2))
-        self.nano4t_ghost_var = ctk.StringVar(
-            value=f"{self._nano4t_wanted_ghost}: {NANO4T_ATTRS[self._nano4t_wanted_ghost][0]}")
+
+        # 方案B：添加状态指示器
+        nano4t_ghost_header = ctk.CTkFrame(nano4t_ghost_frame, fg_color="transparent")
+        nano4t_ghost_header.pack(anchor="w", padx=12, pady=(6, 2))
+        ctk.CTkLabel(nano4t_ghost_header, text="👻 幽灵方特性",
+                     font=("Microsoft YaHei", 14, "bold"), text_color="#ff6666").pack(side="left")
+        self.nano4t_ghost_status_label = ctk.CTkLabel(nano4t_ghost_header, text="[未激活]",
+                                                       font=("Microsoft YaHei", 11), text_color="#888888")
+        self.nano4t_ghost_status_label.pack(side="left", padx=(8, 0))
+
+        # 方案A：显示"未选择"或实际值
+        if self._nano4t_wanted_ghost < 0:
+            ghost_display_text = "未选择（请选择后点击应用）"
+            ghost_desc_text = "效果: 请选择特性并点击「应用」按钮"
+        else:
+            ghost_display_id = self._nano4t_wanted_ghost
+            ghost_display_text = f"{ghost_display_id}: {NANO4T_ATTRS[ghost_display_id][0]}"
+            ghost_desc_text = "效果: " + NANO4T_ATTRS[ghost_display_id][1]
+
+        self.nano4t_ghost_var = ctk.StringVar(value=ghost_display_text)
         self.nano4t_ghost_combo = ctk.CTkComboBox(
             nano4t_ghost_frame,
             values=[f"{i}: {NANO4T_ATTRS[i][0]}" for i in range(10)],
@@ -485,7 +501,7 @@ class App(ctk.CTk):
         self.nano4t_ghost_combo.pack(fill="x", padx=12, pady=(4, 2))
         self.nano4t_ghost_desc = ctk.CTkLabel(
             nano4t_ghost_frame,
-            text="效果: " + NANO4T_ATTRS[self._nano4t_wanted_ghost][1],
+            text=ghost_desc_text,
             font=("Microsoft YaHei", 11), text_color="#cc8888")
         self.nano4t_ghost_desc.pack(anchor="w", padx=12, pady=(2, 6))
 
@@ -493,11 +509,26 @@ class App(ctk.CTk):
                                             height=170)
         nano4t_human_frame.grid(row=0, column=1, sticky="nsew", padx=(4, 8), pady=(6, 4))
         nano4t_human_frame.grid_propagate(False)
-        ctk.CTkLabel(nano4t_human_frame, text="🛡️ 人类方特性",
-                     font=("Microsoft YaHei", 14, "bold"), text_color="#6688ff").pack(
-            anchor="w", padx=12, pady=(6, 2))
-        self.nano4t_human_var = ctk.StringVar(
-            value=f"{self._nano4t_wanted_human}: {NANO4T_ATTRS[self._nano4t_wanted_human][0]}")
+
+        # 方案B：添加状态指示器
+        nano4t_human_header = ctk.CTkFrame(nano4t_human_frame, fg_color="transparent")
+        nano4t_human_header.pack(anchor="w", padx=12, pady=(6, 2))
+        ctk.CTkLabel(nano4t_human_header, text="🛡️ 人类方特性",
+                     font=("Microsoft YaHei", 14, "bold"), text_color="#6688ff").pack(side="left")
+        self.nano4t_human_status_label = ctk.CTkLabel(nano4t_human_header, text="[未激活]",
+                                                       font=("Microsoft YaHei", 11), text_color="#888888")
+        self.nano4t_human_status_label.pack(side="left", padx=(8, 0))
+
+        # 方案A：显示"未选择"或实际值
+        if self._nano4t_wanted_human < 0:
+            human_display_text = "未选择（请选择后点击应用）"
+            human_desc_text = "效果: 请选择特性并点击「应用」按钮"
+        else:
+            human_display_id = self._nano4t_wanted_human
+            human_display_text = f"{human_display_id}: {NANO4T_ATTRS[human_display_id][0]}"
+            human_desc_text = "效果: " + NANO4T_ATTRS[human_display_id][1]
+
+        self.nano4t_human_var = ctk.StringVar(value=human_display_text)
         self.nano4t_human_combo = ctk.CTkComboBox(
             nano4t_human_frame,
             values=[f"{i}: {NANO4T_ATTRS[i][0]}" for i in range(10, 20)],
@@ -507,7 +538,7 @@ class App(ctk.CTk):
         self.nano4t_human_combo.pack(fill="x", padx=12, pady=(4, 2))
         self.nano4t_human_desc = ctk.CTkLabel(
             nano4t_human_frame,
-            text="效果: " + NANO4T_ATTRS[self._nano4t_wanted_human][1],
+            text=human_desc_text,
             font=("Microsoft YaHei", 11), text_color="#8888cc")
         self.nano4t_human_desc.pack(anchor="w", padx=12, pady=(2, 6))
 
@@ -685,7 +716,11 @@ class App(ctk.CTk):
             if self._nano4t_ready:
                 self._log("⚠ 检测到退出多人生化房间，特性系统已销毁")
             self._nano4t_ready = False
+            self._nano4t_activated = False  # 重置激活状态
             self.after(0, self._nano4t_on_destroyed)
+            # 重置状态指示器
+            self.after(0, lambda: self.nano4t_ghost_status_label.configure(text="[未激活]", text_color="#888888"))
+            self.after(0, lambda: self.nano4t_human_status_label.configure(text="[未激活]", text_color="#888888"))
         elif event_type == 'nano4t_error':
             self._nano4t_ready = False
             if self._nano4t_log_errors:
@@ -706,9 +741,13 @@ class App(ctk.CTk):
             h = int(payload.get('h', 0))
             self._nano4t_wanted_ghost = g
             self._nano4t_wanted_human = h
+            self._nano4t_activated = True  # 标记为已激活
             self._log(
                 f"✅ [多人生化] 已锁定: {NANO4T_ATTRS[g][0]} + {NANO4T_ATTRS[h][0]}，下一回合生效")
             self.after(0, self._nano4t_refresh_next_label)
+            # 更新状态指示器
+            self.after(0, lambda: self.nano4t_ghost_status_label.configure(text="[已激活]", text_color="#88ff88"))
+            self.after(0, lambda: self.nano4t_human_status_label.configure(text="[已激活]", text_color="#88ff88"))
         elif event_type == 'nano4t_current':
             g = int(payload.get('g', -1))
             h = int(payload.get('h', -1))
@@ -717,7 +756,11 @@ class App(ctk.CTk):
             if self._nano4t_ready:
                 self._log("⚠ [多人生化] 模式实例已失效")
                 self._nano4t_ready = False
+                self._nano4t_activated = False  # 重置激活状态
                 self.after(0, self._nano4t_on_destroyed)
+                # 重置状态指示器
+                self.after(0, lambda: self.nano4t_ghost_status_label.configure(text="[未激活]", text_color="#888888"))
+                self.after(0, lambda: self.nano4t_human_status_label.configure(text="[未激活]", text_color="#888888"))
         elif event_type == 'nano4t_alive':
             if not self._nano4t_ready and self._ready:
                 self._log("ℹ️ [多人生化] 检测到已进入多人生化模式，正在初始化...")
@@ -1204,25 +1247,30 @@ class App(ctk.CTk):
     def _nano4t_on_ghost_select(self, value):
         gid = int(value.split(":")[0])
         self.nano4t_ghost_desc.configure(text="效果: " + NANO4T_ATTRS[gid][1])
-        self._nano4t_wanted_ghost = gid
-        self._save_nano4t_selector()
+        # 注意：只更新UI显示，不改变_wanted_ghost
+        # _wanted_ghost只在点击"应用"时才更新
         if self._nano4t_ready:
             self.nano4t_next_label.configure(text="💡 请点击「应用」按钮生效")
 
     def _nano4t_on_human_select(self, value):
         hid = int(value.split(":")[0])
         self.nano4t_human_desc.configure(text="效果: " + NANO4T_ATTRS[hid][1])
-        self._nano4t_wanted_human = hid
-        self._save_nano4t_selector()
+        # 注意：只更新UI显示，不改变_wanted_human
+        # _wanted_human只在点击"应用"时才更新
         if self._nano4t_ready:
             self.nano4t_next_label.configure(text="💡 请点击「应用」按钮生效")
 
     def _nano4t_refresh_next_label(self):
-        if self._nano4t_ready:
+        if self._nano4t_ready and self._nano4t_activated:
             g = self._nano4t_wanted_ghost
             h = self._nano4t_wanted_human
-            self.nano4t_next_label.configure(
-                text=f"下一回合已锁定: 👻 {NANO4T_ATTRS[g][0]}  |  🛡️ {NANO4T_ATTRS[h][0]}")
+            if g >= 0 and h >= 0:
+                self.nano4t_next_label.configure(
+                    text=f"下一回合已锁定: 👻 {NANO4T_ATTRS[g][0]}  |  🛡️ {NANO4T_ATTRS[h][0]}")
+            else:
+                self.nano4t_next_label.configure(text="请选择特性并点击「应用」")
+        elif self._nano4t_ready:
+            self.nano4t_next_label.configure(text="请选择特性并点击「应用」")
         else:
             self.nano4t_next_label.configure(text="")
 
@@ -1235,7 +1283,7 @@ class App(ctk.CTk):
         self._nano4t_set_status("green", "已就绪")
         self.nano4t_apply_btn.configure(state="normal", fg_color="#2563eb")
         self._log(f"✅ [多人生化] 已就绪！共 {count} 种特性")
-        self._log("[多人生化] 用法: 下拉选择 → 点击应用 → 下一回合自动生效")
+        self._log("[多人生化] 当前未激活，游戏将正常运行。选择特性后点击应用 → 下一回合生效")
         self.nano4t_next_label.configure(text="💡 请选择特性后点击「应用」按钮")
         threading.Thread(target=self._nano4t_get_current_bg, daemon=True).start()
         threading.Thread(target=self._nano4t_auto_getcurrent_bg, daemon=True).start()
