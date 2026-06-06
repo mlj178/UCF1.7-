@@ -37,6 +37,10 @@ class FridaManager:
     @property
     def pid(self):
         return self._pid
+    
+    def is_ready(self):
+        """Check if Frida is ready (called by GameSessionManager)"""
+        return self._ready and self._script is not None
 
     def _build_js_code(self):
         parts = []
@@ -198,53 +202,83 @@ setTimeout(function() { getGameAssembly(); }, 100);
                 pass
         return None
 
-    def connect(self, pid=None):
+    def connect(self, pid):
+        """
+        Connect to game process (called by GameSessionManager)
+        
+        Returns:
+            True if connected successfully
+            False with error category
+            
+        Error categories:
+            - 'process_not_found': Process does not exist
+            - 'process_terminating': Process is terminating (0xc000010a)
+            - 'permission_denied': Access denied
+            - 'architecture_mismatch': 32/64 bit mismatch
+            - 'connection_failed': General connection failure
+        """
         with self._lock:
             if self._connecting:
-                return False
+                return False, 'already_connecting'
             self._connecting = True
 
+        session = None
+        script = None
+        
         try:
-            if pid is None:
-                pid = self.find_pid()
-            if pid is None:
-                self._event_bus.emit('connection_status', status='not_found')
-                return False
-
-            self._event_bus.emit('log_message', level='info', module='系统',
-                                 message=f'检测到游戏 PID:{pid}，正在连接...')
-
-            session = frida.attach(pid)
+            # Attach to process
+            try:
+                session = frida.attach(pid)
+            except frida.ProcessNotFoundError:
+                return False, 'process_not_found'
+            except frida.PermissionDeniedError:
+                return False, 'permission_denied'
+            except frida.TransportError as e:
+                error_msg = str(e)
+                if '0xc000010a' in error_msg or 'STATUS_PROCESS_IS_TERMINATING' in error_msg:
+                    return False, 'process_terminating'
+                if 'architecture' in error_msg.lower():
+                    return False, 'architecture_mismatch'
+                return False, 'connection_failed'
+            
+            # Create and load script
             js_code = self._build_js_code()
             script = session.create_script(js_code)
-
             script.on('message', self._on_message)
             script.load()
 
+            # Success - update state
             self._session = session
             self._script = script
             self._pid = pid
             self._ready = True
 
-            self._event_bus.emit('log_message', level='info', module='系统',
-                                 message='已连接到游戏进程！')
-            self._event_bus.emit('connection_status', status='connected', pid=pid)
-            return True
+            return True, 'success'
 
-        except frida.ProcessNotFoundError:
-            self._event_bus.emit('log_message', level='error', module='系统',
-                                 message='游戏进程已退出')
-            self._event_bus.emit('connection_status', status='disconnected')
-            return False
         except Exception as e:
-            self._event_bus.emit('log_message', level='error', module='系统',
-                                 message=f'连接失败: {e}')
-            self._event_bus.emit('connection_status', status='disconnected')
-            return False
+            # Clean up on failure
+            if script:
+                try:
+                    script.unload()
+                except Exception:
+                    pass
+            if session:
+                try:
+                    session.detach()
+                except Exception:
+                    pass
+            
+            error_msg = str(e)
+            if '0xc000010a' in error_msg or 'STATUS_PROCESS_IS_TERMINATING' in error_msg:
+                return False, 'process_terminating'
+            
+            return False, 'connection_failed'
+            
         finally:
             self._connecting = False
 
     def disconnect(self):
+        """Disconnect from game process"""
         try:
             if self._script:
                 self._script.unload()
@@ -254,8 +288,9 @@ setTimeout(function() { getGameAssembly(); }, 100);
                 self._session = None
         except Exception:
             pass
+        
         self._ready = False
-        self._event_bus.emit('connection_status', status='disconnected')
+        self._pid = None  # Clear PID on disconnect
 
     def send_toggle(self, feature, enable, extra_params=None):
         if not self._script:

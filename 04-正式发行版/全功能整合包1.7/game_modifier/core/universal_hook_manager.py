@@ -57,85 +57,318 @@ kernel32.SetNamedPipeHandleState.argtypes = [
 
 
 class UniversalHookManager:
-    PIPE_NAME = r"\\.\pipe\ucf_universal_hook"
+    _instance = None
+    _singleton_lock = threading.Lock()
     PIPE_READMODE_MESSAGE = 0x02
     PIPE_TIMEOUT_MS = 3000  # 3 seconds timeout for pipe operations
+    PROTOCOL_VERSION = 2  # Must match DLL
+
+    @classmethod
+    def get_instance(cls):
+        if cls._instance is None:
+            with cls._singleton_lock:
+                if cls._instance is None:
+                    cls._instance = cls()
+        return cls._instance
 
     def __init__(self):
         self._bus = EventBus.get_instance()
         self._pipe = None
-        self._injected = False
-        self._lock = threading.Lock()
+        self._pid = None  # Current connected PID
+        self._lock = threading.RLock()  # Use RLock to allow reentrant calls
         self._dll_path = os.path.join(APP_DIR, "plugins", "universal_hook", "Universal-ImGui-Hook.dll")
+        self._revision_file = os.path.join(APP_DIR, "data", "universal_revision.json")
+        self._revision = self._load_revision()  # Load revision from file
+
+    def _load_revision(self):
+        """Load revision from file to support program restart takeover"""
+        try:
+            if os.path.exists(self._revision_file):
+                with open(self._revision_file, 'r') as f:
+                    data = json.load(f)
+                    return data.get('revision', 0)
+        except Exception:
+            pass
+        return 0
+
+    def _save_revision(self):
+        """Save revision to file"""
+        try:
+            os.makedirs(os.path.dirname(self._revision_file), exist_ok=True)
+            with open(self._revision_file, 'w') as f:
+                json.dump({'revision': self._revision}, f)
+        except Exception:
+            pass
 
     @property
     def injected(self):
-        return self._injected
+        # Check if pipe is connected to a valid process
+        return self._pipe is not None and self._pid is not None
+
+    def _get_pipe_name(self, pid):
+        """Generate PID-specific pipe name"""
+        return f"\\\\.\\pipe\\ucf_universal_hook_{pid}"
 
     def find_pid(self):
+        """Find game process PID"""
         for proc in psutil.process_iter(["pid", "name"]):
             name = proc.info.get("name") or ""
             if name.lower() == "unitycrossfire.exe":
                 return proc.info["pid"]
         return None
 
-    def ensure_ready(self):
+    def try_connect_existing(self, pid):
+        """
+        Try to connect to existing DLL in process.
+        Returns True if connected to existing DLL with valid hello response.
+        """
         with self._lock:
-            if self._pipe and self.ping():
-                return True
-
-            if not os.path.exists(self._dll_path):
-                self._log("error", f"Universal DLL not found: {self._dll_path}")
+            # Close existing pipe if any
+            self._close_pipe()
+            
+            # Try to connect to PID-specific pipe
+            pipe_name = self._get_pipe_name(pid)
+            
+            # Try to connect (short timeout)
+            handle = kernel32.CreateFileW(
+                pipe_name,
+                0xC0000000,  # GENERIC_READ | GENERIC_WRITE
+                0,
+                None,
+                3,  # OPEN_EXISTING
+                0,  # Sync mode
+                None,
+            )
+            
+            if not handle or handle == ctypes.wintypes.HANDLE(-1).value:
                 return False
-
-            pid = self.find_pid()
-            if not pid:
-                self._log("error", "UnityCrossFire.exe not found")
+            
+            # Set pipe to message mode
+            mode = ctypes.wintypes.DWORD(self.PIPE_READMODE_MESSAGE)
+            if not kernel32.SetNamedPipeHandleState(handle, ctypes.byref(mode), None, None):
+                kernel32.CloseHandle(handle)
                 return False
-
-            if not self._injected:
-                if not self._inject(pid):
+            
+            self._pipe = handle
+            
+            # Send hello to verify
+            try:
+                response = self._send({"cmd": "hello"})
+                if not response.get("ok"):
+                    self._close_pipe()
                     return False
-
-            if not self._connect_pipe(timeout=15.0):
-                self._log("error", "Universal pipe not ready")
+                
+                # Verify PID matches
+                if response.get("pid") != pid:
+                    self._log("error", f"PID mismatch: expected {pid}, got {response.get('pid')}")
+                    self._close_pipe()
+                    return False
+                
+                # Verify protocol version
+                if response.get("protocol") != self.PROTOCOL_VERSION:
+                    self._log("error", f"Protocol mismatch: expected {self.PROTOCOL_VERSION}, got {response.get('protocol')}")
+                    self._close_pipe()
+                    return False
+                
+                self._pid = pid
+                self._sync_revision_from_dll()
+                self._log("success", f"连接到现有 DLL (PID: {pid})")
+                return True
+                
+            except Exception as e:
+                self._log("error", f"Hello failed: {e}")
+                self._close_pipe()
                 return False
 
-            return True
+    def inject_and_connect(self, pid):
+        """
+        Inject DLL and connect to it.
+        Returns True if injection and connection both succeed.
+        """
+        with self._lock:
+            # Check if DLL is already loaded
+            if self._is_dll_loaded(pid):
+                self._log("info", "DLL already loaded, connecting...")
+                return self.try_connect_existing(pid)
+            
+            # Inject DLL
+            if not self._inject(pid):
+                return False
+            
+            # Wait for pipe to be ready
+            if not self._connect_pipe(pid, timeout=10.0):
+                self._log("error", "DLL injected but pipe not ready")
+                return False
+            
+            # Send hello to verify
+            try:
+                response = self._send({"cmd": "hello"})
+                if not response.get("ok"):
+                    self._log("error", "Hello failed after injection")
+                    self._close_pipe()
+                    return False
+                
+                # Verify PID matches
+                if response.get("pid") != pid:
+                    self._log("error", f"PID mismatch after injection: expected {pid}, got {response.get('pid')}")
+                    self._close_pipe()
+                    return False
+                
+                # Verify protocol version
+                if response.get("protocol") != self.PROTOCOL_VERSION:
+                    self._log("error", f"Protocol mismatch: expected {self.PROTOCOL_VERSION}, got {response.get('protocol')}")
+                    self._close_pipe()
+                    return False
+                
+                self._pid = pid
+                self._sync_revision_from_dll()
+                self._log("success", f"DLL 注入成功 (PID: {pid})")
+                return True
+                
+            except Exception as e:
+                self._log("error", f"Hello failed after injection: {e}")
+                self._close_pipe()
+                return False
+
+    def _is_dll_loaded(self, pid):
+        """Check if DLL is already loaded in process"""
+        try:
+            proc = psutil.Process(pid)
+            for dll in proc.memory_maps():
+                if "Universal-ImGui-Hook.dll" in dll.path:
+                    return True
+        except Exception:
+            pass
+        return False
 
     def set_esp_box(self, enabled):
-        if not self.ensure_ready():
+        """Set ESP box state"""
+        if not self._pipe:
             return False
-        result = self._send({"cmd": "set_feature", "feature": "esp_box", "enabled": bool(enabled)})
-        ok = bool(result.get("ok"))
-        if ok:
-            self._log("success", "方框透视已开启" if enabled else "方框透视已关闭")
-        else:
-            self._log("error", result.get("error", "方框透视设置失败"))
-        return ok
+        
+        with self._lock:
+            try:
+                # Use set_state with revision for conflict prevention
+                self._revision += 1
+                self._save_revision()  # Persist revision
+                response = self._send({
+                    "cmd": "set_state",
+                    "revision": self._revision,
+                    "esp_box": bool(enabled)
+                })
+                
+                ok = (
+                    bool(response.get("ok"))
+                    and response.get("esp_box") is bool(enabled)
+                    and response.get("revision", -1) >= self._revision
+                )
+                if ok:
+                    self._log("success", "方框透视已开启" if enabled else "方框透视已关闭")
+                else:
+                    self._log("error", response.get("error", "方框透视设置失败"))
+                return ok
+            except Exception as e:
+                self._log("error", f"设置失败: {e}")
+                return False
+
+    def get_state(self):
+        """Get current state from DLL"""
+        if not self._pipe:
+            return None
+        
+        with self._lock:
+            try:
+                return self._send({"cmd": "get_state"})
+            except Exception:
+                return None
 
     def ping(self):
+        """Ping the DLL"""
+        if not self._pipe:
+            return False
         try:
             return bool(self._send({"cmd": "ping"}).get("ok"))
         except Exception:
             return False
 
+    def reset(self):
+        """Reset all states in DLL"""
+        if not self._pipe:
+            return False
+        
+        with self._lock:
+            try:
+                response = self._send({"cmd": "reset"})
+                return bool(response.get("ok"))
+            except Exception:
+                return False
+
     def shutdown(self):
-        try:
+        """Shutdown DLL and close pipe"""
+        with self._lock:
             if self._pipe:
-                self._send({"cmd": "shutdown"})
-        except Exception:
-            pass
-        self._close_pipe()
-        self._injected = False
+                try:
+                    self._send({"cmd": "shutdown"})
+                except Exception:
+                    pass
+            self._close_pipe()
+            self._pid = None
+            self._revision = 0
+            self._save_revision()  # Persist revision reset
+
+    def unload(self):
+        """Disable ESP and safely unload the injected DLL."""
+        with self._lock:
+            if not self._pipe:
+                return False
+
+            ok = False
+            try:
+                response = self._send({"cmd": "unload"})
+                ok = bool(response.get("ok"))
+            except Exception:
+                pass
+            finally:
+                self._close_pipe()
+                self._pid = None
+                self._revision = 0
+                self._save_revision()
+            return ok
+
+    def disconnect(self):
+        """Close the client pipe without stopping the injected DLL."""
+        with self._lock:
+            self._close_pipe()
+            self._pid = None
+
+    def _sync_revision_from_dll(self):
+        state = self._send({"cmd": "get_state"})
+        if state.get("ok"):
+            self._revision = max(self._revision, int(state.get("revision", 0)))
+            self._save_revision()
 
     def _inject(self, pid):
+        """Inject DLL into process"""
         inject_exe = os.path.join(APP_DIR, "plugins", "universal_hook", "inject.exe")
         if not os.path.exists(inject_exe):
             self._log("error", f"inject.exe not found: {inject_exe}")
             return False
 
-        self._log("info", "正在加载 Universal Hook...")
+        if not os.path.exists(self._dll_path):
+            self._log("error", f"Universal DLL not found: {self._dll_path}")
+            return False
+
+        # Check if process is still alive
+        try:
+            proc = psutil.Process(pid)
+            if not proc.is_running():
+                self._log("error", f"Process {pid} is not running")
+                return False
+        except psutil.NoSuchProcess:
+            self._log("error", f"Process {pid} not found")
+            return False
+
+        self._log("info", "正在注入 Universal Hook...")
         result = subprocess.run(
             [inject_exe, str(pid), self._dll_path],
             capture_output=True,
@@ -154,20 +387,26 @@ class UniversalHookManager:
             self._log("error", f"DLL 加载失败: {output}")
             return False
 
-        if "DLL注入成功" not in output:
+        if "DLL注入成功" not in output and "already_loaded" not in output:
             self._log("error", f"注入结果未知: {output}")
             return False
 
-        self._injected = True
-        self._log("success", "Universal Hook 已加载")
+        if "already_loaded" in output:
+            self._log("info", "DLL 已加载")
+        else:
+            self._log("success", f"DLL 注入成功 (PID: {pid})")
+        
         return True
 
-    def _connect_pipe(self, timeout):
+    def _connect_pipe(self, pid, timeout):
+        """Connect to PID-specific pipe"""
+        pipe_name = self._get_pipe_name(pid)
         deadline = time.time() + timeout
+        
         while time.time() < deadline:
             # Use synchronous mode to match DLL's PIPE_WAIT server
             handle = kernel32.CreateFileW(
-                self.PIPE_NAME,
+                pipe_name,
                 0xC0000000,  # GENERIC_READ | GENERIC_WRITE
                 0,
                 None,
