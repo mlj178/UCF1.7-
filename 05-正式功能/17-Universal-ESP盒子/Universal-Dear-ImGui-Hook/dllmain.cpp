@@ -1,7 +1,10 @@
 #include "stdafx.h"
 #include "esp/named_pipe_server.h"
+#include <atomic>
 
 namespace mousehooks { void Init(); void Remove(); }
+
+static std::atomic<bool> s_uninjecting{false};
 
 // Utility helpers for backend initialization checks
 using IsInitFn = bool (*)();
@@ -131,7 +134,7 @@ static int GetBackendPriority(globals::Backend backend)
 
 static void InitForModule(const char* name)
 {
-    if (!name)
+    if (!name || s_uninjecting)
         return;
 
     const char* base = strrchr(name, '\\');
@@ -202,7 +205,7 @@ static HMODULE WINAPI hookLoadLibraryW(LPCWSTR lpLibFileName)
 static DWORD WINAPI UninjectThread(LPVOID)
 {
     DebugLog("[DllMain] Uninject thread starting.\n");
-    Sleep(100);
+    MH_DisableHook(MH_ALL_HOOKS);
 
     switch (globals::activeBackend)
     {
@@ -223,9 +226,9 @@ static DWORD WINAPI UninjectThread(LPVOID)
     }
 
     mousehooks::Remove();
+    globals::activeBackend = globals::Backend::None;
 
-    // Disable and remove all hooks, then uninitialize MinHook
-    MH_DisableHook(MH_ALL_HOOKS);
+    // Remove all hooks, then uninitialize MinHook.
     MH_RemoveHook(MH_ALL_HOOKS);
     MH_Uninitialize();
 
@@ -237,9 +240,16 @@ static DWORD WINAPI UninjectThread(LPVOID)
 // Public helper to begin uninjecting the DLL
 void Uninject()
 {
+    bool expected = false;
+    if (!s_uninjecting.compare_exchange_strong(expected, true))
+        return;
+
     HANDLE hThread = CreateThread(nullptr, 0, UninjectThread, nullptr, 0, nullptr);
-    if (hThread)
+    if (hThread) {
         CloseHandle(hThread);
+    } else {
+        s_uninjecting = false;
+    }
 }
 
 // Thread entry: initialize MinHook and start hook setup
@@ -300,7 +310,11 @@ BOOL WINAPI DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserved
         // Build path next to the DLL
         wchar_t wDiagPath[MAX_PATH] = {0};
         HMODULE hDiagMod = NULL;
-        GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS, (LPCWSTR)DllMain, &hDiagMod);
+        GetModuleHandleExW(
+            GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+            GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+            (LPCWSTR)DllMain,
+            &hDiagMod);
         if (hDiagMod && GetModuleFileNameW(hDiagMod, wDiagPath, MAX_PATH)) {
             wchar_t* lastSlash = wcsrchr(wDiagPath, L'\\');
             if (lastSlash) {
@@ -337,6 +351,10 @@ BOOL WINAPI DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserved
     }
 
     case DLL_PROCESS_DETACH:
+        if (s_uninjecting) {
+            DebugLog("[DllMain] DLL_PROCESS_DETACH after explicit cleanup.\n");
+            break;
+        }
         DebugLog("[DllMain] DLL_PROCESS_DETACH. Releasing hooks and uninitializing MinHook.\n");
         // Stop named pipe server
         NamedPipeServer::Stop();

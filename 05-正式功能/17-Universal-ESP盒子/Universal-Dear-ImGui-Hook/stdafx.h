@@ -99,7 +99,11 @@ public:
             HMODULE hMod = NULL;
             // Get the DLL module handle (globals::mainModule is set in DllMain, may not be set yet)
             // Use GetModuleHandleEx to get the DLL that contains this code
-            GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS, (LPCWSTR)this, &hMod);
+            GetModuleHandleExW(
+                GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                (LPCWSTR)this,
+                &hMod);
             if (hMod && GetModuleFileNameW(hMod, wLogPath, MAX_PATH)) {
                 // Replace filename with esp_debug.log
                 wchar_t* lastSlash = wcsrchr(wLogPath, L'\\');

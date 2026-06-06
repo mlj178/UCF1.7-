@@ -77,8 +77,10 @@ class UniversalHookManager:
         self._pid = None  # Current connected PID
         self._lock = threading.RLock()  # Use RLock to allow reentrant calls
         self._dll_path = os.path.join(APP_DIR, "plugins", "universal_hook", "Universal-ImGui-Hook.dll")
+        self._pending_dll_path = self._dll_path + ".pending"
         self._revision_file = os.path.join(APP_DIR, "data", "universal_revision.json")
         self._revision = self._load_revision()  # Load revision from file
+        self.last_injection_attempted = False
 
     def _load_revision(self):
         """Load revision from file to support program restart takeover"""
@@ -186,12 +188,16 @@ class UniversalHookManager:
         Returns True if injection and connection both succeed.
         """
         with self._lock:
+            self.last_injection_attempted = False
+            self._apply_pending_update()
+
             # Check if DLL is already loaded
             if self._is_dll_loaded(pid):
                 self._log("info", "DLL already loaded, connecting...")
                 return self.try_connect_existing(pid)
             
             # Inject DLL
+            self.last_injection_attempted = True
             if not self._inject(pid):
                 return False
             
@@ -240,6 +246,17 @@ class UniversalHookManager:
         except Exception:
             pass
         return False
+
+    def _apply_pending_update(self):
+        """Install a staged DLL once the previous image is no longer locked."""
+        if not os.path.exists(self._pending_dll_path):
+            return False
+        try:
+            os.replace(self._pending_dll_path, self._dll_path)
+            self._log("success", "Universal DLL 更新已应用")
+            return True
+        except OSError:
+            return False
 
     def set_esp_box(self, enabled):
         """Set ESP box state"""
