@@ -321,9 +321,11 @@ class GameSessionManager:
             )
             return
 
-        self._injection_attempt_identity = identity
-        
-        if universal.inject_and_connect(pid):
+        connected = universal.inject_and_connect(pid)
+        if universal.last_injection_attempted:
+            self._injection_attempt_identity = identity
+
+        if connected:
             self._universal_manager = universal
             with self._lock:
                 self._state = SessionState.SYNCING_FEATURES

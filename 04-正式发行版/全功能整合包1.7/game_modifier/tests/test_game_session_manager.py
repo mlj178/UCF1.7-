@@ -36,9 +36,15 @@ class FakeFridaManager:
 
 
 class FakeUniversalManager:
-    def __init__(self, connect_result=False, inject_result=False):
+    def __init__(
+        self,
+        connect_result=False,
+        inject_result=False,
+        injection_attempted=True,
+    ):
         self.connect_result = connect_result
         self.inject_result = inject_result
+        self.last_injection_attempted = injection_attempted
         self.set_calls = []
         self.disconnected = False
         self.unloaded = False
@@ -138,6 +144,23 @@ class GameSessionManagerTests(unittest.TestCase):
             self.manager._step_injecting_dll()
 
         self.assertEqual(fake_universal.inject_calls, [1234])
+
+    def test_stale_loaded_dll_without_pipe_does_not_block_retry(self):
+        self.manager._state = SessionState.INJECTING_DLL
+        fake_universal = FakeUniversalManager(
+            inject_result=False,
+            injection_attempted=False,
+        )
+
+        with patch(
+            "core.universal_hook_manager.UniversalHookManager.get_instance",
+            return_value=fake_universal,
+        ):
+            self.manager._step_injecting_dll()
+            self.manager._state = SessionState.INJECTING_DLL
+            self.manager._step_injecting_dll()
+
+        self.assertEqual(fake_universal.inject_calls, [1234, 1234])
 
     def test_esp_toggle_applies_immediately_without_injection(self):
         fake_universal = FakeUniversalManager()
