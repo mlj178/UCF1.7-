@@ -14,7 +14,7 @@ from datetime import datetime
 ctk.set_appearance_mode("Dark")
 ctk.set_default_color_theme("blue")
 
-JS_FILE = os.path.join(os.path.dirname(__file__), "skip_round.js")
+JS_FILE = os.path.join(os.path.dirname(__file__), "AAAAA-skip_round.js")
 
 COLOR_GREEN = "#2ecc71"
 COLOR_RED = "#e74c3c"

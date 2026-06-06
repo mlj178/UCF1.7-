@@ -67,7 +67,7 @@ class GameSessionManager:
         self._injection_attempt_identity = None
         
         # Process stability check
-        self._stability_wait = 2.0  # Wait 2 seconds after process detection
+        self._stability_wait = 0.5  # Wait 0.5 seconds after process detection
         
     def start(self):
         """Start the session manager worker thread"""
@@ -135,7 +135,7 @@ class GameSessionManager:
                 self._bus.emit('log_message', level='error', module='SessionManager',
                               message=f'State machine error: {e}')
             
-            time.sleep(1)
+            time.sleep(0.5)
     
     def _state_machine_step(self):
         """Execute one step of the state machine"""
