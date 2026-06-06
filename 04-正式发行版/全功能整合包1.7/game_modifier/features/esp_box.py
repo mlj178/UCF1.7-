@@ -1,6 +1,6 @@
 from features.base import FeatureBase
 from core.feature_registry import register_feature
-from core.universal_hook_manager import UniversalHookManager
+from core.game_session_manager import GameSessionManager
 
 
 @register_feature
@@ -13,19 +13,33 @@ class ESPBoxFeature(FeatureBase):
 
     def __init__(self):
         super().__init__()
-        self._manager = UniversalHookManager()
+        self._session_manager = GameSessionManager.get_instance()
 
     def enable(self):
-        if self._manager.set_esp_box(True):
-            self._enabled = True
-            return True
-        self._enabled = False
-        return False
+        """
+        Enable ESP box.
+        Only updates desired state and submits to session manager.
+        Does NOT directly handle injection or connection.
+        """
+        # Update desired state
+        self._session_manager.set_desired_state(self.feature_id, True)
+        self._enabled = True
+        return True
 
     def disable(self):
-        ok = self._manager.set_esp_box(False)
+        """
+        Disable ESP box.
+        Only updates desired state and submits to session manager.
+        """
+        # Update desired state
+        self._session_manager.set_desired_state(self.feature_id, False)
         self._enabled = False
-        return ok
+        return True
 
     def cleanup(self):
-        self._manager.shutdown()
+        """
+        Cleanup on shutdown.
+        Does NOT clear desired state to preserve user's preference across restarts.
+        """
+        # Do NOT update desired state - preserve for program restart
+        self._enabled = False

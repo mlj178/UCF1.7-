@@ -33,6 +33,9 @@ public class DllInjector
     [DllImport("kernel32.dll", SetLastError = true)]
     public static extern bool GetExitCodeThread(IntPtr hThread, out uint lpExitCode);
 
+    [DllImport("kernel32.dll", SetLastError = true)]
+    public static extern bool IsWow64Process(IntPtr hProcess, out bool wow64Process);
+
     [DllImport("psapi.dll", SetLastError = true)]
     public static extern bool EnumProcessModulesEx(IntPtr hProcess, IntPtr[] lphModule, int cb, out int lpcbNeeded, int dwFilterFlag);
 
@@ -118,7 +121,8 @@ public class DllInjector
             try
             {
                 process = Process.GetProcessById(pid);
-                Log(string.Format("找到进程: PID={0}, 主窗口: '{1}'", process.Id, process.MainWindowTitle), "INFO");
+                Log(string.Format("找到进程: PID={0}, 主窗口: '{1}', 创建时间: {2}", 
+                    process.Id, process.MainWindowTitle, process.StartTime), "INFO");
             }
             catch (ArgumentException)
             {
@@ -139,7 +143,8 @@ public class DllInjector
             {
                 foreach (var p in processes)
                 {
-                    Log(string.Format("候选 PID={0}, Title='{1}'", p.Id, p.MainWindowTitle), "INFO");
+                    Log(string.Format("候选 PID={0}, Title='{1}', 创建时间: {2}", 
+                        p.Id, p.MainWindowTitle, p.StartTime), "INFO");
                 }
             }
 
@@ -161,7 +166,8 @@ public class DllInjector
             }
 
             process = processes[0];
-            Log(string.Format("选中进程: PID={0}, 主窗口: '{1}'", process.Id, process.MainWindowTitle), "INFO");
+            Log(string.Format("选中进程: PID={0}, 主窗口: '{1}', 创建时间: {2}", 
+                process.Id, process.MainWindowTitle, process.StartTime), "INFO");
         }
 
         IntPtr hProcess = IntPtr.Zero;
@@ -177,23 +183,61 @@ public class DllInjector
                 int error = Marshal.GetLastWin32Error();
                 Log(string.Format("错误: OpenProcess失败，错误码: {0}", error), "ERROR");
                 Log("可能需要管理员权限", "ERROR");
+                Environment.Exit(1);
                 return;
             }
             Log(string.Format("进程句柄: 0x{0:X}", hProcess.ToInt64()), "INFO");
+
+            bool targetIs32Bit = !Environment.Is64BitOperatingSystem;
+            if (Environment.Is64BitOperatingSystem)
+            {
+                bool targetIsWow64;
+                if (!IsWow64Process(hProcess, out targetIsWow64))
+                {
+                    Log(string.Format("错误: 无法检测目标进程架构，错误码: {0}", Marshal.GetLastWin32Error()), "ERROR");
+                    Environment.Exit(1);
+                    return;
+                }
+                targetIs32Bit = targetIsWow64;
+            }
+
+            Log(string.Format("进程架构: {0}", targetIs32Bit ? "32-bit" : "64-bit"), "INFO");
+            Log(string.Format("注入器架构: {0}", Environment.Is64BitProcess ? "64-bit" : "32-bit"), "INFO");
+            if (!targetIs32Bit || Environment.Is64BitProcess)
+            {
+                Log("错误: 当前版本要求 32 位注入器和 32 位目标游戏", "ERROR");
+                Environment.Exit(1);
+                return;
+            }
+
+            // Check if DLL is already loaded (idempotency)
+            Log("检查 DLL 是否已加载...", "INFO");
+            string dllName = Path.GetFileName(dllPath);
+            IntPtr existingDll = GetRemoteModuleBase(hProcess, dllName);
+            if (existingDll != IntPtr.Zero)
+            {
+                Log(string.Format("DLL 已加载: 0x{0:X}", existingDll.ToInt64()), "SUCCESS");
+                Log("already_loaded", "INFO");
+                Environment.Exit(0);
+                return;
+            }
+            Log("DLL 未加载，继续注入...", "INFO");
 
             Log("获取目标进程中的 kernel32.dll 基址...", "INFO");
             IntPtr remoteKernel32 = GetRemoteModuleBase(hProcess, "kernel32.dll");
             if (remoteKernel32 == IntPtr.Zero)
             {
                 Log("错误: 未找到 kernel32.dll", "ERROR");
+                Environment.Exit(1);
                 return;
             }
 
-            Log("获取本地 LoadLibraryA 地址...", "INFO");
+            Log("获取本地 LoadLibraryW 地址...", "INFO");
             IntPtr localKernel32 = GetModuleHandle("kernel32.dll");
             if (localKernel32 == IntPtr.Zero)
             {
                 Log("错误: GetModuleHandle失败", "ERROR");
+                Environment.Exit(1);
                 return;
             }
             Log(string.Format("本地 kernel32.dll: 0x{0:X}", localKernel32.ToInt64()), "INFO");
@@ -237,13 +281,14 @@ public class DllInjector
             }
             Log(string.Format("写入字节数: {0}", bytesWritten), "INFO");
 
-            Log("创建远程线程执行LoadLibraryA...", "INFO");
+            Log("创建远程线程执行LoadLibraryW...", "INFO");
             hThread = CreateRemoteThread(hProcess, IntPtr.Zero, 0, remoteLoadLibrary, remoteMem, 0, IntPtr.Zero);
             if (hThread == IntPtr.Zero)
             {
                 int error = Marshal.GetLastWin32Error();
                 Log(string.Format("错误: CreateRemoteThread失败，错误码: {0}", error), "ERROR");
                 Environment.Exit(1);
+                return;
             }
             Log(string.Format("远程线程句柄: 0x{0:X}", hThread.ToInt64()), "INFO");
 
@@ -251,7 +296,10 @@ public class DllInjector
             uint waitResult = WaitForSingleObject(hThread, 10000);
             if (waitResult != 0)
             {
-                Log(string.Format("警告: WaitForSingleObject返回: {0}", waitResult), "WARN");
+                Log(string.Format("错误: WaitForSingleObject返回: {0} (超时或失败)", waitResult), "ERROR");
+                Log("远程线程执行超时，注入失败", "ERROR");
+                Environment.Exit(1);
+                return;
             }
 
             uint exitCode = 0;
@@ -266,16 +314,18 @@ public class DllInjector
                 Log("  2. DllMain初始化代码有bug", "ERROR");
                 Log("  3. 缺少运行时依赖", "ERROR");
                 Environment.Exit(1);
+                return;
             }
 
             if (exitCode == 0)
             {
-                Log("错误: LoadLibraryA返回NULL，DLL加载失败", "ERROR");
+                Log("错误: LoadLibraryW返回NULL，DLL加载失败", "ERROR");
                 Log("可能原因:", "ERROR");
                 Log("  1. DLL文件路径无效", "ERROR");
                 Log("  2. DLL依赖缺失", "ERROR");
                 Log("  3. DllMain返回FALSE", "ERROR");
                 Environment.Exit(1);
+                return;
             }
 
             Log(string.Format("DLL注入成功！基地址: 0x{0:X8}", exitCode), "SUCCESS");
@@ -290,6 +340,7 @@ public class DllInjector
         {
             Log(string.Format("异常: {0}: {1}", ex.GetType().Name, ex.Message), "ERROR");
             Log(string.Format("堆栈跟踪: {0}", ex.StackTrace), "ERROR");
+            Environment.Exit(1);
         }
         finally
         {

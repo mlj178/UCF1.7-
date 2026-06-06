@@ -7,29 +7,29 @@
     "enabled": false
   },
   "recoil": {
-    "enabled": false
+    "enabled": true
   },
   "ammo": {
     "enabled": true
   },
   "movespeed": {
     "enabled": true,
-    "slider_value": 2.3
+    "slider_value": 2.1
   },
   "ammoplus": {
-    "enabled": false
+    "enabled": true
   },
   "range": {
-    "enabled": false,
-    "slider_value": 27.6
+    "enabled": true,
+    "slider_value": 40.2
   },
   "gather": {
     "enabled": false
   },
   "gravity": {
-    "enabled": false,
+    "enabled": true,
     "gravity_value": 1.0,
-    "jump_value": 1.0,
+    "jump_value": 2.0,
     "gravity_mode": "player_only"
   },
   "aim": {
@@ -39,7 +39,7 @@
     "enabled": false
   },
   "speedgun": {
-    "enabled": false
+    "enabled": true
   },
   "isbot": {
     "enabled": false
@@ -58,6 +58,6 @@
     "respawn_weapon": false
   },
   "esp_box": {
-    "enabled": false
+    "enabled": true
   }
 }

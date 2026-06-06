@@ -11,6 +11,7 @@ from core.frida_manager import FridaManager
 from core.feature_registry import FeatureRegistry
 from core.sound_manager import SoundManager
 from core.hotkey_manager import HotkeyManager
+from core.game_session_manager import GameSessionManager
 
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
@@ -145,8 +146,10 @@ class App(ctk.CTk):
         self._log("游戏修改器控制台 v1.6 — 全功能整合包 (模块化架构)")
         self._log("正在检测游戏进程...")
 
-        threading.Thread(target=self._auto_connect_bg, daemon=True).start()
-        threading.Thread(target=self._monitor_connection, daemon=True).start()
+        # Start unified session manager (replaces old _auto_connect_bg)
+        session = GameSessionManager.get_instance()
+        session.start()
+
         threading.Thread(target=self._nano4t_auto_health_bg, daemon=True).start()
 
     def _build_ui(self):
@@ -749,7 +752,7 @@ class App(ctk.CTk):
                 text="① 启动游戏 → ② 进入任意模式 → ③ 打开本工具 → ④ 开启功能开关")
 
     def _toggle_feature(self, feature_id):
-        if not self._ready:
+        if feature_id != 'esp_box' and not self._ready:
             self._log("⚠ 尚未连接到游戏，请先点击「连接游戏」")
             return
 
@@ -1044,10 +1047,8 @@ class App(ctk.CTk):
         threading.Thread(target=do_clear, daemon=True).start()
 
     def _connect(self):
-        if self._connecting:
-            return
-        self._cleanup()
-        threading.Thread(target=self._connect_bg, daemon=True).start()
+        self._log("正在重新检测游戏进程...")
+        GameSessionManager.get_instance().reconnect()
 
     def _connect_bg(self):
         pid = self._frida.find_pid()
@@ -1071,17 +1072,6 @@ class App(ctk.CTk):
             self._log(f"❌ 连接失败: {e}")
         finally:
             self._connecting = False
-
-    def _auto_connect_bg(self):
-        time.sleep(2)
-        while not self._stop:
-            if self._connecting:
-                time.sleep(5)
-                continue
-            pid = self._frida.find_pid()
-            if pid and not self._ready:
-                self._do_connect(pid)
-            time.sleep(5)
 
     def _monitor_connection(self):
         while not self._stop:
@@ -1436,6 +1426,7 @@ class App(ctk.CTk):
 
     def _on_close(self):
         self._stop = True
+        GameSessionManager.get_instance().stop()
         self._hotkey.cleanup()
         self._save_feature_state()
         # Cleanup Universal ESP feature

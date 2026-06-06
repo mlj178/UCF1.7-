@@ -202,6 +202,7 @@ static HMODULE WINAPI hookLoadLibraryW(LPCWSTR lpLibFileName)
 static DWORD WINAPI UninjectThread(LPVOID)
 {
     DebugLog("[DllMain] Uninject thread starting.\n");
+    Sleep(100);
 
     switch (globals::activeBackend)
     {
