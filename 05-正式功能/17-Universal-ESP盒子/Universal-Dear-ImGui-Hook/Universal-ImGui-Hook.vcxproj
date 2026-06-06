@@ -69,6 +69,10 @@
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <OutDir>$(ProjectDir)</OutDir>
+    <IntDir>$(ProjectDir)intermediate\</IntDir>
+  </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <TargetExt>.dll</TargetExt>
   </PropertyGroup>
@@ -146,6 +150,7 @@
     <ClCompile Include="esp\transform_helper.cpp" />
     <ClCompile Include="esp\coord_converter.cpp" />
     <ClCompile Include="esp\esp_renderer.cpp" />
+    <ClCompile Include="esp\named_pipe_server.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="imgui\imconfig.h" />
@@ -167,6 +172,8 @@
     <ClInclude Include="esp\transform_helper.h" />
     <ClInclude Include="esp\coord_converter.h" />
     <ClInclude Include="esp\esp_renderer.h" />
+    <ClInclude Include="esp\esp_state.h" />
+    <ClInclude Include="esp\named_pipe_server.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="imgui\.editorconfig" />

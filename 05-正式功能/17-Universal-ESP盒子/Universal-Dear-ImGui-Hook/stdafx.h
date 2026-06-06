@@ -59,56 +59,81 @@ typedef uint32_t uintx_t;
 
 #include "namespaces.h"
 
-// File-based debug logging system
+// File-based debug logging system (singleton to avoid multi-copy issues from static in header)
 class FileLogger {
 private:
     FILE* logFile = nullptr;
     bool initialized = false;
     bool writeEnabled = true;
-    
+    CRITICAL_SECTION cs;
+
+    FileLogger() {
+        InitializeCriticalSection(&cs);
+    }
+
+    FileLogger(const FileLogger&) = delete;
+    FileLogger& operator=(const FileLogger&) = delete;
+
 public:
+    static FileLogger& Instance() {
+        static FileLogger instance;
+        return instance;
+    }
+
     ~FileLogger() {
+        EnterCriticalSection(&cs);
         if (logFile) {
             fclose(logFile);
             logFile = nullptr;
         }
+        LeaveCriticalSection(&cs);
+        DeleteCriticalSection(&cs);
     }
-    
-    void Initialize() {
-        if (initialized) return;
-        
-        // Fixed log path in DLL project directory
-        const char* logPath = "D:\\trae_project\\Universal-Dear-ImGui-Hook\\esp_debug.log";
-        
-        // Keep the log readable while the injected DLL is still writing.
-        logFile = _fsopen(logPath, "a", _SH_DENYNO);
-        if (!logFile) {
-            writeEnabled = false;
-            // Still output to DebugView
-            OutputDebugStringA("[FileLogger] ERROR: Failed to open log file\n");
-            return;
-        }
-        
-        initialized = true;
-        writeEnabled = true;
-        
-        // Write header immediately
-        SYSTEMTIME st;
-        GetLocalTime(&st);
-        fprintf(logFile, "\n========================================\n");
-        fprintf(logFile, "ESP Debug Log - %04d-%02d-%02d %02d:%02d:%02d\n",
-                st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond);
-        fprintf(logFile, "========================================\n");
-        fflush(logFile);
-    }
-    
+
     void Log(const char* message) {
-        // Always initialize first
+        EnterCriticalSection(&cs);
+
         if (!initialized) {
-            Initialize();
+            // Build log path next to the DLL module
+            wchar_t wLogPath[MAX_PATH] = {0};
+            HMODULE hMod = NULL;
+            // Get the DLL module handle (globals::mainModule is set in DllMain, may not be set yet)
+            // Use GetModuleHandleEx to get the DLL that contains this code
+            GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS, (LPCWSTR)this, &hMod);
+            if (hMod && GetModuleFileNameW(hMod, wLogPath, MAX_PATH)) {
+                // Replace filename with esp_debug.log
+                wchar_t* lastSlash = wcsrchr(wLogPath, L'\\');
+                if (lastSlash) {
+                    wcscpy_s(lastSlash + 1, MAX_PATH - (lastSlash + 1 - wLogPath), L"esp_debug.log");
+                } else {
+                    wcscpy_s(wLogPath, MAX_PATH, L"esp_debug.log");
+                }
+            } else {
+                // Fallback to TEMP directory (always ASCII-safe)
+                GetTempPathW(MAX_PATH, wLogPath);
+                wcscat_s(wLogPath, MAX_PATH, L"esp_debug.log");
+            }
+            logFile = _wfsopen(wLogPath, L"a", _SH_DENYNO);
+            if (logFile) {
+                initialized = true;
+                writeEnabled = true;
+                SYSTEMTIME st;
+                GetLocalTime(&st);
+                fprintf(logFile, "\n========================================\n");
+                fprintf(logFile, "ESP Debug Log - %04d-%02d-%02d %02d:%02d:%02d\n",
+                        st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond);
+                fprintf(logFile, "Log path: D:\\...\\esp_debug.log\n");
+                fprintf(logFile, "========================================\n");
+                fflush(logFile);
+            } else {
+                writeEnabled = false;
+                OutputDebugStringA("[FileLogger] ERROR: Failed to open log file\n");
+                LeaveCriticalSection(&cs);
+                OutputDebugStringA(message);
+                return;
+            }
         }
-        
-        // Write to file if enabled
+
         if (writeEnabled && logFile) {
             SYSTEMTIME st;
             GetLocalTime(&st);
@@ -116,22 +141,18 @@ public:
                     st.wHour, st.wMinute, st.wSecond, st.wMilliseconds, message);
             fflush(logFile);
         }
-        
-        // ALWAYS output to DebugView
+
         OutputDebugStringA(message);
+        LeaveCriticalSection(&cs);
     }
 };
 
-// Global file logger instance
-static FileLogger g_FileLogger;
-
-// Helper macro for debug logging to file and DebugView
+// Helper for debug logging - uses singleton FileLogger
 inline void DebugLog(const char* fmt, ...) {
-    // Always log - disable filtering temporarily
     char buf[512];
     va_list args;
     va_start(args, fmt);
     vsnprintf(buf, sizeof(buf), fmt, args);
     va_end(args);
-    g_FileLogger.Log(buf);
+    FileLogger::Instance().Log(buf);
 }
