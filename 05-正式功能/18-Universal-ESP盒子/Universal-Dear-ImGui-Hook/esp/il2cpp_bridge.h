@@ -43,6 +43,10 @@ struct RVAConstants {
     // Entity.get_isDead (RVA: 0xB400E0)
     static constexpr uintptr_t Entity_get_isDead = 0xB400E0;
 
+    // Collider.get_bounds_Injected (RVA: 0xAB85E0)
+    // Signature: void(Collider* this, Bounds* ret, MethodInfo*)
+    static constexpr uintptr_t Collider_get_bounds_Injected = 0xAB85E0;
+
 };
 
 // Field offset constants (from dump.cs)
@@ -62,6 +66,7 @@ struct OffsetConstants {
 
     // Entity fields
     static constexpr uintptr_t E_team = 0x20;              // Team (int32)
+    static constexpr uintptr_t E_characterController = 0x2C; // CharacterController
 
     // Player fields
     static constexpr uintptr_t P_characterContainer = 0x58;  // Transform (body root)

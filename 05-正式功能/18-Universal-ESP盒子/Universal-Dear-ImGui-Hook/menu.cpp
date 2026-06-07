@@ -59,7 +59,6 @@ namespace menu {
             
             ImGui::Separator();
             ImGui::Text("Config:");
-            ImGui::BulletText("Base Size: %.1f", esp::config::ESP_BASE_SIZE);
             ImGui::BulletText("Max Distance: %.1f", esp::config::MAX_DISTANCE);
             ImGui::BulletText("Box Thickness: %.1f", esp::config::BOX_THICKNESS);
         }

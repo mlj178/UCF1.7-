@@ -127,13 +127,13 @@ void ESPRenderer::DrawPlayerESP(void* player, void* localPlayer) {
     static int debugCounter = 0;
     bool shouldLog = (debugCounter++ % 600 == 0);
 
-    // === Priority 1: Hitbox-based ESP (from CharacterModel.hitboxes) ===
+    // === Primary: Bounds/Hitbox ESP ===
     HitboxESPData hitbox = TransformHelper::GetHitboxData(player);
 
     if (hitbox.valid) {
         // Reject off-screen
         if (std::abs(hitbox.centerX) > 5000.f || std::abs(hitbox.centerY) > 5000.f) {
-            if (shouldLog) DebugLog("[ESP] Hitbox: off-screen center (%.1f, %.1f)\n", hitbox.centerX, hitbox.centerY);
+            if (shouldLog) DebugLog("[ESP] off-screen center (%.1f, %.1f)\n", hitbox.centerX, hitbox.centerY);
             return;
         }
 
@@ -141,9 +141,10 @@ void ESPRenderer::DrawPlayerESP(void* player, void* localPlayer) {
         if (!CoordConverter::IsOnScreen(center, hitbox.width, hitbox.height)) return;
 
         if (shouldLog) {
-            DebugLog("[ESP] Hitbox: player=0x%p box=%.1fx%.1f center=(%.1f,%.1f) hbc=%d screen=%d\n",
-                     player, hitbox.width, hitbox.height, hitbox.centerX, hitbox.centerY,
-                     hitbox.hitboxCount, hitbox.validScreenCount);
+            const char* methodName = (hitbox.method == 1) ? "Bounds" : "Hitbox";
+            DebugLog("[ESP] %s: player=0x%p box=%.1fx%.1f center=(%.1f,%.1f) screen=%d\n",
+                     methodName, player, hitbox.width, hitbox.height, hitbox.centerX, hitbox.centerY,
+                     hitbox.validScreenCount);
         }
 
         ImVec4 color = GetPlayerColor(player, localPlayer);
