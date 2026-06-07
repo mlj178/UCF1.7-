@@ -1,5 +1,6 @@
 import os
 import sys
+import tempfile
 import unittest
 from unittest.mock import patch
 
@@ -180,6 +181,46 @@ class GameSessionManagerTests(unittest.TestCase):
 
         self.assertTrue(fake_universal.unloaded)
         self.assertFalse(fake_universal.disconnected)
+
+    def test_desired_states_ignore_esp_box_from_feature_state_when_file_exists(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            desired_path = os.path.join(tmp, "desired_states.json")
+            feature_path = os.path.join(tmp, "feature_state.json")
+            with open(desired_path, "w", encoding="utf-8") as f:
+                f.write('{"esp_box": false}')
+            with open(feature_path, "w", encoding="utf-8") as f:
+                f.write('{"esp_box": {"enabled": true}}')
+
+            with patch("core.config.DATA_DIR", tmp):
+                self.manager._load_desired_states()
+
+        self.assertFalse(self.manager.get_desired_state("esp_box"))
+
+    def test_feature_state_does_not_store_esp_box(self):
+        from ui.app import App
+
+        app = object.__new__(App)
+        app._features = {"knife": True, "esp_box": True}
+        app._knife_speed = 4.4
+        app._movespeed = 3.0
+        app._range_mult = 50.0
+        app._gravity = 1.0
+        app._jump = 1.0
+        app._gravity_mode = "player_only"
+
+        class RespawnVar:
+            def get(self):
+                return False
+
+        app.respawn_weapon_var = RespawnVar()
+
+        with tempfile.TemporaryDirectory() as tmp, patch("ui.app.DATA_DIR", tmp):
+            app._save_feature_state()
+            with open(os.path.join(tmp, "feature_state.json"), "r", encoding="utf-8") as f:
+                data = f.read()
+
+        self.assertIn('"knife"', data)
+        self.assertNotIn('"esp_box"', data)
 
 
 if __name__ == "__main__":

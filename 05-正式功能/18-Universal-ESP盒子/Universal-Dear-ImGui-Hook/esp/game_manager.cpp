@@ -160,6 +160,22 @@ void GameManager::ResetSessionState() {
     ClearRuntimeCaches("explicit reset");
 }
 
+void GameManager::Cleanup() {
+    DebugLog("[GameManager] Cleanup called.\n");
+    
+    // Clear caches first
+    ClearRuntimeCaches("cleanup");
+    
+    // Delete critical section
+    if (s_CritSecInitialized) {
+        DeleteCriticalSection(&s_BotPlayersCS);
+        s_CritSecInitialized = false;
+        DebugLog("[GameManager] Critical section deleted.\n");
+    }
+    
+    s_initialized = false;
+}
+
 bool GameManager::RefreshSession() {
     if (!s_initialized || !IL2CPPBridge::IsInitialized() || !IL2CPPBridge::IsGameAssemblyReady()) {
         ClearRuntimeCaches("bridge unavailable");

@@ -1,5 +1,6 @@
 #include "stdafx.h"
 #include "esp/named_pipe_server.h"
+#include "esp/game_manager.h"
 #include <atomic>
 
 namespace mousehooks { void Init(); void Remove(); }
@@ -205,7 +206,15 @@ static HMODULE WINAPI hookLoadLibraryW(LPCWSTR lpLibFileName)
 static DWORD WINAPI UninjectThread(LPVOID)
 {
     DebugLog("[DllMain] Uninject thread starting.\n");
+
+    // Stop named pipe server first to prevent thread from accessing freed code
+    NamedPipeServer::Stop();
+
     MH_DisableHook(MH_ALL_HOOKS);
+
+    // Let callbacks that entered before MH_DisableHook return before shared
+    // state and critical sections are destroyed.
+    Sleep(100);
 
     switch (globals::activeBackend)
     {
@@ -232,6 +241,9 @@ static DWORD WINAPI UninjectThread(LPVOID)
     MH_RemoveHook(MH_ALL_HOOKS);
     MH_Uninitialize();
 
+    // Cleanup ESP game manager resources after hooks can no longer enter.
+    esp::GameManager::Cleanup();
+
     DebugLog("[DllMain] Unloading module and exiting thread.\n");
     FreeLibraryAndExitThread(globals::mainModule, 0);
     return 0; // not reached
@@ -243,6 +255,11 @@ void Uninject()
     bool expected = false;
     if (!s_uninjecting.compare_exchange_strong(expected, true))
         return;
+
+    // Wait for current frame to complete before starting cleanup
+    // This ensures the Present hook (which called Uninject) has returned
+    // before we start disabling hooks and releasing resources
+    Sleep(50);  // ~3 frames at 60fps
 
     HANDLE hThread = CreateThread(nullptr, 0, UninjectThread, nullptr, 0, nullptr);
     if (hThread) {
@@ -351,6 +368,10 @@ BOOL WINAPI DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserved
     }
 
     case DLL_PROCESS_DETACH:
+        if (lpReserved) {
+            DebugLog("[DllMain] Process exiting; skipping explicit detach cleanup.\n");
+            break;
+        }
         if (s_uninjecting) {
             DebugLog("[DllMain] DLL_PROCESS_DETACH after explicit cleanup.\n");
             break;
@@ -358,6 +379,8 @@ BOOL WINAPI DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserved
         DebugLog("[DllMain] DLL_PROCESS_DETACH. Releasing hooks and uninitializing MinHook.\n");
         // Stop named pipe server
         NamedPipeServer::Stop();
+        MH_DisableHook(MH_ALL_HOOKS);
+        Sleep(100);
         switch (globals::activeBackend) {
         case globals::Backend::DX9:
             d3d9hook::release();
@@ -375,9 +398,9 @@ BOOL WINAPI DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserved
             break;
         }
         mousehooks::Remove();
-        MH_DisableHook(MH_ALL_HOOKS);
         MH_RemoveHook(MH_ALL_HOOKS);
         MH_Uninitialize();
+        esp::GameManager::Cleanup();
         break;
     }
     return TRUE;

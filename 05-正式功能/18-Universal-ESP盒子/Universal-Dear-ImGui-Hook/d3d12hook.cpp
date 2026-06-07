@@ -568,6 +568,36 @@ namespace d3d12hook {
     void release() {
         DebugLog("[d3d12hook] Releasing resources and hooks.\n");
         gShutdown = true;
+
+        // Wait for GPU to complete all pending commands before releasing resources
+        if (gCommandQueue && gOverlayFence && gFenceEvent) {
+            UINT64 targetValue = gOverlayFenceValue + 1;
+            HRESULT hr = gCommandQueue->Signal(gOverlayFence, targetValue);
+            if (SUCCEEDED(hr)) {
+                gOverlayFenceValue = targetValue;
+                hr = gOverlayFence->SetEventOnCompletion(targetValue, gFenceEvent);
+                if (FAILED(hr)) {
+                    DebugLog("[d3d12hook] SetEventOnCompletion failed: hr=0x%08X\n", hr);
+                }
+                // Wait with timeout to avoid infinite hang
+                const DWORD gpuWaitTimeoutMs = 5000; // 5 seconds timeout
+                while (SUCCEEDED(hr) && gOverlayFence->GetCompletedValue() < targetValue) {
+                    DWORD waitRes = WaitForSingleObject(gFenceEvent, gpuWaitTimeoutMs);
+                    if (waitRes == WAIT_TIMEOUT) {
+                        DebugLog("[d3d12hook] GPU wait timeout, proceeding with cleanup anyway.\n");
+                        break;
+                    }
+                    if (waitRes != WAIT_OBJECT_0) {
+                        DebugLog("[d3d12hook] GPU wait failed: %lu\n", GetLastError());
+                        break;
+                    }
+                    break; // Event was signaled
+                }
+            } else {
+                DebugLog("[d3d12hook] Failed to signal fence for GPU sync: hr=0x%08X\n", hr);
+            }
+        }
+
         if (globals::mainWindow) {
             inputhook::Remove(globals::mainWindow);
         }
