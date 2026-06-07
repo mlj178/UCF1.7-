@@ -126,13 +126,24 @@ class App(ctk.CTk):
         self._gravity_mode = 'player_only'
 
         self._nano4t_ready = False
+        # 多人生化选择器状态变量
         _nano4t_cfg = self._load_nano4t_selector()
-        self._nano4t_wanted_ghost = _nano4t_cfg.get('ghost', -1)
-        self._nano4t_wanted_human = _nano4t_cfg.get('human', -1)
+        # 临时变量：UI选择的值（用于保存到配置文件）
+        self._nano4t_temp_ghost = _nano4t_cfg.get('ghost', 0)
+        self._nano4t_temp_human = _nano4t_cfg.get('human', 10)
+        # 如果配置文件中是-1，使用默认值
+        if self._nano4t_temp_ghost < 0 or self._nano4t_temp_ghost >= 10:
+            self._nano4t_temp_ghost = 0
+        if self._nano4t_temp_human < 10 or self._nano4t_temp_human >= 20:
+            self._nano4t_temp_human = 10
+        # 实际生效的值（-1表示未激活）
+        self._nano4t_wanted_ghost = -1
+        self._nano4t_wanted_human = -1
         self._nano4t_activated = False  # 是否已激活
         self._nano4t_current_ghost = -1
         self._nano4t_current_human = -1
         self._nano4t_log_errors = False
+        self._nano4t_apply_cooldown = 0  # 应用按钮防抖（时间戳）
 
         self.settings_window = None
 
@@ -482,14 +493,10 @@ class App(ctk.CTk):
                                                        font=("Microsoft YaHei", 11), text_color="#888888")
         self.nano4t_ghost_status_label.pack(side="left", padx=(8, 0))
 
-        # 方案A：显示"未选择"或实际值
-        if self._nano4t_wanted_ghost < 0:
-            ghost_display_text = "未选择（请选择后点击应用）"
-            ghost_desc_text = "效果: 请选择特性并点击「应用」按钮"
-        else:
-            ghost_display_id = self._nano4t_wanted_ghost
-            ghost_display_text = f"{ghost_display_id}: {NANO4T_ATTRS[ghost_display_id][0]}"
-            ghost_desc_text = "效果: " + NANO4T_ATTRS[ghost_display_id][1]
+        # 使用临时变量显示初始值
+        ghost_display_id = self._nano4t_temp_ghost
+        ghost_display_text = f"{ghost_display_id}: {NANO4T_ATTRS[ghost_display_id][0]}"
+        ghost_desc_text = "效果: " + NANO4T_ATTRS[ghost_display_id][1]
 
         self.nano4t_ghost_var = ctk.StringVar(value=ghost_display_text)
         self.nano4t_ghost_combo = ctk.CTkComboBox(
@@ -519,14 +526,10 @@ class App(ctk.CTk):
                                                        font=("Microsoft YaHei", 11), text_color="#888888")
         self.nano4t_human_status_label.pack(side="left", padx=(8, 0))
 
-        # 方案A：显示"未选择"或实际值
-        if self._nano4t_wanted_human < 0:
-            human_display_text = "未选择（请选择后点击应用）"
-            human_desc_text = "效果: 请选择特性并点击「应用」按钮"
-        else:
-            human_display_id = self._nano4t_wanted_human
-            human_display_text = f"{human_display_id}: {NANO4T_ATTRS[human_display_id][0]}"
-            human_desc_text = "效果: " + NANO4T_ATTRS[human_display_id][1]
+        # 使用临时变量显示初始值
+        human_display_id = self._nano4t_temp_human
+        human_display_text = f"{human_display_id}: {NANO4T_ATTRS[human_display_id][0]}"
+        human_desc_text = "效果: " + NANO4T_ATTRS[human_display_id][1]
 
         self.nano4t_human_var = ctk.StringVar(value=human_display_text)
         self.nano4t_human_combo = ctk.CTkComboBox(
@@ -1226,39 +1229,75 @@ class App(ctk.CTk):
         SettingsWindow(self)
 
     def _load_nano4t_selector(self):
+        """加载配置文件，如果不存在或无效则返回默认值"""
         path = os.path.join(DATA_DIR, "Nano-4T-selector.json")
         if os.path.exists(path):
             try:
                 with open(path, 'r', encoding='utf-8') as f:
-                    return json.load(f)
+                    data = json.load(f)
+                    # 验证配置文件中的值是否有效
+                    ghost = data.get('ghost', 0)
+                    human = data.get('human', 10)
+                    # 如果值无效，使用默认值
+                    if ghost < 0 or ghost >= 10:
+                        ghost = 0
+                    if human < 10 or human >= 20:
+                        human = 10
+                    return {'ghost': ghost, 'human': human}
             except Exception:
                 pass
-        return {'ghost': 9, 'human': 19}
+        # 默认值：幽灵方=0（强化），人类方=10（救世主）
+        return {'ghost': 0, 'human': 10}
 
     def _save_nano4t_selector(self):
+        """保存用户选择的特性到配置文件（保存临时变量）"""
         path = os.path.join(DATA_DIR, "Nano-4T-selector.json")
         try:
             with open(path, 'w', encoding='utf-8') as f:
-                json.dump({'ghost': self._nano4t_wanted_ghost,
-                           'human': self._nano4t_wanted_human}, f, ensure_ascii=False, indent=2)
+                json.dump({'ghost': self._nano4t_temp_ghost,
+                           'human': self._nano4t_temp_human}, f, ensure_ascii=False, indent=2)
         except Exception:
             pass
 
     def _nano4t_on_ghost_select(self, value):
-        gid = int(value.split(":")[0])
-        self.nano4t_ghost_desc.configure(text="效果: " + NANO4T_ATTRS[gid][1])
-        # 注意：只更新UI显示，不改变_wanted_ghost
-        # _wanted_ghost只在点击"应用"时才更新
-        if self._nano4t_ready:
-            self.nano4t_next_label.configure(text="💡 请点击「应用」按钮生效")
+        """下拉框选择回调：更新临时变量"""
+        try:
+            gid = int(value.split(":")[0])
+            # 验证范围
+            if gid < 0 or gid >= 10:
+                self._log(f"⚠ [多人生化] 幽灵方特性ID无效: {gid}")
+                return
+            # 更新临时变量
+            self._nano4t_temp_ghost = gid
+            # 更新UI描述
+            self.nano4t_ghost_desc.configure(text="效果: " + NANO4T_ATTRS[gid][1])
+            # 保存到配置文件
+            self._save_nano4t_selector()
+            # 提示用户
+            if self._nano4t_ready:
+                self.nano4t_next_label.configure(text="💡 请点击「应用」按钮生效")
+        except Exception as e:
+            self._log(f"❌ [多人生化] 幽灵方选择错误: {e}")
 
     def _nano4t_on_human_select(self, value):
-        hid = int(value.split(":")[0])
-        self.nano4t_human_desc.configure(text="效果: " + NANO4T_ATTRS[hid][1])
-        # 注意：只更新UI显示，不改变_wanted_human
-        # _wanted_human只在点击"应用"时才更新
-        if self._nano4t_ready:
-            self.nano4t_next_label.configure(text="💡 请点击「应用」按钮生效")
+        """下拉框选择回调：更新临时变量"""
+        try:
+            hid = int(value.split(":")[0])
+            # 验证范围
+            if hid < 10 or hid >= 20:
+                self._log(f"⚠ [多人生化] 人类方特性ID无效: {hid}")
+                return
+            # 更新临时变量
+            self._nano4t_temp_human = hid
+            # 更新UI描述
+            self.nano4t_human_desc.configure(text="效果: " + NANO4T_ATTRS[hid][1])
+            # 保存到配置文件
+            self._save_nano4t_selector()
+            # 提示用户
+            if self._nano4t_ready:
+                self.nano4t_next_label.configure(text="💡 请点击「应用」按钮生效")
+        except Exception as e:
+            self._log(f"❌ [多人生化] 人类方选择错误: {e}")
 
     def _nano4t_refresh_next_label(self):
         if self._nano4t_ready and self._nano4t_activated:
@@ -1324,25 +1363,49 @@ class App(ctk.CTk):
             self._log(f"❌ [多人生化] 连接失败: {e}")
 
     def _nano4t_apply(self):
+        """应用按钮：验证参数并调用Frida"""
         if not self._nano4t_ready:
             self._log("⚠ [多人生化] 尚未就绪，请先进入「多人生化模式」房间")
             return
-        try:
-            gid = int(self.nano4t_ghost_var.get().split(":")[0])
-            hid = int(self.nano4t_human_var.get().split(":")[0])
-            threading.Thread(target=lambda: self._nano4t_apply_bg(gid, hid), daemon=True).start()
-        except Exception as e:
-            self._log(f"❌ [多人生化] 参数错误: {e}")
+        
+        # 防抖检查（0.5秒内只能点击一次）
+        import time
+        current_time = time.time()
+        if current_time - self._nano4t_apply_cooldown < 0.5:
+            self._log("⚠ [多人生化] 请勿频繁点击")
+            return
+        self._nano4t_apply_cooldown = current_time
+        
+        # 验证临时变量范围
+        gid = self._nano4t_temp_ghost
+        hid = self._nano4t_temp_human
+        
+        if gid < 0 or gid >= 10:
+            self._log(f"❌ [多人生化] 幽灵方特性ID无效: {gid}（有效范围: 0-9）")
+            return
+        if hid < 10 or hid >= 20:
+            self._log(f"❌ [多人生化] 人类方特性ID无效: {hid}（有效范围: 10-19）")
+            return
+        
+        # 调用Frida（后台线程）
+        threading.Thread(target=lambda: self._nano4t_apply_bg(gid, hid), daemon=True).start()
 
     def _nano4t_apply_bg(self, gid, hid):
+        """后台线程：调用Frida设置特性"""
         try:
-            self._frida.call_export('nano4tset', gid, hid)
+            # 调用Frida RPC（增加超时保护）
+            result = self._frida.call_export('nano4tset', gid, hid)
+            # 更新实际生效的值
+            self._nano4t_wanted_ghost = gid
+            self._nano4t_wanted_human = hid
         except Exception as e:
             self._log(f"❌ [多人生化] 应用失败: {e}")
             self._nano4t_ready = False
             self.after(0, lambda: (
                 self.nano4t_apply_btn.configure(state="disabled", fg_color="#333333"),
-                self._nano4t_set_status("yellow", "已断开")
+                self._nano4t_set_status("yellow", "已断开"),
+                self.nano4t_ghost_status_label.configure(text="[未激活]", text_color="#888888"),
+                self.nano4t_human_status_label.configure(text="[未激活]", text_color="#888888")
             ))
 
     def _nano4t_auto_init_bg(self):

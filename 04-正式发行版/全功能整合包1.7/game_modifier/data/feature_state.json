@@ -1,34 +1,34 @@
 {
   "knife": {
     "enabled": true,
-    "slider_value": 10.0
+    "slider_value": 4.4
   },
   "time": {
     "enabled": false
   },
   "recoil": {
-    "enabled": true
+    "enabled": false
   },
   "ammo": {
-    "enabled": true
+    "enabled": false
   },
   "movespeed": {
     "enabled": true,
     "slider_value": 4.4
   },
   "ammoplus": {
-    "enabled": true
+    "enabled": false
   },
   "range": {
     "enabled": true,
     "slider_value": 40.2
   },
   "gather": {
-    "enabled": false
+    "enabled": true
   },
   "gravity": {
     "enabled": true,
-    "gravity_value": 1.0,
+    "gravity_value": 0.9,
     "jump_value": 3.0,
     "gravity_mode": "player_only"
   },
@@ -39,7 +39,7 @@
     "enabled": false
   },
   "speedgun": {
-    "enabled": true
+    "enabled": false
   },
   "isbot": {
     "enabled": false
@@ -55,7 +55,7 @@
   },
   "weapon_giver": {
     "enabled": false,
-    "respawn_weapon": false
+    "respawn_weapon": true
   },
   "esp_box": {
     "enabled": false

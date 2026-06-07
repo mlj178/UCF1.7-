@@ -89,11 +89,19 @@ inline bool IsExecutableAddress(void* ptr) {
 }
 
 namespace config {
-    constexpr float ESP_BASE_SIZE = 50.0f;
     constexpr float BOX_THICKNESS = 1.5f;
     constexpr float MAX_DISTANCE = 100.0f;
     constexpr float MIN_DISTANCE = 1.0f;
     constexpr float PLAYER_HEAD_HEIGHT = 1.65f;  // feet -> head (aimbot v2)
+    constexpr float HITBOX_MAX_REF_DIST = 5.0f;   // max distance from player ref pos (meters)
+    constexpr float HITBOX_MAX_REF_DIST_SQ = HITBOX_MAX_REF_DIST * HITBOX_MAX_REF_DIST;
+
+    // Box sanity filter
+    constexpr float BOX_MAX_WIDTH = 300.0f;       // max screen width (px)
+    constexpr float BOX_MAX_HEIGHT = 600.0f;      // max screen height (px)
+    constexpr float BOX_MIN_ASPECT = 0.15f;       // min width/height ratio
+    constexpr float BOX_MAX_ASPECT = 5.0f;         // max width/height ratio
+
     constexpr int LOG_INTERVAL = 60;
     
     constexpr ImVec4 COLOR_TEAM1 = {0.78f, 0.80f, 0.82f, 1.0f};

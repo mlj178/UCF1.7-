@@ -136,15 +136,6 @@ bool CoordConverter::WorldToScreen(const Vector3& world, Vector2* outScreen) {
     return true;
 }
 
-void CoordConverter::CalculateBoxSize(float distance, float* width, float* height) {
-    if (distance < config::MIN_DISTANCE) distance = config::MIN_DISTANCE;
-    if (distance > config::MAX_DISTANCE) distance = config::MAX_DISTANCE;
-
-    float scaleFactor = config::ESP_BASE_SIZE / (distance * 0.1f);
-    *width = scaleFactor;
-    *height = scaleFactor * 2.0f;
-}
-
 bool CoordConverter::IsOnScreen(const Vector2& screen, float width, float height) {
     RECT rc = {};
     HWND hwnd = s_GameWindow ? s_GameWindow : globals::mainWindow;
