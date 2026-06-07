@@ -8,7 +8,6 @@ class CoordConverter {
 public:
     static bool Initialize();
     static bool WorldToScreen(const Vector3& world, Vector2* outScreen);
-    static void CalculateBoxSize(float distance, float* width, float* height);
     static bool IsOnScreen(const Vector2& screen, float width, float height);
     
     static bool IsInitialized() { return s_Initialized; }

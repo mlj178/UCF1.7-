@@ -36,8 +36,9 @@ ATTRS = {
 FridaJS = r"""
 var base = null;
 var ATTR_PTR = {};
-var WANTED_GHOST = 9;
-var WANTED_HUMAN = 19;
+var WANTED_GHOST = -1;  // -1表示未选择
+var WANTED_HUMAN = -1;  // -1表示未选择
+var ACTIVE = false;     // 激活开关
 var READY = false;
 var modeDestroyed = false;
 
@@ -70,7 +71,11 @@ function installHooks() {
         },
         onLeave: function(retval) {
             if (modeDestroyed) return;
+            if (!ACTIVE) return;  // 未激活，透传
+            
             var id = this._isNano ? WANTED_GHOST : WANTED_HUMAN;
+            if (id < 0) return;  // 未选择，透传
+            
             var p = ATTR_PTR[id];
             if (p && !p.isNull()) {
                 try { retval.replace(p); } catch(e) {}
@@ -81,6 +86,7 @@ function installHooks() {
         onEnter: function(args) {
             modeDestroyed = true;
             READY = false;
+            ACTIVE = false;  // 重置激活状态
             send(JSON.stringify({type:'destroyed'}));
         }
     });
@@ -105,7 +111,9 @@ else {
 
 rpc.exports = {
     set: function(g, h) {
-        WANTED_GHOST = g; WANTED_HUMAN = h;
+        WANTED_GHOST = g;
+        WANTED_HUMAN = h;
+        ACTIVE = true;  // 设置时激活
         send(JSON.stringify({type:'set', g:g, h:h}));
     },
     getcurrent: function() {
@@ -138,7 +146,8 @@ class Nano4TSelector(ctk.CTk):
         self.session = None; self.script = None
         self._connecting = False; self._ready = False
         self._lock = threading.Lock(); self._stop = False
-        self._wanted_ghost = 9; self._wanted_human = 19
+        self._wanted_ghost = -1; self._wanted_human = -1  # -1表示未选择
+        self._activated = False  # 是否已激活
         self.protocol("WM_DELETE_WINDOW", self._on_close)
 
         # ----- 状态栏 -----
@@ -245,20 +254,25 @@ class Nano4TSelector(ctk.CTk):
     def _on_ghost_select(self, value):
         gid = int(value.split(":")[0])
         self.ghost_desc.configure(text="效果: " + ATTRS[gid][1])
-        self._wanted_ghost = gid
+        # 更新选择的值，但不激活，需要点击"应用"才激活
         self._refresh_next_label()
 
     def _on_human_select(self, value):
         hid = int(value.split(":")[0])
         self.human_desc.configure(text="效果: " + ATTRS[hid][1])
-        self._wanted_human = hid
+        # 更新选择的值，但不激活，需要点击"应用"才激活
         self._refresh_next_label()
 
     def _refresh_next_label(self):
-        if self._ready:
+        if self._ready and self._activated:
             g = self._wanted_ghost; h = self._wanted_human
-            self.next_label.configure(
-                text=f"下一回合已锁定: 👻 {ATTRS[g][0]}  |  🛡️ {ATTRS[h][0]}")
+            if g >= 0 and h >= 0:
+                self.next_label.configure(
+                    text=f"下一回合已锁定: 👻 {ATTRS[g][0]}  |  🛡️ {ATTRS[h][0]}")
+            else:
+                self.next_label.configure(text="请选择特性并点击「应用」")
+        elif self._ready:
+            self.next_label.configure(text="请选择特性并点击「应用」")
         else:
             self.next_label.configure(text="")
 
@@ -356,6 +370,7 @@ class Nano4TSelector(ctk.CTk):
                     self._log("⚠ 检测到退出房间，特性系统已销毁")
                     self._log("  重新进入房间后会自动连接")
                     self._ready = False
+                    self._activated = False  # 重置激活状态
                     self._set_buttons(False)
                     self.after(0, lambda: self._set_status("yellow", "已退出房间"))
                     self.next_label.configure(text="")
@@ -364,6 +379,7 @@ class Nano4TSelector(ctk.CTk):
                     if self._ready:
                         self._log("⚠ 模式实例已失效（退出房间或切换模式）")
                         self._ready = False
+                        self._activated = False  # 重置激活状态
                         self._set_buttons(False)
                         self.after(0, lambda: self._set_status("yellow", "已退出房间"))
                         self.next_label.configure(text="")
@@ -384,6 +400,7 @@ class Nano4TSelector(ctk.CTk):
                 elif t == 'set':
                     g = int(payload['g']); h = int(payload['h'])
                     self._wanted_ghost = g; self._wanted_human = h
+                    self._activated = True  # 标记为已激活
                     self._log(f"✅ 已锁定: {ATTRS[g][0]} + {ATTRS[h][0]}，下一回合生效")
                     self._refresh_next_label()
 
@@ -405,7 +422,7 @@ class Nano4TSelector(ctk.CTk):
     def _on_connected(self, pid):
         self._set_status("green", "已就绪")
         self.pid_label.configure(text=f"PID: {pid}")
-        self.hint_label.configure(text="✅ 已就绪！选择特性后点击「应用」→ 下一回合自动生效",
+        self.hint_label.configure(text="✅ 已就绪！当前未激活，游戏将正常运行。选择特性后点击「应用」→ 下一回合生效",
                                    text_color="#88ff88")
         self.hint_frame.configure(fg_color="#1a3a1a")
 
