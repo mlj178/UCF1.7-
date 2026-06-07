@@ -19,6 +19,7 @@ public:
     static bool Initialize();
     static bool IsInitialized();
     static void ResetSessionState();
+    static void Cleanup();  // Cleanup resources including critical section
     static bool RefreshSession();
     static bool HasActiveSession();
     

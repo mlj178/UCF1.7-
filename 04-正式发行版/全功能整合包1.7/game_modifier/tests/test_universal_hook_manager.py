@@ -1,3 +1,4 @@
+import glob
 import os
 import re
 import sys
@@ -19,10 +20,16 @@ class UniversalHookManagerTests(unittest.TestCase):
             "..",
             "..",
             "..",
-            "05-正式功能",
-            "17-Universal-ESP盒子",
+        ))
+        matches = glob.glob(os.path.join(
+            project_dir,
+            "05-*",
+            "18-Universal-ESP*",
             "Universal-Dear-ImGui-Hook",
         ))
+        if not matches:
+            self.skipTest("Universal ESP source directory not available")
+        project_dir = matches[0]
         offenders = []
 
         for name in ("stdafx.h", "dllmain.cpp"):

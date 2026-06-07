@@ -161,6 +161,8 @@ class App(ctk.CTk):
         # Start unified session manager (replaces old _auto_connect_bg)
         session = GameSessionManager.get_instance()
         session.start()
+        self._features['esp_box'] = session.get_desired_state('esp_box')
+        self._update_switch('esp_box')
 
         threading.Thread(target=self._nano4t_auto_health_bg, daemon=True).start()
 
@@ -1472,6 +1474,8 @@ class App(ctk.CTk):
             with open(path, 'r', encoding='utf-8') as f:
                 state = json.load(f)
             for fid, s in state.items():
+                if fid == 'esp_box':
+                    continue
                 if fid not in self._features or not isinstance(s, dict):
                     continue
                 self._features[fid] = s.get('enabled', False)
@@ -1509,6 +1513,8 @@ class App(ctk.CTk):
     def _save_feature_state(self):
         state = {}
         for fid in self._features:
+            if fid == 'esp_box':
+                continue
             s = {'enabled': self._features.get(fid, False)}
             if fid == 'knife':
                 s['slider_value'] = self._knife_speed

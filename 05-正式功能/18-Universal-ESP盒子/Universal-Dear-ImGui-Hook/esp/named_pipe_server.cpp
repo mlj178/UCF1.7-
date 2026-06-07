@@ -149,31 +149,6 @@ static std::string ProcessCommand(const std::string& cmd) {
 
         return BuildStateResponse();
     }
-    else if (cmdType == "set_feature") {
-        std::string feature = GetJsonString(cmd, "feature");
-        bool enabled = GetJsonBool(cmd, "enabled");
-
-        if (feature == "esp_box") {
-            ESPState::Instance().SetBoxEnabled(enabled);
-            PipeLog("ESP box %s", enabled ? "enabled" : "disabled");
-            return BuildResponse(true);
-        }
-        else {
-            return BuildResponse(false, "unknown feature");
-        }
-    }
-    else if (cmdType == "reset") {
-        // Reset all states
-        ESPState::Instance().Reset();
-        PipeLog("All states reset");
-        return BuildStateResponse();
-    }
-    else if (cmdType == "shutdown") {
-        PipeLog("Shutdown requested");
-        // Legacy command: keep DLL and feature state alive for a new client.
-        PipeLog("State preserved, pipe server continues running");
-        return BuildResponse(true);
-    }
     else if (cmdType == "unload") {
         ESPState::Instance().Reset();
         s_unload_requested = true;
@@ -216,7 +191,12 @@ static DWORD WINAPI PipeServerThread(LPVOID) {
         // Wait for client connection
         BOOL connected = ConnectNamedPipe(hPipe, nullptr);
         if (!connected && GetLastError() != ERROR_PIPE_CONNECTED) {
-            PipeLog("ConnectNamedPipe failed: %d", GetLastError());
+            DWORD err = GetLastError();
+            if (!s_running && err == ERROR_OPERATION_ABORTED) {
+                CloseHandle(hPipe);
+                break;
+            }
+            PipeLog("ConnectNamedPipe failed: %d", err);
             CloseHandle(hPipe);
             continue;
         }
@@ -233,6 +213,8 @@ static DWORD WINAPI PipeServerThread(LPVOID) {
                 DWORD err = GetLastError();
                 if (err == ERROR_BROKEN_PIPE) {
                     PipeLog("Client disconnected");
+                } else if (!s_running && err == ERROR_OPERATION_ABORTED) {
+                    PipeLog("ReadFile canceled during stop");
                 } else {
                     PipeLog("ReadFile failed: %d", err);
                 }
@@ -302,8 +284,12 @@ void Stop() {
     PipeLog("Stopping...");
     s_running = false;
 
-    // Wake up ConnectNamedPipe by connecting as a client
-    // This is necessary because ConnectNamedPipe blocks indefinitely
+    // Cancel a blocking ConnectNamedPipe/ReadFile owned by the server thread.
+    if (s_thread) {
+        CancelSynchronousIo(s_thread);
+    }
+
+    // Also wake ConnectNamedPipe on systems where cancellation is delayed.
     std::string pipeName = GetPipeName();
     HANDLE wakePipe = CreateFileA(
         pipeName.c_str(),
