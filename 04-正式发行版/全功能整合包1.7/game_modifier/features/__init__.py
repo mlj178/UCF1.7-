@@ -16,3 +16,4 @@ from features.is_bot import IsBotFeature
 from features.nano4t import Nano4tFeature
 from features.weapon_giver import WeaponGiverFeature
 from features.esp_box import ESPBoxFeature
+from features.time_scale import TimeScaleFeature

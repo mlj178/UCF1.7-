@@ -49,6 +49,7 @@ FEATURES_INFO = {
     'nano4t': {'name': '多人生化特性', 'icon': '🧬', 'category': 'other'},
     'weapon_giver': {'name': '武器赋予', 'icon': '🔫', 'category': 'weapon'},
     'esp_box': {'name': '方框透视', 'icon': '📦', 'category': 'other'},
+    'timescale': {'name': '时间加速', 'icon': '⏩', 'category': 'other'},
 }
 
 GRAVITY_PRESETS = {
