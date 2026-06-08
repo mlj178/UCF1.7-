@@ -93,7 +93,7 @@ TYPE_COLORS = {
 class App(ctk.CTk):
     def __init__(self):
         super().__init__()
-        self.title("游戏修改器控制台 - 全功能整合包 v1.6")
+        self.title("游戏修改器控制台 - 全功能整合包 v1.7")
         self.geometry("610x700+10+10")
         self.resizable(True, True)
         self.minsize(610, 400)
@@ -124,6 +124,7 @@ class App(ctk.CTk):
         self._gravity = 1.0
         self._jump = 1.0
         self._gravity_mode = 'player_only'
+        self._timescale = 1.0
 
         self._nano4t_ready = False
         # 多人生化选择器状态变量
@@ -155,7 +156,7 @@ class App(ctk.CTk):
         self._hotkey.setup_hotkeys(self._on_hotkey_toggle, silent=True)
         self._setup_tk_hotkeys()
         self._setup_events()
-        self._log("游戏修改器控制台 v1.6 — 全功能整合包 (模块化架构)")
+        self._log("游戏修改器控制台 v1.7 — 全功能整合包")
         self._log("正在检测游戏进程...")
 
         # Start unified session manager (replaces old _auto_connect_bg)
@@ -331,11 +332,11 @@ class App(ctk.CTk):
         self._build_gravity_card(scroll, 1)
 
         _, self.godmode_switch, _ = self._make_feature_card(
-            scroll, 2, 0, 2, "#3a1a1a", 'godmode', '🛡️', '金刚不坏',
+            scroll, 2, 0, 1, "#3a1a1a", 'godmode', '🛡️', '金刚不坏',
             '角色受到攻击时不会受伤', title_color="#E74C3C")
 
         _, self.skillcd_switch, _ = self._make_feature_card(
-            scroll, 3, 0, 1, "#3a2a3a", 'skillcd', '✨', '技能无冷却',
+            scroll, 2, 1, 1, "#3a2a3a", 'skillcd', '✨', '技能无冷却',
             '生化模式，所有技能无冷却', title_color="#A855F7")
 
     def _build_gravity_card(self, parent, row):
@@ -449,9 +450,61 @@ class App(ctk.CTk):
                      text_color="#a0a0a0", wraplength=280, justify="left", anchor="w").pack(
             fill="x", expand=False, padx=5, pady=5)
 
-        _, self.esp_box_switch, _ = self._make_feature_card(
-            scroll, 3, 0, 2, "#1f2937", 'esp_box', '📦', '方框透视',
-            '开启敌人方框显示，由 Universal DLL 执行', title_color="#60A5FA")
+        # 方框透视 - 自定义卡片布局（与时间加速高度匹配）
+        esp_box_frame = ctk.CTkFrame(scroll, corner_radius=6, fg_color="#3a3a3a",
+                                      border_width=1, border_color="#555555", cursor="hand2")
+        esp_box_frame.grid(row=3, column=0, sticky="ew", padx=3, pady=3)
+        esp_box_frame.bind("<Button-1>", lambda e: self._toggle_feature('esp_box'))
+
+        # 第一行：标题 + 开关
+        esp_box_top = ctk.CTkFrame(esp_box_frame, fg_color="transparent")
+        esp_box_top.pack(fill="x", padx=8, pady=(6, 0))
+        ctk.CTkLabel(esp_box_top, text="📦 方框透视", font=("Microsoft YaHei", 15, "bold"),
+                     text_color="#60A5FA").pack(side="left", padx=4)
+        self.esp_box_switch = ctk.CTkSwitch(esp_box_top, text="", font=("Microsoft YaHei", 12),
+                                             width=50, command=lambda: self._toggle_feature('esp_box'))
+        self.esp_box_switch.pack(side="right", padx=6)
+
+        # 第二行：占位（与时间加速滑块行对齐）
+        esp_box_placeholder = ctk.CTkFrame(esp_box_frame, fg_color="transparent")
+        esp_box_placeholder.pack(fill="x", padx=8, pady=(4, 0))
+
+        # 第三行：文字说明
+        ctk.CTkLabel(esp_box_frame, font=("Microsoft YaHei", 15), text="开启敌人方框显示",
+                     text_color="#a0a0a0", wraplength=280, justify="left", anchor="w").pack(
+            fill="x", expand=False, padx=8, pady=(2, 6))
+
+        # 时间加速 - 自定义卡片布局
+        timescale_frame = ctk.CTkFrame(scroll, corner_radius=6, fg_color="#3a3a3a",
+                                        border_width=1, border_color="#555555", cursor="hand2")
+        timescale_frame.grid(row=3, column=1, sticky="ew", padx=3, pady=3)
+        timescale_frame.bind("<Button-1>", lambda e: self._toggle_feature('timescale'))
+
+        # 第一行：标题 + 开关
+        timescale_top = ctk.CTkFrame(timescale_frame, fg_color="transparent")
+        timescale_top.pack(fill="x", padx=8, pady=(6, 0))
+        ctk.CTkLabel(timescale_top, text="⏩ 时间加速", font=("Microsoft YaHei", 15, "bold"),
+                     text_color="#00CED1").pack(side="left", padx=4)
+        self.timescale_switch = ctk.CTkSwitch(timescale_top, text="", font=("Microsoft YaHei", 12),
+                                               width=50, command=lambda: self._toggle_feature('timescale'))
+        self.timescale_switch.pack(side="right", padx=6)
+
+        # 第二行：滑块 + 数值显示
+        timescale_slider_frame = ctk.CTkFrame(timescale_frame, fg_color="transparent")
+        timescale_slider_frame.pack(fill="x", padx=8, pady=(4, 0))
+        self.timescale_var = ctk.DoubleVar(value=1.0)
+        self.timescale_slider = ctk.CTkSlider(timescale_slider_frame, from_=0.1, to=10.0,
+                                               variable=self.timescale_var, number_of_steps=99,
+                                               command=self._on_timescale_change, width=150)
+        self.timescale_slider.pack(side="left", padx=4)
+        self.timescale_label = ctk.CTkLabel(timescale_slider_frame, text="1.0x",
+                                             font=("Microsoft YaHei", 12), text_color="#e0e0e0", width=50)
+        self.timescale_label.pack(side="left", padx=4)
+
+        # 第三行：文字说明
+        ctk.CTkLabel(timescale_frame, font=("Microsoft YaHei", 15), text="调整游戏时间倍速",
+                     text_color="#a0a0a0", wraplength=280, justify="left", anchor="w").pack(
+            fill="x", expand=False, padx=8, pady=(2, 6))
 
     def _build_nano4t_tab(self, scroll):
         self.nano4t_top_frame = ctk.CTkFrame(scroll, corner_radius=8, fg_color="#2b2b2b")
@@ -846,6 +899,9 @@ class App(ctk.CTk):
             self._frida.send_toggle('gravity', new_state)
             if new_state:
                 self._do_send_gravity_config()
+        elif feature_id == 'timescale':
+            params = {'speed': self._timescale} if new_state else None
+            self._frida.send_toggle('timescale', new_state, extra_params=params)
         else:
             self._frida.send_toggle(feature_id, new_state)
 
@@ -862,7 +918,7 @@ class App(ctk.CTk):
             'gravity': self.gravity_switch, 'aim': self.aim_switch,
             'godmode': self.godmode_switch, 'speedgun': self.speedgun_switch,
             'isbot': self.isbot_switch, 'skillcd': self.skillcd_switch,
-            'esp_box': self.esp_box_switch,
+            'esp_box': self.esp_box_switch, 'timescale': self.timescale_switch,
         }
         switch = switch_map.get(feature_id)
         if not switch:
@@ -910,6 +966,13 @@ class App(ctk.CTk):
         self._range_mult = round(float(value), 1)
         if self._features.get('range'):
             self._frida.send_toggle('range_config', self._range_mult)
+        self._schedule_save_state()
+
+    def _on_timescale_change(self, value):
+        self._timescale = round(float(value), 1)
+        self.timescale_label.configure(text=f"{self._timescale:.1f}x")
+        if self._features.get('timescale'):
+            self._frida.send_toggle('timescale_speed', self._timescale)
         self._schedule_save_state()
 
     def _on_gravity_change(self, value):
@@ -1180,6 +1243,8 @@ class App(ctk.CTk):
         elif feature_id == 'gravity':
             self._frida.send_toggle('gravity', True)
             self._do_send_gravity_config()
+        elif feature_id == 'timescale':
+            self._frida.send_toggle('timescale', True, extra_params={'speed': self._timescale})
         else:
             self._frida.send_toggle(feature_id, True)
 
@@ -1489,6 +1554,10 @@ class App(ctk.CTk):
                     elif fid == 'range':
                         self._range_mult = s['slider_value']
                         self.range_var.set(s['slider_value'])
+                    elif fid == 'timescale':
+                        self._timescale = s['slider_value']
+                        self.timescale_var.set(s['slider_value'])
+                        self.timescale_label.configure(text=f"{s['slider_value']:.1f}x")
                 if fid == 'gravity':
                     if 'gravity_value' in s:
                         self._gravity = s['gravity_value']
@@ -1522,6 +1591,8 @@ class App(ctk.CTk):
                 s['slider_value'] = self._movespeed
             elif fid == 'range':
                 s['slider_value'] = self._range_mult
+            elif fid == 'timescale':
+                s['slider_value'] = self._timescale
             if fid == 'gravity':
                 s['gravity_value'] = self._gravity
                 s['jump_value'] = self._jump

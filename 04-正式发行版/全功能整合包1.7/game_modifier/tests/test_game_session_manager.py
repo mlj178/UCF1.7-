@@ -222,6 +222,20 @@ class GameSessionManagerTests(unittest.TestCase):
         self.assertIn('"knife"', data)
         self.assertNotIn('"esp_box"', data)
 
+    def test_timescale_toggle_sends_speed_with_enable_message(self):
+        app_path = os.path.join(GAME_MODIFIER_DIR, "ui", "app.py")
+        with open(app_path, "r", encoding="utf-8") as source:
+            app_source = source.read()
+
+        self.assertIn(
+            "self._frida.send_toggle('timescale', new_state, extra_params=params)",
+            app_source,
+        )
+        self.assertNotIn(
+            "self._frida.send_toggle('timescale_speed', self._timescale)",
+            app_source.split("def _toggle_feature", 1)[1].split("def _update_switch", 1)[0],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

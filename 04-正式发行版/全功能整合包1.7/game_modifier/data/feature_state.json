@@ -10,7 +10,7 @@
     "enabled": false
   },
   "ammo": {
-    "enabled": false
+    "enabled": true
   },
   "movespeed": {
     "enabled": true,
@@ -21,7 +21,7 @@
   },
   "range": {
     "enabled": true,
-    "slider_value": 19.3
+    "slider_value": 50.0
   },
   "gather": {
     "enabled": true
@@ -29,17 +29,17 @@
   "gravity": {
     "enabled": true,
     "gravity_value": 0.9,
-    "jump_value": 3.0,
+    "jump_value": 5.0,
     "gravity_mode": "all"
   },
   "aim": {
     "enabled": false
   },
   "godmode": {
-    "enabled": false
+    "enabled": true
   },
   "speedgun": {
-    "enabled": false
+    "enabled": true
   },
   "isbot": {
     "enabled": false
@@ -56,5 +56,9 @@
   "weapon_giver": {
     "enabled": false,
     "respawn_weapon": true
+  },
+  "timescale": {
+    "enabled": true,
+    "slider_value": 10.0
   }
 }

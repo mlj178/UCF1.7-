@@ -75,6 +75,19 @@ function onToggle(data) {
       if (modules.movespeed) modules.movespeed.setSpeed(enable);
     } else if (featureName === 'gravity_config') {
       if (modules.gravity) modules.gravity.setconfig(enable.g, enable.j, enable.m);
+    } else if (featureName === 'timescale_speed') {
+      if (modules.timescale) modules.timescale.setSpeed(enable);
+    } else if (featureName === 'timescale') {
+      // 特殊处理：enable 时通过 data.speed 传递倍速，避免竞态
+      if (modules.timescale) {
+        if (enable) {
+          var speed = (typeof data.speed === 'number') ? data.speed : 1.0;
+          modules.timescale.setSpeed(speed);
+          modules.timescale.enable();
+        } else {
+          modules.timescale.disable();
+        }
+      }
     } else if (featureName === 'range_config') {
       if (modules.range) modules.range.setRange(enable);
     } else if (featureName === 'nano4t_init') {
@@ -187,7 +200,7 @@ rpc.exports = {
 
     def _build_init_message(self):
         return r"""
-sendLog('info', '系统', '游戏修改器 Agent v1.6 已加载 (模块化架构)');
+sendLog('info', '系统', '游戏修改器 Agent v1.7 已加载');
 sendLog('info', '系统', '请先附加到游戏进程，然后开启对应功能');
 sendLog('info', '系统', '架构: ' + Process.arch + ', 平台: ' + Process.platform);
 setTimeout(function() { getGameAssembly(); }, 100);
