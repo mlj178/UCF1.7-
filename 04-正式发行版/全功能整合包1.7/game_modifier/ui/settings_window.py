@@ -36,7 +36,8 @@ class SettingsWindow(ctk.CTkToplevel):
         hotkey_frame = ctk.CTkScrollableFrame(tab, corner_radius=0)
         hotkey_frame.pack(fill="both", expand=True, padx=4, pady=4)
 
-        ctk.CTkLabel(hotkey_frame, text="快捷键绑定 - 功能互斥绑定",
+        # === 功能快捷键部分 ===
+        ctk.CTkLabel(hotkey_frame, text="功能快捷键绑定 - 功能互斥绑定",
                      font=("Microsoft YaHei", 14, "bold")).pack(pady=(12, 6))
 
         feature_display_names = {v['icon'] + ' ' + v['name']: k for k, v in FEATURES_INFO.items()
@@ -105,11 +106,53 @@ class SettingsWindow(ctk.CTkToplevel):
                 update_combo_options()
 
             combo.configure(command=on_combo_change)
+        
+        # === 武器快捷键部分 ===
+        ctk.CTkLabel(hotkey_frame, text="\n武器快捷键绑定 - 快速赋予武器",
+                     font=("Microsoft YaHei", 14, "bold")).pack(pady=(20, 6))
+        
+        self._setup_weapon_hotkey_section(hotkey_frame)
 
         save_btn = ctk.CTkButton(self, text="保存并应用", width=100,
                                   command=self._on_save,
                                   fg_color="#007acc", hover_color="#005a99")
         save_btn.pack(pady=(0, 12))
+    
+    def _setup_weapon_hotkey_section(self, parent):
+        """设置武器快捷键显示部分"""
+        from core.weapon_hotkey_manager import WeaponHotkeyManager
+        from core.config import WEAPON_HOTKEY_POSITIONS, WEAPON_HOTKEY_DISPLAY_NAMES
+        
+        whm = WeaponHotkeyManager.get_instance()
+        bindings = whm.get_all_bindings()
+        
+        # 显示武器快捷键绑定
+        for hotkey in WEAPON_HOTKEY_POSITIONS:
+            row_frame = ctk.CTkFrame(parent, fg_color="#2a2a2a")
+            row_frame.pack(fill="x", padx=8, pady=3)
+            
+            display_name = WEAPON_HOTKEY_DISPLAY_NAMES.get(hotkey, hotkey)
+            ctk.CTkLabel(row_frame, text=display_name, font=("Microsoft YaHei", 12),
+                         text_color="#aaa", width=60).pack(side="left", padx=8)
+            
+            weapon_id = bindings.get(hotkey)
+            if weapon_id:
+                # 查找武器名称
+                weapon_name = self._get_weapon_name_by_id(weapon_id)
+                weapon_display = f"🔫 {weapon_name}"
+            else:
+                weapon_display = "未绑定"
+            
+            weapon_label = ctk.CTkLabel(row_frame, text=weapon_display,
+                                         font=("Microsoft YaHei", 11), width=150)
+            weapon_label.pack(side="left", padx=8)
+    
+    def _get_weapon_name_by_id(self, weapon_id):
+        """根据武器ID查找武器名称"""
+        # 从父窗口获取WEAPON_LIST
+        if hasattr(self._parent, '_get_weapon_name_by_id'):
+            return self._parent._get_weapon_name_by_id(weapon_id)
+        return f"武器{weapon_id}"
 
     def _setup_about_tab(self):
         tab = self._tabview.add("关于")

@@ -147,6 +147,11 @@ class App(ctk.CTk):
         self._nano4t_apply_cooldown = 0  # 应用按钮防抖（时间戳）
 
         self.settings_window = None
+        
+        # 武器快捷键徽章字典 {weapon_id: badge_frame}
+        self._weapon_hotkey_badges = {}
+        # 武器卡片top_frame字典 {weapon_id: top_frame}
+        self._weapon_top_frames = {}
 
         self.protocol("WM_DELETE_WINDOW", self._on_close)
 
@@ -466,8 +471,9 @@ class App(ctk.CTk):
         self.esp_box_switch.pack(side="right", padx=6)
 
         # 第二行：占位（与时间加速滑块行对齐）
-        esp_box_placeholder = ctk.CTkFrame(esp_box_frame, fg_color="transparent")
+        esp_box_placeholder = ctk.CTkFrame(esp_box_frame, fg_color="transparent", height=28)
         esp_box_placeholder.pack(fill="x", padx=8, pady=(4, 0))
+        esp_box_placeholder.pack_propagate(False)  # 固定高度
 
         # 第三行：文字说明
         ctk.CTkLabel(esp_box_frame, font=("Microsoft YaHei", 15), text="开启敌人方框显示",
@@ -671,24 +677,48 @@ class App(ctk.CTk):
                 weapon_id, en_name, cn_name, w_type = weapon
                 is_hero = (w_type == "英雄")
                 
-                row = i // 6
-                col = i % 6
+                row = i // 4
+                col = i % 4
                 
                 card = ctk.CTkFrame(cards_frame, fg_color="#1a1a2e" if not is_hero else "#2c3e50", corner_radius=4)
                 card.grid(row=row, column=col, padx=3, pady=3, sticky="ew")
                 
                 cards_frame.grid_columnconfigure(col, weight=1)
                 
-                name_label = ctk.CTkLabel(card, text=cn_name,
-                                           font=("Microsoft YaHei", 10, "bold"), text_color="#ecf0f1")
-                name_label.pack(padx=3, pady=(3, 0))
+                # 顶部框架：武器名称 + 快捷键徽章
+                top_frame = ctk.CTkFrame(card, fg_color="transparent")
+                top_frame.pack(fill="x", padx=3, pady=(3, 0))
                 
-                give_btn = ctk.CTkButton(card, text="赋予", width=50, height=20,
+                # 保存top_frame引用，用于后续更新徽章
+                self._weapon_top_frames[weapon_id] = top_frame
+                
+                name_label = ctk.CTkLabel(top_frame, text=cn_name,
+                                           font=("Microsoft YaHei", 10, "bold"), text_color="#ecf0f1")
+                name_label.pack(side="left", padx=3)
+                
+                # 快捷键徽章
+                hotkey_badge = self._create_hotkey_badge(top_frame, weapon_id, cn_name)
+                if hotkey_badge:
+                    hotkey_badge.pack(side="right", padx=3)
+                    self._weapon_hotkey_badges[weapon_id] = hotkey_badge
+                
+                # 底部框架：赋予按钮 + 绑定按钮
+                btn_frame = ctk.CTkFrame(card, fg_color="transparent")
+                btn_frame.pack(padx=3, pady=(0, 3))
+                
+                give_btn = ctk.CTkButton(btn_frame, text="赋予", width=50, height=20,
                                           font=("Microsoft YaHei", 9),
                                           command=lambda wid=weapon_id, name=cn_name: self._give_weapon_by_id(wid, name),
                                           fg_color="#3498db" if not is_hero else "#e74c3c",
                                           hover_color="#2980b9" if not is_hero else "#c0392b")
-                give_btn.pack(padx=3, pady=(0, 3))
+                give_btn.pack(side="left", padx=2)
+                
+                # 绑定快捷键按钮
+                bind_btn = ctk.CTkButton(btn_frame, text="⌨", width=20, height=20,
+                                          font=("Microsoft YaHei", 9),
+                                          command=lambda wid=weapon_id, name=cn_name: self._bind_weapon_hotkey_dialog(wid, name),
+                                          fg_color="#9b59b6", hover_color="#8e44ad")
+                bind_btn.pack(side="left", padx=2)
 
     def _build_connect_button(self):
         self.btn_frame = ctk.CTkFrame(self, corner_radius=8)
@@ -732,11 +762,19 @@ class App(ctk.CTk):
                 self._pid = pid
                 self._restore_features()
                 threading.Thread(target=self._nano4t_auto_init_bg, daemon=True).start()
+                
+                # 初始化武器快捷键管理器
+                self._init_weapon_hotkey_manager()
             elif status == 'not_found':
                 self._set_status("yellow", "未找到游戏")
             else:
                 self._set_status("red", "连接断开，正在重连...")
                 self._ready = False
+                try:
+                    from core.weapon_hotkey_manager import WeaponHotkeyManager
+                    WeaponHotkeyManager.get_instance().pause_hotkeys()
+                except Exception:
+                    pass
 
         self.after(0, update)
 
@@ -1138,6 +1176,173 @@ class App(ctk.CTk):
         else:
             self._clear_respawn_weapon()
         self._schedule_save_state()
+    
+    def _create_hotkey_badge(self, parent, weapon_id, weapon_name):
+        """创建快捷键徽章，返回 None 或 Frame"""
+        from core.weapon_hotkey_manager import WeaponHotkeyManager
+        from core.config import WEAPON_HOTKEY_DISPLAY_NAMES
+        
+        whm = WeaponHotkeyManager.get_instance()
+        hotkey = whm.get_weapon_hotkey(weapon_id)
+        
+        if not hotkey:
+            return None
+        
+        # 创建徽章框架
+        badge_frame = ctk.CTkFrame(parent, fg_color="#3498db", corner_radius=3)
+        
+        # 快捷键文本
+        display_name = WEAPON_HOTKEY_DISPLAY_NAMES.get(hotkey, hotkey)
+        hotkey_label = ctk.CTkLabel(badge_frame, text=f"⌨ {display_name}",
+                                     font=("Microsoft YaHei", 8), text_color="white")
+        hotkey_label.pack(side="left", padx=2)
+        
+        # 删除按钮
+        remove_btn = ctk.CTkButton(badge_frame, text="✕", width=15, height=15,
+                                    font=("Microsoft YaHei", 7),
+                                    command=lambda: self._unbind_weapon_hotkey(weapon_id, weapon_name),
+                                    fg_color="transparent", hover_color="#e74c3c",
+                                    text_color="white")
+        remove_btn.pack(side="left", padx=1)
+        
+        return badge_frame
+    
+    def _unbind_weapon_hotkey(self, weapon_id, weapon_name):
+        """解绑武器快捷键"""
+        from core.weapon_hotkey_manager import WeaponHotkeyManager
+        
+        whm = WeaponHotkeyManager.get_instance()
+        success = whm.unbind_weapon_hotkey(weapon_id)
+        
+        if success:
+            # 更新UI：移除徽章
+            if weapon_id in self._weapon_hotkey_badges:
+                badge = self._weapon_hotkey_badges[weapon_id]
+                badge.destroy()
+                del self._weapon_hotkey_badges[weapon_id]
+    
+    def _bind_weapon_hotkey_dialog(self, weapon_id, weapon_name):
+        """打开绑定快捷键对话框"""
+        from core.weapon_hotkey_manager import WeaponHotkeyManager
+        from core.config import WEAPON_HOTKEY_DISPLAY_NAMES, WEAPON_HOTKEY_POSITIONS
+        
+        # 创建弹出窗口
+        dialog = ctk.CTkToplevel(self)
+        dialog.title(f"绑定快捷键 - {weapon_name}")
+        dialog.geometry("300x200")
+        dialog.transient(self)
+        dialog.grab_set()
+        
+        # 居中显示
+        dialog.update_idletasks()
+        x = self.winfo_x() + (self.winfo_width() - dialog.winfo_width()) // 2
+        y = self.winfo_y() + (self.winfo_height() - dialog.winfo_height()) // 2
+        dialog.geometry(f"+{x}+{y}")
+        
+        # 标题
+        title_label = ctk.CTkLabel(dialog, text=f"为 {weapon_name} 绑定快捷键",
+                                    font=("Microsoft YaHei", 12, "bold"))
+        title_label.pack(pady=15)
+        
+        # 获取可用快捷键
+        whm = WeaponHotkeyManager.get_instance()
+        available_hotkeys = whm.get_available_hotkeys()
+        
+        # 如果当前武器已绑定，也要包含在选项中
+        current_hotkey = whm.get_weapon_hotkey(weapon_id)
+        if current_hotkey and current_hotkey not in available_hotkeys:
+            available_hotkeys.insert(0, current_hotkey)
+        
+        # 转换为显示名称
+        available_display = [WEAPON_HOTKEY_DISPLAY_NAMES.get(h, h) for h in available_hotkeys]
+        
+        # 下拉菜单
+        hotkey_var = ctk.StringVar(value=available_display[0] if available_display else "无可用快捷键")
+        hotkey_menu = ctk.CTkOptionMenu(dialog, variable=hotkey_var,
+                                         values=available_display if available_display else ["无可用快捷键"],
+                                         width=200)
+        hotkey_menu.pack(pady=10)
+        
+        # 按钮框架
+        btn_frame = ctk.CTkFrame(dialog, fg_color="transparent")
+        btn_frame.pack(pady=15)
+        
+        def on_confirm():
+            display_name = hotkey_var.get()
+            # 反向查找快捷键
+            hotkey = None
+            for h, d in WEAPON_HOTKEY_DISPLAY_NAMES.items():
+                if d == display_name:
+                    hotkey = h
+                    break
+            
+            if hotkey:
+                success, error_msg = whm.bind_weapon_hotkey(hotkey, weapon_id, weapon_name)
+                if success:
+                    # 更新UI：添加徽章
+                    self._update_weapon_badge(weapon_id, weapon_name)
+                    dialog.destroy()
+                else:
+                    self._log(f"❌ {error_msg}")
+        
+        confirm_btn = ctk.CTkButton(btn_frame, text="确定", width=80, command=on_confirm)
+        confirm_btn.pack(side="left", padx=10)
+        
+        cancel_btn = ctk.CTkButton(btn_frame, text="取消", width=80, command=dialog.destroy)
+        cancel_btn.pack(side="left", padx=10)
+    
+    def _update_weapon_badge(self, weapon_id, weapon_name):
+        """更新武器快捷键徽章（实时显示）"""
+        from core.weapon_hotkey_manager import WeaponHotkeyManager
+        
+        # 移除旧徽章
+        if weapon_id in self._weapon_hotkey_badges:
+            old_badge = self._weapon_hotkey_badges[weapon_id]
+            old_badge.destroy()
+            del self._weapon_hotkey_badges[weapon_id]
+        
+        # 获取对应的top_frame
+        if weapon_id in self._weapon_top_frames:
+            top_frame = self._weapon_top_frames[weapon_id]
+            
+            # 创建新徽章
+            new_badge = self._create_hotkey_badge(top_frame, weapon_id, weapon_name)
+            if new_badge:
+                new_badge.pack(side="right", padx=3)
+                self._weapon_hotkey_badges[weapon_id] = new_badge
+    
+    def _refresh_weapon_list(self):
+        """刷新武器列表（更新徽章）"""
+        # 简化方案：重新构建武器赋予页面
+        # 这里可以优化为只更新徽章部分
+        pass  # 暂时不实现，因为徽章会在下次打开页面时自动更新
+    
+    def _init_weapon_hotkey_manager(self):
+        """初始化武器快捷键管理器"""
+        from core.weapon_hotkey_manager import WeaponHotkeyManager
+        
+        whm = WeaponHotkeyManager.get_instance()
+        # 传递self引用，用于将快捷键操作调度到主线程（线程安全）
+        whm.setup_hotkeys(self._give_weapon_by_id_from_hotkey, app=self)
+        
+        # 显示已绑定的快捷键
+        bindings = whm.get_all_bindings()
+        if bindings:
+            self._log(f"✅ 武器快捷键已加载: {len(bindings)} 个绑定")
+    
+    def _give_weapon_by_id_from_hotkey(self, weapon_id):
+        """快捷键触发的赋予武器"""
+        # 查找武器名称
+        weapon_name = self._get_weapon_name_by_id(weapon_id)
+        self._give_weapon_by_id(weapon_id, weapon_name)
+    
+    def _get_weapon_name_by_id(self, weapon_id):
+        """根据武器ID查找武器名称"""
+        for weapon in WEAPON_LIST:
+            wid, en_name, cn_name, w_type = weapon
+            if wid == weapon_id:
+                return cn_name
+        return f"武器{weapon_id}"
 
     def _clear_respawn_weapon(self):
         if not self._ready:
@@ -1210,6 +1415,11 @@ class App(ctk.CTk):
     def _cleanup(self, keep_features=False):
         try:
             self._frida.disconnect()
+        except Exception:
+            pass
+        try:
+            from core.weapon_hotkey_manager import WeaponHotkeyManager
+            WeaponHotkeyManager.get_instance().pause_hotkeys()
         except Exception:
             pass
         self._ready = False
@@ -1616,6 +1826,11 @@ class App(ctk.CTk):
         self._stop = True
         GameSessionManager.get_instance().stop()
         self._hotkey.cleanup()
+        try:
+            from core.weapon_hotkey_manager import WeaponHotkeyManager
+            WeaponHotkeyManager.get_instance().cleanup()
+        except Exception:
+            pass
         self._save_feature_state()
         # Cleanup Universal ESP feature
         feature = self._registry.get('esp_box')

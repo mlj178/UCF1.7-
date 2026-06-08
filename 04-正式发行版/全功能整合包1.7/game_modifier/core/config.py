@@ -85,3 +85,14 @@ NANO4T_ATTRS = {
 
 def get_feature_info(feature_id):
     return FEATURES_INFO.get(feature_id, {})
+
+# 武器快捷键配置
+WEAPON_HOTKEYS_FILE = os.path.join(DATA_DIR, "weapon_hotkeys.json")
+
+WEAPON_HOTKEY_POSITIONS = ['shift+1', 'shift+2', 'shift+3']
+
+WEAPON_HOTKEY_DISPLAY_NAMES = {
+    'shift+1': 'Shift+1',
+    'shift+2': 'Shift+2',
+    'shift+3': 'Shift+3',
+}
