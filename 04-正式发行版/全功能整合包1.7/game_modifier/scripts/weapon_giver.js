@@ -28,15 +28,16 @@ modules.weapon_giver = (function() {
   };
 
   var _giveWeaponFunc = null;
+  var _isDeadFunc = null;
+  var _isMyPlayerFunc = null;
   var _initialized = false;
   var _hookInstalled = false;
   var _respawnHookInstalled = false;
   var _spawnHookInstalled = false;
 
   var _pendingTasks = [];
-  var _taskResults = {};
   var _taskIdCounter = 0;
-  var _taskTtlMs = 1500;
+  var _taskTtlMs = 5000;
 
   var _isPlayerDead = false;
   var _lastCheckFrame = 0;
@@ -70,7 +71,6 @@ modules.weapon_giver = (function() {
     _exitingModeBaseInstance = _roomShuttingDown && exitingInstance ? exitingInstance : null;
     _modeBaseInstance = null;
     _pendingTasks = [];
-    _taskResults = {};
     _cachedMyPlayer = null;
     _isPlayerDead = false;
     _lastCheckFrame = 0;
@@ -141,10 +141,24 @@ modules.weapon_giver = (function() {
         ['pointer', 'int', 'int', 'int', 'pointer'],
         'mscdecl'
       );
+      _isDeadFunc = new NativeFunction(
+        base.add(RVA.Entity_get_isDead),
+        'int',
+        ['pointer', 'pointer'],
+        'mscdecl'
+      );
+      _isMyPlayerFunc = new NativeFunction(
+        base.add(RVA.Player_get_isMyPlayer),
+        'int',
+        ['pointer', 'pointer'],
+        'mscdecl'
+      );
       sendLog('success', '武器赋予', 'GiveWeapon NativeFunction 初始化成功 (mscdecl)');
     } catch(e) {
       sendLog('error', '武器赋予', 'GiveWeapon 直接调用初始化失败: ' + e.message);
       _giveWeaponFunc = null;
+      _isDeadFunc = null;
+      _isMyPlayerFunc = null;
       return false;
     }
 
@@ -197,15 +211,11 @@ modules.weapon_giver = (function() {
 
   function isPlayerDead(player) {
     try {
-      var mod = getGameAssembly();
-      if (!mod) return false;
-
-      var funcAddr = mod.base.add(RVA.Entity_get_isDead);
-      var isDeadFunc = new NativeFunction(funcAddr, 'int', ['pointer', 'pointer'], 'mscdecl');
-      var result = isDeadFunc(player, ptr(0));
+      if (!_isDeadFunc || !player || player.isNull()) return true;
+      var result = _isDeadFunc(player, ptr(0));
       return result !== 0;
     } catch(e) {
-      return false;
+      return true;
     }
   }
 
@@ -252,12 +262,8 @@ modules.weapon_giver = (function() {
 
   function isMyPlayer(player) {
     try {
-      var mod = getGameAssembly();
-      if (!mod) return false;
-
-      var funcAddr = mod.base.add(RVA.Player_get_isMyPlayer);
-      var isMyPlayerFunc = new NativeFunction(funcAddr, 'int', ['pointer', 'pointer'], 'mscdecl');
-      var result = isMyPlayerFunc(player, ptr(0));
+      if (!_isMyPlayerFunc || !player || player.isNull()) return false;
+      var result = _isMyPlayerFunc(player, ptr(0));
       return result !== 0;
     } catch(e) {
       return false;
@@ -301,6 +307,8 @@ modules.weapon_giver = (function() {
       return true;
     } catch(e) {
       _giveWeaponFunc = null;
+      _isDeadFunc = null;
+      _isMyPlayerFunc = null;
       _initialized = false;
       sendLog('error', '武器赋予', 'GiveWeapon直接调用异常: ' + e.message);
       return false;
@@ -368,7 +376,6 @@ modules.weapon_giver = (function() {
               var task = _pendingTasks.shift();
               try {
                 if (task.expiresAt && Date.now() > task.expiresAt) {
-                  _taskResults[task.id] = false;
                   send({
                     type: 'giveWeaponResult',
                     taskId: task.id,
@@ -377,7 +384,6 @@ modules.weapon_giver = (function() {
                   sendLog('warn', '武器赋予', '赋予任务已过期，已丢弃: taskId=' + task.id);
                 } else {
                   var result = executeGiveWeaponOnMainThread(task.wpnId, task.giveUp, task.select);
-                  _taskResults[task.id] = result;
 
                   send({
                     type: 'giveWeaponResult',
@@ -387,7 +393,6 @@ modules.weapon_giver = (function() {
                 }
               } catch(e) {
                 sendLog('error', '武器赋予', '执行赋予任务异常: ' + e.message);
-                _taskResults[task.id] = false;
                 send({
                   type: 'giveWeaponResult',
                   taskId: task.id,
@@ -499,12 +504,11 @@ modules.weapon_giver = (function() {
             var player = args[0];
             if (_cachedMyPlayer && player && player.equals(_cachedMyPlayer)) {
               _pendingTasks = [];
-              _taskResults = {};
               _cachedMyPlayer = null;
               _isPlayerDead = false;
               try {
                 if (modules.speedgun && modules.speedgun.clearRoomState) {
-                  modules.speedgun.clearRoomState(false, null);
+                  modules.speedgun.clearRoomState(_roomShuttingDown, _exitingModeBaseInstance);
                 }
               } catch(e) {}
             }
@@ -548,9 +552,12 @@ modules.weapon_giver = (function() {
     try {
       hooks.push(Interceptor.attach(spawnAddr, {
         onEnter: function(args) {
+          this.player = args[0];
+        },
+        onLeave: function() {
           try {
             if (_roomShuttingDown || !isRoomActive()) return;
-            var player = args[0];
+            var player = this.player;
             var myPlayer = getMyPlayer();
 
             if (player && myPlayer && player.equals(myPlayer)) {
@@ -676,6 +683,7 @@ modules.weapon_giver = (function() {
   return {
     enable: function() {
       if (enabled) return;
+      resetRoomState(null, false, null);
       enabled = true;
       sendLog('success', '武器赋予', '武器赋予功能已启用');
       sendStatus('weapon_giver', true);
@@ -690,6 +698,8 @@ modules.weapon_giver = (function() {
       _spawnHookInstalled = false;
       resetRoomState(null, true, _modeBaseInstance);
       _giveWeaponFunc = null;
+      _isDeadFunc = null;
+      _isMyPlayerFunc = null;
       _initialized = false;
       enabled = false;
       sendLog('info', '武器赋予', '武器赋予功能已禁用');

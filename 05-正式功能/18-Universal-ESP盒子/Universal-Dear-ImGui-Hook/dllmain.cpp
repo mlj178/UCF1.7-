@@ -325,6 +325,8 @@ BOOL WINAPI DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserved
     {
         // Early diagnostic: verify DllMain is called before anything else
         // Build path next to the DLL
+        // DISABLED: 日志输出已注释
+        /*
         wchar_t wDiagPath[MAX_PATH] = {0};
         HMODULE hDiagMod = NULL;
         GetModuleHandleExW(
@@ -350,6 +352,7 @@ BOOL WINAPI DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserved
             WriteFile(hDiag, diagMsg, (DWORD)strlen(diagMsg), &written, NULL);
             CloseHandle(hDiag);
         }
+        */
         DebugLog("[DllMain] DLL_PROCESS_ATTACH: hModule=%p\n", hModule);
         globals::mainModule = hModule;
         // Create a thread for hook setup to avoid blocking loading
