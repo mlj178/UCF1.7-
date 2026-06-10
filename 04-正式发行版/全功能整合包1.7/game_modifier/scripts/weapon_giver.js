@@ -12,7 +12,11 @@ modules.weapon_giver = (function() {
     GiveWeapon: 0xAFB390,
     GetWpnName: 0xAFB1F0,
     ModeBase_Update: 0xAF6A00,
+    ModeBase_ExitGame: 0xAEE850,
+    GameManager_GameRoundEnd: 0xAFAA40,
+    GameManager_OnDestroy: 0xAFB6F0,
     Player_OnEntityDeath: 0xB51210,
+    Player_OnDestroy: 0xB511C0,
     Player_Spawn: 0xB53760,
     Entity_get_isDead: 0xB400E0,
     Player_get_isMyPlayer: 0xB55FD0,
@@ -24,8 +28,6 @@ modules.weapon_giver = (function() {
   };
 
   var _giveWeaponFunc = null;
-  var _il2cpp_runtime_invoke = null;
-  var _giveWeaponMethodInfo = null;
   var _initialized = false;
   var _hookInstalled = false;
   var _respawnHookInstalled = false;
@@ -47,8 +49,25 @@ modules.weapon_giver = (function() {
   var _modeSwitchGraceUntil = 0;
   var _roomActiveWindowMs = 1200;
   var _modeSwitchGraceMs = 800;
+  var _roomShuttingDown = false;
+  var _exitingModeBaseInstance = null;
+  var _specialDoubleGiveWeaponIds = {
+    2978: true,
+    3494: true
+  };
+  var _firstRoomSpecialGiveDoneByWeaponId = {};
 
-  function resetRoomState(reason) {
+  function isSpecialDoubleGiveWeapon(wpnId) {
+    return _specialDoubleGiveWeaponIds[wpnId] === true;
+  }
+
+  function resetFirstRoomSpecialGiveState() {
+    _firstRoomSpecialGiveDoneByWeaponId = {};
+  }
+
+  function resetRoomState(reason, shuttingDown, exitingInstance) {
+    _roomShuttingDown = shuttingDown === true;
+    _exitingModeBaseInstance = _roomShuttingDown && exitingInstance ? exitingInstance : null;
     _modeBaseInstance = null;
     _pendingTasks = [];
     _taskResults = {};
@@ -57,6 +76,14 @@ modules.weapon_giver = (function() {
     _lastCheckFrame = 0;
     _lastModeUpdateTime = 0;
     _modeSwitchGraceUntil = Date.now() + _modeSwitchGraceMs;
+    if (_roomShuttingDown) {
+      resetFirstRoomSpecialGiveState();
+    }
+    try {
+      if (modules.speedgun && modules.speedgun.clearRoomState) {
+        modules.speedgun.clearRoomState(_roomShuttingDown, _exitingModeBaseInstance);
+      }
+    } catch(e) {}
     if (reason) {
       sendLog('info', '武器赋予', reason);
     }
@@ -64,6 +91,7 @@ modules.weapon_giver = (function() {
 
   function isRoomActive() {
     var now = Date.now();
+    if (_roomShuttingDown) return false;
     if (!_modeBaseInstance) return false;
     if (now < _modeSwitchGraceUntil) return false;
     return _lastModeUpdateTime > 0 && (now - _lastModeUpdateTime) <= _roomActiveWindowMs;
@@ -79,62 +107,19 @@ modules.weapon_giver = (function() {
     }
   }
 
+  function rollbackHooks(startIndex) {
+    while (hooks.length > startIndex) {
+      var hook = hooks.pop();
+      try { hook.detach(); } catch(e) {}
+    }
+  }
+
   function readPtr(addr) {
     try {
       if (!addr || addr.isNull()) return null;
       var v = addr.readPointer();
       return (v && !v.isNull()) ? v : null;
     } catch(e) {
-      return null;
-    }
-  }
-
-  function getGameManagerKlass() {
-    try {
-      var mod = getGameAssembly();
-      if (!mod) return null;
-      var typeInfoSlot = mod.base.add(RVA.GameManager_TypeInfo);
-      return readPtr(typeInfoSlot);
-    } catch(e) {
-      sendLog('error', '武器赋予', '获取GameManager klass失败: ' + e.message);
-      return null;
-    }
-  }
-
-  function getGiveWeaponMethodInfo() {
-    if (_giveWeaponMethodInfo) return _giveWeaponMethodInfo;
-
-    var mod = getGameAssembly();
-    if (!mod) return null;
-
-    var klass = getGameManagerKlass();
-    if (!klass) {
-      sendLog('error', '武器赋予', '无法获取GameManager klass');
-      return null;
-    }
-
-    try {
-      var exportAddr = mod.getExportByName('il2cpp_class_get_method_from_name');
-      if (!exportAddr) {
-        sendLog('error', '武器赋予', '未找到il2cpp_class_get_method_from_name导出');
-        return null;
-      }
-
-      var getClassMethod = new NativeFunction(exportAddr, 'pointer', ['pointer', 'pointer', 'uint32']);
-      var methodName = Memory.allocUtf8String('GiveWeapon');
-      var methodInfo = getClassMethod(klass, methodName, 4);
-
-      if (methodInfo && !methodInfo.isNull()) {
-        _giveWeaponMethodInfo = methodInfo;
-        sendLog('success', '武器赋予', '成功获取GiveWeapon MethodInfo: ' + methodInfo);
-        return methodInfo;
-      }
-
-      sendLog('error', '武器赋予', 'il2cpp_class_get_method_from_name返回null');
-      return null;
-
-    } catch(e) {
-      sendLog('error', '武器赋予', '获取MethodInfo失败: ' + e.message);
       return null;
     }
   }
@@ -150,23 +135,6 @@ modules.weapon_giver = (function() {
     var base = mod.base;
 
     try {
-      var exportInvoke = mod.getExportByName('il2cpp_runtime_invoke');
-      if (!exportInvoke) {
-        sendLog('error', '武器赋予', '未找到 il2cpp_runtime_invoke');
-        return false;
-      }
-      _il2cpp_runtime_invoke = new NativeFunction(
-        exportInvoke,
-        'pointer',
-        ['pointer', 'pointer', 'pointer', 'pointer']
-      );
-      sendLog('success', '武器赋予', 'il2cpp_runtime_invoke 初始化成功');
-    } catch(e) {
-      sendLog('error', '武器赋予', 'il2cpp_runtime_invoke 初始化失败: ' + e.message);
-      return false;
-    }
-
-    try {
       _giveWeaponFunc = new NativeFunction(
         base.add(RVA.GiveWeapon),
         'pointer',
@@ -175,8 +143,9 @@ modules.weapon_giver = (function() {
       );
       sendLog('success', '武器赋予', 'GiveWeapon NativeFunction 初始化成功 (mscdecl)');
     } catch(e) {
-      sendLog('warn', '武器赋予', 'GiveWeapon 直接调用初始化失败: ' + e.message);
+      sendLog('error', '武器赋予', 'GiveWeapon 直接调用初始化失败: ' + e.message);
       _giveWeaponFunc = null;
+      return false;
     }
 
     _initialized = true;
@@ -259,6 +228,16 @@ modules.weapon_giver = (function() {
       
       // 尝试读取地址（检查是否可读）
       player.readU8();
+
+      // IDA: Player.wpns 位于 +0xA0，GiveWeapon 内部会立即访问它。
+      var playerWeapons = readPtr(player.add(0xA0));
+      if (!playerWeapons) {
+        return false;
+      }
+
+      if (!isMyPlayer(player)) {
+        return false;
+      }
       
       // 检查玩家是否已死亡
       if (isPlayerDead(player)) {
@@ -303,94 +282,44 @@ modules.weapon_giver = (function() {
       return false;
     }
 
-    if (_giveWeaponFunc) {
-      try {
-        var methodInfo = getGiveWeaponMethodInfo();
-        var methodArg = methodInfo ? methodInfo : ptr(0);
-
-        // GiveWeapon调用保护
-        var weapon = null;
-        var directCallFailed = false;
-        try {
-          weapon = _giveWeaponFunc(myPlayer, wpnId, giveUpInt, selectInt, methodArg);
-        } catch(callError) {
-          directCallFailed = true;
-          _giveWeaponFunc = null;
-          sendLog('warn', '武器赋予', 'GiveWeapon直接调用异常，改用il2cpp_runtime_invoke: ' + callError.message);
-        }
-
-        if (weapon && !weapon.isNull()) {
-          notifySpeedgunWeaponAcquired(weapon);
-          sendLog('success', '武器赋予', '赋予武器成功! weaponId=' + wpnId);
-          return true;
-        } else if (!directCallFailed) {
-          sendLog('warn', '武器赋予', 'GiveWeapon直接调用返回null，改用il2cpp_runtime_invoke');
-        }
-      } catch(e) {
-        _giveWeaponFunc = null;
-        sendLog('warn', '武器赋予', 'GiveWeapon直接调用外层异常，改用il2cpp_runtime_invoke: ' + e.message);
-      }
+    if (!_giveWeaponFunc) {
+      sendLog('error', '武器赋予', 'GiveWeapon函数未初始化');
+      return false;
     }
 
-    if (_il2cpp_runtime_invoke) {
-      try {
-        var methodInfo = getGiveWeaponMethodInfo();
-        if (!methodInfo) {
-          sendLog('error', '武器赋予', '主线程: 无法获取MethodInfo');
-          return false;
-        }
-
-        var playerBuf = Memory.alloc(Process.pointerSize);
-        playerBuf.writePointer(myPlayer);
-
-        var wpnIdBuf = Memory.alloc(4);
-        wpnIdBuf.writeS32(wpnId);
-
-        var giveUpBuf = Memory.alloc(4);
-        giveUpBuf.writeU8(giveUpInt);
-
-        var selectBuf = Memory.alloc(4);
-        selectBuf.writeU8(selectInt);
-
-        var params = Memory.alloc(Process.pointerSize * 4);
-        params.writePointer(playerBuf);
-        params.add(Process.pointerSize).writePointer(wpnIdBuf);
-        params.add(Process.pointerSize * 2).writePointer(giveUpBuf);
-        params.add(Process.pointerSize * 3).writePointer(selectBuf);
-
-        var exc = Memory.alloc(Process.pointerSize);
-        exc.writePointer(ptr(0));
-
-        var weapon = _il2cpp_runtime_invoke(methodInfo, ptr(0), params, exc);
-
-        var excVal = exc.readPointer();
-        if (!excVal.isNull()) {
-          sendLog('error', '武器赋予', '主线程 IL2CPP 异常! exc=' + excVal);
-          return false;
-        }
-
-        if (weapon && !weapon.isNull()) {
-          notifySpeedgunWeaponAcquired(weapon);
-          sendLog('success', '武器赋予', '赋予武器成功! weaponId=' + wpnId);
-          return true;
-        } else {
-          sendLog('error', '武器赋予', '赋予武器返回null');
-          return false;
-        }
-      } catch(e) {
-        sendLog('error', '武器赋予', '主线程 invoke 异常: ' + e.message);
+    try {
+      // 与 HUD_Cheat / HUD_ChatBox 的游戏内部调用完全一致：
+      // GiveWeapon(player, weaponId, false, autoSelect, NULL)
+      var weapon = _giveWeaponFunc(myPlayer, wpnId, 0, selectInt, ptr(0));
+      if (!weapon || weapon.isNull()) {
+        sendLog('error', '武器赋予', 'GiveWeapon返回null，weaponId=' + wpnId);
         return false;
       }
-    }
 
-    sendLog('error', '武器赋予', '无可用的调用方式');
-    return false;
+      notifySpeedgunWeaponAcquired(weapon);
+      sendLog('success', '武器赋予', '赋予武器成功! weaponId=' + wpnId);
+      return true;
+    } catch(e) {
+      _giveWeaponFunc = null;
+      _initialized = false;
+      sendLog('error', '武器赋予', 'GiveWeapon直接调用异常: ' + e.message);
+      return false;
+    }
   }
 
   function handleModeBaseUpdate(instance) {
     if (!instance || instance.isNull()) return false;
 
     var now = Date.now();
+    if (_roomShuttingDown) {
+      if (_exitingModeBaseInstance && instance.equals(_exitingModeBaseInstance)) {
+        return false;
+      }
+      _roomShuttingDown = false;
+      _exitingModeBaseInstance = null;
+      _modeSwitchGraceUntil = now + _modeSwitchGraceMs;
+    }
+
     if (!_modeBaseInstance) {
       _modeBaseInstance = instance;
       _lastCheckFrame = 0;
@@ -398,6 +327,7 @@ modules.weapon_giver = (function() {
       sendLog('info', '武器赋予', '检测到ModeBase实例: ' + instance);
     } else if (!instance.equals(_modeBaseInstance)) {
       _modeBaseInstance = instance;
+      resetFirstRoomSpecialGiveState();
       _pendingTasks = [];
       _cachedMyPlayer = null;
       _isPlayerDead = false;
@@ -420,6 +350,7 @@ modules.weapon_giver = (function() {
     }
 
     var updateAddr = mod.base.add(RVA.ModeBase_Update);
+    var hookStartIndex = hooks.length;
 
     try {
       // Hook ModeBase.Update（主线程调度）
@@ -478,19 +409,33 @@ modules.weapon_giver = (function() {
         }
       }));
 
-      // Hook模式切换函数（清空ModeBase实例和任务队列）
-      var modeChangeAddr1 = mod.base.add(0xAFAA40);
-      hooks.push(Interceptor.attach(modeChangeAddr1, {
+      // 回合结束只清理缓存，不进入退出状态。
+      hooks.push(Interceptor.attach(mod.base.add(RVA.GameManager_GameRoundEnd), {
         onEnter: function() {
-          resetRoomState('检测到模式切换，已清空任务队列和玩家缓存');
+          resetRoomState('检测到回合结束，已清空赋予任务和玩家缓存', false, null);
+        }
+      }));
+
+      // 退出房间开始时立即封锁全部旧指针和新任务。
+      hooks.push(Interceptor.attach(mod.base.add(RVA.ModeBase_ExitGame), {
+        onEnter: function(args) {
+          resetRoomState('检测到退出房间，已停止武器赋予', true, args[0]);
+        }
+      }));
+
+      // 场景销毁的最终保险。
+      hooks.push(Interceptor.attach(mod.base.add(RVA.GameManager_OnDestroy), {
+        onEnter: function() {
+          resetRoomState('检测到游戏场景销毁，已清理武器状态', true, _modeBaseInstance);
         }
       }));
 
       _hookInstalled = true;
-      sendLog('success', '武器赋予', 'ModeBase.Update Hook 安装成功（主线程调度 + 模式切换检测）');
+      sendLog('success', '武器赋予', '主线程调度及退出清理 Hook 安装成功');
       return true;
 
     } catch(e) {
+      rollbackHooks(hookStartIndex);
       sendLog('error', '武器赋予', 'Hook 安装失败: ' + e.message);
       return false;
     }
@@ -527,11 +472,13 @@ modules.weapon_giver = (function() {
     }
 
     var deathAddr = mod.base.add(RVA.Player_OnEntityDeath);
+    var hookStartIndex = hooks.length;
 
     try {
       hooks.push(Interceptor.attach(deathAddr, {
         onEnter: function(args) {
           try {
+            if (_roomShuttingDown || !isRoomActive()) return;
             var player = args[0];
             var myPlayer = getMyPlayer();
 
@@ -546,11 +493,33 @@ modules.weapon_giver = (function() {
         }
       }));
 
+      hooks.push(Interceptor.attach(mod.base.add(RVA.Player_OnDestroy), {
+        onEnter: function(args) {
+          try {
+            var player = args[0];
+            if (_cachedMyPlayer && player && player.equals(_cachedMyPlayer)) {
+              _pendingTasks = [];
+              _taskResults = {};
+              _cachedMyPlayer = null;
+              _isPlayerDead = false;
+              try {
+                if (modules.speedgun && modules.speedgun.clearRoomState) {
+                  modules.speedgun.clearRoomState(false, null);
+                }
+              } catch(e) {}
+            }
+          } catch(e) {
+            _cachedMyPlayer = null;
+            _pendingTasks = [];
+          }
+        }
+      }));
+
       _respawnHookInstalled = true;
       sendLog('success', '武器赋予', 'Player.OnEntityDeath Hook 安装成功');
 
-      var myPlayer = getMyPlayer();
-      if (myPlayer) {
+      var myPlayer = isRoomActive() ? getMyPlayer() : null;
+      if (myPlayer && isPlayerValid(myPlayer)) {
         _cachedMyPlayer = myPlayer;
         _isPlayerDead = isPlayerDead(myPlayer);
       }
@@ -558,6 +527,7 @@ modules.weapon_giver = (function() {
       return true;
 
     } catch (e) {
+      rollbackHooks(hookStartIndex);
       sendLog('error', '武器赋予', 'Hook 安装失败: ' + e.message);
       return false;
     }
@@ -573,11 +543,13 @@ modules.weapon_giver = (function() {
     }
 
     var spawnAddr = mod.base.add(RVA.Player_Spawn);
+    var hookStartIndex = hooks.length;
 
     try {
       hooks.push(Interceptor.attach(spawnAddr, {
         onEnter: function(args) {
           try {
+            if (_roomShuttingDown || !isRoomActive()) return;
             var player = args[0];
             var myPlayer = getMyPlayer();
 
@@ -628,6 +600,7 @@ modules.weapon_giver = (function() {
       return true;
 
     } catch (e) {
+      rollbackHooks(hookStartIndex);
       sendLog('error', '武器赋予', 'Hook 安装失败: ' + e.message);
       return false;
     }
@@ -635,6 +608,11 @@ modules.weapon_giver = (function() {
 
   function giveWeapon(weaponIndex, autoGiveUp, autoSelect) {
     try {
+      if (_roomShuttingDown) {
+        sendLog('warn', '武器赋予', '正在退出房间，已忽略赋予请求');
+        return false;
+      }
+
       var wpnId = parseInt(weaponIndex) || 0;
       var giveUpInt = (autoGiveUp === true || autoGiveUp === 1 || autoGiveUp === 'true') ? 1 : 0;
       var selectInt = (autoSelect === true || autoSelect === 1 || autoSelect === 'true') ? 1 : 0;
@@ -662,18 +640,32 @@ modules.weapon_giver = (function() {
         sendLog('warn', '武器赋予', 'Spawn Hook 安装失败，但功能可用');
       }
 
-      var taskId = ++_taskIdCounter;
-      _pendingTasks.push({
-        id: taskId,
-        wpnId: wpnId,
-        giveUp: giveUpInt,
-        select: selectInt,
-        expiresAt: Date.now() + _taskTtlMs
-      });
+      var repeatCount = 1;
+      if (isSpecialDoubleGiveWeapon(wpnId) && !_firstRoomSpecialGiveDoneByWeaponId[wpnId]) {
+        repeatCount = 2;
+        _firstRoomSpecialGiveDoneByWeaponId[wpnId] = true;
+      }
 
-      sendLog('info', '武器赋予', '任务已入队: taskId=' + taskId + '，等待主线程执行...');
+      var firstTaskId = null;
+      for (var i = 0; i < repeatCount; i++) {
+        var taskId = ++_taskIdCounter;
+        if (firstTaskId === null) firstTaskId = taskId;
+        _pendingTasks.push({
+          id: taskId,
+          wpnId: wpnId,
+          giveUp: giveUpInt,
+          select: selectInt,
+          expiresAt: Date.now() + _taskTtlMs
+        });
+      }
 
-      return 'pending:' + taskId;
+      if (repeatCount > 1) {
+        sendLog('info', '武器赋予', '首次进入房间特殊武器，已入队2次赋予任务: weaponId=' + wpnId + ', firstTaskId=' + firstTaskId);
+      } else {
+        sendLog('info', '武器赋予', '任务已入队: taskId=' + firstTaskId + '，等待主线程执行...');
+      }
+
+      return 'pending:' + firstTaskId;
 
     } catch(e) {
       sendLog('error', '武器赋予', '异常: ' + e.message);
@@ -689,7 +681,6 @@ modules.weapon_giver = (function() {
       sendStatus('weapon_giver', true);
     },
     disable: function() {
-      if (!enabled) return;
       for (var i = 0; i < hooks.length; i++) {
         try { hooks[i].detach(); } catch(e) {}
       }
@@ -697,7 +688,9 @@ modules.weapon_giver = (function() {
       _hookInstalled = false;
       _respawnHookInstalled = false;
       _spawnHookInstalled = false;
-      resetRoomState(null);
+      resetRoomState(null, true, _modeBaseInstance);
+      _giveWeaponFunc = null;
+      _initialized = false;
       enabled = false;
       sendLog('info', '武器赋予', '武器赋予功能已禁用');
       sendStatus('weapon_giver', false);

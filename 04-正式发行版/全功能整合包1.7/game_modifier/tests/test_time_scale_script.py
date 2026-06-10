@@ -28,10 +28,17 @@ class TimeScaleScriptTests(unittest.TestCase):
         self.assertIn("range.protection.indexOf('w')", self.source)
         self.assertIn("function isPlausibleTimeScale", self.source)
 
-    def test_reapplies_speed_after_time_manager_rebuilds(self):
-        self.assertIn("function startApplyTimer()", self.source)
-        self.assertIn("safeWriteTimeScale(currentSpeed)", self.source)
-        self.assertIn("function stopApplyTimer()", self.source)
+    def test_applies_speed_only_from_game_main_thread(self):
+        self.assertNotIn("setInterval(", self.source)
+        self.assertIn("function installMainThreadHook()", self.source)
+        self.assertIn("base.add(0xAF6A00)", self.source)
+        self.assertIn("function processPendingTimeScaleWrite(", self.source)
+
+    def test_invalidates_cached_pointers_during_room_teardown(self):
+        self.assertIn("base.add(0xAEE850)", self.source)
+        self.assertIn("base.add(0xAFB6F0)", self.source)
+        self.assertIn("function beginRoomShutdown(", self.source)
+        self.assertIn("_roomShuttingDown = true", self.source)
 
 
 if __name__ == "__main__":

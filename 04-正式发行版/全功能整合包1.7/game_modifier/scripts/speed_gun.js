@@ -7,13 +7,18 @@ modules.speedgun = (function() {
   var isMyWeaponFn = null;
   var getCharAnim = null;
   var setAnimSpeed = null;
+  var rpgAnimSpeedFn = null;
+  var grenadeAnimSpeedFn = null;
+  var classGetNameFn = null;
   var isPlayerShooting = false;
   var pendingWeaponSpeedTasks = [];
   var pendingWeaponSpeedMap = {};
-  var pendingWeaponSpeedMaxFrames = 30;
+  var pendingWeaponSpeedMaxFrames = 300; // 增加到300帧，给特殊武器更多初始化时间
   var modeBaseInstance = null;
   var modeSwitchGraceUntil = 0;
   var modeSwitchGraceMs = 800;
+  var roomShuttingDown = false;
+  var exitingModeBaseInstance = null;
 
   function safeReadPointer(basePtr, offset) {
     try {
@@ -27,6 +32,7 @@ modules.speedgun = (function() {
 
   function applyGunDataSpeed(weapon) {
     try {
+      if (roomShuttingDown) return false;
       var data = safeReadPointer(weapon, 0x68);
       var realData = safeReadPointer(weapon, 0xEC);
       if (data && realData && data.equals(realData)) {
@@ -34,36 +40,52 @@ modules.speedgun = (function() {
         weapon.add(0xF0).writeU8(0); // WPN_Gun.isSemiGun
         weapon.add(0x108).writeS32(0); // WPN_Gun.semiGunFireLinkState
         weapon.add(0x110).writeFloat(0.0); // WPN_Gun.nextAllowedShootTime
+        return true;
       }
     } catch(e) {}
+    return false;
   }
 
   function applyGrenadeGunSpeed(weapon) {
     try {
-      applyGunDataSpeed(weapon);
+      if (roomShuttingDown) return false;
+      var data = safeReadPointer(weapon, 0x68);
+      var realData = safeReadPointer(weapon, 0xEC);
+      if (data && realData && data.equals(realData)) {
+        realData.add(0xD0).writeFloat(10.0); // WeaponData_Gun.fireAnimMultiplier
+        weapon.add(0xF0).writeU8(0); // WPN_Gun.isSemiGun
+        weapon.add(0x108).writeS32(0); // WPN_Gun.semiGunFireLinkState
+        weapon.add(0x110).writeFloat(0.0); // WPN_Gun.nextAllowedShootTime
+        return true;
+      }
     } catch(e) {}
+    return false;
   }
 
   function applyRpgSpeed(weapon) {
     try {
+      if (roomShuttingDown) return false;
       var data = safeReadPointer(weapon, 0x68);
       var realData = safeReadPointer(weapon, 0xF0); // WPN_RPG.realData
       if (data && realData && data.equals(realData)) {
         realData.add(0xEC).writeFloat(10.0); // WD_RPG.reloadAnimRate
         realData.add(0xF0).writeFloat(10.0); // WD_RPG.fireAnimRate
         weapon.add(0xF8).writeS32(1); // WPN_RPG.fireState = Try
+        return true;
       }
     } catch(e) {}
+    return false;
   }
 
   function applyWeaponSpeed(weapon) {
-    if (!enabled || !weapon || weapon.isNull()) return false;
+    if (!enabled || roomShuttingDown || !weapon || weapon.isNull()) return false;
     if (!isMyWeaponFn || !getCharAnim || !setAnimSpeed) return false;
 
     try {
       if (!isMyWeaponFn(weapon, ptr(0))) return false;
 
       var animApplied = false;
+      var dataApplied = false;
       var anim = getCharAnim(weapon, ptr(0));
       if (anim && !anim.isNull()) {
         setAnimSpeed(anim, 10.0, ptr(0));
@@ -76,8 +98,7 @@ modules.speedgun = (function() {
           var wpnClass = data.add(0x10).readU32();
 
           if (wpnClass === 5 || wpnClass === 0) {
-            applyGunDataSpeed(weapon);
-            applyGrenadeGunSpeed(weapon);
+            dataApplied = applyGrenadeGunSpeed(weapon) || dataApplied;
           }
 
           if (wpnClass === 1 || wpnClass === 2) {
@@ -89,11 +110,51 @@ modules.speedgun = (function() {
         }
       } catch(e) {}
 
-      applyGunDataSpeed(weapon);
-      applyGrenadeGunSpeed(weapon);
-      applyRpgSpeed(weapon);
+      dataApplied = applyGunDataSpeed(weapon) || dataApplied;
+      dataApplied = applyRpgSpeed(weapon) || dataApplied;
 
-      return animApplied;
+      // 修复：只要数据成功应用就返回true，不要求动画也必须成功
+      // 这样可以确保特殊武器在GiveWeapon返回后立即生效
+      return dataApplied || animApplied;
+    } catch(e) {
+      return false;
+    }
+  }
+
+  function getObjectClassName(object) {
+    try {
+      if (!classGetNameFn || !object || object.isNull()) return null;
+      var klass = object.readPointer();
+      if (!klass || klass.isNull()) return null;
+      var name = classGetNameFn(klass);
+      return name && !name.isNull() ? name.readUtf8String() : null;
+    } catch(e) {
+      return null;
+    }
+  }
+
+  function refreshSelectedWeapon(playerWeapons) {
+    try {
+      if (!enabled || roomShuttingDown || !playerWeapons || playerWeapons.isNull()) return false;
+      var weapon = safeReadPointer(playerWeapons, 0x18);
+      if (!weapon || !isMyWeaponFn(weapon, ptr(0))) return false;
+
+      var data = safeReadPointer(weapon, 0x68);
+      var dataClassName = getObjectClassName(data);
+      var rpgApplied = applyRpgSpeed(weapon);
+      var gunApplied = applyGunDataSpeed(weapon);
+
+      if (rpgApplied && rpgAnimSpeedFn) {
+        rpgAnimSpeedFn(weapon, ptr(0));
+      } else if (gunApplied && dataClassName === 'WD_GrenadeGun' && grenadeAnimSpeedFn) {
+        grenadeAnimSpeedFn(weapon, ptr(0));
+      }
+
+      var anim = getCharAnim(weapon, ptr(0));
+      if (anim && !anim.isNull()) setAnimSpeed(anim, 10.0, ptr(0));
+
+      if (!(rpgApplied || gunApplied)) queuePendingWeaponSpeed(weapon);
+      return rpgApplied || gunApplied;
     } catch(e) {
       return false;
     }
@@ -125,6 +186,15 @@ modules.speedgun = (function() {
     pendingWeaponSpeedMap = {};
   }
 
+  function clearRoomState(shuttingDown, exitingInstance) {
+    clearPendingWeaponSpeed();
+    isPlayerShooting = false;
+    roomShuttingDown = shuttingDown === true;
+    exitingModeBaseInstance = roomShuttingDown && exitingInstance ? exitingInstance : null;
+    modeBaseInstance = null;
+    modeSwitchGraceUntil = Date.now() + modeSwitchGraceMs;
+  }
+
   function handleModeBaseUpdate(instance) {
     var now = Date.now();
     if (!instance || instance.isNull()) {
@@ -132,6 +202,15 @@ modules.speedgun = (function() {
       modeBaseInstance = null;
       modeSwitchGraceUntil = now + modeSwitchGraceMs;
       return false;
+    }
+
+    if (roomShuttingDown) {
+      if (exitingModeBaseInstance && instance.equals(exitingModeBaseInstance)) {
+        return false;
+      }
+      roomShuttingDown = false;
+      exitingModeBaseInstance = null;
+      modeSwitchGraceUntil = now + modeSwitchGraceMs;
     }
 
     if (!modeBaseInstance) {
@@ -152,7 +231,7 @@ modules.speedgun = (function() {
 
   function notifyWeaponAcquired(weapon) {
     try {
-      if (!enabled || !weapon || weapon.isNull()) return;
+      if (!enabled || roomShuttingDown || !weapon || weapon.isNull()) return;
       if (applyWeaponSpeed(weapon) === true) return;
       queuePendingWeaponSpeed(weapon);
     } catch(e) {}
@@ -205,9 +284,20 @@ modules.speedgun = (function() {
         isMyWeaponFn = new NativeFunction(base.add(0xB6E1D0), "bool", ["pointer", "pointer"]);
         getCharAnim = new NativeFunction(base.add(0xB35310), "pointer", ["pointer", "pointer"]);
         setAnimSpeed = new NativeFunction(base.add(0xAA8C30), "void", ["pointer", "float", "pointer"]);
+        rpgAnimSpeedFn = new NativeFunction(base.add(0xB66CA0), "void", ["pointer", "pointer"]);
+        grenadeAnimSpeedFn = new NativeFunction(base.add(0xB5F7A0), "void", ["pointer", "pointer"]);
       } catch(e) {
         sendLog('error', '射速', 'NativeFunction 初始化失败: ' + e.message);
         return;
+      }
+
+      try {
+        var classGetNameAddr = mod.findExportByName('il2cpp_class_get_name');
+        if (classGetNameAddr) {
+          classGetNameFn = new NativeFunction(classGetNameAddr, "pointer", ["pointer"]);
+        }
+      } catch(e) {
+        classGetNameFn = null;
       }
 
       // 0) ModeBase.Update — 统一处理新获得武器的射速应用时机
@@ -226,12 +316,39 @@ modules.speedgun = (function() {
       try {
         hooks.push(Interceptor.attach(base.add(0xAFAA40), {
           onEnter: function() {
-            clearPendingWeaponSpeed();
-            modeBaseInstance = null;
-            modeSwitchGraceUntil = Date.now() + modeSwitchGraceMs;
+            clearRoomState(false, null);
           }
         }));
-      } catch(e) { sendLog('warn', '射速', '模式切换清理 Hook失败: ' + e.message); }
+      } catch(e) { sendLog('warn', '射速', '回合结束清理 Hook失败: ' + e.message); }
+
+      try {
+        hooks.push(Interceptor.attach(base.add(0xAEE850), {
+          onEnter: function(args) {
+            clearRoomState(true, args[0]);
+          }
+        }));
+      } catch(e) { sendLog('warn', '射速', '退出房间清理 Hook失败: ' + e.message); }
+
+      try {
+        hooks.push(Interceptor.attach(base.add(0xAFB6F0), {
+          onEnter: function() {
+            clearRoomState(true, modeBaseInstance);
+          }
+        }));
+      } catch(e) { sendLog('warn', '射速', '场景销毁清理 Hook失败: ' + e.message); }
+
+      // GiveWeapon中的Select返回时，Owner、Deploy、AnimSpeedSetting和AnimatorInit均已完成
+      try {
+        hooks.push(Interceptor.attach(base.add(0xB166A0), {
+          onEnter: function(args) {
+            this.playerWeapons = args[0];
+          },
+          onLeave: function(retVal) {
+            if (!this.playerWeapons || roomShuttingDown || retVal.toInt32() === 0) return;
+            refreshSelectedWeapon(this.playerWeapons);
+          }
+        }));
+      } catch(e) { sendLog('warn', '射速', 'PlayerWeapons.Select Hook失败: ' + e.message); }
 
       // 1) WPN_Gun.AnimSpeedSetting — 枪械(背包)动画加速（改进：onEnter立即设置）
       try {
@@ -239,6 +356,7 @@ modules.speedgun = (function() {
           onEnter: function(args) {
             this.self = args[0];
             try {
+              if (roomShuttingDown) return;
               if (isMyWeaponFn(this.self, ptr(0))) {
                 applyWeaponSpeed(this.self);
               }
@@ -247,6 +365,7 @@ modules.speedgun = (function() {
           onLeave: function(retVal) {
             if (!this.self) return;
             try {
+              if (roomShuttingDown) return;
               if (isMyWeaponFn(this.self, ptr(0))) {
                 applyWeaponSpeed(this.self);
               }
@@ -261,6 +380,7 @@ modules.speedgun = (function() {
           onEnter: function(args) {
             this.self = args[0];
             try {
+              if (roomShuttingDown) return;
               if (isMyWeaponFn(this.self, ptr(0))) {
                 applyWeaponSpeed(this.self);
               }
@@ -269,6 +389,7 @@ modules.speedgun = (function() {
           onLeave: function(retVal) {
             if (!this.self) return;
             try {
+              if (roomShuttingDown) return;
               if (isMyWeaponFn(this.self, ptr(0))) {
                 applyWeaponSpeed(this.self);
               }
@@ -283,6 +404,7 @@ modules.speedgun = (function() {
           onEnter: function(args) {
             this.self = args[0];
             try {
+              if (roomShuttingDown) return;
               if (isMyWeaponFn(this.self, ptr(0))) {
                 applyWeaponSpeed(this.self);
               }
@@ -291,6 +413,7 @@ modules.speedgun = (function() {
           onLeave: function(retVal) {
             if (!this.self) return;
             try {
+              if (roomShuttingDown) return;
               if (isMyWeaponFn(this.self, ptr(0))) {
                 applyWeaponSpeed(this.self);
               }
@@ -299,12 +422,71 @@ modules.speedgun = (function() {
         }));
       } catch(e) { sendLog('warn', '射速', 'WPN_GrenadeGun.AnimSpeedSetting Hook失败: ' + e.message); }
 
+      // 1.7) 武器池取出和绑定Owner后持续跟踪，覆盖第一局首次GiveWeapon
+      try {
+        hooks.push(Interceptor.attach(base.add(0xB6CDC0), {
+          onEnter: function(args) { this.self = args[0]; },
+          onLeave: function() {
+            if (!this.self || roomShuttingDown) return;
+            try {
+              if (isMyWeaponFn(this.self, ptr(0))) notifyWeaponAcquired(this.self);
+            } catch(e) {}
+          }
+        }));
+      } catch(e) { sendLog('warn', '射速', 'Weapon.OnSelectedFromWeaponPool Hook失败: ' + e.message); }
+
+      try {
+        hooks.push(Interceptor.attach(base.add(0xB6D8C0), {
+          onEnter: function(args) { this.self = args[0]; },
+          onLeave: function() {
+            if (!this.self || roomShuttingDown) return;
+            try {
+              if (isMyWeaponFn(this.self, ptr(0))) notifyWeaponAcquired(this.self);
+            } catch(e) {}
+          }
+        }));
+      } catch(e) { sendLog('warn', '射速', 'Weapon.SetValidOwner Hook失败: ' + e.message); }
+
+      // 1.8) Deploy内部会读取倍率设置动画，必须在onEnter先写，onLeave再补写
+      try {
+        hooks.push(Interceptor.attach(base.add(0xB67030), {
+          onEnter: function(args) {
+            this.self = args[0];
+            if (!this.self || roomShuttingDown) return;
+            try {
+              if (isMyWeaponFn(this.self, ptr(0))) applyRpgSpeed(this.self);
+            } catch(e) {}
+          },
+          onLeave: function() {
+            if (!this.self || roomShuttingDown) return;
+            notifyWeaponAcquired(this.self);
+          }
+        }));
+      } catch(e) { sendLog('warn', '射速', 'WPN_RPG.Deploy Hook失败: ' + e.message); }
+
+      try {
+        hooks.push(Interceptor.attach(base.add(0xB61E60), {
+          onEnter: function(args) {
+            this.self = args[0];
+            if (!this.self || roomShuttingDown) return;
+            try {
+              if (isMyWeaponFn(this.self, ptr(0))) applyGunDataSpeed(this.self);
+            } catch(e) {}
+          },
+          onLeave: function() {
+            if (!this.self || roomShuttingDown) return;
+            notifyWeaponAcquired(this.self);
+          }
+        }));
+      } catch(e) { sendLog('warn', '射速', 'WPN_Gun.Deploy Hook失败: ' + e.message); }
+
       // 2) GunShoot — 清除射击间隔 + 半自动 => 全自动（改进：onEnter立即修改）
       try {
         hooks.push(Interceptor.attach(base.add(0xB624C0), {
           onEnter: function(args) {
             this.self = args[0];
             try {
+              if (roomShuttingDown) return;
               if (isMyWeaponFn(this.self, ptr(0))) {
                 isPlayerShooting = true;
                 this.self.add(0xF0).writeU8(0);
@@ -317,6 +499,10 @@ modules.speedgun = (function() {
           onLeave: function(retVal) {
             if (!this.self) return;
             try {
+              if (roomShuttingDown) {
+                isPlayerShooting = false;
+                return;
+              }
               if (isMyWeaponFn(this.self, ptr(0))) {
                 this.self.add(0x110).writeFloat(0.0);
                 this.self.add(0x108).writeS32(0);
@@ -340,6 +526,7 @@ modules.speedgun = (function() {
           onEnter: function(args) {
             this.self = args[0];
             try {
+              if (roomShuttingDown) return;
               if (isMyWeaponFn(this.self, ptr(0))) {
                 args[1] = ptr(0);
               }
@@ -358,6 +545,7 @@ modules.speedgun = (function() {
             if (!this.wpn) return;
             if (retVal.toInt32() !== 1) return;
             try {
+              if (roomShuttingDown) return;
               if (isMyWeaponFn(this.wpn, ptr(0))) {
                 notifyWeaponAcquired(this.wpn);
               }
@@ -373,6 +561,7 @@ modules.speedgun = (function() {
           onLeave: function(retVal) {
             if (!this.self) return;
             try {
+              if (roomShuttingDown) return;
               if (isMyWeaponFn(this.self, ptr(0))) {
                 notifyWeaponAcquired(this.self);
               }
@@ -388,6 +577,7 @@ modules.speedgun = (function() {
           onLeave: function(retVal) {
             if (!this.self) return;
             try {
+              if (roomShuttingDown) return;
               if (isMyWeaponFn(this.self, ptr(0))) {
                 notifyWeaponAcquired(this.self);
               }
@@ -399,10 +589,20 @@ modules.speedgun = (function() {
       // 5) WPN_RPG.OnFireBtnPressed — RPG/AT4 半自动绕过
       try {
         hooks.push(Interceptor.attach(base.add(0xB67700), {
-          onEnter: function(args) { this.self = args[0]; },
+          onEnter: function(args) {
+            this.self = args[0];
+            if (!this.self || roomShuttingDown) return;
+            try {
+              if (isMyWeaponFn(this.self, ptr(0))) {
+                this.self.add(0xF8).writeS32(1);
+                applyRpgSpeed(this.self);
+              }
+            } catch(e) {}
+          },
           onLeave: function(retVal) {
             if (!this.self) return;
             try {
+              if (roomShuttingDown) return;
               if (isMyWeaponFn(this.self, ptr(0))) {
                 this.self.add(0xF8).writeS32(1);
                 applyRpgSpeed(this.self);
@@ -417,7 +617,7 @@ modules.speedgun = (function() {
         hooks.push(Interceptor.attach(base.add(0xB19980), {
           onEnter: function(args) { this.self = args[0]; },
           onLeave: function(retVal) {
-            if (!isPlayerShooting || !this.self) return;
+            if (roomShuttingDown || !isPlayerShooting || !this.self) return;
             this.self.add(0x68).writeFloat(0.0);
             this.self.add(0x6C).writeFloat(0.0);
             this.self.add(0x70).writeFloat(0.0);
@@ -444,9 +644,7 @@ modules.speedgun = (function() {
         try { hooks[i].detach(); } catch(e) {}
       }
       hooks = [];
-      clearPendingWeaponSpeed();
-      modeBaseInstance = null;
-      modeSwitchGraceUntil = 0;
+      clearRoomState(true, modeBaseInstance);
       enabled = false;
       sendLog('info', '射速', '射速变快已禁用');
       sendStatus('speedgun', false);
@@ -454,6 +652,7 @@ modules.speedgun = (function() {
     isEnabled: function() { return enabled; },
     applyToWeapon: applyWeaponSpeed,
     notifyWeaponAcquired: notifyWeaponAcquired,
-    processPendingWeaponSpeed: processPendingWeaponSpeed
+    processPendingWeaponSpeed: processPendingWeaponSpeed,
+    clearRoomState: clearRoomState
   };
 })();
