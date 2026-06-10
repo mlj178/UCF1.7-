@@ -42,7 +42,18 @@ modules.timescale = (function() {
   var _helperAddr = null;
   var _offset = 0;
   var _helperFunc = null;
-  var _applyTimer = null;
+  var _hooks = [];
+  var _hookInstalled = false;
+  var _activeModeBase = null;
+  var _exitingModeBase = null;
+  var _roomShuttingDown = false;
+  var _pendingSpeed = null;
+  var _restorePending = false;
+  var _lastApplyAt = 0;
+  var _nextRetryAt = 0;
+  var _modeReadyAt = 0;
+  var REAPPLY_INTERVAL_MS = 1000;
+  var MODE_READY_DELAY_MS = 750;
 
   function resetInitCache() {
     _getTimeScaleFunc = null;
@@ -387,58 +398,128 @@ modules.timescale = (function() {
     return writeFloat(addr, value);
   }
 
-  function startApplyTimer() {
-    if (_applyTimer) return;
-    _applyTimer = setInterval(function() {
-      if (!enabled) return;
-      safeWriteTimeScale(currentSpeed);
-    }, 1000);
+  function beginRoomShutdown(modeBase) {
+    var exitingModeBase = isValidPtr(modeBase) ? modeBase : _activeModeBase;
+    if (exitingModeBase) _exitingModeBase = exitingModeBase;
+    _roomShuttingDown = true;
+    _activeModeBase = null;
+    _modeReadyAt = 0;
+    _nextRetryAt = 0;
+    resetInitCache();
   }
 
-  function stopApplyTimer() {
-    if (!_applyTimer) return;
-    clearInterval(_applyTimer);
-    _applyTimer = null;
+  function processPendingTimeScaleWrite(modeBase) {
+    if (!isValidPtr(modeBase)) return;
+
+    var now = Date.now();
+    if (_roomShuttingDown) {
+      if (_exitingModeBase && _exitingModeBase.equals(modeBase)) return;
+      _roomShuttingDown = false;
+      _exitingModeBase = null;
+    }
+
+    if (!_activeModeBase || !_activeModeBase.equals(modeBase)) {
+      _activeModeBase = modeBase;
+      _modeReadyAt = now + MODE_READY_DELAY_MS;
+      _nextRetryAt = 0;
+      resetInitCache();
+      if (enabled) _pendingSpeed = currentSpeed;
+    }
+
+    if (_roomShuttingDown || now < _modeReadyAt || now < _nextRetryAt) return;
+
+    var targetSpeed = _pendingSpeed;
+    if (targetSpeed === null && enabled && now - _lastApplyAt >= REAPPLY_INTERVAL_MS) {
+      targetSpeed = currentSpeed;
+    }
+    if (targetSpeed === null) return;
+
+    if (!initTimeScale() || !safeWriteTimeScale(targetSpeed)) {
+      _nextRetryAt = now + REAPPLY_INTERVAL_MS;
+      return;
+    }
+
+    _pendingSpeed = null;
+    _nextRetryAt = 0;
+    _lastApplyAt = now;
+    if (_restorePending && targetSpeed === 1.0) _restorePending = false;
+  }
+
+  function detachHooks(hooks) {
+    for (var i = 0; i < hooks.length; i++) {
+      try { hooks[i].detach(); } catch(e) {}
+    }
+  }
+
+  function installMainThreadHook() {
+    if (_hookInstalled) return true;
+
+    var mod = getGameAssembly();
+    if (!mod || !mod.base) return false;
+    var base = mod.base;
+    var installed = [];
+
+    try {
+      installed.push(Interceptor.attach(base.add(0xAF6A00), {
+        onEnter: function(args) {
+          processPendingTimeScaleWrite(args[0]);
+        }
+      }));
+
+      installed.push(Interceptor.attach(base.add(0xAEE850), {
+        onEnter: function(args) {
+          beginRoomShutdown(args[0]);
+        }
+      }));
+
+      installed.push(Interceptor.attach(base.add(0xAFB6F0), {
+        onEnter: function() {
+          beginRoomShutdown();
+        }
+      }));
+
+      _hooks = installed;
+      _hookInstalled = true;
+      sendLog('success', '时间加速', '主线程与退出保护Hook安装成功');
+      return true;
+    } catch(e) {
+      detachHooks(installed);
+      sendLog('error', '时间加速', 'Hook安装失败: ' + e.message);
+      return false;
+    }
   }
 
   return {
     setSpeed: function(speed) {
       currentSpeed = normalizeSpeed(speed);
       if (enabled) {
-        if (safeWriteTimeScale(currentSpeed)) {
-          sendLog('info', '时间加速', '倍速已切换: ' + currentSpeed + 'x（实时生效）');
-        } else {
-          sendLog('warn', '时间加速', '倍速切换失败，地址可能已失效');
-        }
+        _pendingSpeed = currentSpeed;
+        _nextRetryAt = 0;
+        sendLog('info', '时间加速', '倍速已切换: ' + currentSpeed + 'x');
       } else {
         sendLog('info', '时间加速', '倍速已预选: ' + speed + 'x（开启后生效）');
       }
     },
     enable: function() {
       if (enabled) return;
-      if (!initTimeScale()) {
-        sendLog('error', '时间加速', '初始化失败: ' + (_initError || '未知'));
-        sendStatus('timescale', false);
-        return;
-      }
-      if (!safeWriteTimeScale(currentSpeed)) {
-        sendLog('error', '时间加速', '启用失败，无法写入变量地址');
+      if (!installMainThreadHook()) {
         sendStatus('timescale', false);
         return;
       }
       enabled = true;
-      startApplyTimer();
-      sendLog('success', '时间加速', '已启用 (' + currentSpeed + 'x)');
+      _restorePending = false;
+      _pendingSpeed = currentSpeed;
+      _nextRetryAt = 0;
+      sendLog('success', '时间加速', '已启用 (' + currentSpeed + 'x)，等待主线程应用');
       sendStatus('timescale', true);
     },
     disable: function() {
       if (!enabled) return;
-      stopApplyTimer();
-      if (!safeWriteTimeScale(1.0)) {
-        sendLog('warn', '时间加速', '恢复1.0x失败，地址可能已失效');
-      }
       enabled = false;
-      sendLog('info', '时间加速', '已禁用，恢复1.0x');
+      _restorePending = true;
+      _pendingSpeed = 1.0;
+      _nextRetryAt = 0;
+      sendLog('info', '时间加速', '已禁用，等待主线程恢复1.0x');
       sendStatus('timescale', false);
     }
   };

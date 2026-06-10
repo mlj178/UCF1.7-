@@ -313,11 +313,26 @@ class App(ctk.CTk):
 
         _, self.aim_switch, _ = self._make_feature_card(
             scroll, 3, 0, 1, "#2a1a3a", 'aim', '🎯', '自瞄',
-            '自动瞄准敌方玩家', title_color="#FF6B6B")
+            '自动瞄准敌方玩家\n\n', title_color="#FF6B6B")
 
-        _, self.speedgun_switch, _ = self._make_feature_card(
-            scroll, 3, 1, 1, "#3a3a1a", 'speedgun', '⚡', '射速变快',
-            '大幅提升枪械射速', title_color="#FFD93D")
+        # 射速变快+连狙 独立卡片
+        speedgun_frame = ctk.CTkFrame(scroll, corner_radius=6, fg_color="#3a3a1a",
+                                       border_width=1, border_color="#555555", cursor="hand2")
+        speedgun_frame.grid(row=3, column=1, sticky="nsew", padx=3, pady=3)
+        speedgun_frame.bind("<Button-1>", lambda e: self._toggle_feature('speedgun'))
+
+        speedgun_top = ctk.CTkFrame(speedgun_frame, fg_color="transparent")
+        speedgun_top.pack(fill="x", padx=8, pady=(6, 0))
+        ctk.CTkLabel(speedgun_top, text="⚡ 射速变快+连狙", font=("Microsoft YaHei", 15, "bold"),
+                     text_color="#FFD93D").pack(side="left", padx=4)
+        self.speedgun_switch = ctk.CTkSwitch(speedgun_top, text="", font=("Microsoft YaHei", 12),
+                                              width=50, command=lambda: self._toggle_feature('speedgun'))
+        self.speedgun_switch.pack(side="right", padx=12)
+
+        ctk.CTkLabel(speedgun_frame, font=("Microsoft YaHei", 12),
+                     text="• 射速10倍加速\n• 连狙：半自动→全自动，狙击镜常开\n• 后坐力清零 + 扩散归零",
+                     text_color="#a0a0a0", wraplength=280, justify="left", anchor="w").pack(
+            fill="x", expand=False, padx=8, pady=(2, 6))
 
     def _build_player_tab(self, scroll):
         for i in range(2):
@@ -1108,9 +1123,12 @@ class App(ctk.CTk):
             return
         
         self._log(f"🔫 快速赋予武器 ID={weapon_id}...")
+        request_pid = self._pid
         
         def do_give_weapon():
             try:
+                if not self._ready or self._pid != request_pid:
+                    return
                 result = self._frida.call_export('giveweapon', weapon_id, True, True)
                 if result and result.get('ok'):
                     if result.get('result', '').startswith('pending:'):
@@ -1131,12 +1149,15 @@ class App(ctk.CTk):
         
         self.current_weapon_label.configure(text=f"当前武器: {weapon_name} (ID: {weapon_id})")
         self._log(f"🔫 正在赋予武器: {weapon_name} (ID: {weapon_id})...")
+        request_pid = self._pid
         
         if self.respawn_weapon_var.get():
             self._set_respawn_weapon(weapon_id, weapon_name)
         
         def do_give_weapon():
             try:
+                if not self._ready or self._pid != request_pid:
+                    return
                 result = self._frida.call_export('giveweapon', weapon_id, True, True)
                 if result and result.get('ok'):
                     if result.get('result', '').startswith('pending:'):

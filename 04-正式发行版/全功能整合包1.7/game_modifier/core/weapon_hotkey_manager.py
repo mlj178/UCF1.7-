@@ -127,7 +127,7 @@ class WeaponHotkeyManager:
         return True
 
     def get_weapon_hotkey(self, weapon_id):
-        """获取武器绑定的快捷键，返回 None 或 'shift+1'"""
+        """获取武器绑定的快捷键，返回 None 或 'ctrl+z'"""
         return self._reverse_map.get(weapon_id)
 
     def get_weapon_by_hotkey(self, hotkey):
