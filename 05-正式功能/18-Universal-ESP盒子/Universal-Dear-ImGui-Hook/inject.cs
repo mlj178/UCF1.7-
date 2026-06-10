@@ -52,10 +52,13 @@ public class DllInjector
 
     public static void Log(string message, string level)
     {
+        // DISABLED: 日志输出已注释
+        /*
         string timestamp = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff");
         string line = string.Format("[{0}] [{1}] {2}", timestamp, level, message);
         Console.WriteLine(line);
         try { File.AppendAllText(logFile, line + "\n"); } catch { }
+        */
     }
 
     public static IntPtr GetRemoteModuleBase(IntPtr hProcess, string moduleName)
@@ -97,7 +100,8 @@ public class DllInjector
         string processArg = args.Length > 0 ? args[0] : "UnityCrossFire";
         string dllPath = args.Length > 1 ? args[1] : Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Universal-ImGui-Hook.dll");
 
-        try { File.AppendAllText(logFile, "\n" + new string('=', 60) + "\n"); } catch { }
+        // DISABLED: 日志分隔线已注释
+        // try { File.AppendAllText(logFile, "\n" + new string('=', 60) + "\n"); } catch { }
 
         Log("DLL注入程序启动", "INFO");
         Log(string.Format("目标参数: {0}", processArg), "INFO");
