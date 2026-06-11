@@ -1,564 +1,448 @@
 
 ============================================================
-[2026-06-10 17:41:35.765] [INFO] DLL注入程序启动
-[2026-06-10 17:41:35.771] [INFO] 目标参数: 3432
-[2026-06-10 17:41:35.772] [INFO] DLL路径: D:\trae_project\ucf1.7-modifier\04-正式发行版\全功能整合包1.7\game_modifier\plugins\universal_hook\Universal-ImGui-Hook.dll
-[2026-06-10 17:41:35.772] [INFO] DLL文件大小: 690688 字节
-[2026-06-10 17:41:35.772] [INFO] 按 PID 查找进程: 3432
-[2026-06-10 17:41:35.779] [INFO] 找到进程: PID=3432, 主窗口: 'UnityCrossFire', 创建时间: 2026年6月10日 17:41:12
-[2026-06-10 17:41:35.779] [INFO] 打开进程句柄...
-[2026-06-10 17:41:35.810] [INFO] 进程句柄: 0x35C
-[2026-06-10 17:41:35.811] [INFO] 进程架构: 32-bit
-[2026-06-10 17:41:35.811] [INFO] 注入器架构: 32-bit
-[2026-06-10 17:41:35.811] [INFO] 检查 DLL 是否已加载...
-[2026-06-10 17:41:35.813] [INFO] 枚举到 71 个模块
-[2026-06-10 17:41:35.814] [INFO] 模块[0]: D:\BaiduNetdiskDownload\UnityCrossFire1.7.1\UnityCrossFire1.7.1\UnityCrossFire.exe
-[2026-06-10 17:41:35.815] [INFO] 模块[1]: C:\WINDOWS\SYSTEM32\ntdll.dll
-[2026-06-10 17:41:35.815] [INFO] 模块[2]: C:\WINDOWS\System32\KERNEL32.DLL
-[2026-06-10 17:41:35.815] [INFO] 模块[3]: C:\WINDOWS\System32\KERNELBASE.dll
-[2026-06-10 17:41:35.815] [INFO] 模块[4]: D:\BaiduNetdiskDownload\UnityCrossFire1.7.1\UnityCrossFire1.7.1\UnityPlayer.dll
-[2026-06-10 17:41:35.815] [INFO] 模块[5]: C:\WINDOWS\System32\USER32.dll
-[2026-06-10 17:41:35.815] [INFO] 模块[6]: C:\WINDOWS\System32\win32u.dll
-[2026-06-10 17:41:35.816] [INFO] 模块[7]: C:\WINDOWS\System32\GDI32.dll
-[2026-06-10 17:41:35.816] [INFO] 模块[8]: C:\WINDOWS\System32\gdi32full.dll
-[2026-06-10 17:41:35.817] [INFO] 模块[9]: C:\WINDOWS\System32\msvcp_win.dll
-[2026-06-10 17:41:35.817] [INFO] 模块[10]: C:\WINDOWS\System32\ucrtbase.dll
-[2026-06-10 17:41:35.818] [INFO] 模块[11]: C:\WINDOWS\System32\ole32.dll
-[2026-06-10 17:41:35.819] [INFO] 模块[12]: C:\WINDOWS\System32\combase.dll
-[2026-06-10 17:41:35.820] [INFO] 模块[13]: C:\WINDOWS\System32\RPCRT4.dll
-[2026-06-10 17:41:35.820] [INFO] 模块[14]: C:\WINDOWS\System32\SHLWAPI.dll
-[2026-06-10 17:41:35.820] [INFO] 模块[15]: C:\WINDOWS\SYSTEM32\VERSION.dll
-[2026-06-10 17:41:35.821] [INFO] 模块[16]: C:\WINDOWS\System32\Windows.Storage.dll
-[2026-06-10 17:41:35.821] [INFO] 模块[17]: C:\WINDOWS\System32\msvcrt.dll
-[2026-06-10 17:41:35.821] [INFO] 模块[18]: C:\WINDOWS\System32\advapi32.dll
-[2026-06-10 17:41:35.821] [INFO] 模块[19]: C:\WINDOWS\System32\sechost.dll
-[2026-06-10 17:41:35.822] [INFO] 模块[20]: C:\WINDOWS\System32\SETUPAPI.dll
-[2026-06-10 17:41:35.822] [INFO] 模块[21]: C:\WINDOWS\System32\SHELL32.dll
-[2026-06-10 17:41:35.822] [INFO] 模块[22]: C:\WINDOWS\System32\OLEAUT32.dll
-[2026-06-10 17:41:35.822] [INFO] 模块[23]: C:\WINDOWS\System32\IMM32.dll
-[2026-06-10 17:41:35.824] [INFO] 模块[24]: C:\WINDOWS\SYSTEM32\WINMM.dll
-[2026-06-10 17:41:35.824] [INFO] 模块[25]: C:\WINDOWS\System32\CRYPT32.dll
-[2026-06-10 17:41:35.825] [INFO] 模块[26]: C:\WINDOWS\SYSTEM32\OPENGL32.dll
-[2026-06-10 17:41:35.825] [INFO] 模块[27]: C:\WINDOWS\System32\WS2_32.dll
-[2026-06-10 17:41:35.825] [INFO] 模块[28]: C:\WINDOWS\SYSTEM32\WINHTTP.dll
-[2026-06-10 17:41:35.826] [INFO] 模块[29]: C:\WINDOWS\SYSTEM32\bcrypt.dll
-[2026-06-10 17:41:35.826] [INFO] 模块[30]: C:\WINDOWS\SYSTEM32\HID.DLL
-[2026-06-10 17:41:35.826] [INFO] 模块[31]: C:\WINDOWS\SYSTEM32\GLU32.dll
-[2026-06-10 17:41:35.826] [INFO] 模块[32]: C:\WINDOWS\SYSTEM32\dxcore.dll
-[2026-06-10 17:41:35.827] [INFO] 模块[33]: C:\WINDOWS\SYSTEM32\kernel.appcore.dll
-[2026-06-10 17:41:35.827] [INFO] 模块[34]: C:\WINDOWS\System32\bcryptPrimitives.dll
-[2026-06-10 17:41:35.827] [INFO] 模块[35]: C:\WINDOWS\system32\uxtheme.dll
-[2026-06-10 17:41:35.828] [INFO] 模块[36]: C:\WINDOWS\System32\shcore.dll
-[2026-06-10 17:41:35.828] [INFO] 模块[37]: C:\WINDOWS\SYSTEM32\profapi.dll
-[2026-06-10 17:41:35.828] [INFO] 模块[38]: D:\BaiduNetdiskDownload\UnityCrossFire1.7.1\UnityCrossFire1.7.1\GameAssembly.dll
-[2026-06-10 17:41:35.829] [INFO] 模块[39]: D:\BaiduNetdiskDownload\UnityCrossFire1.7.1\UnityCrossFire1.7.1\baselib.dll
-[2026-06-10 17:41:35.829] [INFO] 模块[40]: C:\WINDOWS\SYSTEM32\IPHLPAPI.DLL
-[2026-06-10 17:41:35.829] [INFO] 模块[41]: C:\WINDOWS\System32\MSCTF.dll
-[2026-06-10 17:41:35.829] [INFO] 模块[42]: C:\WINDOWS\SYSTEM32\d3d11.dll
-[2026-06-10 17:41:35.829] [INFO] 模块[43]: C:\WINDOWS\SYSTEM32\dxgi.dll
-[2026-06-10 17:41:35.830] [INFO] 模块[44]: C:\WINDOWS\SYSTEM32\powrprof.dll
-[2026-06-10 17:41:35.830] [INFO] 模块[45]: C:\WINDOWS\SYSTEM32\UMPDC.dll
-[2026-06-10 17:41:35.830] [INFO] 模块[46]: C:\WINDOWS\SYSTEM32\directxdatabasehelper.dll
-[2026-06-10 17:41:35.831] [INFO] 模块[47]: C:\WINDOWS\SYSTEM32\cfgmgr32.dll
-[2026-06-10 17:41:35.831] [INFO] 模块[48]: C:\WINDOWS\System32\DriverStore\FileRepository\iigd_dch.inf_amd64_1baad0041739883d\igd10iumd32.dll
-[2026-06-10 17:41:35.831] [INFO] 模块[49]: C:\WINDOWS\SYSTEM32\apphelp.dll
-[2026-06-10 17:41:35.832] [INFO] 模块[50]: C:\WINDOWS\System32\DriverStore\FileRepository\iigd_dch.inf_amd64_1baad0041739883d\igd10um32xe.DLL
-[2026-06-10 17:41:35.832] [INFO] 模块[51]: C:\WINDOWS\System32\DriverStore\FileRepository\iigd_dch.inf_amd64_1baad0041739883d\IntelControlLib32.dll
-[2026-06-10 17:41:35.832] [INFO] 模块[52]: C:\WINDOWS\System32\DriverStore\FileRepository\iigd_dch.inf_amd64_1baad0041739883d\igdgmm32.dll
-[2026-06-10 17:41:35.832] [INFO] 模块[53]: C:\WINDOWS\System32\DriverStore\FileRepository\iigd_dch.inf_amd64_1baad0041739883d\igc32.dll
-[2026-06-10 17:41:35.833] [INFO] 模块[54]: C:\WINDOWS\System32\clbcatq.dll
-[2026-06-10 17:41:35.833] [INFO] 模块[55]: C:\WINDOWS\system32\wbem\wbemprox.dll
-[2026-06-10 17:41:35.833] [INFO] 模块[56]: C:\WINDOWS\SYSTEM32\wbemcomn.dll
-[2026-06-10 17:41:35.833] [INFO] 模块[57]: C:\WINDOWS\system32\wbem\wbemsvc.dll
-[2026-06-10 17:41:35.834] [INFO] 模块[58]: C:\WINDOWS\system32\wbem\fastprox.dll
-[2026-06-10 17:41:35.835] [INFO] 模块[59]: C:\WINDOWS\SYSTEM32\amsi.dll
-[2026-06-10 17:41:35.835] [INFO] 模块[60]: C:\WINDOWS\System32\MMDevApi.dll
-[2026-06-10 17:41:35.835] [INFO] 模块[61]: C:\WINDOWS\System32\DEVOBJ.dll
-[2026-06-10 17:41:35.836] [INFO] 模块[62]: C:\WINDOWS\SYSTEM32\AUDIOSES.DLL
-[2026-06-10 17:41:35.836] [INFO] 模块[63]: C:\WINDOWS\SYSTEM32\resourcepolicyclient.dll
-[2026-06-10 17:41:35.836] [INFO] 模块[64]: C:\WINDOWS\SYSTEM32\xinput1_3.dll
-[2026-06-10 17:41:35.836] [INFO] 模块[65]: C:\WINDOWS\SYSTEM32\dcomp.dll
-[2026-06-10 17:41:35.837] [INFO] 模块[66]: C:\WINDOWS\SYSTEM32\Microsoft.Internal.WarpPal.dll
-[2026-06-10 17:41:35.837] [INFO] 模块[67]: C:\WINDOWS\SYSTEM32\dwmapi.dll
-[2026-06-10 17:41:35.837] [INFO] 模块[68]: C:\WINDOWS\SYSTEM32\textinputframework.dll
-[2026-06-10 17:41:35.838] [INFO] 模块[69]: C:\Windows\System32\uiautomationcore.dll
-[2026-06-10 17:41:35.838] [INFO] 模块[70]: C:\Windows\System32\OLEACC.dll
-[2026-06-10 17:41:35.839] [INFO] DLL 未加载，继续注入...
-[2026-06-10 17:41:35.839] [INFO] 获取目标进程中的 kernel32.dll 基址...
-[2026-06-10 17:41:35.840] [INFO] 枚举到 71 个模块
-[2026-06-10 17:41:35.840] [INFO] 模块[0]: D:\BaiduNetdiskDownload\UnityCrossFire1.7.1\UnityCrossFire1.7.1\UnityCrossFire.exe
-[2026-06-10 17:41:35.840] [INFO] 模块[1]: C:\WINDOWS\SYSTEM32\ntdll.dll
-[2026-06-10 17:41:35.841] [INFO] 模块[2]: C:\WINDOWS\System32\KERNEL32.DLL
-[2026-06-10 17:41:35.841] [INFO] 找到 kernel32.dll: 0x76690000
-[2026-06-10 17:41:35.841] [INFO] 获取本地 LoadLibraryW 地址...
-[2026-06-10 17:41:35.842] [INFO] 本地 kernel32.dll: 0x76690000
-[2026-06-10 17:41:35.842] [INFO] 本地 LoadLibraryW: 0x766AD820
-[2026-06-10 17:41:35.843] [INFO] LoadLibraryW RVA: 0x1D820
-[2026-06-10 17:41:35.843] [INFO] 目标进程 LoadLibraryW: 0x766AD820
-[2026-06-10 17:41:35.844] [INFO] DLL路径长度: 226 字节
-[2026-06-10 17:41:35.844] [INFO] 在目标进程分配内存...
-[2026-06-10 17:41:35.844] [INFO] 远程内存地址: 0x18D30000
-[2026-06-10 17:41:35.844] [INFO] 写入DLL路径到目标进程...
-[2026-06-10 17:41:35.845] [INFO] 写入字节数: 226
-[2026-06-10 17:41:35.845] [INFO] 创建远程线程执行LoadLibraryW...
-[2026-06-10 17:41:35.851] [INFO] 远程线程句柄: 0x3AC
-[2026-06-10 17:41:35.852] [INFO] 等待远程线程执行完成...
-[2026-06-10 17:41:35.887] [INFO] 远程线程退出码: 0x6C330000
-[2026-06-10 17:41:35.888] [SUCCESS] DLL注入成功！基地址: 0x6C330000
-[2026-06-10 17:41:36.392] [INFO] ==========================================
-[2026-06-10 17:41:36.393] [INFO] 注入完成！按 INSERT 键打开菜单
-[2026-06-10 17:41:36.393] [INFO] ==========================================
+[2026-06-11 16:32:01.039] [INFO] DLL注入程序启动
+[2026-06-11 16:32:01.048] [INFO] 目标参数: UnityCrossFire
+[2026-06-11 16:32:01.049] [INFO] DLL路径: D:\trae_project\ucf1.7-modifier\04-正式发行版\全功能整合包1.7\game_modifier\plugins\universal_hook\Universal-ImGui-Hook.dll
+[2026-06-11 16:32:01.050] [INFO] DLL文件大小: 690176 字节
+[2026-06-11 16:32:01.050] [INFO] 按进程名查找: UnityCrossFire
+[2026-06-11 16:32:01.070] [INFO] 候选进程数量: 1
+[2026-06-11 16:32:01.085] [INFO] 候选 PID=31156, Title='UnityCrossFire', 创建时间: 2026年6月11日 16:29:31
+[2026-06-11 16:32:01.085] [INFO] 选中进程: PID=31156, 主窗口: 'UnityCrossFire', 创建时间: 2026年6月11日 16:29:31
+[2026-06-11 16:32:01.086] [INFO] 打开进程句柄...
+[2026-06-11 16:32:01.108] [INFO] 进程句柄: 0x394
+[2026-06-11 16:32:01.111] [INFO] 进程架构: 32-bit
+[2026-06-11 16:32:01.111] [INFO] 注入器架构: 32-bit
+[2026-06-11 16:32:01.113] [INFO] 检查 DLL 是否已加载...
+[2026-06-11 16:32:01.116] [INFO] 枚举到 73 个模块
+[2026-06-11 16:32:01.119] [INFO] 模块[0]: D:\BaiduNetdiskDownload\UnityCrossFire1.7.1\UnityCrossFire1.7.1\UnityCrossFire.exe
+[2026-06-11 16:32:01.119] [INFO] 模块[1]: C:\WINDOWS\SYSTEM32\ntdll.dll
+[2026-06-11 16:32:01.120] [INFO] 模块[2]: C:\WINDOWS\System32\KERNEL32.DLL
+[2026-06-11 16:32:01.121] [INFO] 模块[3]: C:\WINDOWS\System32\KERNELBASE.dll
+[2026-06-11 16:32:01.122] [INFO] 模块[4]: D:\BaiduNetdiskDownload\UnityCrossFire1.7.1\UnityCrossFire1.7.1\UnityPlayer.dll
+[2026-06-11 16:32:01.122] [INFO] 模块[5]: C:\WINDOWS\System32\USER32.dll
+[2026-06-11 16:32:01.123] [INFO] 模块[6]: C:\WINDOWS\System32\win32u.dll
+[2026-06-11 16:32:01.124] [INFO] 模块[7]: C:\WINDOWS\System32\GDI32.dll
+[2026-06-11 16:32:01.124] [INFO] 模块[8]: C:\WINDOWS\System32\gdi32full.dll
+[2026-06-11 16:32:01.125] [INFO] 模块[9]: C:\WINDOWS\System32\msvcp_win.dll
+[2026-06-11 16:32:01.125] [INFO] 模块[10]: C:\WINDOWS\System32\ucrtbase.dll
+[2026-06-11 16:32:01.125] [INFO] 模块[11]: C:\WINDOWS\System32\ole32.dll
+[2026-06-11 16:32:01.126] [INFO] 模块[12]: C:\WINDOWS\System32\combase.dll
+[2026-06-11 16:32:01.127] [INFO] 模块[13]: C:\WINDOWS\System32\RPCRT4.dll
+[2026-06-11 16:32:01.127] [INFO] 模块[14]: C:\WINDOWS\SYSTEM32\VERSION.dll
+[2026-06-11 16:32:01.128] [INFO] 模块[15]: C:\WINDOWS\System32\msvcrt.dll
+[2026-06-11 16:32:01.128] [INFO] 模块[16]: C:\WINDOWS\System32\SHLWAPI.dll
+[2026-06-11 16:32:01.128] [INFO] 模块[17]: C:\WINDOWS\System32\Windows.Storage.dll
+[2026-06-11 16:32:01.130] [INFO] 模块[18]: C:\WINDOWS\System32\advapi32.dll
+[2026-06-11 16:32:01.130] [INFO] 模块[19]: C:\WINDOWS\System32\sechost.dll
+[2026-06-11 16:32:01.131] [INFO] 模块[20]: C:\WINDOWS\System32\SETUPAPI.dll
+[2026-06-11 16:32:01.131] [INFO] 模块[21]: C:\WINDOWS\System32\SHELL32.dll
+[2026-06-11 16:32:01.132] [INFO] 模块[22]: C:\WINDOWS\System32\OLEAUT32.dll
+[2026-06-11 16:32:01.133] [INFO] 模块[23]: C:\WINDOWS\System32\IMM32.dll
+[2026-06-11 16:32:01.133] [INFO] 模块[24]: C:\WINDOWS\SYSTEM32\WINMM.dll
+[2026-06-11 16:32:01.133] [INFO] 模块[25]: C:\WINDOWS\System32\CRYPT32.dll
+[2026-06-11 16:32:01.135] [INFO] 模块[26]: C:\WINDOWS\SYSTEM32\OPENGL32.dll
+[2026-06-11 16:32:01.135] [INFO] 模块[27]: C:\WINDOWS\System32\WS2_32.dll
+[2026-06-11 16:32:01.136] [INFO] 模块[28]: C:\WINDOWS\SYSTEM32\bcrypt.dll
+[2026-06-11 16:32:01.137] [INFO] 模块[29]: C:\WINDOWS\SYSTEM32\WINHTTP.dll
+[2026-06-11 16:32:01.138] [INFO] 模块[30]: C:\WINDOWS\SYSTEM32\HID.DLL
+[2026-06-11 16:32:01.139] [INFO] 模块[31]: C:\WINDOWS\SYSTEM32\GLU32.dll
+[2026-06-11 16:32:01.140] [INFO] 模块[32]: C:\WINDOWS\SYSTEM32\dxcore.dll
+[2026-06-11 16:32:01.140] [INFO] 模块[33]: C:\WINDOWS\SYSTEM32\kernel.appcore.dll
+[2026-06-11 16:32:01.140] [INFO] 模块[34]: C:\WINDOWS\System32\bcryptPrimitives.dll
+[2026-06-11 16:32:01.141] [INFO] 模块[35]: C:\WINDOWS\system32\uxtheme.dll
+[2026-06-11 16:32:01.142] [INFO] 模块[36]: C:\WINDOWS\System32\shcore.dll
+[2026-06-11 16:32:01.143] [INFO] 模块[37]: C:\WINDOWS\SYSTEM32\profapi.dll
+[2026-06-11 16:32:01.145] [INFO] 模块[38]: D:\BaiduNetdiskDownload\UnityCrossFire1.7.1\UnityCrossFire1.7.1\GameAssembly.dll
+[2026-06-11 16:32:01.145] [INFO] 模块[39]: C:\WINDOWS\SYSTEM32\IPHLPAPI.DLL
+[2026-06-11 16:32:01.147] [INFO] 模块[40]: D:\BaiduNetdiskDownload\UnityCrossFire1.7.1\UnityCrossFire1.7.1\baselib.dll
+[2026-06-11 16:32:01.148] [INFO] 模块[41]: C:\WINDOWS\System32\MSCTF.dll
+[2026-06-11 16:32:01.149] [INFO] 模块[42]: C:\WINDOWS\SYSTEM32\d3d11.dll
+[2026-06-11 16:32:01.149] [INFO] 模块[43]: C:\WINDOWS\SYSTEM32\dxgi.dll
+[2026-06-11 16:32:01.150] [INFO] 模块[44]: C:\WINDOWS\SYSTEM32\powrprof.dll
+[2026-06-11 16:32:01.150] [INFO] 模块[45]: C:\WINDOWS\SYSTEM32\UMPDC.dll
+[2026-06-11 16:32:01.151] [INFO] 模块[46]: C:\WINDOWS\SYSTEM32\directxdatabasehelper.dll
+[2026-06-11 16:32:01.151] [INFO] 模块[47]: C:\WINDOWS\SYSTEM32\cfgmgr32.dll
+[2026-06-11 16:32:01.152] [INFO] 模块[48]: C:\WINDOWS\System32\DriverStore\FileRepository\iigd_dch.inf_amd64_1baad0041739883d\igd10iumd32.dll
+[2026-06-11 16:32:01.153] [INFO] 模块[49]: C:\WINDOWS\SYSTEM32\apphelp.dll
+[2026-06-11 16:32:01.153] [INFO] 模块[50]: C:\WINDOWS\System32\DriverStore\FileRepository\iigd_dch.inf_amd64_1baad0041739883d\igd10um32xe.DLL
+[2026-06-11 16:32:01.154] [INFO] 模块[51]: C:\WINDOWS\System32\DriverStore\FileRepository\iigd_dch.inf_amd64_1baad0041739883d\IntelControlLib32.dll
+[2026-06-11 16:32:01.154] [INFO] 模块[52]: C:\WINDOWS\System32\DriverStore\FileRepository\iigd_dch.inf_amd64_1baad0041739883d\igdgmm32.dll
+[2026-06-11 16:32:01.155] [INFO] 模块[53]: C:\WINDOWS\System32\DriverStore\FileRepository\iigd_dch.inf_amd64_1baad0041739883d\igc32.dll
+[2026-06-11 16:32:01.155] [INFO] 模块[54]: C:\WINDOWS\System32\clbcatq.dll
+[2026-06-11 16:32:01.157] [INFO] 模块[55]: C:\WINDOWS\system32\wbem\wbemprox.dll
+[2026-06-11 16:32:01.157] [INFO] 模块[56]: C:\WINDOWS\SYSTEM32\wbemcomn.dll
+[2026-06-11 16:32:01.159] [INFO] 模块[57]: C:\WINDOWS\system32\wbem\wbemsvc.dll
+[2026-06-11 16:32:01.159] [INFO] 模块[58]: C:\WINDOWS\system32\wbem\fastprox.dll
+[2026-06-11 16:32:01.160] [INFO] 模块[59]: C:\WINDOWS\SYSTEM32\amsi.dll
+[2026-06-11 16:32:01.160] [INFO] 模块[60]: C:\WINDOWS\System32\MMDevApi.dll
+[2026-06-11 16:32:01.161] [INFO] 模块[61]: C:\WINDOWS\System32\DEVOBJ.dll
+[2026-06-11 16:32:01.162] [INFO] 模块[62]: C:\WINDOWS\SYSTEM32\AUDIOSES.DLL
+[2026-06-11 16:32:01.163] [INFO] 模块[63]: C:\WINDOWS\SYSTEM32\resourcepolicyclient.dll
+[2026-06-11 16:32:01.164] [INFO] 模块[64]: C:\WINDOWS\SYSTEM32\xinput1_3.dll
+[2026-06-11 16:32:01.164] [INFO] 模块[65]: C:\WINDOWS\SYSTEM32\dcomp.dll
+[2026-06-11 16:32:01.166] [INFO] 模块[66]: C:\WINDOWS\SYSTEM32\Microsoft.Internal.WarpPal.dll
+[2026-06-11 16:32:01.166] [INFO] 模块[67]: C:\WINDOWS\SYSTEM32\dwmapi.dll
+[2026-06-11 16:32:01.167] [INFO] 模块[68]: C:\WINDOWS\SYSTEM32\textinputframework.dll
+[2026-06-11 16:32:01.168] [INFO] 模块[69]: C:\Users\17242\AppData\Local\Temp\frida-9d9dca4d3fe9322f8803d735bf649beb\x86\frida-agent.dll
+[2026-06-11 16:32:01.168] [INFO] 模块[70]: C:\WINDOWS\System32\PSAPI.DLL
+[2026-06-11 16:32:01.170] [INFO] 模块[71]: C:\WINDOWS\SYSTEM32\DNSAPI.dll
+[2026-06-11 16:32:01.170] [INFO] 模块[72]: C:\WINDOWS\System32\NSI.dll
+[2026-06-11 16:32:01.171] [INFO] DLL 未加载，继续注入...
+[2026-06-11 16:32:01.172] [INFO] 获取目标进程中的 kernel32.dll 基址...
+[2026-06-11 16:32:01.173] [INFO] 枚举到 73 个模块
+[2026-06-11 16:32:01.173] [INFO] 模块[0]: D:\BaiduNetdiskDownload\UnityCrossFire1.7.1\UnityCrossFire1.7.1\UnityCrossFire.exe
+[2026-06-11 16:32:01.174] [INFO] 模块[1]: C:\WINDOWS\SYSTEM32\ntdll.dll
+[2026-06-11 16:32:01.174] [INFO] 模块[2]: C:\WINDOWS\System32\KERNEL32.DLL
+[2026-06-11 16:32:01.174] [INFO] 找到 kernel32.dll: 0x75020000
+[2026-06-11 16:32:01.174] [INFO] 获取本地 LoadLibraryW 地址...
+[2026-06-11 16:32:01.176] [INFO] 本地 kernel32.dll: 0x75020000
+[2026-06-11 16:32:01.176] [INFO] 本地 LoadLibraryW: 0x7503D820
+[2026-06-11 16:32:01.178] [INFO] LoadLibraryW RVA: 0x1D820
+[2026-06-11 16:32:01.180] [INFO] 目标进程 LoadLibraryW: 0x7503D820
+[2026-06-11 16:32:01.181] [INFO] DLL路径长度: 226 字节
+[2026-06-11 16:32:01.182] [INFO] 在目标进程分配内存...
+[2026-06-11 16:32:01.183] [INFO] 远程内存地址: 0x10E0000
+[2026-06-11 16:32:01.183] [INFO] 写入DLL路径到目标进程...
+[2026-06-11 16:32:01.185] [INFO] 写入字节数: 226
+[2026-06-11 16:32:01.185] [INFO] 创建远程线程执行LoadLibraryW...
+[2026-06-11 16:32:01.190] [INFO] 远程线程句柄: 0x3F0
+[2026-06-11 16:32:01.191] [INFO] 等待远程线程执行完成...
+[2026-06-11 16:32:01.207] [INFO] 远程线程退出码: 0x620B0000
+[2026-06-11 16:32:01.208] [SUCCESS] DLL注入成功！基地址: 0x620B0000
+[2026-06-11 16:32:01.712] [INFO] ==========================================
+[2026-06-11 16:32:01.712] [INFO] 注入完成！按 INSERT 键打开菜单
+[2026-06-11 16:32:01.714] [INFO] ==========================================
 
 ============================================================
-[2026-06-10 17:58:30.951] [INFO] DLL注入程序启动
-[2026-06-10 17:58:30.953] [INFO] 目标参数: 29884
-[2026-06-10 17:58:30.953] [INFO] DLL路径: D:\trae_project\ucf1.7-modifier\04-正式发行版\全功能整合包1.7\game_modifier\plugins\universal_hook\Universal-ImGui-Hook.dll
-[2026-06-10 17:58:30.953] [INFO] DLL文件大小: 690688 字节
-[2026-06-10 17:58:30.954] [INFO] 按 PID 查找进程: 29884
-[2026-06-10 17:58:30.961] [INFO] 找到进程: PID=29884, 主窗口: 'UnityCrossFire', 创建时间: 2026年6月10日 17:58:28
-[2026-06-10 17:58:30.962] [INFO] 打开进程句柄...
-[2026-06-10 17:58:30.986] [INFO] 进程句柄: 0x354
-[2026-06-10 17:58:30.986] [INFO] 进程架构: 32-bit
-[2026-06-10 17:58:30.987] [INFO] 注入器架构: 32-bit
-[2026-06-10 17:58:30.987] [INFO] 检查 DLL 是否已加载...
-[2026-06-10 17:58:30.990] [INFO] 枚举到 71 个模块
-[2026-06-10 17:58:30.991] [INFO] 模块[0]: D:\BaiduNetdiskDownload\UnityCrossFire1.7.1\UnityCrossFire1.7.1\UnityCrossFire.exe
-[2026-06-10 17:58:30.991] [INFO] 模块[1]: C:\WINDOWS\SYSTEM32\ntdll.dll
-[2026-06-10 17:58:30.991] [INFO] 模块[2]: C:\WINDOWS\System32\KERNEL32.DLL
-[2026-06-10 17:58:30.992] [INFO] 模块[3]: C:\WINDOWS\System32\KERNELBASE.dll
-[2026-06-10 17:58:30.992] [INFO] 模块[4]: D:\BaiduNetdiskDownload\UnityCrossFire1.7.1\UnityCrossFire1.7.1\UnityPlayer.dll
-[2026-06-10 17:58:30.993] [INFO] 模块[5]: C:\WINDOWS\System32\USER32.dll
-[2026-06-10 17:58:30.993] [INFO] 模块[6]: C:\WINDOWS\System32\win32u.dll
-[2026-06-10 17:58:30.994] [INFO] 模块[7]: C:\WINDOWS\System32\GDI32.dll
-[2026-06-10 17:58:30.994] [INFO] 模块[8]: C:\WINDOWS\System32\gdi32full.dll
-[2026-06-10 17:58:30.995] [INFO] 模块[9]: C:\WINDOWS\System32\msvcp_win.dll
-[2026-06-10 17:58:30.995] [INFO] 模块[10]: C:\WINDOWS\System32\ucrtbase.dll
-[2026-06-10 17:58:30.995] [INFO] 模块[11]: C:\WINDOWS\System32\ole32.dll
-[2026-06-10 17:58:30.996] [INFO] 模块[12]: C:\WINDOWS\System32\combase.dll
-[2026-06-10 17:58:30.996] [INFO] 模块[13]: C:\WINDOWS\System32\RPCRT4.dll
-[2026-06-10 17:58:30.997] [INFO] 模块[14]: C:\WINDOWS\SYSTEM32\VERSION.dll
-[2026-06-10 17:58:30.997] [INFO] 模块[15]: C:\WINDOWS\System32\SHLWAPI.dll
-[2026-06-10 17:58:30.998] [INFO] 模块[16]: C:\WINDOWS\System32\msvcrt.dll
-[2026-06-10 17:58:30.998] [INFO] 模块[17]: C:\WINDOWS\System32\Windows.Storage.dll
-[2026-06-10 17:58:30.998] [INFO] 模块[18]: C:\WINDOWS\System32\advapi32.dll
-[2026-06-10 17:58:30.999] [INFO] 模块[19]: C:\WINDOWS\System32\sechost.dll
-[2026-06-10 17:58:30.999] [INFO] 模块[20]: C:\WINDOWS\System32\SETUPAPI.dll
-[2026-06-10 17:58:31.000] [INFO] 模块[21]: C:\WINDOWS\System32\SHELL32.dll
-[2026-06-10 17:58:31.001] [INFO] 模块[22]: C:\WINDOWS\System32\OLEAUT32.dll
-[2026-06-10 17:58:31.001] [INFO] 模块[23]: C:\WINDOWS\System32\IMM32.dll
-[2026-06-10 17:58:31.002] [INFO] 模块[24]: C:\WINDOWS\System32\CRYPT32.dll
-[2026-06-10 17:58:31.003] [INFO] 模块[25]: C:\WINDOWS\SYSTEM32\OPENGL32.dll
-[2026-06-10 17:58:31.003] [INFO] 模块[26]: C:\WINDOWS\System32\WS2_32.dll
-[2026-06-10 17:58:31.003] [INFO] 模块[27]: C:\WINDOWS\SYSTEM32\WINMM.dll
-[2026-06-10 17:58:31.004] [INFO] 模块[28]: C:\WINDOWS\SYSTEM32\WINHTTP.dll
-[2026-06-10 17:58:31.004] [INFO] 模块[29]: C:\WINDOWS\SYSTEM32\bcrypt.dll
-[2026-06-10 17:58:31.005] [INFO] 模块[30]: C:\WINDOWS\SYSTEM32\HID.DLL
-[2026-06-10 17:58:31.005] [INFO] 模块[31]: C:\WINDOWS\SYSTEM32\GLU32.dll
-[2026-06-10 17:58:31.005] [INFO] 模块[32]: C:\WINDOWS\SYSTEM32\dxcore.dll
-[2026-06-10 17:58:31.007] [INFO] 模块[33]: C:\WINDOWS\SYSTEM32\kernel.appcore.dll
-[2026-06-10 17:58:31.007] [INFO] 模块[34]: C:\WINDOWS\System32\bcryptPrimitives.dll
-[2026-06-10 17:58:31.008] [INFO] 模块[35]: C:\WINDOWS\system32\uxtheme.dll
-[2026-06-10 17:58:31.008] [INFO] 模块[36]: C:\WINDOWS\System32\shcore.dll
-[2026-06-10 17:58:31.009] [INFO] 模块[37]: C:\WINDOWS\SYSTEM32\profapi.dll
-[2026-06-10 17:58:31.009] [INFO] 模块[38]: D:\BaiduNetdiskDownload\UnityCrossFire1.7.1\UnityCrossFire1.7.1\GameAssembly.dll
-[2026-06-10 17:58:31.009] [INFO] 模块[39]: C:\WINDOWS\SYSTEM32\IPHLPAPI.DLL
-[2026-06-10 17:58:31.010] [INFO] 模块[40]: D:\BaiduNetdiskDownload\UnityCrossFire1.7.1\UnityCrossFire1.7.1\baselib.dll
-[2026-06-10 17:58:31.011] [INFO] 模块[41]: C:\WINDOWS\System32\MSCTF.dll
-[2026-06-10 17:58:31.011] [INFO] 模块[42]: C:\WINDOWS\SYSTEM32\d3d11.dll
-[2026-06-10 17:58:31.012] [INFO] 模块[43]: C:\WINDOWS\SYSTEM32\dxgi.dll
-[2026-06-10 17:58:31.012] [INFO] 模块[44]: C:\WINDOWS\SYSTEM32\powrprof.dll
-[2026-06-10 17:58:31.012] [INFO] 模块[45]: C:\WINDOWS\SYSTEM32\UMPDC.dll
-[2026-06-10 17:58:31.013] [INFO] 模块[46]: C:\WINDOWS\SYSTEM32\directxdatabasehelper.dll
-[2026-06-10 17:58:31.014] [INFO] 模块[47]: C:\WINDOWS\SYSTEM32\cfgmgr32.dll
-[2026-06-10 17:58:31.015] [INFO] 模块[48]: C:\WINDOWS\System32\DriverStore\FileRepository\iigd_dch.inf_amd64_1baad0041739883d\igd10iumd32.dll
-[2026-06-10 17:58:31.015] [INFO] 模块[49]: C:\WINDOWS\SYSTEM32\apphelp.dll
-[2026-06-10 17:58:31.016] [INFO] 模块[50]: C:\WINDOWS\System32\DriverStore\FileRepository\iigd_dch.inf_amd64_1baad0041739883d\igd10um32xe.DLL
-[2026-06-10 17:58:31.016] [INFO] 模块[51]: C:\WINDOWS\System32\DriverStore\FileRepository\iigd_dch.inf_amd64_1baad0041739883d\IntelControlLib32.dll
-[2026-06-10 17:58:31.017] [INFO] 模块[52]: C:\WINDOWS\System32\DriverStore\FileRepository\iigd_dch.inf_amd64_1baad0041739883d\igdgmm32.dll
-[2026-06-10 17:58:31.019] [INFO] 模块[53]: C:\WINDOWS\System32\DriverStore\FileRepository\iigd_dch.inf_amd64_1baad0041739883d\igc32.dll
-[2026-06-10 17:58:31.019] [INFO] 模块[54]: C:\WINDOWS\System32\clbcatq.dll
-[2026-06-10 17:58:31.020] [INFO] 模块[55]: C:\WINDOWS\system32\wbem\wbemprox.dll
-[2026-06-10 17:58:31.020] [INFO] 模块[56]: C:\WINDOWS\SYSTEM32\wbemcomn.dll
-[2026-06-10 17:58:31.021] [INFO] 模块[57]: C:\WINDOWS\system32\wbem\wbemsvc.dll
-[2026-06-10 17:58:31.022] [INFO] 模块[58]: C:\WINDOWS\system32\wbem\fastprox.dll
-[2026-06-10 17:58:31.023] [INFO] 模块[59]: C:\WINDOWS\SYSTEM32\amsi.dll
-[2026-06-10 17:58:31.023] [INFO] 模块[60]: C:\WINDOWS\System32\MMDevApi.dll
-[2026-06-10 17:58:31.023] [INFO] 模块[61]: C:\WINDOWS\System32\DEVOBJ.dll
-[2026-06-10 17:58:31.025] [INFO] 模块[62]: C:\WINDOWS\SYSTEM32\AUDIOSES.DLL
-[2026-06-10 17:58:31.025] [INFO] 模块[63]: C:\WINDOWS\SYSTEM32\resourcepolicyclient.dll
-[2026-06-10 17:58:31.026] [INFO] 模块[64]: C:\WINDOWS\SYSTEM32\xinput1_3.dll
-[2026-06-10 17:58:31.026] [INFO] 模块[65]: C:\WINDOWS\SYSTEM32\dcomp.dll
-[2026-06-10 17:58:31.027] [INFO] 模块[66]: C:\WINDOWS\SYSTEM32\Microsoft.Internal.WarpPal.dll
-[2026-06-10 17:58:31.027] [INFO] 模块[67]: C:\WINDOWS\SYSTEM32\dwmapi.dll
-[2026-06-10 17:58:31.027] [INFO] 模块[68]: C:\WINDOWS\SYSTEM32\textinputframework.dll
-[2026-06-10 17:58:31.028] [INFO] 模块[69]: C:\Windows\System32\uiautomationcore.dll
-[2026-06-10 17:58:31.028] [INFO] 模块[70]: C:\Windows\System32\OLEACC.dll
-[2026-06-10 17:58:31.029] [INFO] DLL 未加载，继续注入...
-[2026-06-10 17:58:31.029] [INFO] 获取目标进程中的 kernel32.dll 基址...
-[2026-06-10 17:58:31.030] [INFO] 枚举到 71 个模块
-[2026-06-10 17:58:31.031] [INFO] 模块[0]: D:\BaiduNetdiskDownload\UnityCrossFire1.7.1\UnityCrossFire1.7.1\UnityCrossFire.exe
-[2026-06-10 17:58:31.031] [INFO] 模块[1]: C:\WINDOWS\SYSTEM32\ntdll.dll
-[2026-06-10 17:58:31.031] [INFO] 模块[2]: C:\WINDOWS\System32\KERNEL32.DLL
-[2026-06-10 17:58:31.032] [INFO] 找到 kernel32.dll: 0x76690000
-[2026-06-10 17:58:31.032] [INFO] 获取本地 LoadLibraryW 地址...
-[2026-06-10 17:58:31.033] [INFO] 本地 kernel32.dll: 0x76690000
-[2026-06-10 17:58:31.035] [INFO] 本地 LoadLibraryW: 0x766AD820
-[2026-06-10 17:58:31.035] [INFO] LoadLibraryW RVA: 0x1D820
-[2026-06-10 17:58:31.035] [INFO] 目标进程 LoadLibraryW: 0x766AD820
-[2026-06-10 17:58:31.035] [INFO] DLL路径长度: 226 字节
-[2026-06-10 17:58:31.036] [INFO] 在目标进程分配内存...
-[2026-06-10 17:58:31.036] [INFO] 远程内存地址: 0x34CF0000
-[2026-06-10 17:58:31.037] [INFO] 写入DLL路径到目标进程...
-[2026-06-10 17:58:31.038] [INFO] 写入字节数: 226
-[2026-06-10 17:58:31.039] [INFO] 创建远程线程执行LoadLibraryW...
-[2026-06-10 17:58:31.047] [INFO] 远程线程句柄: 0x3C0
-[2026-06-10 17:58:31.047] [INFO] 等待远程线程执行完成...
-[2026-06-10 17:58:31.104] [INFO] 远程线程退出码: 0x6C330000
-[2026-06-10 17:58:31.105] [SUCCESS] DLL注入成功！基地址: 0x6C330000
-[2026-06-10 17:58:31.615] [INFO] ==========================================
-[2026-06-10 17:58:31.615] [INFO] 注入完成！按 INSERT 键打开菜单
-[2026-06-10 17:58:31.616] [INFO] ==========================================
+[2026-06-11 16:33:07.630] [INFO] DLL注入程序启动
+[2026-06-11 16:33:07.632] [INFO] 目标参数: 31156
+[2026-06-11 16:33:07.632] [INFO] DLL路径: d:\trae_project\ucf1.7-modifier\04-正式发行版\全功能整合包1.7\game_modifier\plugins\universal_hook\Universal-ImGui-Hook.dll
+[2026-06-11 16:33:07.634] [INFO] DLL文件大小: 690176 字节
+[2026-06-11 16:33:07.634] [INFO] 按 PID 查找进程: 31156
+[2026-06-11 16:33:07.643] [INFO] 找到进程: PID=31156, 主窗口: 'UnityCrossFire', 创建时间: 2026年6月11日 16:29:31
+[2026-06-11 16:33:07.644] [INFO] 打开进程句柄...
+[2026-06-11 16:33:07.676] [INFO] 进程句柄: 0x3F4
+[2026-06-11 16:33:07.677] [INFO] 进程架构: 32-bit
+[2026-06-11 16:33:07.678] [INFO] 注入器架构: 32-bit
+[2026-06-11 16:33:07.679] [INFO] 检查 DLL 是否已加载...
+[2026-06-11 16:33:07.681] [INFO] 枚举到 74 个模块
+[2026-06-11 16:33:07.682] [INFO] 模块[0]: D:\BaiduNetdiskDownload\UnityCrossFire1.7.1\UnityCrossFire1.7.1\UnityCrossFire.exe
+[2026-06-11 16:33:07.683] [INFO] 模块[1]: C:\WINDOWS\SYSTEM32\ntdll.dll
+[2026-06-11 16:33:07.684] [INFO] 模块[2]: C:\WINDOWS\System32\KERNEL32.DLL
+[2026-06-11 16:33:07.685] [INFO] 模块[3]: C:\WINDOWS\System32\KERNELBASE.dll
+[2026-06-11 16:33:07.685] [INFO] 模块[4]: D:\BaiduNetdiskDownload\UnityCrossFire1.7.1\UnityCrossFire1.7.1\UnityPlayer.dll
+[2026-06-11 16:33:07.686] [INFO] 模块[5]: C:\WINDOWS\System32\USER32.dll
+[2026-06-11 16:33:07.687] [INFO] 模块[6]: C:\WINDOWS\System32\win32u.dll
+[2026-06-11 16:33:07.687] [INFO] 模块[7]: C:\WINDOWS\System32\GDI32.dll
+[2026-06-11 16:33:07.689] [INFO] 模块[8]: C:\WINDOWS\System32\gdi32full.dll
+[2026-06-11 16:33:07.690] [INFO] 模块[9]: C:\WINDOWS\System32\msvcp_win.dll
+[2026-06-11 16:33:07.691] [INFO] 模块[10]: C:\WINDOWS\System32\ucrtbase.dll
+[2026-06-11 16:33:07.691] [INFO] 模块[11]: C:\WINDOWS\System32\ole32.dll
+[2026-06-11 16:33:07.692] [INFO] 模块[12]: C:\WINDOWS\System32\combase.dll
+[2026-06-11 16:33:07.693] [INFO] 模块[13]: C:\WINDOWS\System32\RPCRT4.dll
+[2026-06-11 16:33:07.695] [INFO] 模块[14]: C:\WINDOWS\SYSTEM32\VERSION.dll
+[2026-06-11 16:33:07.695] [INFO] 模块[15]: C:\WINDOWS\System32\msvcrt.dll
+[2026-06-11 16:33:07.696] [INFO] 模块[16]: C:\WINDOWS\System32\SHLWAPI.dll
+[2026-06-11 16:33:07.698] [INFO] 模块[17]: C:\WINDOWS\System32\Windows.Storage.dll
+[2026-06-11 16:33:07.699] [INFO] 模块[18]: C:\WINDOWS\System32\advapi32.dll
+[2026-06-11 16:33:07.700] [INFO] 模块[19]: C:\WINDOWS\System32\sechost.dll
+[2026-06-11 16:33:07.700] [INFO] 模块[20]: C:\WINDOWS\System32\SETUPAPI.dll
+[2026-06-11 16:33:07.701] [INFO] 模块[21]: C:\WINDOWS\System32\SHELL32.dll
+[2026-06-11 16:33:07.702] [INFO] 模块[22]: C:\WINDOWS\System32\OLEAUT32.dll
+[2026-06-11 16:33:07.703] [INFO] 模块[23]: C:\WINDOWS\System32\IMM32.dll
+[2026-06-11 16:33:07.704] [INFO] 模块[24]: C:\WINDOWS\SYSTEM32\WINMM.dll
+[2026-06-11 16:33:07.705] [INFO] 模块[25]: C:\WINDOWS\System32\CRYPT32.dll
+[2026-06-11 16:33:07.706] [INFO] 模块[26]: C:\WINDOWS\SYSTEM32\OPENGL32.dll
+[2026-06-11 16:33:07.708] [INFO] 模块[27]: C:\WINDOWS\System32\WS2_32.dll
+[2026-06-11 16:33:07.708] [INFO] 模块[28]: C:\WINDOWS\SYSTEM32\bcrypt.dll
+[2026-06-11 16:33:07.709] [INFO] 模块[29]: C:\WINDOWS\SYSTEM32\WINHTTP.dll
+[2026-06-11 16:33:07.710] [INFO] 模块[30]: C:\WINDOWS\SYSTEM32\HID.DLL
+[2026-06-11 16:33:07.710] [INFO] 模块[31]: C:\WINDOWS\SYSTEM32\GLU32.dll
+[2026-06-11 16:33:07.712] [INFO] 模块[32]: C:\WINDOWS\SYSTEM32\dxcore.dll
+[2026-06-11 16:33:07.713] [INFO] 模块[33]: C:\WINDOWS\SYSTEM32\kernel.appcore.dll
+[2026-06-11 16:33:07.713] [INFO] 模块[34]: C:\WINDOWS\System32\bcryptPrimitives.dll
+[2026-06-11 16:33:07.714] [INFO] 模块[35]: C:\WINDOWS\system32\uxtheme.dll
+[2026-06-11 16:33:07.716] [INFO] 模块[36]: C:\WINDOWS\System32\shcore.dll
+[2026-06-11 16:33:07.717] [INFO] 模块[37]: C:\WINDOWS\SYSTEM32\profapi.dll
+[2026-06-11 16:33:07.718] [INFO] 模块[38]: D:\BaiduNetdiskDownload\UnityCrossFire1.7.1\UnityCrossFire1.7.1\GameAssembly.dll
+[2026-06-11 16:33:07.719] [INFO] 模块[39]: C:\WINDOWS\SYSTEM32\IPHLPAPI.DLL
+[2026-06-11 16:33:07.720] [INFO] 模块[40]: D:\BaiduNetdiskDownload\UnityCrossFire1.7.1\UnityCrossFire1.7.1\baselib.dll
+[2026-06-11 16:33:07.721] [INFO] 模块[41]: C:\WINDOWS\System32\MSCTF.dll
+[2026-06-11 16:33:07.722] [INFO] 模块[42]: C:\WINDOWS\SYSTEM32\d3d11.dll
+[2026-06-11 16:33:07.723] [INFO] 模块[43]: C:\WINDOWS\SYSTEM32\dxgi.dll
+[2026-06-11 16:33:07.724] [INFO] 模块[44]: C:\WINDOWS\SYSTEM32\powrprof.dll
+[2026-06-11 16:33:07.725] [INFO] 模块[45]: C:\WINDOWS\SYSTEM32\UMPDC.dll
+[2026-06-11 16:33:07.726] [INFO] 模块[46]: C:\WINDOWS\SYSTEM32\directxdatabasehelper.dll
+[2026-06-11 16:33:07.728] [INFO] 模块[47]: C:\WINDOWS\SYSTEM32\cfgmgr32.dll
+[2026-06-11 16:33:07.728] [INFO] 模块[48]: C:\WINDOWS\System32\DriverStore\FileRepository\iigd_dch.inf_amd64_1baad0041739883d\igd10iumd32.dll
+[2026-06-11 16:33:07.730] [INFO] 模块[49]: C:\WINDOWS\SYSTEM32\apphelp.dll
+[2026-06-11 16:33:07.731] [INFO] 模块[50]: C:\WINDOWS\System32\DriverStore\FileRepository\iigd_dch.inf_amd64_1baad0041739883d\igd10um32xe.DLL
+[2026-06-11 16:33:07.732] [INFO] 模块[51]: C:\WINDOWS\System32\DriverStore\FileRepository\iigd_dch.inf_amd64_1baad0041739883d\IntelControlLib32.dll
+[2026-06-11 16:33:07.733] [INFO] 模块[52]: C:\WINDOWS\System32\DriverStore\FileRepository\iigd_dch.inf_amd64_1baad0041739883d\igdgmm32.dll
+[2026-06-11 16:33:07.734] [INFO] 模块[53]: C:\WINDOWS\System32\DriverStore\FileRepository\iigd_dch.inf_amd64_1baad0041739883d\igc32.dll
+[2026-06-11 16:33:07.736] [INFO] 模块[54]: C:\WINDOWS\System32\clbcatq.dll
+[2026-06-11 16:33:07.738] [INFO] 模块[55]: C:\WINDOWS\system32\wbem\wbemprox.dll
+[2026-06-11 16:33:07.739] [INFO] 模块[56]: C:\WINDOWS\SYSTEM32\wbemcomn.dll
+[2026-06-11 16:33:07.739] [INFO] 模块[57]: C:\WINDOWS\system32\wbem\wbemsvc.dll
+[2026-06-11 16:33:07.741] [INFO] 模块[58]: C:\WINDOWS\system32\wbem\fastprox.dll
+[2026-06-11 16:33:07.742] [INFO] 模块[59]: C:\WINDOWS\SYSTEM32\amsi.dll
+[2026-06-11 16:33:07.742] [INFO] 模块[60]: C:\WINDOWS\System32\MMDevApi.dll
+[2026-06-11 16:33:07.743] [INFO] 模块[61]: C:\WINDOWS\System32\DEVOBJ.dll
+[2026-06-11 16:33:07.744] [INFO] 模块[62]: C:\WINDOWS\SYSTEM32\AUDIOSES.DLL
+[2026-06-11 16:33:07.744] [INFO] 模块[63]: C:\WINDOWS\SYSTEM32\resourcepolicyclient.dll
+[2026-06-11 16:33:07.746] [INFO] 模块[64]: C:\WINDOWS\SYSTEM32\xinput1_3.dll
+[2026-06-11 16:33:07.746] [INFO] 模块[65]: C:\WINDOWS\SYSTEM32\dcomp.dll
+[2026-06-11 16:33:07.747] [INFO] 模块[66]: C:\WINDOWS\SYSTEM32\Microsoft.Internal.WarpPal.dll
+[2026-06-11 16:33:07.747] [INFO] 模块[67]: C:\WINDOWS\SYSTEM32\dwmapi.dll
+[2026-06-11 16:33:07.748] [INFO] 模块[68]: C:\WINDOWS\SYSTEM32\textinputframework.dll
+[2026-06-11 16:33:07.750] [INFO] 模块[69]: C:\WINDOWS\System32\NSI.dll
+[2026-06-11 16:33:07.750] [INFO] 模块[70]: C:\WINDOWS\SYSTEM32\xinput1_4.dll
+[2026-06-11 16:33:07.752] [INFO] 模块[71]: C:\WINDOWS\SYSTEM32\inputhost.dll
+[2026-06-11 16:33:07.753] [INFO] 模块[72]: C:\WINDOWS\SYSTEM32\CoreMessaging.dll
+[2026-06-11 16:33:07.754] [INFO] 模块[73]: C:\WINDOWS\SYSTEM32\CRYPTBASE.DLL
+[2026-06-11 16:33:07.755] [INFO] DLL 未加载，继续注入...
+[2026-06-11 16:33:07.756] [INFO] 获取目标进程中的 kernel32.dll 基址...
+[2026-06-11 16:33:07.757] [INFO] 枚举到 74 个模块
+[2026-06-11 16:33:07.758] [INFO] 模块[0]: D:\BaiduNetdiskDownload\UnityCrossFire1.7.1\UnityCrossFire1.7.1\UnityCrossFire.exe
+[2026-06-11 16:33:07.761] [INFO] 模块[1]: C:\WINDOWS\SYSTEM32\ntdll.dll
+[2026-06-11 16:33:07.761] [INFO] 模块[2]: C:\WINDOWS\System32\KERNEL32.DLL
+[2026-06-11 16:33:07.762] [INFO] 找到 kernel32.dll: 0x75020000
+[2026-06-11 16:33:07.764] [INFO] 获取本地 LoadLibraryW 地址...
+[2026-06-11 16:33:07.764] [INFO] 本地 kernel32.dll: 0x75020000
+[2026-06-11 16:33:07.765] [INFO] 本地 LoadLibraryW: 0x7503D820
+[2026-06-11 16:33:07.766] [INFO] LoadLibraryW RVA: 0x1D820
+[2026-06-11 16:33:07.767] [INFO] 目标进程 LoadLibraryW: 0x7503D820
+[2026-06-11 16:33:07.768] [INFO] DLL路径长度: 226 字节
+[2026-06-11 16:33:07.768] [INFO] 在目标进程分配内存...
+[2026-06-11 16:33:07.770] [INFO] 远程内存地址: 0x10F0000
+[2026-06-11 16:33:07.771] [INFO] 写入DLL路径到目标进程...
+[2026-06-11 16:33:07.772] [INFO] 写入字节数: 226
+[2026-06-11 16:33:07.773] [INFO] 创建远程线程执行LoadLibraryW...
+[2026-06-11 16:33:07.780] [INFO] 远程线程句柄: 0x420
+[2026-06-11 16:33:07.782] [INFO] 等待远程线程执行完成...
+[2026-06-11 16:33:07.788] [INFO] 远程线程退出码: 0x692F0000
+[2026-06-11 16:33:07.789] [SUCCESS] DLL注入成功！基地址: 0x692F0000
+[2026-06-11 16:33:08.295] [INFO] ==========================================
+[2026-06-11 16:33:08.296] [INFO] 注入完成！按 INSERT 键打开菜单
+[2026-06-11 16:33:08.297] [INFO] ==========================================
 
 ============================================================
-[2026-06-10 17:58:44.049] [INFO] DLL注入程序启动
-[2026-06-10 17:58:44.050] [INFO] 目标参数: 29884
-[2026-06-10 17:58:44.051] [INFO] DLL路径: D:\trae_project\ucf1.7-modifier\04-正式发行版\全功能整合包1.7\game_modifier\plugins\universal_hook\Universal-ImGui-Hook.dll
-[2026-06-10 17:58:44.051] [INFO] DLL文件大小: 690688 字节
-[2026-06-10 17:58:44.051] [INFO] 按 PID 查找进程: 29884
-[2026-06-10 17:58:44.058] [INFO] 找到进程: PID=29884, 主窗口: 'UnityCrossFire', 创建时间: 2026年6月10日 17:58:28
-[2026-06-10 17:58:44.059] [INFO] 打开进程句柄...
-[2026-06-10 17:58:44.088] [INFO] 进程句柄: 0x3A4
-[2026-06-10 17:58:44.089] [INFO] 进程架构: 32-bit
-[2026-06-10 17:58:44.089] [INFO] 注入器架构: 32-bit
-[2026-06-10 17:58:44.089] [INFO] 检查 DLL 是否已加载...
-[2026-06-10 17:58:44.091] [INFO] 枚举到 75 个模块
-[2026-06-10 17:58:44.092] [INFO] 模块[0]: D:\BaiduNetdiskDownload\UnityCrossFire1.7.1\UnityCrossFire1.7.1\UnityCrossFire.exe
-[2026-06-10 17:58:44.092] [INFO] 模块[1]: C:\WINDOWS\SYSTEM32\ntdll.dll
-[2026-06-10 17:58:44.093] [INFO] 模块[2]: C:\WINDOWS\System32\KERNEL32.DLL
-[2026-06-10 17:58:44.093] [INFO] 模块[3]: C:\WINDOWS\System32\KERNELBASE.dll
-[2026-06-10 17:58:44.093] [INFO] 模块[4]: D:\BaiduNetdiskDownload\UnityCrossFire1.7.1\UnityCrossFire1.7.1\UnityPlayer.dll
-[2026-06-10 17:58:44.094] [INFO] 模块[5]: C:\WINDOWS\System32\USER32.dll
-[2026-06-10 17:58:44.094] [INFO] 模块[6]: C:\WINDOWS\System32\win32u.dll
-[2026-06-10 17:58:44.094] [INFO] 模块[7]: C:\WINDOWS\System32\GDI32.dll
-[2026-06-10 17:58:44.094] [INFO] 模块[8]: C:\WINDOWS\System32\gdi32full.dll
-[2026-06-10 17:58:44.094] [INFO] 模块[9]: C:\WINDOWS\System32\msvcp_win.dll
-[2026-06-10 17:58:44.094] [INFO] 模块[10]: C:\WINDOWS\System32\ucrtbase.dll
-[2026-06-10 17:58:44.095] [INFO] 模块[11]: C:\WINDOWS\System32\ole32.dll
-[2026-06-10 17:58:44.095] [INFO] 模块[12]: C:\WINDOWS\System32\combase.dll
-[2026-06-10 17:58:44.095] [INFO] 模块[13]: C:\WINDOWS\System32\RPCRT4.dll
-[2026-06-10 17:58:44.095] [INFO] 模块[14]: C:\WINDOWS\SYSTEM32\VERSION.dll
-[2026-06-10 17:58:44.095] [INFO] 模块[15]: C:\WINDOWS\System32\SHLWAPI.dll
-[2026-06-10 17:58:44.095] [INFO] 模块[16]: C:\WINDOWS\System32\msvcrt.dll
-[2026-06-10 17:58:44.097] [INFO] 模块[17]: C:\WINDOWS\System32\Windows.Storage.dll
-[2026-06-10 17:58:44.097] [INFO] 模块[18]: C:\WINDOWS\System32\advapi32.dll
-[2026-06-10 17:58:44.097] [INFO] 模块[19]: C:\WINDOWS\System32\sechost.dll
-[2026-06-10 17:58:44.097] [INFO] 模块[20]: C:\WINDOWS\System32\SETUPAPI.dll
-[2026-06-10 17:58:44.097] [INFO] 模块[21]: C:\WINDOWS\System32\SHELL32.dll
-[2026-06-10 17:58:44.097] [INFO] 模块[22]: C:\WINDOWS\System32\OLEAUT32.dll
-[2026-06-10 17:58:44.098] [INFO] 模块[23]: C:\WINDOWS\System32\IMM32.dll
-[2026-06-10 17:58:44.098] [INFO] 模块[24]: C:\WINDOWS\System32\CRYPT32.dll
-[2026-06-10 17:58:44.098] [INFO] 模块[25]: C:\WINDOWS\SYSTEM32\OPENGL32.dll
-[2026-06-10 17:58:44.098] [INFO] 模块[26]: C:\WINDOWS\System32\WS2_32.dll
-[2026-06-10 17:58:44.098] [INFO] 模块[27]: C:\WINDOWS\SYSTEM32\WINMM.dll
-[2026-06-10 17:58:44.100] [INFO] 模块[28]: C:\WINDOWS\SYSTEM32\WINHTTP.dll
-[2026-06-10 17:58:44.100] [INFO] 模块[29]: C:\WINDOWS\SYSTEM32\bcrypt.dll
-[2026-06-10 17:58:44.100] [INFO] 模块[30]: C:\WINDOWS\SYSTEM32\HID.DLL
-[2026-06-10 17:58:44.100] [INFO] 模块[31]: C:\WINDOWS\SYSTEM32\GLU32.dll
-[2026-06-10 17:58:44.100] [INFO] 模块[32]: C:\WINDOWS\SYSTEM32\dxcore.dll
-[2026-06-10 17:58:44.101] [INFO] 模块[33]: C:\WINDOWS\SYSTEM32\kernel.appcore.dll
-[2026-06-10 17:58:44.101] [INFO] 模块[34]: C:\WINDOWS\System32\bcryptPrimitives.dll
-[2026-06-10 17:58:44.101] [INFO] 模块[35]: C:\WINDOWS\system32\uxtheme.dll
-[2026-06-10 17:58:44.102] [INFO] 模块[36]: C:\WINDOWS\System32\shcore.dll
-[2026-06-10 17:58:44.102] [INFO] 模块[37]: C:\WINDOWS\SYSTEM32\profapi.dll
-[2026-06-10 17:58:44.102] [INFO] 模块[38]: D:\BaiduNetdiskDownload\UnityCrossFire1.7.1\UnityCrossFire1.7.1\GameAssembly.dll
-[2026-06-10 17:58:44.103] [INFO] 模块[39]: C:\WINDOWS\SYSTEM32\IPHLPAPI.DLL
-[2026-06-10 17:58:44.103] [INFO] 模块[40]: D:\BaiduNetdiskDownload\UnityCrossFire1.7.1\UnityCrossFire1.7.1\baselib.dll
-[2026-06-10 17:58:44.103] [INFO] 模块[41]: C:\WINDOWS\System32\MSCTF.dll
-[2026-06-10 17:58:44.104] [INFO] 模块[42]: C:\WINDOWS\SYSTEM32\d3d11.dll
-[2026-06-10 17:58:44.104] [INFO] 模块[43]: C:\WINDOWS\SYSTEM32\dxgi.dll
-[2026-06-10 17:58:44.105] [INFO] 模块[44]: C:\WINDOWS\SYSTEM32\powrprof.dll
-[2026-06-10 17:58:44.105] [INFO] 模块[45]: C:\WINDOWS\SYSTEM32\UMPDC.dll
-[2026-06-10 17:58:44.105] [INFO] 模块[46]: C:\WINDOWS\SYSTEM32\directxdatabasehelper.dll
-[2026-06-10 17:58:44.105] [INFO] 模块[47]: C:\WINDOWS\SYSTEM32\cfgmgr32.dll
-[2026-06-10 17:58:44.105] [INFO] 模块[48]: C:\WINDOWS\System32\DriverStore\FileRepository\iigd_dch.inf_amd64_1baad0041739883d\igd10iumd32.dll
-[2026-06-10 17:58:44.107] [INFO] 模块[49]: C:\WINDOWS\SYSTEM32\apphelp.dll
-[2026-06-10 17:58:44.107] [INFO] 模块[50]: C:\WINDOWS\System32\DriverStore\FileRepository\iigd_dch.inf_amd64_1baad0041739883d\igd10um32xe.DLL
-[2026-06-10 17:58:44.107] [INFO] 模块[51]: C:\WINDOWS\System32\DriverStore\FileRepository\iigd_dch.inf_amd64_1baad0041739883d\IntelControlLib32.dll
-[2026-06-10 17:58:44.107] [INFO] 模块[52]: C:\WINDOWS\System32\DriverStore\FileRepository\iigd_dch.inf_amd64_1baad0041739883d\igdgmm32.dll
-[2026-06-10 17:58:44.107] [INFO] 模块[53]: C:\WINDOWS\System32\DriverStore\FileRepository\iigd_dch.inf_amd64_1baad0041739883d\igc32.dll
-[2026-06-10 17:58:44.107] [INFO] 模块[54]: C:\WINDOWS\System32\clbcatq.dll
-[2026-06-10 17:58:44.108] [INFO] 模块[55]: C:\WINDOWS\system32\wbem\wbemprox.dll
-[2026-06-10 17:58:44.108] [INFO] 模块[56]: C:\WINDOWS\SYSTEM32\wbemcomn.dll
-[2026-06-10 17:58:44.108] [INFO] 模块[57]: C:\WINDOWS\system32\wbem\wbemsvc.dll
-[2026-06-10 17:58:44.108] [INFO] 模块[58]: C:\WINDOWS\system32\wbem\fastprox.dll
-[2026-06-10 17:58:44.109] [INFO] 模块[59]: C:\WINDOWS\SYSTEM32\amsi.dll
-[2026-06-10 17:58:44.109] [INFO] 模块[60]: C:\WINDOWS\System32\MMDevApi.dll
-[2026-06-10 17:58:44.109] [INFO] 模块[61]: C:\WINDOWS\System32\DEVOBJ.dll
-[2026-06-10 17:58:44.110] [INFO] 模块[62]: C:\WINDOWS\SYSTEM32\AUDIOSES.DLL
-[2026-06-10 17:58:44.111] [INFO] 模块[63]: C:\WINDOWS\SYSTEM32\resourcepolicyclient.dll
-[2026-06-10 17:58:44.111] [INFO] 模块[64]: C:\WINDOWS\SYSTEM32\xinput1_3.dll
-[2026-06-10 17:58:44.111] [INFO] 模块[65]: C:\WINDOWS\SYSTEM32\dcomp.dll
-[2026-06-10 17:58:44.111] [INFO] 模块[66]: C:\WINDOWS\SYSTEM32\Microsoft.Internal.WarpPal.dll
-[2026-06-10 17:58:44.112] [INFO] 模块[67]: C:\WINDOWS\SYSTEM32\dwmapi.dll
-[2026-06-10 17:58:44.112] [INFO] 模块[68]: C:\WINDOWS\SYSTEM32\textinputframework.dll
-[2026-06-10 17:58:44.112] [INFO] 模块[69]: C:\Windows\System32\uiautomationcore.dll
-[2026-06-10 17:58:44.112] [INFO] 模块[70]: C:\Windows\System32\OLEACC.dll
-[2026-06-10 17:58:44.113] [INFO] 模块[71]: C:\WINDOWS\SYSTEM32\xinput1_4.dll
-[2026-06-10 17:58:44.113] [INFO] 模块[72]: C:\WINDOWS\SYSTEM32\inputhost.dll
-[2026-06-10 17:58:44.114] [INFO] 模块[73]: C:\WINDOWS\SYSTEM32\CoreMessaging.dll
-[2026-06-10 17:58:44.114] [INFO] 模块[74]: C:\WINDOWS\SYSTEM32\CRYPTBASE.DLL
-[2026-06-10 17:58:44.114] [INFO] DLL 未加载，继续注入...
-[2026-06-10 17:58:44.115] [INFO] 获取目标进程中的 kernel32.dll 基址...
-[2026-06-10 17:58:44.115] [INFO] 枚举到 75 个模块
-[2026-06-10 17:58:44.115] [INFO] 模块[0]: D:\BaiduNetdiskDownload\UnityCrossFire1.7.1\UnityCrossFire1.7.1\UnityCrossFire.exe
-[2026-06-10 17:58:44.115] [INFO] 模块[1]: C:\WINDOWS\SYSTEM32\ntdll.dll
-[2026-06-10 17:58:44.116] [INFO] 模块[2]: C:\WINDOWS\System32\KERNEL32.DLL
-[2026-06-10 17:58:44.116] [INFO] 找到 kernel32.dll: 0x76690000
-[2026-06-10 17:58:44.116] [INFO] 获取本地 LoadLibraryW 地址...
-[2026-06-10 17:58:44.116] [INFO] 本地 kernel32.dll: 0x76690000
-[2026-06-10 17:58:44.116] [INFO] 本地 LoadLibraryW: 0x766AD820
-[2026-06-10 17:58:44.117] [INFO] LoadLibraryW RVA: 0x1D820
-[2026-06-10 17:58:44.118] [INFO] 目标进程 LoadLibraryW: 0x766AD820
-[2026-06-10 17:58:44.118] [INFO] DLL路径长度: 226 字节
-[2026-06-10 17:58:44.118] [INFO] 在目标进程分配内存...
-[2026-06-10 17:58:44.119] [INFO] 远程内存地址: 0x34870000
-[2026-06-10 17:58:44.119] [INFO] 写入DLL路径到目标进程...
-[2026-06-10 17:58:44.119] [INFO] 写入字节数: 226
-[2026-06-10 17:58:44.119] [INFO] 创建远程线程执行LoadLibraryW...
-[2026-06-10 17:58:44.125] [INFO] 远程线程句柄: 0x3C0
-[2026-06-10 17:58:44.125] [INFO] 等待远程线程执行完成...
-[2026-06-10 17:58:44.129] [INFO] 远程线程退出码: 0x6BD20000
-[2026-06-10 17:58:44.129] [SUCCESS] DLL注入成功！基地址: 0x6BD20000
-[2026-06-10 17:58:44.643] [INFO] ==========================================
-[2026-06-10 17:58:44.643] [INFO] 注入完成！按 INSERT 键打开菜单
-[2026-06-10 17:58:44.644] [INFO] ==========================================
+[2026-06-11 16:33:26.610] [INFO] DLL注入程序启动
+[2026-06-11 16:33:26.612] [INFO] 目标参数: 8180
+[2026-06-11 16:33:26.613] [INFO] DLL路径: D:\trae_project\ucf1.7-modifier\04-正式发行版\全功能整合包1.7\game_modifier\plugins\universal_hook\Universal-ImGui-Hook.dll
+[2026-06-11 16:33:26.613] [INFO] DLL文件大小: 690176 字节
+[2026-06-11 16:33:26.613] [INFO] 按 PID 查找进程: 8180
+[2026-06-11 16:33:26.619] [INFO] 找到进程: PID=8180, 主窗口: 'UnityCrossFire', 创建时间: 2026年6月11日 16:33:23
+[2026-06-11 16:33:26.619] [INFO] 打开进程句柄...
+[2026-06-11 16:33:26.648] [INFO] 进程句柄: 0x398
+[2026-06-11 16:33:26.648] [INFO] 进程架构: 32-bit
+[2026-06-11 16:33:26.649] [INFO] 注入器架构: 32-bit
+[2026-06-11 16:33:26.649] [INFO] 检查 DLL 是否已加载...
+[2026-06-11 16:33:26.651] [INFO] 枚举到 69 个模块
+[2026-06-11 16:33:26.651] [INFO] 模块[0]: D:\BaiduNetdiskDownload\UnityCrossFire1.7.1\UnityCrossFire1.7.1\UnityCrossFire.exe
+[2026-06-11 16:33:26.652] [INFO] 模块[1]: C:\WINDOWS\SYSTEM32\ntdll.dll
+[2026-06-11 16:33:26.652] [INFO] 模块[2]: C:\WINDOWS\System32\KERNEL32.DLL
+[2026-06-11 16:33:26.653] [INFO] 模块[3]: C:\WINDOWS\System32\KERNELBASE.dll
+[2026-06-11 16:33:26.653] [INFO] 模块[4]: D:\BaiduNetdiskDownload\UnityCrossFire1.7.1\UnityCrossFire1.7.1\UnityPlayer.dll
+[2026-06-11 16:33:26.653] [INFO] 模块[5]: C:\WINDOWS\System32\USER32.dll
+[2026-06-11 16:33:26.654] [INFO] 模块[6]: C:\WINDOWS\System32\win32u.dll
+[2026-06-11 16:33:26.655] [INFO] 模块[7]: C:\WINDOWS\System32\GDI32.dll
+[2026-06-11 16:33:26.655] [INFO] 模块[8]: C:\WINDOWS\System32\gdi32full.dll
+[2026-06-11 16:33:26.655] [INFO] 模块[9]: C:\WINDOWS\System32\msvcp_win.dll
+[2026-06-11 16:33:26.656] [INFO] 模块[10]: C:\WINDOWS\System32\ucrtbase.dll
+[2026-06-11 16:33:26.656] [INFO] 模块[11]: C:\WINDOWS\System32\ole32.dll
+[2026-06-11 16:33:26.657] [INFO] 模块[12]: C:\WINDOWS\System32\combase.dll
+[2026-06-11 16:33:26.657] [INFO] 模块[13]: C:\WINDOWS\System32\RPCRT4.dll
+[2026-06-11 16:33:26.657] [INFO] 模块[14]: C:\WINDOWS\SYSTEM32\VERSION.dll
+[2026-06-11 16:33:26.658] [INFO] 模块[15]: C:\WINDOWS\System32\msvcrt.dll
+[2026-06-11 16:33:26.658] [INFO] 模块[16]: C:\WINDOWS\System32\SHLWAPI.dll
+[2026-06-11 16:33:26.658] [INFO] 模块[17]: C:\WINDOWS\System32\Windows.Storage.dll
+[2026-06-11 16:33:26.658] [INFO] 模块[18]: C:\WINDOWS\System32\advapi32.dll
+[2026-06-11 16:33:26.658] [INFO] 模块[19]: C:\WINDOWS\System32\sechost.dll
+[2026-06-11 16:33:26.659] [INFO] 模块[20]: C:\WINDOWS\System32\SETUPAPI.dll
+[2026-06-11 16:33:26.660] [INFO] 模块[21]: C:\WINDOWS\System32\SHELL32.dll
+[2026-06-11 16:33:26.660] [INFO] 模块[22]: C:\WINDOWS\System32\OLEAUT32.dll
+[2026-06-11 16:33:26.660] [INFO] 模块[23]: C:\WINDOWS\System32\IMM32.dll
+[2026-06-11 16:33:26.660] [INFO] 模块[24]: C:\WINDOWS\SYSTEM32\WINMM.dll
+[2026-06-11 16:33:26.661] [INFO] 模块[25]: C:\WINDOWS\System32\CRYPT32.dll
+[2026-06-11 16:33:26.662] [INFO] 模块[26]: C:\WINDOWS\SYSTEM32\OPENGL32.dll
+[2026-06-11 16:33:26.662] [INFO] 模块[27]: C:\WINDOWS\System32\WS2_32.dll
+[2026-06-11 16:33:26.662] [INFO] 模块[28]: C:\WINDOWS\SYSTEM32\WINHTTP.dll
+[2026-06-11 16:33:26.663] [INFO] 模块[29]: C:\WINDOWS\SYSTEM32\bcrypt.dll
+[2026-06-11 16:33:26.663] [INFO] 模块[30]: C:\WINDOWS\SYSTEM32\HID.DLL
+[2026-06-11 16:33:26.663] [INFO] 模块[31]: C:\WINDOWS\SYSTEM32\GLU32.dll
+[2026-06-11 16:33:26.664] [INFO] 模块[32]: C:\WINDOWS\SYSTEM32\dxcore.dll
+[2026-06-11 16:33:26.664] [INFO] 模块[33]: C:\WINDOWS\SYSTEM32\kernel.appcore.dll
+[2026-06-11 16:33:26.665] [INFO] 模块[34]: C:\WINDOWS\System32\bcryptPrimitives.dll
+[2026-06-11 16:33:26.665] [INFO] 模块[35]: C:\WINDOWS\system32\uxtheme.dll
+[2026-06-11 16:33:26.666] [INFO] 模块[36]: C:\WINDOWS\System32\shcore.dll
+[2026-06-11 16:33:26.666] [INFO] 模块[37]: C:\WINDOWS\SYSTEM32\profapi.dll
+[2026-06-11 16:33:26.666] [INFO] 模块[38]: D:\BaiduNetdiskDownload\UnityCrossFire1.7.1\UnityCrossFire1.7.1\GameAssembly.dll
+[2026-06-11 16:33:26.667] [INFO] 模块[39]: D:\BaiduNetdiskDownload\UnityCrossFire1.7.1\UnityCrossFire1.7.1\baselib.dll
+[2026-06-11 16:33:26.667] [INFO] 模块[40]: C:\WINDOWS\SYSTEM32\IPHLPAPI.DLL
+[2026-06-11 16:33:26.667] [INFO] 模块[41]: C:\WINDOWS\System32\MSCTF.dll
+[2026-06-11 16:33:26.669] [INFO] 模块[42]: C:\WINDOWS\SYSTEM32\d3d11.dll
+[2026-06-11 16:33:26.669] [INFO] 模块[43]: C:\WINDOWS\SYSTEM32\dxgi.dll
+[2026-06-11 16:33:26.670] [INFO] 模块[44]: C:\WINDOWS\SYSTEM32\powrprof.dll
+[2026-06-11 16:33:26.670] [INFO] 模块[45]: C:\WINDOWS\SYSTEM32\UMPDC.dll
+[2026-06-11 16:33:26.670] [INFO] 模块[46]: C:\WINDOWS\SYSTEM32\directxdatabasehelper.dll
+[2026-06-11 16:33:26.671] [INFO] 模块[47]: C:\WINDOWS\SYSTEM32\cfgmgr32.dll
+[2026-06-11 16:33:26.672] [INFO] 模块[48]: C:\WINDOWS\System32\DriverStore\FileRepository\iigd_dch.inf_amd64_1baad0041739883d\igd10iumd32.dll
+[2026-06-11 16:33:26.672] [INFO] 模块[49]: C:\WINDOWS\SYSTEM32\apphelp.dll
+[2026-06-11 16:33:26.673] [INFO] 模块[50]: C:\WINDOWS\System32\DriverStore\FileRepository\iigd_dch.inf_amd64_1baad0041739883d\igd10um32xe.DLL
+[2026-06-11 16:33:26.674] [INFO] 模块[51]: C:\WINDOWS\System32\DriverStore\FileRepository\iigd_dch.inf_amd64_1baad0041739883d\IntelControlLib32.dll
+[2026-06-11 16:33:26.674] [INFO] 模块[52]: C:\WINDOWS\System32\DriverStore\FileRepository\iigd_dch.inf_amd64_1baad0041739883d\igdgmm32.dll
+[2026-06-11 16:33:26.674] [INFO] 模块[53]: C:\WINDOWS\System32\DriverStore\FileRepository\iigd_dch.inf_amd64_1baad0041739883d\igc32.dll
+[2026-06-11 16:33:26.675] [INFO] 模块[54]: C:\WINDOWS\System32\clbcatq.dll
+[2026-06-11 16:33:26.675] [INFO] 模块[55]: C:\WINDOWS\system32\wbem\wbemprox.dll
+[2026-06-11 16:33:26.676] [INFO] 模块[56]: C:\WINDOWS\SYSTEM32\wbemcomn.dll
+[2026-06-11 16:33:26.677] [INFO] 模块[57]: C:\WINDOWS\system32\wbem\wbemsvc.dll
+[2026-06-11 16:33:26.678] [INFO] 模块[58]: C:\WINDOWS\system32\wbem\fastprox.dll
+[2026-06-11 16:33:26.678] [INFO] 模块[59]: C:\WINDOWS\SYSTEM32\amsi.dll
+[2026-06-11 16:33:26.679] [INFO] 模块[60]: C:\WINDOWS\System32\MMDevApi.dll
+[2026-06-11 16:33:26.680] [INFO] 模块[61]: C:\WINDOWS\System32\DEVOBJ.dll
+[2026-06-11 16:33:26.680] [INFO] 模块[62]: C:\WINDOWS\SYSTEM32\AUDIOSES.DLL
+[2026-06-11 16:33:26.680] [INFO] 模块[63]: C:\WINDOWS\SYSTEM32\resourcepolicyclient.dll
+[2026-06-11 16:33:26.680] [INFO] 模块[64]: C:\WINDOWS\SYSTEM32\xinput1_3.dll
+[2026-06-11 16:33:26.682] [INFO] 模块[65]: C:\WINDOWS\SYSTEM32\dcomp.dll
+[2026-06-11 16:33:26.682] [INFO] 模块[66]: C:\WINDOWS\SYSTEM32\Microsoft.Internal.WarpPal.dll
+[2026-06-11 16:33:26.683] [INFO] 模块[67]: C:\WINDOWS\SYSTEM32\dwmapi.dll
+[2026-06-11 16:33:26.683] [INFO] 模块[68]: C:\WINDOWS\SYSTEM32\textinputframework.dll
+[2026-06-11 16:33:26.684] [INFO] DLL 未加载，继续注入...
+[2026-06-11 16:33:26.684] [INFO] 获取目标进程中的 kernel32.dll 基址...
+[2026-06-11 16:33:26.685] [INFO] 枚举到 69 个模块
+[2026-06-11 16:33:26.685] [INFO] 模块[0]: D:\BaiduNetdiskDownload\UnityCrossFire1.7.1\UnityCrossFire1.7.1\UnityCrossFire.exe
+[2026-06-11 16:33:26.685] [INFO] 模块[1]: C:\WINDOWS\SYSTEM32\ntdll.dll
+[2026-06-11 16:33:26.686] [INFO] 模块[2]: C:\WINDOWS\System32\KERNEL32.DLL
+[2026-06-11 16:33:26.686] [INFO] 找到 kernel32.dll: 0x75020000
+[2026-06-11 16:33:26.686] [INFO] 获取本地 LoadLibraryW 地址...
+[2026-06-11 16:33:26.687] [INFO] 本地 kernel32.dll: 0x75020000
+[2026-06-11 16:33:26.687] [INFO] 本地 LoadLibraryW: 0x7503D820
+[2026-06-11 16:33:26.687] [INFO] LoadLibraryW RVA: 0x1D820
+[2026-06-11 16:33:26.688] [INFO] 目标进程 LoadLibraryW: 0x7503D820
+[2026-06-11 16:33:26.688] [INFO] DLL路径长度: 226 字节
+[2026-06-11 16:33:26.688] [INFO] 在目标进程分配内存...
+[2026-06-11 16:33:26.688] [INFO] 远程内存地址: 0x34EB0000
+[2026-06-11 16:33:26.690] [INFO] 写入DLL路径到目标进程...
+[2026-06-11 16:33:26.690] [INFO] 写入字节数: 226
+[2026-06-11 16:33:26.691] [INFO] 创建远程线程执行LoadLibraryW...
+[2026-06-11 16:33:26.694] [INFO] 远程线程句柄: 0x3B4
+[2026-06-11 16:33:26.696] [INFO] 等待远程线程执行完成...
+[2026-06-11 16:33:26.700] [INFO] 远程线程退出码: 0x63260000
+[2026-06-11 16:33:26.701] [SUCCESS] DLL注入成功！基地址: 0x63260000
+[2026-06-11 16:33:27.216] [INFO] ==========================================
+[2026-06-11 16:33:27.217] [INFO] 注入完成！按 INSERT 键打开菜单
+[2026-06-11 16:33:27.218] [INFO] ==========================================
 
 ============================================================
-[2026-06-10 18:00:39.366] [INFO] DLL注入程序启动
-[2026-06-10 18:00:39.369] [INFO] 目标参数: 29884
-[2026-06-10 18:00:39.370] [INFO] DLL路径: D:\trae_project\ucf1.7-modifier\04-正式发行版\全功能整合包1.7\game_modifier\plugins\universal_hook\Universal-ImGui-Hook.dll
-[2026-06-10 18:00:39.370] [INFO] DLL文件大小: 690688 字节
-[2026-06-10 18:00:39.370] [INFO] 按 PID 查找进程: 29884
-[2026-06-10 18:00:39.380] [INFO] 找到进程: PID=29884, 主窗口: 'UnityCrossFire', 创建时间: 2026年6月10日 17:58:28
-[2026-06-10 18:00:39.381] [INFO] 打开进程句柄...
-[2026-06-10 18:00:39.419] [INFO] 进程句柄: 0x308
-[2026-06-10 18:00:39.421] [INFO] 进程架构: 32-bit
-[2026-06-10 18:00:39.421] [INFO] 注入器架构: 32-bit
-[2026-06-10 18:00:39.421] [INFO] 检查 DLL 是否已加载...
-[2026-06-10 18:00:39.424] [INFO] 枚举到 76 个模块
-[2026-06-10 18:00:39.425] [INFO] 模块[0]: D:\BaiduNetdiskDownload\UnityCrossFire1.7.1\UnityCrossFire1.7.1\UnityCrossFire.exe
-[2026-06-10 18:00:39.425] [INFO] 模块[1]: C:\WINDOWS\SYSTEM32\ntdll.dll
-[2026-06-10 18:00:39.425] [INFO] 模块[2]: C:\WINDOWS\System32\KERNEL32.DLL
-[2026-06-10 18:00:39.427] [INFO] 模块[3]: C:\WINDOWS\System32\KERNELBASE.dll
-[2026-06-10 18:00:39.428] [INFO] 模块[4]: D:\BaiduNetdiskDownload\UnityCrossFire1.7.1\UnityCrossFire1.7.1\UnityPlayer.dll
-[2026-06-10 18:00:39.429] [INFO] 模块[5]: C:\WINDOWS\System32\USER32.dll
-[2026-06-10 18:00:39.429] [INFO] 模块[6]: C:\WINDOWS\System32\win32u.dll
-[2026-06-10 18:00:39.431] [INFO] 模块[7]: C:\WINDOWS\System32\GDI32.dll
-[2026-06-10 18:00:39.431] [INFO] 模块[8]: C:\WINDOWS\System32\gdi32full.dll
-[2026-06-10 18:00:39.432] [INFO] 模块[9]: C:\WINDOWS\System32\msvcp_win.dll
-[2026-06-10 18:00:39.432] [INFO] 模块[10]: C:\WINDOWS\System32\ucrtbase.dll
-[2026-06-10 18:00:39.433] [INFO] 模块[11]: C:\WINDOWS\System32\ole32.dll
-[2026-06-10 18:00:39.433] [INFO] 模块[12]: C:\WINDOWS\System32\combase.dll
-[2026-06-10 18:00:39.434] [INFO] 模块[13]: C:\WINDOWS\System32\RPCRT4.dll
-[2026-06-10 18:00:39.435] [INFO] 模块[14]: C:\WINDOWS\SYSTEM32\VERSION.dll
-[2026-06-10 18:00:39.435] [INFO] 模块[15]: C:\WINDOWS\System32\SHLWAPI.dll
-[2026-06-10 18:00:39.435] [INFO] 模块[16]: C:\WINDOWS\System32\msvcrt.dll
-[2026-06-10 18:00:39.436] [INFO] 模块[17]: C:\WINDOWS\System32\Windows.Storage.dll
-[2026-06-10 18:00:39.437] [INFO] 模块[18]: C:\WINDOWS\System32\advapi32.dll
-[2026-06-10 18:00:39.437] [INFO] 模块[19]: C:\WINDOWS\System32\sechost.dll
-[2026-06-10 18:00:39.438] [INFO] 模块[20]: C:\WINDOWS\System32\SETUPAPI.dll
-[2026-06-10 18:00:39.439] [INFO] 模块[21]: C:\WINDOWS\System32\SHELL32.dll
-[2026-06-10 18:00:39.439] [INFO] 模块[22]: C:\WINDOWS\System32\OLEAUT32.dll
-[2026-06-10 18:00:39.439] [INFO] 模块[23]: C:\WINDOWS\System32\IMM32.dll
-[2026-06-10 18:00:39.440] [INFO] 模块[24]: C:\WINDOWS\System32\CRYPT32.dll
-[2026-06-10 18:00:39.441] [INFO] 模块[25]: C:\WINDOWS\SYSTEM32\OPENGL32.dll
-[2026-06-10 18:00:39.442] [INFO] 模块[26]: C:\WINDOWS\System32\WS2_32.dll
-[2026-06-10 18:00:39.442] [INFO] 模块[27]: C:\WINDOWS\SYSTEM32\WINMM.dll
-[2026-06-10 18:00:39.443] [INFO] 模块[28]: C:\WINDOWS\SYSTEM32\WINHTTP.dll
-[2026-06-10 18:00:39.444] [INFO] 模块[29]: C:\WINDOWS\SYSTEM32\bcrypt.dll
-[2026-06-10 18:00:39.444] [INFO] 模块[30]: C:\WINDOWS\SYSTEM32\HID.DLL
-[2026-06-10 18:00:39.445] [INFO] 模块[31]: C:\WINDOWS\SYSTEM32\GLU32.dll
-[2026-06-10 18:00:39.446] [INFO] 模块[32]: C:\WINDOWS\SYSTEM32\dxcore.dll
-[2026-06-10 18:00:39.446] [INFO] 模块[33]: C:\WINDOWS\SYSTEM32\kernel.appcore.dll
-[2026-06-10 18:00:39.447] [INFO] 模块[34]: C:\WINDOWS\System32\bcryptPrimitives.dll
-[2026-06-10 18:00:39.448] [INFO] 模块[35]: C:\WINDOWS\system32\uxtheme.dll
-[2026-06-10 18:00:39.449] [INFO] 模块[36]: C:\WINDOWS\System32\shcore.dll
-[2026-06-10 18:00:39.449] [INFO] 模块[37]: C:\WINDOWS\SYSTEM32\profapi.dll
-[2026-06-10 18:00:39.451] [INFO] 模块[38]: D:\BaiduNetdiskDownload\UnityCrossFire1.7.1\UnityCrossFire1.7.1\GameAssembly.dll
-[2026-06-10 18:00:39.452] [INFO] 模块[39]: C:\WINDOWS\SYSTEM32\IPHLPAPI.DLL
-[2026-06-10 18:00:39.452] [INFO] 模块[40]: D:\BaiduNetdiskDownload\UnityCrossFire1.7.1\UnityCrossFire1.7.1\baselib.dll
-[2026-06-10 18:00:39.453] [INFO] 模块[41]: C:\WINDOWS\System32\MSCTF.dll
-[2026-06-10 18:00:39.453] [INFO] 模块[42]: C:\WINDOWS\SYSTEM32\d3d11.dll
-[2026-06-10 18:00:39.455] [INFO] 模块[43]: C:\WINDOWS\SYSTEM32\dxgi.dll
-[2026-06-10 18:00:39.456] [INFO] 模块[44]: C:\WINDOWS\SYSTEM32\powrprof.dll
-[2026-06-10 18:00:39.457] [INFO] 模块[45]: C:\WINDOWS\SYSTEM32\UMPDC.dll
-[2026-06-10 18:00:39.457] [INFO] 模块[46]: C:\WINDOWS\SYSTEM32\directxdatabasehelper.dll
-[2026-06-10 18:00:39.458] [INFO] 模块[47]: C:\WINDOWS\SYSTEM32\cfgmgr32.dll
-[2026-06-10 18:00:39.459] [INFO] 模块[48]: C:\WINDOWS\System32\DriverStore\FileRepository\iigd_dch.inf_amd64_1baad0041739883d\igd10iumd32.dll
-[2026-06-10 18:00:39.459] [INFO] 模块[49]: C:\WINDOWS\SYSTEM32\apphelp.dll
-[2026-06-10 18:00:39.460] [INFO] 模块[50]: C:\WINDOWS\System32\DriverStore\FileRepository\iigd_dch.inf_amd64_1baad0041739883d\igd10um32xe.DLL
-[2026-06-10 18:00:39.461] [INFO] 模块[51]: C:\WINDOWS\System32\DriverStore\FileRepository\iigd_dch.inf_amd64_1baad0041739883d\IntelControlLib32.dll
-[2026-06-10 18:00:39.462] [INFO] 模块[52]: C:\WINDOWS\System32\DriverStore\FileRepository\iigd_dch.inf_amd64_1baad0041739883d\igdgmm32.dll
-[2026-06-10 18:00:39.462] [INFO] 模块[53]: C:\WINDOWS\System32\DriverStore\FileRepository\iigd_dch.inf_amd64_1baad0041739883d\igc32.dll
-[2026-06-10 18:00:39.463] [INFO] 模块[54]: C:\WINDOWS\System32\clbcatq.dll
-[2026-06-10 18:00:39.463] [INFO] 模块[55]: C:\WINDOWS\system32\wbem\wbemprox.dll
-[2026-06-10 18:00:39.464] [INFO] 模块[56]: C:\WINDOWS\SYSTEM32\wbemcomn.dll
-[2026-06-10 18:00:39.465] [INFO] 模块[57]: C:\WINDOWS\system32\wbem\wbemsvc.dll
-[2026-06-10 18:00:39.465] [INFO] 模块[58]: C:\WINDOWS\system32\wbem\fastprox.dll
-[2026-06-10 18:00:39.466] [INFO] 模块[59]: C:\WINDOWS\SYSTEM32\amsi.dll
-[2026-06-10 18:00:39.466] [INFO] 模块[60]: C:\WINDOWS\System32\MMDevApi.dll
-[2026-06-10 18:00:39.468] [INFO] 模块[61]: C:\WINDOWS\System32\DEVOBJ.dll
-[2026-06-10 18:00:39.469] [INFO] 模块[62]: C:\WINDOWS\SYSTEM32\AUDIOSES.DLL
-[2026-06-10 18:00:39.470] [INFO] 模块[63]: C:\WINDOWS\SYSTEM32\resourcepolicyclient.dll
-[2026-06-10 18:00:39.471] [INFO] 模块[64]: C:\WINDOWS\SYSTEM32\xinput1_3.dll
-[2026-06-10 18:00:39.472] [INFO] 模块[65]: C:\WINDOWS\SYSTEM32\dcomp.dll
-[2026-06-10 18:00:39.473] [INFO] 模块[66]: C:\WINDOWS\SYSTEM32\Microsoft.Internal.WarpPal.dll
-[2026-06-10 18:00:39.474] [INFO] 模块[67]: C:\WINDOWS\SYSTEM32\dwmapi.dll
-[2026-06-10 18:00:39.474] [INFO] 模块[68]: C:\WINDOWS\SYSTEM32\textinputframework.dll
-[2026-06-10 18:00:39.475] [INFO] 模块[69]: C:\Windows\System32\uiautomationcore.dll
-[2026-06-10 18:00:39.475] [INFO] 模块[70]: C:\Windows\System32\OLEACC.dll
-[2026-06-10 18:00:39.477] [INFO] 模块[71]: C:\WINDOWS\SYSTEM32\xinput1_4.dll
-[2026-06-10 18:00:39.479] [INFO] 模块[72]: C:\WINDOWS\SYSTEM32\inputhost.dll
-[2026-06-10 18:00:39.479] [INFO] 模块[73]: C:\WINDOWS\SYSTEM32\CoreMessaging.dll
-[2026-06-10 18:00:39.480] [INFO] 模块[74]: C:\WINDOWS\SYSTEM32\CRYPTBASE.DLL
-[2026-06-10 18:00:39.480] [INFO] 模块[75]: C:\WINDOWS\System32\NSI.dll
-[2026-06-10 18:00:39.481] [INFO] DLL 未加载，继续注入...
-[2026-06-10 18:00:39.481] [INFO] 获取目标进程中的 kernel32.dll 基址...
-[2026-06-10 18:00:39.481] [INFO] 枚举到 76 个模块
-[2026-06-10 18:00:39.483] [INFO] 模块[0]: D:\BaiduNetdiskDownload\UnityCrossFire1.7.1\UnityCrossFire1.7.1\UnityCrossFire.exe
-[2026-06-10 18:00:39.484] [INFO] 模块[1]: C:\WINDOWS\SYSTEM32\ntdll.dll
-[2026-06-10 18:00:39.484] [INFO] 模块[2]: C:\WINDOWS\System32\KERNEL32.DLL
-[2026-06-10 18:00:39.485] [INFO] 找到 kernel32.dll: 0x76690000
-[2026-06-10 18:00:39.486] [INFO] 获取本地 LoadLibraryW 地址...
-[2026-06-10 18:00:39.486] [INFO] 本地 kernel32.dll: 0x76690000
-[2026-06-10 18:00:39.488] [INFO] 本地 LoadLibraryW: 0x766AD820
-[2026-06-10 18:00:39.488] [INFO] LoadLibraryW RVA: 0x1D820
-[2026-06-10 18:00:39.489] [INFO] 目标进程 LoadLibraryW: 0x766AD820
-[2026-06-10 18:00:39.490] [INFO] DLL路径长度: 226 字节
-[2026-06-10 18:00:39.491] [INFO] 在目标进程分配内存...
-[2026-06-10 18:00:39.492] [INFO] 远程内存地址: 0xAD0000
-[2026-06-10 18:00:39.494] [INFO] 写入DLL路径到目标进程...
-[2026-06-10 18:00:39.494] [INFO] 写入字节数: 226
-[2026-06-10 18:00:39.495] [INFO] 创建远程线程执行LoadLibraryW...
-[2026-06-10 18:00:39.503] [INFO] 远程线程句柄: 0x3C8
-[2026-06-10 18:00:39.504] [INFO] 等待远程线程执行完成...
-[2026-06-10 18:00:39.508] [INFO] 远程线程退出码: 0x6BD20000
-[2026-06-10 18:00:39.510] [SUCCESS] DLL注入成功！基地址: 0x6BD20000
-[2026-06-10 18:00:40.015] [INFO] ==========================================
-[2026-06-10 18:00:40.016] [INFO] 注入完成！按 INSERT 键打开菜单
-[2026-06-10 18:00:40.016] [INFO] ==========================================
-
-============================================================
-[2026-06-10 18:07:36.680] [INFO] DLL注入程序启动
-[2026-06-10 18:07:36.683] [INFO] 目标参数: 29884
-[2026-06-10 18:07:36.683] [INFO] DLL路径: D:\trae_project\ucf1.7-modifier\04-正式发行版\全功能整合包1.7\game_modifier\plugins\universal_hook\Universal-ImGui-Hook.dll
-[2026-06-10 18:07:36.684] [INFO] DLL文件大小: 690688 字节
-[2026-06-10 18:07:36.684] [INFO] 按 PID 查找进程: 29884
-[2026-06-10 18:07:36.690] [INFO] 找到进程: PID=29884, 主窗口: 'UnityCrossFire', 创建时间: 2026年6月10日 17:58:28
-[2026-06-10 18:07:36.690] [INFO] 打开进程句柄...
-[2026-06-10 18:07:36.714] [INFO] 进程句柄: 0x3B0
-[2026-06-10 18:07:36.715] [INFO] 进程架构: 32-bit
-[2026-06-10 18:07:36.715] [INFO] 注入器架构: 32-bit
-[2026-06-10 18:07:36.716] [INFO] 检查 DLL 是否已加载...
-[2026-06-10 18:07:36.717] [INFO] 枚举到 76 个模块
-[2026-06-10 18:07:36.717] [INFO] 模块[0]: D:\BaiduNetdiskDownload\UnityCrossFire1.7.1\UnityCrossFire1.7.1\UnityCrossFire.exe
-[2026-06-10 18:07:36.718] [INFO] 模块[1]: C:\WINDOWS\SYSTEM32\ntdll.dll
-[2026-06-10 18:07:36.718] [INFO] 模块[2]: C:\WINDOWS\System32\KERNEL32.DLL
-[2026-06-10 18:07:36.719] [INFO] 模块[3]: C:\WINDOWS\System32\KERNELBASE.dll
-[2026-06-10 18:07:36.719] [INFO] 模块[4]: D:\BaiduNetdiskDownload\UnityCrossFire1.7.1\UnityCrossFire1.7.1\UnityPlayer.dll
-[2026-06-10 18:07:36.720] [INFO] 模块[5]: C:\WINDOWS\System32\USER32.dll
-[2026-06-10 18:07:36.720] [INFO] 模块[6]: C:\WINDOWS\System32\win32u.dll
-[2026-06-10 18:07:36.721] [INFO] 模块[7]: C:\WINDOWS\System32\GDI32.dll
-[2026-06-10 18:07:36.721] [INFO] 模块[8]: C:\WINDOWS\System32\gdi32full.dll
-[2026-06-10 18:07:36.721] [INFO] 模块[9]: C:\WINDOWS\System32\msvcp_win.dll
-[2026-06-10 18:07:36.721] [INFO] 模块[10]: C:\WINDOWS\System32\ucrtbase.dll
-[2026-06-10 18:07:36.723] [INFO] 模块[11]: C:\WINDOWS\System32\ole32.dll
-[2026-06-10 18:07:36.723] [INFO] 模块[12]: C:\WINDOWS\System32\combase.dll
-[2026-06-10 18:07:36.723] [INFO] 模块[13]: C:\WINDOWS\System32\RPCRT4.dll
-[2026-06-10 18:07:36.724] [INFO] 模块[14]: C:\WINDOWS\SYSTEM32\VERSION.dll
-[2026-06-10 18:07:36.724] [INFO] 模块[15]: C:\WINDOWS\System32\SHLWAPI.dll
-[2026-06-10 18:07:36.725] [INFO] 模块[16]: C:\WINDOWS\System32\msvcrt.dll
-[2026-06-10 18:07:36.725] [INFO] 模块[17]: C:\WINDOWS\System32\Windows.Storage.dll
-[2026-06-10 18:07:36.725] [INFO] 模块[18]: C:\WINDOWS\System32\advapi32.dll
-[2026-06-10 18:07:36.725] [INFO] 模块[19]: C:\WINDOWS\System32\sechost.dll
-[2026-06-10 18:07:36.725] [INFO] 模块[20]: C:\WINDOWS\System32\SETUPAPI.dll
-[2026-06-10 18:07:36.725] [INFO] 模块[21]: C:\WINDOWS\System32\SHELL32.dll
-[2026-06-10 18:07:36.726] [INFO] 模块[22]: C:\WINDOWS\System32\OLEAUT32.dll
-[2026-06-10 18:07:36.727] [INFO] 模块[23]: C:\WINDOWS\System32\IMM32.dll
-[2026-06-10 18:07:36.727] [INFO] 模块[24]: C:\WINDOWS\System32\CRYPT32.dll
-[2026-06-10 18:07:36.727] [INFO] 模块[25]: C:\WINDOWS\SYSTEM32\OPENGL32.dll
-[2026-06-10 18:07:36.727] [INFO] 模块[26]: C:\WINDOWS\System32\WS2_32.dll
-[2026-06-10 18:07:36.728] [INFO] 模块[27]: C:\WINDOWS\SYSTEM32\WINMM.dll
-[2026-06-10 18:07:36.728] [INFO] 模块[28]: C:\WINDOWS\SYSTEM32\WINHTTP.dll
-[2026-06-10 18:07:36.728] [INFO] 模块[29]: C:\WINDOWS\SYSTEM32\bcrypt.dll
-[2026-06-10 18:07:36.729] [INFO] 模块[30]: C:\WINDOWS\SYSTEM32\HID.DLL
-[2026-06-10 18:07:36.729] [INFO] 模块[31]: C:\WINDOWS\SYSTEM32\GLU32.dll
-[2026-06-10 18:07:36.729] [INFO] 模块[32]: C:\WINDOWS\SYSTEM32\dxcore.dll
-[2026-06-10 18:07:36.729] [INFO] 模块[33]: C:\WINDOWS\SYSTEM32\kernel.appcore.dll
-[2026-06-10 18:07:36.729] [INFO] 模块[34]: C:\WINDOWS\System32\bcryptPrimitives.dll
-[2026-06-10 18:07:36.730] [INFO] 模块[35]: C:\WINDOWS\system32\uxtheme.dll
-[2026-06-10 18:07:36.730] [INFO] 模块[36]: C:\WINDOWS\System32\shcore.dll
-[2026-06-10 18:07:36.730] [INFO] 模块[37]: C:\WINDOWS\SYSTEM32\profapi.dll
-[2026-06-10 18:07:36.730] [INFO] 模块[38]: D:\BaiduNetdiskDownload\UnityCrossFire1.7.1\UnityCrossFire1.7.1\GameAssembly.dll
-[2026-06-10 18:07:36.731] [INFO] 模块[39]: C:\WINDOWS\SYSTEM32\IPHLPAPI.DLL
-[2026-06-10 18:07:36.731] [INFO] 模块[40]: D:\BaiduNetdiskDownload\UnityCrossFire1.7.1\UnityCrossFire1.7.1\baselib.dll
-[2026-06-10 18:07:36.731] [INFO] 模块[41]: C:\WINDOWS\System32\MSCTF.dll
-[2026-06-10 18:07:36.732] [INFO] 模块[42]: C:\WINDOWS\SYSTEM32\d3d11.dll
-[2026-06-10 18:07:36.732] [INFO] 模块[43]: C:\WINDOWS\SYSTEM32\dxgi.dll
-[2026-06-10 18:07:36.732] [INFO] 模块[44]: C:\WINDOWS\SYSTEM32\powrprof.dll
-[2026-06-10 18:07:36.733] [INFO] 模块[45]: C:\WINDOWS\SYSTEM32\UMPDC.dll
-[2026-06-10 18:07:36.733] [INFO] 模块[46]: C:\WINDOWS\SYSTEM32\directxdatabasehelper.dll
-[2026-06-10 18:07:36.734] [INFO] 模块[47]: C:\WINDOWS\SYSTEM32\cfgmgr32.dll
-[2026-06-10 18:07:36.734] [INFO] 模块[48]: C:\WINDOWS\System32\DriverStore\FileRepository\iigd_dch.inf_amd64_1baad0041739883d\igd10iumd32.dll
-[2026-06-10 18:07:36.735] [INFO] 模块[49]: C:\WINDOWS\SYSTEM32\apphelp.dll
-[2026-06-10 18:07:36.735] [INFO] 模块[50]: C:\WINDOWS\System32\DriverStore\FileRepository\iigd_dch.inf_amd64_1baad0041739883d\igd10um32xe.DLL
-[2026-06-10 18:07:36.735] [INFO] 模块[51]: C:\WINDOWS\System32\DriverStore\FileRepository\iigd_dch.inf_amd64_1baad0041739883d\IntelControlLib32.dll
-[2026-06-10 18:07:36.736] [INFO] 模块[52]: C:\WINDOWS\System32\DriverStore\FileRepository\iigd_dch.inf_amd64_1baad0041739883d\igdgmm32.dll
-[2026-06-10 18:07:36.736] [INFO] 模块[53]: C:\WINDOWS\System32\DriverStore\FileRepository\iigd_dch.inf_amd64_1baad0041739883d\igc32.dll
-[2026-06-10 18:07:36.737] [INFO] 模块[54]: C:\WINDOWS\System32\clbcatq.dll
-[2026-06-10 18:07:36.738] [INFO] 模块[55]: C:\WINDOWS\system32\wbem\wbemprox.dll
-[2026-06-10 18:07:36.738] [INFO] 模块[56]: C:\WINDOWS\SYSTEM32\wbemcomn.dll
-[2026-06-10 18:07:36.738] [INFO] 模块[57]: C:\WINDOWS\system32\wbem\wbemsvc.dll
-[2026-06-10 18:07:36.738] [INFO] 模块[58]: C:\WINDOWS\system32\wbem\fastprox.dll
-[2026-06-10 18:07:36.739] [INFO] 模块[59]: C:\WINDOWS\SYSTEM32\amsi.dll
-[2026-06-10 18:07:36.739] [INFO] 模块[60]: C:\WINDOWS\System32\MMDevApi.dll
-[2026-06-10 18:07:36.739] [INFO] 模块[61]: C:\WINDOWS\System32\DEVOBJ.dll
-[2026-06-10 18:07:36.739] [INFO] 模块[62]: C:\WINDOWS\SYSTEM32\AUDIOSES.DLL
-[2026-06-10 18:07:36.740] [INFO] 模块[63]: C:\WINDOWS\SYSTEM32\resourcepolicyclient.dll
-[2026-06-10 18:07:36.740] [INFO] 模块[64]: C:\WINDOWS\SYSTEM32\xinput1_3.dll
-[2026-06-10 18:07:36.740] [INFO] 模块[65]: C:\WINDOWS\SYSTEM32\dcomp.dll
-[2026-06-10 18:07:36.741] [INFO] 模块[66]: C:\WINDOWS\SYSTEM32\Microsoft.Internal.WarpPal.dll
-[2026-06-10 18:07:36.741] [INFO] 模块[67]: C:\WINDOWS\SYSTEM32\dwmapi.dll
-[2026-06-10 18:07:36.741] [INFO] 模块[68]: C:\WINDOWS\SYSTEM32\textinputframework.dll
-[2026-06-10 18:07:36.742] [INFO] 模块[69]: C:\Windows\System32\uiautomationcore.dll
-[2026-06-10 18:07:36.742] [INFO] 模块[70]: C:\Windows\System32\OLEACC.dll
-[2026-06-10 18:07:36.742] [INFO] 模块[71]: C:\WINDOWS\SYSTEM32\xinput1_4.dll
-[2026-06-10 18:07:36.742] [INFO] 模块[72]: C:\WINDOWS\SYSTEM32\inputhost.dll
-[2026-06-10 18:07:36.743] [INFO] 模块[73]: C:\WINDOWS\SYSTEM32\CoreMessaging.dll
-[2026-06-10 18:07:36.743] [INFO] 模块[74]: C:\WINDOWS\SYSTEM32\CRYPTBASE.DLL
-[2026-06-10 18:07:36.743] [INFO] 模块[75]: C:\WINDOWS\System32\NSI.dll
-[2026-06-10 18:07:36.743] [INFO] DLL 未加载，继续注入...
-[2026-06-10 18:07:36.744] [INFO] 获取目标进程中的 kernel32.dll 基址...
-[2026-06-10 18:07:36.744] [INFO] 枚举到 76 个模块
-[2026-06-10 18:07:36.744] [INFO] 模块[0]: D:\BaiduNetdiskDownload\UnityCrossFire1.7.1\UnityCrossFire1.7.1\UnityCrossFire.exe
-[2026-06-10 18:07:36.745] [INFO] 模块[1]: C:\WINDOWS\SYSTEM32\ntdll.dll
-[2026-06-10 18:07:36.745] [INFO] 模块[2]: C:\WINDOWS\System32\KERNEL32.DLL
-[2026-06-10 18:07:36.745] [INFO] 找到 kernel32.dll: 0x76690000
-[2026-06-10 18:07:36.745] [INFO] 获取本地 LoadLibraryW 地址...
-[2026-06-10 18:07:36.746] [INFO] 本地 kernel32.dll: 0x76690000
-[2026-06-10 18:07:36.746] [INFO] 本地 LoadLibraryW: 0x766AD820
-[2026-06-10 18:07:36.747] [INFO] LoadLibraryW RVA: 0x1D820
-[2026-06-10 18:07:36.747] [INFO] 目标进程 LoadLibraryW: 0x766AD820
-[2026-06-10 18:07:36.747] [INFO] DLL路径长度: 226 字节
-[2026-06-10 18:07:36.747] [INFO] 在目标进程分配内存...
-[2026-06-10 18:07:36.748] [INFO] 远程内存地址: 0xCA0000
-[2026-06-10 18:07:36.748] [INFO] 写入DLL路径到目标进程...
-[2026-06-10 18:07:36.748] [INFO] 写入字节数: 226
-[2026-06-10 18:07:36.749] [INFO] 创建远程线程执行LoadLibraryW...
-[2026-06-10 18:07:36.755] [INFO] 远程线程句柄: 0x3A4
-[2026-06-10 18:07:36.755] [INFO] 等待远程线程执行完成...
-[2026-06-10 18:07:36.759] [INFO] 远程线程退出码: 0x6BD20000
-[2026-06-10 18:07:36.760] [SUCCESS] DLL注入成功！基地址: 0x6BD20000
-[2026-06-10 18:07:37.265] [INFO] ==========================================
-[2026-06-10 18:07:37.265] [INFO] 注入完成！按 INSERT 键打开菜单
-[2026-06-10 18:07:37.265] [INFO] ==========================================
+[2026-06-11 16:46:17.799] [INFO] DLL注入程序启动
+[2026-06-11 16:46:17.807] [INFO] 目标参数: 8180
+[2026-06-11 16:46:17.808] [INFO] DLL路径: D:\trae_project\ucf1.7-modifier\04-正式发行版\全功能整合包1.7\game_modifier\plugins\universal_hook\Universal-ImGui-Hook.dll
+[2026-06-11 16:46:17.809] [INFO] DLL文件大小: 690176 字节
+[2026-06-11 16:46:17.809] [INFO] 按 PID 查找进程: 8180
+[2026-06-11 16:46:17.827] [INFO] 找到进程: PID=8180, 主窗口: 'UnityCrossFire', 创建时间: 2026年6月11日 16:33:23
+[2026-06-11 16:46:17.828] [INFO] 打开进程句柄...
+[2026-06-11 16:46:17.862] [INFO] 进程句柄: 0x3AC
+[2026-06-11 16:46:17.864] [INFO] 进程架构: 32-bit
+[2026-06-11 16:46:17.864] [INFO] 注入器架构: 32-bit
+[2026-06-11 16:46:17.865] [INFO] 检查 DLL 是否已加载...
+[2026-06-11 16:46:17.868] [INFO] 枚举到 74 个模块
+[2026-06-11 16:46:17.870] [INFO] 模块[0]: D:\BaiduNetdiskDownload\UnityCrossFire1.7.1\UnityCrossFire1.7.1\UnityCrossFire.exe
+[2026-06-11 16:46:17.870] [INFO] 模块[1]: C:\WINDOWS\SYSTEM32\ntdll.dll
+[2026-06-11 16:46:17.871] [INFO] 模块[2]: C:\WINDOWS\System32\KERNEL32.DLL
+[2026-06-11 16:46:17.871] [INFO] 模块[3]: C:\WINDOWS\System32\KERNELBASE.dll
+[2026-06-11 16:46:17.871] [INFO] 模块[4]: D:\BaiduNetdiskDownload\UnityCrossFire1.7.1\UnityCrossFire1.7.1\UnityPlayer.dll
+[2026-06-11 16:46:17.871] [INFO] 模块[5]: C:\WINDOWS\System32\USER32.dll
+[2026-06-11 16:46:17.871] [INFO] 模块[6]: C:\WINDOWS\System32\win32u.dll
+[2026-06-11 16:46:17.871] [INFO] 模块[7]: C:\WINDOWS\System32\GDI32.dll
+[2026-06-11 16:46:17.873] [INFO] 模块[8]: C:\WINDOWS\System32\gdi32full.dll
+[2026-06-11 16:46:17.873] [INFO] 模块[9]: C:\WINDOWS\System32\msvcp_win.dll
+[2026-06-11 16:46:17.874] [INFO] 模块[10]: C:\WINDOWS\System32\ucrtbase.dll
+[2026-06-11 16:46:17.874] [INFO] 模块[11]: C:\WINDOWS\System32\ole32.dll
+[2026-06-11 16:46:17.874] [INFO] 模块[12]: C:\WINDOWS\System32\combase.dll
+[2026-06-11 16:46:17.874] [INFO] 模块[13]: C:\WINDOWS\System32\RPCRT4.dll
+[2026-06-11 16:46:17.875] [INFO] 模块[14]: C:\WINDOWS\SYSTEM32\VERSION.dll
+[2026-06-11 16:46:17.875] [INFO] 模块[15]: C:\WINDOWS\System32\msvcrt.dll
+[2026-06-11 16:46:17.875] [INFO] 模块[16]: C:\WINDOWS\System32\SHLWAPI.dll
+[2026-06-11 16:46:17.876] [INFO] 模块[17]: C:\WINDOWS\System32\Windows.Storage.dll
+[2026-06-11 16:46:17.876] [INFO] 模块[18]: C:\WINDOWS\System32\advapi32.dll
+[2026-06-11 16:46:17.876] [INFO] 模块[19]: C:\WINDOWS\System32\sechost.dll
+[2026-06-11 16:46:17.877] [INFO] 模块[20]: C:\WINDOWS\System32\SETUPAPI.dll
+[2026-06-11 16:46:17.877] [INFO] 模块[21]: C:\WINDOWS\System32\SHELL32.dll
+[2026-06-11 16:46:17.877] [INFO] 模块[22]: C:\WINDOWS\System32\OLEAUT32.dll
+[2026-06-11 16:46:17.878] [INFO] 模块[23]: C:\WINDOWS\System32\IMM32.dll
+[2026-06-11 16:46:17.878] [INFO] 模块[24]: C:\WINDOWS\SYSTEM32\WINMM.dll
+[2026-06-11 16:46:17.879] [INFO] 模块[25]: C:\WINDOWS\System32\CRYPT32.dll
+[2026-06-11 16:46:17.879] [INFO] 模块[26]: C:\WINDOWS\SYSTEM32\OPENGL32.dll
+[2026-06-11 16:46:17.879] [INFO] 模块[27]: C:\WINDOWS\System32\WS2_32.dll
+[2026-06-11 16:46:17.879] [INFO] 模块[28]: C:\WINDOWS\SYSTEM32\WINHTTP.dll
+[2026-06-11 16:46:17.880] [INFO] 模块[29]: C:\WINDOWS\SYSTEM32\bcrypt.dll
+[2026-06-11 16:46:17.880] [INFO] 模块[30]: C:\WINDOWS\SYSTEM32\HID.DLL
+[2026-06-11 16:46:17.880] [INFO] 模块[31]: C:\WINDOWS\SYSTEM32\GLU32.dll
+[2026-06-11 16:46:17.880] [INFO] 模块[32]: C:\WINDOWS\SYSTEM32\dxcore.dll
+[2026-06-11 16:46:17.881] [INFO] 模块[33]: C:\WINDOWS\SYSTEM32\kernel.appcore.dll
+[2026-06-11 16:46:17.881] [INFO] 模块[34]: C:\WINDOWS\System32\bcryptPrimitives.dll
+[2026-06-11 16:46:17.881] [INFO] 模块[35]: C:\WINDOWS\system32\uxtheme.dll
+[2026-06-11 16:46:17.882] [INFO] 模块[36]: C:\WINDOWS\System32\shcore.dll
+[2026-06-11 16:46:17.882] [INFO] 模块[37]: C:\WINDOWS\SYSTEM32\profapi.dll
+[2026-06-11 16:46:17.883] [INFO] 模块[38]: D:\BaiduNetdiskDownload\UnityCrossFire1.7.1\UnityCrossFire1.7.1\GameAssembly.dll
+[2026-06-11 16:46:17.884] [INFO] 模块[39]: D:\BaiduNetdiskDownload\UnityCrossFire1.7.1\UnityCrossFire1.7.1\baselib.dll
+[2026-06-11 16:46:17.884] [INFO] 模块[40]: C:\WINDOWS\SYSTEM32\IPHLPAPI.DLL
+[2026-06-11 16:46:17.885] [INFO] 模块[41]: C:\WINDOWS\System32\MSCTF.dll
+[2026-06-11 16:46:17.885] [INFO] 模块[42]: C:\WINDOWS\SYSTEM32\d3d11.dll
+[2026-06-11 16:46:17.885] [INFO] 模块[43]: C:\WINDOWS\SYSTEM32\dxgi.dll
+[2026-06-11 16:46:17.886] [INFO] 模块[44]: C:\WINDOWS\SYSTEM32\powrprof.dll
+[2026-06-11 16:46:17.886] [INFO] 模块[45]: C:\WINDOWS\SYSTEM32\UMPDC.dll
+[2026-06-11 16:46:17.886] [INFO] 模块[46]: C:\WINDOWS\SYSTEM32\directxdatabasehelper.dll
+[2026-06-11 16:46:17.887] [INFO] 模块[47]: C:\WINDOWS\SYSTEM32\cfgmgr32.dll
+[2026-06-11 16:46:17.887] [INFO] 模块[48]: C:\WINDOWS\System32\DriverStore\FileRepository\iigd_dch.inf_amd64_1baad0041739883d\igd10iumd32.dll
+[2026-06-11 16:46:17.887] [INFO] 模块[49]: C:\WINDOWS\SYSTEM32\apphelp.dll
+[2026-06-11 16:46:17.888] [INFO] 模块[50]: C:\WINDOWS\System32\DriverStore\FileRepository\iigd_dch.inf_amd64_1baad0041739883d\igd10um32xe.DLL
+[2026-06-11 16:46:17.888] [INFO] 模块[51]: C:\WINDOWS\System32\DriverStore\FileRepository\iigd_dch.inf_amd64_1baad0041739883d\IntelControlLib32.dll
+[2026-06-11 16:46:17.889] [INFO] 模块[52]: C:\WINDOWS\System32\DriverStore\FileRepository\iigd_dch.inf_amd64_1baad0041739883d\igdgmm32.dll
+[2026-06-11 16:46:17.889] [INFO] 模块[53]: C:\WINDOWS\System32\DriverStore\FileRepository\iigd_dch.inf_amd64_1baad0041739883d\igc32.dll
+[2026-06-11 16:46:17.889] [INFO] 模块[54]: C:\WINDOWS\System32\clbcatq.dll
+[2026-06-11 16:46:17.890] [INFO] 模块[55]: C:\WINDOWS\system32\wbem\wbemprox.dll
+[2026-06-11 16:46:17.890] [INFO] 模块[56]: C:\WINDOWS\SYSTEM32\wbemcomn.dll
+[2026-06-11 16:46:17.891] [INFO] 模块[57]: C:\WINDOWS\system32\wbem\wbemsvc.dll
+[2026-06-11 16:46:17.891] [INFO] 模块[58]: C:\WINDOWS\system32\wbem\fastprox.dll
+[2026-06-11 16:46:17.892] [INFO] 模块[59]: C:\WINDOWS\SYSTEM32\amsi.dll
+[2026-06-11 16:46:17.893] [INFO] 模块[60]: C:\WINDOWS\System32\MMDevApi.dll
+[2026-06-11 16:46:17.894] [INFO] 模块[61]: C:\WINDOWS\System32\DEVOBJ.dll
+[2026-06-11 16:46:17.894] [INFO] 模块[62]: C:\WINDOWS\SYSTEM32\AUDIOSES.DLL
+[2026-06-11 16:46:17.894] [INFO] 模块[63]: C:\WINDOWS\SYSTEM32\resourcepolicyclient.dll
+[2026-06-11 16:46:17.895] [INFO] 模块[64]: C:\WINDOWS\SYSTEM32\xinput1_3.dll
+[2026-06-11 16:46:17.895] [INFO] 模块[65]: C:\WINDOWS\SYSTEM32\dcomp.dll
+[2026-06-11 16:46:17.895] [INFO] 模块[66]: C:\WINDOWS\SYSTEM32\Microsoft.Internal.WarpPal.dll
+[2026-06-11 16:46:17.895] [INFO] 模块[67]: C:\WINDOWS\SYSTEM32\dwmapi.dll
+[2026-06-11 16:46:17.896] [INFO] 模块[68]: C:\WINDOWS\SYSTEM32\textinputframework.dll
+[2026-06-11 16:46:17.896] [INFO] 模块[69]: C:\WINDOWS\SYSTEM32\xinput1_4.dll
+[2026-06-11 16:46:17.896] [INFO] 模块[70]: C:\WINDOWS\SYSTEM32\inputhost.dll
+[2026-06-11 16:46:17.896] [INFO] 模块[71]: C:\WINDOWS\SYSTEM32\CoreMessaging.dll
+[2026-06-11 16:46:17.898] [INFO] 模块[72]: C:\WINDOWS\SYSTEM32\CRYPTBASE.DLL
+[2026-06-11 16:46:17.898] [INFO] 模块[73]: C:\WINDOWS\System32\NSI.dll
+[2026-06-11 16:46:17.899] [INFO] DLL 未加载，继续注入...
+[2026-06-11 16:46:17.899] [INFO] 获取目标进程中的 kernel32.dll 基址...
+[2026-06-11 16:46:17.899] [INFO] 枚举到 74 个模块
+[2026-06-11 16:46:17.900] [INFO] 模块[0]: D:\BaiduNetdiskDownload\UnityCrossFire1.7.1\UnityCrossFire1.7.1\UnityCrossFire.exe
+[2026-06-11 16:46:17.900] [INFO] 模块[1]: C:\WINDOWS\SYSTEM32\ntdll.dll
+[2026-06-11 16:46:17.900] [INFO] 模块[2]: C:\WINDOWS\System32\KERNEL32.DLL
+[2026-06-11 16:46:17.900] [INFO] 找到 kernel32.dll: 0x75020000
+[2026-06-11 16:46:17.902] [INFO] 获取本地 LoadLibraryW 地址...
+[2026-06-11 16:46:17.902] [INFO] 本地 kernel32.dll: 0x75020000
+[2026-06-11 16:46:17.902] [INFO] 本地 LoadLibraryW: 0x7503D820
+[2026-06-11 16:46:17.904] [INFO] LoadLibraryW RVA: 0x1D820
+[2026-06-11 16:46:17.905] [INFO] 目标进程 LoadLibraryW: 0x7503D820
+[2026-06-11 16:46:17.906] [INFO] DLL路径长度: 226 字节
+[2026-06-11 16:46:17.907] [INFO] 在目标进程分配内存...
+[2026-06-11 16:46:17.907] [INFO] 远程内存地址: 0x10B00000
+[2026-06-11 16:46:17.908] [INFO] 写入DLL路径到目标进程...
+[2026-06-11 16:46:17.909] [INFO] 写入字节数: 226
+[2026-06-11 16:46:17.909] [INFO] 创建远程线程执行LoadLibraryW...
+[2026-06-11 16:46:17.915] [INFO] 远程线程句柄: 0x3C4
+[2026-06-11 16:46:17.915] [INFO] 等待远程线程执行完成...
+[2026-06-11 16:46:17.926] [INFO] 远程线程退出码: 0x68C30000
+[2026-06-11 16:46:17.926] [SUCCESS] DLL注入成功！基地址: 0x68C30000
+[2026-06-11 16:46:18.440] [INFO] ==========================================
+[2026-06-11 16:46:18.440] [INFO] 注入完成！按 INSERT 键打开菜单
+[2026-06-11 16:46:18.440] [INFO] ==========================================

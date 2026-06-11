@@ -146,6 +146,26 @@ class GameSessionManagerTests(unittest.TestCase):
 
         self.assertEqual(fake_universal.inject_calls, [1234])
 
+    def test_same_process_pipe_retry_does_not_reenter_injection_state(self):
+        self.manager._state = SessionState.CONNECTING_EXISTING_DLL
+        self.manager._injection_attempt_identity = (1234, 10.0)
+        self.manager._frida_manager = FakeFridaManager()
+        fake_universal = FakeUniversalManager(connect_result=False)
+
+        with patch(
+            "core.universal_hook_manager.UniversalHookManager.get_instance",
+            return_value=fake_universal,
+        ):
+            self.manager._step_connecting_existing_dll()
+
+        self.assertEqual(self.manager.get_state(), SessionState.READY)
+        messages = [
+            kwargs.get("message", "")
+            for event_type, kwargs in self.manager._bus.events
+            if event_type == "log_message"
+        ]
+        self.assertFalse(any("不再重复注入" in message for message in messages))
+
     def test_stale_loaded_dll_without_pipe_does_not_block_retry(self):
         self.manager._state = SessionState.INJECTING_DLL
         fake_universal = FakeUniversalManager(
@@ -207,6 +227,7 @@ class GameSessionManagerTests(unittest.TestCase):
         app._gravity = 1.0
         app._jump = 1.0
         app._gravity_mode = "player_only"
+        app._battle_round_enabled = False
 
         class RespawnVar:
             def get(self):

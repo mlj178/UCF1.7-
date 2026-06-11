@@ -7,16 +7,25 @@ modules.gravity = (function() {
   var state = { enabled: false, mode: 'player_only', gravityScale: 1.0, jumpScale: 1.0, airJump: false, airMove: false };
   var gm = null, timer = null, gmHook = null, jumpHook = null, singletonGetter = null;
   var loopCount = 0, lastLogTime = 0, playerState = {};
+  var roomShuttingDown = true;
+  var lifecycleHooks = [];
 
-  function hasGm() { if (!gm) return false; try { var v = gm.add(0x1C).readPointer(); return v && !v.isNull(); } catch(e) { return false; } }
+  function beginRoomShutdown() {
+    roomShuttingDown = true;
+    gm = null;
+    playerState = {};
+  }
+
+  function hasGm() { if (roomShuttingDown || !gm) return false; try { var v = gm.add(0x1C).readPointer(); return v && !v.isNull(); } catch(e) { return false; } }
 
   function tryGetGM() {
-    if (gm) return;
+    if (roomShuttingDown || gm) return;
     try { var methodInfo = getGameAssembly().base.add(0xE1CE64).readPointer(); var temp = singletonGetter(methodInfo); if (temp && !temp.isNull()) { gm = temp; playerState = {}; } } catch(e) {}
   }
 
   function loop() {
     if (!state.enabled) return;
+    if (roomShuttingDown) return;
     if (!hasGm()) { tryGetGM(); if (!hasGm()) { gm = null; playerState = {}; return; } }
     try {
       var ap = gm.add(0x1C).readPointer();
@@ -64,9 +73,11 @@ modules.gravity = (function() {
       var base = mod.base;
       isMyPlayer = new NativeFunction(base.add(0xB55FD0), 'bool', ['pointer']);
       singletonGetter = new NativeFunction(base.add(0x4A8170), 'pointer', ['pointer']);
-      try { gmHook = Interceptor.attach(base.add(0xAF9A90), { onEnter: function(args) { var newGm = args[0]; if (newGm && !newGm.isNull()) { gm = newGm; playerState = {}; } } }); } catch(e) {}
-      try { jumpHook = Interceptor.attach(base.add(0xB51780), { onEnter: function(args) { if (!state.airJump || !state.enabled) return; try { var pp = args[0]; if (pp && !pp.isNull()) { var grounded = pp.add(0x70).readU8(); if (!grounded) pp.add(0x70).writeU8(1); } } catch(_) {} } }); } catch(e) {}
-      tryGetGM();
+      try { gmHook = Interceptor.attach(base.add(0xAF9A90), { onEnter: function(args) { var newGm = args[0]; if (newGm && !newGm.isNull()) { roomShuttingDown = false; gm = newGm; playerState = {}; } } }); } catch(e) {}
+      try { jumpHook = Interceptor.attach(base.add(0xB51780), { onEnter: function(args) { if (roomShuttingDown || !state.airJump || !state.enabled) return; try { var pp = args[0]; if (pp && !pp.isNull()) { var grounded = pp.add(0x70).readU8(); if (!grounded) pp.add(0x70).writeU8(1); } } catch(_) {} } }); } catch(e) {}
+      try { lifecycleHooks.push(Interceptor.attach(base.add(0xAF6A00), { onEnter: function() { roomShuttingDown = false; } })); } catch(e) {}
+      try { lifecycleHooks.push(Interceptor.attach(base.add(0xAEE850), { onEnter: beginRoomShutdown })); } catch(e) {}
+      try { lifecycleHooks.push(Interceptor.attach(base.add(0xAFB6F0), { onEnter: beginRoomShutdown })); } catch(e) {}
       timer = setInterval(loop, 50);
       state.enabled = true; state.airJump = true; state.airMove = true; enabled = true;
       sendLog('success', '轻重力', '已启用 (重力=' + state.gravityScale.toFixed(1) + ', 跳跃=' + state.jumpScale.toFixed(1) + ', 模式=' + state.mode + ')');
@@ -77,7 +88,9 @@ modules.gravity = (function() {
       if (timer) { clearInterval(timer); timer = null; }
       if (gmHook) { try { gmHook.detach(); } catch(e) {} gmHook = null; }
       if (jumpHook) { try { jumpHook.detach(); } catch(e) {} jumpHook = null; }
-      state.enabled = false; gm = null; playerState = {}; enabled = false;
+      for (var i = 0; i < lifecycleHooks.length; i++) { try { lifecycleHooks[i].detach(); } catch(e) {} }
+      lifecycleHooks = [];
+      state.enabled = false; roomShuttingDown = true; gm = null; playerState = {}; enabled = false;
       sendLog('info', '轻重力', '已禁用');
       sendStatus('gravity', false);
     },
@@ -94,7 +107,9 @@ modules.gravity = (function() {
       if (timer) { clearInterval(timer); timer = null; }
       if (gmHook) { try { gmHook.detach(); } catch(e) {} gmHook = null; }
       if (jumpHook) { try { jumpHook.detach(); } catch(e) {} jumpHook = null; }
-      gm = null; playerState = {}; enabled = false;
+      for (var i = 0; i < lifecycleHooks.length; i++) { try { lifecycleHooks[i].detach(); } catch(e) {} }
+      lifecycleHooks = [];
+      roomShuttingDown = true; gm = null; playerState = {}; enabled = false;
       sendLog('info', '轻重力', '已重置'); sendStatus('gravity', false); return { ok: true };
     },
     getstatus: function() { return { enabled: state.enabled, gravityScale: state.gravityScale, jumpScale: state.jumpScale, airJump: state.airJump, airMove: state.airMove, haveGM: hasGm() }; }

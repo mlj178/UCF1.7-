@@ -146,6 +146,10 @@ class App(ctk.CTk):
         self._nano4t_log_errors = False
         self._nano4t_apply_cooldown = 0  # 应用按钮防抖（时间戳）
 
+        # 强制决战回合状态变量
+        self._battle_round_enabled = False  # 开关状态（持久化）
+        self._battle_round_active = False   # 实际生效状态
+
         self.settings_window = None
         
         # 武器快捷键徽章字典 {weapon_id: badge_frame}
@@ -171,6 +175,9 @@ class App(ctk.CTk):
         self._update_switch('esp_box')
 
         threading.Thread(target=self._nano4t_auto_health_bg, daemon=True).start()
+
+        # 启动强制决战回合实时状态更新
+        self.after(1000, self._update_battle_round_realtime_status)
 
     def _build_ui(self):
         self._build_status_bar()
@@ -634,6 +641,36 @@ class App(ctk.CTk):
                                                   fg_color="#2a6e2a")
         self.nano4t_connect_btn.pack(side="left", padx=(6, 12), pady=8, expand=True)
 
+        # 强制决战回合功能卡片
+        battle_round_frame = ctk.CTkFrame(scroll, corner_radius=6, fg_color="#3a2a1a",
+                                           border_width=1, border_color="#555555")
+        battle_round_frame.pack(fill="x", padx=8, pady=(4, 8))
+
+        battle_round_top = ctk.CTkFrame(battle_round_frame, fg_color="transparent")
+        battle_round_top.pack(fill="x", padx=12, pady=(8, 4))
+
+        ctk.CTkLabel(battle_round_top, text="⚔️ 决战回合",
+                     font=("Microsoft YaHei", 14, "bold"), text_color="#FFB347").pack(side="left")
+
+        self.battle_round_status_label = ctk.CTkLabel(battle_round_top,
+                                                       text="状态: ⚪ 等待进入多人生化模式...",
+                                                       font=("Microsoft YaHei", 11), text_color="#888888")
+        self.battle_round_status_label.pack(side="left", padx=(12, 0))
+
+        ctk.CTkLabel(battle_round_top, text="该功能在开启后下一回合生效",
+                     font=("Microsoft YaHei", 11), text_color="#a0a0a0").pack(side="left", padx=(12, 0))
+
+        self.battle_round_switch = ctk.CTkSwitch(battle_round_top, text="",
+                                                  font=("Microsoft YaHei", 12),
+                                                  command=self._toggle_battle_round,
+                                                  state="disabled")
+        self.battle_round_switch.pack(side="right")
+
+        ctk.CTkLabel(battle_round_frame, text="每局强制触发决战回合（保底局）",
+                     font=("Microsoft YaHei", 11), text_color="#a0a0a0").pack(anchor="w", padx=12, pady=(0, 2))
+        ctk.CTkLabel(battle_round_frame, text="决战回合：多人生化模式，倒计时1分30秒，触发希望buff",
+                     font=("Microsoft YaHei", 11), text_color="#a0a0a0").pack(anchor="w", padx=12, pady=(0, 8))
+
     def _build_weapon_giver_tab(self, scroll):
         weapon_giver_frame = ctk.CTkFrame(scroll, corner_radius=8, fg_color="#2b2b2b")
         weapon_giver_frame.pack(fill="x", padx=8, pady=(8, 4))
@@ -823,15 +860,11 @@ class App(ctk.CTk):
             ids = payload.get('ids', [])
             self._nano4t_ready = True
             self.after(0, lambda: self._nano4t_on_ready(len(ids)))
+            self.after(0, self._update_battle_round_button_state)
         elif event_type == 'nano4t_destroyed':
             if self._nano4t_ready:
                 self._log("⚠ 检测到退出多人生化房间，特性系统已销毁")
-            self._nano4t_ready = False
-            self._nano4t_activated = False  # 重置激活状态
-            self.after(0, self._nano4t_on_destroyed)
-            # 重置状态指示器
-            self.after(0, lambda: self.nano4t_ghost_status_label.configure(text="[未激活]", text_color="#888888"))
-            self.after(0, lambda: self.nano4t_human_status_label.configure(text="[未激活]", text_color="#888888"))
+            self._handle_nano4t_mode_exit()
         elif event_type == 'nano4t_error':
             self._nano4t_ready = False
             if self._nano4t_log_errors:
@@ -847,6 +880,7 @@ class App(ctk.CTk):
                 else:
                     self._log(f"❌ [多人生化] {m}")
             self.after(0, lambda: self._nano4t_set_status("yellow", "未就绪"))
+            self.after(0, self._update_battle_round_button_state)
         elif event_type == 'nano4t_set':
             g = int(payload.get('g', 0))
             h = int(payload.get('h', 0))
@@ -866,12 +900,7 @@ class App(ctk.CTk):
         elif event_type == 'nano4t_dead':
             if self._nano4t_ready:
                 self._log("⚠ [多人生化] 模式实例已失效")
-                self._nano4t_ready = False
-                self._nano4t_activated = False  # 重置激活状态
-                self.after(0, self._nano4t_on_destroyed)
-                # 重置状态指示器
-                self.after(0, lambda: self.nano4t_ghost_status_label.configure(text="[未激活]", text_color="#888888"))
-                self.after(0, lambda: self.nano4t_human_status_label.configure(text="[未激活]", text_color="#888888"))
+            self._handle_nano4t_mode_exit()
         elif event_type == 'nano4t_alive':
             if not self._nano4t_ready and self._ready:
                 self._log("ℹ️ [多人生化] 检测到已进入多人生化模式，正在初始化...")
@@ -1625,11 +1654,31 @@ class App(ctk.CTk):
         threading.Thread(target=self._nano4t_get_current_bg, daemon=True).start()
         threading.Thread(target=self._nano4t_auto_getcurrent_bg, daemon=True).start()
 
+    def _handle_nano4t_mode_exit(self):
+        """处理退出多人生化模式，统一清理运行状态并调度 UI 重置。"""
+        self._nano4t_ready = False
+        self._nano4t_activated = False
+        self._nano4t_current_ghost = -1
+        self._nano4t_current_human = -1
+
+        if self._battle_round_active and self._frida.is_connected:
+            self._frida.send_toggle('battle_round_always', False)
+        self._battle_round_active = False
+
+        self.after(0, self._nano4t_on_destroyed)
+
     def _nano4t_on_destroyed(self):
         self.nano4t_apply_btn.configure(state="disabled", fg_color="#333333")
         self._nano4t_set_status("yellow", "已退出房间")
         self.nano4t_next_label.configure(text="")
         self.nano4t_round_label.configure(text="当前回合: 等待进入多人生化模式...")
+        self.nano4t_ghost_status_label.configure(text="[未激活]", text_color="#888888")
+        self.nano4t_human_status_label.configure(text="[未激活]", text_color="#888888")
+        self.battle_round_switch.configure(state="disabled")
+        self.battle_round_status_label.configure(
+            text="状态: ⚪ 等待进入多人生化模式...",
+            text_color="#888888",
+        )
 
     def _nano4t_update_round_label(self, g, h):
         self._nano4t_current_ghost = g
@@ -1659,6 +1708,76 @@ class App(ctk.CTk):
                 self._log("❌ [多人生化] 多人生化模块未加载，请重新连接游戏")
         except Exception as e:
             self._log(f"❌ [多人生化] 连接失败: {e}")
+
+    def _toggle_battle_round(self):
+        """切换强制决战回合开关"""
+        if not self._ready:
+            self._log("⚠ 请先连接游戏")
+            return
+        
+        if not self._nano4t_ready:
+            self._log("⚠ 请先进入多人生化模式")
+            return
+        
+        current = self.battle_round_switch.get()
+        if current:
+            self._frida.send_toggle('battle_round_always', True)
+            self._battle_round_enabled = True
+            self._battle_round_active = True
+            self._log("✅ 强制决战回合已启用")
+            self.battle_round_status_label.configure(text="状态: ✅ 已启用", text_color="#2ecc71")
+        else:
+            self._frida.send_toggle('battle_round_always', False)
+            self._battle_round_enabled = False
+            self._battle_round_active = False
+            self._log("强制决战回合已禁用")
+            self.battle_round_status_label.configure(text="状态: 🟢 模式就绪，等待开启", text_color="#f39c12")
+
+    def _update_battle_round_button_state(self):
+        """更新强制决战回合按钮状态（根据多人生化模式）"""
+        if self._nano4t_ready:
+            # 多人生化模式就绪，按钮可点击
+            self.battle_round_switch.configure(state="normal")
+            
+            # 如果之前是开启状态，自动启用
+            if self._battle_round_enabled and not self._battle_round_active:
+                self.battle_round_switch.select()
+                self._frida.send_toggle('battle_round_always', True)
+                self._battle_round_active = True
+                self._log("✅ 检测到多人生化模式，自动启用强制决战回合")
+                self.battle_round_status_label.configure(text="状态: ✅ 已启用", text_color="#2ecc71")
+            else:
+                # 模式就绪但未开启
+                self.battle_round_status_label.configure(text="状态: 🟢 模式就绪，等待开启", text_color="#f39c12")
+        else:
+            # 多人生化模式未就绪，按钮禁用
+            self.battle_round_switch.configure(state="disabled")
+            self._battle_round_active = False
+            self.battle_round_status_label.configure(text="状态: ⚪ 等待进入多人生化模式...", text_color="#888888")
+
+    def _update_battle_round_realtime_status(self):
+        """实时更新决战回合状态"""
+        if not self._ready or not self._nano4t_ready or not self._battle_round_active:
+            self.after(1000, self._update_battle_round_realtime_status)
+            return
+        
+        try:
+            result = self._frida.call_export('battleRoundGetStatus')
+            if result:
+                import json
+                data = json.loads(result) if isinstance(result, str) else result
+                flag = data.get('currentIsBattleRound', -1)
+                
+                if flag == 1:
+                    self.battle_round_status_label.configure(text="状态: ⚔️ 决战回合", text_color="#2ecc71")
+                elif flag == 0:
+                    self.battle_round_status_label.configure(text="状态: 🔄 普通回合", text_color="#f39c12")
+                else:
+                    self.battle_round_status_label.configure(text="状态: 读取中...", text_color="#888888")
+        except Exception:
+            pass
+        
+        self.after(1000, self._update_battle_round_realtime_status)
 
     def _nano4t_apply(self):
         """应用按钮：验证参数并调用Frida"""
@@ -1772,7 +1891,17 @@ class App(ctk.CTk):
             for fid, s in state.items():
                 if fid == 'esp_box':
                     continue
-                if fid not in self._features or not isinstance(s, dict):
+                if not isinstance(s, dict):
+                    continue
+                
+                # 强制决战回合状态恢复（不在 self._features 中，需单独处理）
+                if fid == 'battle_round_always':
+                    self._battle_round_enabled = s.get('enabled', False)
+                    if self._battle_round_enabled:
+                        self.battle_round_switch.select()
+                    continue
+                
+                if fid not in self._features:
                     continue
                 self._features[fid] = s.get('enabled', False)
                 if 'slider_value' in s:
@@ -1831,6 +1960,8 @@ class App(ctk.CTk):
             if fid == 'weapon_giver':
                 s['respawn_weapon'] = self.respawn_weapon_var.get()
             state[fid] = s
+        # 强制决战回合状态保存
+        state['battle_round_always'] = {'enabled': self._battle_round_enabled}
         path = os.path.join(DATA_DIR, "feature_state.json")
         try:
             with open(path, 'w', encoding='utf-8') as f:
