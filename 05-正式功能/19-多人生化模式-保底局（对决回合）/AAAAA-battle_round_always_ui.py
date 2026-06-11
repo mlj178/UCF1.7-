@@ -47,6 +47,9 @@ class BattleRoundUI(ctk.CTk):
         self._cleanup_done = False
         self._connecting = False
         self._force_enabled = False
+        
+        # 添加RPC锁，防止并发调用冲突
+        self._rpc_lock = threading.Lock()
 
         self.setup_ui()
         self.after(800, self._auto_connect_thread)
@@ -125,12 +128,26 @@ class BattleRoundUI(ctk.CTk):
         )
         self.status_check_btn.pack(side="left", padx=5)
 
-        self.force_now_btn = ctk.CTkButton(
-            btn_frame, text="⚡ 立即强制写入",
-            command=self.force_now, width=140, height=40,
-            fg_color=COLOR_ORANGE, hover_color="#d68910"
+        self.debug_btn = ctk.CTkButton(
+            btn_frame, text="🔧 调试读取",
+            command=self.debug_read, width=100, height=40,
+            fg_color="#34495e", hover_color="#2c3e50"
         )
-        self.force_now_btn.pack(side="left", padx=5)
+        self.debug_btn.pack(side="left", padx=5)
+
+        # 实时状态显示区
+        status_display_frame = ctk.CTkFrame(self, corner_radius=8, fg_color=COLOR_DARKER)
+        status_display_frame.grid(row=4, column=0, padx=20, pady=5, sticky="ew")
+
+        self.battle_round_status_label = ctk.CTkLabel(
+            status_display_frame, 
+            text="决斗回合状态: 等待中...",
+            font=ctk.CTkFont(size=13)
+        )
+        self.battle_round_status_label.pack(side="left", padx=15, pady=8)
+
+        # 启动实时状态更新
+        self.after(1000, self._update_realtime_status)
 
     # ==================== 自动连接 ====================
 
@@ -211,6 +228,16 @@ class BattleRoundUI(ctk.CTk):
                 self._safe_log("未找到游戏进程: " + GAME_PROCESS_NAME)
 
     def _do_disconnect(self):
+        # 先调用cleanup清理状态
+        if self.script:
+            try:
+                with self._rpc_lock:
+                    self.script.exports.cleanup()
+                    self._safe_log("已调用cleanup清理状态")
+            except Exception as e:
+                self._safe_log("cleanup调用失败: " + str(e))
+        
+        # 卸载脚本
         if self.script:
             try:
                 self.script.unload()
@@ -248,7 +275,8 @@ class BattleRoundUI(ctk.CTk):
 
     def _do_enable(self):
         try:
-            result = self.script.exports.enable()
+            with self._rpc_lock:
+                result = self.script.exports.enable()
             if result.get('ok'):
                 self._force_enabled = True
                 self._update_force_btn()
@@ -263,7 +291,8 @@ class BattleRoundUI(ctk.CTk):
 
     def _do_disable(self):
         try:
-            result = self.script.exports.disable()
+            with self._rpc_lock:
+                result = self.script.exports.disable()
             if result.get('ok'):
                 self._force_enabled = False
                 self._update_force_btn()
@@ -298,14 +327,15 @@ class BattleRoundUI(ctk.CTk):
 
     def _do_check_status(self):
         try:
-            status = self.script.exports.get_status()
+            with self._rpc_lock:
+                status = self.script.exports.get_status()
             enabled = status.get('enabled', False)
-            hookOk = status.get('hookInstalled', False)
+            hookInstalled = status.get('hookInstalled', False)
             flag = status.get('currentIsBattleRound', -1)
 
             self._safe_log("--- 当前状态 ---")
             self._safe_log("  功能开关: " + ("开启" if enabled else "关闭"))
-            self._safe_log("  Hook状态: " + ("已安装" if hookOk else "未安装"))
+            self._safe_log("  Hook状态: " + ("已安装 ✓" if hookInstalled else "未安装 ✗"))
             self._safe_log("  isBattleRound字段: " + str(flag) + (" (决战回合)" if flag == 1 else " (普通回合)" if flag == 0 else " (读取失败)"))
 
             # 同步UI状态
@@ -318,24 +348,79 @@ class BattleRoundUI(ctk.CTk):
         except Exception as e:
             self._safe_log("查询失败: " + str(e))
 
-    def force_now(self):
+    def _update_realtime_status(self):
+        if not self.is_connected or not self.script:
+            self.after(1000, self._update_realtime_status)
+            return
+
+        # 使用非阻塞锁，如果锁被占用则跳过本次更新
+        if self._rpc_lock.acquire(blocking=False):
+            try:
+                threading.Thread(target=self._do_update_status, daemon=True).start()
+            except:
+                self._rpc_lock.release()
+        else:
+            # 锁被占用，跳过本次更新
+            pass
+        
+        self.after(1000, self._update_realtime_status)
+
+    def _do_update_status(self):
+        try:
+            # 直接从游戏内存读取isBattleRound字段
+            status = self.script.exports.get_status()
+            flag = status.get('currentIsBattleRound', -1)
+
+            if flag == 1:
+                status_text = "决斗回合状态: ⚔️ 决斗回合"
+                status_color = COLOR_GREEN
+            elif flag == 0:
+                status_text = "决斗回合状态: 🔄 普通回合"
+                status_color = COLOR_ORANGE
+            else:
+                status_text = "决斗回合状态: ❓ 读取失败"
+                status_color = COLOR_RED
+
+            self._safe_config(self.battle_round_status_label, text=status_text, text_color=status_color)
+
+        except frida.InvalidOperationError:
+            self._safe_config(self.battle_round_status_label, text="决斗回合状态: ❌ 连接断开", text_color=COLOR_RED)
+        except Exception as e:
+            # 如果读取失败，显示错误
+            self._safe_config(self.battle_round_status_label, text="决斗回合状态: ❌ 读取错误", text_color=COLOR_RED)
+        finally:
+            # 确保释放锁
+            self._rpc_lock.release()
+
+    def debug_read(self):
         if not self.is_connected or not self.script:
             self._safe_log("未连接到游戏")
             return
-        threading.Thread(target=self._do_force_now, daemon=True).start()
+        threading.Thread(target=self._do_debug_read, daemon=True).start()
 
-    def _do_force_now(self):
+    def _do_debug_read(self):
         try:
-            result = self.script.exports.force_now()
+            with self._rpc_lock:
+                result = self.script.exports.debug_read_info()
             if result.get('ok'):
-                self._safe_log("⚡ 已立即强制写入 isBattleRound=1")
+                info = result.get('info', {})
+                self._safe_log("=== 调试读取信息 ===")
+                self._safe_log("GameAssembly基址: " + info.get('gameAssemblyBase', 'N/A'))
+                self._safe_log("TypeInfo RVA: " + info.get('typeInfoRVA', 'N/A'))
+                self._safe_log("TypeInfo地址: " + info.get('typeInfoAddr', 'N/A'))
+                self._safe_log("TypeInfo值: " + info.get('typeInfo', 'N/A'))
+                self._safe_log("static_fields地址: " + info.get('staticFieldsAddr', 'N/A'))
+                self._safe_log("--- 静态字段 ---")
+                self._safe_log("isAttributeEnable地址: " + info.get('isAttributeEnableAddr', 'N/A') + " = " + str(info.get('isAttributeEnable', 'N/A')))
+                self._safe_log("isBattleRound地址: " + info.get('isBattleRoundAddr', 'N/A') + " = " + str(info.get('isBattleRound', 'N/A')))
+                self._safe_log("isBattleStart地址: " + info.get('isBattleStartAddr', 'N/A') + " = " + str(info.get('isBattleStart', 'N/A')))
             else:
-                self._safe_log("立即写入失败: " + result.get('msg', '未知'))
+                self._safe_log("调试读取失败: " + result.get('msg', '未知错误'))
         except frida.InvalidOperationError:
             self._safe_log("脚本已失效，请重新连接")
             self._do_disconnect()
         except Exception as e:
-            self._safe_log("立即写入失败: " + str(e))
+            self._safe_log("调试读取失败: " + str(e))
 
     # ==================== JS消息处理 ====================
 

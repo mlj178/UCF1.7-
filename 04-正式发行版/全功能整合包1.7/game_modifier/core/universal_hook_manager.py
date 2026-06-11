@@ -8,7 +8,7 @@ import time
 
 import psutil
 
-from core.config import APP_DIR
+from core.config import APP_DIR, PLUGINS_DIR
 from core.event_bus import EventBus
 
 
@@ -118,7 +118,7 @@ class UniversalHookManager:
         self._pipe = None
         self._pid = None  # Current connected PID
         self._lock = threading.RLock()  # Use RLock to allow reentrant calls
-        self._dll_path = os.path.join(APP_DIR, "plugins", "universal_hook", "Universal-ImGui-Hook.dll")
+        self._dll_path = os.path.join(PLUGINS_DIR, "universal_hook", "Universal-ImGui-Hook.dll")
         self._pending_dll_path = self._dll_path + ".pending"
         self._revision_file = os.path.join(APP_DIR, "data", "universal_revision.json")
         self._revision = self._load_revision()  # Load revision from file
@@ -375,7 +375,7 @@ class UniversalHookManager:
 
     def _inject(self, pid):
         """Inject DLL into process"""
-        inject_exe = os.path.join(APP_DIR, "plugins", "universal_hook", "inject.exe")
+        inject_exe = os.path.join(PLUGINS_DIR, "universal_hook", "inject.exe")
         if not os.path.exists(inject_exe):
             self._log("error", f"inject.exe not found: {inject_exe}")
             return False

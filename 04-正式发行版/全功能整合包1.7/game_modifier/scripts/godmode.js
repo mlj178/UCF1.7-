@@ -10,6 +10,8 @@ modules.godmode = (function() {
   var isMyPlayerFn = null;
   var isDeadFn = null;
   var singletonGetter = null;
+  var roomShuttingDown = true;
+  var lifecycleHooks = [];
 
   var RVA = {
     SingletonGet:                    0x4A8170,
@@ -53,6 +55,7 @@ modules.godmode = (function() {
   }
 
   function getGM() {
+    if (roomShuttingDown) return null;
     try {
       var base = getGameAssembly().base;
       var mi = base.add(RVA.GM_Singleton_MethodInfo).readPointer();
@@ -117,6 +120,7 @@ modules.godmode = (function() {
   }
 
   function findMyPlayer() {
+    if (roomShuttingDown) return null;
     try {
       var gm = getGM();
       if (!gm || gm.isNull()) return null;
@@ -129,9 +133,15 @@ modules.godmode = (function() {
   }
 
   function installHooks(base) {
+    function beginRoomShutdown() {
+      roomShuttingDown = true;
+      cachedMyPlayer = null;
+    }
+
     var entityHurtAddr = base.add(RVA.Entity_OnEntityHurt);
     var hookHandler = {
       onEnter: function(args) {
+        if (roomShuttingDown) return;
         var entity = args[0];
         if (!entity || entity.isNull()) return;
         if (!cachedMyPlayer || cachedMyPlayer.isNull()) return;
@@ -153,11 +163,29 @@ modules.godmode = (function() {
       playerHurtHook = Interceptor.attach(playerHurtAddr, hookHandler);
       sendLog('success', 'HP', 'Player_OnEntityHurt 兜底Hook已安装 (RVA: 0xB516B0)');
     } catch(e) { sendLog('warn', 'HP', 'Player_OnEntityHurt Hook失败: ' + e.message + ' (不影响)'); }
+    try {
+      lifecycleHooks.push(Interceptor.attach(base.add(0xAF6A00), {
+        onEnter: function() {
+          roomShuttingDown = false;
+        }
+      }));
+    } catch(e) {}
+    try {
+      lifecycleHooks.push(Interceptor.attach(base.add(0xAF9A90), {
+        onEnter: function() {
+          roomShuttingDown = false;
+          cachedMyPlayer = null;
+        }
+      }));
+    } catch(e) {}
+    try { lifecycleHooks.push(Interceptor.attach(base.add(0xAEE850), { onEnter: beginRoomShutdown })); } catch(e) {}
+    try { lifecycleHooks.push(Interceptor.attach(base.add(0xAFB6F0), { onEnter: beginRoomShutdown })); } catch(e) {}
   }
 
   function startRefresh() {
     if (refreshTimer) return;
     refreshTimer = setInterval(function() {
+      if (roomShuttingDown) return;
       if (!cachedMyPlayer || cachedMyPlayer.isNull()) {
         var found = findMyPlayer();
         if (found && !found.isNull()) {
@@ -200,13 +228,13 @@ modules.godmode = (function() {
       var mod = getGameAssembly();
       if (!mod) { sendLog('error', 'HP', '未找到 GameAssembly.dll'); return; }
       if (!initNativeFunctions()) { sendLog('error', 'HP', 'NativeFunction 初始化失败'); return; }
+      installHooks(mod.base);
       cachedMyPlayer = findMyPlayer();
       if (cachedMyPlayer) {
         sendLog('info', 'HP', '已找到玩家: ' + cachedMyPlayer);
       } else {
         sendLog('info', 'HP', '等待玩家出现（自动刷新中）...');
       }
-      installHooks(mod.base);
       startRefresh();
       enabled = true;
       sendLog('success', 'HP', '无敌模式已启用!');
@@ -216,7 +244,10 @@ modules.godmode = (function() {
       if (!enabled) return;
       if (hurtHook) { try { hurtHook.detach(); } catch(e) {} hurtHook = null; }
       if (playerHurtHook) { try { playerHurtHook.detach(); } catch(e) {} playerHurtHook = null; }
+      for (var i = 0; i < lifecycleHooks.length; i++) { try { lifecycleHooks[i].detach(); } catch(e) {} }
+      lifecycleHooks = [];
       stopRefresh();
+      roomShuttingDown = true;
       cachedMyPlayer = null;
       enabled = false;
       sendLog('info', 'HP', '无敌模式已禁用');

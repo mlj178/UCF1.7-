@@ -98,6 +98,14 @@ function onToggle(data) {
       if (modules.roundskip) { modules.roundskip.enable(); modules.roundskip.skipround(); }
     } else if (featureName === 'gather_trigger') {
       if (modules.gather) modules.gather.gather();
+    } else if (featureName === 'battle_round_always') {
+      if (modules.battle_round_always) {
+        if (enable) {
+          modules.battle_round_always.enable();
+        } else {
+          modules.battle_round_always.disable();
+        }
+      }
     } else if (modules[featureName]) {
       var actionText = enable ? '已开启' : '已关闭';
       sendLog('success', '系统', featureName + ' ' + actionText);
@@ -194,6 +202,10 @@ rpc.exports = {
     if (!modules.weapon_giver) return JSON.stringify({ ok: false });
     var result = modules.weapon_giver.clearrespawnweapon();
     return JSON.stringify({ ok: result });
+  },
+  battleRoundGetStatus: function() {
+    if (!modules.battle_round_always) return JSON.stringify({ enabled: false, hookInstalled: false, currentIsBattleRound: -1 });
+    return modules.battle_round_always.getStatus();
   }
 };
 """

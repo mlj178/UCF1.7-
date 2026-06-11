@@ -1,27 +1,14 @@
 // ============================================================
 // AAAAA-battle_round_always.js - 多人生化模式：每局强制决战回合
 //
-// 原理：
-//   OnStartNewGameRound 中，roundCount%5==0 时写 static_fields[1]=1（决战回合）
-//   StartGenerateSupplyBox 读取 static_fields[1] 决定是否进入决战分支
-//   （决战分支启动 BattleTimer 协程，非决战分支启动普通补给箱生成器）
+// 方案：Hook StartGenerateSupplyBox，强制写入isBattleRound=1
+// 优势：简单可靠，不修改游戏代码，兼容性好
 //
-//   关键时序：
-//     OnStartNewGameRound 内部：
-//       1. 计算 %5 → 写 static_fields[1]
-//       2. 调用 ModeBase_Nano.OnStartNewGameRound
-//          → 内部调用 StartGenerateSupplyBox（虚函数）
-//          → StartGenerateSupplyBox 读取 static_fields[1]
-//
-//   如果 Hook OnStartNewGameRound 的 onLeave，写入太晚！
-//   因为 StartGenerateSupplyBox 已经在函数内部执行完毕了。
-//
-//   正确方案：Hook StartGenerateSupplyBox，在 onEnter 中写入 static_fields[1]=1
-//   这样 StartGenerateSupplyBox 执行时读到的就是1，进入决战分支
-//
-// RVA地址（根据IDA分析）：
+// 关键地址：
 //   Mode_Nano4_Terminator_TypeInfo: 0xE2CCB4
 //   StartGenerateSupplyBox:         0xB45AA0
+//
+// 修复：线程安全、指针验证、错误处理
 // ============================================================
 
 (function() {
@@ -32,32 +19,29 @@
     var moduleLogCounts = {};
 
     function log(level, module, message) {
-        if (!moduleLogCounts[module]) moduleLogCounts[module] = 0;
-        if (moduleLogCounts[module] >= MAX_LOGS_PER_MODULE) return;
-        moduleLogCounts[module]++;
-        var fullMsg = '[' + module + '] ' + message;
-        console.log('[' + level + '] ' + fullMsg);
         try {
-            send({type: 'log', level: level, module: module, message: message});
+            if (!moduleLogCounts[module]) moduleLogCounts[module] = 0;
+            if (moduleLogCounts[module] >= MAX_LOGS_PER_MODULE) return;
+            moduleLogCounts[module]++;
+            
+            var fullMsg = '[' + module + '] ' + message;
+            console.log('[' + level + '] ' + fullMsg);
+            
+            try {
+                send({type: 'log', level: level, module: module, message: message});
+            } catch(e) {}
         } catch(e) {}
     }
 
-    // ==================== 2. 模块查找 ====================
-    var _gameAssembly = null;
-
+    // ==================== 2. 模块查找（不缓存，每次重新查找）====================
     function getGameAssembly() {
-        if (_gameAssembly) return _gameAssembly;
         try {
             var mod = Process.findModuleByName('GameAssembly.dll');
             if (!mod) {
-                log('error', '系统', '未找到 GameAssembly.dll');
                 return null;
             }
-            _gameAssembly = mod;
-            log('success', '系统', 'GameAssembly.dll 基址: ' + mod.base);
             return mod;
         } catch(e) {
-            log('error', '系统', '获取模块失败: ' + e.message);
             return null;
         }
     }
@@ -68,24 +52,26 @@
         StartGenerateSupplyBox:         0xB45AA0,
     };
 
-    // ==================== 4. 字段偏移常量 ====================
-    var OFF = {
-        Klass_staticFields: 0x5C,   // klass->static_fields 指针偏移
-        StaticField_isBattleRound: 1, // static_fields[1] = isBattleRound
-    };
+    // ==================== 4. 线程安全的状态变量 ====================
+    // RPC调用在Frida主线程执行，天然串行，不需要互斥锁
+    // Hook回调在游戏线程执行，但只读取_enabled变量，JavaScript布尔值读写是原子的
+    var _enabled = false;
+    var _hookInstalled = false;
 
-    // ==================== 5. 安全读取函数 ====================
-    function readPtr(addr) {
+    // ==================== 5. 安全的指针读取函数 ====================
+    
+    // 安全读取指针
+    function safeReadPointer(addr) {
         try {
             if (!addr || addr.isNull()) return null;
-            var v = addr.readPointer();
-            return (v && !v.isNull()) ? v : null;
+            return addr.readPointer();
         } catch(e) {
             return null;
         }
     }
 
-    function readU8(addr) {
+    // 安全读取U8
+    function safeReadU8(addr) {
         try {
             if (!addr || addr.isNull()) return null;
             return addr.readU8();
@@ -94,148 +80,307 @@
         }
     }
 
-    // ==================== 6. 核心功能 ====================
-
-    var _hookInstalled = false;
-    var _enabled = false;  // 默认关闭，由UI控制开关
-
-    // 获取 static_fields 指针
-    function getStaticFields() {
+    // 安全写入U8
+    function safeWriteU8(addr, value) {
         try {
-            var mod = getGameAssembly();
-            if (!mod) return null;
-            var base = mod.base;
-
-            // 读取 TypeInfo 槽位 → klass → static_fields
-            var typeInfoSlot = base.add(RVA.Mode_Nano4_Terminator_TypeInfo);
-            var klass = readPtr(typeInfoSlot);
-            if (!klass) return null;
-
-            var staticFields = readPtr(klass.add(OFF.Klass_staticFields));
-            if (!staticFields) return null;
-
-            return staticFields;
-        } catch(e) {
-            log('error', 'Core', '获取 static_fields 失败: ' + e.message);
-            return null;
-        }
-    }
-
-    // 读取当前 isBattleRound 值
-    function readBattleRoundFlag() {
-        var sf = getStaticFields();
-        if (!sf) return -1;
-        var val = readU8(sf.add(OFF.StaticField_isBattleRound));
-        return val !== null ? val : -1;
-    }
-
-    // 强制写入 isBattleRound = 1
-    function forceBattleRound() {
-        var sf = getStaticFields();
-        if (!sf) {
-            log('error', 'Core', '无法写入：static_fields 为空');
-            return false;
-        }
-        try {
-            sf.add(OFF.StaticField_isBattleRound).writeU8(1);
+            if (!addr || addr.isNull()) return false;
+            addr.writeU8(value);
             return true;
         } catch(e) {
-            log('error', 'Core', '写入失败: ' + e.message);
             return false;
         }
     }
 
-    // 安装 Hook
+    // ==================== 6. 核心功能 ====================
+
+    // 读取当前 isBattleRound 值（从游戏内存实时读取）
+    function readBattleRoundFlag() {
+        try {
+            var mod = getGameAssembly();
+            if (!mod) return -1;
+            var base = mod.base;
+
+            // 读取TypeInfo
+            var typeInfoAddr = base.add(RVA.Mode_Nano4_Terminator_TypeInfo);
+            var typeInfo = safeReadPointer(typeInfoAddr);
+            if (!typeInfo) return -1;
+
+            // 读取static_fields
+            var staticFields = safeReadPointer(typeInfo.add(0x5C));
+            if (!staticFields) return -1;
+
+            // 读取isBattleRound字段
+            var isBattleRound = safeReadU8(staticFields.add(1));
+            if (isBattleRound === null) return -1;
+
+            return isBattleRound;
+        } catch(e) {
+            return -1;
+        }
+    }
+
+    // ==================== 7. Hook安装 ====================
     function installHook() {
         if (_hookInstalled) return true;
 
         var mod = getGameAssembly();
-        if (!mod) return false;
+        if (!mod) {
+            log('error', 'Hook', '无法获取GameAssembly');
+            return false;
+        }
         var base = mod.base;
 
+        // 计算目标地址
         var targetAddr = base.add(RVA.StartGenerateSupplyBox);
 
         try {
             Interceptor.attach(targetAddr, {
                 onEnter: function(args) {
-                    if (!_enabled) return;  // 未启用时透传
+                    // 检查功能是否启用（原子读取）
+                    if (!_enabled) return;
 
-                    var sf = getStaticFields();
-                    if (!sf) return;
-
-                    // 读取原始值用于日志
-                    var oldVal = readU8(sf.add(OFF.StaticField_isBattleRound));
-
-                    // 在 StartGenerateSupplyBox 执行前，强制写入 isBattleRound = 1
-                    // 这样函数内部读取 static_fields[1] 时就是1，进入决战分支
                     try {
-                        sf.add(OFF.StaticField_isBattleRound).writeU8(1);
-                        log('success', 'Hook', '决战回合已强制开启 (原值=' + oldVal + ' → 新值=1)');
+                        // 动态获取基址（避免缓存失效问题）
+                        var currentMod = getGameAssembly();
+                        if (!currentMod) return;
+                        var currentBase = currentMod.base;
+
+                        // 读取TypeInfo
+                        var typeInfoAddr = currentBase.add(RVA.Mode_Nano4_Terminator_TypeInfo);
+                        var typeInfo = safeReadPointer(typeInfoAddr);
+                        
+                        // 验证TypeInfo指针是否有效
+                        if (!typeInfo || typeInfo.isNull()) {
+                            // 只在首次失败时记录，避免刷屏
+                            if (!this._loggedInvalidType) {
+                                log('warn', 'Hook', 'TypeInfo指针无效: ' + typeInfoAddr);
+                                this._loggedInvalidType = true;
+                            }
+                            return;
+                        }
+
+                        // 读取static_fields
+                        var staticFields = safeReadPointer(typeInfo.add(0x5C));
+                        if (!staticFields || staticFields.isNull()) {
+                            if (!this._loggedInvalidFields) {
+                                log('warn', 'Hook', 'static_fields指针无效');
+                                this._loggedInvalidFields = true;
+                            }
+                            return;
+                        }
+
+                        // 读取当前值
+                        var oldVal = safeReadU8(staticFields.add(1));
+                        if (oldVal === null) {
+                            if (!this._loggedReadFail) {
+                                log('warn', 'Hook', '无法读取isBattleRound字段');
+                                this._loggedReadFail = true;
+                            }
+                            return;
+                        }
+
+                        // 如果不是1，强制写入
+                        if (oldVal !== 1) {
+                            if (safeWriteU8(staticFields.add(1), 1)) {
+                                log('warn', 'Hook', '强制写入 isBattleRound=1 (原值=' + oldVal + ')');
+                            }
+                        }
                     } catch(e) {
-                        log('error', 'Hook', '写入失败: ' + e.message);
+                        // 静默失败，避免影响游戏
                     }
                 }
             });
 
             _hookInstalled = true;
-            log('success', 'Hook', 'StartGenerateSupplyBox Hook 已安装 (RVA=0x' + RVA.StartGenerateSupplyBox.toString(16) + ')');
+            log('success', 'Hook', 'StartGenerateSupplyBox Hook已安装');
+            log('info', 'Hook', '目标地址: ' + targetAddr);
             return true;
 
         } catch(e) {
-            log('error', 'Hook', 'Hook 安装失败: ' + e.message);
+            log('error', 'Hook', 'Hook安装失败: ' + e.message);
             return false;
         }
     }
 
-    // ==================== 7. RPC接口导出 ====================
-    // 注意：Frida Python端会自动将 snake_case 转为 camelCase 查找
-    // 所以这里必须用 camelCase 命名
+    // ==================== 8. RPC接口导出 ====================
     rpc.exports = {
         // 启用强制决战回合
         enable: function() {
-            if (!_hookInstalled) {
-                var ok = installHook();
-                if (!ok) return {ok: false, msg: 'Hook安装失败'};
+            try {
+                if (!_hookInstalled) {
+                    var ok = installHook();
+                    if (!ok) {
+                        return {ok: false, msg: 'Hook安装失败'};
+                    }
+                }
+                
+                _enabled = true;
+                
+                // 启用时立即强制写入一次（确保立即生效）
+                try {
+                    var mod = getGameAssembly();
+                    if (mod) {
+                        var base = mod.base;
+                        var typeInfo = safeReadPointer(base.add(RVA.Mode_Nano4_Terminator_TypeInfo));
+                        if (typeInfo) {
+                            var staticFields = safeReadPointer(typeInfo.add(0x5C));
+                            if (staticFields) {
+                                safeWriteU8(staticFields.add(1), 1);
+                                log('success', 'RPC', '已立即强制写入 isBattleRound=1');
+                            }
+                        }
+                    }
+                } catch(e) {}
+                
+                log('success', 'RPC', '强制决战回合已启用 - 每局都是决战回合');
+                return {ok: true, msg: '已启用（已立即强制写入一次）'};
+            } catch(e) {
+                return {ok: false, msg: '启用失败: ' + e.message};
             }
-            _enabled = true;
-            log('success', 'RPC', '强制决战回合已启用');
-            return {ok: true, msg: '已启用'};
         },
 
-        // 禁用强制决战回合（恢复原始随机逻辑）
+        // 禁用强制决战回合
         disable: function() {
-            _enabled = false;
-            log('info', 'RPC', '强制决战回合已禁用，恢复原始逻辑');
-            return {ok: true, msg: '已禁用'};
+            try {
+                _enabled = false;
+                log('info', 'RPC', '强制决战回合已禁用 - 恢复原始随机逻辑');
+                return {ok: true, msg: '已禁用'};
+            } catch(e) {
+                return {ok: false, msg: '禁用失败: ' + e.message};
+            }
+        },
+
+        // 清理Hook和恢复状态
+        cleanup: function() {
+            try {
+                // 禁用功能
+                _enabled = false;
+                
+                // 尝试恢复原始值（可选，避免影响后续游戏）
+                try {
+                    var mod = getGameAssembly();
+                    if (mod) {
+                        var base = mod.base;
+                        var typeInfo = safeReadPointer(base.add(RVA.Mode_Nano4_Terminator_TypeInfo));
+                        if (typeInfo) {
+                            var staticFields = safeReadPointer(typeInfo.add(0x5C));
+                            if (staticFields) {
+                                // 恢复为0（普通回合）
+                                safeWriteU8(staticFields.add(1), 0);
+                                log('info', 'Cleanup', '已恢复 isBattleRound=0');
+                            }
+                        }
+                    }
+                } catch(e) {}
+                
+                log('success', 'Cleanup', 'Hook已清理，状态已恢复');
+                return {ok: true, msg: '清理完成'};
+            } catch(e) {
+                return {ok: false, msg: '清理失败: ' + e.message};
+            }
         },
 
         // 查询当前状态
         getStatus: function() {
-            var flag = readBattleRoundFlag();
-            return {
-                enabled: _enabled,
-                hookInstalled: _hookInstalled,
-                currentIsBattleRound: flag,
-            };
+            try {
+                var flag = readBattleRoundFlag();
+                return {
+                    enabled: _enabled,
+                    hookInstalled: _hookInstalled,
+                    currentIsBattleRound: flag,
+                };
+            } catch(e) {
+                return {
+                    enabled: _enabled,
+                    hookInstalled: _hookInstalled,
+                    currentIsBattleRound: -1,
+                };
+            }
         },
 
-        // 立即强制写入一次（不依赖Hook触发）
+        // 立即强制写入一次
         forceNow: function() {
-            var ok = forceBattleRound();
-            return {ok: ok, msg: ok ? '已强制写入' : '写入失败'};
+            try {
+                var mod = getGameAssembly();
+                if (!mod) {
+                    return {ok: false, msg: '无法获取GameAssembly'};
+                }
+                var base = mod.base;
+
+                var typeInfoAddr = base.add(RVA.Mode_Nano4_Terminator_TypeInfo);
+                var typeInfo = safeReadPointer(typeInfoAddr);
+                if (!typeInfo) {
+                    return {ok: false, msg: 'TypeInfo为空'};
+                }
+
+                var staticFields = safeReadPointer(typeInfo.add(0x5C));
+                if (!staticFields) {
+                    return {ok: false, msg: 'static_fields为空'};
+                }
+
+                if (safeWriteU8(staticFields.add(1), 1)) {
+                    log('success', 'RPC', '已立即强制写入 isBattleRound=1');
+                    return {ok: true, msg: '已强制写入'};
+                } else {
+                    return {ok: false, msg: '写入失败'};
+                }
+            } catch(e) {
+                return {ok: false, msg: '写入失败: ' + e.message};
+            }
+        },
+
+        // 调试：显示详细的读取信息
+        debugReadInfo: function() {
+            try {
+                var mod = getGameAssembly();
+                if (!mod) return {ok: false, msg: '无法获取GameAssembly'};
+                var base = mod.base;
+
+                var typeInfoAddr = base.add(RVA.Mode_Nano4_Terminator_TypeInfo);
+                var typeInfo = safeReadPointer(typeInfoAddr);
+
+                var info = {
+                    gameAssemblyBase: base.toString(),
+                    typeInfoRVA: '0x' + RVA.Mode_Nano4_Terminator_TypeInfo.toString(16),
+                    typeInfoAddr: typeInfoAddr.toString(),
+                    typeInfo: typeInfo ? typeInfo.toString() : 'null',
+                };
+
+                if (typeInfo) {
+                    var staticFields = safeReadPointer(typeInfo.add(0x5C));
+                    info.staticFieldsAddr = staticFields ? staticFields.toString() : 'null';
+
+                    if (staticFields) {
+                        var isAttributeEnable = safeReadU8(staticFields.add(0));
+                        var isBattleRound = safeReadU8(staticFields.add(1));
+                        var isBattleStart = safeReadU8(staticFields.add(2));
+                        
+                        info.isAttributeEnable = isAttributeEnable !== null ? isAttributeEnable : 'null';
+                        info.isBattleRound = isBattleRound !== null ? isBattleRound : 'null';
+                        info.isBattleStart = isBattleStart !== null ? isBattleStart : 'null';
+                        
+                        info.isAttributeEnableAddr = staticFields.add(0).toString();
+                        info.isBattleRoundAddr = staticFields.add(1).toString();
+                        info.isBattleStartAddr = staticFields.add(2).toString();
+                    }
+                }
+
+                log('info', 'Debug', '调试信息已生成');
+                return {ok: true, info: info};
+            } catch(e) {
+                return {ok: false, msg: '调试失败: ' + e.message};
+            }
         },
     };
 
-    // ==================== 8. 初始化 ====================
+    // ==================== 9. 初始化 ====================
     var mod = getGameAssembly();
     if (mod) {
-        log('success', '系统', '决战回合修改器已加载');
-        log('info', '系统', '点击UI按钮启用/禁用强制决战回合');
-        log('info', '系统', 'StartGenerateSupplyBox RVA: 0x' + RVA.StartGenerateSupplyBox.toString(16));
-        log('info', '系统', 'TypeInfo RVA: 0x' + RVA.Mode_Nano4_Terminator_TypeInfo.toString(16));
-
-        // 预安装Hook（但不启用），避免首次回合触发时延迟
-        installHook();
+        log('success', '系统', '脚本已加载');
+        log('info', '系统', 'GameAssembly基址: ' + mod.base);
+        log('info', '系统', '等待启用...');
+    } else {
+        log('error', '系统', 'GameAssembly.dll 未找到');
     }
 
 })();

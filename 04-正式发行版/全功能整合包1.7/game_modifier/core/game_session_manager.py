@@ -296,7 +296,19 @@ class GameSessionManager:
             self._bus.emit('log_message', level='success', module='SessionManager',
                           message='连接到现有 DLL')
         else:
-            # No existing DLL, need to inject
+            identity = (pid, self._pid_create_time)
+            if self._injection_attempt_identity == identity:
+                self._universal_manager = None
+                self._last_universal_retry = time.time()
+                with self._lock:
+                    self._state = (
+                        SessionState.READY
+                        if self._frida_manager
+                        else SessionState.CONNECTING_FRIDA
+                    )
+                return
+
+            # No existing DLL and this process has not had a real injection attempt.
             with self._lock:
                 self._state = SessionState.INJECTING_DLL
     
