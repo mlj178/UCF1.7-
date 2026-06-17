@@ -1,0 +1,484 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ModeBase_Nano 字段关系图与字段说明</title>
+  <style>
+    :root { --bg:#f4f6f8; --panel:#ffffff; --ink:#1f2937; --muted:#667085; --line:#d9e1ec; --blue:#2457a6; --green:#207450; --amber:#9a5b13; }
+    * { box-sizing:border-box; }
+    body { margin:0; background:var(--bg); color:var(--ink); font-family:"Microsoft YaHei","Segoe UI",Arial,sans-serif; }
+    .page { max-width:1360px; margin:0 auto; padding:18px; }
+    header,.panel,table { background:var(--panel); border:1px solid var(--line); border-radius:8px; }
+    header { padding:18px 20px; }
+    h1 { margin:0 0 8px; font-size:26px; letter-spacing:0; }
+    h2 { margin:26px 0 12px; font-size:20px; }
+    p { margin:0; line-height:1.65; }
+    .summary { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; margin-top:16px; }
+    .metric { border:1px solid var(--line); border-radius:8px; padding:12px; background:#fafcff; }
+    .metric strong { display:block; font-size:24px; color:var(--blue); }
+    .metric span { color:var(--muted); font-size:13px; }
+    .graph { display:grid; grid-template-columns:1fr 1.1fr; gap:14px; margin-top:16px; }
+    .panel { padding:16px; }
+    .core { border:2px solid var(--blue); background:#eef5ff; border-radius:8px; padding:16px; }
+    .core strong { display:block; font-size:24px; color:var(--blue); margin-bottom:8px; }
+    .section-panel { margin-top:14px; }
+    .section-note { color:var(--muted); font-size:13px; margin-bottom:12px; }
+    .nodes { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; margin-top:12px; }
+    .node { border:1px solid #cbd8e8; background:#fbfdff; border-radius:8px; padding:10px; min-height:112px; }
+    .node b { display:block; color:var(--green); margin-bottom:4px; }
+    .node span { display:block; color:var(--muted); font-size:13px; line-height:1.45; }
+    .node p { color:#344054; font-size:13px; line-height:1.55; margin-top:8px; }
+    .stats { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; }
+    .stat-card { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:12px; min-height:116px; }
+    .stat-card strong { display:block; font-size:16px; margin-bottom:6px; }
+    .stat-card span { display:inline-block; color:#fff; background:var(--blue); border-radius:999px; padding:3px 9px; font-size:12px; margin-bottom:8px; }
+    .stat-card p { color:var(--muted); font-size:13px; }
+    .toolbar { display:flex; align-items:center; justify-content:space-between; gap:12px; margin:16px 0 8px; flex-wrap:wrap; }
+    .filters,.pager { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+    button,select { border:1px solid var(--line); background:#fff; color:var(--ink); border-radius:6px; padding:8px 12px; cursor:pointer; font:inherit; }
+    button.active { background:var(--blue); color:#fff; border-color:var(--blue); }
+    .hint,.footnote { color:var(--muted); font-size:13px; }
+    table { width:100%; border-collapse:separate; border-spacing:0; overflow:hidden; }
+    th,td { padding:11px 12px; border-bottom:1px solid #edf1f6; vertical-align:top; text-align:left; }
+    th { background:#f8fafc; font-size:13px; color:#344054; }
+    tr:last-child td { border-bottom:0; }
+    td.num { width:44px; color:var(--muted); }
+    td strong { display:block; margin-bottom:4px; }
+    td span, small { display:block; color:var(--muted); font-size:12px; line-height:1.45; }
+    code { white-space:nowrap; color:#344054; background:#f3f6fa; border:1px solid #e0e7ef; border-radius:5px; padding:2px 5px; }
+    .badge { display:inline-block; border-radius:999px; padding:3px 8px; font-size:12px; margin-top:8px; }
+    .badge.keep { background:#eaf7ef; color:var(--green); }
+    .badge.ignore { background:#fff4e5; color:var(--amber); }
+    .footnote { margin-top:14px; }
+    @media (max-width: 900px) { .summary,.graph,.stats,.nodes { grid-template-columns:1fr; } table { font-size:13px; } code { white-space:normal; } }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header>
+      <h1>ModeBase_Nano 字段关系图与字段说明</h1>
+      <p>纳米模式规则扩展。它继承玩法规则基类，并额外保存纳米模式里死亡后转化或吸收相关的角色状态。</p>
+      <div class="summary">
+        <div class="metric"><strong>26</strong><span>dump.cs 中字段总数</span></div>
+        <div class="metric"><strong>7</strong><span>建议重点分析字段</span></div>
+        <div class="metric"><strong>19</strong><span>可忽略但已统计字段</span></div>
+        <div class="metric"><strong>2</strong><span>字段表分页，每页 15 行</span></div>
+      </div>
+    </header>
+    <section class="graph">
+      <div class="panel"><div class="core"><strong>ModeBase_Nano</strong><p>纳米模式规则扩展。它继承玩法规则基类，并额外保存纳米模式里死亡后转化或吸收相关的角色状态。</p></div></div>
+      <div class="panel"><h2 style="margin-top:0">它直接保存的主要类型</h2><div class="nodes">
+        <div class="node">
+          <b>AnimationHud</b>
+          <span>字段依据：nanoKillMark / nanoKillMark_MultiKill</span>
+          <p>动画 HUD 控件：显示模式倒计时、提示动画或状态切换反馈</p>
+        </div>
+        
+
+        <div class="node">
+          <b>CommonHud_1</b>
+          <span>字段依据：nanoTimerTip / hpRecoverIcon / gKeyTip / supplyBoxTip / meleeKillNanoTip</span>
+          <p>通用对局 HUD：承载模式提示、计分、倒计时等基础界面元素</p>
+        </div>
+        
+
+        <div class="node">
+          <b>CommonKillMark</b>
+          <span>字段依据：mark</span>
+          <p>通用击杀提示：显示击杀、连杀、爆头等战斗反馈</p>
+        </div>
+        
+
+        <div class="node">
+          <b>GameObject</b>
+          <span>字段依据：nanoClothIcon</span>
+          <p>Unity 场景对象或预制体。这里多用于 UI 容器、玩家条目模板或模式对象生成。</p>
+        </div>
+        
+
+        <div class="node">
+          <b>HUD_Nano_FinalBattle</b>
+          <span>字段依据：finalBattle</span>
+          <p>HUD 界面组件：显示玩家状态、提示、图标或模式信息</p>
+        </div>
+        
+
+        <div class="node">
+          <b>NameKeyPool</b>
+          <span>字段依据：supplyBoxPool</span>
+          <p>按名称索引的对象池：复用角色/武器对象</p>
+        </div>
+        
+
+        <div class="node">
+          <b>NanoModeAsset</b>
+          <span>字段依据：asset</span>
+          <p>纳米模式相关类型：处理终结者/幽灵玩法数据或行为</p>
+        </div>
+        
+
+        <div class="node">
+          <b>NanoModeBasicAsset</b>
+          <span>字段依据：basicAsset</span>
+          <p>纳米模式相关类型：处理终结者/幽灵玩法数据或行为</p>
+        </div>
+        
+
+        <div class="node">
+          <b>Player</b>
+          <span>字段依据：respawningPlayer / randomPlayerList</span>
+          <p>玩家战斗主体。保存生命、阵营、武器、输入、模型和 HUD 状态，是本机玩家、队友、敌人和 Bot 在战斗层的核心对象。</p>
+        </div>
+        
+
+        <div class="node">
+          <b>readonly string</b>
+          <span>字段依据：Text_GetSkill / Tip_Infect</span>
+          <p>项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</p>
+        </div>
+        </div></div>
+    </section>
+    
+    <h2>字段系统分类统计</h2>
+    <section class="stats">
+        <article class="stat-card">
+          <strong>资源与对象池</strong>
+          <span>1 个字段</span>
+          <p>负责资源索引和对象复用。</p>
+        </article>
+        
+
+        <article class="stat-card">
+          <strong>武器数据</strong>
+          <span>1 个字段</span>
+          <p>负责武器实例和配置表查找。</p>
+        </article>
+        
+
+        <article class="stat-card">
+          <strong>玩家与阵营统计</strong>
+          <span>3 个字段</span>
+          <p>负责双方人数、存活人数和本机玩家引用。</p>
+        </article>
+        
+
+        <article class="stat-card">
+          <strong>HUD/UI/计分板</strong>
+          <span>12 个字段</span>
+          <p>负责比分、时间、玩家条目和模式提示显示。</p>
+        </article>
+        
+
+        <article class="stat-card">
+          <strong>纳米/特殊规则</strong>
+          <span>9 个字段</span>
+          <p>负责纳米模式身份、死亡转化或特殊规则。</p>
+        </article>
+        </section>
+    
+    <h2>字段完整说明</h2>
+    <div class="toolbar">
+      <div class="filters">
+        <label for="categoryFilter">字段系统分类</label>
+        <select id="categoryFilter">
+          <option value="全部">全部字段（26）</option>
+          <option value="资源与对象池">资源与对象池（1）</option>
+<option value="武器数据">武器数据（1）</option>
+<option value="玩家与阵营统计">玩家与阵营统计（3）</option>
+<option value="HUD/UI/计分板">HUD/UI/计分板（12）</option>
+<option value="纳米/特殊规则">纳米/特殊规则（9）</option>
+        </select>
+      </div>
+      <div class="pager" id="pager"></div>
+      <div class="hint">当前显示 <span id="pageLabel">第 1 页</span>，筛选后 <span id="visibleCount">26</span> 个字段；可忽略字段不会遗漏，只是不进入主要类关系判断。</div>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>字段</th>
+          <th>类型</th>
+          <th>功能分类与解释</th>
+          <th>修改/忽略建议</th>
+        </tr>
+      </thead>
+      <tbody>
+            <tr data-page="1" data-category="纳米/特殊规则">
+              <td class="num">1</td>
+              <td><strong>asset</strong><span>public / instance / offset 0x74</span></td>
+              <td><code>NanoModeAsset</code></td>
+              <td><b>纳米/特殊规则</b><p>纳米模式资源配置入口，保存终结者/幽灵/人类等模式资源和规则素材。</p></td>
+              <td><p>查纳米模式角色资源、技能资源时优先看。</p><span class="badge keep">纳入重点分析</span></td>
+            </tr>
+            
+
+            <tr data-page="1" data-category="纳米/特殊规则">
+              <td class="num">2</td>
+              <td><strong>basicAsset</strong><span>public / instance / offset 0x78</span></td>
+              <td><code>NanoModeBasicAsset</code></td>
+              <td><b>纳米/特殊规则</b><p>纳米模式基础配置资源，通常保存通用数值、提示、基础表现资源。</p></td>
+              <td><p>适合查纳米模式基础参数。</p><span class="badge keep">纳入重点分析</span></td>
+            </tr>
+            
+
+            <tr data-page="1" data-category="HUD/UI/计分板">
+              <td class="num">3</td>
+              <td><strong>nanoTimerTip</strong><span>protected / instance / offset 0x7C</span></td>
+              <td><code>CommonHud_1</code></td>
+              <td><b>HUD/UI/计分板</b><p>纳米模式倒计时提示 HUD，用于显示感染、最终战或阶段计时。</p></td>
+              <td><p>只影响显示；实际计时逻辑要看方法读写。</p><span class="badge ignore">可忽略</span><small>编译器生成的属性后备字段，逻辑入口应优先看属性或方法。</small></td>
+            </tr>
+            
+
+            <tr data-page="1" data-category="HUD/UI/计分板">
+              <td class="num">4</td>
+              <td><strong>finalBattle</strong><span>protected / instance / offset 0x80</span></td>
+              <td><code>HUD_Nano_FinalBattle</code></td>
+              <td><b>HUD/UI/计分板</b><p>最终战 HUD 控件，用于纳米模式末期阶段提示和表现。</p></td>
+              <td><p>查最终战 UI 或触发提示时重点看。</p><span class="badge ignore">可忽略</span><small>编译器生成的属性后备字段，逻辑入口应优先看属性或方法。</small></td>
+            </tr>
+            
+
+            <tr data-page="1" data-category="HUD/UI/计分板">
+              <td class="num">5</td>
+              <td><strong>hpRecoverIcon</strong><span>protected / instance / offset 0x84</span></td>
+              <td><code>CommonHud_1</code></td>
+              <td><b>HUD/UI/计分板</b><p>回血提示图标，纳米/终结者角色恢复生命时用于 UI 表现。</p></td>
+              <td><p>改表现可查；规则数值不在这里。</p><span class="badge ignore">可忽略</span><small>编译器生成的属性后备字段，逻辑入口应优先看属性或方法。</small></td>
+            </tr>
+            
+
+            <tr data-page="1" data-category="HUD/UI/计分板">
+              <td class="num">6</td>
+              <td><strong>gKeyTip</strong><span>protected / instance / offset 0x88</span></td>
+              <td><code>CommonHud_1</code></td>
+              <td><b>HUD/UI/计分板</b><p>G 键技能或交互提示，提示玩家使用纳米模式特殊能力。</p></td>
+              <td><p>查技能按键提示时有价值。</p><span class="badge ignore">可忽略</span><small>编译器生成的属性后备字段，逻辑入口应优先看属性或方法。</small></td>
+            </tr>
+            
+
+            <tr data-page="1" data-category="HUD/UI/计分板">
+              <td class="num">7</td>
+              <td><strong>mark</strong><span>protected / instance / offset 0x8C</span></td>
+              <td><code>CommonKillMark</code></td>
+              <td><b>HUD/UI/计分板</b><p>击杀标记 HUD，用于纳米模式击杀、人类感染或连杀提示。</p></td>
+              <td><p>查击杀反馈表现时重点看。</p><span class="badge ignore">可忽略</span><small>编译器生成的属性后备字段，逻辑入口应优先看属性或方法。</small></td>
+            </tr>
+            
+
+            <tr data-page="1" data-category="HUD/UI/计分板">
+              <td class="num">8</td>
+              <td><strong>nanoClothIcon</strong><span>protected / instance / offset 0x90</span></td>
+              <td><code>GameObject</code></td>
+              <td><b>HUD/UI/计分板</b><p>纳米布料/身份图标对象，用于显示纳米相关状态或外观提示。</p></td>
+              <td><p>Unity 对象引用，主要影响 UI/表现。</p><span class="badge ignore">可忽略</span><small>编译器生成的属性后备字段，逻辑入口应优先看属性或方法。</small></td>
+            </tr>
+            
+
+            <tr data-page="1" data-category="HUD/UI/计分板">
+              <td class="num">9</td>
+              <td><strong>supplyBoxTip</strong><span>protected / instance / offset 0x94</span></td>
+              <td><code>CommonHud_1</code></td>
+              <td><b>HUD/UI/计分板</b><p>补给箱提示 HUD，用于纳米模式补给箱刷新或拾取提示。</p></td>
+              <td><p>查补给箱流程时有价值。</p><span class="badge ignore">可忽略</span><small>编译器生成的属性后备字段，逻辑入口应优先看属性或方法。</small></td>
+            </tr>
+            
+
+            <tr data-page="1" data-category="HUD/UI/计分板">
+              <td class="num">10</td>
+              <td><strong>meleeKillNanoTip</strong><span>protected / instance / offset 0x98</span></td>
+              <td><code>CommonHud_1</code></td>
+              <td><b>HUD/UI/计分板</b><p>近战击杀纳米提示，用于特殊击杀或转化反馈。</p></td>
+              <td><p>查刀杀纳米奖励或提示时看它。</p><span class="badge ignore">可忽略</span><small>编译器生成的属性后备字段，逻辑入口应优先看属性或方法。</small></td>
+            </tr>
+            
+
+            <tr data-page="1" data-category="HUD/UI/计分板">
+              <td class="num">11</td>
+              <td><strong>nanoKillMark</strong><span>private / instance / offset 0x9C</span></td>
+              <td><code>AnimationHud</code></td>
+              <td><b>HUD/UI/计分板</b><p>纳米击杀动画标记，用于单次击杀表现。</p></td>
+              <td><p>只影响击杀表现。</p><span class="badge ignore">可忽略</span><small>编译器生成的属性后备字段，逻辑入口应优先看属性或方法。</small></td>
+            </tr>
+            
+
+            <tr data-page="1" data-category="HUD/UI/计分板">
+              <td class="num">12</td>
+              <td><strong>nanoKillMark_MultiKill</strong><span>private / instance / offset 0xA0</span></td>
+              <td><code>AnimationHud</code></td>
+              <td><b>HUD/UI/计分板</b><p>纳米连杀动画标记，用于多杀反馈。</p></td>
+              <td><p>查纳米连杀提示时看它。</p><span class="badge ignore">可忽略</span><small>编译器生成的属性后备字段，逻辑入口应优先看属性或方法。</small></td>
+            </tr>
+            
+
+            <tr data-page="1" data-category="玩家与阵营统计">
+              <td class="num">13</td>
+              <td><strong>thisRoundPlayer</strong><span>protected / instance / offset 0xA4</span></td>
+              <td><code>int</code></td>
+              <td><b>玩家与阵营统计</b><p>本回合参与玩家数量缓存，影响纳米身份分配、感染比例或胜负统计。</p></td>
+              <td><p>基础 int，关系图可忽略；规则分析时要查读写点。</p><span class="badge ignore">可忽略</span><small>基础值类型 int，不作为类关系节点；但字段仍计入总数。</small></td>
+            </tr>
+            
+
+            <tr data-page="1" data-category="纳米/特殊规则">
+              <td class="num">14</td>
+              <td><strong>soldierAttackPower</strong><span>public / static / offset 0x0</span></td>
+              <td><code>int</code></td>
+              <td><b>纳米/特殊规则</b><p>士兵/人类攻击力配置，可能影响人类对纳米角色的伤害倍率。</p></td>
+              <td><p>适合查纳米模式伤害强化。</p><span class="badge ignore">可忽略</span><small>基础值类型 int，不作为类关系节点；但字段仍计入总数。</small></td>
+            </tr>
+            
+
+            <tr data-page="1" data-category="武器数据">
+              <td class="num">15</td>
+              <td><strong>ignoreSoldierPowerWpnList</strong><span>protected / instance / offset 0xA8</span></td>
+              <td><code>List&lt;int&gt;</code></td>
+              <td><b>武器数据</b><p>不受士兵攻击力加成影响的武器 ID 列表。</p></td>
+              <td><p>查纳米模式武器伤害例外规则时重点看。</p><span class="badge ignore">可忽略</span><small>基础值类型 int，不作为类关系节点；但字段仍计入总数。</small></td>
+            </tr>
+            
+
+            <tr data-page="2" data-category="玩家与阵营统计">
+              <td class="num">16</td>
+              <td><strong>respawningPlayer</strong><span>private / instance / offset 0xAC</span></td>
+              <td><code>List&lt;Player&gt;</code></td>
+              <td><b>玩家与阵营统计</b><p>正在复活倒计时的玩家列表。</p></td>
+              <td><p>查纳米模式复活流程和倒计时 UI 时重点看。</p><span class="badge keep">纳入重点分析</span></td>
+            </tr>
+            
+
+            <tr data-page="2" data-category="纳米/特殊规则">
+              <td class="num">17</td>
+              <td><strong>&lt;nanoRespawn_Melee&gt;k__BackingField</strong><span>private / static / offset 0x4</span></td>
+              <td><code>bool</code></td>
+              <td><b>纳米/特殊规则</b><p>nanoRespawn_Melee 属性后备字段，表示近战击杀是否允许纳米复活或特殊复活规则。</p></td>
+              <td><p>编译器字段，逻辑入口看属性和复活方法。</p><span class="badge ignore">可忽略</span><small>编译器生成的属性后备字段，逻辑入口应优先看属性或方法。</small></td>
+            </tr>
+            
+
+            <tr data-page="2" data-category="纳米/特殊规则">
+              <td class="num">18</td>
+              <td><strong>&lt;nanoRespawn_Headshot&gt;k__BackingField</strong><span>private / static / offset 0x5</span></td>
+              <td><code>bool</code></td>
+              <td><b>纳米/特殊规则</b><p>nanoRespawn_Headshot 属性后备字段，表示爆头击杀是否触发纳米复活限制或特殊规则。</p></td>
+              <td><p>编译器字段，逻辑入口看属性和复活方法。</p><span class="badge ignore">可忽略</span><small>编译器生成的属性后备字段，逻辑入口应优先看属性或方法。</small></td>
+            </tr>
+            
+
+            <tr data-page="2" data-category="资源与对象池">
+              <td class="num">19</td>
+              <td><strong>supplyBoxPool</strong><span>protected / instance / offset 0xB0</span></td>
+              <td><code>NameKeyPool</code></td>
+              <td><b>资源与对象池</b><p>补给箱对象池，用于纳米模式补给箱生成和回收。</p></td>
+              <td><p>查补给箱刷新、回收和性能时重点看。</p><span class="badge keep">纳入重点分析</span></td>
+            </tr>
+            
+
+            <tr data-page="2" data-category="玩家与阵营统计">
+              <td class="num">20</td>
+              <td><strong>randomPlayerList</strong><span>protected / instance / offset 0xB4</span></td>
+              <td><code>List&lt;Player&gt;</code></td>
+              <td><b>玩家与阵营统计</b><p>随机玩家列表，用于抽取纳米角色、终结者或特殊身份。</p></td>
+              <td><p>查身份随机分配时重点看。</p><span class="badge keep">纳入重点分析</span></td>
+            </tr>
+            
+
+            <tr data-page="2" data-category="纳米/特殊规则">
+              <td class="num">21</td>
+              <td><strong>nanoLevelUpNeedExp</strong><span>public / static / offset 0x8</span></td>
+              <td><code>int[]</code></td>
+              <td><b>纳米/特殊规则</b><p>纳米升级所需经验数组，控制不同等级升级门槛。</p></td>
+              <td><p>可作为等级成长参数入口。</p><span class="badge ignore">可忽略</span><small>基础值类型 int，不作为类关系节点；但字段仍计入总数。</small></td>
+            </tr>
+            
+
+            <tr data-page="2" data-category="纳米/特殊规则">
+              <td class="num">22</td>
+              <td><strong>BornNanoGhostHP</strong><span>protected / static / offset 0xC</span></td>
+              <td><code>int</code></td>
+              <td><b>纳米/特殊规则</b><p>出生时纳米幽灵生命值。</p></td>
+              <td><p>可作为纳米角色初始血量修改点。</p><span class="badge ignore">可忽略</span><small>基础值类型 int，不作为类关系节点；但字段仍计入总数。</small></td>
+            </tr>
+            
+
+            <tr data-page="2" data-category="纳米/特殊规则">
+              <td class="num">23</td>
+              <td><strong>AbsorbNeedTime</strong><span>protected / static / offset 0x10</span></td>
+              <td><code>float</code></td>
+              <td><b>纳米/特殊规则</b><p>吸收所需时间，控制纳米模式吸收/感染动作持续时长。</p></td>
+              <td><p>查吸收机制和交互耗时。</p><span class="badge ignore">可忽略</span><small>基础值类型 float，不作为类关系节点；但字段仍计入总数。</small></td>
+            </tr>
+            
+
+            <tr data-page="2" data-category="纳米/特殊规则">
+              <td class="num">24</td>
+              <td><strong>AbsorbCheckCount</strong><span>protected / static / offset 0x14</span></td>
+              <td><code>int</code></td>
+              <td><b>纳米/特殊规则</b><p>吸收检查次数，可能用于持续判定吸收是否完成或中断。</p></td>
+              <td><p>查吸收判定稳定性和频率。</p><span class="badge ignore">可忽略</span><small>基础值类型 int，不作为类关系节点；但字段仍计入总数。</small></td>
+            </tr>
+            
+
+            <tr data-page="2" data-category="HUD/UI/计分板">
+              <td class="num">25</td>
+              <td><strong>Text_GetSkill</strong><span>protected / static / offset 0x18</span></td>
+              <td><code>readonly string</code></td>
+              <td><b>HUD/UI/计分板</b><p>获得技能提示文本。</p></td>
+              <td><p>适合改纳米模式提示文案。</p><span class="badge keep">纳入重点分析</span></td>
+            </tr>
+            
+
+            <tr data-page="2" data-category="HUD/UI/计分板">
+              <td class="num">26</td>
+              <td><strong>Tip_Infect</strong><span>protected / static / offset 0x1C</span></td>
+              <td><code>readonly string[]</code></td>
+              <td><b>HUD/UI/计分板</b><p>感染提示文本数组，用于不同感染场景的 HUD 提示。</p></td>
+              <td><p>适合改感染提示文案。</p><span class="badge keep">纳入重点分析</span></td>
+            </tr>
+            </tbody>
+    </table>
+    <p class="footnote">忽略规则：基础值字段、编译器生成后备字段、Action/事件委托字段不作为“类保存类”的关系图节点；但本页仍逐项解释并计入总数。</p>
+    
+  </main>
+  <script>
+    const rows = Array.from(document.querySelectorAll('tbody tr[data-page]'));
+    const filter = document.getElementById('categoryFilter');
+    const pager = document.getElementById('pager');
+    const label = document.getElementById('pageLabel');
+    const visibleCount = document.getElementById('visibleCount');
+    const pageSize = 15;
+    let currentPage = 1;
+    function matchingRows() {
+      if (!filter) return rows;
+      const category = filter.value;
+      return rows.filter(row => category === '全部' || row.dataset.category === category);
+    }
+    function renderPager(totalPages) {
+      if (!pager) return;
+      pager.innerHTML = '';
+      for (let page = 1; page <= totalPages; page++) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.textContent = '第 ' + page + ' 页';
+        button.className = page === currentPage ? 'active' : '';
+        button.addEventListener('click', () => { currentPage = page; updateTable(); });
+        pager.appendChild(button);
+      }
+    }
+    function updateTable() {
+      const matched = matchingRows();
+      const totalPages = Math.max(1, Math.ceil(matched.length / pageSize));
+      if (currentPage > totalPages) currentPage = totalPages;
+      const start = (currentPage - 1) * pageSize;
+      const visibleSet = new Set(matched.slice(start, start + pageSize));
+      rows.forEach(row => row.style.display = visibleSet.has(row) ? '' : 'none');
+      if (visibleCount) visibleCount.textContent = matched.length;
+      if (label) label.textContent = '第 ' + currentPage + ' 页';
+      renderPager(totalPages);
+    }
+    if (filter) filter.addEventListener('change', () => { currentPage = 1; updateTable(); });
+    updateTable();
+  </script>
+</body>
+</html>

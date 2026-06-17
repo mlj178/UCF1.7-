@@ -1,0 +1,306 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Text 字段关系图与字段说明</title>
+  <style>
+    :root { --bg:#f4f6f8; --panel:#ffffff; --ink:#1f2937; --muted:#667085; --line:#d9e1ec; --blue:#2457a6; --green:#207450; --amber:#9a5b13; }
+    * { box-sizing:border-box; }
+    body { margin:0; background:var(--bg); color:var(--ink); font-family:"Microsoft YaHei","Segoe UI",Arial,sans-serif; }
+    .page { max-width:1360px; margin:0 auto; padding:18px; }
+    header,.panel,table { background:var(--panel); border:1px solid var(--line); border-radius:8px; }
+    header { padding:18px 20px; }
+    h1 { margin:0 0 8px; font-size:26px; letter-spacing:0; }
+    h2 { margin:26px 0 12px; font-size:20px; }
+    p { margin:0; line-height:1.65; }
+    .summary { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; margin-top:16px; }
+    .metric { border:1px solid var(--line); border-radius:8px; padding:12px; background:#fafcff; }
+    .metric strong { display:block; font-size:24px; color:var(--blue); }
+    .metric span { color:var(--muted); font-size:13px; }
+    .graph { display:grid; grid-template-columns:1fr 1.1fr; gap:14px; margin-top:16px; }
+    .panel { padding:16px; }
+    .core { border:2px solid var(--blue); background:#eef5ff; border-radius:8px; padding:16px; }
+    .core strong { display:block; font-size:24px; color:var(--blue); margin-bottom:8px; }
+    .section-panel { margin-top:14px; }
+    .section-note { color:var(--muted); font-size:13px; margin-bottom:12px; }
+    .nodes { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; margin-top:12px; }
+    .node { border:1px solid #cbd8e8; background:#fbfdff; border-radius:8px; padding:10px; min-height:112px; }
+    .node b { display:block; color:var(--green); margin-bottom:4px; }
+    .node span { display:block; color:var(--muted); font-size:13px; line-height:1.45; }
+    .node p { color:#344054; font-size:13px; line-height:1.55; margin-top:8px; }
+    .stats { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; }
+    .stat-card { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:12px; min-height:116px; }
+    .stat-card strong { display:block; font-size:16px; margin-bottom:6px; }
+    .stat-card span { display:inline-block; color:#fff; background:var(--blue); border-radius:999px; padding:3px 9px; font-size:12px; margin-bottom:8px; }
+    .stat-card p { color:var(--muted); font-size:13px; }
+    .toolbar { display:flex; align-items:center; justify-content:space-between; gap:12px; margin:16px 0 8px; flex-wrap:wrap; }
+    .filters,.pager { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+    button,select { border:1px solid var(--line); background:#fff; color:var(--ink); border-radius:6px; padding:8px 12px; cursor:pointer; font:inherit; }
+    button.active { background:var(--blue); color:#fff; border-color:var(--blue); }
+    .hint,.footnote { color:var(--muted); font-size:13px; }
+    table { width:100%; border-collapse:separate; border-spacing:0; overflow:hidden; }
+    th,td { padding:11px 12px; border-bottom:1px solid #edf1f6; vertical-align:top; text-align:left; }
+    th { background:#f8fafc; font-size:13px; color:#344054; }
+    tr:last-child td { border-bottom:0; }
+    td.num { width:44px; color:var(--muted); }
+    td strong { display:block; margin-bottom:4px; }
+    td span, small { display:block; color:var(--muted); font-size:12px; line-height:1.45; }
+    code { white-space:nowrap; color:#344054; background:#f3f6fa; border:1px solid #e0e7ef; border-radius:5px; padding:2px 5px; }
+    .badge { display:inline-block; border-radius:999px; padding:3px 8px; font-size:12px; margin-top:8px; }
+    .badge.keep { background:#eaf7ef; color:var(--green); }
+    .badge.ignore { background:#fff4e5; color:var(--amber); }
+    .footnote { margin-top:14px; }
+    @media (max-width: 900px) { .summary,.graph,.stats,.nodes { grid-template-columns:1fr; } table { font-size:13px; } code { white-space:normal; } }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header>
+      <h1>Text 字段关系图与字段说明</h1>
+      <p>Unity UI 文本：显示名字、分数、提示等</p>
+      <div class="summary">
+        <div class="metric"><strong>7</strong><span>dump.cs 中字段总数</span></div>
+        <div class="metric"><strong>4</strong><span>建议重点分析字段</span></div>
+        <div class="metric"><strong>3</strong><span>可忽略但已统计字段</span></div>
+        <div class="metric"><strong>1</strong><span>字段表分页，每页 15 行</span></div>
+      </div>
+    </header>
+    <section class="graph">
+      <div class="panel"><div class="core"><strong>Text</strong><p>Unity UI 文本：显示名字、分数、提示等</p></div></div>
+      <div class="panel"><h2 style="margin-top:0">它直接保存的主要类型</h2><div class="nodes">
+        <div class="node">
+          <b>FontData</b>
+          <span>字段依据：m_FontData</span>
+          <p>配置/数据类型：保存运行参数、资源引用、显示数据或系统配置</p>
+        </div>
+        
+
+        <div class="node">
+          <b>Material</b>
+          <span>字段依据：s_DefaultText</span>
+          <p>Unity 材质资源。这里常用于倒计时闪烁、警告色或 UI 特效表现。</p>
+        </div>
+        
+
+        <div class="node">
+          <b>readonly UIVertex</b>
+          <span>字段依据：m_TempVerts</span>
+          <p>项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</p>
+        </div>
+        
+
+        <div class="node">
+          <b>TextGenerator</b>
+          <span>字段依据：m_TextCache / m_TextCacheForLayout</span>
+          <p>UI 控件类型：用于界面布局、文本、按钮、滚动、图形或交互控件</p>
+        </div>
+        </div></div>
+    </section>
+    
+    <section class="panel section-panel">
+      <h2 style="margin-top:0">谁保存了这个类</h2>
+      <p class="section-note">只统计 dump.cs 里字段类型直接使用 Text 的类。</p>
+      <div class="nodes"><div class="node"><b>CommonHud_1</b><span>字段依据：text</span><p>通用对局 HUD：承载模式提示、计分、倒计时等基础界面元素</p></div>
+<div class="node"><b>CriticalDamageText</b><span>字段依据：dmgText</span><p>战斗结算类型：用于伤害、命中、击杀、爆头或战斗反馈</p></div>
+<div class="node"><b>DebugUIHandlerBitField</b><span>字段依据：nameLabel</span><p>项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</p></div>
+<div class="node"><b>DebugUIHandlerButton</b><span>字段依据：nameLabel</span><p>UI 控件类型：用于界面布局、文本、按钮、滚动、图形或交互控件</p></div>
+<div class="node"><b>DebugUIHandlerColor</b><span>字段依据：nameLabel</span><p>颜色配置类型：用于 UI、特效、渲染或阵营表现的颜色数据</p></div>
+<div class="node"><b>DebugUIHandlerEnumField</b><span>字段依据：nameLabel / valueLabel</span><p>项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</p></div>
+<div class="node"><b>DebugUIHandlerEnumHistory</b><span>字段依据：historyValues</span><p>项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</p></div>
+<div class="node"><b>DebugUIHandlerFloatField</b><span>字段依据：nameLabel / valueLabel</span><p>项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</p></div>
+<div class="node"><b>DebugUIHandlerFoldout</b><span>字段依据：nameLabel</span><p>项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</p></div>
+<div class="node"><b>DebugUIHandlerGroup</b><span>字段依据：nameLabel</span><p>项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</p></div>
+<div class="node"><b>DebugUIHandlerIndirectFloatField</b><span>字段依据：nameLabel / valueLabel</span><p>项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</p></div>
+<div class="node"><b>DebugUIHandlerIndirectToggle</b><span>字段依据：nameLabel</span><p>项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</p></div>
+<div class="node"><b>DebugUIHandlerIntField</b><span>字段依据：nameLabel / valueLabel</span><p>项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</p></div>
+<div class="node"><b>DebugUIHandlerPanel</b><span>字段依据：nameLabel</span><p>项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</p></div>
+<div class="node"><b>DebugUIHandlerToggle</b><span>字段依据：nameLabel</span><p>项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</p></div>
+<div class="node"><b>DebugUIHandlerUIntField</b><span>字段依据：nameLabel / valueLabel</span><p>项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</p></div>
+<div class="node"><b>DebugUIHandlerValue</b><span>字段依据：nameLabel / valueLabel</span><p>项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</p></div>
+<div class="node"><b>DebugUIHandlerVector2</b><span>字段依据：nameLabel</span><p>空间数据类型：保存位置、方向、旋转、速度或坐标信息</p></div>
+<div class="node"><b>DebugUIHandlerVector3</b><span>字段依据：nameLabel</span><p>空间数据类型：保存位置、方向、旋转、速度或坐标信息</p></div>
+<div class="node"><b>DebugUIHandlerVector4</b><span>字段依据：nameLabel</span><p>空间数据类型：保存位置、方向、旋转、速度或坐标信息</p></div>
+<div class="node"><b>Dropdown</b><span>字段依据：m_CaptionText / m_ItemText</span><p>项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</p></div>
+<div class="node"><b>Dropdown.DropdownItem</b><span>字段依据：m_Text</span><p>项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</p></div>
+<div class="node"><b>HUD_Bag</b><span>字段依据：bagIndexText</span><p>HUD 界面组件：显示玩家状态、提示、图标或模式信息</p></div>
+<div class="node"><b>HUD_ChatBox</b><span>字段依据：msgText / tempMsgText</span><p>HUD 界面组件：显示玩家状态、提示、图标或模式信息</p></div>
+<div class="node"><b>HUD_CheatChoice</b><span>字段依据：choiceText</span><p>HUD 界面组件：显示玩家状态、提示、图标或模式信息</p></div>
+<div class="node"><b>HUD_CommonMsg</b><span>字段依据：msgText</span><p>HUD 界面组件：显示玩家状态、提示、图标或模式信息</p></div>
+<div class="node"><b>HUD_Crosshair</b><span>字段依据：zoomTargetTexts</span><p>准星 HUD：根据玩家武器和状态显示准星</p></div>
+<div class="node"><b>HUD_Gauge</b><span>字段依据：progressText / introduction</span><p>HUD 界面组件：显示玩家状态、提示、图标或模式信息</p></div>
+<div class="node"><b>HUD_HealthBar</b><span>字段依据：entityName</span><p>HUD 界面组件：显示玩家状态、提示、图标或模式信息</p></div>
+<div class="node"><b>HUD_KillMsgIndividual</b><span>字段依据：deathText / killerText</span><p>HUD 界面组件：显示玩家状态、提示、图标或模式信息</p></div>
+<div class="node"><b>HUD_MapGun</b><span>字段依据：ammoText / emptyAmmoText</span><p>HUD 界面组件：显示玩家状态、提示、图标或模式信息</p></div>
+<div class="node"><b>HUD_Nano4T_Attribute</b><span>字段依据：timer / nanoLayer / humanLayer / battleAttributeText / battleCDText</span><p>HUD 界面组件：显示玩家状态、提示、图标或模式信息</p></div>
+<div class="node"><b>HUD_Nano4T_AttributeIcon</b><span>字段依据：description</span><p>HUD 界面组件：显示玩家状态、提示、图标或模式信息</p></div>
+<div class="node"><b>HUD_Nano4T_BoxTimer</b><span>字段依据：timerText</span><p>HUD 界面组件：显示玩家状态、提示、图标或模式信息</p></div>
+<div class="node"><b>HUD_Nano4_HumanGauge</b><span>字段依据：atkPowerText</span><p>HUD 界面组件：显示玩家状态、提示、图标或模式信息</p></div>
+<div class="node"><b>HUD_Nano_FinalBattle</b><span>字段依据：heroNumText / nanoNumText</span><p>HUD 界面组件：显示玩家状态、提示、图标或模式信息</p></div>
+<div class="node"><b>HUD_ProjectionSign</b><span>字段依据：distanceText</span><p>HUD 界面组件：显示玩家状态、提示、图标或模式信息</p></div>
+<div class="node"><b>HUD_Role</b><span>字段依据：healthNum / armorNum</span><p>HUD 界面组件：显示玩家状态、提示、图标或模式信息</p></div>
+<div class="node"><b>HUD_SelectNanoRole</b><span>字段依据：timeText</span><p>HUD 界面组件：显示玩家状态、提示、图标或模式信息</p></div>
+<div class="node"><b>HUD_Spectate</b><span>字段依据：underText / killerNameText / weaponNameText</span><p>HUD 界面组件：显示玩家状态、提示、图标或模式信息</p></div>
+<div class="node"><b>HUD_SpectateMsg</b><span>字段依据：nameText / damageText</span><p>HUD 界面组件：显示玩家状态、提示、图标或模式信息</p></div>
+<div class="node"><b>HUD_TabScoreBoard</b><span>字段依据：fpsText</span><p>HUD 界面组件：显示玩家状态、提示、图标或模式信息</p></div>
+<div class="node"><b>HUD_TerminatorSign</b><span>字段依据：btnText / centerText</span><p>HUD 界面组件：显示玩家状态、提示、图标或模式信息</p></div>
+<div class="node"><b>HUD_Tombstone</b><span>字段依据：tip / hpText</span><p>HUD 界面组件：显示玩家状态、提示、图标或模式信息</p></div>
+<div class="node"><b>HUD_UpgradeBoxTip</b><span>字段依据：text</span><p>HUD 界面组件：显示玩家状态、提示、图标或模式信息</p></div>
+<div class="node"><b>HUD_Weapon</b><span>字段依据：clipText / ammoText / weaponNameText</span><p>HUD 界面组件：显示玩家状态、提示、图标或模式信息</p></div>
+<div class="node"><b>InputField</b><span>字段依据：m_TextComponent</span><p>输入交互类型：用于鼠标、触摸、按键或输入模块状态</p></div>
+<div class="node"><b>ModeBase</b><span>字段依据：scoreText_L / scoreText_R / roundText_T / roundText_C / timeText_M / timeText_S</span><p>玩法规则基类。它集中维护比分、回合、时间、复活、双方人数和计分板 UI，是具体模式规则的共同底座。</p></div>
+<div class="node"><b>TSBPD_DM</b><span>字段依据：rankText / kill / death</span><p>项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</p></div>
+<div class="node"><b>TSBPD_Nano</b><span>字段依据：kill / survival</span><p>项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</p></div>
+<div class="node"><b>TSBPD_TD</b><span>字段依据：kill / death</span><p>项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</p></div>
+<div class="node"><b>TabScoreBoard_PlayerData</b><span>字段依据：playerName / ping</span><p>TAB 记分板玩家数据：显示分数、击杀、死亡等</p></div>
+<div class="node"><b>UI_ItemBox</b><span>字段依据：itemName / clipBuffText</span><p>UI 界面类：负责菜单、房间、背包或游戏内交互显示</p></div>
+<div class="node"><b>UI_SliderValueText</b><span>字段依据：text</span><p>UI 界面类：负责菜单、房间、背包或游戏内交互显示</p></div></div>
+    </section>
+    
+    <h2>字段系统分类统计</h2>
+    <section class="stats">
+        <article class="stat-card">
+          <strong>相机/视角/渲染</strong>
+          <span>1 个字段</span>
+          <p>负责玩家视角、观战、FOV、材质和渲染表现。</p>
+        </article>
+        
+
+        <article class="stat-card">
+          <strong>数据结构/工具/对象池</strong>
+          <span>6 个字段</span>
+          <p>负责列表、字典、缓存、配置和对象复用。</p>
+        </article>
+        </section>
+    
+    <h2>字段完整说明</h2>
+    <div class="toolbar">
+      <div class="filters">
+        <label for="categoryFilter">字段系统分类</label>
+        <select id="categoryFilter">
+          <option value="全部">全部字段（7）</option>
+          <option value="相机/视角/渲染">相机/视角/渲染（1）</option>
+<option value="数据结构/工具/对象池">数据结构/工具/对象池（6）</option>
+        </select>
+      </div>
+      <div class="pager" id="pager"></div>
+      <div class="hint">当前显示 <span id="pageLabel">第 1 页</span>，筛选后 <span id="visibleCount">7</span> 个字段；可忽略字段不会遗漏，只是不进入主要类关系判断。</div>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>字段</th>
+          <th>类型</th>
+          <th>功能分类与解释</th>
+          <th>修改/忽略建议</th>
+        </tr>
+      </thead>
+      <tbody>
+            <tr data-page="1" data-category="数据结构/工具/对象池">
+              <td class="num">1</td>
+              <td><strong>m_FontData</strong><span>private / instance / offset 0x80</span></td>
+              <td><code>FontData</code></td>
+              <td><b>数据结构/工具/对象池</b><p>m_FontData 保存数据表、列表、缓存、资源配置或对象池，是其他系统读取运行数据的支撑字段。</p></td>
+              <td><p>适合查数据来源和对象生命周期；修改时注意引用一致性。</p><span class="badge ignore">可忽略</span><small>编译器生成的属性后备字段，逻辑入口应优先看属性或方法。</small></td>
+            </tr>
+            
+
+            <tr data-page="1" data-category="数据结构/工具/对象池">
+              <td class="num">2</td>
+              <td><strong>m_Text</strong><span>protected / instance / offset 0x84</span></td>
+              <td><code>string</code></td>
+              <td><b>数据结构/工具/对象池</b><p>m_Text 保存 string 类型的运行时引用或配置值，用于支撑 Text 的当前系统职责。</p></td>
+              <td><p>先按字段所属系统读取；需要修改时优先追踪该字段的读写方法。</p><span class="badge ignore">可忽略</span><small>编译器生成的属性后备字段，逻辑入口应优先看属性或方法。</small></td>
+            </tr>
+            
+
+            <tr data-page="1" data-category="数据结构/工具/对象池">
+              <td class="num">3</td>
+              <td><strong>m_TextCache</strong><span>private / instance / offset 0x88</span></td>
+              <td><code>TextGenerator</code></td>
+              <td><b>数据结构/工具/对象池</b><p>m_TextCache 保存数据表、列表、缓存、资源配置或对象池，是其他系统读取运行数据的支撑字段。</p></td>
+              <td><p>适合查数据来源和对象生命周期；修改时注意引用一致性。</p><span class="badge keep">纳入重点分析</span></td>
+            </tr>
+            
+
+            <tr data-page="1" data-category="数据结构/工具/对象池">
+              <td class="num">4</td>
+              <td><strong>m_TextCacheForLayout</strong><span>private / instance / offset 0x8C</span></td>
+              <td><code>TextGenerator</code></td>
+              <td><b>数据结构/工具/对象池</b><p>m_TextCacheForLayout 保存数据表、列表、缓存、资源配置或对象池，是其他系统读取运行数据的支撑字段。</p></td>
+              <td><p>适合查数据来源和对象生命周期；修改时注意引用一致性。</p><span class="badge keep">纳入重点分析</span></td>
+            </tr>
+            
+
+            <tr data-page="1" data-category="相机/视角/渲染">
+              <td class="num">5</td>
+              <td><strong>s_DefaultText</strong><span>protected / static / offset 0x0</span></td>
+              <td><code>Material</code></td>
+              <td><b>相机/视角/渲染</b><p>s_DefaultText 与相机视角、FOV、观战、渲染材质或后处理表现有关。</p></td>
+              <td><p>多为表现层字段；改动前确认是否影响第一人称/观战视角。</p><span class="badge keep">纳入重点分析</span></td>
+            </tr>
+            
+
+            <tr data-page="1" data-category="数据结构/工具/对象池">
+              <td class="num">6</td>
+              <td><strong>m_DisableFontTextureRebuiltCallback</strong><span>protected / instance / offset 0x90</span></td>
+              <td><code>bool</code></td>
+              <td><b>数据结构/工具/对象池</b><p>m_DisableFontTextureRebuiltCallback 保存 bool 类型的运行时引用或配置值，用于支撑 Text 的当前系统职责。</p></td>
+              <td><p>先按字段所属系统读取；需要修改时优先追踪该字段的读写方法。</p><span class="badge ignore">可忽略</span><small>基础值类型 bool，不作为类关系节点；但字段仍计入总数。</small></td>
+            </tr>
+            
+
+            <tr data-page="1" data-category="数据结构/工具/对象池">
+              <td class="num">7</td>
+              <td><strong>m_TempVerts</strong><span>private / instance / offset 0x94</span></td>
+              <td><code>readonly UIVertex[]</code></td>
+              <td><b>数据结构/工具/对象池</b><p>m_TempVerts 保存 readonly UIVertex[] 类型的运行时引用或配置值，用于支撑 Text 的当前系统职责。</p></td>
+              <td><p>先按字段所属系统读取；需要修改时优先追踪该字段的读写方法。</p><span class="badge keep">纳入重点分析</span></td>
+            </tr>
+            </tbody>
+    </table>
+    <p class="footnote">忽略规则：基础值字段、编译器生成后备字段、Action/事件委托字段不作为“类保存类”的关系图节点；但本页仍逐项解释并计入总数。</p>
+    
+  </main>
+  <script>
+    const rows = Array.from(document.querySelectorAll('tbody tr[data-page]'));
+    const filter = document.getElementById('categoryFilter');
+    const pager = document.getElementById('pager');
+    const label = document.getElementById('pageLabel');
+    const visibleCount = document.getElementById('visibleCount');
+    const pageSize = 15;
+    let currentPage = 1;
+    function matchingRows() {
+      if (!filter) return rows;
+      const category = filter.value;
+      return rows.filter(row => category === '全部' || row.dataset.category === category);
+    }
+    function renderPager(totalPages) {
+      if (!pager) return;
+      pager.innerHTML = '';
+      for (let page = 1; page <= totalPages; page++) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.textContent = '第 ' + page + ' 页';
+        button.className = page === currentPage ? 'active' : '';
+        button.addEventListener('click', () => { currentPage = page; updateTable(); });
+        pager.appendChild(button);
+      }
+    }
+    function updateTable() {
+      const matched = matchingRows();
+      const totalPages = Math.max(1, Math.ceil(matched.length / pageSize));
+      if (currentPage > totalPages) currentPage = totalPages;
+      const start = (currentPage - 1) * pageSize;
+      const visibleSet = new Set(matched.slice(start, start + pageSize));
+      rows.forEach(row => row.style.display = visibleSet.has(row) ? '' : 'none');
+      if (visibleCount) visibleCount.textContent = matched.length;
+      if (label) label.textContent = '第 ' + currentPage + ' 页';
+      renderPager(totalPages);
+    }
+    if (filter) filter.addEventListener('change', () => { currentPage = 1; updateTable(); });
+    updateTable();
+  </script>
+</body>
+</html>

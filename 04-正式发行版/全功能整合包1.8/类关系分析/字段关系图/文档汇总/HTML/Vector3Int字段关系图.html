@@ -1,0 +1,261 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Vector3Int 字段关系图与字段说明</title>
+  <style>
+    :root { --bg:#f4f6f8; --panel:#ffffff; --ink:#1f2937; --muted:#667085; --line:#d9e1ec; --blue:#2457a6; --green:#207450; --amber:#9a5b13; }
+    * { box-sizing:border-box; }
+    body { margin:0; background:var(--bg); color:var(--ink); font-family:"Microsoft YaHei","Segoe UI",Arial,sans-serif; }
+    .page { max-width:1360px; margin:0 auto; padding:18px; }
+    header,.panel,table { background:var(--panel); border:1px solid var(--line); border-radius:8px; }
+    header { padding:18px 20px; }
+    h1 { margin:0 0 8px; font-size:26px; letter-spacing:0; }
+    h2 { margin:26px 0 12px; font-size:20px; }
+    p { margin:0; line-height:1.65; }
+    .summary { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; margin-top:16px; }
+    .metric { border:1px solid var(--line); border-radius:8px; padding:12px; background:#fafcff; }
+    .metric strong { display:block; font-size:24px; color:var(--blue); }
+    .metric span { color:var(--muted); font-size:13px; }
+    .graph { display:grid; grid-template-columns:1fr 1.1fr; gap:14px; margin-top:16px; }
+    .panel { padding:16px; }
+    .core { border:2px solid var(--blue); background:#eef5ff; border-radius:8px; padding:16px; }
+    .core strong { display:block; font-size:24px; color:var(--blue); margin-bottom:8px; }
+    .section-panel { margin-top:14px; }
+    .section-note { color:var(--muted); font-size:13px; margin-bottom:12px; }
+    .nodes { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; margin-top:12px; }
+    .node { border:1px solid #cbd8e8; background:#fbfdff; border-radius:8px; padding:10px; min-height:112px; }
+    .node b { display:block; color:var(--green); margin-bottom:4px; }
+    .node span { display:block; color:var(--muted); font-size:13px; line-height:1.45; }
+    .node p { color:#344054; font-size:13px; line-height:1.55; margin-top:8px; }
+    .stats { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; }
+    .stat-card { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:12px; min-height:116px; }
+    .stat-card strong { display:block; font-size:16px; margin-bottom:6px; }
+    .stat-card span { display:inline-block; color:#fff; background:var(--blue); border-radius:999px; padding:3px 9px; font-size:12px; margin-bottom:8px; }
+    .stat-card p { color:var(--muted); font-size:13px; }
+    .toolbar { display:flex; align-items:center; justify-content:space-between; gap:12px; margin:16px 0 8px; flex-wrap:wrap; }
+    .filters,.pager { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+    button,select { border:1px solid var(--line); background:#fff; color:var(--ink); border-radius:6px; padding:8px 12px; cursor:pointer; font:inherit; }
+    button.active { background:var(--blue); color:#fff; border-color:var(--blue); }
+    .hint,.footnote { color:var(--muted); font-size:13px; }
+    table { width:100%; border-collapse:separate; border-spacing:0; overflow:hidden; }
+    th,td { padding:11px 12px; border-bottom:1px solid #edf1f6; vertical-align:top; text-align:left; }
+    th { background:#f8fafc; font-size:13px; color:#344054; }
+    tr:last-child td { border-bottom:0; }
+    td.num { width:44px; color:var(--muted); }
+    td strong { display:block; margin-bottom:4px; }
+    td span, small { display:block; color:var(--muted); font-size:12px; line-height:1.45; }
+    code { white-space:nowrap; color:#344054; background:#f3f6fa; border:1px solid #e0e7ef; border-radius:5px; padding:2px 5px; }
+    .badge { display:inline-block; border-radius:999px; padding:3px 8px; font-size:12px; margin-top:8px; }
+    .badge.keep { background:#eaf7ef; color:var(--green); }
+    .badge.ignore { background:#fff4e5; color:var(--amber); }
+    .footnote { margin-top:14px; }
+    @media (max-width: 900px) { .summary,.graph,.stats,.nodes { grid-template-columns:1fr; } table { font-size:13px; } code { white-space:normal; } }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header>
+      <h1>Vector3Int 字段关系图与字段说明</h1>
+      <p>三维整数向量：格子坐标、方向索引或离散移动方向</p>
+      <div class="summary">
+        <div class="metric"><strong>11</strong><span>dump.cs 中字段总数</span></div>
+        <div class="metric"><strong>8</strong><span>建议重点分析字段</span></div>
+        <div class="metric"><strong>3</strong><span>可忽略但已统计字段</span></div>
+        <div class="metric"><strong>1</strong><span>字段表分页，每页 15 行</span></div>
+      </div>
+    </header>
+    <section class="graph">
+      <div class="panel"><div class="core"><strong>Vector3Int</strong><p>三维整数向量：格子坐标、方向索引或离散移动方向</p></div></div>
+      <div class="panel"><h2 style="margin-top:0">它直接保存的主要类型</h2><div class="nodes">
+        <div class="node">
+          <b>readonly Vector3Int</b>
+          <span>字段依据：s_Zero / s_One / s_Up / s_Down / s_Left / s_Right / s_Forward / s_Back</span>
+          <p>空间数据类型：保存位置、方向、旋转、速度或坐标信息</p>
+        </div>
+        </div></div>
+    </section>
+    
+    <section class="panel section-panel">
+      <h2 style="margin-top:0">谁保存了这个类</h2>
+      <p class="section-note">只统计 dump.cs 里字段类型直接使用 Vector3Int 的类。</p>
+      <div class="nodes"><div class="node"><b>ObscuredVector3Int</b><span>字段依据：fakeValue</span><p>空间数据类型：保存位置、方向、旋转、速度或坐标信息</p></div>
+<div class="node"><b>PlayerVelocity</b><span>字段依据：&lt;tryMoveDir&gt;k__BackingField</span><p>玩家速度数据：移动速度、跳跃或物理速度状态</p></div></div>
+    </section>
+    
+    <h2>字段系统分类统计</h2>
+    <section class="stats">
+        <article class="stat-card">
+          <strong>数据结构/工具/对象池</strong>
+          <span>11 个字段</span>
+          <p>负责列表、字典、缓存、配置和对象复用。</p>
+        </article>
+        </section>
+    
+    <h2>字段完整说明</h2>
+    <div class="toolbar">
+      <div class="filters">
+        <label for="categoryFilter">字段系统分类</label>
+        <select id="categoryFilter">
+          <option value="全部">全部字段（11）</option>
+          <option value="数据结构/工具/对象池">数据结构/工具/对象池（11）</option>
+        </select>
+      </div>
+      <div class="pager" id="pager"></div>
+      <div class="hint">当前显示 <span id="pageLabel">第 1 页</span>，筛选后 <span id="visibleCount">11</span> 个字段；可忽略字段不会遗漏，只是不进入主要类关系判断。</div>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>字段</th>
+          <th>类型</th>
+          <th>功能分类与解释</th>
+          <th>修改/忽略建议</th>
+        </tr>
+      </thead>
+      <tbody>
+            <tr data-page="1" data-category="数据结构/工具/对象池">
+              <td class="num">1</td>
+              <td><strong>m_X</strong><span>private / instance / offset 0x0</span></td>
+              <td><code>int</code></td>
+              <td><b>数据结构/工具/对象池</b><p>m_X 保存 int 类型的运行时引用或配置值，用于支撑 Vector3Int 的当前系统职责。</p></td>
+              <td><p>先按字段所属系统读取；需要修改时优先追踪该字段的读写方法。</p><span class="badge ignore">可忽略</span><small>基础值类型 int，不作为类关系节点；但字段仍计入总数。</small></td>
+            </tr>
+            
+
+            <tr data-page="1" data-category="数据结构/工具/对象池">
+              <td class="num">2</td>
+              <td><strong>m_Y</strong><span>private / instance / offset 0x4</span></td>
+              <td><code>int</code></td>
+              <td><b>数据结构/工具/对象池</b><p>m_Y 保存 int 类型的运行时引用或配置值，用于支撑 Vector3Int 的当前系统职责。</p></td>
+              <td><p>先按字段所属系统读取；需要修改时优先追踪该字段的读写方法。</p><span class="badge ignore">可忽略</span><small>基础值类型 int，不作为类关系节点；但字段仍计入总数。</small></td>
+            </tr>
+            
+
+            <tr data-page="1" data-category="数据结构/工具/对象池">
+              <td class="num">3</td>
+              <td><strong>m_Z</strong><span>private / instance / offset 0x8</span></td>
+              <td><code>int</code></td>
+              <td><b>数据结构/工具/对象池</b><p>m_Z 保存 int 类型的运行时引用或配置值，用于支撑 Vector3Int 的当前系统职责。</p></td>
+              <td><p>先按字段所属系统读取；需要修改时优先追踪该字段的读写方法。</p><span class="badge ignore">可忽略</span><small>基础值类型 int，不作为类关系节点；但字段仍计入总数。</small></td>
+            </tr>
+            
+
+            <tr data-page="1" data-category="数据结构/工具/对象池">
+              <td class="num">4</td>
+              <td><strong>s_Zero</strong><span>private / static / offset 0x0</span></td>
+              <td><code>readonly Vector3Int</code></td>
+              <td><b>数据结构/工具/对象池</b><p>s_Zero 保存 readonly Vector3Int 类型的运行时引用或配置值，用于支撑 Vector3Int 的当前系统职责。</p></td>
+              <td><p>先按字段所属系统读取；需要修改时优先追踪该字段的读写方法。</p><span class="badge keep">纳入重点分析</span></td>
+            </tr>
+            
+
+            <tr data-page="1" data-category="数据结构/工具/对象池">
+              <td class="num">5</td>
+              <td><strong>s_One</strong><span>private / static / offset 0xC</span></td>
+              <td><code>readonly Vector3Int</code></td>
+              <td><b>数据结构/工具/对象池</b><p>s_One 保存 readonly Vector3Int 类型的运行时引用或配置值，用于支撑 Vector3Int 的当前系统职责。</p></td>
+              <td><p>先按字段所属系统读取；需要修改时优先追踪该字段的读写方法。</p><span class="badge keep">纳入重点分析</span></td>
+            </tr>
+            
+
+            <tr data-page="1" data-category="数据结构/工具/对象池">
+              <td class="num">6</td>
+              <td><strong>s_Up</strong><span>private / static / offset 0x18</span></td>
+              <td><code>readonly Vector3Int</code></td>
+              <td><b>数据结构/工具/对象池</b><p>s_Up 保存 readonly Vector3Int 类型的运行时引用或配置值，用于支撑 Vector3Int 的当前系统职责。</p></td>
+              <td><p>先按字段所属系统读取；需要修改时优先追踪该字段的读写方法。</p><span class="badge keep">纳入重点分析</span></td>
+            </tr>
+            
+
+            <tr data-page="1" data-category="数据结构/工具/对象池">
+              <td class="num">7</td>
+              <td><strong>s_Down</strong><span>private / static / offset 0x24</span></td>
+              <td><code>readonly Vector3Int</code></td>
+              <td><b>数据结构/工具/对象池</b><p>s_Down 保存 readonly Vector3Int 类型的运行时引用或配置值，用于支撑 Vector3Int 的当前系统职责。</p></td>
+              <td><p>先按字段所属系统读取；需要修改时优先追踪该字段的读写方法。</p><span class="badge keep">纳入重点分析</span></td>
+            </tr>
+            
+
+            <tr data-page="1" data-category="数据结构/工具/对象池">
+              <td class="num">8</td>
+              <td><strong>s_Left</strong><span>private / static / offset 0x30</span></td>
+              <td><code>readonly Vector3Int</code></td>
+              <td><b>数据结构/工具/对象池</b><p>s_Left 保存 readonly Vector3Int 类型的运行时引用或配置值，用于支撑 Vector3Int 的当前系统职责。</p></td>
+              <td><p>先按字段所属系统读取；需要修改时优先追踪该字段的读写方法。</p><span class="badge keep">纳入重点分析</span></td>
+            </tr>
+            
+
+            <tr data-page="1" data-category="数据结构/工具/对象池">
+              <td class="num">9</td>
+              <td><strong>s_Right</strong><span>private / static / offset 0x3C</span></td>
+              <td><code>readonly Vector3Int</code></td>
+              <td><b>数据结构/工具/对象池</b><p>s_Right 保存 readonly Vector3Int 类型的运行时引用或配置值，用于支撑 Vector3Int 的当前系统职责。</p></td>
+              <td><p>先按字段所属系统读取；需要修改时优先追踪该字段的读写方法。</p><span class="badge keep">纳入重点分析</span></td>
+            </tr>
+            
+
+            <tr data-page="1" data-category="数据结构/工具/对象池">
+              <td class="num">10</td>
+              <td><strong>s_Forward</strong><span>private / static / offset 0x48</span></td>
+              <td><code>readonly Vector3Int</code></td>
+              <td><b>数据结构/工具/对象池</b><p>s_Forward 保存 readonly Vector3Int 类型的运行时引用或配置值，用于支撑 Vector3Int 的当前系统职责。</p></td>
+              <td><p>先按字段所属系统读取；需要修改时优先追踪该字段的读写方法。</p><span class="badge keep">纳入重点分析</span></td>
+            </tr>
+            
+
+            <tr data-page="1" data-category="数据结构/工具/对象池">
+              <td class="num">11</td>
+              <td><strong>s_Back</strong><span>private / static / offset 0x54</span></td>
+              <td><code>readonly Vector3Int</code></td>
+              <td><b>数据结构/工具/对象池</b><p>s_Back 保存 readonly Vector3Int 类型的运行时引用或配置值，用于支撑 Vector3Int 的当前系统职责。</p></td>
+              <td><p>先按字段所属系统读取；需要修改时优先追踪该字段的读写方法。</p><span class="badge keep">纳入重点分析</span></td>
+            </tr>
+            </tbody>
+    </table>
+    <p class="footnote">忽略规则：基础值字段、编译器生成后备字段、Action/事件委托字段不作为“类保存类”的关系图节点；但本页仍逐项解释并计入总数。</p>
+    
+  </main>
+  <script>
+    const rows = Array.from(document.querySelectorAll('tbody tr[data-page]'));
+    const filter = document.getElementById('categoryFilter');
+    const pager = document.getElementById('pager');
+    const label = document.getElementById('pageLabel');
+    const visibleCount = document.getElementById('visibleCount');
+    const pageSize = 15;
+    let currentPage = 1;
+    function matchingRows() {
+      if (!filter) return rows;
+      const category = filter.value;
+      return rows.filter(row => category === '全部' || row.dataset.category === category);
+    }
+    function renderPager(totalPages) {
+      if (!pager) return;
+      pager.innerHTML = '';
+      for (let page = 1; page <= totalPages; page++) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.textContent = '第 ' + page + ' 页';
+        button.className = page === currentPage ? 'active' : '';
+        button.addEventListener('click', () => { currentPage = page; updateTable(); });
+        pager.appendChild(button);
+      }
+    }
+    function updateTable() {
+      const matched = matchingRows();
+      const totalPages = Math.max(1, Math.ceil(matched.length / pageSize));
+      if (currentPage > totalPages) currentPage = totalPages;
+      const start = (currentPage - 1) * pageSize;
+      const visibleSet = new Set(matched.slice(start, start + pageSize));
+      rows.forEach(row => row.style.display = visibleSet.has(row) ? '' : 'none');
+      if (visibleCount) visibleCount.textContent = matched.length;
+      if (label) label.textContent = '第 ' + currentPage + ' 页';
+      renderPager(totalPages);
+    }
+    if (filter) filter.addEventListener('change', () => { currentPage = 1; updateTable(); });
+    updateTable();
+  </script>
+</body>
+</html>

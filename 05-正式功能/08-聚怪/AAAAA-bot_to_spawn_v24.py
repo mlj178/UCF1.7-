@@ -202,6 +202,24 @@ class BotToSpawnApp(ctk.CTk):
                     self._set_buttons(True)
                 elif msg_type == "err":
                     self._log(f"⚠️ {payload.get('msg')}")
+                # TEMP DEBUG: comment out this block when allPlayers logging is no longer needed.
+                elif msg_type == "allplayers":
+                    entries = payload.get("entries", [])
+                    self._log(
+                        f"allPlayers[{payload.get('total', len(entries))}] = "
+                        f"[{', '.join(str(entry) for entry in entries)}]"
+                    )
+                # TEMP DEBUG: comment out this block when Player ClientData logging is no longer needed.
+                elif msg_type == "player_clientdata":
+                    entries = payload.get("entries", [])
+                    self._log(f"Player ClientData[{payload.get('total', len(entries))}]:")
+                    for index, entry in enumerate(entries):
+                        self._log(
+                            f"  #{index} source={entry.get('source')} "
+                            f"player={entry.get('player')} "
+                            f"clientData={entry.get('clientData')} "
+                            f"isBot={entry.get('isBot')}"
+                        )
             except json.JSONDecodeError:
                 pass
         elif message.get("type") == "error":

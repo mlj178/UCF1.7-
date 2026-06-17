@@ -1,0 +1,348 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Color 字段关系图</title>
+  <style>
+    :root{--bg:#f3f5f8;--ink:#1f2633;--muted:#5f6878;--line:#cfd7e4;--core:#1f5fbf;--source:#315f9f;--target:#24724c}
+    *{box-sizing:border-box}html,body{margin:0;background:var(--bg);font-family:"Microsoft YaHei","Segoe UI",Arial,sans-serif;color:var(--ink)}
+    .canvas{width:100%;min-height:100vh;padding:12px}svg{display:block;width:100%;min-width:1180px;height:auto;background:#fff;border:1px solid var(--line);border-radius:8px}
+    .title{font-size:25px;font-weight:700;fill:var(--ink)}.note{font-size:13px;fill:var(--muted)}.lane{fill:#f8fafc;stroke:#e2e8f0;stroke-width:1;rx:12}
+    .core{fill:#eef5ff;stroke:var(--core);stroke-width:3;rx:12}.box,.source,.target,.empty{fill:#fff;stroke:#cbd5e1;stroke-width:1.5;rx:10}.source{fill:#f2f7ff}.target{fill:#f1fbf5}.empty{fill:#f8fafc}
+    .name{font-size:15px;font-weight:700;fill:#1f2633}.desc{font-size:12px;fill:var(--muted)}.count{font-size:14px;font-weight:700;fill:#1f7a4d}.lane-title{font-size:17px;font-weight:700;fill:#2d3748}
+    .edge{fill:none;stroke-width:2.7}.source-edge{stroke:var(--source)}.target-edge{stroke:var(--target)}.label{font-size:12px;fill:#344054}.label-bg{fill:#fff;stroke:#edf0f5;rx:5}
+  </style>
+</head>
+<body>
+<div class="canvas">
+<svg viewBox="0 0 1450 5202" role="img" aria-label="Color field relationship graph">
+  <defs>
+    <marker id="arrowSource" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><path d="M0,0 L9,3 L0,6 Z" fill="#315f9f"/></marker>
+    <marker id="arrowTarget" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><path d="M0,0 L9,3 L0,6 Z" fill="#24724c"/></marker>
+  </defs>
+  <text x="36" y="44" class="title">Color 字段关系图</text>
+  <text x="36" y="70" class="note">只统计 dump.cs 字段声明：左边是谁的字段保存了 Color；右边是 Color 自己字段保存的类型。委托事件字段和基础值不画。</text>
+
+  <rect class="lane" x="40" y="110" width="390" height="5042"/>
+  <rect class="lane" x="530" y="110" width="370" height="5042"/>
+  <rect class="lane" x="980" y="110" width="420" height="5042"/>
+  <text x="70" y="148" class="lane-title">谁保存了这个类</text>
+  <text x="70" y="172" class="note">通俗说：其他类字段里有没有它</text>
+  <text x="70" y="196" class="count">统计：49 / 49 已画出</text>
+  <text x="70" y="220" class="note">分析：有 49 个类字段保存 Color</text>
+  <text x="560" y="148" class="lane-title">当前类</text>
+  <text x="560" y="172" class="note">分析直接写在类名下面</text>
+  <text x="1010" y="148" class="lane-title">它保存了哪些类型</text>
+  <text x="1010" y="172" class="note">通俗说：这个类字段里有哪些对象</text>
+  <text x="1010" y="196" class="count">统计：0 / 0 已画出</text>
+  <text x="1010" y="220" class="note">分析：Color 没有字段直接保存其他非基础类型</text>
+
+  <rect class="core" x="610" y="340" width="280" height="170"/>
+  <text x="750" y="382" text-anchor="middle" style="font-size:24px;font-weight:700;fill:#1f5fbf">Color</text>
+  <text x="750" y="414" text-anchor="middle" class="desc">字段关系中心</text>
+  <text x="750" y="454" text-anchor="middle" class="desc">功能翻译：Unity 颜色值：控制 UI、模型或特效颜色表现</text>
+  <text x="750" y="477" text-anchor="middle" class="desc">关系依据：只看 dump.cs 字段声明</text>
+  <text x="750" y="500" text-anchor="middle" class="desc">用途判断：看左侧谁保存它、右侧它保存哪些类型</text>
+
+  <g transform="translate(70 235)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">AIBase</text>
+    <text x="18" y="49" class="desc">AI 行为类型：用于电脑角色、代理移动、决策或目标选择</text>
+    <text x="18" y="69" class="desc">字段依据：ShapeGizmoColor</text>
+  </g>
+  <g transform="translate(70 333)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">AstarColor</text>
+    <text x="18" y="49" class="desc">寻路/导航类型：用于 AI 路径搜索、导航网格、避障或路径节点</text>
+    <text x="18" y="69" class="desc">字段依据：_SolidColor / _UnwalkableNode / _BoundsHandles / _ConnectionLowLerp 等 14 个字段</text>
+  </g>
+  <g transform="translate(70 431)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">CinemachinePathBase.Appearance</text>
+    <text x="18" y="49" class="desc">相机/镜头控制类型：用于虚拟相机、镜头混合、视角参数或相机状态</text>
+    <text x="18" y="69" class="desc">字段依据：pathColor / inactivePathColor</text>
+  </g>
+  <g transform="translate(70 529)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">Color2</text>
+    <text x="18" y="49" class="desc">颜色配置类型：用于 UI、特效、渲染或阵营表现的颜色数据</text>
+    <text x="18" y="69" class="desc">字段依据：ca / cb</text>
+  </g>
+  <g transform="translate(70 627)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">ColorBlock</text>
+    <text x="18" y="49" class="desc">颜色配置类型：用于 UI、特效、渲染或阵营表现的颜色数据</text>
+    <text x="18" y="69" class="desc">字段依据：m_NormalColor / m_HighlightedColor / m_PressedColor / m_SelectedColor 等 5 个字段</text>
+  </g>
+  <g transform="translate(70 725)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">ColorTween</text>
+    <text x="18" y="49" class="desc">颜色配置类型：用于 UI、特效、渲染或阵营表现的颜色数据</text>
+    <text x="18" y="69" class="desc">字段依据：m_StartColor / m_TargetColor</text>
+  </g>
+  <g transform="translate(70 823)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">CommonHud_1</text>
+    <text x="18" y="49" class="desc">通用对局 HUD：承载模式提示、计分、倒计时等基础界面元素</text>
+    <text x="18" y="69" class="desc">字段依据：defaultColor / zeroAlphaColor</text>
+  </g>
+  <g transform="translate(70 921)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">Core</text>
+    <text x="18" y="49" class="desc">项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</text>
+    <text x="18" y="69" class="desc">字段依据：halfAlpha / zeroAlpha</text>
+  </g>
+  <g transform="translate(70 1019)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">DataBaseExample.ChildTest</text>
+    <text x="18" y="49" class="desc">配置/数据类型：保存运行参数、资源引用、显示数据或系统配置</text>
+    <text x="18" y="69" class="desc">字段依据：myChildColor</text>
+  </g>
+  <g transform="translate(70 1117)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">DebugUIHandlerWidget</text>
+    <text x="18" y="49" class="desc">项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</text>
+    <text x="18" y="69" class="desc">字段依据：colorDefault / colorSelected</text>
+  </g>
+  <g transform="translate(70 1215)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">DefaultControls</text>
+    <text x="18" y="49" class="desc">项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</text>
+    <text x="18" y="69" class="desc">字段依据：s_DefaultSelectableColor / s_PanelColor / s_TextColor</text>
+  </g>
+  <g transform="translate(70 1313)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">DemoGUIMessage</text>
+    <text x="18" y="49" class="desc">项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</text>
+    <text x="18" y="69" class="desc">字段依据：color</text>
+  </g>
+  <g transform="translate(70 1411)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">GUISettings</text>
+    <text x="18" y="49" class="desc">配置/数据类型：保存运行参数、资源引用、显示数据或系统配置</text>
+    <text x="18" y="69" class="desc">字段依据：m_CursorColor / m_SelectionColor</text>
+  </g>
+  <g transform="translate(70 1509)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">GradientColorKey</text>
+    <text x="18" y="49" class="desc">输入交互类型：用于鼠标、触摸、按键或输入模块状态</text>
+    <text x="18" y="69" class="desc">字段依据：color</text>
+  </g>
+  <g transform="translate(70 1607)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">GraphGizmoHelper</text>
+    <text x="18" y="49" class="desc">寻路/导航类型：用于 AI 路径搜索、导航网格、避障或路径节点</text>
+    <text x="18" y="69" class="desc">字段依据：drawConnectionColor</text>
+  </g>
+  <g transform="translate(70 1705)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">Graphic</text>
+    <text x="18" y="49" class="desc">寻路/导航类型：用于 AI 路径搜索、导航网格、避障或路径节点</text>
+    <text x="18" y="69" class="desc">字段依据：m_Color</text>
+  </g>
+  <g transform="translate(70 1803)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">HUD_Crosshair</text>
+    <text x="18" y="49" class="desc">准星 HUD：根据玩家武器和状态显示准星</text>
+    <text x="18" y="69" class="desc">字段依据：color_ZoomTeammate / color_ZoomEnemy</text>
+  </g>
+  <g transform="translate(70 1901)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">HUD_DamageArrow</text>
+    <text x="18" y="49" class="desc">HUD 界面组件：显示玩家状态、提示、图标或模式信息</text>
+    <text x="18" y="69" class="desc">字段依据：imageColor</text>
+  </g>
+  <g transform="translate(70 1999)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">HUD_Gauge_EvilFire</text>
+    <text x="18" y="49" class="desc">HUD 界面组件：显示玩家状态、提示、图标或模式信息</text>
+    <text x="18" y="69" class="desc">字段依据：color1 / color2</text>
+  </g>
+  <g transform="translate(70 2097)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">HUD_KillMsg</text>
+    <text x="18" y="49" class="desc">HUD 界面组件：显示玩家状态、提示、图标或模式信息</text>
+    <text x="18" y="69" class="desc">字段依据：vvipFlashColor / color_BL / color_GR / color_NanoGhost 等 7 个字段</text>
+  </g>
+  <g transform="translate(70 2195)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">HUD_Role</text>
+    <text x="18" y="49" class="desc">HUD 界面组件：显示玩家状态、提示、图标或模式信息</text>
+    <text x="18" y="69" class="desc">字段依据：green / orange / red</text>
+  </g>
+  <g transform="translate(70 2293)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">HUD_SpectateMsg</text>
+    <text x="18" y="49" class="desc">HUD 界面组件：显示玩家状态、提示、图标或模式信息</text>
+    <text x="18" y="69" class="desc">字段依据：deadColor / aliveColor</text>
+  </g>
+  <g transform="translate(70 2391)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">HUD_Weapon</text>
+    <text x="18" y="49" class="desc">HUD 界面组件：显示玩家状态、提示、图标或模式信息</text>
+    <text x="18" y="69" class="desc">字段依据：Color_BuffClip</text>
+  </g>
+  <g transform="translate(70 2489)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">HUD_WeaponSlotIndividual</text>
+    <text x="18" y="49" class="desc">HUD 界面组件：显示玩家状态、提示、图标或模式信息</text>
+    <text x="18" y="69" class="desc">字段依据：&lt;curColor&gt;k__BackingField</text>
+  </g>
+  <g transform="translate(70 2587)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">InputField</text>
+    <text x="18" y="49" class="desc">输入交互类型：用于鼠标、触摸、按键或输入模块状态</text>
+    <text x="18" y="69" class="desc">字段依据：m_CaretColor / m_SelectionColor</text>
+  </g>
+  <g transform="translate(70 2685)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">Light2D</text>
+    <text x="18" y="49" class="desc">渲染/光照类型：用于渲染管线、光照、材质、后处理或屏幕效果</text>
+    <text x="18" y="69" class="desc">字段依据：m_Color</text>
+  </g>
+  <g transform="translate(70 2783)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">LightUtility.ParametricLightMeshVertex</text>
+    <text x="18" y="49" class="desc">渲染/光照类型：用于渲染管线、光照、材质、后处理或屏幕效果</text>
+    <text x="18" y="69" class="desc">字段依据：color</text>
+  </g>
+  <g transform="translate(70 2881)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">LightUtility.SpriteLightMeshVertex</text>
+    <text x="18" y="49" class="desc">渲染/光照类型：用于渲染管线、光照、材质、后处理或屏幕效果</text>
+    <text x="18" y="69" class="desc">字段依据：color</text>
+  </g>
+  <g transform="translate(70 2979)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">NavmeshAdd</text>
+    <text x="18" y="49" class="desc">寻路/导航类型：用于 AI 路径搜索、导航网格、避障或路径节点</text>
+    <text x="18" y="69" class="desc">字段依据：GizmoColor</text>
+  </g>
+  <g transform="translate(70 3077)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">NavmeshCut</text>
+    <text x="18" y="49" class="desc">寻路/导航类型：用于 AI 路径搜索、导航网格、避障或路径节点</text>
+    <text x="18" y="69" class="desc">字段依据：GizmoColor</text>
+  </g>
+  <g transform="translate(70 3175)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">NestedExample</text>
+    <text x="18" y="49" class="desc">项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</text>
+    <text x="18" y="69" class="desc">字段依据：color</text>
+  </g>
+  <g transform="translate(70 3273)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">NodeLink2</text>
+    <text x="18" y="49" class="desc">项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</text>
+    <text x="18" y="69" class="desc">字段依据：GizmosColor / GizmosColorSelected</text>
+  </g>
+  <g transform="translate(70 3371)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">NodeLink3</text>
+    <text x="18" y="49" class="desc">项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</text>
+    <text x="18" y="69" class="desc">字段依据：GizmosColor / GizmosColorSelected</text>
+  </g>
+  <g transform="translate(70 3469)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">PlayerMdlInfo</text>
+    <text x="18" y="49" class="desc">玩家模型信息：角色模型、皮肤或显示状态资料</text>
+    <text x="18" y="69" class="desc">字段依据：pvColor / cvColor / AbsorbedColor</text>
+  </g>
+  <g transform="translate(70 3567)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">RendererLighting</text>
+    <text x="18" y="49" class="desc">渲染/光照类型：用于渲染管线、光照、材质、后处理或屏幕效果</text>
+    <text x="18" y="69" class="desc">字段依据：k_NormalClearColor</text>
+  </g>
+  <g transform="translate(70 3665)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">RichAI</text>
+    <text x="18" y="49" class="desc">项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</text>
+    <text x="18" y="69" class="desc">字段依据：GizmoColorPath</text>
+  </g>
+  <g transform="translate(70 3763)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">ScriptableRenderPass</text>
+    <text x="18" y="49" class="desc">渲染/光照类型：用于渲染管线、光照、材质、后处理或屏幕效果</text>
+    <text x="18" y="69" class="desc">字段依据：m_ClearColor</text>
+  </g>
+  <g transform="translate(70 3861)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">Shadow</text>
+    <text x="18" y="49" class="desc">项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</text>
+    <text x="18" y="69" class="desc">字段依据：m_EffectColor</text>
+  </g>
+  <g transform="translate(70 3959)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">SoftMask</text>
+    <text x="18" y="49" class="desc">项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</text>
+    <text x="18" y="69" class="desc">字段依据：s_ClearColors</text>
+  </g>
+  <g transform="translate(70 4057)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">SpriteIntermediateRendererInfo</text>
+    <text x="18" y="49" class="desc">渲染/光照类型：用于渲染管线、光照、材质、后处理或屏幕效果</text>
+    <text x="18" y="69" class="desc">字段依据：Color</text>
+  </g>
+  <g transform="translate(70 4155)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">TabScoreBoard_PlayerData</text>
+    <text x="18" y="49" class="desc">TAB 记分板玩家数据：显示分数、击杀、死亡等</text>
+    <text x="18" y="69" class="desc">字段依据：color_MyDead / color_Teammate / color_Enemy / color_OtherDead 等 8 个字段</text>
+  </g>
+  <g transform="translate(70 4253)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">TextGenerationSettings</text>
+    <text x="18" y="49" class="desc">UI 控件类型：用于界面布局、文本、按钮、滚动、图形或交互控件</text>
+    <text x="18" y="69" class="desc">字段依据：color</text>
+  </g>
+  <g transform="translate(70 4351)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">TextureDesc</text>
+    <text x="18" y="49" class="desc">UI 控件类型：用于界面布局、文本、按钮、滚动、图形或交互控件</text>
+    <text x="18" y="69" class="desc">字段依据：clearColor</text>
+  </g>
+  <g transform="translate(70 4449)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">Tile</text>
+    <text x="18" y="49" class="desc">项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</text>
+    <text x="18" y="69" class="desc">字段依据：m_Color</text>
+  </g>
+  <g transform="translate(70 4547)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">TrackColorAttribute</text>
+    <text x="18" y="49" class="desc">颜色配置类型：用于 UI、特效、渲染或阵营表现的颜色数据</text>
+    <text x="18" y="69" class="desc">字段依据：m_Color</text>
+  </g>
+  <g transform="translate(70 4645)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">VFXAudioSpectrumBinder</text>
+    <text x="18" y="49" class="desc">视觉特效类型：用于粒子、屏幕特效、技能表现或受击反馈</text>
+    <text x="18" y="69" class="desc">字段依据：m_ColorCache</text>
+  </g>
+  <g transform="translate(70 4743)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">VisibleLight</text>
+    <text x="18" y="49" class="desc">渲染/光照类型：用于渲染管线、光照、材质、后处理或屏幕效果</text>
+    <text x="18" y="69" class="desc">字段依据：m_FinalColor</text>
+  </g>
+  <g transform="translate(70 4841)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">WallHackDetector</text>
+    <text x="18" y="49" class="desc">项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</text>
+    <text x="18" y="69" class="desc">字段依据：wfColor1 / wfColor2</text>
+  </g>
+  <g transform="translate(70 4939)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">WpnSpriteAsset</text>
+    <text x="18" y="49" class="desc">资源索引类型：保存可加载资源、图标、预制体或表现素材引用</text>
+    <text x="18" y="69" class="desc">字段依据：backgroundColor</text>
+  </g>
+
+<path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 274 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 372 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 470 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 568 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 666 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 764 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 862 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 960 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 1058 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 1156 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 1254 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 1352 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 1450 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 1548 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 1646 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 1744 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 1842 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 1940 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 2038 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 2136 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 2234 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 2332 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 2430 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 2528 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 2626 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 2724 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 2822 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 2920 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 3018 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 3116 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 3214 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 3312 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 3410 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 3508 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 3606 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 3704 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 3802 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 3900 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 3998 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 4096 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 4194 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 4292 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 4390 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 4488 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 4586 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 4684 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 4782 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 4880 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 4978 H575 V430 H660"/>
+
+</svg>
+</div>
+</body>
+</html>

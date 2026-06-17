@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MapManager 类新人入门与完整开发参考</title>
+  <style>
+    :root{--bg:#f4f7fb;--panel:#fff;--text:#172033;--muted:#667085;--line:#dbe3ee;--blue:#2563eb;--blue2:#eaf2ff;--green:#087a55;--green2:#e8f7f0;--orange:#a85300;--orange2:#fff3e2;--shadow:0 10px 30px rgba(24,39,75,.07)}
+    *{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:var(--bg);color:var(--text);font-family:"Microsoft YaHei","Segoe UI",Arial,sans-serif;line-height:1.72}
+    code{font-family:Consolas,"Cascadia Mono",monospace;color:#173f7a;background:#edf3fb;border-radius:5px;padding:1px 5px;overflow-wrap:anywhere}
+    .layout{display:grid;grid-template-columns:270px minmax(0,1fr);gap:24px;width:min(1740px,calc(100% - 32px));margin:20px auto 60px}
+    .side{position:sticky;top:18px;align-self:start;max-height:calc(100vh - 36px);overflow:auto;background:#17233a;color:#dce7f8;border-radius:16px;padding:20px}
+    .side strong{display:block;color:#fff;font-size:17px;margin-bottom:12px}.side a{display:block;color:#c8d6ec;text-decoration:none;padding:7px 9px;border-radius:7px;font-size:13px}.side a:hover{background:#263754;color:#fff}
+    .main{min-width:0}.hero,.panel{background:var(--panel);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow)}.hero{padding:30px}.panel{padding:26px;margin-top:20px}
+    h1{font-size:30px;margin:0 0 8px}h2{font-size:23px;margin:0 0 8px}h3{font-size:17px;margin:20px 0 8px}.sub,.muted{color:var(--muted)}
+    .badge{display:inline-block;padding:3px 9px;border-radius:999px;background:var(--blue2);color:#174eae;font-size:12px;font-weight:700;margin:2px 5px 2px 0}
+    .stats{display:grid;grid-template-columns:repeat(6,minmax(110px,1fr));gap:10px;margin-top:20px}.stat{border:1px solid var(--line);border-radius:11px;padding:13px;background:#fbfdff}.stat b{display:block;font-size:24px}.stat span{font-size:12px;color:var(--muted)}
+    .callout{border-left:4px solid var(--blue);background:#f3f7ff;padding:12px 15px;margin:14px 0}.warn{border-left-color:#d47a0b;background:#fff8e9}.ok{border-left-color:#16845d;background:#eefaf5}
+    .route{display:grid;grid-template-columns:repeat(6,minmax(110px,1fr));gap:9px;margin:18px 0}.step{position:relative;padding:13px 10px;border:1px solid #bdd0ef;border-radius:10px;background:#f7faff;text-align:center;font-size:13px}.step:not(:last-child)::after{content:"→";position:absolute;right:-10px;top:36%;z-index:2;color:var(--blue);font-weight:700}
+    .relations{display:grid;grid-template-columns:1fr 1.05fr 1fr;gap:16px;align-items:stretch;margin-top:16px}.relcol,.core{border:1px solid var(--line);border-radius:13px;padding:16px}.core{display:flex;flex-direction:column;justify-content:center;text-align:center;border:3px solid var(--blue);background:linear-gradient(150deg,#fff,var(--blue2))}.core b{font:700 30px Consolas;color:#174eae}.node{padding:9px 10px;margin:7px 0;border-radius:8px;background:#f8fafc;border:1px solid var(--line);font-size:13px}
+    .table-wrap{overflow:auto;border:1px solid var(--line);border-radius:11px;margin-top:14px}table{width:100%;border-collapse:collapse;min-width:1120px;font-size:13px}th,td{padding:10px 11px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}th{position:sticky;top:0;background:#eef3f9;color:#40516b;z-index:1;white-space:nowrap}tr:hover td{background:#f8fbff}
+    .evidence{display:inline-block;padding:2px 7px;border-radius:999px;font-size:11px;font-weight:700;white-space:nowrap;color:#28558e;background:#eaf2ff}
+    .tools{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0}.tools input,.tools select{border:1px solid var(--line);border-radius:8px;padding:8px 10px;font:inherit;font-size:13px;background:white}.tools input{min-width:300px}.count{color:var(--muted);font-size:13px;align-self:center}
+    @media(max-width:1100px){.layout{grid-template-columns:1fr}.side{position:static;max-height:none}.side a{display:inline-block}.stats{grid-template-columns:repeat(3,1fr)}.relations{grid-template-columns:1fr}.route{grid-template-columns:1fr}.step:not(:last-child)::after{right:50%;top:auto;bottom:-15px}.tools input{min-width:100%;width:100%}}
+  </style>
+</head>
+<body>
+<div class="layout">
+  <nav class="side">
+    <strong>MapManager 学习路线</strong>
+    <a href="#read-first">1. 先看这里</a>
+    <a href="#five-minutes">2. 五分钟理解</a>
+    <a href="#flow">3. 游戏流程</a>
+    <a href="#relations">4. 分层预览</a>
+    <a href="#external">5. 谁保存它</a>
+    <a href="#internal">6. 它连接谁</a>
+    <a href="#fields">7. 字段全表</a>
+    <a href="#properties">8. 属性全表</a>
+    <a href="#methods">9. 方法全表</a>
+    <a href="#dev">10. 新人开发导航</a>
+    <a href="#boundary">11. 证据边界</a>
+  </nav>
+  <main class="main">
+    <header class="hero" id="read-first">
+      <span class="badge">新人上手</span><span class="badge">完整成员</span><span class="badge">分类筛选</span><span class="badge">Unity IL2CPP</span>
+      <h1>MapManager 类新人入门与完整开发参考</h1>
+      <p class="sub">MapManager 是当前地图的点位与地图资源中心：出生点、补给点、地图枪、小地图和雷达坐标。</p>
+      <div class="stats">
+        <div class="stat"><b>19</b><span>字段总数，已列 19</span></div>
+        <div class="stat"><b>4</b><span>静态字段</span></div>
+        <div class="stat"><b>15</b><span>实例字段</span></div>
+        <div class="stat"><b>0</b><span>属性总数，已列 0</span></div>
+        <div class="stat"><b>10</b><span>方法总数，已列 10</span></div>
+        <div class="stat"><b>0</b><span>其他类字段引用</span></div>
+      </div>
+      <div class="callout warn"><b>先建立边界：</b>它不创建玩家、不决定胜负；它提供地图坐标、点位和地图参数给 Player、补给箱、HUD 使用。</div>
+    </header>
+
+    <section class="panel" id="five-minutes">
+      <h2>二、五分钟理解 MapManager</h2>
+      <p><code>MapManager</code> 的声明：<code>public class MapManager : Singleton&lt;MapManager&gt; // TypeDefIndex: 5371</code></p>
+      <p>继承来源：<code>Singleton&lt;MapManager&gt;</code>。新人先记住“它在游戏里负责什么”，再看完整字段表。</p>
+      <div class="table-wrap"><table><thead><tr><th>#</th><th>问题</th><th>新人应先记住的答案</th><th>依据</th></tr></thead><tbody><tr><td>1</td><td>MapManager 管什么？</td><td>管地图上的“规则点位”：出生点、补给点、地图枪、小地图和雷达坐标。</td><td><span class="evidence">dump.cs + 游戏流程推断</span></td></tr><tr><td>2</td><td>玩家出生为什么会被覆盖位置？</td><td>Player.Spawn 会走 MapManager.GetSpawnPoint，直接改坐标可能在下一次出生时被重新设置。</td><td><span class="evidence">dump.cs + 游戏流程推断</span></td></tr><tr><td>3</td><td>团队模式和个人竞技出生点一样吗？</td><td>团队通常用 BL/GR 出生点；个人竞技或特殊模式可能用 Neutral，最终还要看传入 Team 和 Mode 规则。</td><td><span class="evidence">dump.cs + 游戏流程推断</span></td></tr><tr><td>4</td><td>补给箱为什么要 Release？</td><td>GetSupplyBoxPoint 会占用点位，ReleaseSupplyBoxPoint 把点位放回可用列表，避免多个箱子重叠。</td><td><span class="evidence">dump.cs + 游戏流程推断</span></td></tr><tr><td>5</td><td>改地图枪只改 mapGunIndex 够吗？</td><td>不一定。mapGunAmmo 通常由 MapGunInit 根据 WeaponData 初始化，改编号后要考虑重新初始化。</td><td><span class="evidence">dump.cs + 游戏流程推断</span></td></tr></tbody></table></div>
+    </section>
+
+    <section class="panel" id="flow">
+      <h2>三、从穿越火线一局游戏看它怎么参与</h2>
+      <div class="route"><div class="step"><b>1</b><br>地图场景加载</div><div class="step"><b>2</b><br>Awake 读取 pointDic</div><div class="step"><b>3</b><br>分类出生/补给点</div><div class="step"><b>4</b><br>Player.Spawn 请求点位</div><div class="step"><b>5</b><br>补给箱占用/释放</div><div class="step"><b>6</b><br>新回合重置</div></div>
+      <div class="callout ok"><b>新人判断法：</b>先问“这是进场前资料、战斗运行时状态，还是地图/回合规则？” 位置判断对了，修改点通常就清楚了。</div>
+    </section>
+
+    <section class="panel" id="relations">
+      <h2>四、以 MapManager 为中心的分层预览</h2>
+      <div class="relations">
+        <div class="relcol"><h3>谁管理、控制或保存它</h3><div class="node">Unity 地图场景：通过序列化字段提供 pointDic、minimap、雷达参数。</div><div class="node">GameManager：新回合事件会触发地图状态重置。</div><div class="node">Mode_*：不同模式可能请求不同类型的出生/补给点。</div></div>
+        <div class="core"><b>MapManager</b><p>地图点位与雷达资源</p><p class="muted">MapManager 是当前地图的点位与地图资源中心：出生点、补给点、地图枪、小地图和雷达坐标。</p></div>
+        <div class="relcol"><h3>MapManager 自己连接的系统</h3><div class="node">Player.Spawn：按 Team 请求出生点。</div><div class="node">SupplyBox：占用并释放补给箱点位。</div><div class="node">MapGun/WeaponData：按 mapGunIndex 初始化地图枪。</div><div class="node">HUD Radar/Minimap：使用 minimap、radarOriginPos、pixelPerDistance。</div></div>
+      </div>
+      <div class="callout">这里的箭头含义是“项目理解关系”，不等于每一条都是字段直接引用。字段直接引用请看下面两张表。</div>
+    </section>
+
+    <section class="panel" id="external">
+      <h2>五、哪些类的字段保存了 MapManager</h2>
+      <p class="muted">只统计 dump.cs 里“字段类型直接包含 <code>MapManager</code>”的关系；方法参数、局部变量、运行时查找不算。</p>
+      <div class="table-wrap"><table><thead><tr><th>#</th><th>保存者类</th><th>字段名</th><th>字段类型</th><th>穿越火线中的实际含义</th><th>依据</th></tr></thead><tbody><tr><td colspan="6">dump.cs 没有发现其他类通过字段直接保存 <code>MapManager</code>。方法参数和局部变量不计入这里。</td></tr></tbody></table></div>
+    </section>
+
+    <section class="panel" id="internal">
+      <h2>六、MapManager 自己的字段连接了哪些外部类型</h2>
+      <p class="muted">对象字段 7 个。这个表帮助新人快速知道“它不是孤立的，它会拿着哪些系统的对象或配置”。</p>
+      <div class="table-wrap"><table><thead><tr><th>#</th><th>分类</th><th>MapManager 字段</th><th>字段类型</th><th>关联外部类型</th><th>穿越火线中的功能</th><th>依据</th></tr></thead><tbody><tr><td>1</td><td>出生点</td><td><code>pointDic</code></td><td><code>SpawnPointDictionary</code></td><td>SpawnPointDictionary</td><td>Unity 场景里序列化的点位字典，是所有出生点/补给点数组的数据源。</td><td><span class="evidence">dump.cs 字段类型</span></td></tr><tr><td>2</td><td>出生点</td><td><code>SP_BL</code></td><td><code>SpawnPoint[]</code></td><td>SpawnPoint</td><td>BL 阵营出生点数组。</td><td><span class="evidence">dump.cs 字段类型</span></td></tr><tr><td>3</td><td>出生点</td><td><code>SP_GR</code></td><td><code>SpawnPoint[]</code></td><td>SpawnPoint</td><td>GR 阵营出生点数组。</td><td><span class="evidence">dump.cs 字段类型</span></td></tr><tr><td>4</td><td>出生点</td><td><code>SP_Netural</code></td><td><code>SpawnPoint[]</code></td><td>SpawnPoint</td><td>中立出生点数组，常用于个人竞技或特殊出生规则。</td><td><span class="evidence">dump.cs 字段类型</span></td></tr><tr><td>5</td><td>出生点</td><td><code>SP_SupplyBox</code></td><td><code>SpawnPoint[]</code></td><td>SpawnPoint</td><td>普通补给箱点位数组。</td><td><span class="evidence">dump.cs 字段类型</span></td></tr><tr><td>6</td><td>出生点</td><td><code>SP_RedBox</code></td><td><code>SpawnPoint[]</code></td><td>SpawnPoint</td><td>红方补给点数组。</td><td><span class="evidence">dump.cs 字段类型</span></td></tr><tr><td>7</td><td>出生点</td><td><code>SP_BlueBox</code></td><td><code>SpawnPoint[]</code></td><td>SpawnPoint</td><td>蓝方补给点数组。</td><td><span class="evidence">dump.cs 字段类型</span></td></tr></tbody></table></div>
+    </section>
+
+    <section class="panel" id="fields">
+      <h2>七、字段完整表：19 / 19</h2>
+      <div class="tools"><select data-cat-filter="fieldsTable"><option value="全部">全部</option><option value="出生点">出生点</option><option value="补给点">补给点</option><option value="地图武器">地图武器</option><option value="运行状态">运行状态</option><option value="雷达与小地图">雷达与小地图</option></select><input data-filter="fieldsTable" placeholder="搜索字段、类型、说明..."><span class="count" data-count="fieldsTable"></span></div>
+      <div class="table-wrap"><table id="fieldsTable"><thead><tr><th>#</th><th>分类</th><th>字段名</th><th>类型</th><th>字段性质</th><th>穿越火线中的功能</th><th>开发提示</th><th>依据</th></tr></thead><tbody><tr data-cat="出生点"><td>1</td><td>出生点</td><td><code>pointDic</code></td><td><code>SpawnPointDictionary</code></td><td>实例字段</td><td>Unity 场景里序列化的点位字典，是所有出生点/补给点数组的数据源。</td><td>可作为观察点；修改前确认是否会被初始化、回合或刷新流程覆盖。</td><td><span class="evidence">dump.cs</span></td></tr><tr data-cat="出生点"><td>2</td><td>出生点</td><td><code>SP_BL</code></td><td><code>SpawnPoint[]</code></td><td>实例字段</td><td>BL 阵营出生点数组。</td><td>会被出生/补给/回合重置流程使用。</td><td><span class="evidence">dump.cs</span></td></tr><tr data-cat="出生点"><td>3</td><td>出生点</td><td><code>SP_GR</code></td><td><code>SpawnPoint[]</code></td><td>实例字段</td><td>GR 阵营出生点数组。</td><td>会被出生/补给/回合重置流程使用。</td><td><span class="evidence">dump.cs</span></td></tr><tr data-cat="出生点"><td>4</td><td>出生点</td><td><code>SP_Netural</code></td><td><code>SpawnPoint[]</code></td><td>实例字段</td><td>中立出生点数组，常用于个人竞技或特殊出生规则。</td><td>会被出生/补给/回合重置流程使用。</td><td><span class="evidence">dump.cs</span></td></tr><tr data-cat="出生点"><td>5</td><td>出生点</td><td><code>SP_SupplyBox</code></td><td><code>SpawnPoint[]</code></td><td>实例字段</td><td>普通补给箱点位数组。</td><td>会被出生/补给/回合重置流程使用。</td><td><span class="evidence">dump.cs</span></td></tr><tr data-cat="出生点"><td>6</td><td>出生点</td><td><code>SP_RedBox</code></td><td><code>SpawnPoint[]</code></td><td>实例字段</td><td>红方补给点数组。</td><td>会被出生/补给/回合重置流程使用。</td><td><span class="evidence">dump.cs</span></td></tr><tr data-cat="出生点"><td>7</td><td>出生点</td><td><code>SP_BlueBox</code></td><td><code>SpawnPoint[]</code></td><td>实例字段</td><td>蓝方补给点数组。</td><td>会被出生/补给/回合重置流程使用。</td><td><span class="evidence">dump.cs</span></td></tr><tr data-cat="出生点"><td>8</td><td>出生点</td><td><code>SPID_BL</code></td><td><code>int</code></td><td>静态字段</td><td>BL 出生点轮换索引，避免总出生在同一个点。</td><td>会被出生/补给/回合重置流程使用。</td><td><span class="evidence">dump.cs</span></td></tr><tr data-cat="出生点"><td>9</td><td>出生点</td><td><code>SPID_GR</code></td><td><code>int</code></td><td>静态字段</td><td>GR 出生点轮换索引，避免总出生在同一个点。</td><td>会被出生/补给/回合重置流程使用。</td><td><span class="evidence">dump.cs</span></td></tr><tr data-cat="出生点"><td>10</td><td>出生点</td><td><code>SPID_Netural</code></td><td><code>int</code></td><td>静态字段</td><td>中立出生点轮换索引。</td><td>会被出生/补给/回合重置流程使用。</td><td><span class="evidence">dump.cs</span></td></tr><tr data-cat="补给点"><td>11</td><td>补给点</td><td><code>IDList_SupplyBox</code></td><td><code>List&lt;int&gt;</code></td><td>实例字段</td><td>当前可用普通补给点索引池。</td><td>会被出生/补给/回合重置流程使用。</td><td><span class="evidence">dump.cs</span></td></tr><tr data-cat="补给点"><td>12</td><td>补给点</td><td><code>IDList_RedBox</code></td><td><code>List&lt;int&gt;</code></td><td>实例字段</td><td>当前可用红方补给点索引池。</td><td>会被出生/补给/回合重置流程使用。</td><td><span class="evidence">dump.cs</span></td></tr><tr data-cat="补给点"><td>13</td><td>补给点</td><td><code>IDList_BlueBox</code></td><td><code>List&lt;int&gt;</code></td><td>实例字段</td><td>当前可用蓝方补给点索引池。</td><td>会被出生/补给/回合重置流程使用。</td><td><span class="evidence">dump.cs</span></td></tr><tr data-cat="地图武器"><td>14</td><td>地图武器</td><td><code>mapGunIndex</code></td><td><code>int</code></td><td>实例字段</td><td>地图枪的武器编号。</td><td>改完可能还要重新走 MapGunInit。</td><td><span class="evidence">dump.cs</span></td></tr><tr data-cat="地图武器"><td>15</td><td>地图武器</td><td><code>mapGunAmmo</code></td><td><code>Vector2Int</code></td><td>静态字段</td><td>地图枪弹药参数，通常由 mapGunIndex 对应的 WeaponData 初始化。</td><td>改完可能还要重新走 MapGunInit。</td><td><span class="evidence">dump.cs</span></td></tr><tr data-cat="运行状态"><td>16</td><td>运行状态</td><td><code>knifeHitStun</code></td><td><code>bool</code></td><td>实例字段</td><td>刀击硬直开关，影响近战命中后的反馈规则。</td><td>可作为观察点；修改前确认是否会被初始化、回合或刷新流程覆盖。</td><td><span class="evidence">dump.cs</span></td></tr><tr data-cat="雷达与小地图"><td>17</td><td>雷达与小地图</td><td><code>minimap</code></td><td><code>Texture2D</code></td><td>实例字段</td><td>小地图贴图资源。</td><td>可作为观察点；修改前确认是否会被初始化、回合或刷新流程覆盖。</td><td><span class="evidence">dump.cs</span></td></tr><tr data-cat="雷达与小地图"><td>18</td><td>雷达与小地图</td><td><code>radarOriginPos</code></td><td><code>Vector3</code></td><td>实例字段</td><td>世界坐标映射到雷达/小地图时的原点。</td><td>可作为观察点；修改前确认是否会被初始化、回合或刷新流程覆盖。</td><td><span class="evidence">dump.cs</span></td></tr><tr data-cat="雷达与小地图"><td>19</td><td>雷达与小地图</td><td><code>pixelPerDistance</code></td><td><code>float</code></td><td>实例字段</td><td>世界距离换算成小地图像素距离的比例。</td><td>可作为观察点；修改前确认是否会被初始化、回合或刷新流程覆盖。</td><td><span class="evidence">dump.cs</span></td></tr></tbody></table></div>
+    </section>
+
+    <section class="panel" id="properties">
+      <h2>八、属性完整表：0 / 0</h2>
+      <div class="tools"><select data-cat-filter="propsTable"><option value="全部">全部</option><option value="无属性">无属性</option></select><input data-filter="propsTable" placeholder="搜索属性、类型、说明..."><span class="count" data-count="propsTable"></span></div>
+      <div class="table-wrap"><table id="propsTable"><thead><tr><th>#</th><th>分类</th><th>属性名</th><th>类型</th><th>性质</th><th>访问器</th><th>穿越火线中的功能</th><th>开发提示</th><th>依据</th></tr></thead><tbody><tr data-cat="无属性"><td colspan="9">该类在 dump.cs 中没有属性声明。</td></tr></tbody></table></div>
+    </section>
+
+    <section class="panel" id="methods">
+      <h2>九、方法完整表：10 / 10</h2>
+      <div class="tools"><select data-cat-filter="methodsTable"><option value="全部">全部</option><option value="Unity 生命周期">Unity 生命周期</option><option value="地图武器">地图武器</option><option value="地图生命周期">地图生命周期</option><option value="出生点">出生点</option><option value="补给点">补给点</option></select><input data-filter="methodsTable" placeholder="搜索方法、参数、说明..."><span class="count" data-count="methodsTable"></span></div>
+      <div class="table-wrap"><table id="methodsTable"><thead><tr><th>#</th><th>分类</th><th>方法名</th><th>返回值</th><th>参数</th><th>性质</th><th>穿越火线中的功能</th><th>开发提示</th><th>依据</th></tr></thead><tbody><tr data-cat="Unity 生命周期"><td>1</td><td>Unity 生命周期</td><td><code>Awake</code></td><td><code>void</code></td><td><code></code></td><td>实例方法</td><td>Unity 生命周期：场景对象刚创建时执行，常用于注册 Singleton、读取序列化资源、订阅事件。</td><td>生命周期方法不建议随便主动调用。</td><td><span class="evidence">dump.cs</span></td></tr><tr data-cat="Unity 生命周期"><td>2</td><td>Unity 生命周期</td><td><code>OnDestroy</code></td><td><code>void</code></td><td><code></code></td><td>实例方法</td><td>Unity 生命周期：场景销毁时清理事件、单例、静态引用，避免下局残留。</td><td>生命周期方法不建议随便主动调用。</td><td><span class="evidence">dump.cs</span></td></tr><tr data-cat="地图武器"><td>3</td><td>地图武器</td><td><code>MapGunInit</code></td><td><code>void</code></td><td><code></code></td><td>实例方法</td><td>根据 mapGunIndex 从武器数据中初始化地图枪和 mapGunAmmo。</td><td>可作为观察点；修改前确认是否会被初始化、回合或刷新流程覆盖。</td><td><span class="evidence">dump.cs</span></td></tr><tr data-cat="地图生命周期"><td>4</td><td>地图生命周期</td><td><code>NewGameRoundStart</code></td><td><code>void</code></td><td><code></code></td><td>实例方法</td><td>新回合开始时重置地图临时状态，例如补给点占用。</td><td>可作为观察点；修改前确认是否会被初始化、回合或刷新流程覆盖。</td><td><span class="evidence">dump.cs</span></td></tr><tr data-cat="出生点"><td>5</td><td>出生点</td><td><code>GetSpawnPoint</code></td><td><code>SpawnPoint</code></td><td><code>Team team</code></td><td>静态方法</td><td>按 Team 选择 BL/GR/Neutral 出生点，并用索引轮换返回点位。</td><td>可作为观察点；修改前确认是否会被初始化、回合或刷新流程覆盖。</td><td><span class="evidence">dump.cs</span></td></tr><tr data-cat="地图生命周期"><td>6</td><td>地图生命周期</td><td><code>OnDrawGizmos</code></td><td><code>void</code></td><td><code></code></td><td>实例方法</td><td>Unity 编辑器调试绘制点位，运行修改时通常不是核心入口。</td><td>可作为观察点；修改前确认是否会被初始化、回合或刷新流程覆盖。</td><td><span class="evidence">dump.cs</span></td></tr><tr data-cat="补给点"><td>7</td><td>补给点</td><td><code>GetSupplyBoxPoint</code></td><td><code>int</code></td><td><code>out SpawnPoint point, SupplyBox.Type type</code></td><td>静态方法</td><td>按补给箱类型随机/选择一个可用点位，并把它从可用列表移除。</td><td>可作为观察点；修改前确认是否会被初始化、回合或刷新流程覆盖。</td><td><span class="evidence">dump.cs</span></td></tr><tr data-cat="补给点"><td>8</td><td>补给点</td><td><code>ReleaseSupplyBoxPoint</code></td><td><code>void</code></td><td><code>int index, SupplyBox.Type boxType</code></td><td>静态方法</td><td>补给箱消失后释放点位，让后续补给箱可以再次使用。</td><td>可作为观察点；修改前确认是否会被初始化、回合或刷新流程覆盖。</td><td><span class="evidence">dump.cs</span></td></tr><tr data-cat="Unity 生命周期"><td>9</td><td>Unity 生命周期</td><td><code>.ctor</code></td><td><code>void</code></td><td><code></code></td><td>实例方法</td><td>构造 C# 对象并初始化容器/默认值；不是 Unity 场景初始化完成。</td><td>可作为观察点；修改前确认是否会被初始化、回合或刷新流程覆盖。</td><td><span class="evidence">dump.cs</span></td></tr><tr data-cat="出生点"><td>10</td><td>出生点</td><td><code>&lt;GetSpawnPoint&gt;g__GetPoint|23_0</code></td><td><code>SpawnPoint</code></td><td><code>ref int pointId, SpawnPoint[] points</code></td><td>静态方法</td><td>业务方法。新人应先看名字和参数判断它属于哪个流程，再用 IDA 查调用者确认真实执行时机。</td><td>可作为观察点；修改前确认是否会被初始化、回合或刷新流程覆盖。</td><td><span class="evidence">dump.cs</span></td></tr></tbody></table></div>
+    </section>
+
+    <section class="panel" id="dev">
+      <h2>十、新人开发功能导航</h2>
+      <div class="table-wrap"><table><thead><tr><th>你想做的功能</th><th>先看哪一类</th><th>为什么</th><th>常见坑</th></tr></thead><tbody>
+        <tr><td>想定位对象地址或对象链</td><td>第 4、5、6 节</td><td>先知道谁保存它、它又连接谁，少走盲猜偏移的路。</td><td>字段引用不等于方法一定会执行，仍要看调用链。</td></tr>
+        <tr><td>想改进场前资料</td><td>字段表里的身份、背包、角色、模式配置</td><td>这类值通常在创建 Player 或初始化前生效。</td><td>改晚了可能已经被 Player/WeaponBag/Mode 读走。</td></tr>
+        <tr><td>想改战斗运行效果</td><td>方法表里的伤害、出生、回合、武器、刷新分类</td><td>运行时逻辑经常由方法重新计算，不能只盯字段。</td><td>无参方法也可能依赖 Unity 场景、事件、资源字典。</td></tr>
+        <tr><td>想判断能不能修改字段</td><td>字段表“开发提示”和第 11 节证据边界</td><td>区分数据源、缓存值、派生结果和临时状态。</td><td>派生值常被 Update、Awake、Start、ResetRound 覆盖。</td></tr>
+      </tbody></table></div>
+    </section>
+
+    <section class="panel" id="boundary">
+      <h2>十一、完整性与证据边界</h2>
+      <div class="table-wrap"><table><thead><tr><th>内容</th><th>是否完整</th><th>来源</th><th>怎么继续验证</th></tr></thead><tbody>
+        <tr><td>字段、属性、方法英文声明和数量</td><td>完整列出</td><td><code>01-游戏逆向分析-相关信息\Il2CppDumper\dump.cs</code></td><td>和 dump.cs 对照，或用 Il2CppDumper 重新导出。</td></tr>
+        <tr><td>其他类字段保存 MapManager</td><td>完整统计字段直接引用</td><td>dump.cs 全文扫描字段声明</td><td>方法参数、局部变量、运行时 Find/GetComponent 不在此表，需要 IDA 查调用链。</td></tr>
+        <tr><td>穿越火线中的功能解释</td><td>按新人理解整理</td><td>字段名、类型、Unity 生命周期、IL2CPP 属性拆分、已有逆向流程</td><td>关键修改点用 IDA MCP 看反编译和 xref，确认真实读写位置。</td></tr>
+        <tr><td>能否直接调用或修改</td><td>给出风险提示，不做绝对保证</td><td>Unity/IL2CPP 运行机制和当前声明</td><td>看前置状态、调用者、被调用方法、是否会被下一帧/下回合覆盖。</td></tr>
+      </tbody></table></div>
+    </section>
+  </main>
+</div>
+<script>
+  function bindTable(tableId) {
+    const table = document.getElementById(tableId);
+    if (!table) return;
+    const search = document.querySelector('input[data-filter="' + tableId + '"]');
+    const select = document.querySelector('select[data-cat-filter="' + tableId + '"]');
+    const counter = document.querySelector('[data-count="' + tableId + '"]');
+    const rows = Array.from(table.tBodies[0].rows);
+    const update = () => {
+      const q = search ? search.value.trim().toLowerCase() : '';
+      const cat = select ? select.value : '全部';
+      let shown = 0;
+      rows.forEach(row => {
+        const okText = !q || row.innerText.toLowerCase().includes(q);
+        const okCat = cat === '全部' || row.dataset.cat === cat;
+        const ok = okText && okCat;
+        row.style.display = ok ? '' : 'none';
+        if (ok) shown++;
+      });
+      if (counter) counter.textContent = '显示 ' + shown + ' / ' + rows.length;
+    };
+    if (search) search.addEventListener('input', update);
+    if (select) select.addEventListener('change', update);
+    update();
+  }
+  ['fieldsTable','propsTable','methodsTable'].forEach(bindTable);
+</script>
+</body>
+</html>

@@ -1,0 +1,355 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>NanoRole 字段关系图与字段说明</title>
+  <style>
+    :root { --bg:#f4f6f8; --panel:#ffffff; --ink:#1f2937; --muted:#667085; --line:#d9e1ec; --blue:#2457a6; --green:#207450; --amber:#9a5b13; }
+    * { box-sizing:border-box; }
+    body { margin:0; background:var(--bg); color:var(--ink); font-family:"Microsoft YaHei","Segoe UI",Arial,sans-serif; }
+    .page { max-width:1360px; margin:0 auto; padding:18px; }
+    header,.panel,table { background:var(--panel); border:1px solid var(--line); border-radius:8px; }
+    header { padding:18px 20px; }
+    h1 { margin:0 0 8px; font-size:26px; letter-spacing:0; }
+    h2 { margin:26px 0 12px; font-size:20px; }
+    p { margin:0; line-height:1.65; }
+    .summary { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; margin-top:16px; }
+    .metric { border:1px solid var(--line); border-radius:8px; padding:12px; background:#fafcff; }
+    .metric strong { display:block; font-size:24px; color:var(--blue); }
+    .metric span { color:var(--muted); font-size:13px; }
+    .graph { display:grid; grid-template-columns:1fr 1.1fr; gap:14px; margin-top:16px; }
+    .panel { padding:16px; }
+    .core { border:2px solid var(--blue); background:#eef5ff; border-radius:8px; padding:16px; }
+    .core strong { display:block; font-size:24px; color:var(--blue); margin-bottom:8px; }
+    .section-panel { margin-top:14px; }
+    .section-note { color:var(--muted); font-size:13px; margin-bottom:12px; }
+    .nodes { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; margin-top:12px; }
+    .node { border:1px solid #cbd8e8; background:#fbfdff; border-radius:8px; padding:10px; min-height:112px; }
+    .node b { display:block; color:var(--green); margin-bottom:4px; }
+    .node span { display:block; color:var(--muted); font-size:13px; line-height:1.45; }
+    .node p { color:#344054; font-size:13px; line-height:1.55; margin-top:8px; }
+    .stats { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; }
+    .stat-card { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:12px; min-height:116px; }
+    .stat-card strong { display:block; font-size:16px; margin-bottom:6px; }
+    .stat-card span { display:inline-block; color:#fff; background:var(--blue); border-radius:999px; padding:3px 9px; font-size:12px; margin-bottom:8px; }
+    .stat-card p { color:var(--muted); font-size:13px; }
+    .toolbar { display:flex; align-items:center; justify-content:space-between; gap:12px; margin:16px 0 8px; flex-wrap:wrap; }
+    .filters,.pager { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+    button,select { border:1px solid var(--line); background:#fff; color:var(--ink); border-radius:6px; padding:8px 12px; cursor:pointer; font:inherit; }
+    button.active { background:var(--blue); color:#fff; border-color:var(--blue); }
+    .hint,.footnote { color:var(--muted); font-size:13px; }
+    table { width:100%; border-collapse:separate; border-spacing:0; overflow:hidden; }
+    th,td { padding:11px 12px; border-bottom:1px solid #edf1f6; vertical-align:top; text-align:left; }
+    th { background:#f8fafc; font-size:13px; color:#344054; }
+    tr:last-child td { border-bottom:0; }
+    td.num { width:44px; color:var(--muted); }
+    td strong { display:block; margin-bottom:4px; }
+    td span, small { display:block; color:var(--muted); font-size:12px; line-height:1.45; }
+    code { white-space:nowrap; color:#344054; background:#f3f6fa; border:1px solid #e0e7ef; border-radius:5px; padding:2px 5px; }
+    .badge { display:inline-block; border-radius:999px; padding:3px 8px; font-size:12px; margin-top:8px; }
+    .badge.keep { background:#eaf7ef; color:var(--green); }
+    .badge.ignore { background:#fff4e5; color:var(--amber); }
+    .footnote { margin-top:14px; }
+    @media (max-width: 900px) { .summary,.graph,.stats,.nodes { grid-template-columns:1fr; } table { font-size:13px; } code { white-space:normal; } }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header>
+      <h1>NanoRole 字段关系图与字段说明</h1>
+      <p>纳米模式相关类型：处理终结者/幽灵玩法数据或行为</p>
+      <div class="summary">
+        <div class="metric"><strong>0</strong><span>dump.cs 中字段总数</span></div>
+        <div class="metric"><strong>0</strong><span>建议重点分析字段</span></div>
+        <div class="metric"><strong>0</strong><span>可忽略但已统计字段</span></div>
+        <div class="metric"><strong>1</strong><span>字段表分页，每页 15 行</span></div>
+      </div>
+    </header>
+    <section class="graph">
+      <div class="panel"><div class="core"><strong>NanoRole</strong><p>纳米模式相关类型：处理终结者/幽灵玩法数据或行为</p></div></div>
+      <div class="panel"><h2 style="margin-top:0">它直接保存的主要类型</h2><div class="nodes"><p class="section-note">没有字段直接保存其他主要类型。</p></div></div>
+    </section>
+    
+    <h2>字段系统分类统计</h2>
+    <section class="stats"><article class="stat-card"><strong>枚举值</strong><span>28 个值</span><p>该类型是枚举，没有普通字段；页面展示枚举值和反向保存者。</p></article></section>
+    
+    <h2>枚举值说明</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>枚举值</th>
+          <th>数值</th>
+          <th colspan="2">功能说明</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="num">1</td>
+          <td><strong>Soldier</strong></td>
+          <td><code>0</code></td>
+          <td colspan="2"><p>枚举值，用于玩法规则中的状态判断。</p></td>
+        </tr>
+        
+
+        <tr>
+          <td class="num">2</td>
+          <td><strong>NanoGhost</strong></td>
+          <td><code>1</code></td>
+          <td colspan="2"><p>枚举值，用于玩法规则中的状态判断。</p></td>
+        </tr>
+        
+
+        <tr>
+          <td class="num">3</td>
+          <td><strong>Hulk</strong></td>
+          <td><code>2</code></td>
+          <td colspan="2"><p>枚举值，用于玩法规则中的状态判断。</p></td>
+        </tr>
+        
+
+        <tr>
+          <td class="num">4</td>
+          <td><strong>Nurse</strong></td>
+          <td><code>3</code></td>
+          <td colspan="2"><p>枚举值，用于玩法规则中的状态判断。</p></td>
+        </tr>
+        
+
+        <tr>
+          <td class="num">5</td>
+          <td><strong>Assassin</strong></td>
+          <td><code>4</code></td>
+          <td colspan="2"><p>枚举值，用于玩法规则中的状态判断。</p></td>
+        </tr>
+        
+
+        <tr>
+          <td class="num">6</td>
+          <td><strong>Ink</strong></td>
+          <td><code>5</code></td>
+          <td colspan="2"><p>枚举值，用于玩法规则中的状态判断。</p></td>
+        </tr>
+        
+
+        <tr>
+          <td class="num">7</td>
+          <td><strong>Jiangshi</strong></td>
+          <td><code>6</code></td>
+          <td colspan="2"><p>枚举值，用于玩法规则中的状态判断。</p></td>
+        </tr>
+        
+
+        <tr>
+          <td class="num">8</td>
+          <td><strong>Psycho</strong></td>
+          <td><code>7</code></td>
+          <td colspan="2"><p>枚举值，用于玩法规则中的状态判断。</p></td>
+        </tr>
+        
+
+        <tr>
+          <td class="num">9</td>
+          <td><strong>Terminator</strong></td>
+          <td><code>8</code></td>
+          <td colspan="2"><p>枚举值，用于玩法规则中的状态判断。</p></td>
+        </tr>
+        
+
+        <tr>
+          <td class="num">10</td>
+          <td><strong>GrandTerminator</strong></td>
+          <td><code>9</code></td>
+          <td colspan="2"><p>枚举值，用于玩法规则中的状态判断。</p></td>
+        </tr>
+        
+
+        <tr>
+          <td class="num">11</td>
+          <td><strong>ArmoredTerminator</strong></td>
+          <td><code>10</code></td>
+          <td colspan="2"><p>枚举值，用于玩法规则中的状态判断。</p></td>
+        </tr>
+        
+
+        <tr>
+          <td class="num">12</td>
+          <td><strong>DevilTerminator</strong></td>
+          <td><code>11</code></td>
+          <td colspan="2"><p>枚举值，用于玩法规则中的状态判断。</p></td>
+        </tr>
+        
+
+        <tr>
+          <td class="num">13</td>
+          <td><strong>ArchDevilTerminator</strong></td>
+          <td><code>12</code></td>
+          <td colspan="2"><p>枚举值，用于玩法规则中的状态判断。</p></td>
+        </tr>
+        
+
+        <tr>
+          <td class="num">14</td>
+          <td><strong>EvilTerminator</strong></td>
+          <td><code>13</code></td>
+          <td colspan="2"><p>枚举值，用于玩法规则中的状态判断。</p></td>
+        </tr>
+        
+
+        <tr>
+          <td class="num">15</td>
+          <td><strong>DemonTerminator</strong></td>
+          <td><code>14</code></td>
+          <td colspan="2"><p>枚举值，用于玩法规则中的状态判断。</p></td>
+        </tr>
+        
+
+        <tr>
+          <td class="num">16</td>
+          <td><strong>VoidTerminator</strong></td>
+          <td><code>15</code></td>
+          <td colspan="2"><p>枚举值，用于玩法规则中的状态判断。</p></td>
+        </tr>
+        
+
+        <tr>
+          <td class="num">17</td>
+          <td><strong>QueenTerminator</strong></td>
+          <td><code>16</code></td>
+          <td colspan="2"><p>枚举值，用于玩法规则中的状态判断。</p></td>
+        </tr>
+        
+
+        <tr>
+          <td class="num">18</td>
+          <td><strong>OutlawTerminator</strong></td>
+          <td><code>17</code></td>
+          <td colspan="2"><p>枚举值，用于玩法规则中的状态判断。</p></td>
+        </tr>
+        
+
+        <tr>
+          <td class="num">19</td>
+          <td><strong>Savior</strong></td>
+          <td><code>18</code></td>
+          <td colspan="2"><p>枚举值，用于玩法规则中的状态判断。</p></td>
+        </tr>
+        
+
+        <tr>
+          <td class="num">20</td>
+          <td><strong>HumanBoss</strong></td>
+          <td><code>19</code></td>
+          <td colspan="2"><p>枚举值，用于玩法规则中的状态判断。</p></td>
+        </tr>
+        
+
+        <tr>
+          <td class="num">21</td>
+          <td><strong>WomanHumanBoss</strong></td>
+          <td><code>20</code></td>
+          <td colspan="2"><p>枚举值，用于玩法规则中的状态判断。</p></td>
+        </tr>
+        
+
+        <tr>
+          <td class="num">22</td>
+          <td><strong>GhostBlade</strong></td>
+          <td><code>21</code></td>
+          <td colspan="2"><p>枚举值，用于玩法规则中的状态判断。</p></td>
+        </tr>
+        
+
+        <tr>
+          <td class="num">23</td>
+          <td><strong>DevilHunter</strong></td>
+          <td><code>22</code></td>
+          <td colspan="2"><p>枚举值，用于玩法规则中的状态判断。</p></td>
+        </tr>
+        
+
+        <tr>
+          <td class="num">24</td>
+          <td><strong>MasterHumanHero</strong></td>
+          <td><code>23</code></td>
+          <td colspan="2"><p>枚举值，用于玩法规则中的状态判断。</p></td>
+        </tr>
+        
+
+        <tr>
+          <td class="num">25</td>
+          <td><strong>MasterHunter</strong></td>
+          <td><code>24</code></td>
+          <td colspan="2"><p>枚举值，用于玩法规则中的状态判断。</p></td>
+        </tr>
+        
+
+        <tr>
+          <td class="num">26</td>
+          <td><strong>AsceticHero</strong></td>
+          <td><code>25</code></td>
+          <td colspan="2"><p>枚举值，用于玩法规则中的状态判断。</p></td>
+        </tr>
+        
+
+        <tr>
+          <td class="num">27</td>
+          <td><strong>MysticHero</strong></td>
+          <td><code>26</code></td>
+          <td colspan="2"><p>枚举值，用于玩法规则中的状态判断。</p></td>
+        </tr>
+        
+
+        <tr>
+          <td class="num">28</td>
+          <td><strong>MechanicHero</strong></td>
+          <td><code>27</code></td>
+          <td colspan="2"><p>枚举值，用于玩法规则中的状态判断。</p></td>
+        </tr>
+        </tbody>
+    </table>
+    <p class="footnote">NanoRole 是枚举类型，没有普通字段；它的价值主要体现在被哪些类字段保存、以及各枚举值在玩法规则里的含义。</p>
+    
+  </main>
+  <script>
+    const rows = Array.from(document.querySelectorAll('tbody tr[data-page]'));
+    const filter = document.getElementById('categoryFilter');
+    const pager = document.getElementById('pager');
+    const label = document.getElementById('pageLabel');
+    const visibleCount = document.getElementById('visibleCount');
+    const pageSize = 15;
+    let currentPage = 1;
+    function matchingRows() {
+      if (!filter) return rows;
+      const category = filter.value;
+      return rows.filter(row => category === '全部' || row.dataset.category === category);
+    }
+    function renderPager(totalPages) {
+      if (!pager) return;
+      pager.innerHTML = '';
+      for (let page = 1; page <= totalPages; page++) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.textContent = '第 ' + page + ' 页';
+        button.className = page === currentPage ? 'active' : '';
+        button.addEventListener('click', () => { currentPage = page; updateTable(); });
+        pager.appendChild(button);
+      }
+    }
+    function updateTable() {
+      const matched = matchingRows();
+      const totalPages = Math.max(1, Math.ceil(matched.length / pageSize));
+      if (currentPage > totalPages) currentPage = totalPages;
+      const start = (currentPage - 1) * pageSize;
+      const visibleSet = new Set(matched.slice(start, start + pageSize));
+      rows.forEach(row => row.style.display = visibleSet.has(row) ? '' : 'none');
+      if (visibleCount) visibleCount.textContent = matched.length;
+      if (label) label.textContent = '第 ' + currentPage + ' 页';
+      renderPager(totalPages);
+    }
+    if (filter) filter.addEventListener('change', () => { currentPage = 1; updateTable(); });
+    updateTable();
+  </script>
+</body>
+</html>

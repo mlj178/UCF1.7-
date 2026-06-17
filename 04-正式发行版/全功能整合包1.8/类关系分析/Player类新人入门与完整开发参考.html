@@ -1,0 +1,2074 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Player 类新人入门与完整开发参考</title>
+  <style>
+    :root{--bg:#f3f6fa;--panel:#fff;--text:#172033;--muted:#64748b;--line:#dbe3ee;--blue:#2563eb;--blue2:#eaf2ff;--green:#087a55;--green2:#e8f7f0;--orange:#a85300;--orange2:#fff3e2;--red:#ad3440;--red2:#fff0f1;--purple:#6842b8;--purple2:#f1edff;--shadow:0 10px 30px rgba(24,39,75,.07)}
+    *{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:var(--bg);color:var(--text);font-family:"Microsoft YaHei","Segoe UI",sans-serif;line-height:1.7}
+    code{font-family:Consolas,"Cascadia Mono",monospace;color:#173f7a;background:#edf3fb;border-radius:5px;padding:1px 5px;overflow-wrap:anywhere}
+    .layout{display:grid;grid-template-columns:260px minmax(0,1fr);gap:24px;width:min(1680px,calc(100% - 32px));margin:20px auto 60px}
+    .side{position:sticky;top:18px;align-self:start;max-height:calc(100vh - 36px);overflow:auto;background:#17233a;color:#dce7f8;border-radius:16px;padding:20px}
+    .side strong{display:block;color:#fff;font-size:17px;margin-bottom:12px}.side a{display:block;color:#c8d6ec;text-decoration:none;padding:7px 9px;border-radius:7px;font-size:13px}.side a:hover{background:#263754;color:#fff}
+    .main{min-width:0}.hero,.panel{background:var(--panel);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow)}.hero{padding:30px}.panel{padding:26px;margin-top:20px}
+    h1{font-size:30px;margin:0 0 8px}h2{font-size:23px;margin:0 0 8px}h3{font-size:17px;margin:20px 0 8px}.sub,.muted{color:var(--muted)}
+    .badge{display:inline-block;padding:3px 9px;border-radius:999px;background:var(--blue2);color:#174eae;font-size:12px;font-weight:700;margin-right:6px}
+    .stats{display:grid;grid-template-columns:repeat(6,minmax(110px,1fr));gap:10px;margin-top:20px}.stat{border:1px solid var(--line);border-radius:11px;padding:13px;background:#fbfdff}.stat b{display:block;font-size:24px}.stat span{font-size:12px;color:var(--muted)}
+    .callout{border-left:4px solid var(--blue);background:#f3f7ff;padding:12px 15px;margin:14px 0}.warn{border-left-color:#d47a0b;background:#fff8e9}.ok{border-left-color:#16845d;background:#eefaf5}
+    .route{display:grid;grid-template-columns:repeat(7,minmax(105px,1fr));gap:8px;margin:18px 0}.step{position:relative;padding:13px 10px;border:1px solid #bdd0ef;border-radius:10px;background:#f7faff;text-align:center;font-size:13px}.step:not(:last-child)::after{content:"→";position:absolute;right:-9px;top:35%;z-index:2;color:var(--blue);font-weight:700}
+    .relations{display:grid;grid-template-columns:1fr 1.05fr 1fr;gap:16px;align-items:stretch;margin-top:16px}.relcol,.player-core{border:1px solid var(--line);border-radius:13px;padding:16px}.player-core{display:flex;flex-direction:column;justify-content:center;text-align:center;border:3px solid var(--blue);background:linear-gradient(150deg,#fff,var(--blue2))}.player-core b{font:700 30px Consolas;color:#174eae}.node{padding:9px 10px;margin:7px 0;border-radius:8px;background:#f8fafc;border:1px solid var(--line);font-size:13px}
+    .summary-table,.table-wrap{overflow:auto;border:1px solid var(--line);border-radius:11px;margin-top:14px}table{width:100%;border-collapse:collapse;min-width:1000px;font-size:13px}th,td{padding:10px 11px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}th{position:sticky;top:0;background:#eef3f9;color:#40516b;z-index:1;white-space:nowrap}tr:hover td{background:#f8fbff}
+    .pill{display:inline-block;min-width:36px;text-align:center;padding:2px 7px;border-radius:999px;font-size:11px;font-weight:700}.pill.high{color:var(--red);background:var(--red2)}.pill.medium{color:var(--orange);background:var(--orange2)}.pill.low{color:var(--green);background:var(--green2)}
+    .evidence{display:inline-block;padding:2px 7px;border-radius:999px;font-size:11px;font-weight:700;white-space:nowrap}.evidence.dump{color:#28558e;background:#eaf2ff}.evidence.ida{color:#08704b;background:#e8f7f0}.evidence.need{color:#9a5700;background:#fff3e2}
+    details{border:1px solid var(--line);border-radius:11px;margin-top:14px;background:#fbfdff}summary{cursor:pointer;padding:13px 15px;font-weight:700}details>.inside{padding:0 15px 15px}
+    .tools{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0}.tools input,.tools select{border:1px solid var(--line);border-radius:8px;padding:8px 10px;font:inherit;font-size:13px;background:white}.tools input{min-width:260px}.count{color:var(--muted);font-size:13px;align-self:center}.raw{font-size:12px}
+    .dev-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.dev-card{border:1px solid var(--line);border-radius:11px;padding:14px}.dev-card b{display:block;margin-bottom:5px}
+    .complete td:nth-child(2),.complete th:nth-child(2){font-weight:700}
+    @media(max-width:1100px){.layout{grid-template-columns:1fr}.side{position:static;max-height:none}.side a{display:inline-block}.stats{grid-template-columns:repeat(3,1fr)}.relations{grid-template-columns:1fr}.route{grid-template-columns:1fr}.step:not(:last-child)::after{content:"↓";right:50%;top:auto;bottom:-14px}.dev-grid{grid-template-columns:1fr}}
+    @media(max-width:650px){.layout{width:min(100% - 16px,1680px)}.hero,.panel{padding:18px}.stats{grid-template-columns:repeat(2,1fr)}h1{font-size:25px}.tools input{min-width:100%;width:100%}}
+  </style>
+</head>
+<body>
+<div class="layout">
+  <nav class="side">
+    <strong>Player 学习路线</strong>
+    <a href="#read-first">1. 先看这里</a><a href="#five-minutes">2. 五分钟认识 Player</a>
+    <a href="#game-flow">3. 一局游戏流程</a><a href="#relations">4. 类关系总览</a>
+    <a href="#external-player">5. 谁保存 Player</a><a href="#player-external">6. Player 保存了谁</a>
+    <a href="#fields">7. 60 个字段</a><a href="#properties">8. 45 个属性</a>
+    <a href="#methods">9. 152 个方法</a><a href="#development">10. 开发功能导航</a>
+    <a href="#boundary">11. 完整性与证据边界</a>
+  </nav>
+  <main class="main">
+    <header class="hero" id="read-first">
+      <span class="badge">新人正文</span><span class="badge">全量成员</span><span class="badge">Unity IL2CPP</span>
+      <h1>Player 类新人入门与完整开发参考</h1>
+      <h2 style="margin-top:18px">一、文档用途与阅读方法</h2>
+      <p class="sub">从穿越火线实际对局理解 Player，再进入完整字段、属性和方法手册。英文声明来自 <code>dump.cs</code>；中文功能说明按声明、现有逆向文档和重点 IDA 结论分级表达。</p>
+      <div class="stats">
+        <div class="stat"><b>60 / 60</b><span>Player 字段：全部列出</span></div>
+        <div class="stat"><b>45 / 45</b><span>Player 属性：全部列出</span></div>
+        <div class="stat"><b>152 / 152</b><span>Player 方法：全部列出</span></div>
+        <div class="stat"><b>40 / 40</b><span>正常游戏字段保存 Player</span></div>
+        <div class="stat"><b>23 / 23</b><span>编译器生成字段保存 Player</span></div>
+        <div class="stat"><b>19 / 19</b><span>Player 字段使用的外部类型</span></div>
+      </div>
+      <div class="callout warn"><b>阅读顺序：</b>新人先读第 2～4 节建立游戏流程，再按开发目标看第 10 节。第 7～9 节是完整查表区，不建议第一次从头背到尾。</div>
+    </header>
+
+    <section class="panel" id="five-minutes">
+      <h2>二、五分钟认识 Player</h2>
+      <p><code>Player</code> 表示战场里的一名可战斗角色。真人和 Bot 都使用同一个 Player；区别主要在“谁给它输入”，而不是 Player 类本身不同。</p>
+      <div class="summary-table"><table>
+        <thead><tr><th>问题</th><th>新人应先记住的答案</th><th>主要依据</th></tr></thead>
+        <tbody>
+          <tr><td>Player 从哪里获得生命和阵营？</td><td>继承 <code>Entity</code>，获得 healthData、team、伤害、死亡、Buff 和碰撞基础能力。</td><td><code>Player : Entity</code></td></tr>
+          <tr><td>谁保存房间里的全部 Player？</td><td><code>GameManager.allPlayers</code> 是主集合，同时还有 myPlayer、阵营列表和存活列表。</td><td>GameManager 字段声明</td></tr>
+          <tr><td>真人和 Bot 怎么区分？</td><td>都对应 Player。真人由输入/控制器驱动；Bot 由 <code>Bot.thisPlayer</code> 绑定并驱动。身份资料还可查看 <code>clientData.isBot</code>。</td><td>字段关系；具体控制过程需查调用链</td></tr>
+          <tr><td>昵称、阵营和 Bot 信息在哪里？</td><td><code>Player.clientData</code> 指向 ClientData；Player 本身主要保存进入战场后的运行状态。</td><td>Player 字段类型</td></tr>
+          <tr><td>敌人如何判断？</td><td>Player 没有通用 <code>isEnemy</code> 字段。团队模式通常比较 Entity.team；个人竞技、生化等必须结合具体 <code>Mode_*</code> 规则。</td><td>未发现通用字段；模式逻辑决定</td></tr>
+          <tr><td>自己的视角是哪个 cameraRotation？</td><td>先取得 <code>GameManager.myPlayer</code>，再读取该实例的 <code>cameraRotation</code>。其他 Player 实例中的值属于其他角色。</td><td>实例字段关系</td></tr>
+        </tbody>
+      </table></div>
+    </section>
+
+    <section class="panel" id="game-flow">
+      <h2>三、穿越火线一局游戏中的 Player</h2>
+      <div class="route">
+        <div class="step"><b>进入房间</b><br>ClientData 准备资料</div>
+        <div class="step"><b>创建角色</b><br>GameManager.AddPlayer</div>
+        <div class="step"><b>初始化</b><br>Player.Awake</div>
+        <div class="step"><b>出生</b><br>Player.Spawn</div>
+        <div class="step"><b>战斗</b><br>移动、视角、武器</div>
+        <div class="step"><b>死亡复活</b><br>OnEntityDeath / Respawn</div>
+        <div class="step"><b>离开房间</b><br>Player.OnDestroy</div>
+      </div>
+      <div class="callout"><b>关键理解：</b><code>AddPlayer</code> 负责创建/登记战场对象；普通死亡后通常沿 <code>Respawn → Spawn</code> 复用同一 Player，而不是每次重新 AddPlayer。具体模式仍可能有特殊流程。</div>
+    </section>
+
+    <section class="panel" id="relations">
+      <h2>四、以 Player 为中心的类关系</h2>
+      <div class="relations">
+        <div class="relcol"><h3>谁管理、控制或保存 Player</h3>
+          <div class="node"><code>GameManager</code> 房间玩家集合、本机玩家、阵营列表</div>
+          <div class="node"><code>PlayerController</code> 真人输入控制</div>
+          <div class="node"><code>Bot</code> AI 通过 thisPlayer 控制</div>
+          <div class="node"><code>ModeBase / Mode_*</code> 胜负、计分、复活规则</div>
+          <div class="node"><code>CameraManager / HUD</code> 观察和显示 Player</div>
+        </div>
+        <div class="player-core"><b>Player</b><span>一名穿越火线战场角色</span><p><code>public class Player : Entity</code></p><span>移动 · 瞄准 · 武器 · 模型<br>受伤 · 死亡 · 复活 · 地图交互</span></div>
+        <div class="relcol"><h3>Player 自己连接的系统</h3>
+          <div class="node"><code>ClientData / PlayerData</code> 身份资料和对局数据</div>
+          <div class="node"><code>PlayerVelocity / PlayerInput</code> 移动和输入</div>
+          <div class="node"><code>PlayerWeapons / WeaponBag</code> 武器和背包</div>
+          <div class="node"><code>CharacterModel</code> 模型、动画和受击部位</div>
+          <div class="node"><code>PlayerSkills / Nano4T_Data</code> 技能和生化模式</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel" id="external-player">
+      <h2>五、哪些类的字段保存了 Player 实例</h2>
+      <p>字段层面共找到 <b>46 个类型块、63 个字段</b>。其中正常游戏类型 24 个类型块/40 个字段；编译器生成类型 22 个类型块/23 个字段。这里全部列举。</p>
+      <div class="table-wrap"><table><thead><tr><th>#</th><th>外部类</th><th>字段</th><th>保存形式</th><th>穿越火线中的功能</th><th>重要程度</th></tr></thead><tbody><tr>
+    <td>1</td><td><code>Bot</code></td><td><code>thisPlayer</code></td>
+    <td>一个</td><td>Bot AI 当前控制的战场角色</td><td><span class="pill high">核心</span></td>
+  </tr>
+<tr>
+    <td>2</td><td><code>Bot_GuardPos</code></td><td><code>owner</code></td>
+    <td>一个</td><td>守点行为所属的 Player</td><td><span class="pill low">一般</span></td>
+  </tr>
+<tr>
+    <td>3</td><td><code>CameraManager</code></td><td><code>focusPlayer</code></td>
+    <td>一个</td><td>当前镜头观察或跟随的 Player</td><td><span class="pill high">核心</span></td>
+  </tr>
+<tr>
+    <td>4</td><td><code>CameraManager</code></td><td><code>FocusPlayerChangeEvent_Observers</code></td>
+    <td>委托</td><td>通知观察目标发生变化</td><td><span class="pill medium">重要</span></td>
+  </tr>
+<tr>
+    <td>5</td><td><code>CharacterEffect</code></td><td><code>owner</code></td>
+    <td>一个</td><td>角色特效归属的 Player</td><td><span class="pill low">一般</span></td>
+  </tr>
+<tr>
+    <td>6</td><td><code>GameManager</code></td><td><code>myPlayer</code></td>
+    <td>一个</td><td>本机玩家实例</td><td><span class="pill high">核心</span></td>
+  </tr>
+<tr>
+    <td>7</td><td><code>GameManager</code></td><td><code>allPlayers</code></td>
+    <td>多个</td><td>房间内 Player 主集合</td><td><span class="pill high">核心</span></td>
+  </tr>
+<tr>
+    <td>8</td><td><code>GameManager</code></td><td><code>playersBL</code></td>
+    <td>多个</td><td>BL 阵营 Player 集合</td><td><span class="pill high">核心</span></td>
+  </tr>
+<tr>
+    <td>9</td><td><code>GameManager</code></td><td><code>playersBL_Alive</code></td>
+    <td>多个</td><td>BL 阵营存活 Player 集合</td><td><span class="pill high">核心</span></td>
+  </tr>
+<tr>
+    <td>10</td><td><code>GameManager</code></td><td><code>playersGR</code></td>
+    <td>多个</td><td>GR 阵营 Player 集合</td><td><span class="pill high">核心</span></td>
+  </tr>
+<tr>
+    <td>11</td><td><code>GameManager</code></td><td><code>playersGR_Alive</code></td>
+    <td>多个</td><td>GR 阵营存活 Player 集合</td><td><span class="pill high">核心</span></td>
+  </tr>
+<tr>
+    <td>12</td><td><code>GameManager</code></td><td><code>ace</code></td>
+    <td>一个</td><td>当前 ACE Player</td><td><span class="pill medium">重要</span></td>
+  </tr>
+<tr>
+    <td>13</td><td><code>GameManager</code></td><td><code>NewPlayerJoinEvent_Observers</code></td>
+    <td>委托</td><td>新 Player 加入通知</td><td><span class="pill medium">重要</span></td>
+  </tr>
+<tr>
+    <td>14</td><td><code>GameManager</code></td><td><code>PlayerSpawnEvent_Observers</code></td>
+    <td>委托</td><td>任意 Player 出生通知</td><td><span class="pill medium">重要</span></td>
+  </tr>
+<tr>
+    <td>15</td><td><code>GameManager</code></td><td><code>MyPlayerJoinEvent_Observers</code></td>
+    <td>委托</td><td>本机 Player 加入通知</td><td><span class="pill medium">重要</span></td>
+  </tr>
+<tr>
+    <td>16</td><td><code>GameManager</code></td><td><code>MyPlayerSpawnEvent_Observers</code></td>
+    <td>委托</td><td>本机 Player 出生通知</td><td><span class="pill medium">重要</span></td>
+  </tr>
+<tr>
+    <td>17</td><td><code>HUD_Crosshair</code></td><td><code>player</code></td>
+    <td>一个</td><td>准星 HUD 当前服务的 Player</td><td><span class="pill medium">重要</span></td>
+  </tr>
+<tr>
+    <td>18</td><td><code>HUD_HeartBeatRadar</code></td><td><code>checkedEnemy</code></td>
+    <td>一个</td><td>心跳雷达当前检测到的敌方 Player</td><td><span class="pill medium">重要</span></td>
+  </tr>
+<tr>
+    <td>19</td><td><code>HUD_KillMark.EventData</code></td><td><code>killer</code></td>
+    <td>一个</td><td>击杀标记中的击杀者</td><td><span class="pill low">一般</span></td>
+  </tr>
+<tr>
+    <td>20</td><td><code>HUD_KillMark.EventData</code></td><td><code>dead</code></td>
+    <td>一个</td><td>击杀标记中的死亡者</td><td><span class="pill low">一般</span></td>
+  </tr>
+<tr>
+    <td>21</td><td><code>HUD_NanoRoleSign</code></td><td><code>bindPlayer</code></td>
+    <td>一个</td><td>生化身份标识绑定的 Player</td><td><span class="pill low">一般</span></td>
+  </tr>
+<tr>
+    <td>22</td><td><code>MapGun</code></td><td><code>occupier</code></td>
+    <td>一个</td><td>正在占用地图武器的 Player</td><td><span class="pill medium">重要</span></td>
+  </tr>
+<tr>
+    <td>23</td><td><code>ModeBase</code></td><td><code>myPlayer</code></td>
+    <td>一个</td><td>模式规则中的本机 Player</td><td><span class="pill high">核心</span></td>
+  </tr>
+<tr>
+    <td>24</td><td><code>ModeBase_Nano</code></td><td><code>respawningPlayer</code></td>
+    <td>一个</td><td>生化模式正在复活的 Player</td><td><span class="pill medium">重要</span></td>
+  </tr>
+<tr>
+    <td>25</td><td><code>ModeBase_Nano</code></td><td><code>randomPlayerList</code></td>
+    <td>多个</td><td>生化模式随机选择使用的 Player 列表</td><td><span class="pill medium">重要</span></td>
+  </tr>
+<tr>
+    <td>26</td><td><code>Model</code></td><td><code>owner</code></td>
+    <td>一个</td><td>模型所属的 Player</td><td><span class="pill low">一般</span></td>
+  </tr>
+<tr>
+    <td>27</td><td><code>NanoRoleSelect</code></td><td><code>owner</code></td>
+    <td>一个</td><td>生化角色选择所属 Player</td><td><span class="pill low">一般</span></td>
+  </tr>
+<tr>
+    <td>28</td><td><code>PlayerData</code></td><td><code>revengeTarget</code></td>
+    <td>一个</td><td>复仇目标 Player</td><td><span class="pill low">一般</span></td>
+  </tr>
+<tr>
+    <td>29</td><td><code>PlayerData</code></td><td><code>revengeTarget_Listener</code></td>
+    <td>委托</td><td>复仇目标改变通知</td><td><span class="pill low">一般</span></td>
+  </tr>
+<tr>
+    <td>30</td><td><code>PlayerSkills</code></td><td><code>owner</code></td>
+    <td>一个</td><td>技能系统所属 Player</td><td><span class="pill medium">重要</span></td>
+  </tr>
+<tr>
+    <td>31</td><td><code>PlayerVelocity</code></td><td><code>owner</code></td>
+    <td>一个</td><td>移动系统所属 Player</td><td><span class="pill high">核心</span></td>
+  </tr>
+<tr>
+    <td>32</td><td><code>PlayerWeapons</code></td><td><code>owner</code></td>
+    <td>一个</td><td>武器系统所属 Player</td><td><span class="pill high">核心</span></td>
+  </tr>
+<tr>
+    <td>33</td><td><code>SentryGun</code></td><td><code>owner</code></td>
+    <td>一个</td><td>哨戒枪归属 Player</td><td><span class="pill medium">重要</span></td>
+  </tr>
+<tr>
+    <td>34</td><td><code>Skill_Common</code></td><td><code>work</code></td>
+    <td>一个</td><td>技能正在作用的 Player</td><td><span class="pill low">一般</span></td>
+  </tr>
+<tr>
+    <td>35</td><td><code>TabScoreBoard_PlayerData</code></td><td><code>player</code></td>
+    <td>一个</td><td>计分板行对应的 Player</td><td><span class="pill medium">重要</span></td>
+  </tr>
+<tr>
+    <td>36</td><td><code>TombStone</code></td><td><code>owner</code></td>
+    <td>一个</td><td>墓碑或死亡物件所属 Player</td><td><span class="pill low">一般</span></td>
+  </tr>
+<tr>
+    <td>37</td><td><code>Weapon</code></td><td><code>NewValidOwner_Listener</code></td>
+    <td>委托</td><td>武器获得有效 Player 持有者的通知</td><td><span class="pill medium">重要</span></td>
+  </tr>
+<tr>
+    <td>38</td><td><code>Weapon</code></td><td><code>RemoveFromOwner_Listener</code></td>
+    <td>委托</td><td>武器从 Player 移除的通知</td><td><span class="pill medium">重要</span></td>
+  </tr>
+<tr>
+    <td>39</td><td><code>WPN_GhostBlade</code></td><td><code>secKillTargets</code></td>
+    <td>多个</td><td>幽灵刀秒杀候选 Player 集合</td><td><span class="pill low">一般</span></td>
+  </tr>
+<tr>
+    <td>40</td><td><code>WPN_GhostBlade</code></td><td><code>killTarget</code></td>
+    <td>一个</td><td>幽灵刀当前击杀目标 Player</td><td><span class="pill low">一般</span></td>
+  </tr></tbody></table></div>
+      <details><summary>展开：23 个编译器生成字段（全部列出，一般不作为修改入口）</summary><div class="inside">
+        <p class="muted">这些名称来自 C# 闭包、协程状态机或局部函数。它们说明运行过程中临时保存过 Player，但稳定性和可读性通常不如业务类字段。</p>
+        <div class="table-wrap"><table><thead><tr><th>#</th><th>英文声明位置</th><th>作用</th><th>开发价值</th></tr></thead><tbody><tr>
+    <td>1</td><td><code>CameraManager.&lt;&gt;c.&lt;&gt;9__28_1</code></td>
+    <td>闭包、状态机或局部函数临时保存 Player</td><td><span class="pill low">低</span></td>
+  </tr>
+<tr>
+    <td>2</td><td><code>HUD_Spectate.&lt;&gt;c__DisplayClass25_0.dead</code></td>
+    <td>闭包、状态机或局部函数临时保存 Player</td><td><span class="pill low">低</span></td>
+  </tr>
+<tr>
+    <td>3</td><td><code>MapTrigger.&lt;&gt;c__DisplayClass11_0.player</code></td>
+    <td>闭包、状态机或局部函数临时保存 Player</td><td><span class="pill low">低</span></td>
+  </tr>
+<tr>
+    <td>4</td><td><code>MapTrigger.Interaction.interactor</code></td>
+    <td>闭包、状态机或局部函数临时保存 Player</td><td><span class="pill low">低</span></td>
+  </tr>
+<tr>
+    <td>5</td><td><code>Mode_Nano4_Terminator.&lt;&gt;c__DisplayClass25_0.player</code></td>
+    <td>闭包、状态机或局部函数临时保存 Player</td><td><span class="pill low">低</span></td>
+  </tr>
+<tr>
+    <td>6</td><td><code>Mode_Nano4_Terminator.&lt;&gt;c__DisplayClass28_0.player</code></td>
+    <td>闭包、状态机或局部函数临时保存 Player</td><td><span class="pill low">低</span></td>
+  </tr>
+<tr>
+    <td>7</td><td><code>ModeBase_Nano.Absorbing.absorber</code></td>
+    <td>闭包、状态机或局部函数临时保存 Player</td><td><span class="pill low">低</span></td>
+  </tr>
+<tr>
+    <td>8</td><td><code>ModeBase_Nano.Absorbing.absorbedTarget</code></td>
+    <td>闭包、状态机或局部函数临时保存 Player</td><td><span class="pill low">低</span></td>
+  </tr>
+<tr>
+    <td>9</td><td><code>ModeBase_Nano.&lt;&gt;c__DisplayClass87_0.player</code></td>
+    <td>闭包、状态机或局部函数临时保存 Player</td><td><span class="pill low">低</span></td>
+  </tr>
+<tr>
+    <td>10</td><td><code>ModeBase_Nano.&lt;&gt;c__DisplayClass88_0.player</code></td>
+    <td>闭包、状态机或局部函数临时保存 Player</td><td><span class="pill low">低</span></td>
+  </tr>
+<tr>
+    <td>11</td><td><code>ModeBase_Nano.&lt;&gt;c__DisplayClass89_0.player</code></td>
+    <td>闭包、状态机或局部函数临时保存 Player</td><td><span class="pill low">低</span></td>
+  </tr>
+<tr>
+    <td>12</td><td><code>ModeBase_Nano.&lt;&gt;c__DisplayClass90_0.player</code></td>
+    <td>闭包、状态机或局部函数临时保存 Player</td><td><span class="pill low">低</span></td>
+  </tr>
+<tr>
+    <td>13</td><td><code>Nano4T_AttributeAsset.&lt;&gt;c__DisplayClass13_0.player</code></td>
+    <td>闭包、状态机或局部函数临时保存 Player</td><td><span class="pill low">低</span></td>
+  </tr>
+<tr>
+    <td>14</td><td><code>Nano4T_AttributeAsset.&lt;&gt;c__DisplayClass16_0.player</code></td>
+    <td>闭包、状态机或局部函数临时保存 Player</td><td><span class="pill low">低</span></td>
+  </tr>
+<tr>
+    <td>15</td><td><code>Player.&lt;&gt;c__DisplayClass206_0.&lt;&gt;4__this</code></td>
+    <td>闭包、状态机或局部函数临时保存 Player</td><td><span class="pill low">低</span></td>
+  </tr>
+<tr>
+    <td>16</td><td><code>Player.&lt;&gt;c__DisplayClass220_0.&lt;&gt;4__this</code></td>
+    <td>闭包、状态机或局部函数临时保存 Player</td><td><span class="pill low">低</span></td>
+  </tr>
+<tr>
+    <td>17</td><td><code>Player.&lt;&gt;c__DisplayClass243_0.&lt;&gt;4__this</code></td>
+    <td>闭包、状态机或局部函数临时保存 Player</td><td><span class="pill low">低</span></td>
+  </tr>
+<tr>
+    <td>18</td><td><code>Player.&lt;&gt;c__DisplayClass249_1.respawner</code></td>
+    <td>闭包、状态机或局部函数临时保存 Player</td><td><span class="pill low">低</span></td>
+  </tr>
+<tr>
+    <td>19</td><td><code>RankField.&lt;&gt;c__DisplayClass5_0.player</code></td>
+    <td>闭包、状态机或局部函数临时保存 Player</td><td><span class="pill low">低</span></td>
+  </tr>
+<tr>
+    <td>20</td><td><code>WPN_AsceticHero.&lt;&gt;c__DisplayClass14_0.player</code></td>
+    <td>闭包、状态机或局部函数临时保存 Player</td><td><span class="pill low">低</span></td>
+  </tr>
+<tr>
+    <td>21</td><td><code>WPN_BoxingKing.&lt;&gt;c__DisplayClass11_0.player</code></td>
+    <td>闭包、状态机或局部函数临时保存 Player</td><td><span class="pill low">低</span></td>
+  </tr>
+<tr>
+    <td>22</td><td><code>WPN_MasterHero.&lt;&gt;c__DisplayClass3_0.victimPlayer</code></td>
+    <td>闭包、状态机或局部函数临时保存 Player</td><td><span class="pill low">低</span></td>
+  </tr>
+<tr>
+    <td>23</td><td><code>WPN_MasterHunter.&lt;&gt;c__DisplayClass6_0.player</code></td>
+    <td>闭包、状态机或局部函数临时保存 Player</td><td><span class="pill low">低</span></td>
+  </tr></tbody></table></div>
+      </div></details>
+    </section>
+
+    <section class="panel" id="player-external">
+      <h2>六、Player 字段又使用了哪些外部类</h2>
+      <p>Player 的 60 个字段中，有 <b>22 个对象连接字段</b>使用<b>19 种外部类型</b>。数量不同，是因为 Transform、CharacterModel 和 AmmoData 分别被多个字段使用。</p>
+      <div class="table-wrap"><table><thead><tr><th>#</th><th>外部类型</th><th>Player 字段</th><th>引用方向</th><th>穿越火线中的功能</th></tr></thead><tbody><tr>
+    <td>1</td><td><code>PlayerCameraManager</code></td><td><code>cameraManager</code></td>
+    <td>Player → PlayerCameraManager</td><td>玩家相机和第一人称视角</td>
+  </tr>
+<tr>
+    <td>2</td><td><code>Recoil</code></td><td><code>recoil</code></td>
+    <td>Player → Recoil</td><td>射击后坐力</td>
+  </tr>
+<tr>
+    <td>3</td><td><code>Transform</code></td><td><code>characterContainer, climbStair</code></td>
+    <td>Player → Transform</td><td>角色容器和梯子位置</td>
+  </tr>
+<tr>
+    <td>4</td><td><code>CharacterModel</code></td><td><code>currentCharacter, characters</code></td>
+    <td>Player → CharacterModel</td><td>人物模型、动画和受击部位</td>
+  </tr>
+<tr>
+    <td>5</td><td><code>EffectObj</code></td><td><code>bulletEffect</code></td>
+    <td>Player → EffectObj</td><td>子弹和命中特效</td>
+  </tr>
+<tr>
+    <td>6</td><td><code>PropertyModifier</code></td><td><code>Modifier_MoveSpeedRatio</code></td>
+    <td>Player → PropertyModifier</td><td>移动速度 Buff 倍率汇总</td>
+  </tr>
+<tr>
+    <td>7</td><td><code>PlayerVelocity</code></td><td><code>velData</code></td>
+    <td>Player → PlayerVelocity</td><td>速度、重力和移动方向</td>
+  </tr>
+<tr>
+    <td>8</td><td><code>ClientData</code></td><td><code>clientData</code></td>
+    <td>Player → ClientData</td><td>昵称、阵营、Bot、角色和背包资料</td>
+  </tr>
+<tr>
+    <td>9</td><td><code>PlayerData</code></td><td><code>playerData</code></td>
+    <td>Player → PlayerData</td><td>击杀、死亡、观察和模式状态</td>
+  </tr>
+<tr>
+    <td>10</td><td><code>PlayerInput</code></td><td><code>input</code></td>
+    <td>Player → PlayerInput</td><td>按键和控制输入</td>
+  </tr>
+<tr>
+    <td>11</td><td><code>PlayerWeapons</code></td><td><code>wpns</code></td>
+    <td>Player → PlayerWeapons</td><td>武器槽和当前武器</td>
+  </tr>
+<tr>
+    <td>12</td><td><code>WeaponBag</code></td><td><code>weaponBag</code></td>
+    <td>Player → WeaponBag</td><td>当前背包配置</td>
+  </tr>
+<tr>
+    <td>13</td><td><code>NanoRoleSelect</code></td><td><code>nanoRoleSelect</code></td>
+    <td>Player → NanoRoleSelect</td><td>生化角色选择</td>
+  </tr>
+<tr>
+    <td>14</td><td><code>Nano4T_Data</code></td><td><code>nano4TData</code></td>
+    <td>Player → Nano4T_Data</td><td>终结者模式数据</td>
+  </tr>
+<tr>
+    <td>15</td><td><code>PlayerSkills</code></td><td><code>skills</code></td>
+    <td>Player → PlayerSkills</td><td>角色技能系统</td>
+  </tr>
+<tr>
+    <td>16</td><td><code>PlayerMdlInfo</code></td><td><code>modelInfo</code></td>
+    <td>Player → PlayerMdlInfo</td><td>玩家模型配置</td>
+  </tr>
+<tr>
+    <td>17</td><td><code>Coroutine</code></td><td><code>respawn_Coroutine</code></td>
+    <td>Player → Coroutine</td><td>延迟复活协程</td>
+  </tr>
+<tr>
+    <td>18</td><td><code>MapTrigger</code></td><td><code>mapTrigger</code></td>
+    <td>Player → MapTrigger</td><td>地图机关和交互区域</td>
+  </tr>
+<tr>
+    <td>19</td><td><code>WPN_Gun.AmmoData</code></td><td><code>mapGunAmmo1, mapGunAmmo2</code></td>
+    <td>Player → WPN_Gun.AmmoData</td><td>地图固定武器弹药</td>
+  </tr></tbody></table></div>
+      <div class="callout ok">剩余 38 个字段没有漏掉：它们属于数值/状态、委托或 Buff 汇总字段，已在下一节 60 个字段表中全部说明。</div>
+    </section>
+
+    <section class="panel" id="fields">
+      <h2>七、Player 的 60 个字段：60 / 60 全部列出</h2>
+      <p>核心字段详细说明；表现层、声音和编译器后备字段也保留，但说明更短。没有因为“开发价值低”而从总表删除。</p>
+      <div class="tools"><input class="search" data-target="fieldTable" placeholder="搜索字段、类型或中文功能"><select class="filter" data-target="fieldTable"><option value="">全部功能</option></select><span class="count" data-target="fieldTable"></span></div>
+      <div class="table-wrap"><table id="fieldTable"><thead><tr><th>#</th><th>字段</th><th>类型</th><th>功能分类</th><th>穿越火线中的功能</th><th>修改/读取注意事项</th><th>开发价值</th><th>dump.cs 英文依据</th></tr></thead><tbody><tr data-group="移动" data-value="中">
+      <td>1</td><td><code>defaultMoveSpeed</code></td>
+      <td><code>float</code></td><td>移动</td>
+      <td>Player 默认移动速度基准</td><td>静态只读基准值；最终速度还会经过 Entity、Buff 和移动逻辑计算</td>
+      <td><span class="pill medium">中</span></td><td class="raw"><code>public static readonly float defaultMoveSpeed</code></td>
+    </tr>
+<tr data-group="移动" data-value="低">
+      <td>2</td><td><code>playerHeight</code></td>
+      <td><code>float</code></td><td>移动</td>
+      <td>站立状态下角色高度基准</td><td>影响角色体积或位置计算，修改前需验证碰撞体同步</td>
+      <td><span class="pill low">低</span></td><td class="raw"><code>public static readonly float playerHeight</code></td>
+    </tr>
+<tr data-group="移动" data-value="低">
+      <td>3</td><td><code>crouchSubHeight</code></td>
+      <td><code>float</code></td><td>移动</td>
+      <td>蹲下时从站立高度扣除的高度</td><td>通常与蹲姿、相机和碰撞体共同生效</td>
+      <td><span class="pill low">低</span></td><td class="raw"><code>public static readonly float crouchSubHeight</code></td>
+    </tr>
+<tr data-group="视角" data-value="低">
+      <td>4</td><td><code>mapCmrHeight</code></td>
+      <td><code>float</code></td><td>视角</td>
+      <td>小地图或地图相机使用的站立高度</td><td>不是第一人称主相机旋转</td>
+      <td><span class="pill low">低</span></td><td class="raw"><code>public static readonly float mapCmrHeight</code></td>
+    </tr>
+<tr data-group="视角" data-value="低">
+      <td>5</td><td><code>mapCmrCrouchSubHeight</code></td>
+      <td><code>float</code></td><td>视角</td>
+      <td>蹲下时地图相机高度修正</td><td>只影响地图相机相关位置计算</td>
+      <td><span class="pill low">低</span></td><td class="raw"><code>public static readonly float mapCmrCrouchSubHeight</code></td>
+    </tr>
+<tr data-group="移动" data-value="中">
+      <td>6</td><td><code>playerGravity</code></td>
+      <td><code>Vector3</code></td><td>移动</td>
+      <td>Player 使用的重力向量基准</td><td>修改会影响跳跃和下落，需结合 FixedUpdate/PhysicalUpdate</td>
+      <td><span class="pill medium">中</span></td><td class="raw"><code>public static readonly Vector3 playerGravity</code></td>
+    </tr>
+<tr data-group="视角" data-value="高">
+      <td>7</td><td><code>cameraManager</code></td>
+      <td><code>PlayerCameraManager</code></td><td>视角</td>
+      <td>连接这名玩家的 PlayerCameraManager</td><td>本地视角功能的重要入口；先确认该 Player 是 myPlayer</td>
+      <td><span class="pill high">高</span></td><td class="raw"><code>public PlayerCameraManager cameraManager</code></td>
+    </tr>
+<tr data-group="视角" data-value="高">
+      <td>8</td><td><code>cameraRotation</code></td>
+      <td><code>Vector2</code></td><td>视角</td>
+      <td>保存这名 Player 当前俯仰角和水平角</td><td>可能被输入、Bot 或 UpdateCameraRotaion 每帧覆盖</td>
+      <td><span class="pill high">高</span></td><td class="raw"><code>private Vector2 cameraRotation</code></td>
+    </tr>
+<tr data-group="武器" data-value="高">
+      <td>9</td><td><code>recoil</code></td>
+      <td><code>Recoil</code></td><td>武器</td>
+      <td>连接后坐力计算对象</td><td>自瞄或无后坐力分析的重要关联对象</td>
+      <td><span class="pill high">高</span></td><td class="raw"><code>public Recoil recoil</code></td>
+    </tr>
+<tr data-group="模型" data-value="中">
+      <td>10</td><td><code>characterContainer</code></td>
+      <td><code>Transform</code></td><td>模型</td>
+      <td>角色模型所在的 Transform 容器</td><td>属性的编译器后备字段，通常通过属性或模型方法使用</td>
+      <td><span class="pill medium">中</span></td><td class="raw"><code>private Transform &lt;characterContainer&gt;k__BackingField</code></td>
+    </tr>
+<tr data-group="模型" data-value="高">
+      <td>11</td><td><code>currentCharacter</code></td>
+      <td><code>CharacterModel</code></td><td>模型</td>
+      <td>当前正在显示的 CharacterModel</td><td>角色切换、阵营模型和受击部位的重要入口</td>
+      <td><span class="pill high">高</span></td><td class="raw"><code>private CharacterModel &lt;currentCharacter&gt;k__BackingField</code></td>
+    </tr>
+<tr data-group="模型" data-value="中">
+      <td>12</td><td><code>characters</code></td>
+      <td><code>List&lt;CharacterModel&gt;</code></td><td>模型</td>
+      <td>该 Player 已持有的角色模型列表</td><td>用于管理可用模型，不等于房间玩家列表</td>
+      <td><span class="pill medium">中</span></td><td class="raw"><code>private List&lt;CharacterModel&gt; characters</code></td>
+    </tr>
+<tr data-group="特效" data-value="低">
+      <td>13</td><td><code>bulletEffect</code></td>
+      <td><code>EffectObj</code></td><td>特效</td>
+      <td>子弹命中或射击相关 EffectObj</td><td>主要影响本地表现，不代表真实伤害计算</td>
+      <td><span class="pill low">低</span></td><td class="raw"><code>private EffectObj bulletEffect</code></td>
+    </tr>
+<tr data-group="移动" data-value="中">
+      <td>14</td><td><code>Acceleration</code></td>
+      <td><code>float</code></td><td>移动</td>
+      <td>地面移动加速度常量</td><td>修改后仍受速度上限和服务器校验影响</td>
+      <td><span class="pill medium">中</span></td><td class="raw"><code>public const float Acceleration</code></td>
+    </tr>
+<tr data-group="移动" data-value="中">
+      <td>15</td><td><code>Acceleration_Air</code></td>
+      <td><code>float</code></td><td>移动</td>
+      <td>空中移动加速度常量</td><td>影响空中控制，需结合 canControlVelInAir</td>
+      <td><span class="pill medium">中</span></td><td class="raw"><code>public const float Acceleration_Air</code></td>
+    </tr>
+<tr data-group="移动" data-value="中">
+      <td>16</td><td><code>JumpPower</code></td>
+      <td><code>float</code></td><td>移动</td>
+      <td>跳跃初始力度常量</td><td>修改后可能受落地检测和同步逻辑限制</td>
+      <td><span class="pill medium">中</span></td><td class="raw"><code>public const float JumpPower</code></td>
+    </tr>
+<tr data-group="移动" data-value="中">
+      <td>17</td><td><code>autonomousJump</code></td>
+      <td><code>bool</code></td><td>移动</td>
+      <td>是否处于自动跳跃状态</td><td>属性后备字段，状态可能由移动逻辑重新写入</td>
+      <td><span class="pill medium">中</span></td><td class="raw"><code>private bool &lt;autonomousJump&gt;k__BackingField</code></td>
+    </tr>
+<tr data-group="事件" data-value="中">
+      <td>18</td><td><code>JumpPost_Listener</code></td>
+      <td><code>Action</code></td><td>事件</td>
+      <td>跳跃完成后通知其他系统</td><td>委托字段，适合监听，不建议直接替换</td>
+      <td><span class="pill medium">中</span></td><td class="raw"><code>private Action JumpPost_Listener</code></td>
+    </tr>
+<tr data-group="移动" data-value="高">
+      <td>19</td><td><code>isGrounded</code></td>
+      <td><code>bool</code></td><td>移动</td>
+      <td>当前是否接触地面</td><td>由物理检测持续更新，直接写入很容易被覆盖</td>
+      <td><span class="pill high">高</span></td><td class="raw"><code>private bool &lt;isGrounded&gt;k__BackingField</code></td>
+    </tr>
+<tr data-group="移动" data-value="低">
+      <td>20</td><td><code>groundMatName</code></td>
+      <td><code>string</code></td><td>移动</td>
+      <td>脚下地面材质名称</td><td>用于脚步声或落地声音选择</td>
+      <td><span class="pill low">低</span></td><td class="raw"><code>private string &lt;groundMatName&gt;k__BackingField</code></td>
+    </tr>
+<tr data-group="声音" data-value="低">
+      <td>21</td><td><code>jumpDropSndNextPlayTime</code></td>
+      <td><code>float</code></td><td>声音</td>
+      <td>下一次允许播放跳跃/落地声的时间</td><td>表现层节流字段</td>
+      <td><span class="pill low">低</span></td><td class="raw"><code>private float jumpDropSndNextPlayTime</code></td>
+    </tr>
+<tr data-group="移动" data-value="低">
+      <td>22</td><td><code>lastFallTime</code></td>
+      <td><code>float</code></td><td>移动</td>
+      <td>最近一次开始下落的时间</td><td>用于 fallTime 等下落状态计算</td>
+      <td><span class="pill low">低</span></td><td class="raw"><code>private float lastFallTime</code></td>
+    </tr>
+<tr data-group="移动" data-value="低">
+      <td>23</td><td><code>heightBeforeFloat</code></td>
+      <td><code>float</code></td><td>移动</td>
+      <td>进入浮空或下落前记录的高度</td><td>用于落差或下落过程判断</td>
+      <td><span class="pill low">低</span></td><td class="raw"><code>private float heightBeforeFloat</code></td>
+    </tr>
+<tr data-group="移动" data-value="低">
+      <td>24</td><td><code>startMoveTime</code></td>
+      <td><code>float</code></td><td>移动</td>
+      <td>开始移动的时间</td><td>用于跑动状态、声音或动画时序</td>
+      <td><span class="pill low">低</span></td><td class="raw"><code>private float startMoveTime</code></td>
+    </tr>
+<tr data-group="移动" data-value="中">
+      <td>25</td><td><code>airVelControlEndTime</code></td>
+      <td><code>float</code></td><td>移动</td>
+      <td>空中速度可控制状态的结束时间</td><td>修改会影响空中转向窗口</td>
+      <td><span class="pill medium">中</span></td><td class="raw"><code>public float airVelControlEndTime</code></td>
+    </tr>
+<tr data-group="移动" data-value="高">
+      <td>26</td><td><code>Modifier_MoveSpeedRatio</code></td>
+      <td><code>PropertyModifier</code></td><td>移动</td>
+      <td>汇总移动速度倍率的 PropertyModifier</td><td>Buff 修改移动速度的关键汇总入口</td>
+      <td><span class="pill high">高</span></td><td class="raw"><code>public PropertyModifier Modifier_MoveSpeedRatio</code></td>
+    </tr>
+<tr data-group="移动" data-value="高">
+      <td>27</td><td><code>velData</code></td>
+      <td><code>PlayerVelocity</code></td><td>移动</td>
+      <td>连接 PlayerVelocity 移动状态对象</td><td>读取速度、方向、重力和冲刺状态的重要入口</td>
+      <td><span class="pill high">高</span></td><td class="raw"><code>private PlayerVelocity &lt;velData&gt;k__BackingField</code></td>
+    </tr>
+<tr data-group="身份" data-value="高">
+      <td>28</td><td><code>clientData</code></td>
+      <td><code>ClientData</code></td><td>身份</td>
+      <td>进入战斗前的昵称、阵营、Bot、角色和背包资料</td><td>可能在 Player 创建后稍晚赋值，使用前判空</td>
+      <td><span class="pill high">高</span></td><td class="raw"><code>public ClientData clientData</code></td>
+    </tr>
+<tr data-group="战绩" data-value="高">
+      <td>29</td><td><code>playerData</code></td>
+      <td><code>PlayerData</code></td><td>战绩</td>
+      <td>连接运行中的击杀、死亡、观察和模式数据</td><td>对局状态入口，不等同于 ClientData</td>
+      <td><span class="pill high">高</span></td><td class="raw"><code>private PlayerData &lt;playerData&gt;k__BackingField</code></td>
+    </tr>
+<tr data-group="输入" data-value="高">
+      <td>30</td><td><code>input</code></td>
+      <td><code>PlayerInput</code></td><td>输入</td>
+      <td>连接 PlayerInput 输入状态</td><td>本地真人、Bot 控制路径可能不同</td>
+      <td><span class="pill high">高</span></td><td class="raw"><code>private PlayerInput &lt;input&gt;k__BackingField</code></td>
+    </tr>
+<tr data-group="武器" data-value="高">
+      <td>31</td><td><code>wpns</code></td>
+      <td><code>PlayerWeapons</code></td><td>武器</td>
+      <td>连接 PlayerWeapons 武器槽管理器</td><td>当前武器、切枪和武器持有关系的重要入口</td>
+      <td><span class="pill high">高</span></td><td class="raw"><code>private PlayerWeapons &lt;wpns&gt;k__BackingField</code></td>
+    </tr>
+<tr data-group="武器" data-value="高">
+      <td>32</td><td><code>weaponBag</code></td>
+      <td><code>WeaponBag</code></td><td>武器</td>
+      <td>当前武器背包配置</td><td>背包资料通常源于 ClientData，实际武器由 PlayerWeapons 管理</td>
+      <td><span class="pill high">高</span></td><td class="raw"><code>private WeaponBag &lt;weaponBag&gt;k__BackingField</code></td>
+    </tr>
+<tr data-group="生化" data-value="中">
+      <td>33</td><td><code>nanoRoleSelect</code></td>
+      <td><code>NanoRoleSelect</code></td><td>生化</td>
+      <td>生化角色选择对象</td><td>只对相关生化模式有开发价值</td>
+      <td><span class="pill medium">中</span></td><td class="raw"><code>public NanoRoleSelect nanoRoleSelect</code></td>
+    </tr>
+<tr data-group="生化" data-value="中">
+      <td>34</td><td><code>nano4TData</code></td>
+      <td><code>Nano4T_Data</code></td><td>生化</td>
+      <td>终结者等 Nano4T 模式运行数据</td><td>模式专用，普通团队/个人竞技中可能为空</td>
+      <td><span class="pill medium">中</span></td><td class="raw"><code>public Nano4T_Data nano4TData</code></td>
+    </tr>
+<tr data-group="技能" data-value="高">
+      <td>35</td><td><code>skills</code></td>
+      <td><code>PlayerSkills</code></td><td>技能</td>
+      <td>连接 PlayerSkills 技能系统</td><td>角色技能和模式技能的重要入口</td>
+      <td><span class="pill high">高</span></td><td class="raw"><code>public PlayerSkills skills</code></td>
+    </tr>
+<tr data-group="模型" data-value="中">
+      <td>36</td><td><code>modelInfo</code></td>
+      <td><code>PlayerMdlInfo</code></td><td>模型</td>
+      <td>当前玩家模型配置资料</td><td>属性后备字段，配合 CharacterModelSetting 使用</td>
+      <td><span class="pill medium">中</span></td><td class="raw"><code>private PlayerMdlInfo &lt;modelInfo&gt;k__BackingField</code></td>
+    </tr>
+<tr data-group="武器" data-value="中">
+      <td>37</td><td><code>isSniper</code></td>
+      <td><code>bool</code></td><td>武器</td>
+      <td>当前是否处于狙击枪相关状态</td><td>由武器切换逻辑维护，直接修改可能被 SetWeapon 覆盖</td>
+      <td><span class="pill medium">中</span></td><td class="raw"><code>private bool &lt;isSniper&gt;k__BackingField</code></td>
+    </tr>
+<tr data-group="复活" data-value="高">
+      <td>38</td><td><code>spawnPos</code></td>
+      <td><code>Vector3</code></td><td>复活</td>
+      <td>本次出生或复活位置</td><td>设置位置应结合 Spawn/SetPos，避免只改缓存值</td>
+      <td><span class="pill high">高</span></td><td class="raw"><code>private Vector3 &lt;spawnPos&gt;k__BackingField</code></td>
+    </tr>
+<tr data-group="复活" data-value="中">
+      <td>39</td><td><code>respawn_Coroutine</code></td>
+      <td><code>Coroutine</code></td><td>复活</td>
+      <td>当前复活协程句柄</td><td>用于中断或避免重复复活流程</td>
+      <td><span class="pill medium">中</span></td><td class="raw"><code>private Coroutine respawn_Coroutine</code></td>
+    </tr>
+<tr data-group="事件" data-value="中">
+      <td>40</td><td><code>StartRespawn_Listener</code></td>
+      <td><code>Action&lt;Player&gt;</code></td><td>事件</td>
+      <td>开始复活时通知其他系统</td><td>可用于 HUD、模式或修改器监听复活开始</td>
+      <td><span class="pill medium">中</span></td><td class="raw"><code>private Action&lt;Player&gt; StartRespawn_Listener</code></td>
+    </tr>
+<tr data-group="复活" data-value="中">
+      <td>41</td><td><code>respawnType</code></td>
+      <td><code>Player.RespawnType</code></td><td>复活</td>
+      <td>本次复活方式枚举</td><td>不同模式可能选择不同出生处理</td>
+      <td><span class="pill medium">中</span></td><td class="raw"><code>public Player.RespawnType respawnType</code></td>
+    </tr>
+<tr data-group="事件" data-value="中">
+      <td>42</td><td><code>NextRespawnInRound_Listener</code></td>
+      <td><code>Action&lt;Player&gt;</code></td><td>事件</td>
+      <td>通知本回合下一次复活</td><td>由模式或 HUD 订阅，通常不直接修改</td>
+      <td><span class="pill medium">中</span></td><td class="raw"><code>private Action&lt;Player&gt; NextRespawnInRound_Listener</code></td>
+    </tr>
+<tr data-group="复活" data-value="高">
+      <td>43</td><td><code>isRespawning</code></td>
+      <td><code>bool</code></td><td>复活</td>
+      <td>当前是否正在执行复活流程</td><td>由复活协程维护，强改可能造成流程不一致</td>
+      <td><span class="pill high">高</span></td><td class="raw"><code>private bool &lt;isRespawning&gt;k__BackingField</code></td>
+    </tr>
+<tr data-group="移动" data-value="中">
+      <td>44</td><td><code>crouchDuration</code></td>
+      <td><code>float</code></td><td>移动</td>
+      <td>当前蹲姿持续时间或过渡时间</td><td>影响蹲下状态计算和表现</td>
+      <td><span class="pill medium">中</span></td><td class="raw"><code>private float &lt;crouchDuration&gt;k__BackingField</code></td>
+    </tr>
+<tr data-group="移动" data-value="中">
+      <td>45</td><td><code>walking</code></td>
+      <td><code>bool</code></td><td>移动</td>
+      <td>当前是否使用走路状态</td><td>可能由输入和 SetWalkState 持续更新</td>
+      <td><span class="pill medium">中</span></td><td class="raw"><code>private bool &lt;walking&gt;k__BackingField</code></td>
+    </tr>
+<tr data-group="生化" data-value="中">
+      <td>46</td><td><code>nanoClothCount</code></td>
+      <td><code>ObscuredInt</code></td><td>生化</td>
+      <td>生化模式护甲/防护层数量</td><td>ObscuredInt 表明带有数值混淆封装</td>
+      <td><span class="pill medium">中</span></td><td class="raw"><code>private ObscuredInt &lt;nanoClothCount&gt;k__BackingField</code></td>
+    </tr>
+<tr data-group="模式" data-value="低">
+      <td>47</td><td><code>lastStopStartTime</code></td>
+      <td><code>float</code></td><td>模式</td>
+      <td>最近一次定身或停止状态开始时间</td><td>主要用于特定模式状态时序</td>
+      <td><span class="pill low">低</span></td><td class="raw"><code>private float &lt;lastStopStartTime&gt;k__BackingField</code></td>
+    </tr>
+<tr data-group="生化" data-value="中">
+      <td>48</td><td><code>nextRegenTime</code></td>
+      <td><code>float</code></td><td>生化</td>
+      <td>下一次生命恢复时间</td><td>配合 NanoGhostHPRegen 使用</td>
+      <td><span class="pill medium">中</span></td><td class="raw"><code>private float nextRegenTime</code></td>
+    </tr>
+<tr data-group="交互" data-value="中">
+      <td>49</td><td><code>input_Interact</code></td>
+      <td><code>KeyInputState</code></td><td>交互</td>
+      <td>当前地图交互按键状态</td><td>用于拾取、机关或地图物件交互</td>
+      <td><span class="pill medium">中</span></td><td class="raw"><code>private KeyInputState &lt;input_Interact&gt;k__BackingField</code></td>
+    </tr>
+<tr data-group="事件" data-value="中">
+      <td>50</td><td><code>Interact_Listener</code></td>
+      <td><code>Action&lt;Player, KeyInputState&gt;</code></td><td>事件</td>
+      <td>交互输入改变时通知其他系统</td><td>地图机关可通过此委托接收 Player 和输入状态</td>
+      <td><span class="pill medium">中</span></td><td class="raw"><code>private Action&lt;Player, KeyInputState&gt; Interact_Listener</code></td>
+    </tr>
+<tr data-group="交互" data-value="高">
+      <td>51</td><td><code>mapTrigger</code></td>
+      <td><code>MapTrigger</code></td><td>交互</td>
+      <td>当前接触或可交互的 MapTrigger</td><td>地图机关、拾取点等交互入口</td>
+      <td><span class="pill high">高</span></td><td class="raw"><code>public MapTrigger mapTrigger</code></td>
+    </tr>
+<tr data-group="交互" data-value="中">
+      <td>52</td><td><code>mapGunAmmo1</code></td>
+      <td><code>WPN_Gun.AmmoData</code></td><td>交互</td>
+      <td>地图固定武器的第一组弹药数据</td><td>只在使用地图武器时有意义</td>
+      <td><span class="pill medium">中</span></td><td class="raw"><code>private WPN_Gun.AmmoData &lt;mapGunAmmo1&gt;k__BackingField</code></td>
+    </tr>
+<tr data-group="交互" data-value="中">
+      <td>53</td><td><code>mapGunAmmo2</code></td>
+      <td><code>WPN_Gun.AmmoData</code></td><td>交互</td>
+      <td>地图固定武器的第二组弹药数据</td><td>只在使用地图武器时有意义</td>
+      <td><span class="pill medium">中</span></td><td class="raw"><code>private WPN_Gun.AmmoData &lt;mapGunAmmo2&gt;k__BackingField</code></td>
+    </tr>
+<tr data-group="交互" data-value="中">
+      <td>54</td><td><code>climbStair</code></td>
+      <td><code>Transform</code></td><td>交互</td>
+      <td>当前攀爬的梯子 Transform</td><td>用于判断和计算攀爬状态</td>
+      <td><span class="pill medium">中</span></td><td class="raw"><code>private Transform &lt;climbStair&gt;k__BackingField</code></td>
+    </tr>
+<tr data-group="Buff" data-value="高">
+      <td>55</td><td><code>Buff_CameraRotDisabled</code></td>
+      <td><code>bool</code></td><td>Buff</td>
+      <td>最终是否禁止转动视角</td><td>由 Buff 汇总结果控制，直接写入可能被更新器覆盖</td>
+      <td><span class="pill high">高</span></td><td class="raw"><code>private bool Buff_CameraRotDisabled</code></td>
+    </tr>
+<tr data-group="Buff" data-value="高">
+      <td>56</td><td><code>CameraRotDisabled_BuffUpdater</code></td>
+      <td><code>RefBool</code></td><td>Buff</td>
+      <td>汇总多个禁转视角 Buff</td><td>比单独改最终布尔值更接近真实来源</td>
+      <td><span class="pill high">高</span></td><td class="raw"><code>private RefBool CameraRotDisabled_BuffUpdater</code></td>
+    </tr>
+<tr data-group="Buff" data-value="高">
+      <td>57</td><td><code>Buff_JumpDisabled</code></td>
+      <td><code>bool</code></td><td>Buff</td>
+      <td>最终是否禁止跳跃</td><td>由 JumpDisabled_BuffUpdater 汇总</td>
+      <td><span class="pill high">高</span></td><td class="raw"><code>private bool &lt;Buff_JumpDisabled&gt;k__BackingField</code></td>
+    </tr>
+<tr data-group="Buff" data-value="高">
+      <td>58</td><td><code>JumpDisabled_BuffUpdater</code></td>
+      <td><code>RefBool</code></td><td>Buff</td>
+      <td>汇总多个禁跳 Buff</td><td>适合追踪谁在禁止跳跃</td>
+      <td><span class="pill high">高</span></td><td class="raw"><code>private RefBool JumpDisabled_BuffUpdater</code></td>
+    </tr>
+<tr data-group="Buff" data-value="高">
+      <td>59</td><td><code>Buff_InfinityAmmo</code></td>
+      <td><code>bool</code></td><td>Buff</td>
+      <td>最终是否启用无限弹药效果</td><td>是否真正生效还取决于武器扣弹逻辑是否读取它</td>
+      <td><span class="pill high">高</span></td><td class="raw"><code>public bool Buff_InfinityAmmo</code></td>
+    </tr>
+<tr data-group="Buff" data-value="高">
+      <td>60</td><td><code>InfinityAmmo_BuffUpdater</code></td>
+      <td><code>RefBool</code></td><td>Buff</td>
+      <td>汇总多个无限弹药 Buff</td><td>适合追踪无限弹药状态来源</td>
+      <td><span class="pill high">高</span></td><td class="raw"><code>private RefBool InfinityAmmo_BuffUpdater</code></td>
+    </tr></tbody></table></div>
+    </section>
+
+    <section class="panel" id="properties">
+      <h2>八、Player 的 45 个属性：45 / 45 全部列出</h2>
+      <p>属性不一定拥有独立数据。有些包装后备字段，有些会从 ClientData、PlayerData、velData 或当前状态计算。</p>
+      <div class="tools"><input class="search" data-target="propertyTable" placeholder="搜索属性或中文功能"><select class="filter" data-target="propertyTable"><option value="">全部功能</option></select><span class="count" data-target="propertyTable"></span></div>
+      <div class="table-wrap"><table id="propertyTable"><thead><tr><th>#</th><th>属性</th><th>类型</th><th>读写</th><th>功能分类</th><th>穿越火线中的功能</th><th>实际来源/注意事项</th><th>开发价值</th></tr></thead><tbody><tr data-group="视角" data-value="中">
+      <td>1</td><td><code>mapCameraPos</code></td>
+      <td><code>Vector3</code></td><td><code>get;</code></td>
+      <td>视角</td><td>返回该 Player 在地图相机中的位置</td>
+      <td>由 Player 内部位置和地图相机高度计算</td><td><span class="pill medium">中</span></td>
+    </tr>
+<tr data-group="视角" data-value="中">
+      <td>2</td><td><code>mapCameraForward</code></td>
+      <td><code>Vector3</code></td><td><code>get;</code></td>
+      <td>视角</td><td>返回地图显示使用的朝向</td>
+      <td>计算属性，不是独立字段</td><td><span class="pill medium">中</span></td>
+    </tr>
+<tr data-group="模型" data-value="中">
+      <td>3</td><td><code>characterContainer</code></td>
+      <td><code>Transform</code></td><td><code>get; set;</code></td>
+      <td>模型</td><td>读取或设置角色模型容器</td>
+      <td>包装后备字段 characterContainer</td><td><span class="pill medium">中</span></td>
+    </tr>
+<tr data-group="模型" data-value="高">
+      <td>4</td><td><code>currentCharacter</code></td>
+      <td><code>CharacterModel</code></td><td><code>get; set;</code></td>
+      <td>模型</td><td>读取或设置当前 CharacterModel</td>
+      <td>包装后备字段 currentCharacter</td><td><span class="pill high">高</span></td>
+    </tr>
+<tr data-group="位置" data-value="高">
+      <td>5</td><td><code>footPos</code></td>
+      <td><code>Vector3</code></td><td><code>get;</code></td>
+      <td>位置</td><td>返回玩家脚底位置</td>
+      <td>通常由 Transform 与角色高度计算</td><td><span class="pill high">高</span></td>
+    </tr>
+<tr data-group="移动" data-value="中">
+      <td>6</td><td><code>autonomousJump</code></td>
+      <td><code>bool</code></td><td><code>get; set;</code></td>
+      <td>移动</td><td>读取或设置自动跳跃状态</td>
+      <td>包装同名后备字段</td><td><span class="pill medium">中</span></td>
+    </tr>
+<tr data-group="移动" data-value="高">
+      <td>7</td><td><code>isGrounded</code></td>
+      <td><code>bool</code></td><td><code>get; set;</code></td>
+      <td>移动</td><td>读取或设置是否落地</td>
+      <td>物理更新会持续维护</td><td><span class="pill high">高</span></td>
+    </tr>
+<tr data-group="移动" data-value="低">
+      <td>8</td><td><code>groundMatName</code></td>
+      <td><code>string</code></td><td><code>get; set;</code></td>
+      <td>移动</td><td>读取或设置脚下材质名</td>
+      <td>用于脚步和落地声音</td><td><span class="pill low">低</span></td>
+    </tr>
+<tr data-group="移动" data-value="中">
+      <td>9</td><td><code>fallTime</code></td>
+      <td><code>float</code></td><td><code>get;</code></td>
+      <td>移动</td><td>返回当前连续下落时间</td>
+      <td>根据 lastFallTime 等状态计算</td><td><span class="pill medium">中</span></td>
+    </tr>
+<tr data-group="移动" data-value="中">
+      <td>10</td><td><code>canControlVelInAir</code></td>
+      <td><code>bool</code></td><td><code>get;</code></td>
+      <td>移动</td><td>判断当前能否在空中控制速度</td>
+      <td>私有计算属性</td><td><span class="pill medium">中</span></td>
+    </tr>
+<tr data-group="移动" data-value="高">
+      <td>11</td><td><code>velocity</code></td>
+      <td><code>Vector3</code></td><td><code>get;</code></td>
+      <td>移动</td><td>返回这名玩家当前速度</td>
+      <td>通常从 velData 获取</td><td><span class="pill high">高</span></td>
+    </tr>
+<tr data-group="移动" data-value="高">
+      <td>12</td><td><code>MoveSpeedRatio</code></td>
+      <td><code>float</code></td><td><code>get;</code></td>
+      <td>移动</td><td>返回 Buff 汇总后的移动速度倍率</td>
+      <td>来源是 Modifier_MoveSpeedRatio</td><td><span class="pill high">高</span></td>
+    </tr>
+<tr data-group="移动" data-value="高">
+      <td>13</td><td><code>velData</code></td>
+      <td><code>PlayerVelocity</code></td><td><code>get; set;</code></td>
+      <td>移动</td><td>访问 PlayerVelocity</td>
+      <td>包装后备字段 velData</td><td><span class="pill high">高</span></td>
+    </tr>
+<tr data-group="战绩" data-value="高">
+      <td>14</td><td><code>playerData</code></td>
+      <td><code>PlayerData</code></td><td><code>get; set;</code></td>
+      <td>战绩</td><td>访问 PlayerData 对局数据</td>
+      <td>包装后备字段 playerData</td><td><span class="pill high">高</span></td>
+    </tr>
+<tr data-group="输入" data-value="高">
+      <td>15</td><td><code>input</code></td>
+      <td><code>PlayerInput</code></td><td><code>get; set;</code></td>
+      <td>输入</td><td>访问 PlayerInput</td>
+      <td>包装后备字段 input</td><td><span class="pill high">高</span></td>
+    </tr>
+<tr data-group="武器" data-value="高">
+      <td>16</td><td><code>wpns</code></td>
+      <td><code>PlayerWeapons</code></td><td><code>get; set;</code></td>
+      <td>武器</td><td>访问 PlayerWeapons</td>
+      <td>包装后备字段 wpns</td><td><span class="pill high">高</span></td>
+    </tr>
+<tr data-group="武器" data-value="高">
+      <td>17</td><td><code>weaponBag</code></td>
+      <td><code>WeaponBag</code></td><td><code>get; set;</code></td>
+      <td>武器</td><td>访问当前 WeaponBag</td>
+      <td>包装后备字段 weaponBag</td><td><span class="pill high">高</span></td>
+    </tr>
+<tr data-group="模型" data-value="中">
+      <td>18</td><td><code>modelInfo</code></td>
+      <td><code>PlayerMdlInfo</code></td><td><code>get; set;</code></td>
+      <td>模型</td><td>访问 PlayerMdlInfo</td>
+      <td>包装后备字段 modelInfo</td><td><span class="pill medium">中</span></td>
+    </tr>
+<tr data-group="武器" data-value="中">
+      <td>19</td><td><code>isSniper</code></td>
+      <td><code>bool</code></td><td><code>get; set;</code></td>
+      <td>武器</td><td>判断或设置狙击状态</td>
+      <td>由切枪流程维护</td><td><span class="pill medium">中</span></td>
+    </tr>
+<tr data-group="复活" data-value="高">
+      <td>20</td><td><code>spawnPos</code></td>
+      <td><code>Vector3</code></td><td><code>get; set;</code></td>
+      <td>复活</td><td>读取或设置出生位置</td>
+      <td>设置后仍需由 Spawn/SetPos 执行移动</td><td><span class="pill high">高</span></td>
+    </tr>
+<tr data-group="复活" data-value="高">
+      <td>21</td><td><code>isRespawning</code></td>
+      <td><code>bool</code></td><td><code>get; set;</code></td>
+      <td>复活</td><td>读取或设置复活中状态</td>
+      <td>复活协程会维护</td><td><span class="pill high">高</span></td>
+    </tr>
+<tr data-group="身份" data-value="高">
+      <td>22</td><td><code>isMyPlayer</code></td>
+      <td><code>bool</code></td><td><code>get;</code></td>
+      <td>身份</td><td>判断是否为本机控制的 Player</td>
+      <td>应与 GameManager.myPlayer 关系一起验证</td><td><span class="pill high">高</span></td>
+    </tr>
+<tr data-group="观察" data-value="高">
+      <td>23</td><td><code>isFocusPlayer</code></td>
+      <td><code>bool</code></td><td><code>get;</code></td>
+      <td>观察</td><td>判断是否为当前镜头关注对象</td>
+      <td>死亡观战时不一定等于 myPlayer</td><td><span class="pill high">高</span></td>
+    </tr>
+<tr data-group="观察" data-value="中">
+      <td>24</td><td><code>isFocusPlayerInPV</code></td>
+      <td><code>bool</code></td><td><code>get;</code></td>
+      <td>观察</td><td>判断是否为第一人称观察目标</td>
+      <td>用于观战或第一人称表现</td><td><span class="pill medium">中</span></td>
+    </tr>
+<tr data-group="生化" data-value="高">
+      <td>25</td><td><code>isNanoGhost</code></td>
+      <td><code>bool</code></td><td><code>get;</code></td>
+      <td>生化</td><td>判断是否为生化幽灵角色</td>
+      <td>模式相关计算属性</td><td><span class="pill high">高</span></td>
+    </tr>
+<tr data-group="移动" data-value="中">
+      <td>26</td><td><code>crouchDuration</code></td>
+      <td><code>float</code></td><td><code>get; set;</code></td>
+      <td>移动</td><td>访问蹲姿持续/过渡时间</td>
+      <td>包装后备字段</td><td><span class="pill medium">中</span></td>
+    </tr>
+<tr data-group="移动" data-value="高">
+      <td>27</td><td><code>isCrouching</code></td>
+      <td><code>bool</code></td><td><code>get;</code></td>
+      <td>移动</td><td>判断当前是否蹲下</td>
+      <td>计算结果可能结合 crouchDuration</td><td><span class="pill high">高</span></td>
+    </tr>
+<tr data-group="移动" data-value="中">
+      <td>28</td><td><code>walking</code></td>
+      <td><code>bool</code></td><td><code>get; set;</code></td>
+      <td>移动</td><td>读取或设置走路状态</td>
+      <td>由输入逻辑维护</td><td><span class="pill medium">中</span></td>
+    </tr>
+<tr data-group="生化" data-value="中">
+      <td>29</td><td><code>nanoClothCount</code></td>
+      <td><code>ObscuredInt</code></td><td><code>get; set;</code></td>
+      <td>生化</td><td>读取或设置生化防护层数量</td>
+      <td>包装 ObscuredInt 后备字段</td><td><span class="pill medium">中</span></td>
+    </tr>
+<tr data-group="模式" data-value="低">
+      <td>30</td><td><code>lastStopStartTime</code></td>
+      <td><code>float</code></td><td><code>get; set;</code></td>
+      <td>模式</td><td>访问最近停止状态开始时间</td>
+      <td>特定模式使用</td><td><span class="pill low">低</span></td>
+    </tr>
+<tr data-group="交互" data-value="中">
+      <td>31</td><td><code>input_Interact</code></td>
+      <td><code>KeyInputState</code></td><td><code>get; set;</code></td>
+      <td>交互</td><td>读取或设置交互键状态</td>
+      <td>会触发或配合 Interact_Listener</td><td><span class="pill medium">中</span></td>
+    </tr>
+<tr data-group="交互" data-value="中">
+      <td>32</td><td><code>mapGunAmmo1</code></td>
+      <td><code>WPN_Gun.AmmoData</code></td><td><code>get; set;</code></td>
+      <td>交互</td><td>访问地图武器第一组弹药</td>
+      <td>地图武器专用</td><td><span class="pill medium">中</span></td>
+    </tr>
+<tr data-group="交互" data-value="中">
+      <td>33</td><td><code>mapGunAmmo2</code></td>
+      <td><code>WPN_Gun.AmmoData</code></td><td><code>get; set;</code></td>
+      <td>交互</td><td>访问地图武器第二组弹药</td>
+      <td>地图武器专用</td><td><span class="pill medium">中</span></td>
+    </tr>
+<tr data-group="交互" data-value="中">
+      <td>34</td><td><code>climbStair</code></td>
+      <td><code>Transform</code></td><td><code>get; set;</code></td>
+      <td>交互</td><td>访问当前梯子对象</td>
+      <td>包装后备字段</td><td><span class="pill medium">中</span></td>
+    </tr>
+<tr data-group="交互" data-value="中">
+      <td>35</td><td><code>isClimbing</code></td>
+      <td><code>bool</code></td><td><code>get;</code></td>
+      <td>交互</td><td>判断 Player 是否正在攀爬</td>
+      <td>通常根据 climbStair 计算</td><td><span class="pill medium">中</span></td>
+    </tr>
+<tr data-group="Buff" data-value="高">
+      <td>36</td><td><code>Buff_JumpDisabled</code></td>
+      <td><code>bool</code></td><td><code>get; set;</code></td>
+      <td>Buff</td><td>读取或设置最终禁跳状态</td>
+      <td>可能被 Buff 更新器重新计算</td><td><span class="pill high">高</span></td>
+    </tr>
+<tr data-group="身份" data-value="高">
+      <td>37</td><td><code>nickName</code></td>
+      <td><code>string</code></td><td><code>get;</code></td>
+      <td>身份</td><td>返回玩家昵称</td>
+      <td>实际资料通常来自 clientData</td><td><span class="pill high">高</span></td>
+    </tr>
+<tr data-group="身份" data-value="中">
+      <td>38</td><td><code>level</code></td>
+      <td><code>int</code></td><td><code>get;</code></td>
+      <td>身份</td><td>返回玩家等级</td>
+      <td>实际资料通常来自 clientData</td><td><span class="pill medium">中</span></td>
+    </tr>
+<tr data-group="身份" data-value="低">
+      <td>39</td><td><code>vipLevel</code></td>
+      <td><code>int</code></td><td><code>get;</code></td>
+      <td>身份</td><td>返回 VIP 等级</td>
+      <td>实际资料通常来自 clientData</td><td><span class="pill low">低</span></td>
+    </tr>
+<tr data-group="战绩" data-value="高">
+      <td>40</td><td><code>kill</code></td>
+      <td><code>int</code></td><td><code>get; set;</code></td>
+      <td>战绩</td><td>读取或设置击杀数</td>
+      <td>实际数据通常落在 playerData，可能受模式同步覆盖</td><td><span class="pill high">高</span></td>
+    </tr>
+<tr data-group="战绩" data-value="高">
+      <td>41</td><td><code>death</code></td>
+      <td><code>int</code></td><td><code>get; set;</code></td>
+      <td>战绩</td><td>读取或设置死亡数</td>
+      <td>实际数据通常落在 playerData</td><td><span class="pill high">高</span></td>
+    </tr>
+<tr data-group="战绩" data-value="中">
+      <td>42</td><td><code>survival</code></td>
+      <td><code>int</code></td><td><code>get; set;</code></td>
+      <td>战绩</td><td>读取或设置生存相关计数</td>
+      <td>具体意义依模式规则而定</td><td><span class="pill medium">中</span></td>
+    </tr>
+<tr data-group="战绩" data-value="高">
+      <td>43</td><td><code>score</code></td>
+      <td><code>int</code></td><td><code>get; set;</code></td>
+      <td>战绩</td><td>读取或设置当前得分</td>
+      <td>模式规则可能重新计算或同步</td><td><span class="pill high">高</span></td>
+    </tr>
+<tr data-group="战绩" data-value="中">
+      <td>44</td><td><code>aceSign</code></td>
+      <td><code>HUD_Role.AceSign</code></td><td><code>get; set;</code></td>
+      <td>战绩</td><td>读取或设置 ACE 标识</td>
+      <td>用于计分板或 HUD 表现</td><td><span class="pill medium">中</span></td>
+    </tr>
+<tr data-group="生化" data-value="高">
+      <td>45</td><td><code>nanoRole</code></td>
+      <td><code>NanoRole</code></td><td><code>get; set;</code></td>
+      <td>生化</td><td>读取或设置当前生化角色</td>
+      <td>实际来源通常是模式或 playerData</td><td><span class="pill high">高</span></td>
+    </tr></tbody></table></div>
+    </section>
+
+    <section class="panel" id="methods">
+      <h2>九、Player 的 152 个方法：152 / 152 全部列出</h2>
+      <p>核心业务方法说明调用目的；大量 <code>get_*</code>/<code>set_*</code>、事件访问器和编译器生成方法仍全部保留，但标记为低开发价值。</p>
+      <div class="tools"><input class="search" data-target="methodTable" placeholder="搜索方法、分类或功能"><select class="filter" data-target="methodTable"><option value="">全部功能</option></select><span class="count" data-target="methodTable"></span></div>
+      <div class="table-wrap"><table id="methodTable"><thead><tr><th>#</th><th>方法</th><th>功能分类</th><th>穿越火线中的功能</th><th>开发价值</th><th>证据</th><th>dump.cs 签名</th></tr></thead><tbody><tr data-group="属性访问器" data-value="低">
+      <td>1</td><td><code>get_mapCameraPos</code></td>
+      <td>属性访问器</td><td>读取 mapCameraPos：返回该 Player 在地图相机中的位置</td>
+      <td><span class="pill low">低</span></td><td><span class="evidence dump">dump声明</span></td>
+      <td class="raw"><code>public Vector3 get_mapCameraPos()</code></td>
+    </tr>
+<tr data-group="属性访问器" data-value="低">
+      <td>2</td><td><code>get_mapCameraForward</code></td>
+      <td>属性访问器</td><td>读取 mapCameraForward：返回地图显示使用的朝向</td>
+      <td><span class="pill low">低</span></td><td><span class="evidence dump">dump声明</span></td>
+      <td class="raw"><code>public Vector3 get_mapCameraForward()</code></td>
+    </tr>
+<tr data-group="属性访问器" data-value="低">
+      <td>3</td><td><code>get_characterContainer</code></td>
+      <td>属性访问器</td><td>读取 characterContainer：读取或设置角色模型容器</td>
+      <td><span class="pill low">低</span></td><td><span class="evidence dump">dump声明</span></td>
+      <td class="raw"><code>public Transform get_characterContainer()</code></td>
+    </tr>
+<tr data-group="属性访问器" data-value="低">
+      <td>4</td><td><code>set_characterContainer</code></td>
+      <td>属性访问器</td><td>写入 characterContainer：读取或设置角色模型容器</td>
+      <td><span class="pill low">低</span></td><td><span class="evidence dump">dump声明</span></td>
+      <td class="raw"><code>private void set_characterContainer(Transform value)</code></td>
+    </tr>
+<tr data-group="属性访问器" data-value="低">
+      <td>5</td><td><code>get_currentCharacter</code></td>
+      <td>属性访问器</td><td>读取 currentCharacter：读取或设置当前 CharacterModel</td>
+      <td><span class="pill low">低</span></td><td><span class="evidence dump">dump声明</span></td>
+      <td class="raw"><code>public CharacterModel get_currentCharacter()</code></td>
+    </tr>
+<tr data-group="属性访问器" data-value="低">
+      <td>6</td><td><code>set_currentCharacter</code></td>
+      <td>属性访问器</td><td>写入 currentCharacter：读取或设置当前 CharacterModel</td>
+      <td><span class="pill low">低</span></td><td><span class="evidence dump">dump声明</span></td>
+      <td class="raw"><code>private void set_currentCharacter(CharacterModel value)</code></td>
+    </tr>
+<tr data-group="属性访问器" data-value="低">
+      <td>7</td><td><code>get_footPos</code></td>
+      <td>属性访问器</td><td>读取 footPos：返回玩家脚底位置</td>
+      <td><span class="pill low">低</span></td><td><span class="evidence dump">dump声明</span></td>
+      <td class="raw"><code>public Vector3 get_footPos()</code></td>
+    </tr>
+<tr data-group="属性访问器" data-value="低">
+      <td>8</td><td><code>get_autonomousJump</code></td>
+      <td>属性访问器</td><td>读取 autonomousJump：读取或设置自动跳跃状态</td>
+      <td><span class="pill low">低</span></td><td><span class="evidence dump">dump声明</span></td>
+      <td class="raw"><code>public bool get_autonomousJump()</code></td>
+    </tr>
+<tr data-group="属性访问器" data-value="低">
+      <td>9</td><td><code>set_autonomousJump</code></td>
+      <td>属性访问器</td><td>写入 autonomousJump：读取或设置自动跳跃状态</td>
+      <td><span class="pill low">低</span></td><td><span class="evidence dump">dump声明</span></td>
+      <td class="raw"><code>private void set_autonomousJump(bool value)</code></td>
+    </tr>
+<tr data-group="事件访问器" data-value="低">
+      <td>10</td><td><code>add_JumpPost_Listener</code></td>
+      <td>事件访问器</td><td>订阅 JumpPost_Listener 事件或 Buff 更新器</td>
+      <td><span class="pill low">低</span></td><td><span class="evidence dump">dump声明</span></td>
+      <td class="raw"><code>public void add_JumpPost_Listener(Action value)</code></td>
+    </tr>
+<tr data-group="事件访问器" data-value="低">
+      <td>11</td><td><code>remove_JumpPost_Listener</code></td>
+      <td>事件访问器</td><td>取消订阅 JumpPost_Listener 事件或 Buff 更新器</td>
+      <td><span class="pill low">低</span></td><td><span class="evidence dump">dump声明</span></td>
+      <td class="raw"><code>public void remove_JumpPost_Listener(Action value)</code></td>
+    </tr>
+<tr data-group="属性访问器" data-value="低">
+      <td>12</td><td><code>get_isGrounded</code></td>
+      <td>属性访问器</td><td>读取 isGrounded：读取或设置是否落地</td>
+      <td><span class="pill low">低</span></td><td><span class="evidence dump">dump声明</span></td>
+      <td class="raw"><code>public bool get_isGrounded()</code></td>
+    </tr>
+<tr data-group="属性访问器" data-value="低">
+      <td>13</td><td><code>set_isGrounded</code></td>
+      <td>属性访问器</td><td>写入 isGrounded：读取或设置是否落地</td>
+      <td><span class="pill low">低</span></td><td><span class="evidence dump">dump声明</span></td>
+      <td class="raw"><code>private void set_isGrounded(bool value)</code></td>
+    </tr>
+<tr data-group="属性访问器" data-value="低">
+      <td>14</td><td><code>get_groundMatName</code></td>
+      <td>属性访问器</td><td>读取 groundMatName：读取或设置脚下材质名</td>
+      <td><span class="pill low">低</span></td><td><span class="evidence dump">dump声明</span></td>
+      <td class="raw"><code>public string get_groundMatName()</code></td>
+    </tr>
+<tr data-group="属性访问器" data-value="低">
+      <td>15</td><td><code>set_groundMatName</code></td>
+      <td>属性访问器</td><td>写入 groundMatName：读取或设置脚下材质名</td>
+      <td><span class="pill low">低</span></td><td><span class="evidence dump">dump声明</span></td>
+      <td class="raw"><code>private void set_groundMatName(string value)</code></td>
+    </tr>
+<tr data-group="属性访问器" data-value="低">
+      <td>16</td><td><code>get_fallTime</code></td>
+      <td>属性访问器</td><td>读取 fallTime：返回当前连续下落时间</td>
+      <td><span class="pill low">低</span></td><td><span class="evidence dump">dump声明</span></td>
+      <td class="raw"><code>public float get_fallTime()</code></td>
+    </tr>
+<tr data-group="属性访问器" data-value="低">
+      <td>17</td><td><code>get_canControlVelInAir</code></td>
+      <td>属性访问器</td><td>读取 canControlVelInAir：判断当前能否在空中控制速度</td>
+      <td><span class="pill low">低</span></td><td><span class="evidence dump">dump声明</span></td>
+      <td class="raw"><code>private bool get_canControlVelInAir()</code></td>
+    </tr>
+<tr data-group="属性访问器" data-value="低">
+      <td>18</td><td><code>get_velocity</code></td>
+      <td>属性访问器</td><td>读取 velocity：返回这名玩家当前速度</td>
+      <td><span class="pill low">低</span></td><td><span class="evidence dump">dump声明</span></td>
+      <td class="raw"><code>public Vector3 get_velocity()</code></td>
+    </tr>
+<tr data-group="属性访问器" data-value="低">
+      <td>19</td><td><code>get_MoveSpeedRatio</code></td>
+      <td>属性访问器</td><td>读取 MoveSpeedRatio：返回 Buff 汇总后的移动速度倍率</td>
+      <td><span class="pill low">低</span></td><td><span class="evidence dump">dump声明</span></td>
+      <td class="raw"><code>public float get_MoveSpeedRatio()</code></td>
+    </tr>
+<tr data-group="属性访问器" data-value="低">
+      <td>20</td><td><code>get_velData</code></td>
+      <td>属性访问器</td><td>读取 velData：访问 PlayerVelocity</td>
+      <td><span class="pill low">低</span></td><td><span class="evidence dump">dump声明</span></td>
+      <td class="raw"><code>public PlayerVelocity get_velData()</code></td>
+    </tr>
+<tr data-group="属性访问器" data-value="低">
+      <td>21</td><td><code>set_velData</code></td>
+      <td>属性访问器</td><td>写入 velData：访问 PlayerVelocity</td>
+      <td><span class="pill low">低</span></td><td><span class="evidence dump">dump声明</span></td>
+      <td class="raw"><code>protected void set_velData(PlayerVelocity value)</code></td>
+    </tr>
+<tr data-group="属性访问器" data-value="低">
+      <td>22</td><td><code>get_playerData</code></td>
+      <td>属性访问器</td><td>读取 playerData：访问 PlayerData 对局数据</td>
+      <td><span class="pill low">低</span></td><td><span class="evidence dump">dump声明</span></td>
+      <td class="raw"><code>public PlayerData get_playerData()</code></td>
+    </tr>
+<tr data-group="属性访问器" data-value="低">
+      <td>23</td><td><code>set_playerData</code></td>
+      <td>属性访问器</td><td>写入 playerData：访问 PlayerData 对局数据</td>
+      <td><span class="pill low">低</span></td><td><span class="evidence dump">dump声明</span></td>
+      <td class="raw"><code>protected void set_playerData(PlayerData value)</code></td>
+    </tr>
+<tr data-group="属性访问器" data-value="低">
+      <td>24</td><td><code>get_input</code></td>
+      <td>属性访问器</td><td>读取 input：访问 PlayerInput</td>
+      <td><span class="pill low">低</span></td><td><span class="evidence dump">dump声明</span></td>
+      <td class="raw"><code>public PlayerInput get_input()</code></td>
+    </tr>
+<tr data-group="属性访问器" data-value="低">
+      <td>25</td><td><code>set_input</code></td>
+      <td>属性访问器</td><td>写入 input：访问 PlayerInput</td>
+      <td><span class="pill low">低</span></td><td><span class="evidence dump">dump声明</span></td>
+      <td class="raw"><code>protected void set_input(PlayerInput value)</code></td>
+    </tr>
+<tr data-group="属性访问器" data-value="低">
+      <td>26</td><td><code>get_wpns</code></td>
+      <td>属性访问器</td><td>读取 wpns：访问 PlayerWeapons</td>
+      <td><span class="pill low">低</span></td><td><span class="evidence dump">dump声明</span></td>
+      <td class="raw"><code>public PlayerWeapons get_wpns()</code></td>
+    </tr>
+<tr data-group="属性访问器" data-value="低">
+      <td>27</td><td><code>set_wpns</code></td>
+      <td>属性访问器</td><td>写入 wpns：访问 PlayerWeapons</td>
+      <td><span class="pill low">低</span></td><td><span class="evidence dump">dump声明</span></td>
+      <td class="raw"><code>private void set_wpns(PlayerWeapons value)</code></td>
+    </tr>
+<tr data-group="属性访问器" data-value="低">
+      <td>28</td><td><code>get_weaponBag</code></td>
+      <td>属性访问器</td><td>读取 weaponBag：访问当前 WeaponBag</td>
+      <td><span class="pill low">低</span></td><td><span class="evidence dump">dump声明</span></td>
+      <td class="raw"><code>public WeaponBag get_weaponBag()</code></td>
+    </tr>
+<tr data-group="属性访问器" data-value="低">
+      <td>29</td><td><code>set_weaponBag</code></td>
+      <td>属性访问器</td><td>写入 weaponBag：访问当前 WeaponBag</td>
+      <td><span class="pill low">低</span></td><td><span class="evidence dump">dump声明</span></td>
+      <td class="raw"><code>protected void set_weaponBag(WeaponBag value)</code></td>
+    </tr>
+<tr data-group="属性访问器" data-value="低">
+      <td>30</td><td><code>get_modelInfo</code></td>
+      <td>属性访问器</td><td>读取 modelInfo：访问 PlayerMdlInfo</td>
+      <td><span class="pill low">低</span></td><td><span class="evidence dump">dump声明</span></td>
+      <td class="raw"><code>public PlayerMdlInfo get_modelInfo()</code></td>
+    </tr>
+<tr data-group="属性访问器" data-value="低">
+      <td>31</td><td><code>set_modelInfo</code></td>
+      <td>属性访问器</td><td>写入 modelInfo：访问 PlayerMdlInfo</td>
+      <td><span class="pill low">低</span></td><td><span class="evidence dump">dump声明</span></td>
+      <td class="raw"><code>protected void set_modelInfo(PlayerMdlInfo value)</code></td>
+    </tr>
+<tr data-group="属性访问器" data-value="低">
+      <td>32</td><td><code>get_isSniper</code></td>
+      <td>属性访问器</td><td>读取 isSniper：判断或设置狙击状态</td>
+      <td><span class="pill low">低</span></td><td><span class="evidence dump">dump声明</span></td>
+      <td class="raw"><code>public bool get_isSniper()</code></td>
+    </tr>
+<tr data-group="属性访问器" data-value="低">
+      <td>33</td><td><code>set_isSniper</code></td>
+      <td>属性访问器</td><td>写入 isSniper：判断或设置狙击状态</td>
+      <td><span class="pill low">低</span></td><td><span class="evidence dump">dump声明</span></td>
+      <td class="raw"><code>protected void set_isSniper(bool value)</code></td>
+    </tr>
+<tr data-group="属性访问器" data-value="低">
+      <td>34</td><td><code>get_spawnPos</code></td>
+      <td>属性访问器</td><td>读取 spawnPos：读取或设置出生位置</td>
+      <td><span class="pill low">低</span></td><td><span class="evidence dump">dump声明</span></td>
+      <td class="raw"><code>public Vector3 get_spawnPos()</code></td>
+    </tr>
+<tr data-group="属性访问器" data-value="低">
+      <td>35</td><td><code>set_spawnPos</code></td>
+      <td>属性访问器</td><td>写入 spawnPos：读取或设置出生位置</td>
+      <td><span class="pill low">低</span></td><td><span class="evidence dump">dump声明</span></td>
+      <td class="raw"><code>protected void set_spawnPos(Vector3 value)</code></td>
+    </tr>
+<tr data-group="事件访问器" data-value="低">
+      <td>36</td><td><code>add_StartRespawn_Listener</code></td>
+      <td>事件访问器</td><td>订阅 StartRespawn_Listener 事件或 Buff 更新器</td>
+      <td><span class="pill low">低</span></td><td><span class="evidence dump">dump声明</span></td>
+      <td class="raw"><code>public void add_StartRespawn_Listener(Action&lt;Player&gt; value)</code></td>
+    </tr>
+<tr data-group="事件访问器" data-value="低">
+      <td>37</td><td><code>remove_StartRespawn_Listener</code></td>
+      <td>事件访问器</td><td>取消订阅 StartRespawn_Listener 事件或 Buff 更新器</td>
+      <td><span class="pill low">低</span></td><td><span class="evidence dump">dump声明</span></td>
+      <td class="raw"><code>public void remove_StartRespawn_Listener(Action&lt;Player&gt; value)</code></td>
+    </tr>
+<tr data-group="事件访问器" data-value="低">
+      <td>38</td><td><code>add_NextRespawnInRound_Listener</code></td>
+      <td>事件访问器</td><td>订阅 NextRespawnInRound_Listener 事件或 Buff 更新器</td>
+      <td><span class="pill low">低</span></td><td><span class="evidence dump">dump声明</span></td>
+      <td class="raw"><code>public void add_NextRespawnInRound_Listener(Action&lt;Player&gt; value)</code></td>
+    </tr>
+<tr data-group="事件访问器" data-value="低">
+      <td>39</td><td><code>remove_NextRespawnInRound_Listener</code></td>
+      <td>事件访问器</td><td>取消订阅 NextRespawnInRound_Listener 事件或 Buff 更新器</td>
+      <td><span class="pill low">低</span></td><td><span class="evidence dump">dump声明</span></td>
+      <td class="raw"><code>public void remove_NextRespawnInRound_Listener(Action&lt;Player&gt; value)</code></td>
+    </tr>
+<tr data-group="属性访问器" data-value="低">
+      <td>40</td><td><code>get_isRespawning</code></td>
+      <td>属性访问器</td><td>读取 isRespawning：读取或设置复活中状态</td>
+      <td><span class="pill low">低</span></td><td><span class="evidence dump">dump声明</span></td>
+      <td class="raw"><code>public bool get_isRespawning()</code></td>
+    </tr>
+<tr data-group="属性访问器" data-value="低">
+      <td>41</td><td><code>set_isRespawning</code></td>
+      <td>属性访问器</td><td>写入 isRespawning：读取或设置复活中状态</td>
+      <td><span class="pill low">低</span></td><td><span class="evidence dump">dump声明</span></td>
+      <td class="raw"><code>private void set_isRespawning(bool value)</code></td>
+    </tr>
+<tr data-group="属性访问器" data-value="低">
+      <td>42</td><td><code>get_isMyPlayer</code></td>
+      <td>属性访问器</td><td>读取 isMyPlayer：判断是否为本机控制的 Player</td>
+      <td><span class="pill low">低</span></td><td><span class="evidence dump">dump声明</span></td>
+      <td class="raw"><code>public bool get_isMyPlayer()</code></td>
+    </tr>
+<tr data-group="属性访问器" data-value="低">
+      <td>43</td><td><code>get_isFocusPlayer</code></td>
+      <td>属性访问器</td><td>读取 isFocusPlayer：判断是否为当前镜头关注对象</td>
+      <td><span class="pill low">低</span></td><td><span class="evidence dump">dump声明</span></td>
+      <td class="raw"><code>public bool get_isFocusPlayer()</code></td>
+    </tr>
+<tr data-group="属性访问器" data-value="低">
+      <td>44</td><td><code>get_isFocusPlayerInPV</code></td>
+      <td>属性访问器</td><td>读取 isFocusPlayerInPV：判断是否为第一人称观察目标</td>
+      <td><span class="pill low">低</span></td><td><span class="evidence dump">dump声明</span></td>
+      <td class="raw"><code>public bool get_isFocusPlayerInPV()</code></td>
+    </tr>
+<tr data-group="属性访问器" data-value="低">
+      <td>45</td><td><code>get_isNanoGhost</code></td>
+      <td>属性访问器</td><td>读取 isNanoGhost：判断是否为生化幽灵角色</td>
+      <td><span class="pill low">低</span></td><td><span class="evidence dump">dump声明</span></td>
+      <td class="raw"><code>public bool get_isNanoGhost()</code></td>
+    </tr>
+<tr data-group="属性访问器" data-value="低">
+      <td>46</td><td><code>get_crouchDuration</code></td>
+      <td>属性访问器</td><td>读取 crouchDuration：访问蹲姿持续/过渡时间</td>
+      <td><span class="pill low">低</span></td><td><span class="evidence dump">dump声明</span></td>
+      <td class="raw"><code>public float get_crouchDuration()</code></td>
+    </tr>
+<tr data-group="属性访问器" data-value="低">
+      <td>47</td><td><code>set_crouchDuration</code></td>
+      <td>属性访问器</td><td>写入 crouchDuration：访问蹲姿持续/过渡时间</td>
+      <td><span class="pill low">低</span></td><td><span class="evidence dump">dump声明</span></td>
+      <td class="raw"><code>private void set_crouchDuration(float value)</code></td>
+    </tr>
+<tr data-group="属性访问器" data-value="低">
+      <td>48</td><td><code>get_isCrouching</code></td>
+      <td>属性访问器</td><td>读取 isCrouching：判断当前是否蹲下</td>
+      <td><span class="pill low">低</span></td><td><span class="evidence dump">dump声明</span></td>
+      <td class="raw"><code>public bool get_isCrouching()</code></td>
+    </tr>
+<tr data-group="属性访问器" data-value="低">
+      <td>49</td><td><code>get_walking</code></td>
+      <td>属性访问器</td><td>读取 walking：读取或设置走路状态</td>
+      <td><span class="pill low">低</span></td><td><span class="evidence dump">dump声明</span></td>
+      <td class="raw"><code>public bool get_walking()</code></td>
+    </tr>
+<tr data-group="属性访问器" data-value="低">
+      <td>50</td><td><code>set_walking</code></td>
+      <td>属性访问器</td><td>写入 walking：读取或设置走路状态</td>
+      <td><span class="pill low">低</span></td><td><span class="evidence dump">dump声明</span></td>
+      <td class="raw"><code>private void set_walking(bool value)</code></td>
+    </tr>
+<tr data-group="属性访问器" data-value="低">
+      <td>51</td><td><code>get_nanoClothCount</code></td>
+      <td>属性访问器</td><td>读取 nanoClothCount：读取或设置生化防护层数量</td>
+      <td><span class="pill low">低</span></td><td><span class="evidence dump">dump声明</span></td>
+      <td class="raw"><code>public ObscuredInt get_nanoClothCount()</code></td>
+    </tr>
+<tr data-group="属性访问器" data-value="低">
+      <td>52</td><td><code>set_nanoClothCount</code></td>
+      <td>属性访问器</td><td>写入 nanoClothCount：读取或设置生化防护层数量</td>
+      <td><span class="pill low">低</span></td><td><span class="evidence dump">dump声明</span></td>
+      <td class="raw"><code>private void set_nanoClothCount(ObscuredInt value)</code></td>
+    </tr>
+<tr data-group="属性访问器" data-value="低">
+      <td>53</td><td><code>get_lastStopStartTime</code></td>
+      <td>属性访问器</td><td>读取 lastStopStartTime：访问最近停止状态开始时间</td>
+      <td><span class="pill low">低</span></td><td><span class="evidence dump">dump声明</span></td>
+      <td class="raw"><code>public float get_lastStopStartTime()</code></td>
+    </tr>
+<tr data-group="属性访问器" data-value="低">
+      <td>54</td><td><code>set_lastStopStartTime</code></td>
+      <td>属性访问器</td><td>写入 lastStopStartTime：访问最近停止状态开始时间</td>
+      <td><span class="pill low">低</span></td><td><span class="evidence dump">dump声明</span></td>
+      <td class="raw"><code>private void set_lastStopStartTime(float value)</code></td>
+    </tr>
+<tr data-group="属性访问器" data-value="低">
+      <td>55</td><td><code>get_input_Interact</code></td>
+      <td>属性访问器</td><td>读取 input_Interact：读取或设置交互键状态</td>
+      <td><span class="pill low">低</span></td><td><span class="evidence dump">dump声明</span></td>
+      <td class="raw"><code>public KeyInputState get_input_Interact()</code></td>
+    </tr>
+<tr data-group="属性访问器" data-value="低">
+      <td>56</td><td><code>set_input_Interact</code></td>
+      <td>属性访问器</td><td>写入 input_Interact：读取或设置交互键状态</td>
+      <td><span class="pill low">低</span></td><td><span class="evidence dump">dump声明</span></td>
+      <td class="raw"><code>private void set_input_Interact(KeyInputState value)</code></td>
+    </tr>
+<tr data-group="事件访问器" data-value="低">
+      <td>57</td><td><code>add_Interact_Listener</code></td>
+      <td>事件访问器</td><td>订阅 Interact_Listener 事件或 Buff 更新器</td>
+      <td><span class="pill low">低</span></td><td><span class="evidence dump">dump声明</span></td>
+      <td class="raw"><code>public void add_Interact_Listener(Action&lt;Player, KeyInputState&gt; value)</code></td>
+    </tr>
+<tr data-group="事件访问器" data-value="低">
+      <td>58</td><td><code>remove_Interact_Listener</code></td>
+      <td>事件访问器</td><td>取消订阅 Interact_Listener 事件或 Buff 更新器</td>
+      <td><span class="pill low">低</span></td><td><span class="evidence dump">dump声明</span></td>
+      <td class="raw"><code>public void remove_Interact_Listener(Action&lt;Player, KeyInputState&gt; value)</code></td>
+    </tr>
+<tr data-group="属性访问器" data-value="低">
+      <td>59</td><td><code>get_mapGunAmmo1</code></td>
+      <td>属性访问器</td><td>读取 mapGunAmmo1：访问地图武器第一组弹药</td>
+      <td><span class="pill low">低</span></td><td><span class="evidence dump">dump声明</span></td>
+      <td class="raw"><code>public WPN_Gun.AmmoData get_mapGunAmmo1()</code></td>
+    </tr>
+<tr data-group="属性访问器" data-value="低">
+      <td>60</td><td><code>set_mapGunAmmo1</code></td>
+      <td>属性访问器</td><td>写入 mapGunAmmo1：访问地图武器第一组弹药</td>
+      <td><span class="pill low">低</span></td><td><span class="evidence dump">dump声明</span></td>
+      <td class="raw"><code>private void set_mapGunAmmo1(WPN_Gun.AmmoData value)</code></td>
+    </tr>
+<tr data-group="属性访问器" data-value="低">
+      <td>61</td><td><code>get_mapGunAmmo2</code></td>
+      <td>属性访问器</td><td>读取 mapGunAmmo2：访问地图武器第二组弹药</td>
+      <td><span class="pill low">低</span></td><td><span class="evidence dump">dump声明</span></td>
+      <td class="raw"><code>public WPN_Gun.AmmoData get_mapGunAmmo2()</code></td>
+    </tr>
+<tr data-group="属性访问器" data-value="低">
+      <td>62</td><td><code>set_mapGunAmmo2</code></td>
+      <td>属性访问器</td><td>写入 mapGunAmmo2：访问地图武器第二组弹药</td>
+      <td><span class="pill low">低</span></td><td><span class="evidence dump">dump声明</span></td>
+      <td class="raw"><code>private void set_mapGunAmmo2(WPN_Gun.AmmoData value)</code></td>
+    </tr>
+<tr data-group="属性访问器" data-value="低">
+      <td>63</td><td><code>get_climbStair</code></td>
+      <td>属性访问器</td><td>读取 climbStair：访问当前梯子对象</td>
+      <td><span class="pill low">低</span></td><td><span class="evidence dump">dump声明</span></td>
+      <td class="raw"><code>public Transform get_climbStair()</code></td>
+    </tr>
+<tr data-group="属性访问器" data-value="低">
+      <td>64</td><td><code>set_climbStair</code></td>
+      <td>属性访问器</td><td>写入 climbStair：访问当前梯子对象</td>
+      <td><span class="pill low">低</span></td><td><span class="evidence dump">dump声明</span></td>
+      <td class="raw"><code>private void set_climbStair(Transform value)</code></td>
+    </tr>
+<tr data-group="属性访问器" data-value="低">
+      <td>65</td><td><code>get_isClimbing</code></td>
+      <td>属性访问器</td><td>读取 isClimbing：判断 Player 是否正在攀爬</td>
+      <td><span class="pill low">低</span></td><td><span class="evidence dump">dump声明</span></td>
+      <td class="raw"><code>public bool get_isClimbing()</code></td>
+    </tr>
+<tr data-group="事件访问器" data-value="低">
+      <td>66</td><td><code>add_CameraRotDisabled_BuffUpdater</code></td>
+      <td>事件访问器</td><td>订阅 CameraRotDisabled_BuffUpdater 事件或 Buff 更新器</td>
+      <td><span class="pill low">低</span></td><td><span class="evidence dump">dump声明</span></td>
+      <td class="raw"><code>public void add_CameraRotDisabled_BuffUpdater(RefBool value)</code></td>
+    </tr>
+<tr data-group="事件访问器" data-value="低">
+      <td>67</td><td><code>remove_CameraRotDisabled_BuffUpdater</code></td>
+      <td>事件访问器</td><td>取消订阅 CameraRotDisabled_BuffUpdater 事件或 Buff 更新器</td>
+      <td><span class="pill low">低</span></td><td><span class="evidence dump">dump声明</span></td>
+      <td class="raw"><code>public void remove_CameraRotDisabled_BuffUpdater(RefBool value)</code></td>
+    </tr>
+<tr data-group="属性访问器" data-value="低">
+      <td>68</td><td><code>get_Buff_JumpDisabled</code></td>
+      <td>属性访问器</td><td>读取 Buff_JumpDisabled：读取或设置最终禁跳状态</td>
+      <td><span class="pill low">低</span></td><td><span class="evidence dump">dump声明</span></td>
+      <td class="raw"><code>public bool get_Buff_JumpDisabled()</code></td>
+    </tr>
+<tr data-group="属性访问器" data-value="低">
+      <td>69</td><td><code>set_Buff_JumpDisabled</code></td>
+      <td>属性访问器</td><td>写入 Buff_JumpDisabled：读取或设置最终禁跳状态</td>
+      <td><span class="pill low">低</span></td><td><span class="evidence dump">dump声明</span></td>
+      <td class="raw"><code>private void set_Buff_JumpDisabled(bool value)</code></td>
+    </tr>
+<tr data-group="事件访问器" data-value="低">
+      <td>70</td><td><code>add_JumpDisabled_BuffUpdater</code></td>
+      <td>事件访问器</td><td>订阅 JumpDisabled_BuffUpdater 事件或 Buff 更新器</td>
+      <td><span class="pill low">低</span></td><td><span class="evidence dump">dump声明</span></td>
+      <td class="raw"><code>public void add_JumpDisabled_BuffUpdater(RefBool value)</code></td>
+    </tr>
+<tr data-group="事件访问器" data-value="低">
+      <td>71</td><td><code>remove_JumpDisabled_BuffUpdater</code></td>
+      <td>事件访问器</td><td>取消订阅 JumpDisabled_BuffUpdater 事件或 Buff 更新器</td>
+      <td><span class="pill low">低</span></td><td><span class="evidence dump">dump声明</span></td>
+      <td class="raw"><code>public void remove_JumpDisabled_BuffUpdater(RefBool value)</code></td>
+    </tr>
+<tr data-group="事件访问器" data-value="低">
+      <td>72</td><td><code>add_InfinityAmmo_BuffUpdater</code></td>
+      <td>事件访问器</td><td>订阅 InfinityAmmo_BuffUpdater 事件或 Buff 更新器</td>
+      <td><span class="pill low">低</span></td><td><span class="evidence dump">dump声明</span></td>
+      <td class="raw"><code>public void add_InfinityAmmo_BuffUpdater(RefBool value)</code></td>
+    </tr>
+<tr data-group="事件访问器" data-value="低">
+      <td>73</td><td><code>remove_InfinityAmmo_BuffUpdater</code></td>
+      <td>事件访问器</td><td>取消订阅 InfinityAmmo_BuffUpdater 事件或 Buff 更新器</td>
+      <td><span class="pill low">低</span></td><td><span class="evidence dump">dump声明</span></td>
+      <td class="raw"><code>public void remove_InfinityAmmo_BuffUpdater(RefBool value)</code></td>
+    </tr>
+<tr data-group="属性访问器" data-value="低">
+      <td>74</td><td><code>get_nickName</code></td>
+      <td>属性访问器</td><td>读取 nickName：返回玩家昵称</td>
+      <td><span class="pill low">低</span></td><td><span class="evidence dump">dump声明</span></td>
+      <td class="raw"><code>public string get_nickName()</code></td>
+    </tr>
+<tr data-group="属性访问器" data-value="低">
+      <td>75</td><td><code>get_level</code></td>
+      <td>属性访问器</td><td>读取 level：返回玩家等级</td>
+      <td><span class="pill low">低</span></td><td><span class="evidence dump">dump声明</span></td>
+      <td class="raw"><code>public int get_level()</code></td>
+    </tr>
+<tr data-group="属性访问器" data-value="低">
+      <td>76</td><td><code>get_vipLevel</code></td>
+      <td>属性访问器</td><td>读取 vipLevel：返回 VIP 等级</td>
+      <td><span class="pill low">低</span></td><td><span class="evidence dump">dump声明</span></td>
+      <td class="raw"><code>public int get_vipLevel()</code></td>
+    </tr>
+<tr data-group="属性访问器" data-value="低">
+      <td>77</td><td><code>get_kill</code></td>
+      <td>属性访问器</td><td>读取 kill：读取或设置击杀数</td>
+      <td><span class="pill low">低</span></td><td><span class="evidence dump">dump声明</span></td>
+      <td class="raw"><code>public int get_kill()</code></td>
+    </tr>
+<tr data-group="属性访问器" data-value="低">
+      <td>78</td><td><code>set_kill</code></td>
+      <td>属性访问器</td><td>写入 kill：读取或设置击杀数</td>
+      <td><span class="pill low">低</span></td><td><span class="evidence dump">dump声明</span></td>
+      <td class="raw"><code>public void set_kill(int value)</code></td>
+    </tr>
+<tr data-group="属性访问器" data-value="低">
+      <td>79</td><td><code>get_death</code></td>
+      <td>属性访问器</td><td>读取 death：读取或设置死亡数</td>
+      <td><span class="pill low">低</span></td><td><span class="evidence dump">dump声明</span></td>
+      <td class="raw"><code>public int get_death()</code></td>
+    </tr>
+<tr data-group="属性访问器" data-value="低">
+      <td>80</td><td><code>set_death</code></td>
+      <td>属性访问器</td><td>写入 death：读取或设置死亡数</td>
+      <td><span class="pill low">低</span></td><td><span class="evidence dump">dump声明</span></td>
+      <td class="raw"><code>public void set_death(int value)</code></td>
+    </tr>
+<tr data-group="属性访问器" data-value="低">
+      <td>81</td><td><code>get_survival</code></td>
+      <td>属性访问器</td><td>读取 survival：读取或设置生存相关计数</td>
+      <td><span class="pill low">低</span></td><td><span class="evidence dump">dump声明</span></td>
+      <td class="raw"><code>public int get_survival()</code></td>
+    </tr>
+<tr data-group="属性访问器" data-value="低">
+      <td>82</td><td><code>set_survival</code></td>
+      <td>属性访问器</td><td>写入 survival：读取或设置生存相关计数</td>
+      <td><span class="pill low">低</span></td><td><span class="evidence dump">dump声明</span></td>
+      <td class="raw"><code>public void set_survival(int value)</code></td>
+    </tr>
+<tr data-group="属性访问器" data-value="低">
+      <td>83</td><td><code>get_score</code></td>
+      <td>属性访问器</td><td>读取 score：读取或设置当前得分</td>
+      <td><span class="pill low">低</span></td><td><span class="evidence dump">dump声明</span></td>
+      <td class="raw"><code>public int get_score()</code></td>
+    </tr>
+<tr data-group="属性访问器" data-value="低">
+      <td>84</td><td><code>set_score</code></td>
+      <td>属性访问器</td><td>写入 score：读取或设置当前得分</td>
+      <td><span class="pill low">低</span></td><td><span class="evidence dump">dump声明</span></td>
+      <td class="raw"><code>public void set_score(int value)</code></td>
+    </tr>
+<tr data-group="属性访问器" data-value="低">
+      <td>85</td><td><code>get_aceSign</code></td>
+      <td>属性访问器</td><td>读取 aceSign：读取或设置 ACE 标识</td>
+      <td><span class="pill low">低</span></td><td><span class="evidence dump">dump声明</span></td>
+      <td class="raw"><code>public HUD_Role.AceSign get_aceSign()</code></td>
+    </tr>
+<tr data-group="属性访问器" data-value="低">
+      <td>86</td><td><code>set_aceSign</code></td>
+      <td>属性访问器</td><td>写入 aceSign：读取或设置 ACE 标识</td>
+      <td><span class="pill low">低</span></td><td><span class="evidence dump">dump声明</span></td>
+      <td class="raw"><code>public void set_aceSign(HUD_Role.AceSign value)</code></td>
+    </tr>
+<tr data-group="属性访问器" data-value="低">
+      <td>87</td><td><code>get_nanoRole</code></td>
+      <td>属性访问器</td><td>读取 nanoRole：读取或设置当前生化角色</td>
+      <td><span class="pill low">低</span></td><td><span class="evidence dump">dump声明</span></td>
+      <td class="raw"><code>public NanoRole get_nanoRole()</code></td>
+    </tr>
+<tr data-group="属性访问器" data-value="低">
+      <td>88</td><td><code>set_nanoRole</code></td>
+      <td>属性访问器</td><td>写入 nanoRole：读取或设置当前生化角色</td>
+      <td><span class="pill low">低</span></td><td><span class="evidence dump">dump声明</span></td>
+      <td class="raw"><code>public void set_nanoRole(NanoRole value)</code></td>
+    </tr>
+<tr data-group="生命周期" data-value="高">
+      <td>89</td><td><code>Awake</code></td>
+      <td>生命周期</td><td>Player 实例创建后初始化运行时子系统和监听关系</td>
+      <td><span class="pill high">高</span></td><td><span class="evidence ida">IDA重点</span></td>
+      <td class="raw"><code>protected void Awake()</code></td>
+    </tr>
+<tr data-group="生命周期" data-value="高">
+      <td>90</td><td><code>Update</code></td>
+      <td>生命周期</td><td>每帧更新玩家状态、表现或非物理逻辑</td>
+      <td><span class="pill high">高</span></td><td><span class="evidence need">需IDA</span></td>
+      <td class="raw"><code>protected void Update()</code></td>
+    </tr>
+<tr data-group="生命周期" data-value="高">
+      <td>91</td><td><code>FixedUpdate</code></td>
+      <td>生命周期</td><td>按物理帧更新移动和碰撞相关逻辑</td>
+      <td><span class="pill high">高</span></td><td><span class="evidence need">需IDA</span></td>
+      <td class="raw"><code>private void FixedUpdate()</code></td>
+    </tr>
+<tr data-group="移动" data-value="低">
+      <td>92</td><td><code>UpdateGroundMatName</code></td>
+      <td>移动</td><td>检测并更新脚下材质名称</td>
+      <td><span class="pill low">低</span></td><td><span class="evidence dump">dump声明</span></td>
+      <td class="raw"><code>private void UpdateGroundMatName()</code></td>
+    </tr>
+<tr data-group="模型" data-value="高">
+      <td>93</td><td><code>CharacterModelSetting</code></td>
+      <td>模型</td><td>根据玩家资料配置角色模型</td>
+      <td><span class="pill high">高</span></td><td><span class="evidence ida">IDA重点</span></td>
+      <td class="raw"><code>public void CharacterModelSetting()</code></td>
+    </tr>
+<tr data-group="生命周期" data-value="高">
+      <td>94</td><td><code>OnDestroy</code></td>
+      <td>生命周期</td><td>Player 销毁时解除监听并清理运行时对象</td>
+      <td><span class="pill high">高</span></td><td><span class="evidence ida">IDA重点</span></td>
+      <td class="raw"><code>protected void OnDestroy()</code></td>
+    </tr>
+<tr data-group="模型" data-value="中">
+      <td>95</td><td><code>SetExistentCharacter</code></td>
+      <td>模型</td><td>从已有 CharacterModel 中选择并绑定当前模型</td>
+      <td><span class="pill medium">中</span></td><td><span class="evidence need">需IDA</span></td>
+      <td class="raw"><code>public bool SetExistentCharacter(string name)</code></td>
+    </tr>
+<tr data-group="模型" data-value="高">
+      <td>96</td><td><code>SetCharacter</code></td>
+      <td>模型</td><td>为 Player 设置角色模型及相关表现</td>
+      <td><span class="pill high">高</span></td><td><span class="evidence ida">IDA重点</span></td>
+      <td class="raw"><code>public void SetCharacter(CharacterModel character)</code></td>
+    </tr>
+<tr data-group="模型" data-value="中">
+      <td>97</td><td><code>UpdateModelColor</code></td>
+      <td>模型</td><td>更新角色模型颜色或阵营表现</td>
+      <td><span class="pill medium">中</span></td><td><span class="evidence need">需IDA</span></td>
+      <td class="raw"><code>private void UpdateModelColor()</code></td>
+    </tr>
+<tr data-group="移动" data-value="高">
+      <td>98</td><td><code>PhysicalUpdate</code></td>
+      <td>移动</td><td>执行 Player 主要物理与速度更新</td>
+      <td><span class="pill high">高</span></td><td><span class="evidence ida">IDA重点</span></td>
+      <td class="raw"><code>private void PhysicalUpdate()</code></td>
+    </tr>
+<tr data-group="移动" data-value="高">
+      <td>99</td><td><code>SetGroundState</code></td>
+      <td>移动</td><td>设置落地/离地状态并处理状态切换</td>
+      <td><span class="pill high">高</span></td><td><span class="evidence need">需IDA</span></td>
+      <td class="raw"><code>private void SetGroundState(bool newState)</code></td>
+    </tr>
+<tr data-group="移动" data-value="高">
+      <td>100</td><td><code>OnJumpBtnDown</code></td>
+      <td>移动</td><td>处理跳跃按键，检查禁跳和落地条件</td>
+      <td><span class="pill high">高</span></td><td><span class="evidence ida">IDA重点</span></td>
+      <td class="raw"><code>public void OnJumpBtnDown()</code></td>
+    </tr>
+<tr data-group="移动" data-value="高">
+      <td>101</td><td><code>GetMoveSpeed</code></td>
+      <td>移动</td><td>计算基础速度、倍率和状态修正后的移动速度</td>
+      <td><span class="pill high">高</span></td><td><span class="evidence ida">IDA重点</span></td>
+      <td class="raw"><code>public float GetMoveSpeed()</code></td>
+    </tr>
+<tr data-group="移动" data-value="高">
+      <td>102</td><td><code>MoveByLocalDirection</code></td>
+      <td>移动</td><td>按玩家本地朝向把输入转换为移动速度</td>
+      <td><span class="pill high">高</span></td><td><span class="evidence ida">IDA重点</span></td>
+      <td class="raw"><code>public void MoveByLocalDirection(int x, int z)</code></td>
+    </tr>
+<tr data-group="视角" data-value="高">
+      <td>103</td><td><code>GetCameraRotation</code></td>
+      <td>视角</td><td>读取当前相机旋转值</td>
+      <td><span class="pill high">高</span></td><td><span class="evidence dump">dump声明</span></td>
+      <td class="raw"><code>public Vector2 GetCameraRotation()</code></td>
+    </tr>
+<tr data-group="视角" data-value="高">
+      <td>104</td><td><code>AddCameraRotation</code></td>
+      <td>视角</td><td>在当前视角上叠加旋转增量</td>
+      <td><span class="pill high">高</span></td><td><span class="evidence ida">IDA重点</span></td>
+      <td class="raw"><code>public void AddCameraRotation(float x, float y)</code></td>
+    </tr>
+<tr data-group="视角" data-value="高">
+      <td>105</td><td><code>UpdateCameraRotaion</code></td>
+      <td>视角</td><td>把输入或控制结果更新到 cameraRotation</td>
+      <td><span class="pill high">高</span></td><td><span class="evidence ida">IDA重点</span></td>
+      <td class="raw"><code>private void UpdateCameraRotaion()</code></td>
+    </tr>
+<tr data-group="视角" data-value="高">
+      <td>106</td><td><code>LookAt</code></td>
+      <td>视角</td><td>让 Player 朝向指定位置或方向</td>
+      <td><span class="pill high">高</span></td><td><span class="evidence need">需IDA</span></td>
+      <td class="raw"><code>public void LookAt(Vector3 dir)</code></td>
+    </tr>
+<tr data-group="武器" data-value="高">
+      <td>107</td><td><code>SetWeapon</code></td>
+      <td>武器</td><td>为 Player 设置当前武器并更新持有关系</td>
+      <td><span class="pill high">高</span></td><td><span class="evidence ida">IDA重点</span></td>
+      <td class="raw"><code>public void SetWeapon(Weapon weapon)</code></td>
+    </tr>
+<tr data-group="武器" data-value="中">
+      <td>108</td><td><code>RecoilShootPostureCheck</code></td>
+      <td>武器</td><td>依据射击姿态检查后坐力相关状态</td>
+      <td><span class="pill medium">中</span></td><td><span class="evidence need">需IDA</span></td>
+      <td class="raw"><code>private void RecoilShootPostureCheck()</code></td>
+    </tr>
+<tr data-group="伤害" data-value="高">
+      <td>109</td><td><code>OnEntityHurt</code></td>
+      <td>伤害</td><td>Player 受伤后的表现和玩家专用处理</td>
+      <td><span class="pill high">高</span></td><td><span class="evidence ida">IDA重点</span></td>
+      <td class="raw"><code>public void OnEntityHurt(DamageEventData eventData)</code></td>
+    </tr>
+<tr data-group="死亡" data-value="高">
+      <td>110</td><td><code>OnEntityDeath</code></td>
+      <td>死亡</td><td>Player 死亡后的掉枪、计分、模型和模式处理</td>
+      <td><span class="pill high">高</span></td><td><span class="evidence ida">IDA重点</span></td>
+      <td class="raw"><code>public void OnEntityDeath(DeathEventData eventData)</code></td>
+    </tr>
+<tr data-group="交互" data-value="中">
+      <td>111</td><td><code>ClearMapObject</code></td>
+      <td>交互</td><td>清理 Player 当前占用的地图对象</td>
+      <td><span class="pill medium">中</span></td><td><span class="evidence need">需IDA</span></td>
+      <td class="raw"><code>private void ClearMapObject()</code></td>
+    </tr>
+<tr data-group="死亡" data-value="中">
+      <td>112</td><td><code>DropWeaponAfterDeath</code></td>
+      <td>死亡</td><td>死亡时根据规则掉落武器</td>
+      <td><span class="pill medium">中</span></td><td><span class="evidence need">需IDA</span></td>
+      <td class="raw"><code>private void DropWeaponAfterDeath()</code></td>
+    </tr>
+<tr data-group="声音" data-value="低">
+      <td>113</td><td><code>SendFireInTheHoleRadio</code></td>
+      <td>声音</td><td>投掷物或相关动作时发送无线电语音</td>
+      <td><span class="pill low">低</span></td><td><span class="evidence need">需IDA</span></td>
+      <td class="raw"><code>public void SendFireInTheHoleRadio(WeaponClass wpnClass)</code></td>
+    </tr>
+<tr data-group="阵营" data-value="高">
+      <td>114</td><td><code>RemoveFromTeamList</code></td>
+      <td>阵营</td><td>从 GameManager 对应阵营/存活列表移除 Player</td>
+      <td><span class="pill high">高</span></td><td><span class="evidence ida">IDA重点</span></td>
+      <td class="raw"><code>protected void RemoveFromTeamList(bool onlyAliveList)</code></td>
+    </tr>
+<tr data-group="阵营" data-value="高">
+      <td>115</td><td><code>AddToTeamList</code></td>
+      <td>阵营</td><td>把 Player 加入对应阵营或存活列表</td>
+      <td><span class="pill high">高</span></td><td><span class="evidence ida">IDA重点</span></td>
+      <td class="raw"><code>protected void AddToTeamList(bool isAliveList)</code></td>
+    </tr>
+<tr data-group="复活" data-value="高">
+      <td>116</td><td><code>Respawn</code></td>
+      <td>复活</td><td>启动延迟复活流程并维护 isRespawning</td>
+      <td><span class="pill high">高</span></td><td><span class="evidence ida">IDA重点</span></td>
+      <td class="raw"><code>public void Respawn(float respawnTime, float invisibleTime = 1)</code></td>
+    </tr>
+<tr data-group="复活" data-value="中">
+      <td>117</td><td><code>BreakRespawnCoroutine</code></td>
+      <td>复活</td><td>中断正在执行的复活协程</td>
+      <td><span class="pill medium">中</span></td><td><span class="evidence need">需IDA</span></td>
+      <td class="raw"><code>public void BreakRespawnCoroutine()</code></td>
+    </tr>
+<tr data-group="出生" data-value="高">
+      <td>118</td><td><code>Spawn</code></td>
+      <td>出生</td><td>把 Player 放入出生点并恢复可战斗状态</td>
+      <td><span class="pill high">高</span></td><td><span class="evidence ida">IDA重点</span></td>
+      <td class="raw"><code>public void Spawn()</code></td>
+    </tr>
+<tr data-group="回合" data-value="高">
+      <td>119</td><td><code>OnGameRoundEnd</code></td>
+      <td>回合</td><td>回合结束时重置或停止 Player 的临时状态</td>
+      <td><span class="pill high">高</span></td><td><span class="evidence need">需IDA</span></td>
+      <td class="raw"><code>private void OnGameRoundEnd()</code></td>
+    </tr>
+<tr data-group="位置" data-value="高">
+      <td>120</td><td><code>SetPos</code></td>
+      <td>位置</td><td>设置 Player 的世界位置</td>
+      <td><span class="pill high">高</span></td><td><span class="evidence need">需IDA</span></td>
+      <td class="raw"><code>public void SetPos(Vector3 pos)</code></td>
+    </tr>
+<tr data-group="武器" data-value="高">
+      <td>121</td><td><code>SelectWeaponBag</code></td>
+      <td>武器</td><td>选择背包并装配对应武器</td>
+      <td><span class="pill high">高</span></td><td><span class="evidence ida">IDA重点</span></td>
+      <td class="raw"><code>public bool SelectWeaponBag(int index = -1)</code></td>
+    </tr>
+<tr data-group="武器" data-value="高">
+      <td>122</td><td><code>TryPickUpWeapon</code></td>
+      <td>武器</td><td>尝试拾取地面武器并检查条件</td>
+      <td><span class="pill high">高</span></td><td><span class="evidence need">需IDA</span></td>
+      <td class="raw"><code>public bool TryPickUpWeapon(Weapon wpn)</code></td>
+    </tr>
+<tr data-group="移动" data-value="高">
+      <td>123</td><td><code>SetCrouchState</code></td>
+      <td>移动</td><td>设置蹲下状态和相关高度/模型表现</td>
+      <td><span class="pill high">高</span></td><td><span class="evidence need">需IDA</span></td>
+      <td class="raw"><code>public void SetCrouchState(bool crouch)</code></td>
+    </tr>
+<tr data-group="移动" data-value="中">
+      <td>124</td><td><code>SetWalkState</code></td>
+      <td>移动</td><td>设置走路状态</td>
+      <td><span class="pill medium">中</span></td><td><span class="evidence need">需IDA</span></td>
+      <td class="raw"><code>public void SetWalkState(bool walk)</code></td>
+    </tr>
+<tr data-group="技能" data-value="中">
+      <td>125</td><td><code>TrySubSkillHPCost</code></td>
+      <td>技能</td><td>技能使用前尝试扣除生命消耗</td>
+      <td><span class="pill medium">中</span></td><td><span class="evidence need">需IDA</span></td>
+      <td class="raw"><code>public bool TrySubSkillHPCost(int cost)</code></td>
+    </tr>
+<tr data-group="模式" data-value="中">
+      <td>126</td><td><code>BreakStopTime</code></td>
+      <td>模式</td><td>解除或打断停止/定身时间状态</td>
+      <td><span class="pill medium">中</span></td><td><span class="evidence need">需IDA</span></td>
+      <td class="raw"><code>public void BreakStopTime()</code></td>
+    </tr>
+<tr data-group="生化" data-value="高">
+      <td>127</td><td><code>NanoGhostHPRegen</code></td>
+      <td>生化</td><td>处理生化幽灵生命恢复</td>
+      <td><span class="pill high">高</span></td><td><span class="evidence need">需IDA</span></td>
+      <td class="raw"><code>private void NanoGhostHPRegen()</code></td>
+    </tr>
+<tr data-group="生化" data-value="中">
+      <td>128</td><td><code>SetNanoClothCount</code></td>
+      <td>生化</td><td>设置生化防护层数量</td>
+      <td><span class="pill medium">中</span></td><td><span class="evidence dump">dump声明</span></td>
+      <td class="raw"><code>public void SetNanoClothCount(int count)</code></td>
+    </tr>
+<tr data-group="生化" data-value="中">
+      <td>129</td><td><code>AddNanoClothCount</code></td>
+      <td>生化</td><td>增加生化防护层数量</td>
+      <td><span class="pill medium">中</span></td><td><span class="evidence dump">dump声明</span></td>
+      <td class="raw"><code>public void AddNanoClothCount(int count)</code></td>
+    </tr>
+<tr data-group="交互" data-value="高">
+      <td>130</td><td><code>SetInteractInput</code></td>
+      <td>交互</td><td>写入交互按键状态并通知监听者</td>
+      <td><span class="pill high">高</span></td><td><span class="evidence need">需IDA</span></td>
+      <td class="raw"><code>public void SetInteractInput(KeyInputState state)</code></td>
+    </tr>
+<tr data-group="交互" data-value="中">
+      <td>131</td><td><code>FillMapGunAmmo</code></td>
+      <td>交互</td><td>补充地图固定武器弹药</td>
+      <td><span class="pill medium">中</span></td><td><span class="evidence need">需IDA</span></td>
+      <td class="raw"><code>public void FillMapGunAmmo()</code></td>
+    </tr>
+<tr data-group="声音" data-value="低">
+      <td>132</td><td><code>Play3dSound</code></td>
+      <td>声音</td><td>在 Player 位置播放三维声音</td>
+      <td><span class="pill low">低</span></td><td><span class="evidence dump">dump声明</span></td>
+      <td class="raw"><code>public RecyclableSound Play3dSound(string sndName, int index = -1)</code></td>
+    </tr>
+<tr data-group="特效" data-value="低">
+      <td>133</td><td><code>PlayBulletEffect</code></td>
+      <td>特效</td><td>播放子弹或命中特效</td>
+      <td><span class="pill low">低</span></td><td><span class="evidence dump">dump声明</span></td>
+      <td class="raw"><code>public void PlayBulletEffect(Vector3 position, bool left = False)</code></td>
+    </tr>
+<tr data-group="交互" data-value="中">
+      <td>134</td><td><code>OnTriggerEnter</code></td>
+      <td>交互</td><td>进入 Unity Trigger 时登记地图交互对象</td>
+      <td><span class="pill medium">中</span></td><td><span class="evidence need">需IDA</span></td>
+      <td class="raw"><code>private void OnTriggerEnter(Collider other)</code></td>
+    </tr>
+<tr data-group="交互" data-value="中">
+      <td>135</td><td><code>OnTriggerExit</code></td>
+      <td>交互</td><td>离开 Unity Trigger 时清理地图交互对象</td>
+      <td><span class="pill medium">中</span></td><td><span class="evidence need">需IDA</span></td>
+      <td class="raw"><code>private void OnTriggerExit(Collider other)</code></td>
+    </tr>
+<tr data-group="声音" data-value="低">
+      <td>136</td><td><code>Speak</code></td>
+      <td>声音</td><td>播放角色语音或无线电内容</td>
+      <td><span class="pill low">低</span></td><td><span class="evidence dump">dump声明</span></td>
+      <td class="raw"><code>public void Speak(string msg, HUD_ChatBox.Channel channel = 0)</code></td>
+    </tr>
+<tr data-group="战绩" data-value="中">
+      <td>137</td><td><code>UpdateAce</code></td>
+      <td>战绩</td><td>更新 ACE 玩家标识</td>
+      <td><span class="pill medium">中</span></td><td><span class="evidence need">需IDA</span></td>
+      <td class="raw"><code>private void UpdateAce()</code></td>
+    </tr>
+<tr data-group="声音" data-value="低">
+      <td>138</td><td><code>PlayFootStepSound</code></td>
+      <td>声音</td><td>根据地面材质和移动状态播放脚步声</td>
+      <td><span class="pill low">低</span></td><td><span class="evidence need">需IDA</span></td>
+      <td class="raw"><code>private void PlayFootStepSound(bool isRightFoot)</code></td>
+    </tr>
+<tr data-group="声音" data-value="低">
+      <td>139</td><td><code>PlayJumpSound</code></td>
+      <td>声音</td><td>播放跳跃声音</td>
+      <td><span class="pill low">低</span></td><td><span class="evidence dump">dump声明</span></td>
+      <td class="raw"><code>private void PlayJumpSound(bool isDrop)</code></td>
+    </tr>
+<tr data-group="声音" data-value="低">
+      <td>140</td><td><code>ResetDropSndTime</code></td>
+      <td>声音</td><td>重置落地声音的播放节流时间</td>
+      <td><span class="pill low">低</span></td><td><span class="evidence dump">dump声明</span></td>
+      <td class="raw"><code>private void ResetDropSndTime()</code></td>
+    </tr>
+<tr data-group="移动" data-value="中">
+      <td>141</td><td><code>UpdateFallTime</code></td>
+      <td>移动</td><td>更新下落开始时间和持续时间</td>
+      <td><span class="pill medium">中</span></td><td><span class="evidence need">需IDA</span></td>
+      <td class="raw"><code>private void UpdateFallTime()</code></td>
+    </tr>
+<tr data-group="移动" data-value="中">
+      <td>142</td><td><code>UpdateRunState</code></td>
+      <td>移动</td><td>更新跑步/走路表现状态</td>
+      <td><span class="pill medium">中</span></td><td><span class="evidence need">需IDA</span></td>
+      <td class="raw"><code>private void UpdateRunState()</code></td>
+    </tr>
+<tr data-group="视角" data-value="中">
+      <td>143</td><td><code>AddPlayerViewEffect</code></td>
+      <td>视角</td><td>为玩家视角添加临时画面效果</td>
+      <td><span class="pill medium">中</span></td><td><span class="evidence need">需IDA</span></td>
+      <td class="raw"><code>public EffectObj AddPlayerViewEffect(GameObject fxPrefab)</code></td>
+    </tr>
+<tr data-group="Buff" data-value="高">
+      <td>144</td><td><code>UpdateBuffProperty</code></td>
+      <td>Buff</td><td>重新汇总禁跳、禁转视角、无限弹药等 Buff 结果</td>
+      <td><span class="pill high">高</span></td><td><span class="evidence ida">IDA重点</span></td>
+      <td class="raw"><code>protected void UpdateBuffProperty()</code></td>
+    </tr>
+<tr data-group="复活" data-value="高">
+      <td>145</td><td><code>AddNextRespawnInvincible</code></td>
+      <td>复活</td><td>为下一次复活添加无敌保护</td>
+      <td><span class="pill high">高</span></td><td><span class="evidence need">需IDA</span></td>
+      <td class="raw"><code>public void AddNextRespawnInvincible(float time)</code></td>
+    </tr>
+<tr data-group="身份" data-value="中">
+      <td>146</td><td><code>GetName</code></td>
+      <td>身份</td><td>返回用于显示或调试的玩家名称</td>
+      <td><span class="pill medium">中</span></td><td><span class="evidence dump">dump声明</span></td>
+      <td class="raw"><code>public string GetName()</code></td>
+    </tr>
+<tr data-group="伤害" data-value="高">
+      <td>147</td><td><code>GetVisibleHitBox</code></td>
+      <td>伤害</td><td>返回当前可见或可命中的 HitBox</td>
+      <td><span class="pill high">高</span></td><td><span class="evidence need">需IDA</span></td>
+      <td class="raw"><code>public Transform GetVisibleHitBox(Ray viewRay)</code></td>
+    </tr>
+<tr data-group="初始化" data-value="低">
+      <td>148</td><td><code>.ctor</code></td>
+      <td>初始化</td><td>Player 实例构造函数</td>
+      <td><span class="pill low">低</span></td><td><span class="evidence dump">dump声明</span></td>
+      <td class="raw"><code>public void .ctor()</code></td>
+    </tr>
+<tr data-group="初始化" data-value="低">
+      <td>149</td><td><code>.cctor</code></td>
+      <td>初始化</td><td>初始化 Player 静态常量和只读字段</td>
+      <td><span class="pill low">低</span></td><td><span class="evidence dump">dump声明</span></td>
+      <td class="raw"><code>private static void .cctor()</code></td>
+    </tr>
+<tr data-group="编译器生成" data-value="低">
+      <td>150</td><td><code>&lt;MoveByLocalDirection&gt;g__GetWalkVelocity|206_0</code></td>
+      <td>编译器生成</td><td>MoveByLocalDirection 内部用于计算行走速度的局部函数</td>
+      <td><span class="pill low">低</span></td><td><span class="evidence dump">dump声明</span></td>
+      <td class="raw"><code>private Vector3 &lt;MoveByLocalDirection&gt;g__GetWalkVelocity|206_0(ref Player.&lt;&gt;c__DisplayClass206_0 )</code></td>
+    </tr>
+<tr data-group="编译器生成" data-value="中">
+      <td>151</td><td><code>&lt;Spawn&gt;g__MoveToRespawnPos|222_0</code></td>
+      <td>编译器生成</td><td>Spawn 内部把 Player 移到复活点的局部函数</td>
+      <td><span class="pill medium">中</span></td><td><span class="evidence dump">dump声明</span></td>
+      <td class="raw"><code>private void &lt;Spawn&gt;g__MoveToRespawnPos|222_0()</code></td>
+    </tr>
+<tr data-group="编译器生成" data-value="低">
+      <td>152</td><td><code>&lt;PlayJumpSound&gt;g__PlaySnd|243_0</code></td>
+      <td>编译器生成</td><td>PlayJumpSound 内部实际播放声音的局部函数</td>
+      <td><span class="pill low">低</span></td><td><span class="evidence dump">dump声明</span></td>
+      <td class="raw"><code>private void &lt;PlayJumpSound&gt;g__PlaySnd|243_0(ref Player.&lt;&gt;c__DisplayClass243_0 )</code></td>
+    </tr></tbody></table></div>
+    </section>
+
+    <section class="panel" id="development">
+      <h2>十、新人开发功能导航</h2>
+      <div class="dev-grid">
+        <div class="dev-card"><b>获取房间内全部玩家</b><code>GameManager.allPlayers</code><p>遍历前确认槽位非空，并检查每个 Player 的 clientData 是否已经初始化。不要只用 Bot.thisPlayer。</p></div>
+        <div class="dev-card"><b>判断本机玩家</b><code>GameManager.myPlayer</code> + <code>Player.isMyPlayer</code><p>从 myPlayer 开始读取 cameraRotation、input 和相机对象，避免把观察目标当成本机角色。</p></div>
+        <div class="dev-card"><b>区分敌人和队友</b><code>Entity.team</code> + <code>Mode_*</code><p>团队模式可比较阵营；个人竞技、生化等不能只依赖固定阵营值。</p></div>
+        <div class="dev-card"><b>获取昵称、Bot 和角色资料</b><code>Player.clientData</code><p>Player 已创建不代表 ClientData 已赋值。进入房间、加载和重生阶段都要判空。</p></div>
+        <div class="dev-card"><b>修改视角或自瞄</b><code>cameraRotation</code> / <code>UpdateCameraRotaion</code> / <code>LookAt</code><p>字段可能每帧被真人输入或 Bot AI 覆盖，Hook 更新方法通常比单次写字段稳定。</p></div>
+        <div class="dev-card"><b>修改移动</b><code>velData</code> / <code>GetMoveSpeed</code> / <code>PhysicalUpdate</code><p>速度受 Entity 基础值、Player 倍率、Buff、物理帧和同步共同影响。</p></div>
+        <div class="dev-card"><b>修改武器</b><code>wpns</code> / <code>weaponBag</code> / <code>SetWeapon</code><p>背包配置与当前武器不是同一层；需要跟踪 PlayerWeapons 和 Weapon 持有关系。</p></div>
+        <div class="dev-card"><b>修改死亡和复活</b><code>OnEntityDeath</code> / <code>Respawn</code> / <code>Spawn</code><p>模式规则决定复活时机。只写 isRespawning 或生命值可能造成状态不同步。</p></div>
+      </div>
+    </section>
+
+    <section class="panel" id="boundary">
+      <h2>十一、完整性与证据边界</h2>
+      <div class="table-wrap"><table class="complete"><thead><tr><th>检查范围</th><th>总数 / 列举数</th><th>是否完整</th><th>说明</th></tr></thead><tbody>
+        <tr><td>Player 自有字段</td><td>60 / 60</td><td>完整</td><td>来自 Player TypeDefIndex 5171 的 Fields 区块。</td></tr>
+        <tr><td>Player 自有属性</td><td>45 / 45</td><td>完整</td><td>来自 Properties 区块；属性实际来源需结合访问器方法体。</td></tr>
+        <tr><td>Player 自有方法条目</td><td>152 / 152</td><td>完整</td><td>包含访问器、事件方法、构造函数和编译器生成局部函数。</td></tr>
+        <tr><td>Entity 继承声明</td><td>77 / 77</td><td>完整统计</td><td>16 字段 + 10 属性 + 51 方法；不包含在 Player 自有 257 条声明内。</td></tr>
+        <tr><td>其他类型的字段保存 Player</td><td>63 / 63</td><td>字段扫描完整</td><td>正常字段 40 + 编译器生成字段 23。</td></tr>
+        <tr><td>其他类型的属性使用 Player</td><td>未统计 / 0</td><td>不在本页范围</td><td>不能据此声称所有外部属性关系已经完整。</td></tr>
+        <tr><td>其他类型的方法参数/返回值使用 Player</td><td>未统计 / 0</td><td>不在本页范围</td><td>需要另做全局签名扫描。</td></tr>
+        <tr><td>运行时谁调用 Player 方法</td><td>未全量统计</td><td>不完整</td><td>必须继续用 IDA callers、反编译或运行时 Hook 验证。</td></tr>
+      </tbody></table></div>
+      <div class="callout warn"><b>证据规则：</b><code>dump.cs</code> 能证明类、继承、字段类型、属性和方法签名；仅凭名称不能证明方法体一定怎样运行。页面中的“需 IDA”表示功能解释合理，但尚不能当作完整调用链结论。</div>
+    </section>
+  </main>
+</div>
+<script>
+  function setupTable(id) {
+    const table = document.getElementById(id);
+    const rows = [...table.tBodies[0].rows];
+    const search = document.querySelector('.search[data-target="' + id + '"]');
+    const filter = document.querySelector('.filter[data-target="' + id + '"]');
+    const count = document.querySelector('.count[data-target="' + id + '"]');
+    [...new Set(rows.map(row => row.dataset.group).filter(Boolean))].sort().forEach(group => {
+      const option = document.createElement("option");
+      option.value = group; option.textContent = group; filter.appendChild(option);
+    });
+    function apply() {
+      const keyword = search.value.trim().toLowerCase();
+      let shown = 0;
+      rows.forEach(row => {
+        const matchText = !keyword || row.textContent.toLowerCase().includes(keyword);
+        const matchGroup = !filter.value || row.dataset.group === filter.value;
+        row.hidden = !(matchText && matchGroup);
+        if (!row.hidden) shown++;
+      });
+      count.textContent = "显示 " + shown + " / " + rows.length;
+    }
+    search.addEventListener("input", apply);
+    filter.addEventListener("change", apply);
+    apply();
+  }
+  setupTable("fieldTable");
+  setupTable("propertyTable");
+  setupTable("methodTable");
+</script>
+</body>
+</html>

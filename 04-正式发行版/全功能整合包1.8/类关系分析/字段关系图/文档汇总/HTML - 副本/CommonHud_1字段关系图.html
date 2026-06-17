@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CommonHud_1 字段关系图</title>
+  <style>
+    :root{--bg:#f3f5f8;--ink:#1f2633;--muted:#5f6878;--line:#cfd7e4;--core:#1f5fbf;--source:#315f9f;--target:#24724c}
+    *{box-sizing:border-box}html,body{margin:0;background:var(--bg);font-family:"Microsoft YaHei","Segoe UI",Arial,sans-serif;color:var(--ink)}
+    .canvas{width:100%;min-height:100vh;padding:12px}svg{display:block;width:100%;min-width:1180px;height:auto;background:#fff;border:1px solid var(--line);border-radius:8px}
+    .title{font-size:25px;font-weight:700;fill:var(--ink)}.note{font-size:13px;fill:var(--muted)}.lane{fill:#f8fafc;stroke:#e2e8f0;stroke-width:1;rx:12}
+    .core{fill:#eef5ff;stroke:var(--core);stroke-width:3;rx:12}.box,.source,.target,.empty{fill:#fff;stroke:#cbd5e1;stroke-width:1.5;rx:10}.source{fill:#f2f7ff}.target{fill:#f1fbf5}.empty{fill:#f8fafc}
+    .name{font-size:15px;font-weight:700;fill:#1f2633}.desc{font-size:12px;fill:var(--muted)}.count{font-size:14px;font-weight:700;fill:#1f7a4d}.lane-title{font-size:17px;font-weight:700;fill:#2d3748}
+    .edge{fill:none;stroke-width:2.7}.source-edge{stroke:var(--source)}.target-edge{stroke:var(--target)}.label{font-size:12px;fill:#344054}.label-bg{fill:#fff;stroke:#edf0f5;rx:5}
+  </style>
+</head>
+<body>
+<div class="canvas">
+<svg viewBox="0 0 1450 1184" role="img" aria-label="CommonHud_1 field relationship graph">
+  <defs>
+    <marker id="arrowSource" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><path d="M0,0 L9,3 L0,6 Z" fill="#315f9f"/></marker>
+    <marker id="arrowTarget" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><path d="M0,0 L9,3 L0,6 Z" fill="#24724c"/></marker>
+  </defs>
+  <text x="36" y="44" class="title">CommonHud_1 字段关系图</text>
+  <text x="36" y="70" class="note">只统计 dump.cs 字段声明：左边是谁的字段保存了 CommonHud_1；右边是 CommonHud_1 自己字段保存的类型。委托事件字段和基础值不画。</text>
+
+  <rect class="lane" x="40" y="110" width="390" height="1024"/>
+  <rect class="lane" x="530" y="110" width="370" height="1024"/>
+  <rect class="lane" x="980" y="110" width="420" height="1024"/>
+  <text x="70" y="148" class="lane-title">谁保存了这个类</text>
+  <text x="70" y="172" class="note">通俗说：其他类字段里有没有它</text>
+  <text x="70" y="196" class="count">统计：8 / 8 已画出</text>
+  <text x="70" y="220" class="note">分析：有 8 个类字段保存 CommonHud_1</text>
+  <text x="560" y="148" class="lane-title">当前类</text>
+  <text x="560" y="172" class="note">分析直接写在类名下面</text>
+  <text x="1010" y="148" class="lane-title">它保存了哪些类型</text>
+  <text x="1010" y="172" class="note">通俗说：这个类字段里有哪些对象</text>
+  <text x="1010" y="196" class="count">统计：5 / 5 已画出</text>
+  <text x="1010" y="220" class="note">分析：CommonHud_1 字段直接保存 5 种非基础类型</text>
+
+  <rect class="core" x="610" y="340" width="280" height="170"/>
+  <text x="750" y="382" text-anchor="middle" style="font-size:24px;font-weight:700;fill:#1f5fbf">CommonHud_1</text>
+  <text x="750" y="414" text-anchor="middle" class="desc">字段关系中心</text>
+  <text x="750" y="454" text-anchor="middle" class="desc">功能翻译：通用对局 HUD：承载模式提示、计分、倒计时等基础界面元素</text>
+  <text x="750" y="477" text-anchor="middle" class="desc">关系依据：只看 dump.cs 字段声明</text>
+  <text x="750" y="500" text-anchor="middle" class="desc">用途判断：看左侧谁保存它、右侧它保存哪些类型</text>
+
+  <g transform="translate(70 235)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">HUD_CommonMsg</text>
+    <text x="18" y="49" class="desc">HUD 界面组件：显示玩家状态、提示、图标或模式信息</text>
+    <text x="18" y="69" class="desc">字段依据：modeTipText / wpnModeTip_RepeatFire / wpnModeTip_GrenadeGun</text>
+  </g>
+  <g transform="translate(70 333)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">HUD_HeartBeatRadar</text>
+    <text x="18" y="49" class="desc">心跳雷达 HUD：显示被侦测敌人或特殊模式提示</text>
+    <text x="18" y="69" class="desc">字段依据：radarEffect</text>
+  </g>
+  <g transform="translate(70 431)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">HUD_RadarIcon_HearBeat</text>
+    <text x="18" y="49" class="desc">心跳雷达图标：显示被心跳雷达探测到的目标</text>
+    <text x="18" y="69" class="desc">字段依据：hud</text>
+  </g>
+  <g transform="translate(70 529)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">ModeBase_Nano</text>
+    <text x="18" y="49" class="desc">纳米模式规则：终结者/幽灵相关玩法、吸收和胜负逻辑</text>
+    <text x="18" y="69" class="desc">字段依据：nanoTimerTip / hpRecoverIcon / gKeyTip / supplyBoxTip 等 5 个字段</text>
+  </g>
+  <g transform="translate(70 627)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">Mode_Nano4</text>
+    <text x="18" y="49" class="desc">具体玩法模式类：实现某种模式的规则和流程</text>
+    <text x="18" y="69" class="desc">字段依据：terminatorMsg / characterMark / becomeHeroKeyTip</text>
+  </g>
+  <g transform="translate(70 725)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">Mode_Nano4_Terminator</text>
+    <text x="18" y="49" class="desc">具体玩法模式类：实现某种模式的规则和流程</text>
+    <text x="18" y="69" class="desc">字段依据：nanoItemTip</text>
+  </g>
+  <g transform="translate(70 823)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">Mode_Nano6</text>
+    <text x="18" y="49" class="desc">具体玩法模式类：实现某种模式的规则和流程</text>
+    <text x="18" y="69" class="desc">字段依据：eventTip / levelUpTip / levelUpText / skillTip</text>
+  </g>
+  <g transform="translate(70 921)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">Mode_TeamDeath</text>
+    <text x="18" y="49" class="desc">具体玩法模式类：实现某种模式的规则和流程</text>
+    <text x="18" y="69" class="desc">字段依据：remain10KillTip</text>
+  </g>
+
+  <g transform="translate(1020 235)">
+    <rect class="target" width="360" height="78"/>
+    <text x="18" y="27" class="name">Color</text>
+    <text x="18" y="49" class="desc">Unity 颜色值：控制 UI、模型或特效颜色表现</text>
+    <text x="18" y="69" class="desc">字段依据：defaultColor / zeroAlphaColor</text>
+  </g>
+  <g transform="translate(1020 333)">
+    <rect class="target" width="360" height="78"/>
+    <text x="18" y="27" class="name">CommonHud_1.Type</text>
+    <text x="18" y="49" class="desc">项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</text>
+    <text x="18" y="69" class="desc">字段依据：graphicType</text>
+  </g>
+  <g transform="translate(1020 431)">
+    <rect class="target" width="360" height="78"/>
+    <text x="18" y="27" class="name">Image</text>
+    <text x="18" y="49" class="desc">Unity UI 图片：显示图标、准星、血条等界面元素</text>
+    <text x="18" y="69" class="desc">字段依据：image</text>
+  </g>
+  <g transform="translate(1020 529)">
+    <rect class="target" width="360" height="78"/>
+    <text x="18" y="27" class="name">RawImage</text>
+    <text x="18" y="49" class="desc">Unity UI 原始图片：显示贴图类界面内容</text>
+    <text x="18" y="69" class="desc">字段依据：rawImage</text>
+  </g>
+  <g transform="translate(1020 627)">
+    <rect class="target" width="360" height="78"/>
+    <text x="18" y="27" class="name">Text</text>
+    <text x="18" y="49" class="desc">Unity UI 文本：显示名字、分数、提示等</text>
+    <text x="18" y="69" class="desc">字段依据：text</text>
+  </g>
+<path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 274 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 372 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 470 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 568 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 666 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 764 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 862 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 960 H575 V430 H660"/>
+<path class="edge target-edge" marker-end="url(#arrowTarget)" d="M840 430 H940 V274 H1020"/><path class="edge target-edge" marker-end="url(#arrowTarget)" d="M840 430 H940 V372 H1020"/><path class="edge target-edge" marker-end="url(#arrowTarget)" d="M840 430 H940 V470 H1020"/><path class="edge target-edge" marker-end="url(#arrowTarget)" d="M840 430 H940 V568 H1020"/><path class="edge target-edge" marker-end="url(#arrowTarget)" d="M840 430 H940 V666 H1020"/>
+</svg>
+</div>
+</body>
+</html>

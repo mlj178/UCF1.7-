@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>GraphNode 字段关系图</title>
+  <style>
+    :root{--bg:#f3f5f8;--ink:#1f2633;--muted:#5f6878;--line:#cfd7e4;--core:#1f5fbf;--source:#315f9f;--target:#24724c}
+    *{box-sizing:border-box}html,body{margin:0;background:var(--bg);font-family:"Microsoft YaHei","Segoe UI",Arial,sans-serif;color:var(--ink)}
+    .canvas{width:100%;min-height:100vh;padding:12px}svg{display:block;width:100%;min-width:1180px;height:auto;background:#fff;border:1px solid var(--line);border-radius:8px}
+    .title{font-size:25px;font-weight:700;fill:var(--ink)}.note{font-size:13px;fill:var(--muted)}.lane{fill:#f8fafc;stroke:#e2e8f0;stroke-width:1;rx:12}
+    .core{fill:#eef5ff;stroke:var(--core);stroke-width:3;rx:12}.box,.source,.target,.empty{fill:#fff;stroke:#cbd5e1;stroke-width:1.5;rx:10}.source{fill:#f2f7ff}.target{fill:#f1fbf5}.empty{fill:#f8fafc}
+    .name{font-size:15px;font-weight:700;fill:#1f2633}.desc{font-size:12px;fill:var(--muted)}.count{font-size:14px;font-weight:700;fill:#1f7a4d}.lane-title{font-size:17px;font-weight:700;fill:#2d3748}
+    .edge{fill:none;stroke-width:2.7}.source-edge{stroke:var(--source)}.target-edge{stroke:var(--target)}.label{font-size:12px;fill:#344054}.label-bg{fill:#fff;stroke:#edf0f5;rx:5}
+  </style>
+</head>
+<body>
+<div class="canvas">
+<svg viewBox="0 0 1450 3144" role="img" aria-label="GraphNode field relationship graph">
+  <defs>
+    <marker id="arrowSource" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><path d="M0,0 L9,3 L0,6 Z" fill="#315f9f"/></marker>
+    <marker id="arrowTarget" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><path d="M0,0 L9,3 L0,6 Z" fill="#24724c"/></marker>
+  </defs>
+  <text x="36" y="44" class="title">GraphNode 字段关系图</text>
+  <text x="36" y="70" class="note">只统计 dump.cs 字段声明：左边是谁的字段保存了 GraphNode；右边是 GraphNode 自己字段保存的类型。委托事件字段和基础值不画。</text>
+
+  <rect class="lane" x="40" y="110" width="390" height="2984"/>
+  <rect class="lane" x="530" y="110" width="370" height="2984"/>
+  <rect class="lane" x="980" y="110" width="420" height="2984"/>
+  <text x="70" y="148" class="lane-title">谁保存了这个类</text>
+  <text x="70" y="172" class="note">通俗说：其他类字段里有没有它</text>
+  <text x="70" y="196" class="count">统计：28 / 28 已画出</text>
+  <text x="70" y="220" class="note">分析：有 28 个类字段保存 GraphNode</text>
+  <text x="560" y="148" class="lane-title">当前类</text>
+  <text x="560" y="172" class="note">分析直接写在类名下面</text>
+  <text x="1010" y="148" class="lane-title">它保存了哪些类型</text>
+  <text x="1010" y="172" class="note">通俗说：这个类字段里有哪些对象</text>
+  <text x="1010" y="196" class="count">统计：1 / 1 已画出</text>
+  <text x="1010" y="220" class="note">分析：GraphNode 字段直接保存 1 种非基础类型</text>
+
+  <rect class="core" x="610" y="340" width="280" height="170"/>
+  <text x="750" y="382" text-anchor="middle" style="font-size:24px;font-weight:700;fill:#1f5fbf">GraphNode</text>
+  <text x="750" y="414" text-anchor="middle" class="desc">字段关系中心</text>
+  <text x="750" y="454" text-anchor="middle" class="desc">功能翻译：寻路图节点：AI 路径搜索中的地图节点</text>
+  <text x="750" y="477" text-anchor="middle" class="desc">关系依据：只看 dump.cs 字段声明</text>
+  <text x="750" y="500" text-anchor="middle" class="desc">用途判断：看左侧谁保存它、右侧它保存哪些类型</text>
+
+  <g transform="translate(70 235)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">ABPath</text>
+    <text x="18" y="49" class="desc">寻路/导航类型：用于 AI 路径搜索、导航网格、避障或路径节点</text>
+    <text x="18" y="69" class="desc">字段依据：startNode / endNode</text>
+  </g>
+  <g transform="translate(70 333)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">AlternativePath</text>
+    <text x="18" y="49" class="desc">AI 备用路径：Bot 主路径不可用时的替代移动路线</text>
+    <text x="18" y="69" class="desc">字段依据：prevNodes</text>
+  </g>
+  <g transform="translate(70 431)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">BlockManager</text>
+    <text x="18" y="49" class="desc">管理器类：集中维护对应系统的运行时对象和流程</text>
+    <text x="18" y="69" class="desc">字段依据：blocked</text>
+  </g>
+  <g transform="translate(70 529)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">Bot</text>
+    <text x="18" y="49" class="desc">AI 玩家对象：自动寻路、索敌、开火的电脑角色</text>
+    <text x="18" y="69" class="desc">字段依据：gNode_Nearset / gNode_Next / nextJumpStartNode</text>
+  </g>
+  <g transform="translate(70 627)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">Bot_JumpLink</text>
+    <text x="18" y="49" class="desc">Bot 跳跃连接配置：定义 AI 可跨越或跳跃通过的寻路连接</text>
+    <text x="18" y="69" class="desc">字段依据：linkDic / &lt;startNode&gt;k__BackingField</text>
+  </g>
+  <g transform="translate(70 725)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">Bot_JumpLink.Link</text>
+    <text x="18" y="49" class="desc">Bot 跳跃连接点：AI 寻路中跨越/跳跃路径段</text>
+    <text x="18" y="69" class="desc">字段依据：endNode</text>
+  </g>
+  <g transform="translate(70 823)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">Connection</text>
+    <text x="18" y="49" class="desc">项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</text>
+    <text x="18" y="69" class="desc">字段依据：node</text>
+  </g>
+  <g transform="translate(70 921)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">ConstantPath</text>
+    <text x="18" y="49" class="desc">寻路/导航类型：用于 AI 路径搜索、导航网格、避障或路径节点</text>
+    <text x="18" y="69" class="desc">字段依据：startNode / allNodes</text>
+  </g>
+  <g transform="translate(70 1019)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">EuclideanEmbedding</text>
+    <text x="18" y="49" class="desc">项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</text>
+    <text x="18" y="69" class="desc">字段依据：pivots</text>
+  </g>
+  <g transform="translate(70 1117)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">FloodPath</text>
+    <text x="18" y="49" class="desc">寻路/导航类型：用于 AI 路径搜索、导航网格、避障或路径节点</text>
+    <text x="18" y="69" class="desc">字段依据：startNode / parents</text>
+  </g>
+  <g transform="translate(70 1215)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">GraphHitInfo</text>
+    <text x="18" y="49" class="desc">寻路/导航类型：用于 AI 路径搜索、导航网格、避障或路径节点</text>
+    <text x="18" y="69" class="desc">字段依据：node</text>
+  </g>
+  <g transform="translate(70 1313)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">GraphSerializationContext</text>
+    <text x="18" y="49" class="desc">寻路/导航类型：用于 AI 路径搜索、导航网格、避障或路径节点</text>
+    <text x="18" y="69" class="desc">字段依据：id2NodeMapping</text>
+  </g>
+  <g transform="translate(70 1411)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">GraphUpdateObject</text>
+    <text x="18" y="49" class="desc">寻路/导航类型：用于 AI 路径搜索、导航网格、避障或路径节点</text>
+    <text x="18" y="69" class="desc">字段依据：changedNodes</text>
+  </g>
+  <g transform="translate(70 1509)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">HierarchicalGraph</text>
+    <text x="18" y="49" class="desc">寻路/导航类型：用于 AI 路径搜索、导航网格、避障或路径节点</text>
+    <text x="18" y="69" class="desc">字段依据：children / temporaryQueue / currentChildren / dirtyNodes</text>
+  </g>
+  <g transform="translate(70 1607)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">MultiTargetPath</text>
+    <text x="18" y="49" class="desc">寻路/导航类型：用于 AI 路径搜索、导航网格、避障或路径节点</text>
+    <text x="18" y="69" class="desc">字段依据：targetNodes / nodePaths</text>
+  </g>
+  <g transform="translate(70 1705)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">NNInfo</text>
+    <text x="18" y="49" class="desc">项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</text>
+    <text x="18" y="69" class="desc">字段依据：node</text>
+  </g>
+  <g transform="translate(70 1803)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">NNInfoInternal</text>
+    <text x="18" y="49" class="desc">项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</text>
+    <text x="18" y="69" class="desc">字段依据：node / constrainedNode</text>
+  </g>
+  <g transform="translate(70 1901)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">NodeLink2</text>
+    <text x="18" y="49" class="desc">项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</text>
+    <text x="18" y="69" class="desc">字段依据：reference / connectedNode1 / connectedNode2</text>
+  </g>
+  <g transform="translate(70 1999)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">NodeLink3</text>
+    <text x="18" y="49" class="desc">项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</text>
+    <text x="18" y="69" class="desc">字段依据：reference</text>
+  </g>
+  <g transform="translate(70 2097)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">Path</text>
+    <text x="18" y="49" class="desc">AI 寻路路径：Bot 从当前位置到目标点的路径结果</text>
+    <text x="18" y="69" class="desc">字段依据：path / hTargetNode</text>
+  </g>
+  <g transform="translate(70 2195)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">PathNode</text>
+    <text x="18" y="49" class="desc">寻路/导航类型：用于 AI 路径搜索、导航网格、避障或路径节点</text>
+    <text x="18" y="69" class="desc">字段依据：node</text>
+  </g>
+  <g transform="translate(70 2293)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">PathUtilities</text>
+    <text x="18" y="49" class="desc">寻路/导航类型：用于 AI 路径搜索、导航网格、避障或路径节点</text>
+    <text x="18" y="69" class="desc">字段依据：BFSQueue / BFSMap</text>
+  </g>
+  <g transform="translate(70 2391)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">PointKDTree</text>
+    <text x="18" y="49" class="desc">项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</text>
+    <text x="18" y="69" class="desc">字段依据：largeList / arrayCache / comparers</text>
+  </g>
+  <g transform="translate(70 2489)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">PointKDTree.Node</text>
+    <text x="18" y="49" class="desc">项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</text>
+    <text x="18" y="69" class="desc">字段依据：data</text>
+  </g>
+  <g transform="translate(70 2587)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">Seeker</text>
+    <text x="18" y="49" class="desc">A* 寻路请求器：给 Bot 计算路径</text>
+    <text x="18" y="69" class="desc">字段依据：lastCompletedNodePath</text>
+  </g>
+  <g transform="translate(70 2685)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">SingleNodeBlocker</text>
+    <text x="18" y="49" class="desc">项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</text>
+    <text x="18" y="69" class="desc">字段依据：&lt;lastBlocked&gt;k__BackingField</text>
+  </g>
+  <g transform="translate(70 2783)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">StartEndModifier</text>
+    <text x="18" y="49" class="desc">项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</text>
+    <text x="18" y="69" class="desc">字段依据：connectionBuffer</text>
+  </g>
+  <g transform="translate(70 2881)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">TurnBasedAI</text>
+    <text x="18" y="49" class="desc">项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</text>
+    <text x="18" y="69" class="desc">字段依据：targetNode</text>
+  </g>
+
+  <g transform="translate(1020 235)">
+    <rect class="target" width="360" height="78"/>
+    <text x="18" y="27" class="name">Int3</text>
+    <text x="18" y="49" class="desc">项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</text>
+    <text x="18" y="69" class="desc">字段依据：position</text>
+  </g>
+<path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 274 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 372 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 470 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 568 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 666 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 764 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 862 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 960 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 1058 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 1156 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 1254 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 1352 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 1450 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 1548 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 1646 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 1744 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 1842 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 1940 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 2038 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 2136 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 2234 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 2332 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 2430 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 2528 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 2626 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 2724 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 2822 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 2920 H575 V430 H660"/>
+<path class="edge target-edge" marker-end="url(#arrowTarget)" d="M840 430 H940 V274 H1020"/>
+</svg>
+</div>
+</body>
+</html>
