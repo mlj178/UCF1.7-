@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Material 字段关系图与字段说明</title>
+  <style>
+    :root { --bg:#f4f6f8; --panel:#ffffff; --ink:#1f2937; --muted:#667085; --line:#d9e1ec; --blue:#2457a6; --green:#207450; --amber:#9a5b13; }
+    * { box-sizing:border-box; }
+    body { margin:0; background:var(--bg); color:var(--ink); font-family:"Microsoft YaHei","Segoe UI",Arial,sans-serif; }
+    .page { max-width:1360px; margin:0 auto; padding:18px; }
+    header,.panel,table { background:var(--panel); border:1px solid var(--line); border-radius:8px; }
+    header { padding:18px 20px; }
+    h1 { margin:0 0 8px; font-size:26px; letter-spacing:0; }
+    h2 { margin:26px 0 12px; font-size:20px; }
+    p { margin:0; line-height:1.65; }
+    .summary { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; margin-top:16px; }
+    .metric { border:1px solid var(--line); border-radius:8px; padding:12px; background:#fafcff; }
+    .metric strong { display:block; font-size:24px; color:var(--blue); }
+    .metric span { color:var(--muted); font-size:13px; }
+    .graph { display:grid; grid-template-columns:1fr 1.1fr; gap:14px; margin-top:16px; }
+    .panel { padding:16px; }
+    .core { border:2px solid var(--blue); background:#eef5ff; border-radius:8px; padding:16px; }
+    .core strong { display:block; font-size:24px; color:var(--blue); margin-bottom:8px; }
+    .section-panel { margin-top:14px; }
+    .section-note { color:var(--muted); font-size:13px; margin-bottom:12px; }
+    .nodes { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; margin-top:12px; }
+    .node { border:1px solid #cbd8e8; background:#fbfdff; border-radius:8px; padding:10px; min-height:112px; }
+    .node b { display:block; color:var(--green); margin-bottom:4px; }
+    .node span { display:block; color:var(--muted); font-size:13px; line-height:1.45; }
+    .node p { color:#344054; font-size:13px; line-height:1.55; margin-top:8px; }
+    .stats { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; }
+    .stat-card { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:12px; min-height:116px; }
+    .stat-card strong { display:block; font-size:16px; margin-bottom:6px; }
+    .stat-card span { display:inline-block; color:#fff; background:var(--blue); border-radius:999px; padding:3px 9px; font-size:12px; margin-bottom:8px; }
+    .stat-card p { color:var(--muted); font-size:13px; }
+    .toolbar { display:flex; align-items:center; justify-content:space-between; gap:12px; margin:16px 0 8px; flex-wrap:wrap; }
+    .filters,.pager { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+    button,select { border:1px solid var(--line); background:#fff; color:var(--ink); border-radius:6px; padding:8px 12px; cursor:pointer; font:inherit; }
+    button.active { background:var(--blue); color:#fff; border-color:var(--blue); }
+    .hint,.footnote { color:var(--muted); font-size:13px; }
+    table { width:100%; border-collapse:separate; border-spacing:0; overflow:hidden; }
+    th,td { padding:11px 12px; border-bottom:1px solid #edf1f6; vertical-align:top; text-align:left; }
+    th { background:#f8fafc; font-size:13px; color:#344054; }
+    tr:last-child td { border-bottom:0; }
+    td.num { width:44px; color:var(--muted); }
+    td strong { display:block; margin-bottom:4px; }
+    td span, small { display:block; color:var(--muted); font-size:12px; line-height:1.45; }
+    code { white-space:nowrap; color:#344054; background:#f3f6fa; border:1px solid #e0e7ef; border-radius:5px; padding:2px 5px; }
+    .badge { display:inline-block; border-radius:999px; padding:3px 8px; font-size:12px; margin-top:8px; }
+    .badge.keep { background:#eaf7ef; color:var(--green); }
+    .badge.ignore { background:#fff4e5; color:var(--amber); }
+    .footnote { margin-top:14px; }
+    @media (max-width: 900px) { .summary,.graph,.stats,.nodes { grid-template-columns:1fr; } table { font-size:13px; } code { white-space:normal; } }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header>
+      <h1>Material 字段关系图与字段说明</h1>
+      <p>Unity 材质：控制模型表面颜色、贴图和渲染效果</p>
+      <div class="summary">
+        <div class="metric"><strong>0</strong><span>dump.cs 中字段总数</span></div>
+        <div class="metric"><strong>0</strong><span>建议重点分析字段</span></div>
+        <div class="metric"><strong>0</strong><span>可忽略但已统计字段</span></div>
+        <div class="metric"><strong>1</strong><span>字段表分页，每页 15 行</span></div>
+      </div>
+    </header>
+    <section class="graph">
+      <div class="panel"><div class="core"><strong>Material</strong><p>Unity 材质：控制模型表面颜色、贴图和渲染效果</p></div></div>
+      <div class="panel"><h2 style="margin-top:0">它直接保存的主要类型</h2><div class="nodes"><p class="section-note">没有字段直接保存其他主要类型。</p></div></div>
+    </section>
+    
+    <section class="panel section-panel">
+      <h2 style="margin-top:0">谁保存了这个类</h2>
+      <p class="section-note">只统计 dump.cs 里字段类型直接使用 Material 的类。</p>
+      <div class="nodes"><div class="node"><b>CopyColorPass</b><span>字段依据：m_SamplingMaterial / m_CopyColorMaterial</span><p>颜色配置类型：用于 UI、特效、渲染或阵营表现的颜色数据</p></div>
+<div class="node"><b>CopyDepthPass</b><span>字段依据：m_CopyDepthMaterial</span><p>项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</p></div>
+<div class="node"><b>CustomTexSheet</b><span>字段依据：mat</span><p>项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</p></div>
+<div class="node"><b>DeferredLights</b><span>字段依据：m_TileDepthInfoMaterial / m_TileDeferredMaterial / m_StencilDeferredMaterial</span><p>渲染/光照类型：用于渲染管线、光照、材质、后处理或屏幕效果</p></div>
+<div class="node"><b>FinalBlitPass</b><span>字段依据：m_BlitMaterial</span><p>项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</p></div>
+<div class="node"><b>ForwardRenderer</b><span>字段依据：m_BlitMaterial / m_CopyDepthMaterial / m_SamplingMaterial / m_ScreenspaceShadowsMaterial / m_TileDepthInfoMaterial / m_TileDeferredMaterial / m_StencilDeferredMaterial</span><p>渲染/光照类型：用于渲染管线、光照、材质、后处理或屏幕效果</p></div>
+<div class="node"><b>GhostBladeOneShinePass</b><span>字段依据：mat</span><p>项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</p></div>
+<div class="node"><b>Graphic</b><span>字段依据：s_DefaultUI / m_Material</span><p>寻路/导航类型：用于 AI 路径搜索、导航网格、避障或路径节点</p></div>
+<div class="node"><b>HUD_KillMsg</b><span>字段依据：additiveMaterial</span><p>HUD 界面组件：显示玩家状态、提示、图标或模式信息</p></div>
+<div class="node"><b>HUD_Role</b><span>字段依据：redFlashMat</span><p>HUD 界面组件：显示玩家状态、提示、图标或模式信息</p></div>
+<div class="node"><b>HumanCatchFeature</b><span>字段依据：overrideMat</span><p>项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</p></div>
+<div class="node"><b>HumanCatchPass</b><span>字段依据：mat</span><p>项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</p></div>
+<div class="node"><b>Image</b><span>字段依据：s_ETC1DefaultUI</span><p>Unity UI 图片：显示图标、准星、血条等界面元素</p></div>
+<div class="node"><b>Mask</b><span>字段依据：m_MaskMaterial / m_UnmaskMaterial</span><p>项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</p></div>
+<div class="node"><b>MaskableGraphic</b><span>字段依据：m_MaskMaterial</span><p>寻路/导航类型：用于 AI 路径搜索、导航网格、避障或路径节点</p></div>
+<div class="node"><b>MaterialEntry</b><span>字段依据：material</span><p>项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</p></div>
+<div class="node"><b>ModeBase</b><span>字段依据：timeFlashMat</span><p>玩法规则基类。它集中维护比分、回合、时间、复活、双方人数和计分板 UI，是具体模式规则的共同底座。</p></div>
+<div class="node"><b>PlayerMdlInfo.MatData</b><span>字段依据：mat</span><p>配置/数据类型：保存运行参数、资源引用、显示数据或系统配置</p></div>
+<div class="node"><b>PostProcessPass</b><span>字段依据：m_BlitMaterial</span><p>项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</p></div>
+<div class="node"><b>RenderObjects.RenderObjectsSettings</b><span>字段依据：overrideMaterial</span><p>渲染/光照类型：用于渲染管线、光照、材质、后处理或屏幕效果</p></div>
+<div class="node"><b>RenderObjectsPass</b><span>字段依据：&lt;overrideMaterial&gt;k__BackingField</span><p>渲染/光照类型：用于渲染管线、光照、材质、后处理或屏幕效果</p></div>
+<div class="node"><b>Renderer2D</b><span>字段依据：m_BlitMaterial</span><p>渲染/光照类型：用于渲染管线、光照、材质、后处理或屏幕效果</p></div>
+<div class="node"><b>Renderer2DData</b><span>字段依据：&lt;shadowMaterials&gt;k__BackingField / &lt;removeSelfShadowMaterials&gt;k__BackingField</span><p>渲染/光照类型：用于渲染管线、光照、材质、后处理或屏幕效果</p></div>
+<div class="node"><b>RendererListDesc</b><span>字段依据：overrideMaterial</span><p>渲染/光照类型：用于渲染管线、光照、材质、后处理或屏幕效果</p></div>
+<div class="node"><b>RenderingUtils</b><span>字段依据：s_ErrorMaterial</span><p>渲染/光照类型：用于渲染管线、光照、材质、后处理或屏幕效果</p></div>
+<div class="node"><b>RequiredReferences</b><span>字段依据：_material</span><p>项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</p></div>
+<div class="node"><b>RetainedGizmos</b><span>字段依据：surfaceMaterial / lineMaterial</span><p>项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</p></div>
+<div class="node"><b>SceneViewDepthCopyPass</b><span>字段依据：m_CopyDepthMaterial</span><p>项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</p></div>
+<div class="node"><b>ScreenSpaceAmbientOcclusion</b><span>字段依据：m_Material</span><p>项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</p></div>
+<div class="node"><b>ScreenSpaceAmbientOcclusion.ScreenSpaceAmbientOcclusionPass</b><span>字段依据：material</span><p>项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</p></div>
+<div class="node"><b>ScreenSpaceShadowResolvePass</b><span>字段依据：m_ScreenSpaceShadowsMaterial</span><p>项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</p></div>
+<div class="node"><b>SoftMask</b><span>字段依据：_material</span><p>项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</p></div>
+<div class="node"><b>SoftMaskable</b><span>字段依据：&lt;modifiedMaterial&gt;k__BackingField</span><p>项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</p></div>
+<div class="node"><b>StencilMaterial.MatEntry</b><span>字段依据：baseMat / customMat</span><p>项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</p></div>
+<div class="node"><b>Text</b><span>字段依据：s_DefaultText</span><p>Unity UI 文本组件。用于显示比分、回合、倒计时、模式提示等。</p></div>
+<div class="node"><b>TextureAnimation</b><span>字段依据：thisMaterial</span><p>UI 控件类型：用于界面布局、文本、按钮、滚动、图形或交互控件</p></div>
+<div class="node"><b>ThermalVisionPass</b><span>字段依据：mat</span><p>项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</p></div>
+<div class="node"><b>UniversalRenderPipelineEditorResources.MaterialResources</b><span>字段依据：lit / particleLit / terrainLit</span><p>渲染/光照类型：用于渲染管线、光照、材质、后处理或屏幕效果</p></div>
+<div class="node"><b>WallHackDetector</b><span>字段依据：wfMaterial</span><p>项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</p></div>
+<div class="node"><b>XRPass</b><span>字段依据：occlusionMeshMaterial</span><p>项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</p></div>
+<div class="node"><b>XRSystem</b><span>字段依据：occlusionMeshMaterial / mirrorViewMaterial</span><p>项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</p></div></div>
+    </section>
+    
+    <h2>字段系统分类统计</h2>
+    <section class="stats"><article class="stat-card"><strong>无字段</strong><span>0 个字段</span><p>dump.cs 中没有该类型的字段声明，通常是 Unity 基础类型、外部类型、空壳类型或只通过方法使用的类型。</p></article></section>
+    
+    <h2>字段说明</h2>
+    <section class="panel section-panel">
+      <p>Material 在 dump.cs 中没有普通字段或枚举值。它通常属于 Unity 基础组件、外部库类型、空壳类型，或者只通过方法和继承关系参与逻辑。本页重点看“谁保存了这个类”，用反向字段关系判断它在哪些系统里被使用。</p>
+    </section>
+    
+  </main>
+  <script>
+    const rows = Array.from(document.querySelectorAll('tbody tr[data-page]'));
+    const filter = document.getElementById('categoryFilter');
+    const pager = document.getElementById('pager');
+    const label = document.getElementById('pageLabel');
+    const visibleCount = document.getElementById('visibleCount');
+    const pageSize = 15;
+    let currentPage = 1;
+    function matchingRows() {
+      if (!filter) return rows;
+      const category = filter.value;
+      return rows.filter(row => category === '全部' || row.dataset.category === category);
+    }
+    function renderPager(totalPages) {
+      if (!pager) return;
+      pager.innerHTML = '';
+      for (let page = 1; page <= totalPages; page++) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.textContent = '第 ' + page + ' 页';
+        button.className = page === currentPage ? 'active' : '';
+        button.addEventListener('click', () => { currentPage = page; updateTable(); });
+        pager.appendChild(button);
+      }
+    }
+    function updateTable() {
+      const matched = matchingRows();
+      const totalPages = Math.max(1, Math.ceil(matched.length / pageSize));
+      if (currentPage > totalPages) currentPage = totalPages;
+      const start = (currentPage - 1) * pageSize;
+      const visibleSet = new Set(matched.slice(start, start + pageSize));
+      rows.forEach(row => row.style.display = visibleSet.has(row) ? '' : 'none');
+      if (visibleCount) visibleCount.textContent = matched.length;
+      if (label) label.textContent = '第 ' + currentPage + ' 页';
+      renderPager(totalPages);
+    }
+    if (filter) filter.addEventListener('change', () => { currentPage = 1; updateTable(); });
+    updateTable();
+  </script>
+</body>
+</html>

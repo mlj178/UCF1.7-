@@ -68,6 +68,8 @@
     var trackedPlayers = {};
     var trackedBots = {};
     var botUpdateSeen = {};
+    var allPlayersLogged = false;
+    var playerClientDataLogged = false;
 
     var isMy   = new NativeFunction(B.add(R.P_isMy),  'bool',   ['pointer','pointer']);
     var isDead = new NativeFunction(B.add(R.E_isDead), 'bool',   ['pointer','pointer']);
@@ -185,18 +187,34 @@
         L('i', '出生点: (' + spawn.x.toFixed(1) + ',' + spawn.y.toFixed(1) + ',' + spawn.z.toFixed(1) + ')');
         posBuf.writeFloat(spawn.x); posBuf.add(4).writeFloat(spawn.y); posBuf.add(8).writeFloat(spawn.z);
 
+        var allPlayersKeys = {};
         try {
             var ap = gm.add(O.GM_allPlayers).readPointer();
             if (ap && !ap.isNull()) {
                 var t = ap.add(0xC).readU32();
+                var allPlayersEntries = [];
                 for (var i = 0; i < t; i++) {
                     try {
                         var pp = ap.add(0x10 + i * 8).readPointer();
+                        allPlayersEntries.push(pp ? pp.toString() : 'null');
                         if (isValid(pp)) {
                             var pk = pp.toString();
+                            allPlayersKeys[pk] = true;
                             if (!trackedPlayers[pk]) trackedPlayers[pk] = pp;
                         }
-                    } catch(e) {}
+                    } catch(e) {
+                        allPlayersEntries.push('[read error]');
+                    }
+                }
+
+                // TEMP DEBUG: comment out this block when allPlayers logging is no longer needed.
+                if (!allPlayersLogged) {
+                    allPlayersLogged = true;
+                    send(JSON.stringify({
+                        t: 'allplayers',
+                        total: t,
+                        entries: allPlayersEntries
+                    }));
                 }
             }
         } catch(e) {}
@@ -208,6 +226,37 @@
                 var pk = e.player.toString();
                 if (!trackedPlayers[pk]) trackedPlayers[pk] = e.player;
             }
+        }
+
+        // TEMP DEBUG: comment out this block when Player ClientData logging is no longer needed.
+        if (!playerClientDataLogged) {
+            playerClientDataLogged = true;
+            var clientDataEntries = [];
+            var clientDataPlayerKeys = Object.keys(trackedPlayers);
+            for (var ci = 0; ci < clientDataPlayerKeys.length; ci++) {
+                var playerKey = clientDataPlayerKeys[ci];
+                var playerPtr = trackedPlayers[playerKey];
+                var clientData = rp(playerPtr, O.P_clientData);
+                var isBotValue = 'clientData=null';
+                if (clientData && !clientData.isNull()) {
+                    try {
+                        isBotValue = clientData.add(O.CD_isBot).readU8();
+                    } catch(e) {
+                        isBotValue = '[read error]';
+                    }
+                }
+                clientDataEntries.push({
+                    player: playerKey,
+                    source: allPlayersKeys[playerKey] ? 'allPlayers' : 'Bot.Update',
+                    clientData: clientData && !clientData.isNull() ? clientData.toString() : 'null',
+                    isBot: isBotValue
+                });
+            }
+            send(JSON.stringify({
+                t: 'player_clientdata',
+                total: clientDataEntries.length,
+                entries: clientDataEntries
+            }));
         }
 
         L('i', '追踪: ' + Object.keys(trackedPlayers).length + ' Player | ' + bKeys.length + ' Bot组件');

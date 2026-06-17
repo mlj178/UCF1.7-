@@ -400,6 +400,7 @@ class UniversalHookManager:
             capture_output=True,
             text=True,
             timeout=15,
+            creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0x08000000
         )
 
         # Check return code first

@@ -1,0 +1,79 @@
+// ammo.js - 无限子弹 plan4
+// 替换 ConsumeAmmo 函数，消耗子弹时返回 true 但不扣弹
+
+modules.ammo = (function() {
+  var enabled = false;
+  var hooks = [];
+
+  return {
+    enable: function() {
+      if (enabled) return;
+      var mod = Process.findModuleByName('GameAssembly.dll');
+      if (!mod) { sendLog('error', '无限子弹', 'GameAssembly.dll 未找到'); return; }
+      var base = mod.base;
+
+      try {
+        var addrConsumeAmmo = base.add(0xB61140);
+        Interceptor.replace(addrConsumeAmmo, new NativeCallback(function(thisPtr, methodInfo) {
+          return 1;
+        }, 'bool', ['pointer', 'pointer']));
+        hooks.push({ type: 'replace', addr: addrConsumeAmmo });
+        sendLog('info', '无限子弹', 'WPN_Gun.ConsumeAmmo 已替换');
+      } catch (e) {
+        sendLog('error', '无限子弹', '替换 WPN_Gun.ConsumeAmmo 失败: ' + e);
+      }
+
+      try {
+        var addrConsumeBase = base.add(0xB6C310);
+        Interceptor.replace(addrConsumeBase, new NativeCallback(function(thisPtr, methodInfo) {
+          return 1;
+        }, 'bool', ['pointer', 'pointer']));
+        hooks.push({ type: 'replace', addr: addrConsumeBase });
+        sendLog('info', '无限子弹', 'Weapon.ConsumeAmmo 已替换');
+      } catch (e) {
+        sendLog('info', '无限子弹', '替换 Weapon.ConsumeAmmo 失败: ' + e);
+      }
+
+      try {
+        var addrRpgFire = base.add(0xB670A0);
+        var addrRpgFillAmmo = base.add(0xB67070);
+        var rpgFillAmmoFn = new NativeFunction(addrRpgFillAmmo, 'void', ['pointer', 'pointer']);
+        
+        Interceptor.attach(addrRpgFire, {
+          onEnter: function(args) {
+            try {
+              var self = args[0];
+              if (self && !self.isNull()) {
+                rpgFillAmmoFn(self, ptr(0));
+              }
+            } catch (e) {}
+          }
+        });
+        hooks.push({ type: 'attach', addr: addrRpgFire });
+        sendLog('info', '无限子弹', 'RPG/AT4 无限子弹已启用');
+      } catch (e) {
+        sendLog('error', '无限子弹', 'RPG/AT4 初始化失败: ' + e);
+      }
+
+      enabled = true;
+      sendLog('success', '无限子弹', '已启用 (Zero ammo consumption)');
+      sendStatus('ammo', true);
+    },
+    disable: function() {
+      if (!enabled) return;
+      for (var i = 0; i < hooks.length; i++) {
+        try {
+          if (hooks[i].type === 'replace') {
+            Interceptor.revert(hooks[i].addr);
+          } else {
+            hooks[i].addr.detach();
+          }
+        } catch(e) {}
+      }
+      hooks = [];
+      enabled = false;
+      sendLog('info', '无限子弹', '已禁用');
+      sendStatus('ammo', false);
+    }
+  };
+})();

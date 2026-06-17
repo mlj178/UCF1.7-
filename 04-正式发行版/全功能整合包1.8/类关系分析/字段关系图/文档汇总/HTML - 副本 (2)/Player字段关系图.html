@@ -1,0 +1,324 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Player 字段关系图</title>
+  <style>
+    :root{--bg:#f3f5f8;--ink:#1f2633;--muted:#5f6878;--line:#cfd7e4;--core:#1f5fbf;--source:#315f9f;--target:#24724c}
+    *{box-sizing:border-box}html,body{margin:0;background:var(--bg);font-family:"Microsoft YaHei","Segoe UI",Arial,sans-serif;color:var(--ink)}
+    .canvas{width:100%;min-height:100vh;padding:12px}svg{display:block;width:100%;min-width:1180px;height:auto;background:#fff;border:1px solid var(--line);border-radius:8px}
+    .title{font-size:25px;font-weight:700;fill:var(--ink)}.note{font-size:13px;fill:var(--muted)}.lane{fill:#f8fafc;stroke:#e2e8f0;stroke-width:1;rx:12}
+    .core{fill:#eef5ff;stroke:var(--core);stroke-width:3;rx:12}.box,.source,.target,.empty{fill:#fff;stroke:#cbd5e1;stroke-width:1.5;rx:10}.source{fill:#f2f7ff}.target{fill:#f1fbf5}.empty{fill:#f8fafc}
+    .name{font-size:15px;font-weight:700;fill:#1f2633}.desc{font-size:12px;fill:var(--muted)}.count{font-size:14px;font-weight:700;fill:#1f7a4d}.lane-title{font-size:17px;font-weight:700;fill:#2d3748}
+    .edge{fill:none;stroke-width:2.7}.source-edge{stroke:var(--source)}.target-edge{stroke:var(--target)}.label{font-size:12px;fill:#344054}.label-bg{fill:#fff;stroke:#edf0f5;rx:5}
+  </style>
+</head>
+<body>
+<div class="canvas">
+<svg viewBox="0 0 1450 2752" role="img" aria-label="Player field relationship graph">
+  <defs>
+    <marker id="arrowSource" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><path d="M0,0 L9,3 L0,6 Z" fill="#315f9f"/></marker>
+    <marker id="arrowTarget" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><path d="M0,0 L9,3 L0,6 Z" fill="#24724c"/></marker>
+  </defs>
+  <text x="36" y="44" class="title">Player 字段关系图</text>
+  <text x="36" y="70" class="note">只统计 dump.cs 字段声明：左边是谁的字段保存了 Player；右边是 Player 自己字段保存的类型。委托事件字段和基础值不画。</text>
+
+  <rect class="lane" x="40" y="110" width="390" height="2592"/>
+  <rect class="lane" x="530" y="110" width="370" height="2592"/>
+  <rect class="lane" x="980" y="110" width="420" height="2592"/>
+  <text x="70" y="148" class="lane-title">谁保存了这个类</text>
+  <text x="70" y="172" class="note">通俗说：其他类字段里有没有它</text>
+  <text x="70" y="196" class="count">统计：21 / 21 已画出</text>
+  <text x="70" y="220" class="note">分析：有 21 个类字段保存 Player</text>
+  <text x="560" y="148" class="lane-title">当前类</text>
+  <text x="560" y="172" class="note">分析直接写在类名下面</text>
+  <text x="1010" y="148" class="lane-title">它保存了哪些类型</text>
+  <text x="1010" y="172" class="note">通俗说：这个类字段里有哪些对象</text>
+  <text x="1010" y="196" class="count">统计：24 / 24 已画出</text>
+  <text x="1010" y="220" class="note">分析：Player 字段直接保存 24 种非基础类型</text>
+
+  <rect class="core" x="610" y="340" width="280" height="170"/>
+  <text x="750" y="382" text-anchor="middle" style="font-size:24px;font-weight:700;fill:#1f5fbf">Player</text>
+  <text x="750" y="414" text-anchor="middle" class="desc">字段关系中心</text>
+  <text x="750" y="454" text-anchor="middle" class="desc">功能：玩家战斗对象</text>
+  <text x="750" y="477" text-anchor="middle" class="desc">Unity：实体组件，继承 Entity</text>
+  <text x="750" y="500" text-anchor="middle" class="desc">CF：承载生命、阵营、武器、角色模型、HUD 相关状态</text>
+
+  <g transform="translate(70 235)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">Bot</text>
+    <text x="18" y="49" class="desc">AI 玩家对象：自动寻路、索敌、开火的电脑角色</text>
+    <text x="18" y="69" class="desc">字段依据：&lt;thisPlayer&gt;k__BackingField</text>
+  </g>
+  <g transform="translate(70 333)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">Bot_GuardPos</text>
+    <text x="18" y="49" class="desc">Bot 防守点逻辑：让 AI 占位、巡逻或守点</text>
+    <text x="18" y="69" class="desc">字段依据：&lt;owner&gt;k__BackingField</text>
+  </g>
+  <g transform="translate(70 431)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">CameraManager</text>
+    <text x="18" y="49" class="desc">摄像机管理器：切换第一人称、观战、死亡等视角</text>
+    <text x="18" y="69" class="desc">字段依据：&lt;focusPlayer&gt;k__BackingField</text>
+  </g>
+  <g transform="translate(70 529)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">CharacterEffect</text>
+    <text x="18" y="49" class="desc">角色特效组件：控制角色身上的光效、受击或技能表现</text>
+    <text x="18" y="69" class="desc">字段依据：owner</text>
+  </g>
+  <g transform="translate(70 627)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">GameManager</text>
+    <text x="18" y="49" class="desc">对局总管理器：统一协调玩家、实体、模式、武器和回合</text>
+    <text x="18" y="69" class="desc">字段依据：myPlayer / allPlayers / playersBL / playersBL_Alive 等 7 个字段</text>
+  </g>
+  <g transform="translate(70 725)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">HUD_Crosshair</text>
+    <text x="18" y="49" class="desc">准星 HUD：根据玩家武器和状态显示准星</text>
+    <text x="18" y="69" class="desc">字段依据：player</text>
+  </g>
+  <g transform="translate(70 823)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">HUD_HeartBeatRadar</text>
+    <text x="18" y="49" class="desc">心跳雷达 HUD：显示被侦测敌人或特殊模式提示</text>
+    <text x="18" y="69" class="desc">字段依据：checkedEnemy</text>
+  </g>
+  <g transform="translate(70 921)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">HUD_KillMark.EventData</text>
+    <text x="18" y="49" class="desc">击杀标记数据：HUD 显示连杀、爆头等击杀反馈</text>
+    <text x="18" y="69" class="desc">字段依据：killer / dead</text>
+  </g>
+  <g transform="translate(70 1019)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">HUD_NanoRoleSign</text>
+    <text x="18" y="49" class="desc">纳米模式角色标识 HUD：显示纳米/终结者身份提示</text>
+    <text x="18" y="69" class="desc">字段依据：bindPlayer</text>
+  </g>
+  <g transform="translate(70 1117)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">MapGun</text>
+    <text x="18" y="49" class="desc">地图枪对象：地图上可拾取或使用的武器点</text>
+    <text x="18" y="69" class="desc">字段依据：occupier</text>
+  </g>
+  <g transform="translate(70 1215)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">ModeBase</text>
+    <text x="18" y="49" class="desc">玩法规则基类：胜负、计分、复活、回合流程</text>
+    <text x="18" y="69" class="desc">字段依据：myPlayer</text>
+  </g>
+  <g transform="translate(70 1313)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">ModeBase_Nano</text>
+    <text x="18" y="49" class="desc">纳米模式规则：终结者/幽灵相关玩法、吸收和胜负逻辑</text>
+    <text x="18" y="69" class="desc">字段依据：respawningPlayer / randomPlayerList</text>
+  </g>
+  <g transform="translate(70 1411)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">Model</text>
+    <text x="18" y="49" class="desc">模型基类：角色或物体表现层的父级结构</text>
+    <text x="18" y="69" class="desc">字段依据：&lt;owner&gt;k__BackingField</text>
+  </g>
+  <g transform="translate(70 1509)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">NanoRoleSelect</text>
+    <text x="18" y="49" class="desc">纳米角色选择数据：纳米模式角色选择或身份配置</text>
+    <text x="18" y="69" class="desc">字段依据：owner</text>
+  </g>
+  <g transform="translate(70 1607)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">PlayerData</text>
+    <text x="18" y="49" class="desc">玩家资料数据：保存玩家身份、队伍或对局基础资料</text>
+    <text x="18" y="69" class="desc">字段依据：&lt;revengeTarget&gt;k__BackingField</text>
+  </g>
+  <g transform="translate(70 1705)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">PlayerSkills</text>
+    <text x="18" y="49" class="desc">玩家技能集合：角色技能、被动或模式能力</text>
+    <text x="18" y="69" class="desc">字段依据：owner</text>
+  </g>
+  <g transform="translate(70 1803)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">PlayerVelocity</text>
+    <text x="18" y="49" class="desc">玩家速度数据：移动速度、跳跃或物理速度状态</text>
+    <text x="18" y="69" class="desc">字段依据：owner</text>
+  </g>
+  <g transform="translate(70 1901)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">PlayerWeapons</text>
+    <text x="18" y="49" class="desc">玩家武器管理：背包、当前武器、切枪和发枪</text>
+    <text x="18" y="69" class="desc">字段依据：owner</text>
+  </g>
+  <g transform="translate(70 1999)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">TabScoreBoard_PlayerData</text>
+    <text x="18" y="49" class="desc">TAB 记分板玩家数据：显示分数、击杀、死亡等</text>
+    <text x="18" y="69" class="desc">字段依据：&lt;player&gt;k__BackingField</text>
+  </g>
+  <g transform="translate(70 2097)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">TombStone</text>
+    <text x="18" y="49" class="desc">墓碑/死亡标记：玩家死亡后场景中的标记对象</text>
+    <text x="18" y="69" class="desc">字段依据：owner</text>
+  </g>
+  <g transform="translate(70 2195)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">WPN_GhostBlade</text>
+    <text x="18" y="49" class="desc">幽灵之刃武器：近战/特殊技能武器逻辑</text>
+    <text x="18" y="69" class="desc">字段依据：secKillTargets / killTarget</text>
+  </g>
+
+  <g transform="translate(1020 235)">
+    <rect class="target" width="360" height="78"/>
+    <text x="18" y="27" class="name">CharacterModel</text>
+    <text x="18" y="49" class="desc">角色模型表现：身体、动画、材质和挂点</text>
+    <text x="18" y="69" class="desc">字段依据：&lt;currentCharacter&gt;k__BackingField / characters</text>
+  </g>
+  <g transform="translate(1020 333)">
+    <rect class="target" width="360" height="78"/>
+    <text x="18" y="27" class="name">ClientData</text>
+    <text x="18" y="49" class="desc">房间/开局数据：玩家、阵营、背包等进场资料</text>
+    <text x="18" y="69" class="desc">字段依据：clientData</text>
+  </g>
+  <g transform="translate(1020 431)">
+    <rect class="target" width="360" height="78"/>
+    <text x="18" y="27" class="name">Coroutine</text>
+    <text x="18" y="49" class="desc">Unity 协程句柄：保存延时、复活、动画等待等异步流程</text>
+    <text x="18" y="69" class="desc">字段依据：respawn_Coroutine</text>
+  </g>
+  <g transform="translate(1020 529)">
+    <rect class="target" width="360" height="78"/>
+    <text x="18" y="27" class="name">EffectObj</text>
+    <text x="18" y="49" class="desc">特效对象：命中、爆炸、枪口火光等视觉效果实例</text>
+    <text x="18" y="69" class="desc">字段依据：bulletEffect</text>
+  </g>
+  <g transform="translate(1020 627)">
+    <rect class="target" width="360" height="78"/>
+    <text x="18" y="27" class="name">KeyInputState</text>
+    <text x="18" y="49" class="desc">按键输入状态：保存某个动作键的按下/松开状态</text>
+    <text x="18" y="69" class="desc">字段依据：&lt;input_Interact&gt;k__BackingField</text>
+  </g>
+  <g transform="translate(1020 725)">
+    <rect class="target" width="360" height="78"/>
+    <text x="18" y="27" class="name">MapTrigger</text>
+    <text x="18" y="49" class="desc">地图交互触发器：开关、占点、拾取或场景互动区域</text>
+    <text x="18" y="69" class="desc">字段依据：mapTrigger</text>
+  </g>
+  <g transform="translate(1020 823)">
+    <rect class="target" width="360" height="78"/>
+    <text x="18" y="27" class="name">Nano4T_Data</text>
+    <text x="18" y="49" class="desc">纳米 4T 模式数据：终结者模式角色/属性配置</text>
+    <text x="18" y="69" class="desc">字段依据：nano4TData</text>
+  </g>
+  <g transform="translate(1020 921)">
+    <rect class="target" width="360" height="78"/>
+    <text x="18" y="27" class="name">NanoRoleSelect</text>
+    <text x="18" y="49" class="desc">纳米角色选择数据：纳米模式角色选择或身份配置</text>
+    <text x="18" y="69" class="desc">字段依据：nanoRoleSelect</text>
+  </g>
+  <g transform="translate(1020 1019)">
+    <rect class="target" width="360" height="78"/>
+    <text x="18" y="27" class="name">ObscuredInt</text>
+    <text x="18" y="49" class="desc">加密整数：防作弊保护的数值字段</text>
+    <text x="18" y="69" class="desc">字段依据：&lt;nanoClothCount&gt;k__BackingField</text>
+  </g>
+  <g transform="translate(1020 1117)">
+    <rect class="target" width="360" height="78"/>
+    <text x="18" y="27" class="name">Player.RespawnType</text>
+    <text x="18" y="49" class="desc">玩家复活方式枚举：决定按队伍点、原地或敌方区域等规则复活</text>
+    <text x="18" y="69" class="desc">字段依据：respawnType</text>
+  </g>
+  <g transform="translate(1020 1215)">
+    <rect class="target" width="360" height="78"/>
+    <text x="18" y="27" class="name">PlayerCameraManager</text>
+    <text x="18" y="49" class="desc">玩家相机控制：玩家视角、后坐力和观察点管理</text>
+    <text x="18" y="69" class="desc">字段依据：cameraManager</text>
+  </g>
+  <g transform="translate(1020 1313)">
+    <rect class="target" width="360" height="78"/>
+    <text x="18" y="27" class="name">PlayerData</text>
+    <text x="18" y="49" class="desc">玩家资料数据：保存玩家身份、队伍或对局基础资料</text>
+    <text x="18" y="69" class="desc">字段依据：&lt;playerData&gt;k__BackingField</text>
+  </g>
+  <g transform="translate(1020 1411)">
+    <rect class="target" width="360" height="78"/>
+    <text x="18" y="27" class="name">PlayerInput</text>
+    <text x="18" y="49" class="desc">玩家输入封装：移动、开火、交互等输入状态</text>
+    <text x="18" y="69" class="desc">字段依据：&lt;input&gt;k__BackingField</text>
+  </g>
+  <g transform="translate(1020 1509)">
+    <rect class="target" width="360" height="78"/>
+    <text x="18" y="27" class="name">PlayerMdlInfo</text>
+    <text x="18" y="49" class="desc">玩家模型信息：角色模型、皮肤或显示状态资料</text>
+    <text x="18" y="69" class="desc">字段依据：&lt;modelInfo&gt;k__BackingField</text>
+  </g>
+  <g transform="translate(1020 1607)">
+    <rect class="target" width="360" height="78"/>
+    <text x="18" y="27" class="name">PlayerSkills</text>
+    <text x="18" y="49" class="desc">玩家技能集合：角色技能、被动或模式能力</text>
+    <text x="18" y="69" class="desc">字段依据：skills</text>
+  </g>
+  <g transform="translate(1020 1705)">
+    <rect class="target" width="360" height="78"/>
+    <text x="18" y="27" class="name">PlayerVelocity</text>
+    <text x="18" y="49" class="desc">玩家速度数据：移动速度、跳跃或物理速度状态</text>
+    <text x="18" y="69" class="desc">字段依据：&lt;velData&gt;k__BackingField</text>
+  </g>
+  <g transform="translate(1020 1803)">
+    <rect class="target" width="360" height="78"/>
+    <text x="18" y="27" class="name">PlayerWeapons</text>
+    <text x="18" y="49" class="desc">玩家武器管理：背包、当前武器、切枪和发枪</text>
+    <text x="18" y="69" class="desc">字段依据：&lt;wpns&gt;k__BackingField</text>
+  </g>
+  <g transform="translate(1020 1901)">
+    <rect class="target" width="360" height="78"/>
+    <text x="18" y="27" class="name">PropertyModifier</text>
+    <text x="18" y="49" class="desc">属性修改器：临时改变速度、弹药、控制等属性</text>
+    <text x="18" y="69" class="desc">字段依据：Modifier_MoveSpeedRatio</text>
+  </g>
+  <g transform="translate(1020 1999)">
+    <rect class="target" width="360" height="78"/>
+    <text x="18" y="27" class="name">Recoil</text>
+    <text x="18" y="49" class="desc">后坐力数据：控制开火时视角/枪口上跳</text>
+    <text x="18" y="69" class="desc">字段依据：recoil</text>
+  </g>
+  <g transform="translate(1020 2097)">
+    <rect class="target" width="360" height="78"/>
+    <text x="18" y="27" class="name">Transform</text>
+    <text x="18" y="49" class="desc">Unity 变换组件：位置、旋转、层级挂点</text>
+    <text x="18" y="69" class="desc">字段依据：&lt;characterContainer&gt;k__BackingField / &lt;climbStair&gt;k__BackingField</text>
+  </g>
+  <g transform="translate(1020 2195)">
+    <rect class="target" width="360" height="78"/>
+    <text x="18" y="27" class="name">Vector2</text>
+    <text x="18" y="49" class="desc">二维向量：UI、坐标或平面数值</text>
+    <text x="18" y="69" class="desc">字段依据：cameraRotation</text>
+  </g>
+  <g transform="translate(1020 2293)">
+    <rect class="target" width="360" height="78"/>
+    <text x="18" y="27" class="name">Vector3</text>
+    <text x="18" y="49" class="desc">三维向量：世界坐标、方向、命中位置</text>
+    <text x="18" y="69" class="desc">字段依据：playerGravity / &lt;spawnPos&gt;k__BackingField</text>
+  </g>
+  <g transform="translate(1020 2391)">
+    <rect class="target" width="360" height="78"/>
+    <text x="18" y="27" class="name">WPN_Gun.AmmoData</text>
+    <text x="18" y="49" class="desc">枪械弹药数据：当前弹匣、备弹和弹药显示</text>
+    <text x="18" y="69" class="desc">字段依据：&lt;mapGunAmmo1&gt;k__BackingField / &lt;mapGunAmmo2&gt;k__BackingField</text>
+  </g>
+  <g transform="translate(1020 2489)">
+    <rect class="target" width="360" height="78"/>
+    <text x="18" y="27" class="name">WeaponBag</text>
+    <text x="18" y="49" class="desc">武器背包配置：玩家进场携带的主武器、副武器和道具</text>
+    <text x="18" y="69" class="desc">字段依据：&lt;weaponBag&gt;k__BackingField</text>
+  </g>
+<path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 274 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 372 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 470 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 568 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 666 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 764 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 862 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 960 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 1058 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 1156 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 1254 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 1352 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 1450 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 1548 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 1646 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 1744 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 1842 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 1940 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 2038 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 2136 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 2234 H575 V430 H660"/>
+<path class="edge target-edge" marker-end="url(#arrowTarget)" d="M840 430 H940 V274 H1020"/><path class="edge target-edge" marker-end="url(#arrowTarget)" d="M840 430 H940 V372 H1020"/><path class="edge target-edge" marker-end="url(#arrowTarget)" d="M840 430 H940 V470 H1020"/><path class="edge target-edge" marker-end="url(#arrowTarget)" d="M840 430 H940 V568 H1020"/><path class="edge target-edge" marker-end="url(#arrowTarget)" d="M840 430 H940 V666 H1020"/><path class="edge target-edge" marker-end="url(#arrowTarget)" d="M840 430 H940 V764 H1020"/><path class="edge target-edge" marker-end="url(#arrowTarget)" d="M840 430 H940 V862 H1020"/><path class="edge target-edge" marker-end="url(#arrowTarget)" d="M840 430 H940 V960 H1020"/><path class="edge target-edge" marker-end="url(#arrowTarget)" d="M840 430 H940 V1058 H1020"/><path class="edge target-edge" marker-end="url(#arrowTarget)" d="M840 430 H940 V1156 H1020"/><path class="edge target-edge" marker-end="url(#arrowTarget)" d="M840 430 H940 V1254 H1020"/><path class="edge target-edge" marker-end="url(#arrowTarget)" d="M840 430 H940 V1352 H1020"/><path class="edge target-edge" marker-end="url(#arrowTarget)" d="M840 430 H940 V1450 H1020"/><path class="edge target-edge" marker-end="url(#arrowTarget)" d="M840 430 H940 V1548 H1020"/><path class="edge target-edge" marker-end="url(#arrowTarget)" d="M840 430 H940 V1646 H1020"/><path class="edge target-edge" marker-end="url(#arrowTarget)" d="M840 430 H940 V1744 H1020"/><path class="edge target-edge" marker-end="url(#arrowTarget)" d="M840 430 H940 V1842 H1020"/><path class="edge target-edge" marker-end="url(#arrowTarget)" d="M840 430 H940 V1940 H1020"/><path class="edge target-edge" marker-end="url(#arrowTarget)" d="M840 430 H940 V2038 H1020"/><path class="edge target-edge" marker-end="url(#arrowTarget)" d="M840 430 H940 V2136 H1020"/><path class="edge target-edge" marker-end="url(#arrowTarget)" d="M840 430 H940 V2234 H1020"/><path class="edge target-edge" marker-end="url(#arrowTarget)" d="M840 430 H940 V2332 H1020"/><path class="edge target-edge" marker-end="url(#arrowTarget)" d="M840 430 H940 V2430 H1020"/><path class="edge target-edge" marker-end="url(#arrowTarget)" d="M840 430 H940 V2528 H1020"/>
+</svg>
+</div>
+</body>
+</html>

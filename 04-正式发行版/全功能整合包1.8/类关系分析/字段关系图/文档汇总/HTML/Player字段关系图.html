@@ -1,0 +1,941 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Player 字段关系图与字段说明</title>
+  <style>
+    :root { --bg:#f4f6f8; --panel:#ffffff; --ink:#1f2937; --muted:#667085; --line:#d9e1ec; --blue:#2457a6; --green:#207450; --amber:#9a5b13; }
+    * { box-sizing:border-box; }
+    body { margin:0; background:var(--bg); color:var(--ink); font-family:"Microsoft YaHei","Segoe UI",Arial,sans-serif; }
+    .page { max-width:1360px; margin:0 auto; padding:18px; }
+    header,.panel,table { background:var(--panel); border:1px solid var(--line); border-radius:8px; }
+    header { padding:18px 20px; }
+    h1 { margin:0 0 8px; font-size:26px; letter-spacing:0; }
+    h2 { margin:26px 0 12px; font-size:20px; }
+    p { margin:0; line-height:1.65; }
+    .summary { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; margin-top:16px; }
+    .metric { border:1px solid var(--line); border-radius:8px; padding:12px; background:#fafcff; }
+    .metric strong { display:block; font-size:24px; color:var(--blue); }
+    .metric span { color:var(--muted); font-size:13px; }
+    .graph { display:grid; grid-template-columns:1fr 1.1fr; gap:14px; margin-top:16px; }
+    .panel { padding:16px; }
+    .core { border:2px solid var(--blue); background:#eef5ff; border-radius:8px; padding:16px; }
+    .core strong { display:block; font-size:24px; color:var(--blue); margin-bottom:8px; }
+    .section-panel { margin-top:14px; }
+    .section-note { color:var(--muted); font-size:13px; margin-bottom:12px; }
+    .nodes { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; margin-top:12px; }
+    .node { border:1px solid #cbd8e8; background:#fbfdff; border-radius:8px; padding:10px; min-height:112px; }
+    .node b { display:block; color:var(--green); margin-bottom:4px; }
+    .node span { display:block; color:var(--muted); font-size:13px; line-height:1.45; }
+    .node p { color:#344054; font-size:13px; line-height:1.55; margin-top:8px; }
+    .stats { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; }
+    .stat-card { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:12px; min-height:116px; }
+    .stat-card strong { display:block; font-size:16px; margin-bottom:6px; }
+    .stat-card span { display:inline-block; color:#fff; background:var(--blue); border-radius:999px; padding:3px 9px; font-size:12px; margin-bottom:8px; }
+    .stat-card p { color:var(--muted); font-size:13px; }
+    .toolbar { display:flex; align-items:center; justify-content:space-between; gap:12px; margin:16px 0 8px; flex-wrap:wrap; }
+    .filters,.pager { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+    button,select { border:1px solid var(--line); background:#fff; color:var(--ink); border-radius:6px; padding:8px 12px; cursor:pointer; font:inherit; }
+    button.active { background:var(--blue); color:#fff; border-color:var(--blue); }
+    .hint,.footnote { color:var(--muted); font-size:13px; }
+    table { width:100%; border-collapse:separate; border-spacing:0; overflow:hidden; }
+    th,td { padding:11px 12px; border-bottom:1px solid #edf1f6; vertical-align:top; text-align:left; }
+    th { background:#f8fafc; font-size:13px; color:#344054; }
+    tr:last-child td { border-bottom:0; }
+    td.num { width:44px; color:var(--muted); }
+    td strong { display:block; margin-bottom:4px; }
+    td span, small { display:block; color:var(--muted); font-size:12px; line-height:1.45; }
+    code { white-space:nowrap; color:#344054; background:#f3f6fa; border:1px solid #e0e7ef; border-radius:5px; padding:2px 5px; }
+    .badge { display:inline-block; border-radius:999px; padding:3px 8px; font-size:12px; margin-top:8px; }
+    .badge.keep { background:#eaf7ef; color:var(--green); }
+    .badge.ignore { background:#fff4e5; color:var(--amber); }
+    .footnote { margin-top:14px; }
+    @media (max-width: 900px) { .summary,.graph,.stats,.nodes { grid-template-columns:1fr; } table { font-size:13px; } code { white-space:normal; } }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header>
+      <h1>Player 字段关系图与字段说明</h1>
+      <p>玩家对象：本机/敌我玩家的战斗状态主体</p>
+      <div class="summary">
+        <div class="metric"><strong>57</strong><span>dump.cs 中字段总数</span></div>
+        <div class="metric"><strong>18</strong><span>建议重点分析字段</span></div>
+        <div class="metric"><strong>39</strong><span>可忽略但已统计字段</span></div>
+        <div class="metric"><strong>4</strong><span>字段表分页，每页 15 行</span></div>
+      </div>
+    </header>
+    <section class="graph">
+      <div class="panel"><div class="core"><strong>Player</strong><p>玩家对象：本机/敌我玩家的战斗状态主体</p></div></div>
+      <div class="panel"><h2 style="margin-top:0">它直接保存的主要类型</h2><div class="nodes">
+        <div class="node">
+          <b>CharacterModel</b>
+          <span>字段依据：&lt;currentCharacter&gt;k__BackingField / characters</span>
+          <p>角色模型表现：身体、动画、材质和挂点</p>
+        </div>
+        
+
+        <div class="node">
+          <b>ClientData</b>
+          <span>字段依据：clientData</span>
+          <p>房间/开局数据：玩家、阵营、背包等进场资料</p>
+        </div>
+        
+
+        <div class="node">
+          <b>Coroutine</b>
+          <span>字段依据：respawn_Coroutine</span>
+          <p>Unity 协程句柄：保存延时、复活、动画等待等异步流程</p>
+        </div>
+        
+
+        <div class="node">
+          <b>EffectObj</b>
+          <span>字段依据：bulletEffect</span>
+          <p>特效对象：命中、爆炸、枪口火光等视觉效果实例</p>
+        </div>
+        
+
+        <div class="node">
+          <b>KeyInputState</b>
+          <span>字段依据：&lt;input_Interact&gt;k__BackingField</span>
+          <p>按键输入状态：保存某个动作键的按下/松开状态</p>
+        </div>
+        
+
+        <div class="node">
+          <b>MapTrigger</b>
+          <span>字段依据：mapTrigger</span>
+          <p>地图交互触发器：开关、占点、拾取或场景互动区域</p>
+        </div>
+        
+
+        <div class="node">
+          <b>Nano4T_Data</b>
+          <span>字段依据：nano4TData</span>
+          <p>纳米 4T 模式数据：终结者模式角色/属性配置</p>
+        </div>
+        
+
+        <div class="node">
+          <b>NanoRoleSelect</b>
+          <span>字段依据：nanoRoleSelect</span>
+          <p>纳米角色选择数据：纳米模式角色选择或身份配置</p>
+        </div>
+        
+
+        <div class="node">
+          <b>ObscuredInt</b>
+          <span>字段依据：&lt;nanoClothCount&gt;k__BackingField</span>
+          <p>加密整数：防作弊保护的数值字段</p>
+        </div>
+        
+
+        <div class="node">
+          <b>PlayerCameraManager</b>
+          <span>字段依据：cameraManager</span>
+          <p>玩家相机控制：玩家视角、后坐力和观察点管理</p>
+        </div>
+        
+
+        <div class="node">
+          <b>PlayerData</b>
+          <span>字段依据：&lt;playerData&gt;k__BackingField</span>
+          <p>玩家资料数据：保存玩家身份、队伍或对局基础资料</p>
+        </div>
+        
+
+        <div class="node">
+          <b>PlayerInput</b>
+          <span>字段依据：&lt;input&gt;k__BackingField</span>
+          <p>玩家输入封装：移动、开火、交互等输入状态</p>
+        </div>
+        
+
+        <div class="node">
+          <b>PlayerMdlInfo</b>
+          <span>字段依据：&lt;modelInfo&gt;k__BackingField</span>
+          <p>玩家模型信息：角色模型、皮肤或显示状态资料</p>
+        </div>
+        
+
+        <div class="node">
+          <b>PlayerSkills</b>
+          <span>字段依据：skills</span>
+          <p>玩家技能集合：角色技能、被动或模式能力</p>
+        </div>
+        
+
+        <div class="node">
+          <b>PlayerVelocity</b>
+          <span>字段依据：&lt;velData&gt;k__BackingField</span>
+          <p>玩家速度数据：移动速度、跳跃或物理速度状态</p>
+        </div>
+        
+
+        <div class="node">
+          <b>PlayerWeapons</b>
+          <span>字段依据：&lt;wpns&gt;k__BackingField</span>
+          <p>玩家武器管理：背包、当前武器、切枪和发枪</p>
+        </div>
+        
+
+        <div class="node">
+          <b>PropertyModifier</b>
+          <span>字段依据：Modifier_MoveSpeedRatio</span>
+          <p>属性修改器：临时改变速度、弹药、控制等属性</p>
+        </div>
+        
+
+        <div class="node">
+          <b>readonly float</b>
+          <span>字段依据：defaultMoveSpeed / playerHeight / crouchSubHeight / mapCmrHeight / mapCmrCrouchSubHeight</span>
+          <p>项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</p>
+        </div>
+        
+
+        <div class="node">
+          <b>readonly Vector3</b>
+          <span>字段依据：playerGravity</span>
+          <p>空间数据类型：保存位置、方向、旋转、速度或坐标信息</p>
+        </div>
+        
+
+        <div class="node">
+          <b>Recoil</b>
+          <span>字段依据：recoil</span>
+          <p>后坐力数据：控制开火时视角/枪口上跳</p>
+        </div>
+        
+
+        <div class="node">
+          <b>RefBool</b>
+          <span>字段依据：CameraRotDisabled_BuffUpdater / JumpDisabled_BuffUpdater / InfinityAmmo_BuffUpdater</span>
+          <p>布尔引用值：用于共享开关、禁用状态或 Buff 状态</p>
+        </div>
+        
+
+        <div class="node">
+          <b>Transform</b>
+          <span>字段依据：&lt;characterContainer&gt;k__BackingField / &lt;climbStair&gt;k__BackingField</span>
+          <p>Unity 变换组件：位置、旋转、层级挂点</p>
+        </div>
+        
+
+        <div class="node">
+          <b>Vector2</b>
+          <span>字段依据：cameraRotation</span>
+          <p>二维向量：UI、坐标或平面数值</p>
+        </div>
+        
+
+        <div class="node">
+          <b>Vector3</b>
+          <span>字段依据：&lt;spawnPos&gt;k__BackingField</span>
+          <p>三维向量：世界坐标、方向、命中位置</p>
+        </div>
+        
+
+        <div class="node">
+          <b>WeaponBag</b>
+          <span>字段依据：&lt;weaponBag&gt;k__BackingField</span>
+          <p>武器背包配置：玩家进场携带的主武器、副武器和道具</p>
+        </div>
+        
+
+        <div class="node">
+          <b>WPN_Gun.AmmoData</b>
+          <span>字段依据：&lt;mapGunAmmo1&gt;k__BackingField / &lt;mapGunAmmo2&gt;k__BackingField</span>
+          <p>枪械弹药数据：当前弹匣、备弹和弹药显示</p>
+        </div>
+        </div></div>
+    </section>
+    
+    <section class="panel section-panel">
+      <h2 style="margin-top:0">谁保存了这个类</h2>
+      <p class="section-note">只统计 dump.cs 里字段类型直接使用 Player 的类。</p>
+      <div class="nodes"><div class="node"><b>Bot</b><span>字段依据：&lt;thisPlayer&gt;k__BackingField</span><p>AI 玩家对象：自动寻路、索敌、开火的电脑角色</p></div>
+<div class="node"><b>Bot_GuardPos</b><span>字段依据：&lt;owner&gt;k__BackingField</span><p>Bot 防守点逻辑：让 AI 占位、巡逻或守点</p></div>
+<div class="node"><b>CameraManager</b><span>字段依据：&lt;focusPlayer&gt;k__BackingField</span><p>摄像机管理器：切换第一人称、观战、死亡等视角</p></div>
+<div class="node"><b>CharacterEffect</b><span>字段依据：owner</span><p>角色特效组件：控制角色身上的光效、受击或技能表现</p></div>
+<div class="node"><b>GameManager</b><span>字段依据：myPlayer / allPlayers / playersBL / playersBL_Alive / playersGR / playersGR_Alive / &lt;ace&gt;k__BackingField</span><p>一局对战的全局总控。它保存玩家、阵营、模式、武器数据、角色/武器资源池，并通过事件把伤害、死亡、出生、回合开始等流程通知给其他系统。</p></div>
+<div class="node"><b>HUD_Crosshair</b><span>字段依据：player</span><p>准星 HUD：根据玩家武器和状态显示准星</p></div>
+<div class="node"><b>HUD_HeartBeatRadar</b><span>字段依据：checkedEnemy</span><p>心跳雷达 HUD：显示被侦测敌人或特殊模式提示</p></div>
+<div class="node"><b>HUD_KillMark.EventData</b><span>字段依据：killer / dead</span><p>击杀标记数据：HUD 显示连杀、爆头等击杀反馈</p></div>
+<div class="node"><b>HUD_NanoRoleSign</b><span>字段依据：bindPlayer</span><p>纳米模式角色标识 HUD：显示纳米/终结者身份提示</p></div>
+<div class="node"><b>MapGun</b><span>字段依据：occupier</span><p>地图枪对象：地图上可拾取或使用的武器点</p></div>
+<div class="node"><b>ModeBase</b><span>字段依据：myPlayer</span><p>玩法规则基类。它集中维护比分、回合、时间、复活、双方人数和计分板 UI，是具体模式规则的共同底座。</p></div>
+<div class="node"><b>ModeBase_Nano</b><span>字段依据：respawningPlayer / randomPlayerList</span><p>纳米模式规则扩展。它继承玩法规则基类，并额外保存纳米模式里死亡后转化或吸收相关的角色状态。</p></div>
+<div class="node"><b>Model</b><span>字段依据：&lt;owner&gt;k__BackingField</span><p>模型基类：角色或物体表现层的父级结构</p></div>
+<div class="node"><b>NanoRoleSelect</b><span>字段依据：owner</span><p>纳米角色选择数据：纳米模式角色选择或身份配置</p></div>
+<div class="node"><b>PlayerData</b><span>字段依据：&lt;revengeTarget&gt;k__BackingField</span><p>玩家资料数据：保存玩家身份、队伍或对局基础资料</p></div>
+<div class="node"><b>PlayerSkills</b><span>字段依据：owner</span><p>玩家技能集合：角色技能、被动或模式能力</p></div>
+<div class="node"><b>PlayerVelocity</b><span>字段依据：owner</span><p>玩家速度数据：移动速度、跳跃或物理速度状态</p></div>
+<div class="node"><b>PlayerWeapons</b><span>字段依据：owner</span><p>玩家武器管理：背包、当前武器、切枪和发枪</p></div>
+<div class="node"><b>TabScoreBoard_PlayerData</b><span>字段依据：&lt;player&gt;k__BackingField</span><p>TAB 记分板玩家数据：显示分数、击杀、死亡等</p></div>
+<div class="node"><b>TombStone</b><span>字段依据：owner</span><p>墓碑/死亡标记：玩家死亡后场景中的标记对象</p></div>
+<div class="node"><b>WPN_GhostBlade</b><span>字段依据：secKillTargets / killTarget</span><p>幽灵之刃武器：近战/特殊技能武器逻辑</p></div></div>
+    </section>
+    
+    <h2>字段系统分类统计</h2>
+    <section class="stats">
+        <article class="stat-card">
+          <strong>武器与伤害结算</strong>
+          <span>7 个字段</span>
+          <p>负责武器、弹药、命中、伤害、死亡和击杀反馈。</p>
+        </article>
+        
+
+        <article class="stat-card">
+          <strong>Bot/AI/寻路</strong>
+          <span>8 个字段</span>
+          <p>负责电脑玩家目标、路径、动作和决策状态。</p>
+        </article>
+        
+
+        <article class="stat-card">
+          <strong>地图与出生点</strong>
+          <span>9 个字段</span>
+          <p>负责地图点位、出生点、触发区域和补给空间。</p>
+        </article>
+        
+
+        <article class="stat-card">
+          <strong>纳米/特殊规则</strong>
+          <span>3 个字段</span>
+          <p>负责纳米模式身份、死亡转化或特殊规则。</p>
+        </article>
+        
+
+        <article class="stat-card">
+          <strong>角色模型与表现资源</strong>
+          <span>4 个字段</span>
+          <p>负责角色模型、动画、声音、特效、材质和外观资源。</p>
+        </article>
+        
+
+        <article class="stat-card">
+          <strong>相机/视角/渲染</strong>
+          <span>4 个字段</span>
+          <p>负责玩家视角、观战、FOV、材质和渲染表现。</p>
+        </article>
+        
+
+        <article class="stat-card">
+          <strong>数据结构/工具/对象池</strong>
+          <span>9 个字段</span>
+          <p>负责列表、字典、缓存、配置和对象复用。</p>
+        </article>
+        
+
+        <article class="stat-card">
+          <strong>玩法规则/比分回合</strong>
+          <span>2 个字段</span>
+          <p>负责比分、目标分数、目标回合和回合推进。</p>
+        </article>
+        
+
+        <article class="stat-card">
+          <strong>玩法规则/时间复活</strong>
+          <span>4 个字段</span>
+          <p>负责对局倒计时、剩余时间和复活等待。</p>
+        </article>
+        
+
+        <article class="stat-card">
+          <strong>玩家与阵营统计</strong>
+          <span>7 个字段</span>
+          <p>负责双方人数、存活人数和本机玩家引用。</p>
+        </article>
+        </section>
+    
+    <h2>字段完整说明</h2>
+    <div class="toolbar">
+      <div class="filters">
+        <label for="categoryFilter">字段系统分类</label>
+        <select id="categoryFilter">
+          <option value="全部">全部字段（57）</option>
+          <option value="武器与伤害结算">武器与伤害结算（7）</option>
+<option value="Bot/AI/寻路">Bot/AI/寻路（8）</option>
+<option value="地图与出生点">地图与出生点（9）</option>
+<option value="纳米/特殊规则">纳米/特殊规则（3）</option>
+<option value="角色模型与表现资源">角色模型与表现资源（4）</option>
+<option value="相机/视角/渲染">相机/视角/渲染（4）</option>
+<option value="数据结构/工具/对象池">数据结构/工具/对象池（9）</option>
+<option value="玩法规则/比分回合">玩法规则/比分回合（2）</option>
+<option value="玩法规则/时间复活">玩法规则/时间复活（4）</option>
+<option value="玩家与阵营统计">玩家与阵营统计（7）</option>
+        </select>
+      </div>
+      <div class="pager" id="pager"></div>
+      <div class="hint">当前显示 <span id="pageLabel">第 1 页</span>，筛选后 <span id="visibleCount">57</span> 个字段；可忽略字段不会遗漏，只是不进入主要类关系判断。</div>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>字段</th>
+          <th>类型</th>
+          <th>功能分类与解释</th>
+          <th>修改/忽略建议</th>
+        </tr>
+      </thead>
+      <tbody>
+            <tr data-page="1" data-category="数据结构/工具/对象池">
+              <td class="num">1</td>
+              <td><strong>defaultMoveSpeed</strong><span>public / static / offset 0x0</span></td>
+              <td><code>readonly float</code></td>
+              <td><b>数据结构/工具/对象池</b><p>defaultMoveSpeed 保存 readonly float 类型的运行时引用或配置值，用于支撑 Player 的当前系统职责。</p></td>
+              <td><p>先按字段所属系统读取；需要修改时优先追踪该字段的读写方法。</p><span class="badge keep">纳入重点分析</span></td>
+            </tr>
+            
+
+            <tr data-page="1" data-category="玩家与阵营统计">
+              <td class="num">2</td>
+              <td><strong>playerHeight</strong><span>public / static / offset 0x4</span></td>
+              <td><code>readonly float</code></td>
+              <td><b>玩家与阵营统计</b><p>playerHeight 与玩家、阵营或存活统计相关，用于对局胜负、复活和 HUD 显示。</p></td>
+              <td><p>读为主；修改时要同步 GameManager 和 UI。</p><span class="badge keep">纳入重点分析</span></td>
+            </tr>
+            
+
+            <tr data-page="1" data-category="数据结构/工具/对象池">
+              <td class="num">3</td>
+              <td><strong>crouchSubHeight</strong><span>public / static / offset 0x8</span></td>
+              <td><code>readonly float</code></td>
+              <td><b>数据结构/工具/对象池</b><p>crouchSubHeight 保存 readonly float 类型的运行时引用或配置值，用于支撑 Player 的当前系统职责。</p></td>
+              <td><p>先按字段所属系统读取；需要修改时优先追踪该字段的读写方法。</p><span class="badge keep">纳入重点分析</span></td>
+            </tr>
+            
+
+            <tr data-page="1" data-category="地图与出生点">
+              <td class="num">4</td>
+              <td><strong>mapCmrHeight</strong><span>public / static / offset 0xC</span></td>
+              <td><code>readonly float</code></td>
+              <td><b>地图与出生点</b><p>mapCmrHeight 与地图点位、出生点、触发区域或补给点有关，用于组织场景玩法空间。</p></td>
+              <td><p>适合查出生、补给、地图互动；改点位要注意阵营和模式限制。</p><span class="badge keep">纳入重点分析</span></td>
+            </tr>
+            
+
+            <tr data-page="1" data-category="地图与出生点">
+              <td class="num">5</td>
+              <td><strong>mapCmrCrouchSubHeight</strong><span>public / static / offset 0x10</span></td>
+              <td><code>readonly float</code></td>
+              <td><b>地图与出生点</b><p>mapCmrCrouchSubHeight 与地图点位、出生点、触发区域或补给点有关，用于组织场景玩法空间。</p></td>
+              <td><p>适合查出生、补给、地图互动；改点位要注意阵营和模式限制。</p><span class="badge keep">纳入重点分析</span></td>
+            </tr>
+            
+
+            <tr data-page="1" data-category="玩家与阵营统计">
+              <td class="num">6</td>
+              <td><strong>playerGravity</strong><span>public / static / offset 0x14</span></td>
+              <td><code>readonly Vector3</code></td>
+              <td><b>玩家与阵营统计</b><p>playerGravity 与玩家、阵营或存活统计相关，用于对局胜负、复活和 HUD 显示。</p></td>
+              <td><p>读为主；修改时要同步 GameManager 和 UI。</p><span class="badge keep">纳入重点分析</span></td>
+            </tr>
+            
+
+            <tr data-page="1" data-category="相机/视角/渲染">
+              <td class="num">7</td>
+              <td><strong>cameraManager</strong><span>public / instance / offset 0x48</span></td>
+              <td><code>PlayerCameraManager</code></td>
+              <td><b>相机/视角/渲染</b><p>cameraManager 与相机视角、FOV、观战、渲染材质或后处理表现有关。</p></td>
+              <td><p>多为表现层字段；改动前确认是否影响第一人称/观战视角。</p><span class="badge keep">纳入重点分析</span></td>
+            </tr>
+            
+
+            <tr data-page="1" data-category="相机/视角/渲染">
+              <td class="num">8</td>
+              <td><strong>cameraRotation</strong><span>private / instance / offset 0x4C</span></td>
+              <td><code>Vector2</code></td>
+              <td><b>相机/视角/渲染</b><p>cameraRotation 与相机视角、FOV、观战、渲染材质或后处理表现有关。</p></td>
+              <td><p>多为表现层字段；改动前确认是否影响第一人称/观战视角。</p><span class="badge keep">纳入重点分析</span></td>
+            </tr>
+            
+
+            <tr data-page="1" data-category="武器与伤害结算">
+              <td class="num">9</td>
+              <td><strong>recoil</strong><span>public / instance / offset 0x54</span></td>
+              <td><code>Recoil</code></td>
+              <td><b>武器与伤害结算</b><p>recoil 与武器、弹药、命中、伤害或死亡结算有关，是战斗数值和反馈链路的一部分。</p></td>
+              <td><p>适合查武器参数、伤害结算或击杀反馈；修改时注意玩法规则是否二次限制。</p><span class="badge keep">纳入重点分析</span></td>
+            </tr>
+            
+
+            <tr data-page="1" data-category="Bot/AI/寻路">
+              <td class="num">10</td>
+              <td><strong>&lt;characterContainer&gt;k__BackingField</strong><span>private / instance / offset 0x58</span></td>
+              <td><code>Transform</code></td>
+              <td><b>Bot/AI/寻路</b><p>&lt;characterContainer&gt;k__BackingField 与 Bot 行为、目标选择、寻路或 AI 状态有关，用于控制电脑玩家移动和战斗决策。</p></td>
+              <td><p>适合查 AI 行为；修改前确认寻路状态和目标缓存同步。</p><span class="badge ignore">可忽略</span><small>编译器生成的属性后备字段，逻辑入口应优先看属性或方法。</small></td>
+            </tr>
+            
+
+            <tr data-page="1" data-category="角色模型与表现资源">
+              <td class="num">11</td>
+              <td><strong>&lt;currentCharacter&gt;k__BackingField</strong><span>private / instance / offset 0x5C</span></td>
+              <td><code>CharacterModel</code></td>
+              <td><b>角色模型与表现资源</b><p>&lt;currentCharacter&gt;k__BackingField 与角色模型、动画、语音、特效、材质或外观资源有关。</p></td>
+              <td><p>适合查角色外观和表现；替换资源时要确认骨骼、挂点和动画匹配。</p><span class="badge ignore">可忽略</span><small>编译器生成的属性后备字段，逻辑入口应优先看属性或方法。</small></td>
+            </tr>
+            
+
+            <tr data-page="1" data-category="角色模型与表现资源">
+              <td class="num">12</td>
+              <td><strong>characters</strong><span>private / instance / offset 0x60</span></td>
+              <td><code>List&lt;CharacterModel&gt;</code></td>
+              <td><b>角色模型与表现资源</b><p>characters 与角色模型、动画、语音、特效、材质或外观资源有关。</p></td>
+              <td><p>适合查角色外观和表现；替换资源时要确认骨骼、挂点和动画匹配。</p><span class="badge keep">纳入重点分析</span></td>
+            </tr>
+            
+
+            <tr data-page="1" data-category="角色模型与表现资源">
+              <td class="num">13</td>
+              <td><strong>bulletEffect</strong><span>private / instance / offset 0x64</span></td>
+              <td><code>EffectObj</code></td>
+              <td><b>角色模型与表现资源</b><p>bulletEffect 与角色模型、动画、语音、特效、材质或外观资源有关。</p></td>
+              <td><p>适合查角色外观和表现；替换资源时要确认骨骼、挂点和动画匹配。</p><span class="badge ignore">可忽略</span><small>编译器生成的属性后备字段，逻辑入口应优先看属性或方法。</small></td>
+            </tr>
+            
+
+            <tr data-page="1" data-category="Bot/AI/寻路">
+              <td class="num">14</td>
+              <td><strong>&lt;autonomousJump&gt;k__BackingField</strong><span>private / instance / offset 0x68</span></td>
+              <td><code>bool</code></td>
+              <td><b>Bot/AI/寻路</b><p>&lt;autonomousJump&gt;k__BackingField 与 Bot 行为、目标选择、寻路或 AI 状态有关，用于控制电脑玩家移动和战斗决策。</p></td>
+              <td><p>适合查 AI 行为；修改前确认寻路状态和目标缓存同步。</p><span class="badge ignore">可忽略</span><small>编译器生成的属性后备字段，逻辑入口应优先看属性或方法。</small></td>
+            </tr>
+            
+
+            <tr data-page="1" data-category="Bot/AI/寻路">
+              <td class="num">15</td>
+              <td><strong>JumpPost_Listener</strong><span>private / instance / offset 0x6C</span></td>
+              <td><code>Action</code></td>
+              <td><b>Bot/AI/寻路</b><p>JumpPost_Listener 与 Bot 行为、目标选择、寻路或 AI 状态有关，用于控制电脑玩家移动和战斗决策。</p></td>
+              <td><p>适合查 AI 行为；修改前确认寻路状态和目标缓存同步。</p><span class="badge ignore">可忽略</span><small>编译器生成的属性后备字段，逻辑入口应优先看属性或方法。</small></td>
+            </tr>
+            
+
+            <tr data-page="2" data-category="玩法规则/比分回合">
+              <td class="num">16</td>
+              <td><strong>&lt;isGrounded&gt;k__BackingField</strong><span>private / instance / offset 0x70</span></td>
+              <td><code>bool</code></td>
+              <td><b>玩法规则/比分回合</b><p>&lt;isGrounded&gt;k__BackingField 属于比分、回合或模式规则字段。</p></td>
+              <td><p>适合查规则入口；直接改会影响胜负流程。</p><span class="badge ignore">可忽略</span><small>编译器生成的属性后备字段，逻辑入口应优先看属性或方法。</small></td>
+            </tr>
+            
+
+            <tr data-page="2" data-category="玩法规则/比分回合">
+              <td class="num">17</td>
+              <td><strong>&lt;groundMatName&gt;k__BackingField</strong><span>private / instance / offset 0x74</span></td>
+              <td><code>string</code></td>
+              <td><b>玩法规则/比分回合</b><p>&lt;groundMatName&gt;k__BackingField 属于比分、回合或模式规则字段。</p></td>
+              <td><p>适合查规则入口；直接改会影响胜负流程。</p><span class="badge ignore">可忽略</span><small>编译器生成的属性后备字段，逻辑入口应优先看属性或方法。</small></td>
+            </tr>
+            
+
+            <tr data-page="2" data-category="Bot/AI/寻路">
+              <td class="num">18</td>
+              <td><strong>jumpDropSndNextPlayTime</strong><span>private / instance / offset 0x78</span></td>
+              <td><code>float</code></td>
+              <td><b>Bot/AI/寻路</b><p>jumpDropSndNextPlayTime 与 Bot 行为、目标选择、寻路或 AI 状态有关，用于控制电脑玩家移动和战斗决策。</p></td>
+              <td><p>适合查 AI 行为；修改前确认寻路状态和目标缓存同步。</p><span class="badge ignore">可忽略</span><small>基础值类型 float，不作为类关系节点；但字段仍计入总数。</small></td>
+            </tr>
+            
+
+            <tr data-page="2" data-category="玩法规则/时间复活">
+              <td class="num">19</td>
+              <td><strong>lastFallTime</strong><span>private / instance / offset 0x7C</span></td>
+              <td><code>float</code></td>
+              <td><b>玩法规则/时间复活</b><p>lastFallTime 与对局时间、倒计时或复活等待有关。</p></td>
+              <td><p>适合查限时或复活功能。</p><span class="badge ignore">可忽略</span><small>基础值类型 float，不作为类关系节点；但字段仍计入总数。</small></td>
+            </tr>
+            
+
+            <tr data-page="2" data-category="数据结构/工具/对象池">
+              <td class="num">20</td>
+              <td><strong>heightBeforeFloat</strong><span>private / instance / offset 0x80</span></td>
+              <td><code>float</code></td>
+              <td><b>数据结构/工具/对象池</b><p>heightBeforeFloat 保存 float 类型的运行时引用或配置值，用于支撑 Player 的当前系统职责。</p></td>
+              <td><p>先按字段所属系统读取；需要修改时优先追踪该字段的读写方法。</p><span class="badge ignore">可忽略</span><small>基础值类型 float，不作为类关系节点；但字段仍计入总数。</small></td>
+            </tr>
+            
+
+            <tr data-page="2" data-category="玩法规则/时间复活">
+              <td class="num">21</td>
+              <td><strong>startMoveTime</strong><span>private / instance / offset 0x84</span></td>
+              <td><code>float</code></td>
+              <td><b>玩法规则/时间复活</b><p>startMoveTime 与对局时间、倒计时或复活等待有关。</p></td>
+              <td><p>适合查限时或复活功能。</p><span class="badge ignore">可忽略</span><small>基础值类型 float，不作为类关系节点；但字段仍计入总数。</small></td>
+            </tr>
+            
+
+            <tr data-page="2" data-category="Bot/AI/寻路">
+              <td class="num">22</td>
+              <td><strong>airVelControlEndTime</strong><span>public / instance / offset 0x88</span></td>
+              <td><code>float</code></td>
+              <td><b>Bot/AI/寻路</b><p>airVelControlEndTime 与 Bot 行为、目标选择、寻路或 AI 状态有关，用于控制电脑玩家移动和战斗决策。</p></td>
+              <td><p>适合查 AI 行为；修改前确认寻路状态和目标缓存同步。</p><span class="badge ignore">可忽略</span><small>基础值类型 float，不作为类关系节点；但字段仍计入总数。</small></td>
+            </tr>
+            
+
+            <tr data-page="2" data-category="数据结构/工具/对象池">
+              <td class="num">23</td>
+              <td><strong>Modifier_MoveSpeedRatio</strong><span>public / instance / offset 0x8C</span></td>
+              <td><code>PropertyModifier</code></td>
+              <td><b>数据结构/工具/对象池</b><p>Modifier_MoveSpeedRatio 保存 PropertyModifier 类型的运行时引用或配置值，用于支撑 Player 的当前系统职责。</p></td>
+              <td><p>先按字段所属系统读取；需要修改时优先追踪该字段的读写方法。</p><span class="badge keep">纳入重点分析</span></td>
+            </tr>
+            
+
+            <tr data-page="2" data-category="玩家与阵营统计">
+              <td class="num">24</td>
+              <td><strong>&lt;velData&gt;k__BackingField</strong><span>private / instance / offset 0x90</span></td>
+              <td><code>PlayerVelocity</code></td>
+              <td><b>玩家与阵营统计</b><p>&lt;velData&gt;k__BackingField 与玩家、阵营或存活统计相关，用于对局胜负、复活和 HUD 显示。</p></td>
+              <td><p>读为主；修改时要同步 GameManager 和 UI。</p><span class="badge ignore">可忽略</span><small>编译器生成的属性后备字段，逻辑入口应优先看属性或方法。</small></td>
+            </tr>
+            
+
+            <tr data-page="2" data-category="数据结构/工具/对象池">
+              <td class="num">25</td>
+              <td><strong>clientData</strong><span>public / instance / offset 0x94</span></td>
+              <td><code>ClientData</code></td>
+              <td><b>数据结构/工具/对象池</b><p>clientData 保存数据表、列表、缓存、资源配置或对象池，是其他系统读取运行数据的支撑字段。</p></td>
+              <td><p>适合查数据来源和对象生命周期；修改时注意引用一致性。</p><span class="badge keep">纳入重点分析</span></td>
+            </tr>
+            
+
+            <tr data-page="2" data-category="玩家与阵营统计">
+              <td class="num">26</td>
+              <td><strong>&lt;playerData&gt;k__BackingField</strong><span>private / instance / offset 0x98</span></td>
+              <td><code>PlayerData</code></td>
+              <td><b>玩家与阵营统计</b><p>&lt;playerData&gt;k__BackingField 与玩家、阵营或存活统计相关，用于对局胜负、复活和 HUD 显示。</p></td>
+              <td><p>读为主；修改时要同步 GameManager 和 UI。</p><span class="badge ignore">可忽略</span><small>编译器生成的属性后备字段，逻辑入口应优先看属性或方法。</small></td>
+            </tr>
+            
+
+            <tr data-page="2" data-category="玩家与阵营统计">
+              <td class="num">27</td>
+              <td><strong>&lt;input&gt;k__BackingField</strong><span>private / instance / offset 0x9C</span></td>
+              <td><code>PlayerInput</code></td>
+              <td><b>玩家与阵营统计</b><p>&lt;input&gt;k__BackingField 与玩家、阵营或存活统计相关，用于对局胜负、复活和 HUD 显示。</p></td>
+              <td><p>读为主；修改时要同步 GameManager 和 UI。</p><span class="badge ignore">可忽略</span><small>编译器生成的属性后备字段，逻辑入口应优先看属性或方法。</small></td>
+            </tr>
+            
+
+            <tr data-page="2" data-category="武器与伤害结算">
+              <td class="num">28</td>
+              <td><strong>&lt;wpns&gt;k__BackingField</strong><span>private / instance / offset 0xA0</span></td>
+              <td><code>PlayerWeapons</code></td>
+              <td><b>武器与伤害结算</b><p>&lt;wpns&gt;k__BackingField 与武器、弹药、命中、伤害或死亡结算有关，是战斗数值和反馈链路的一部分。</p></td>
+              <td><p>适合查武器参数、伤害结算或击杀反馈；修改时注意玩法规则是否二次限制。</p><span class="badge ignore">可忽略</span><small>编译器生成的属性后备字段，逻辑入口应优先看属性或方法。</small></td>
+            </tr>
+            
+
+            <tr data-page="2" data-category="武器与伤害结算">
+              <td class="num">29</td>
+              <td><strong>&lt;weaponBag&gt;k__BackingField</strong><span>private / instance / offset 0xA4</span></td>
+              <td><code>WeaponBag</code></td>
+              <td><b>武器与伤害结算</b><p>&lt;weaponBag&gt;k__BackingField 与武器、弹药、命中、伤害或死亡结算有关，是战斗数值和反馈链路的一部分。</p></td>
+              <td><p>适合查武器参数、伤害结算或击杀反馈；修改时注意玩法规则是否二次限制。</p><span class="badge ignore">可忽略</span><small>编译器生成的属性后备字段，逻辑入口应优先看属性或方法。</small></td>
+            </tr>
+            
+
+            <tr data-page="2" data-category="纳米/特殊规则">
+              <td class="num">30</td>
+              <td><strong>nanoRoleSelect</strong><span>public / instance / offset 0xA8</span></td>
+              <td><code>NanoRoleSelect</code></td>
+              <td><b>纳米/特殊规则</b><p>nanoRoleSelect 与纳米、终结者、感染、吸收或特殊模式阶段有关。</p></td>
+              <td><p>适合查特殊模式规则和表现；修改时注意身份转换和胜负条件。</p><span class="badge keep">纳入重点分析</span></td>
+            </tr>
+            
+
+            <tr data-page="3" data-category="纳米/特殊规则">
+              <td class="num">31</td>
+              <td><strong>nano4TData</strong><span>public / instance / offset 0xAC</span></td>
+              <td><code>Nano4T_Data</code></td>
+              <td><b>纳米/特殊规则</b><p>nano4TData 与纳米、终结者、感染、吸收或特殊模式阶段有关。</p></td>
+              <td><p>适合查特殊模式规则和表现；修改时注意身份转换和胜负条件。</p><span class="badge keep">纳入重点分析</span></td>
+            </tr>
+            
+
+            <tr data-page="3" data-category="玩家与阵营统计">
+              <td class="num">32</td>
+              <td><strong>skills</strong><span>public / instance / offset 0xB0</span></td>
+              <td><code>PlayerSkills</code></td>
+              <td><b>玩家与阵营统计</b><p>skills 与玩家、阵营或存活统计相关，用于对局胜负、复活和 HUD 显示。</p></td>
+              <td><p>读为主；修改时要同步 GameManager 和 UI。</p><span class="badge keep">纳入重点分析</span></td>
+            </tr>
+            
+
+            <tr data-page="3" data-category="角色模型与表现资源">
+              <td class="num">33</td>
+              <td><strong>&lt;modelInfo&gt;k__BackingField</strong><span>private / instance / offset 0xB4</span></td>
+              <td><code>PlayerMdlInfo</code></td>
+              <td><b>角色模型与表现资源</b><p>&lt;modelInfo&gt;k__BackingField 与角色模型、动画、语音、特效、材质或外观资源有关。</p></td>
+              <td><p>适合查角色外观和表现；替换资源时要确认骨骼、挂点和动画匹配。</p><span class="badge ignore">可忽略</span><small>编译器生成的属性后备字段，逻辑入口应优先看属性或方法。</small></td>
+            </tr>
+            
+
+            <tr data-page="3" data-category="数据结构/工具/对象池">
+              <td class="num">34</td>
+              <td><strong>&lt;isSniper&gt;k__BackingField</strong><span>private / instance / offset 0xB8</span></td>
+              <td><code>bool</code></td>
+              <td><b>数据结构/工具/对象池</b><p>&lt;isSniper&gt;k__BackingField 保存 bool 类型的运行时引用或配置值，用于支撑 Player 的当前系统职责。</p></td>
+              <td><p>先按字段所属系统读取；需要修改时优先追踪该字段的读写方法。</p><span class="badge ignore">可忽略</span><small>编译器生成的属性后备字段，逻辑入口应优先看属性或方法。</small></td>
+            </tr>
+            
+
+            <tr data-page="3" data-category="地图与出生点">
+              <td class="num">35</td>
+              <td><strong>&lt;spawnPos&gt;k__BackingField</strong><span>private / instance / offset 0xBC</span></td>
+              <td><code>Vector3</code></td>
+              <td><b>地图与出生点</b><p>&lt;spawnPos&gt;k__BackingField 与地图点位、出生点、触发区域或补给点有关，用于组织场景玩法空间。</p></td>
+              <td><p>适合查出生、补给、地图互动；改点位要注意阵营和模式限制。</p><span class="badge ignore">可忽略</span><small>编译器生成的属性后备字段，逻辑入口应优先看属性或方法。</small></td>
+            </tr>
+            
+
+            <tr data-page="3" data-category="地图与出生点">
+              <td class="num">36</td>
+              <td><strong>respawn_Coroutine</strong><span>private / instance / offset 0xC8</span></td>
+              <td><code>Coroutine</code></td>
+              <td><b>地图与出生点</b><p>respawn_Coroutine 与地图点位、出生点、触发区域或补给点有关，用于组织场景玩法空间。</p></td>
+              <td><p>适合查出生、补给、地图互动；改点位要注意阵营和模式限制。</p><span class="badge keep">纳入重点分析</span></td>
+            </tr>
+            
+
+            <tr data-page="3" data-category="地图与出生点">
+              <td class="num">37</td>
+              <td><strong>StartRespawn_Listener</strong><span>private / instance / offset 0xCC</span></td>
+              <td><code>Action&lt;Player&gt;</code></td>
+              <td><b>地图与出生点</b><p>StartRespawn_Listener 与地图点位、出生点、触发区域或补给点有关，用于组织场景玩法空间。</p></td>
+              <td><p>适合查出生、补给、地图互动；改点位要注意阵营和模式限制。</p><span class="badge ignore">可忽略</span><small>编译器生成的属性后备字段，逻辑入口应优先看属性或方法。</small></td>
+            </tr>
+            
+
+            <tr data-page="3" data-category="地图与出生点">
+              <td class="num">38</td>
+              <td><strong>respawnType</strong><span>public / instance / offset 0xD0</span></td>
+              <td><code>Player.RespawnType</code></td>
+              <td><b>地图与出生点</b><p>respawnType 与地图点位、出生点、触发区域或补给点有关，用于组织场景玩法空间。</p></td>
+              <td><p>适合查出生、补给、地图互动；改点位要注意阵营和模式限制。</p><span class="badge keep">纳入重点分析</span></td>
+            </tr>
+            
+
+            <tr data-page="3" data-category="地图与出生点">
+              <td class="num">39</td>
+              <td><strong>NextRespawnInRound_Listener</strong><span>private / instance / offset 0xD4</span></td>
+              <td><code>Action&lt;Player&gt;</code></td>
+              <td><b>地图与出生点</b><p>NextRespawnInRound_Listener 与地图点位、出生点、触发区域或补给点有关，用于组织场景玩法空间。</p></td>
+              <td><p>适合查出生、补给、地图互动；改点位要注意阵营和模式限制。</p><span class="badge ignore">可忽略</span><small>编译器生成的属性后备字段，逻辑入口应优先看属性或方法。</small></td>
+            </tr>
+            
+
+            <tr data-page="3" data-category="地图与出生点">
+              <td class="num">40</td>
+              <td><strong>&lt;isRespawning&gt;k__BackingField</strong><span>private / instance / offset 0xD8</span></td>
+              <td><code>bool</code></td>
+              <td><b>地图与出生点</b><p>&lt;isRespawning&gt;k__BackingField 与地图点位、出生点、触发区域或补给点有关，用于组织场景玩法空间。</p></td>
+              <td><p>适合查出生、补给、地图互动；改点位要注意阵营和模式限制。</p><span class="badge ignore">可忽略</span><small>编译器生成的属性后备字段，逻辑入口应优先看属性或方法。</small></td>
+            </tr>
+            
+
+            <tr data-page="3" data-category="数据结构/工具/对象池">
+              <td class="num">41</td>
+              <td><strong>&lt;crouchDuration&gt;k__BackingField</strong><span>private / instance / offset 0xDC</span></td>
+              <td><code>float</code></td>
+              <td><b>数据结构/工具/对象池</b><p>&lt;crouchDuration&gt;k__BackingField 保存 float 类型的运行时引用或配置值，用于支撑 Player 的当前系统职责。</p></td>
+              <td><p>先按字段所属系统读取；需要修改时优先追踪该字段的读写方法。</p><span class="badge ignore">可忽略</span><small>编译器生成的属性后备字段，逻辑入口应优先看属性或方法。</small></td>
+            </tr>
+            
+
+            <tr data-page="3" data-category="数据结构/工具/对象池">
+              <td class="num">42</td>
+              <td><strong>&lt;walking&gt;k__BackingField</strong><span>private / instance / offset 0xE0</span></td>
+              <td><code>bool</code></td>
+              <td><b>数据结构/工具/对象池</b><p>&lt;walking&gt;k__BackingField 保存 bool 类型的运行时引用或配置值，用于支撑 Player 的当前系统职责。</p></td>
+              <td><p>先按字段所属系统读取；需要修改时优先追踪该字段的读写方法。</p><span class="badge ignore">可忽略</span><small>编译器生成的属性后备字段，逻辑入口应优先看属性或方法。</small></td>
+            </tr>
+            
+
+            <tr data-page="3" data-category="纳米/特殊规则">
+              <td class="num">43</td>
+              <td><strong>&lt;nanoClothCount&gt;k__BackingField</strong><span>private / instance / offset 0xE4</span></td>
+              <td><code>ObscuredInt</code></td>
+              <td><b>纳米/特殊规则</b><p>&lt;nanoClothCount&gt;k__BackingField 与纳米、终结者、感染、吸收或特殊模式阶段有关。</p></td>
+              <td><p>适合查特殊模式规则和表现；修改时注意身份转换和胜负条件。</p><span class="badge ignore">可忽略</span><small>编译器生成的属性后备字段，逻辑入口应优先看属性或方法。</small></td>
+            </tr>
+            
+
+            <tr data-page="3" data-category="玩法规则/时间复活">
+              <td class="num">44</td>
+              <td><strong>&lt;lastStopStartTime&gt;k__BackingField</strong><span>private / instance / offset 0xF8</span></td>
+              <td><code>float</code></td>
+              <td><b>玩法规则/时间复活</b><p>&lt;lastStopStartTime&gt;k__BackingField 与对局时间、倒计时或复活等待有关。</p></td>
+              <td><p>适合查限时或复活功能。</p><span class="badge ignore">可忽略</span><small>编译器生成的属性后备字段，逻辑入口应优先看属性或方法。</small></td>
+            </tr>
+            
+
+            <tr data-page="3" data-category="玩法规则/时间复活">
+              <td class="num">45</td>
+              <td><strong>nextRegenTime</strong><span>private / instance / offset 0xFC</span></td>
+              <td><code>float</code></td>
+              <td><b>玩法规则/时间复活</b><p>nextRegenTime 与对局时间、倒计时或复活等待有关。</p></td>
+              <td><p>适合查限时或复活功能。</p><span class="badge ignore">可忽略</span><small>基础值类型 float，不作为类关系节点；但字段仍计入总数。</small></td>
+            </tr>
+            
+
+            <tr data-page="4" data-category="数据结构/工具/对象池">
+              <td class="num">46</td>
+              <td><strong>&lt;input_Interact&gt;k__BackingField</strong><span>private / instance / offset 0x100</span></td>
+              <td><code>KeyInputState</code></td>
+              <td><b>数据结构/工具/对象池</b><p>&lt;input_Interact&gt;k__BackingField 保存 KeyInputState 类型的运行时引用或配置值，用于支撑 Player 的当前系统职责。</p></td>
+              <td><p>先按字段所属系统读取；需要修改时优先追踪该字段的读写方法。</p><span class="badge ignore">可忽略</span><small>编译器生成的属性后备字段，逻辑入口应优先看属性或方法。</small></td>
+            </tr>
+            
+
+            <tr data-page="4" data-category="玩家与阵营统计">
+              <td class="num">47</td>
+              <td><strong>Interact_Listener</strong><span>private / instance / offset 0x104</span></td>
+              <td><code>Action&lt;Player, KeyInputState&gt;</code></td>
+              <td><b>玩家与阵营统计</b><p>Interact_Listener 与玩家、阵营或存活统计相关，用于对局胜负、复活和 HUD 显示。</p></td>
+              <td><p>读为主；修改时要同步 GameManager 和 UI。</p><span class="badge ignore">可忽略</span><small>编译器生成的属性后备字段，逻辑入口应优先看属性或方法。</small></td>
+            </tr>
+            
+
+            <tr data-page="4" data-category="地图与出生点">
+              <td class="num">48</td>
+              <td><strong>mapTrigger</strong><span>public / instance / offset 0x108</span></td>
+              <td><code>MapTrigger</code></td>
+              <td><b>地图与出生点</b><p>mapTrigger 与地图点位、出生点、触发区域或补给点有关，用于组织场景玩法空间。</p></td>
+              <td><p>适合查出生、补给、地图互动；改点位要注意阵营和模式限制。</p><span class="badge keep">纳入重点分析</span></td>
+            </tr>
+            
+
+            <tr data-page="4" data-category="武器与伤害结算">
+              <td class="num">49</td>
+              <td><strong>&lt;mapGunAmmo1&gt;k__BackingField</strong><span>private / instance / offset 0x10C</span></td>
+              <td><code>WPN_Gun.AmmoData</code></td>
+              <td><b>武器与伤害结算</b><p>&lt;mapGunAmmo1&gt;k__BackingField 与武器、弹药、命中、伤害或死亡结算有关，是战斗数值和反馈链路的一部分。</p></td>
+              <td><p>适合查武器参数、伤害结算或击杀反馈；修改时注意玩法规则是否二次限制。</p><span class="badge ignore">可忽略</span><small>编译器生成的属性后备字段，逻辑入口应优先看属性或方法。</small></td>
+            </tr>
+            
+
+            <tr data-page="4" data-category="武器与伤害结算">
+              <td class="num">50</td>
+              <td><strong>&lt;mapGunAmmo2&gt;k__BackingField</strong><span>private / instance / offset 0x110</span></td>
+              <td><code>WPN_Gun.AmmoData</code></td>
+              <td><b>武器与伤害结算</b><p>&lt;mapGunAmmo2&gt;k__BackingField 与武器、弹药、命中、伤害或死亡结算有关，是战斗数值和反馈链路的一部分。</p></td>
+              <td><p>适合查武器参数、伤害结算或击杀反馈；修改时注意玩法规则是否二次限制。</p><span class="badge ignore">可忽略</span><small>编译器生成的属性后备字段，逻辑入口应优先看属性或方法。</small></td>
+            </tr>
+            
+
+            <tr data-page="4" data-category="Bot/AI/寻路">
+              <td class="num">51</td>
+              <td><strong>&lt;climbStair&gt;k__BackingField</strong><span>private / instance / offset 0x114</span></td>
+              <td><code>Transform</code></td>
+              <td><b>Bot/AI/寻路</b><p>&lt;climbStair&gt;k__BackingField 与 Bot 行为、目标选择、寻路或 AI 状态有关，用于控制电脑玩家移动和战斗决策。</p></td>
+              <td><p>适合查 AI 行为；修改前确认寻路状态和目标缓存同步。</p><span class="badge ignore">可忽略</span><small>编译器生成的属性后备字段，逻辑入口应优先看属性或方法。</small></td>
+            </tr>
+            
+
+            <tr data-page="4" data-category="相机/视角/渲染">
+              <td class="num">52</td>
+              <td><strong>Buff_CameraRotDisabled</strong><span>private / instance / offset 0x118</span></td>
+              <td><code>bool</code></td>
+              <td><b>相机/视角/渲染</b><p>Buff_CameraRotDisabled 与相机视角、FOV、观战、渲染材质或后处理表现有关。</p></td>
+              <td><p>多为表现层字段；改动前确认是否影响第一人称/观战视角。</p><span class="badge ignore">可忽略</span><small>基础值类型 bool，不作为类关系节点；但字段仍计入总数。</small></td>
+            </tr>
+            
+
+            <tr data-page="4" data-category="相机/视角/渲染">
+              <td class="num">53</td>
+              <td><strong>CameraRotDisabled_BuffUpdater</strong><span>private / instance / offset 0x11C</span></td>
+              <td><code>RefBool</code></td>
+              <td><b>相机/视角/渲染</b><p>CameraRotDisabled_BuffUpdater 与相机视角、FOV、观战、渲染材质或后处理表现有关。</p></td>
+              <td><p>多为表现层字段；改动前确认是否影响第一人称/观战视角。</p><span class="badge ignore">可忽略</span><small>编译器生成的属性后备字段，逻辑入口应优先看属性或方法。</small></td>
+            </tr>
+            
+
+            <tr data-page="4" data-category="Bot/AI/寻路">
+              <td class="num">54</td>
+              <td><strong>&lt;Buff_JumpDisabled&gt;k__BackingField</strong><span>private / instance / offset 0x120</span></td>
+              <td><code>bool</code></td>
+              <td><b>Bot/AI/寻路</b><p>&lt;Buff_JumpDisabled&gt;k__BackingField 与 Bot 行为、目标选择、寻路或 AI 状态有关，用于控制电脑玩家移动和战斗决策。</p></td>
+              <td><p>适合查 AI 行为；修改前确认寻路状态和目标缓存同步。</p><span class="badge ignore">可忽略</span><small>编译器生成的属性后备字段，逻辑入口应优先看属性或方法。</small></td>
+            </tr>
+            
+
+            <tr data-page="4" data-category="Bot/AI/寻路">
+              <td class="num">55</td>
+              <td><strong>JumpDisabled_BuffUpdater</strong><span>private / instance / offset 0x124</span></td>
+              <td><code>RefBool</code></td>
+              <td><b>Bot/AI/寻路</b><p>JumpDisabled_BuffUpdater 与 Bot 行为、目标选择、寻路或 AI 状态有关，用于控制电脑玩家移动和战斗决策。</p></td>
+              <td><p>适合查 AI 行为；修改前确认寻路状态和目标缓存同步。</p><span class="badge ignore">可忽略</span><small>编译器生成的属性后备字段，逻辑入口应优先看属性或方法。</small></td>
+            </tr>
+            
+
+            <tr data-page="4" data-category="武器与伤害结算">
+              <td class="num">56</td>
+              <td><strong>Buff_InfinityAmmo</strong><span>public / instance / offset 0x128</span></td>
+              <td><code>bool</code></td>
+              <td><b>武器与伤害结算</b><p>Buff_InfinityAmmo 与武器、弹药、命中、伤害或死亡结算有关，是战斗数值和反馈链路的一部分。</p></td>
+              <td><p>适合查武器参数、伤害结算或击杀反馈；修改时注意玩法规则是否二次限制。</p><span class="badge ignore">可忽略</span><small>基础值类型 bool，不作为类关系节点；但字段仍计入总数。</small></td>
+            </tr>
+            
+
+            <tr data-page="4" data-category="武器与伤害结算">
+              <td class="num">57</td>
+              <td><strong>InfinityAmmo_BuffUpdater</strong><span>private / instance / offset 0x12C</span></td>
+              <td><code>RefBool</code></td>
+              <td><b>武器与伤害结算</b><p>InfinityAmmo_BuffUpdater 与武器、弹药、命中、伤害或死亡结算有关，是战斗数值和反馈链路的一部分。</p></td>
+              <td><p>适合查武器参数、伤害结算或击杀反馈；修改时注意玩法规则是否二次限制。</p><span class="badge ignore">可忽略</span><small>编译器生成的属性后备字段，逻辑入口应优先看属性或方法。</small></td>
+            </tr>
+            </tbody>
+    </table>
+    <p class="footnote">忽略规则：基础值字段、编译器生成后备字段、Action/事件委托字段不作为“类保存类”的关系图节点；但本页仍逐项解释并计入总数。</p>
+    
+  </main>
+  <script>
+    const rows = Array.from(document.querySelectorAll('tbody tr[data-page]'));
+    const filter = document.getElementById('categoryFilter');
+    const pager = document.getElementById('pager');
+    const label = document.getElementById('pageLabel');
+    const visibleCount = document.getElementById('visibleCount');
+    const pageSize = 15;
+    let currentPage = 1;
+    function matchingRows() {
+      if (!filter) return rows;
+      const category = filter.value;
+      return rows.filter(row => category === '全部' || row.dataset.category === category);
+    }
+    function renderPager(totalPages) {
+      if (!pager) return;
+      pager.innerHTML = '';
+      for (let page = 1; page <= totalPages; page++) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.textContent = '第 ' + page + ' 页';
+        button.className = page === currentPage ? 'active' : '';
+        button.addEventListener('click', () => { currentPage = page; updateTable(); });
+        pager.appendChild(button);
+      }
+    }
+    function updateTable() {
+      const matched = matchingRows();
+      const totalPages = Math.max(1, Math.ceil(matched.length / pageSize));
+      if (currentPage > totalPages) currentPage = totalPages;
+      const start = (currentPage - 1) * pageSize;
+      const visibleSet = new Set(matched.slice(start, start + pageSize));
+      rows.forEach(row => row.style.display = visibleSet.has(row) ? '' : 'none');
+      if (visibleCount) visibleCount.textContent = matched.length;
+      if (label) label.textContent = '第 ' + currentPage + ' 页';
+      renderPager(totalPages);
+    }
+    if (filter) filter.addEventListener('change', () => { currentPage = 1; updateTable(); });
+    updateTable();
+  </script>
+</body>
+</html>

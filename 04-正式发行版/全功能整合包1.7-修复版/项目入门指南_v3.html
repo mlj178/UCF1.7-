@@ -1,0 +1,2252 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>游戏修改器项目 - 完整架构指南 v3</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: "Microsoft YaHei", Arial, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            color: #e0e0e0;
+            line-height: 1.8;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+            background: rgba(30, 30, 50, 0.9);
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+        }
+
+        h1 {
+            text-align: center;
+            color: #00d4ff;
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            text-shadow: 0 0 20px rgba(0, 212, 255, 0.5);
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #888;
+            font-size: 1.1em;
+            margin-bottom: 30px;
+        }
+
+        .version-badge {
+            display: inline-block;
+            background: linear-gradient(135deg, #ff6b6b, #feca57);
+            color: #fff;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 0.9em;
+            font-weight: bold;
+            margin-left: 10px;
+        }
+
+        /* 导航栏 */
+        .nav-tabs {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-bottom: 30px;
+            flex-wrap: wrap;
+        }
+
+        .nav-tab {
+            background: rgba(60, 60, 90, 0.8);
+            border: 2px solid #4a4a7a;
+            color: #e0e0e0;
+            padding: 12px 24px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 1em;
+            font-weight: bold;
+        }
+
+        .nav-tab:hover {
+            background: rgba(80, 80, 120, 0.9);
+            border-color: #6a6aaa;
+            transform: translateY(-2px);
+        }
+
+        .nav-tab.active {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            border-color: #667eea;
+            color: #fff;
+        }
+
+        /* 内容区域 */
+        .content-section {
+            display: none;
+        }
+
+        .content-section.active {
+            display: block;
+        }
+
+        /* 卡片样式 */
+        .card {
+            background: rgba(50, 50, 80, 0.6);
+            border: 1px solid #4a4a7a;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+
+        .card-title {
+            font-size: 1.4em;
+            color: #00d4ff;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .card-icon {
+            font-size: 1.5em;
+        }
+
+        /* 表格样式 */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            background: rgba(40, 40, 70, 0.5);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        th, td {
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 1px solid #4a4a7a;
+        }
+
+        th {
+            background: rgba(60, 60, 100, 0.8);
+            color: #00d4ff;
+            font-weight: bold;
+        }
+
+        tr:hover {
+            background: rgba(70, 70, 110, 0.5);
+        }
+
+        /* 代码块 */
+        .code-block {
+            background: rgba(20, 20, 40, 0.9);
+            border: 1px solid #4a4a7a;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 15px 0;
+            overflow-x: auto;
+        }
+
+        .code-title {
+            color: #00d4ff;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+
+        pre {
+            color: #a0e0a0;
+            font-family: "Consolas", "Courier New", monospace;
+            font-size: 0.9em;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+
+        /* 提示框 */
+        .tip-box {
+            background: rgba(0, 100, 150, 0.2);
+            border-left: 4px solid #00d4ff;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 0 8px 8px 0;
+        }
+
+        .warning-box {
+            background: rgba(150, 100, 0, 0.2);
+            border-left: 4px solid #feca57;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 0 8px 8px 0;
+        }
+
+        /* 流程图样式 */
+        .flowchart {
+            background: rgba(40, 40, 70, 0.5);
+            border: 2px solid #4a4a7a;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+
+        .flow-step {
+            background: rgba(60, 60, 100, 0.8);
+            border: 2px solid #6a6aaa;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 10px 0;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            transition: all 0.3s ease;
+        }
+
+        .flow-step:hover {
+            background: rgba(80, 80, 120, 0.9);
+            transform: translateX(5px);
+        }
+
+        .step-number {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: #fff;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 1.2em;
+            flex-shrink: 0;
+        }
+
+        .step-content {
+            flex: 1;
+        }
+
+        .step-title {
+            color: #00d4ff;
+            font-weight: bold;
+            font-size: 1.1em;
+            margin-bottom: 5px;
+        }
+
+        .step-desc {
+            color: #a0a0a0;
+            font-size: 0.95em;
+        }
+
+        .arrow-down {
+            text-align: center;
+            color: #00d4ff;
+            font-size: 2em;
+            margin: 5px 0;
+        }
+
+        /* 对比表格 */
+        .comparison-table {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin: 20px 0;
+        }
+
+        .comparison-card {
+            background: rgba(50, 50, 80, 0.6);
+            border: 2px solid #4a4a7a;
+            border-radius: 10px;
+            padding: 20px;
+        }
+
+        .comparison-card.without {
+            border-color: #ff6b6b;
+        }
+
+        .comparison-card.with {
+            border-color: #51cf66;
+        }
+
+        .comparison-title {
+            font-size: 1.3em;
+            font-weight: bold;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .comparison-title.bad {
+            color: #ff6b6b;
+        }
+
+        .comparison-title.good {
+            color: #51cf66;
+        }
+
+        .comparison-list {
+            list-style: none;
+            padding: 0;
+        }
+
+        .comparison-list li {
+            padding: 8px 0;
+            border-bottom: 1px solid #4a4a7a;
+        }
+
+        .comparison-list li:last-child {
+            border-bottom: none;
+        }
+
+        /* 问题专区样式 */
+        .question-card {
+            background: rgba(50, 50, 80, 0.6);
+            border: 2px solid #6a6aaa;
+            border-radius: 10px;
+            padding: 25px;
+            margin: 25px 0;
+        }
+
+        .question-title {
+            font-size: 1.3em;
+            color: #feca57;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .answer-content {
+            color: #e0e0e0;
+            line-height: 1.8;
+        }
+
+        .highlight {
+            background: rgba(0, 212, 255, 0.2);
+            padding: 2px 6px;
+            border-radius: 4px;
+            color: #00d4ff;
+            font-weight: bold;
+        }
+
+        /* 统计卡片 */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+
+        .stat-card {
+            background: rgba(60, 60, 100, 0.8);
+            border: 2px solid #4a4a7a;
+            border-radius: 10px;
+            padding: 20px;
+            text-align: center;
+        }
+
+        .stat-number {
+            font-size: 2.5em;
+            color: #00d4ff;
+            font-weight: bold;
+        }
+
+        .stat-label {
+            color: #a0a0a0;
+            margin-top: 5px;
+        }
+
+        /* 文件树样式 */
+        .file-tree {
+            background: rgba(20, 20, 40, 0.9);
+            border: 1px solid #4a4a7a;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 15px 0;
+            font-family: "Consolas", monospace;
+            font-size: 0.9em;
+        }
+
+        .file-item {
+            padding: 3px 0;
+            color: #a0e0a0;
+        }
+
+        .folder-item {
+            color: #feca57;
+            font-weight: bold;
+        }
+
+        /* 场景卡片 */
+        .scenario-card {
+            background: rgba(60, 60, 100, 0.6);
+            border: 2px solid #6a6aaa;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+
+        .scenario-title {
+            font-size: 1.2em;
+            color: #feca57;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎮 游戏修改器项目 - 完整架构指南 <span class="version-badge">v3</span></h1>
+        <p class="subtitle">基于真实代码生成 | 新手友好 | 持续更新中</p>
+
+        <!-- 导航标签 -->
+        <div class="nav-tabs">
+            <button class="nav-tab active" onclick="showSection('overview')">📊 项目概览</button>
+            <button class="nav-tab" onclick="showSection('architecture')">🏗️ 核心架构</button>
+            <button class="nav-tab" onclick="showSection('flow')">🔄 程序流程</button>
+            <button class="nav-tab" onclick="showSection('design')">💡 设计巧思</button>
+            <button class="nav-tab" onclick="showSection('qa')">❓ 问题专区</button>
+        </div>
+
+        <!-- 项目概览 -->
+        <div id="overview" class="content-section active">
+            <h2>📊 项目概览</h2>
+            
+            <div class="card">
+                <div class="card-title">
+                    <span class="card-icon">🎯</span>
+                    项目简介
+                </div>
+                <p>这是一个<strong>穿越火线游戏修改器</strong>，使用 Python + Frida + JavaScript + C++ DLL 技术栈开发。程序通过注入代码到游戏进程，实现各种游戏功能修改。</p>
+                
+                <div class="tip-box">
+                    <p><strong>通俗理解：</strong>想象你有一个遥控器，可以控制游戏里的各种参数（比如移动速度、武器威力等）。这个项目就是制作这个遥控器的工具。</p>
+                </div>
+            </div>
+
+            <h3>📁 完整目录结构</h3>
+            <div class="file-tree">
+<div class="folder-item">📦 game_modifier/</div>
+<div class="file-item">  ├── 🎨 ui/ (用户界面层 - 4个文件)</div>
+<div class="file-item">  ├── ⚙️ features/ (业务逻辑层 - 22个文件)</div>
+<div class="file-item">  ├── 🧠 core/ (核心管理层 - 10个文件)</div>
+<div class="file-item">  ├── 💉 scripts/ (注入层 - 21个文件)</div>
+<div class="file-item">  ├── 💾 data/ (数据层 - 6个文件)</div>
+<div class="file-item">  └── 🧪 tests/ (测试层 - 7个文件)</div>
+            </div>
+        </div>
+
+        <!-- 核心架构 -->
+        <div id="architecture" class="content-section">
+            <h2>🏗️ 核心架构</h2>
+            
+            <div class="card">
+                <div class="card-title">
+                    <span class="card-icon">📊</span>
+                    六层架构设计
+                </div>
+                <p>项目采用分层架构设计，每一层负责不同的功能，层次清晰，便于维护和扩展。</p>
+            </div>
+
+            <h3>🧠 第3层：核心管理层 (Core Management Layer)</h3>
+            <div class="card">
+                <div class="card-title">
+                    <span class="card-icon">🧠</span>
+                    程序的大脑
+                </div>
+                <p><strong>通俗解释：</strong>这一层是"总指挥部"，负责协调各个模块的工作。比如检测游戏是否运行、管理注入过程、处理模块间的通信等。</p>
+                
+                <div class="code-block">
+                    <div class="code-title">文件列表：</div>
+                    <pre>
+core/
+├── game_session_manager.py   # 游戏会话管理（检测游戏、自动连接）
+├── frida_manager.py          # Frida注入管理（注入JavaScript代码）
+├── event_bus.py              # 事件总线（模块间通信）
+├── feature_registry.py       # 功能注册表（统一管理所有功能）
+├── universal_hook_manager.py # DLL注入管理（高性能功能）
+├── config.py                 # 配置文件
+├── hotkey_manager.py         # 快捷键管理
+├── sound_manager.py          # 音效管理
+├── logger.py                 # 日志管理
+└── __init__.py
+                    </pre>
+                </div>
+            </div>
+        </div>
+
+        <!-- 程序流程 -->
+        <div id="flow" class="content-section">
+            <h2>🔄 程序流程</h2>
+            
+            <h3>🚀 启动流程</h3>
+            <div class="flowchart">
+                <div class="flow-step">
+                    <div class="step-number">1</div>
+                    <div class="step-content">
+                        <div class="step-title">启动主程序 (app.py)</div>
+                        <div class="step-desc">用户双击运行程序，创建主窗口，初始化界面</div>
+                    </div>
+                </div>
+                <div class="arrow-down">⬇️</div>
+                <div class="flow-step">
+                    <div class="step-number">2</div>
+                    <div class="step-content">
+                        <div class="step-title">初始化核心管理器</div>
+                        <div class="step-desc">创建EventBus、FeatureRegistry、FridaManager、GameSessionManager等核心管理器（都是单例）</div>
+                    </div>
+                </div>
+                <div class="arrow-down">⬇️</div>
+                <div class="flow-step">
+                    <div class="step-number">3</div>
+                    <div class="step-content">
+                        <div class="step-title">注册所有功能模块</div>
+                        <div class="step-desc">通过装饰器 @register_feature 自动注册所有功能到FeatureRegistry</div>
+                    </div>
+                </div>
+                <div class="arrow-down">⬇️</div>
+                <div class="flow-step">
+                    <div class="step-number">4</div>
+                    <div class="step-content">
+                        <div class="step-title">加载持久化状态</div>
+                        <div class="step-desc">从 feature_state.json 读取上次的功能开关状态，恢复用户设置</div>
+                    </div>
+                </div>
+                <div class="arrow-down">⬇️</div>
+                <div class="flow-step">
+                    <div class="step-number">5</div>
+                    <div class="step-content">
+                        <div class="step-title">启动游戏检测线程</div>
+                        <div class="step-desc">GameSessionManager 启动后台线程，每2秒检测一次游戏进程</div>
+                    </div>
+                </div>
+                <div class="arrow-down">⬇️</div>
+                <div class="flow-step">
+                    <div class="step-number">6</div>
+                    <div class="step-content">
+                        <div class="step-title">显示主界面</div>
+                        <div class="step-desc">窗口显示，等待用户操作</div>
+                    </div>
+                </div>
+            </div>
+
+            <h3>🎮 游戏连接流程</h3>
+            <div class="flowchart">
+                <div class="flow-step">
+                    <div class="step-number">1</div>
+                    <div class="step-content">
+                        <div class="step-title">检测游戏进程</div>
+                        <div class="step-desc">后台线程每2秒扫描一次进程列表，查找游戏进程（通过进程名判断）</div>
+                    </div>
+                </div>
+                <div class="arrow-down">⬇️</div>
+                <div class="flow-step">
+                    <div class="step-number">2</div>
+                    <div class="step-content">
+                        <div class="step-title">等待游戏稳定</div>
+                        <div class="step-desc">检测到游戏进程后，等待0.5秒确保进程稳定（避免刚启动就崩溃）</div>
+                    </div>
+                </div>
+                <div class="arrow-down">⬇️</div>
+                <div class="flow-step">
+                    <div class="step-number">3</div>
+                    <div class="step-content">
+                        <div class="step-title">连接现有DLL</div>
+                        <div class="step-desc">尝试连接游戏中已有的DLL（如果之前注入过），通过命名管道通信</div>
+                    </div>
+                </div>
+                <div class="arrow-down">⬇️</div>
+                <div class="flow-step">
+                    <div class="step-number">4</div>
+                    <div class="step-content">
+                        <div class="step-title">注入DLL（如果需要）</div>
+                        <div class="step-desc">如果游戏中没有DLL，则注入 Universal-ImGui-Hook.dll（高性能功能用）</div>
+                    </div>
+                </div>
+                <div class="arrow-down">⬇️</div>
+                <div class="flow-step">
+                    <div class="step-number">5</div>
+                    <div class="step-content">
+                        <div class="step-title">同步功能状态</div>
+                        <div class="step-desc">将用户期望的功能状态同步到DLL（比如开启快刀、移动速度等）</div>
+                    </div>
+                </div>
+                <div class="arrow-down">⬇️</div>
+                <div class="flow-step">
+                    <div class="step-number">6</div>
+                    <div class="step-content">
+                        <div class="step-title">连接Frida</div>
+                        <div class="step-desc">使用Frida工具注入JavaScript代码到游戏进程</div>
+                    </div>
+                </div>
+                <div class="arrow-down">⬇️</div>
+                <div class="flow-step">
+                    <div class="step-number">7</div>
+                    <div class="step-content">
+                        <div class="step-title">准备就绪</div>
+                        <div class="step-desc">所有连接完成，程序进入READY状态，用户可以使用各种功能</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 设计巧思 -->
+        <div id="design" class="content-section">
+            <h2>💡 设计巧思</h2>
+            
+            <h3>1. 单例模式 - 全局唯一实例</h3>
+            <div class="card">
+                <div class="card-title">
+                    <span class="card-icon">👑</span>
+                    什么是单例？
+                </div>
+                <p><strong>通俗解释：</strong>单例就是"一个国家只有一个总统"。程序中的某些管理器（比如EventBus、FridaManager）只能有一个实例，不能创建多个。</p>
+
+                <div class="code-block">
+                    <div class="code-title">单例模式代码：</div>
+                    <pre>
+class EventBus:
+    _instance = None  # 类变量，保存唯一实例
+    _lock = threading.Lock()  # 线程锁
+    
+    @classmethod
+    def get_instance(cls):
+        if cls._instance is None:  # 如果还没有实例
+            with cls._lock:  # 加锁（防止多线程同时创建）
+                if cls._instance is None:
+                    cls._instance = cls()  # 创建实例
+        return cls._instance  # 返回唯一实例
+                    </pre>
+                </div>
+
+                <div class="tip-box">
+                    <p><strong>为什么使用单例？</strong>因为EventBus是"广播站"，如果有多个广播站，消息就会混乱。FridaManager是"注入管理器"，如果有多个，就会重复注入导致游戏崩溃。</p>
+                </div>
+            </div>
+
+            <h3>2. 事件总线 - 模块间通信</h3>
+            <div class="card">
+                <div class="card-title">
+                    <span class="card-icon">📡</span>
+                    模块间的广播站
+                </div>
+                <p><strong>通俗解释：</strong>EventBus就像一个广播站，一个模块发送消息，所有订阅了该消息的模块都能收到。比如UI层发送"游戏已连接"消息，日志模块、音效模块都能收到并做出反应。</p>
+            </div>
+
+            <h3>3. 功能注册表 - 统一管理功能</h3>
+            <div class="card">
+                <div class="card-title">
+                    <span class="card-icon">📋</span>
+                    功能的花名册
+                </div>
+                <p><strong>通俗解释：</strong>FeatureRegistry就像一个花名册，记录了所有功能模块。程序启动时，所有功能模块自动注册到花名册中，方便统一管理。</p>
+            </div>
+
+            <h3>4. 状态持久化 - 自动保存用户设置</h3>
+            <div class="card">
+                <div class="card-title">
+                    <span class="card-icon">💾</span>
+                    自动保存和恢复
+                </div>
+                <p><strong>通俗解释：</strong>程序关闭时自动保存所有功能的开关状态和参数值，下次启动时自动恢复到上次的设置。用户不需要每次都重新设置。</p>
+
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-number">20</div>
+                        <div class="stat-label">支持持久化的功能</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number">1</div>
+                        <div class="stat-label">不支持持久化的功能</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number">95%</div>
+                        <div class="stat-label">持久化覆盖率</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 问题专区 -->
+        <div id="qa" class="content-section">
+            <h2>❓ 问题专区</h2>
+            <p style="color: #a0a0a0; margin-bottom: 30px;">这里收集了新手常见问题，用通俗易懂的语言解答。如果你有其他问题，欢迎提问！</p>
+
+            <div class="question-card">
+                <div class="question-title">
+                    <span>❓</span>
+                    问题1：核心管理层各个文件的详细解释
+                </div>
+                <div class="answer-content">
+                    <p><strong>答：</strong>让我详细解释核心管理层每个文件的代码、作用、以及如果没有会怎么样。</p>
+
+                    <h4 style="color: #00d4ff; margin: 20px 0 10px 0;">1. game_session_manager.py - 游戏会话管理器</h4>
+                    <div class="card">
+                        <p><strong>作用：</strong>检测游戏是否运行，自动连接/断开，管理整个游戏会话的生命周期。</p>
+                        
+                        <div class="code-block">
+                            <div class="code-title">核心代码解析：</div>
+                            <pre>
+class GameSessionManager:
+    # 单例模式
+    _instance = None
+    _singleton_lock = threading.Lock()
+    
+    @classmethod
+    def get_instance(cls):
+        """获取单例实例"""
+        if cls._instance is None:
+            with cls._singleton_lock:
+                if cls._instance is None:
+                    cls._instance = cls()
+        return cls._instance
+    
+    def __init__(self):
+        # 初始化状态机
+        self._state = SessionState.NO_GAME
+        self._pid = None  # 游戏进程ID
+        self._pid_create_time = None  # 进程创建时间
+        self._lock = threading.Lock()  # 线程锁
+        self._stop_event = threading.Event()  # 停止事件
+        self._worker_thread = None  # 工作线程
+        self._frida_manager = None  # Frida管理器
+        self._universal_manager = None  # DLL管理器
+        self._desired_states = {}  # 用户期望的功能状态
+        self._applied_states = {}  # 实际应用的功能状态
+    
+    def start(self):
+        """启动会话管理器"""
+        self._load_desired_states()  # 加载用户期望状态
+        self._stop_event.clear()
+        # 启动后台线程，每2秒执行一次状态机
+        self._worker_thread = threading.Thread(target=self._worker_loop, daemon=True)
+        self._worker_thread.start()
+    
+    def _worker_loop(self):
+        """后台线程循环"""
+        while not self._stop_event.is_set():
+            self._state_machine_step()  # 执行状态机的一步
+            time.sleep(2)  # 每2秒执行一次
+    
+    def _state_machine_step(self):
+        """状态机的一步"""
+        current_state = self._state
+        
+        # 根据当前状态执行对应的步骤
+        if current_state == SessionState.NO_GAME:
+            self._step_no_game()  # 没有游戏，检测游戏进程
+        elif current_state == SessionState.WAITING_GAME_READY:
+            self._step_waiting_game_ready()  # 等待游戏稳定
+        elif current_state == SessionState.CONNECTING_EXISTING_DLL:
+            self._step_connecting_existing_dll()  # 连接现有DLL
+        elif current_state == SessionState.INJECTING_DLL:
+            self._step_injecting_dll()  # 注入DLL
+        elif current_state == SessionState.SYNCING_FEATURES:
+            self._step_syncing_features()  # 同步功能状态
+        elif current_state == SessionState.CONNECTING_FRIDA:
+            self._step_connecting_frida()  # 连接Frida
+        elif current_state == SessionState.READY:
+            self._step_ready()  # 准备就绪，监控游戏
+                            </pre>
+                        </div>
+
+                        <div class="tip-box">
+                            <p><strong>为什么需要：</strong>如果没有这个文件，程序就无法自动检测游戏、自动连接、自动断开。用户需要手动点击"连接"按钮，而且游戏关闭后程序不会自动断开，可能导致错误。</p>
+                        </div>
+
+                        <div class="flowchart">
+                            <div class="flow-step">
+                                <div class="step-number">1</div>
+                                <div class="step-content">
+                                    <div class="step-title">NO_GAME - 没有游戏</div>
+                                    <div class="step-desc">每2秒扫描进程列表，查找 crossfire.exe</div>
+                                </div>
+                            </div>
+                            <div class="arrow-down">⬇️</div>
+                            <div class="flow-step">
+                                <div class="step-number">2</div>
+                                <div class="step-content">
+                                    <div class="step-title">WAITING_GAME_READY - 等待游戏稳定</div>
+                                    <div class="step-desc">等待0.5秒，确保进程稳定，避免刚启动就崩溃</div>
+                                </div>
+                            </div>
+                            <div class="arrow-down">⬇️</div>
+                            <div class="flow-step">
+                                <div class="step-number">3</div>
+                                <div class="step-content">
+                                    <div class="step-title">CONNECTING_EXISTING_DLL - 连接现有DLL</div>
+                                    <div class="step-desc">尝试通过命名管道连接游戏中已有的DLL</div>
+                                </div>
+                            </div>
+                            <div class="arrow-down">⬇️</div>
+                            <div class="flow-step">
+                                <div class="step-number">4</div>
+                                <div class="step-content">
+                                    <div class="step-title">INJECTING_DLL - 注入DLL（如果需要）</div>
+                                    <div class="step-desc">如果游戏中没有DLL，则注入 Universal-ImGui-Hook.dll</div>
+                                </div>
+                            </div>
+                            <div class="arrow-down">⬇️</div>
+                            <div class="flow-step">
+                                <div class="step-number">5</div>
+                                <div class="step-content">
+                                    <div class="step-title">SYNCING_FEATURES - 同步功能状态</div>
+                                    <div class="step-desc">将用户期望的功能状态同步到DLL</div>
+                                </div>
+                            </div>
+                            <div class="arrow-down">⬇️</div>
+                            <div class="flow-step">
+                                <div class="step-number">6</div>
+                                <div class="step-content">
+                                    <div class="step-title">CONNECTING_FRIDA - 连接Frida</div>
+                                    <div class="step-desc">使用Frida附加到游戏进程，注入JavaScript代码</div>
+                                </div>
+                            </div>
+                            <div class="arrow-down">⬇️</div>
+                            <div class="flow-step">
+                                <div class="step-number">7</div>
+                                <div class="step-content">
+                                    <div class="step-title">READY - 准备就绪</div>
+                                    <div class="step-desc">监控游戏进程，检查连接是否断开</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <h4 style="color: #00d4ff; margin: 20px 0 10px 0;">2. frida_manager.py - Frida注入管理器</h4>
+                    <div class="card">
+                        <p><strong>作用：</strong>管理Frida注入过程，加载JavaScript代码，发送消息到游戏内部。</p>
+                        
+                        <div class="code-block">
+                            <div class="code-title">核心代码解析：</div>
+                            <pre>
+class FridaManager:
+    _instance = None
+    _lock = threading.Lock()
+
+    def __init__(self):
+        self._session = None  # Frida会话
+        self._script = None  # 注入的脚本
+        self._ready = False  # 是否准备就绪
+        self._pid = None  # 游戏进程ID
+        self._event_bus = EventBus.get_instance()
+    
+    def connect(self, pid):
+        """连接到游戏进程"""
+        # 1. 使用Frida附加到进程
+        self._session = frida.attach(pid)
+        
+        # 2. 构建JavaScript代码（加载所有功能的JS代码）
+        js_code = self._build_js_code()
+        
+        # 3. 注入JavaScript代码
+        self._script = self._session.create_script(js_code)
+        self._script.on('message', self._on_message)  # 设置消息回调
+        self._script.load()  # 加载脚本
+        
+        self._ready = True
+        return True, "连接成功"
+    
+    def _build_js_code(self):
+        """构建JavaScript代码"""
+        parts = []
+        
+        # 1. 加载通用函数
+        common_path = os.path.join(SCRIPTS_DIR, '_common.js')
+        with open(common_path, 'r', encoding='utf-8') as f:
+            parts.append(f.read())
+        
+        # 2. 加载所有功能的JavaScript代码
+        registry = FeatureRegistry.get_instance()
+        for feature in registry.get_all():
+            js_code = feature.get_js_code()
+            if js_code:
+                parts.append(js_code)
+        
+        # 3. 添加消息分发器
+        parts.append(self._build_dispatcher())
+        
+        return '\n\n'.join(parts)
+    
+    def send_toggle(self, feature_id, enabled):
+        """发送功能开关消息"""
+        self._script.post({
+            'type': 'toggle',
+            'feature': feature_id,
+            'enable': enabled
+        })
+                            </pre>
+                        </div>
+
+                        <div class="tip-box">
+                            <p><strong>为什么需要：</strong>如果没有这个文件，程序就无法注入JavaScript代码到游戏，所有功能都无法实现。Frida是连接Python和游戏内存的桥梁。</p>
+                        </div>
+
+                        <div class="flowchart">
+                            <div class="flow-step">
+                                <div class="step-number">1</div>
+                                <div class="step-content">
+                                    <div class="step-title">附加到游戏进程</div>
+                                    <div class="step-desc">frida.attach(pid) 附加到游戏进程</div>
+                                </div>
+                            </div>
+                            <div class="arrow-down">⬇️</div>
+                            <div class="flow-step">
+                                <div class="step-number">2</div>
+                                <div class="step-content">
+                                    <div class="step-title">构建JavaScript代码</div>
+                                    <div class="step-desc">加载 _common.js + 所有功能的JS代码 + 消息分发器</div>
+                                </div>
+                            </div>
+                            <div class="arrow-down">⬇️</div>
+                            <div class="flow-step">
+                                <div class="step-number">3</div>
+                                <div class="step-content">
+                                    <div class="step-title">注入脚本</div>
+                                    <div class="step-desc">session.create_script() 创建脚本，script.load() 加载</div>
+                                </div>
+                            </div>
+                            <div class="arrow-down">⬇️</div>
+                            <div class="flow-step">
+                                <div class="step-number">4</div>
+                                <div class="step-content">
+                                    <div class="step-title">设置消息回调</div>
+                                    <div class="step-desc">script.on('message', callback) 监听来自游戏的消息</div>
+                                </div>
+                            </div>
+                            <div class="arrow-down">⬇️</div>
+                            <div class="flow-step">
+                                <div class="step-number">5</div>
+                                <div class="step-content">
+                                    <div class="step-title">准备就绪</div>
+                                    <div class="step-desc">可以发送消息到游戏，控制功能开关</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <h4 style="color: #00d4ff; margin: 20px 0 10px 0;">3. event_bus.py - 事件总线</h4>
+                    <div class="card">
+                        <p><strong>作用：</strong>模块间的消息广播站，一个模块发送消息，所有订阅的模块都能收到。</p>
+                        
+                        <div class="code-block">
+                            <div class="code-title">核心代码解析：</div>
+                            <pre>
+class EventBus:
+    _instance = None
+    _lock = threading.Lock()
+
+    def __init__(self):
+        self._subscribers = defaultdict(list)  # 订阅者列表
+        self._lock = threading.Lock()
+    
+    def subscribe(self, event_type, callback):
+        """订阅消息（收听广播）"""
+        with self._lock:
+            # 使用弱引用避免内存泄漏
+            ref = weakref.WeakMethod(callback) if hasattr(callback, '__self__') else callback
+            self._subscribers[event_type].append(ref)
+    
+    def emit(self, event_type, **kwargs):
+        """发送消息（广播）"""
+        with self._lock:
+            subscribers = list(self._subscribers.get(event_type, []))
+        
+        # 在新线程中执行回调，避免阻塞
+        for ref in subscribers:
+            callback = self._resolve_ref(ref)
+            if callback:
+                threading.Thread(target=callback, kwargs=kwargs, daemon=True).start()
+                            </pre>
+                        </div>
+
+                        <div class="tip-box">
+                            <p><strong>为什么需要：</strong>如果没有这个文件，模块间通信会非常困难。比如UI层要通知日志模块、音效模块、状态管理模块，需要分别调用每个模块的方法，代码会非常冗余。</p>
+                        </div>
+
+                        <div class="flowchart">
+                            <div class="flow-step">
+                                <div class="step-number">1</div>
+                                <div class="step-content">
+                                    <div class="step-title">模块A订阅消息</div>
+                                    <div class="step-desc">bus.subscribe('connection_status', callback)</div>
+                                </div>
+                            </div>
+                            <div class="arrow-down">⬇️</div>
+                            <div class="flow-step">
+                                <div class="step-number">2</div>
+                                <div class="step-content">
+                                    <div class="step-title">模块B订阅消息</div>
+                                    <div class="step-desc">bus.subscribe('connection_status', callback2)</div>
+                                </div>
+                            </div>
+                            <div class="arrow-down">⬇️</div>
+                            <div class="flow-step">
+                                <div class="step-number">3</div>
+                                <div class="step-content">
+                                    <div class="step-title">模块C发送消息</div>
+                                    <div class="step-desc">bus.emit('connection_status', status='connected')</div>
+                                </div>
+                            </div>
+                            <div class="arrow-down">⬇️</div>
+                            <div class="flow-step">
+                                <div class="step-number">4</div>
+                                <div class="step-content">
+                                    <div class="step-title">模块A和B收到消息</div>
+                                    <div class="step-desc">在新线程中执行回调，避免阻塞</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <h4 style="color: #00d4ff; margin: 20px 0 10px 0;">4. feature_registry.py - 功能注册表</h4>
+                    <div class="card">
+                        <p><strong>作用：</strong>统一管理所有功能模块，提供查询和遍历功能。</p>
+                        
+                        <div class="code-block">
+                            <div class="code-title">核心代码解析：</div>
+                            <pre>
+class FeatureRegistry:
+    _instance = None
+    _lock = threading.Lock()
+
+    def __init__(self):
+        self._features = {}  # 功能字典 {feature_id: feature_instance}
+        self._lock = threading.Lock()
+    
+    def register(self, feature_instance):
+        """注册功能到花名册"""
+        with self._lock:
+            self._features[feature_instance.feature_id] = feature_instance
+    
+    def get_all(self):
+        """获取所有功能"""
+        with self._lock:
+            return list(self._features.values())
+    
+    def get(self, feature_id):
+        """根据ID获取功能"""
+        with self._lock:
+            return self._features.get(feature_id)
+
+# 装饰器：自动注册功能
+def register_feature(cls):
+    instance = cls()  # 创建功能实例
+    FeatureRegistry.get_instance().register(instance)  # 注册到花名册
+    return cls
+                            </pre>
+                        </div>
+
+                        <div class="tip-box">
+                            <p><strong>为什么需要：</strong>如果没有这个文件，需要手动管理所有功能，容易遗漏。新增功能时需要修改多处代码，维护困难。</p>
+                        </div>
+
+                        <div class="flowchart">
+                            <div class="flow-step">
+                                <div class="step-number">1</div>
+                                <div class="step-content">
+                                    <div class="step-title">定义功能类</div>
+                                    <div class="step-desc">@register_feature class KnifeFeature(FeatureBase): ...</div>
+                                </div>
+                            </div>
+                            <div class="arrow-down">⬇️</div>
+                            <div class="flow-step">
+                                <div class="step-number">2</div>
+                                <div class="step-content">
+                                    <div class="step-title">装饰器自动执行</div>
+                                    <div class="step-desc">instance = cls() 创建实例</div>
+                                </div>
+                            </div>
+                            <div class="arrow-down">⬇️</div>
+                            <div class="flow-step">
+                                <div class="step-number">3</div>
+                                <div class="step-content">
+                                    <div class="step-title">注册到花名册</div>
+                                    <div class="step-desc">registry.register(instance)</div>
+                                </div>
+                            </div>
+                            <div class="arrow-down">⬇️</div>
+                            <div class="flow-step">
+                                <div class="step-number">4</div>
+                                <div class="step-content">
+                                    <div class="step-title">统一管理</div>
+                                    <div class="step-desc">registry.get_all() 获取所有功能</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <h4 style="color: #00d4ff; margin: 20px 0 10px 0;">5. universal_hook_manager.py - DLL注入管理器</h4>
+                    <div class="card">
+                        <p><strong>作用：</strong>管理DLL注入，通过命名管道与DLL通信，实现高性能功能（如ESP透视）。</p>
+                        
+                        <div class="code-block">
+                            <div class="code-title">核心代码解析：</div>
+                            <pre>
+class UniversalHookManager:
+    _instance = None
+    _singleton_lock = threading.Lock()
+
+    def __init__(self):
+        self._bus = EventBus.get_instance()
+        self._pipe = None  # 命名管道句柄
+        self._pid = None  # 当前连接的PID
+        self._lock = threading.RLock()
+        self._dll_path = os.path.join(PLUGINS_DIR, "Universal-ImGui-Hook.dll")
+    
+    def try_connect_existing(self, pid):
+        """尝试连接游戏中已有的DLL"""
+        # 构建管道名称
+        pipe_name = f"\\\\.\\pipe\\UniversalHook_{pid}"
+        
+        # 打开管道
+        self._pipe = kernel32.CreateFileW(
+            pipe_name,
+            GENERIC_READ | GENERIC_WRITE,
+            0, None, OPEN_EXISTING,
+            FILE_FLAG_OVERLAPPED, None
+        )
+        
+        if self._pipe != INVALID_HANDLE_VALUE:
+            self._pid = pid
+            return True  # 连接成功
+        return False  # 连接失败
+    
+    def inject_and_connect(self, pid):
+        """注入DLL并连接"""
+        # 1. 注入DLL到游戏进程
+        # 2. 等待DLL创建命名管道
+        # 3. 连接到命名管道
+        pass
+                            </pre>
+                        </div>
+
+                        <div class="tip-box">
+                            <p><strong>为什么需要：</strong>如果没有这个文件，就无法实现高性能功能（如ESP透视）。Frida的JavaScript注入性能有限，无法满足每秒画几十次方框的需求。</p>
+                        </div>
+
+                        <div class="flowchart">
+                            <div class="flow-step">
+                                <div class="step-number">1</div>
+                                <div class="step-content">
+                                    <div class="step-title">尝试连接现有DLL</div>
+                                    <div class="step-desc">通过命名管道连接：\\\\.\\pipe\\UniversalHook_{pid}</div>
+                                </div>
+                            </div>
+                            <div class="arrow-down">⬇️</div>
+                            <div class="flow-step">
+                                <div class="step-number">2</div>
+                                <div class="step-content">
+                                    <div class="step-title">如果连接失败</div>
+                                    <div class="step-desc">注入DLL到游戏进程（使用远程线程注入）</div>
+                                </div>
+                            </div>
+                            <div class="arrow-down">⬇️</div>
+                            <div class="flow-step">
+                                <div class="step-number">3</div>
+                                <div class="step-content">
+                                    <div class="step-title">等待DLL创建管道</div>
+                                    <div class="step-desc">DLL初始化后会创建命名管道</div>
+                                </div>
+                            </div>
+                            <div class="arrow-down">⬇️</div>
+                            <div class="flow-step">
+                                <div class="step-number">4</div>
+                                <div class="step-content">
+                                    <div class="step-title">连接到管道</div>
+                                    <div class="step-desc">CreateFileW() 打开管道，建立通信</div>
+                                </div>
+                            </div>
+                            <div class="arrow-down">⬇️</div>
+                            <div class="flow-step">
+                                <div class="step-number">5</div>
+                                <div class="step-content">
+                                    <div class="step-title">发送指令</div>
+                                    <div class="step-desc">通过管道发送JSON指令，控制ESP等功能</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="question-card">
+                <div class="question-title">
+                    <span>❓</span>
+                    问题2：注入DLL的各种情况处理
+                </div>
+                <div class="answer-content">
+                    <p><strong>答：</strong>程序会根据不同的情况采取不同的处理方式。让我详细解释：</p>
+
+                    <div class="scenario-card">
+                        <div class="scenario-title">
+                            <span>场景1：</span>
+                            用户之前用程序注入过DLL，再次开启程序
+                        </div>
+                        <div class="flowchart">
+                            <div class="flow-step">
+                                <div class="step-number">1</div>
+                                <div class="step-content">
+                                    <div class="step-title">检测游戏进程</div>
+                                    <div class="step-desc">找到游戏进程，PID=1234</div>
+                                </div>
+                            </div>
+                            <div class="arrow-down">⬇️</div>
+                            <div class="flow-step">
+                                <div class="step-number">2</div>
+                                <div class="step-content">
+                                    <div class="step-title">尝试连接现有DLL</div>
+                                    <div class="step-desc">调用 universal.try_connect_existing(1234)</div>
+                                </div>
+                            </div>
+                            <div class="arrow-down">⬇️</div>
+                            <div class="flow-step">
+                                <div class="step-number">3</div>
+                                <div class="step-content">
+                                    <div class="step-title">连接成功</div>
+                                    <div class="step-desc">DLL还在游戏中，直接连接命名管道，无需重复注入</div>
+                                </div>
+                            </div>
+                            <div class="arrow-down">⬇️</div>
+                            <div class="flow-step">
+                                <div class="step-number">4</div>
+                                <div class="step-content">
+                                    <div class="step-title">同步功能状态</div>
+                                    <div class="step-desc">恢复用户上次开启的功能（如ESP透视）</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="tip-box">
+                            <p><strong>好处：</strong>避免重复注入，节省时间，提高稳定性。</p>
+                        </div>
+                    </div>
+
+                    <div class="scenario-card">
+                        <div class="scenario-title">
+                            <span>场景2：</span>
+                            第一次打开程序，游戏中没有DLL
+                        </div>
+                        <div class="flowchart">
+                            <div class="flow-step">
+                                <div class="step-number">1</div>
+                                <div class="step-content">
+                                    <div class="step-title">检测游戏进程</div>
+                                    <div class="step-desc">找到游戏进程，PID=1234</div>
+                                </div>
+                            </div>
+                            <div class="arrow-down">⬇️</div>
+                            <div class="flow-step">
+                                <div class="step-number">2</div>
+                                <div class="step-content">
+                                    <div class="step-title">尝试连接现有DLL</div>
+                                    <div class="step-desc">调用 universal.try_connect_existing(1234)</div>
+                                </div>
+                            </div>
+                            <div class="arrow-down">⬇️</div>
+                            <div class="flow-step">
+                                <div class="step-number">3</div>
+                                <div class="step-content">
+                                    <div class="step-title">连接失败</div>
+                                    <div class="step-desc">游戏中没有DLL，管道不存在</div>
+                                </div>
+                            </div>
+                            <div class="arrow-down">⬇️</div>
+                            <div class="flow-step">
+                                <div class="step-number">4</div>
+                                <div class="step-content">
+                                    <div class="step-title">注入DLL</div>
+                                    <div class="step-desc">调用 universal.inject_and_connect(1234)</div>
+                                </div>
+                            </div>
+                            <div class="arrow-down">⬇️</div>
+                            <div class="flow-step">
+                                <div class="step-number">5</div>
+                                <div class="step-content">
+                                    <div class="step-title">连接成功</div>
+                                    <div class="step-desc">DLL注入成功，创建管道，程序连接到管道</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="scenario-card">
+                        <div class="scenario-title">
+                            <span>场景3：</span>
+                            关闭了游戏，程序没关闭，重启了游戏（新进程）
+                        </div>
+                        <div class="flowchart">
+                            <div class="flow-step">
+                                <div class="step-number">1</div>
+                                <div class="step-content">
+                                    <div class="step-title">检测游戏进程变化</div>
+                                    <div class="step-desc">旧PID=1234，新PID=5678，create_time也变了</div>
+                                </div>
+                            </div>
+                            <div class="arrow-down">⬇️</div>
+                            <div class="flow-step">
+                                <div class="step-number">2</div>
+                                <div class="step-content">
+                                    <div class="step-title">重置会话</div>
+                                    <div class="step-desc">断开旧连接，清理旧状态</div>
+                                </div>
+                            </div>
+                            <div class="arrow-down">⬇️</div>
+                            <div class="flow-step">
+                                <div class="step-number">3</div>
+                                <div class="step-content">
+                                    <div class="step-title">重新连接</div>
+                                    <div class="step-desc">按照"场景1"或"场景2"的流程重新连接</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="tip-box">
+                            <p><strong>关键代码：</strong>程序通过PID和create_time判断进程是否变化。如果PID或create_time变了，说明游戏重启了，需要重新连接。</p>
+                        </div>
+                    </div>
+
+                    <div class="scenario-card">
+                        <div class="scenario-title">
+                            <span>场景4：</span>
+                            游戏崩溃或被强制关闭
+                        </div>
+                        <div class="flowchart">
+                            <div class="flow-step">
+                                <div class="step-number">1</div>
+                                <div class="step-content">
+                                    <div class="step-title">检测游戏进程不存在</div>
+                                    <div class="step-desc">_find_game_process() 返回 None</div>
+                                </div>
+                            </div>
+                            <div class="arrow-down">⬇️</div>
+                            <div class="flow-step">
+                                <div class="step-number">2</div>
+                                <div class="step-content">
+                                    <div class="step-title">断开连接</div>
+                                    <div class="step-desc">frida.disconnect()，universal.disconnect()</div>
+                                </div>
+                            </div>
+                            <div class="arrow-down">⬇️</div>
+                            <div class="flow-step">
+                                <div class="step-number">3</div>
+                                <div class="step-content">
+                                    <div class="step-title">回到初始状态</div>
+                                    <div class="step-desc">state = SessionState.NO_GAME，等待游戏重新启动</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="warning-box">
+                        <p><strong>其他情况：</strong></p>
+                        <ul style="margin: 10px 0; padding-left: 20px;">
+                            <li><strong>游戏更新：</strong>如果游戏更新了，可能需要更新注入代码。程序会检测DLL版本号，如果版本不匹配会提示用户。</li>
+                            <li><strong>权限不足：</strong>如果程序没有管理员权限，可能无法注入DLL。程序会提示用户以管理员身份运行。</li>
+                            <li><strong>杀毒软件拦截：</strong>某些杀毒软件可能拦截DLL注入。程序会提示用户关闭杀毒软件或添加白名单。</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <div class="question-card">
+                <div class="question-title">
+                    <span>❓</span>
+                    问题3：快捷键的配置和调用流程
+                </div>
+                <div class="answer-content">
+                    <p><strong>答：</strong>快捷键的调用流程与用户点击开关的流程基本一致，只是触发方式不同。</p>
+
+                    <div class="card">
+                        <div class="card-title">
+                            <span class="card-icon">⌨️</span>
+                            快捷键调用流程
+                        </div>
+                        
+                        <div class="flowchart">
+                            <div class="flow-step">
+                                <div class="step-number">1</div>
+                                <div class="step-content">
+                                    <div class="step-title">用户按下快捷键</div>
+                                    <div class="step-desc">比如按下 Ctrl+1</div>
+                                </div>
+                            </div>
+                            <div class="arrow-down">⬇️</div>
+                            <div class="flow-step">
+                                <div class="step-number">2</div>
+                                <div class="step-content">
+                                    <div class="step-title">HotkeyManager捕获按键</div>
+                                    <div class="step-desc">keyboard.add_hotkey() 监听到按键，触发回调</div>
+                                </div>
+                            </div>
+                            <div class="arrow-down">⬇️</div>
+                            <div class="flow-step">
+                                <div class="step-number">3</div>
+                                <div class="step-content">
+                                    <div class="step-title">查找对应功能</div>
+                                    <div class="step-desc">根据快捷键配置，找到对应的功能ID（如 'knife'）</div>
+                                </div>
+                            </div>
+                            <div class="arrow-down">⬇️</div>
+                            <div class="flow-step">
+                                <div class="step-number">4</div>
+                                <div class="step-content">
+                                    <div class="step-title">调用切换函数</div>
+                                    <div class="step-desc">app.after(0, toggle_callback) 在主线程中执行切换</div>
+                                </div>
+                            </div>
+                            <div class="arrow-down">⬇️</div>
+                            <div class="flow-step">
+                                <div class="step-number">5</div>
+                                <div class="step-content">
+                                    <div class="step-title">切换功能状态</div>
+                                    <div class="step-desc">与用户点击开关的流程一致</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="code-block">
+                            <div class="code-title">快捷键管理器代码：</div>
+                            <pre>
+class HotkeyManager:
+    def setup_hotkeys(self, toggle_callback, silent=False):
+        """设置快捷键"""
+        self._toggle_callback = toggle_callback
+        
+        # 清除旧的快捷键
+        for handle in self._hotkey_handles:
+            handle.unhook()
+        self._hotkey_handles = []
+        
+        # 遍历所有快捷键位置
+        for pos in HOTKEY_POSITIONS:
+            feature = self._hotkeys.get(pos)  # 获取对应的功能ID
+            if feature:
+                # 绑定快捷键
+                callback = functools.partial(self._on_hotkey_triggered, feature)
+                handle = keyboard.add_hotkey(pos, callback)
+                self._hotkey_handles.append(handle)
+    
+    def _on_hotkey_triggered(self, feature):
+        """快捷键触发时的回调"""
+        if self._toggle_callback:
+            # 在主线程中执行切换（避免线程安全问题）
+            self._app.after(0, lambda: self._toggle_callback(feature))
+                            </pre>
+                        </div>
+
+                        <div class="tip-box">
+                            <p><strong>与用户点击开关的区别：</strong></p>
+                            <ul style="margin: 10px 0; padding-left: 20px;">
+                                <li><strong>触发方式不同：</strong>快捷键通过键盘事件触发，用户点击通过鼠标事件触发</li>
+                                <li><strong>执行线程不同：</strong>快捷键回调在后台线程执行，需要用 app.after() 切换到主线程</li>
+                                <li><strong>后续流程相同：</strong>都是调用同一个 toggle_callback 函数，执行相同的切换逻辑</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="question-card">
+                <div class="question-title">
+                    <span>❓</span>
+                    问题4：功能注册表的代码对比
+                </div>
+                <div class="answer-content">
+                    <p><strong>答：</strong>让我通过代码对比，详细解释功能注册表的好处。</p>
+
+                    <h4 style="color: #00d4ff; margin: 20px 0 10px 0;">场景：你要新增一个"无限血量"功能</h4>
+
+                    <div class="comparison-table">
+                        <div class="comparison-card without">
+                            <div class="comparison-title bad">❌ 没有功能注册表</div>
+                            
+                            <div class="code-block">
+                                <div class="code-title">步骤1：创建功能文件</div>
+                                <pre>
+# features/infinite_health.py
+class InfiniteHealthFeature:
+    def enable(self):
+        pass
+    def disable(self):
+        pass
+                                </pre>
+                            </div>
+                            
+                            <div class="code-block">
+                                <div class="code-title">步骤2：在app.py中手动添加（需要修改多个地方）</div>
+                                <pre>
+# ui/app.py
+from features.infinite_health import InfiniteHealthFeature
+
+class App:
+    def __init__(self):
+        # 手动创建实例
+        self.infinite_health = InfiniteHealthFeature()
+        
+        # 手动添加UI开关
+        self._build_infinite_health_ui()
+    
+    def _build_infinite_health_ui(self):
+        # 手动创建UI组件
+        self.infinite_health_switch = ctk.CTkSwitch(
+            text="无限血量",
+            command=self._toggle_infinite_health
+        )
+        self.infinite_health_switch.pack()
+    
+    def _toggle_infinite_health(self):
+        # 手动处理切换逻辑
+        if self.infinite_health_switch.get():
+            self.infinite_health.enable()
+        else:
+            self.infinite_health.disable()
+    
+    def _save_feature_state(self):
+        # 手动添加到保存逻辑
+        state = {
+            'knife': self.knife_switch.get(),
+            'movespeed': self.movespeed_switch.get(),
+            'infinite_health': self.infinite_health_switch.get(),  # 手动添加
+            # ... 每次新增功能都要手动添加
+        }
+        with open('feature_state.json', 'w') as f:
+            json.dump(state, f)
+    
+    def _load_feature_state(self):
+        # 手动添加到加载逻辑
+        if os.path.exists('feature_state.json'):
+            with open('feature_state.json', 'r') as f:
+                state = json.load(f)
+            self.knife_switch.set(state.get('knife', False))
+            self.movespeed_switch.set(state.get('movespeed', False))
+            self.infinite_health_switch.set(state.get('infinite_health', False))  # 手动添加
+            # ... 每次新增功能都要手动添加
+                                </pre>
+                            </div>
+                            
+                            <ul style="margin-top: 15px; padding-left: 20px;">
+                                <li>❌ 需要修改多个文件</li>
+                                <li>❌ 需要手动创建实例</li>
+                                <li>❌ 需要手动添加UI</li>
+                                <li>❌ 需要手动处理切换</li>
+                                <li>❌ 需要手动保存和加载</li>
+                                <li>❌ 容易遗漏某个步骤</li>
+                                <li>❌ 代码重复，维护困难</li>
+                            </ul>
+                        </div>
+
+                        <div class="comparison-card with">
+                            <div class="comparison-title good">✅ 有功能注册表</div>
+                            
+                            <div class="code-block">
+                                <div class="code-title">只需要一步：创建功能文件</div>
+                                <pre>
+# features/infinite_health.py
+from core.feature_registry import register_feature
+from features.base import FeatureBase
+
+@register_feature  # 这个装饰器会自动注册！
+class InfiniteHealthFeature(FeatureBase):
+    feature_id = 'infinite_health'
+    name = '无限血量'
+    icon = '❤️'
+    desc = '血量永远不减'
+    
+    def enable(self):
+        # 开启无限血量
+        pass
+    
+    def disable(self):
+        # 关闭无限血量
+        pass
+                                </pre>
+                            </div>
+                            
+                            <div class="tip-box" style="margin-top: 15px;">
+                                <p><strong>就这样！</strong>程序启动时会自动：</p>
+                                <ul style="margin: 10px 0; padding-left: 20px;">
+                                    <li>✅ 自动注册到FeatureRegistry</li>
+                                    <li>✅ 自动在UI中显示开关</li>
+                                    <li>✅ 自动处理切换逻辑</li>
+                                    <li>✅ 自动保存和加载状态</li>
+                                    <li>✅ 自动响应快捷键</li>
+                                </ul>
+                            </div>
+                            
+                            <div class="code-block">
+                                <div class="code-title">app.py 自动处理所有功能：</div>
+                                <pre>
+# ui/app.py
+class App:
+    def __init__(self):
+        # 获取所有功能（自动）
+        registry = FeatureRegistry.get_instance()
+        all_features = registry.get_all()
+        
+        # 自动创建UI（自动）
+        for feature in all_features:
+            self._build_feature_ui(feature)
+    
+    def _build_feature_ui(self, feature):
+        # 根据功能元数据自动创建UI
+        switch = ctk.CTkSwitch(
+            text=f"{feature.icon} {feature.name}",
+            command=lambda: self._toggle_feature(feature.feature_id)
+        )
+        switch.pack()
+    
+    def _toggle_feature(self, feature_id):
+        # 统一的切换逻辑（自动）
+        feature = FeatureRegistry.get_instance().get(feature_id)
+        if feature.enabled:
+            feature.disable()
+        else:
+            feature.enable()
+    
+    def _save_feature_state(self):
+        # 自动保存所有功能状态（自动）
+        state = {}
+        for feature in FeatureRegistry.get_instance().get_all():
+            state[feature.feature_id] = {
+                'enabled': feature.enabled
+            }
+        with open('feature_state.json', 'w') as f:
+            json.dump(state, f)
+                                </pre>
+                            </div>
+                            
+                            <ul style="margin-top: 15px; padding-left: 20px;">
+                                <li>✅ 只需要创建一个文件</li>
+                                <li>✅ 自动注册，无需手动创建</li>
+                                <li>✅ 自动创建UI</li>
+                                <li>✅ 自动处理切换</li>
+                                <li>✅ 自动保存和加载</li>
+                                <li>✅ 不会遗漏任何步骤</li>
+                                <li>✅ 代码简洁，维护容易</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <div class="tip-box">
+                        <p><strong>总结：</strong>功能注册表就像一个"自动登记系统"。你只需要创建功能文件，加一个装饰器，系统就会自动帮你完成所有注册工作。就像你去酒店入住，只需要出示身份证，前台就会自动帮你办理入住、分配房间、登记信息等所有事情。</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="question-card">
+                <div class="question-title">
+                    <span>❓</span>
+                    问题5：状态持久化的明确列举
+                </div>
+                <div class="answer-content">
+                    <p><strong>答：</strong>让我明确列举所有支持持久化的功能：</p>
+
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <div class="stat-number">20</div>
+                            <div class="stat-label">支持持久化的功能</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-number">1</div>
+                            <div class="stat-label">不支持持久化的功能</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-number">95%</div>
+                            <div class="stat-label">持久化覆盖率</div>
+                        </div>
+                    </div>
+
+                    <h4 style="color: #00d4ff; margin: 20px 0 10px 0;">✅ 支持持久化的功能（20个）</h4>
+                    <div class="card">
+                        <table>
+                            <tr>
+                                <th>功能ID</th>
+                                <th>功能名称</th>
+                            </tr>
+                            <tr><td>knife</td><td>快刀</td></tr>
+                            <tr><td>time</td><td>时间控制</td></tr>
+                            <tr><td>recoil</td><td>后坐力</td></tr>
+                            <tr><td>ammo</td><td>弹药无限</td></tr>
+                            <tr><td>movespeed</td><td>移动速度</td></tr>
+                            <tr><td>ammoplus</td><td>弹药增强</td></tr>
+                            <tr><td>range</td><td>射程修改</td></tr>
+                            <tr><td>gather</td><td>聚怪</td></tr>
+                            <tr><td>gravity</td><td>重力修改</td></tr>
+                            <tr><td>aim</td><td>自瞄</td></tr>
+                            <tr><td>godmode</td><td>金刚不坏</td></tr>
+                            <tr><td>speedgun</td><td>射速</td></tr>
+                            <tr><td>isbot</td><td>人机识别</td></tr>
+                            <tr><td>skillcd</td><td>技能冷却</td></tr>
+                            <tr><td>roundskip</td><td>跳回合</td></tr>
+                            <tr><td>nano4t</td><td>多人生化Buff</td></tr>
+                            <tr><td>weapon_giver</td><td>赋予武器</td></tr>
+                            <tr><td>timescale</td><td>时间倍速</td></tr>
+                            <tr><td>battle_round_always</td><td>战斗回合</td></tr>
+                            <tr><td>esp_box</td><td>ESP透视（特殊）</td></tr>
+                        </table>
+                    </div>
+
+                    <div class="warning-box">
+                        <p><strong>特殊说明：</strong></p>
+                        <ul style="margin: 10px 0; padding-left: 20px;">
+                            <li><strong>多人生化Buff（nano4t）：</strong>这个功能有特殊的多选框UI，用户可以选择不同的Buff组合。持久化时会保存用户选择的Buff配置。</li>
+                            <li><strong>战斗回合（battle_round_always）：</strong>这个功能比较简单，只有开关状态，没有额外参数。</li>
+                            <li><strong>ESP透视（esp_box）：</strong>这个功能通过DLL实现，状态保存在 desired_states.json 文件中，而不是 feature_state.json。</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <div class="question-card">
+                <div class="question-title">
+                    <span>❓</span>
+                    问题6：IPC机制是什么，是否还有其他更好的方案？
+                </div>
+                <div class="answer-content">
+                    <p><strong>答：</strong>IPC（Inter-Process Communication，进程间通信）是指不同进程之间交换数据的机制。在这个项目中，Python主程序和游戏内的DLL需要通信，就用到了IPC。</p>
+
+                    <div class="card">
+                        <div class="card-title">
+                            <span class="card-icon">🔧</span>
+                            当前使用的IPC方案
+                        </div>
+                        
+                        <div class="code-block">
+                            <div class="code-title">命名管道（Named Pipe）：</div>
+                            <pre>
+# Python端（客户端）
+pipe_name = f"\\\\.\\pipe\\UniversalHook_{pid}"
+pipe_handle = kernel32.CreateFileW(
+    pipe_name,
+    GENERIC_READ | GENERIC_WRITE,
+    0, None, OPEN_EXISTING,
+    FILE_FLAG_OVERLAPPED, None
+)
+
+# 发送消息
+message = json.dumps({"type": "set_esp", "enabled": True})
+kernel32.WriteFile(pipe_handle, message.encode(), ...)
+
+# DLL端（服务端）
+# 创建命名管道
+pipe_handle = CreateNamedPipe(
+    "\\\\.\\pipe\\UniversalHook_1234",
+    PIPE_ACCESS_DUPLEX | FILE_FLAG_OVERLAPPED,
+    PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE,
+    1, 0, 0, 0, NULL
+);
+
+// 监听连接
+ConnectNamedPipe(pipe_handle, NULL);
+
+// 读取消息
+ReadFile(pipe_handle, buffer, sizeof(buffer), &bytesRead, NULL);
+                            </pre>
+                        </div>
+
+                        <div class="tip-box">
+                            <p><strong>为什么选择命名管道？</strong></p>
+                            <ul style="margin: 10px 0; padding-left: 20px;">
+                                <li>✅ Windows原生支持，无需额外依赖</li>
+                                <li>✅ 支持双向通信，Python和DLL都可以发送消息</li>
+                                <li>✅ 支持异步IO，不会阻塞主线程</li>
+                                <li>✅ 性能较好，适合频繁通信</li>
+                                <li>✅ 安全性高，只能本地访问</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-title">
+                            <span class="card-icon">🔄</span>
+                            其他IPC方案对比
+                        </div>
+                        
+                        <table>
+                            <tr>
+                                <th>方案</th>
+                                <th>优点</th>
+                                <th>缺点</th>
+                                <th>适用场景</th>
+                            </tr>
+                            <tr>
+                                <td><strong>命名管道</strong><br>（当前方案）</td>
+                                <td>Windows原生，双向通信，异步IO，性能好</td>
+                                <td>仅限Windows，需要手动处理序列化</td>
+                                <td>本地进程间高频通信</td>
+                            </tr>
+                            <tr>
+                                <td><strong>共享内存</strong></td>
+                                <td>性能最高，适合大数据传输</td>
+                                <td>需要同步机制（锁），编程复杂</td>
+                                <td>大量数据传输</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Socket</strong></td>
+                                <td>跨平台，支持远程通信</td>
+                                <td>性能较低，需要端口管理</td>
+                                <td>跨机器通信</td>
+                            </tr>
+                            <tr>
+                                <td><strong>消息队列</strong></td>
+                                <td>解耦，支持多对多通信</td>
+                                <td>Windows消息队列性能一般</td>
+                                <td>低频消息传递</td>
+                            </tr>
+                            <tr>
+                                <td><strong>COM/DCOM</strong></td>
+                                <td>功能强大，支持远程调用</td>
+                                <td>复杂，学习成本高</td>
+                                <td>企业级应用</td>
+                            </tr>
+                        </table>
+
+                        <div class="warning-box">
+                            <p><strong>结论：</strong>对于这个项目，命名管道是最合适的方案。因为：</p>
+                            <ul style="margin: 10px 0; padding-left: 20px;">
+                                <li>只需要本地通信，不需要跨机器</li>
+                                <li>需要频繁通信（每秒可能几十次）</li>
+                                <li>需要双向通信（Python发送指令，DLL返回结果）</li>
+                                <li>Windows原生支持，无需额外依赖</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="question-card">
+                <div class="question-title">
+                    <span>❓</span>
+                    问题7：JavaScript功能代码的注入时机和控制方式
+                </div>
+                <div class="answer-content">
+                    <p><strong>答：</strong>JavaScript功能代码的注入时机和控制方式是关键问题，让我详细解释：</p>
+
+                    <div class="card">
+                        <div class="card-title">
+                            <span class="card-icon">💉</span>
+                            注入时机：检测到游戏就一次性注入所有功能
+                        </div>
+                        
+                        <div class="flowchart">
+                            <div class="flow-step">
+                                <div class="step-number">1</div>
+                                <div class="step-content">
+                                    <div class="step-title">检测到游戏进程</div>
+                                    <div class="step-desc">GameSessionManager 检测到游戏进程</div>
+                                </div>
+                            </div>
+                            <div class="arrow-down">⬇️</div>
+                            <div class="flow-step">
+                                <div class="step-number">2</div>
+                                <div class="step-content">
+                                    <div class="step-title">连接Frida</div>
+                                    <div class="step-desc">FridaManager.connect(pid) 附加到游戏进程</div>
+                                </div>
+                            </div>
+                            <div class="arrow-down">⬇️</div>
+                            <div class="flow-step">
+                                <div class="step-number">3</div>
+                                <div class="step-content">
+                                    <div class="step-title">构建JavaScript代码</div>
+                                    <div class="step-desc">_build_js_code() 加载所有功能的JS代码</div>
+                                </div>
+                            </div>
+                            <div class="arrow-down">⬇️</div>
+                            <div class="flow-step">
+                                <div class="step-number">4</div>
+                                <div class="step-content">
+                                    <div class="step-title">一次性注入所有功能</div>
+                                    <div class="step-desc">script.load() 加载所有JS代码到游戏内存</div>
+                                </div>
+                            </div>
+                            <div class="arrow-down">⬇️</div>
+                            <div class="flow-step">
+                                <div class="step-number">5</div>
+                                <div class="step-content">
+                                    <div class="step-title">所有功能代码都在内存中</div>
+                                    <div class="step-desc">但默认都是禁用状态，等待用户开启</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="code-block">
+                            <div class="code-title">注入代码构建：</div>
+                            <pre>
+def _build_js_code(self):
+    """构建JavaScript代码"""
+    parts = []
+    
+    # 1. 加载通用函数
+    common_path = os.path.join(SCRIPTS_DIR, '_common.js')
+    with open(common_path, 'r', encoding='utf-8') as f:
+        parts.append(f.read())
+    
+    # 2. 加载所有功能的JavaScript代码
+    registry = FeatureRegistry.get_instance()
+    for feature in registry.get_all():
+        js_code = feature.get_js_code()  # 读取 knife.js, movespeed.js 等
+        if js_code:
+            parts.append(js_code)
+    
+    # 3. 添加消息分发器
+    parts.append(self._build_dispatcher())
+    
+    # 4. 合并所有代码
+    return '\n\n'.join(parts)
+
+# 最终注入的代码结构：
+# _common.js (通用函数)
+# knife.js (快刀功能代码)
+# movespeed.js (移动速度功能代码)
+# gravity.js (重力修改功能代码)
+# ... (所有功能的代码)
+# dispatcher (消息分发器)
+                            </pre>
+                        </div>
+
+                        <div class="tip-box">
+                            <p><strong>为什么一次性注入所有功能？</strong></p>
+                            <ul style="margin: 10px 0; padding-left: 20px;">
+                                <li>✅ 性能好：只需要注入一次，避免频繁注入</li>
+                                <li>✅ 稳定性高：避免重复注入导致游戏崩溃</li>
+                                <li>✅ 响应快：用户点击开关时，功能代码已经在内存中，立即生效</li>
+                                <li>✅ 代码量小：所有功能的JS代码加起来也就几十KB</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-title">
+                            <span class="card-icon">🎛️</span>
+                            控制方式：通过消息控制功能开关
+                        </div>
+                        
+                        <div class="flowchart">
+                            <div class="flow-step">
+                                <div class="step-number">1</div>
+                                <div class="step-content">
+                                    <div class="step-title">用户点击开关</div>
+                                    <div class="step-desc">用户在UI上点击"快刀"开关</div>
+                                </div>
+                            </div>
+                            <div class="arrow-down">⬇️</div>
+                            <div class="flow-step">
+                                <div class="step-number">2</div>
+                                <div class="step-content">
+                                    <div class="step-title">发送消息</div>
+                                    <div class="step-desc">FridaManager.send_toggle('knife', True)</div>
+                                </div>
+                            </div>
+                            <div class="arrow-down">⬇️</div>
+                            <div class="flow-step">
+                                <div class="step-number">3</div>
+                                <div class="step-content">
+                                    <div class="step-title">游戏内接收消息</div>
+                                    <div class="step-desc">JavaScript的 recv('toggle', callback) 接收消息</div>
+                                </div>
+                            </div>
+                            <div class="arrow-down">⬇️</div>
+                            <div class="flow-step">
+                                <div class="step-number">4</div>
+                                <div class="step-content">
+                                    <div class="step-title">调用对应功能</div>
+                                    <div class="step-desc">modules.knife.enable() 或 modules.knife.disable()</div>
+                                </div>
+                            </div>
+                            <div class="arrow-down">⬇️</div>
+                            <div class="flow-step">
+                                <div class="step-number">5</div>
+                                <div class="step-content">
+                                    <div class="step-title">修改游戏内存</div>
+                                    <div class="step-desc">Memory.writeFloat() 修改游戏参数</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="code-block">
+                            <div class="code-title">JavaScript消息分发器：</div>
+                            <pre>
+// _common.js
+// 消息分发器：接收Python发来的消息，调用对应的功能模块
+recv('toggle', function(data) {
+    var featureName = data.feature;  // 功能名，如 'knife'
+    var enable = data.enable;        // 开启或关闭
+    
+    // 根据功能名调用对应的模块
+    if (featureName === 'knife') {
+        if (enable) {
+            modules.knife.enable();   // 开启快刀
+        } else {
+            modules.knife.disable();  // 关闭快刀
+        }
+    } else if (featureName === 'movespeed') {
+        if (enable) {
+            modules.movespeed.enable();
+        } else {
+            modules.movespeed.disable();
+        }
+    }
+    // ... 其他功能
+    
+    recv('toggle', arguments.callee);  // 继续监听下一条消息
+});
+
+// knife.js
+var modules = modules || {};
+modules.knife = {
+    enable: function() {
+        // 修改游戏内存，提升挥刀速度
+        Memory.writeFloat(speedAddress, 10.0);
+        sendLog('success', '快刀已开启');
+    },
+    disable: function() {
+        // 恢复游戏内存，还原挥刀速度
+        Memory.writeFloat(speedAddress, 1.0);
+        sendLog('info', '快刀已关闭');
+    }
+};
+                            </pre>
+                        </div>
+
+                        <div class="warning-box">
+                            <p><strong>重要概念：</strong></p>
+                            <ul style="margin: 10px 0; padding-left: 20px;">
+                                <li><strong>开启 ≠ 注入：</strong>开启功能只是调用 enable() 方法，修改游戏内存。注入是在游戏启动时一次性完成的。</li>
+                                <li><strong>关闭 ≠ 销毁：</strong>关闭功能只是调用 disable() 方法，恢复游戏内存。代码仍然在内存中，随时可以再次开启。</li>
+                                <li><strong>销毁 = 断开连接：</strong>只有当游戏关闭或程序断开Frida连接时，JavaScript代码才会从内存中卸载。</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="question-card">
+                <div class="question-title">
+                    <span>❓</span>
+                    问题8：核心管理层文件有无对比
+                </div>
+                <div class="answer-content">
+                    <p><strong>答：</strong>让我通过代码对比，展示核心管理层文件的重要性。</p>
+
+                    <h4 style="color: #00d4ff; margin: 20px 0 10px 0;">对比1：有无EventBus（事件总线）</h4>
+                    <div class="comparison-table">
+                        <div class="comparison-card without">
+                            <div class="comparison-title bad">❌ 没有EventBus</div>
+                            <div class="code-block">
+                                <div class="code-title">模块间通信需要直接调用：</div>
+                                <pre>
+# ui/app.py
+class App:
+    def _on_game_connected(self, pid):
+        # 需要手动通知每个模块
+        self.log_window.add_log('游戏已连接')
+        self.sound_manager.play_sound('connected')
+        self.status_bar.update_status('已连接')
+        self.feature_manager.enable_features()
+        # ... 每增加一个模块就要加一行
+
+# 新增模块时，需要修改所有相关的地方
+def _on_game_disconnected(self):
+    self.log_window.add_log('游戏已断开')
+    self.sound_manager.play_sound('disconnected')
+    self.status_bar.update_status('未连接')
+    self.feature_manager.disable_features()
+    # ... 容易遗漏
+                                </pre>
+                            </div>
+                            <ul style="margin-top: 15px; padding-left: 20px;">
+                                <li>❌ 模块间耦合严重</li>
+                                <li>❌ 新增模块需要修改多处代码</li>
+                                <li>❌ 容易遗漏某个模块</li>
+                                <li>❌ 代码重复，维护困难</li>
+                            </ul>
+                        </div>
+
+                        <div class="comparison-card with">
+                            <div class="comparison-title good">✅ 有EventBus</div>
+                            <div class="code-block">
+                                <div class="code-title">模块间通信通过事件总线：</div>
+                                <pre>
+# ui/app.py
+class App:
+    def _on_game_connected(self, pid):
+        # 只需要发送一个消息
+        bus.emit('connection_status', status='connected', pid=pid)
+
+# log_window.py
+bus.subscribe('connection_status', self._on_connection_changed)
+def _on_connection_changed(self, status, pid):
+    if status == 'connected':
+        self.add_log('游戏已连接')
+
+# sound_manager.py
+bus.subscribe('connection_status', self._on_connection_changed)
+def _on_connection_changed(self, status, pid):
+    if status == 'connected':
+        self.play_sound('connected')
+
+# 新增模块时，只需要订阅消息即可
+# 不需要修改其他模块的代码
+                                </pre>
+                            </div>
+                            <ul style="margin-top: 15px; padding-left: 20px;">
+                                <li>✅ 模块间解耦，互不依赖</li>
+                                <li>✅ 新增模块只需订阅消息</li>
+                                <li>✅ 不会遗漏任何模块</li>
+                                <li>✅ 代码简洁，维护容易</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <h4 style="color: #00d4ff; margin: 20px 0 10px 0;">对比2：有无GameSessionManager（游戏会话管理器）</h4>
+                    <div class="comparison-table">
+                        <div class="comparison-card without">
+                            <div class="comparison-title bad">❌ 没有GameSessionManager</div>
+                            <div class="code-block">
+                                <div class="code-title">需要手动管理游戏连接：</div>
+                                <pre>
+# ui/app.py
+class App:
+    def __init__(self):
+        self.game_pid = None
+        self.frida_connected = False
+        self.dll_connected = False
+        # 需要手动启动检测线程
+        self._start_game_detection()
+    
+    def _start_game_detection(self):
+        # 手动编写检测逻辑
+        def detect():
+            while True:
+                # 查找游戏进程
+                for proc in psutil.process_iter():
+                    if proc.name() == 'crossfire.exe':
+                        if self.game_pid != proc.pid:
+                            # 游戏进程变化
+                            self.game_pid = proc.pid
+                            self._on_game_found(proc.pid)
+                        break
+                else:
+                    # 没有游戏进程
+                    if self.game_pid:
+                        self._on_game_lost()
+                        self.game_pid = None
+                time.sleep(2)
+        
+        thread = threading.Thread(target=detect, daemon=True)
+        thread.start()
+    
+    def _on_game_found(self, pid):
+        # 手动处理连接逻辑
+        # 需要处理各种异常情况
+        # 需要处理重连逻辑
+        # 需要处理状态同步
+        # ... 代码非常复杂
+                                </pre>
+                            </div>
+                            <ul style="margin-top: 15px; padding-left: 20px;">
+                                <li>❌ 需要手动编写复杂的检测逻辑</li>
+                                <li>❌ 需要手动处理各种异常情况</li>
+                                <li>❌ 需要手动管理状态转换</li>
+                                <li>❌ 代码冗长，容易出错</li>
+                            </ul>
+                        </div>
+
+                        <div class="comparison-card with">
+                            <div class="comparison-title good">✅ 有GameSessionManager</div>
+                            <div class="code-block">
+                                <div class="code-title">自动管理游戏连接：</div>
+                                <pre>
+# ui/app.py
+class App:
+    def __init__(self):
+        # 只需要一行代码启动
+        GameSessionManager.get_instance().start()
+        
+        # 订阅连接状态消息
+        bus.subscribe('connection_status', self._on_connection_changed)
+    
+    def _on_connection_changed(self, status, pid):
+        # 只需要处理UI更新
+        if status == 'connected':
+            self.status_label.config(text=f"已连接 PID:{pid}")
+        else:
+            self.status_label.config(text="未连接")
+
+# GameSessionManager 自动处理：
+# - 游戏进程检测
+# - 状态机转换
+# - Frida连接
+# - DLL注入
+# - 功能状态同步
+# - 异常处理
+# - 重连逻辑
+                                </pre>
+                            </div>
+                            <ul style="margin-top: 15px; padding-left: 20px;">
+                                <li>✅ 自动检测游戏进程</li>
+                                <li>✅ 自动处理状态转换</li>
+                                <li>✅ 自动处理异常情况</li>
+                                <li>✅ 代码简洁，稳定可靠</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <div class="tip-box">
+                        <p><strong>总结：</strong>核心管理层文件就像"基础设施"，虽然看不到，但非常重要。没有它们，代码会变得非常复杂、冗余、难以维护。有了它们，代码变得简洁、清晰、易于扩展。</p>
+                    </div>
+                </div>
+            </div>
+
+            <div style="text-align: center; margin-top: 50px; padding-top: 20px; border-top: 2px solid #3a3a6a;">
+                <p style="color: #888;">🎮 游戏修改器项目 - 全功能整合包 v1.7</p>
+                <p style="color: #666; font-size: 0.9em;">本文档基于实际代码生成，帮助新手快速上手理解项目</p>
+                <p style="color: #666; font-size: 0.9em;">版本：v3 | 持续更新中</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 切换内容区域
+        function showSection(sectionId) {
+            // 隐藏所有内容区域
+            document.querySelectorAll('.content-section').forEach(section => {
+                section.classList.remove('active');
+            });
+
+            // 移除所有导航标签的active状态
+            document.querySelectorAll('.nav-tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+
+            // 显示选中的内容区域
+            document.getElementById(sectionId).classList.add('active');
+
+            // 添加active状态到对应的导航标签
+            event.target.classList.add('active');
+
+            // 滚动到顶部
+            window.scrollTo(0, 0);
+        }
+
+        // 平滑滚动
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function(e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({
+                        behavior: 'smooth'
+                    });
+                }
+            });
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>RaycastHit 字段关系图</title>
+  <style>
+    :root{--bg:#f3f5f8;--ink:#1f2633;--muted:#5f6878;--line:#cfd7e4;--core:#1f5fbf;--source:#315f9f;--target:#24724c}
+    *{box-sizing:border-box}html,body{margin:0;background:var(--bg);font-family:"Microsoft YaHei","Segoe UI",Arial,sans-serif;color:var(--ink)}
+    .canvas{width:100%;min-height:100vh;padding:12px}svg{display:block;width:100%;min-width:1180px;height:auto;background:#fff;border:1px solid var(--line);border-radius:8px}
+    .title{font-size:25px;font-weight:700;fill:var(--ink)}.note{font-size:13px;fill:var(--muted)}.lane{fill:#f8fafc;stroke:#e2e8f0;stroke-width:1;rx:12}
+    .core{fill:#eef5ff;stroke:var(--core);stroke-width:3;rx:12}.box,.source,.target,.empty{fill:#fff;stroke:#cbd5e1;stroke-width:1.5;rx:10}.source{fill:#f2f7ff}.target{fill:#f1fbf5}.empty{fill:#f8fafc}
+    .name{font-size:15px;font-weight:700;fill:#1f2633}.desc{font-size:12px;fill:var(--muted)}.count{font-size:14px;font-weight:700;fill:#1f7a4d}.lane-title{font-size:17px;font-weight:700;fill:#2d3748}
+    .edge{fill:none;stroke-width:2.7}.source-edge{stroke:var(--source)}.target-edge{stroke:var(--target)}.label{font-size:12px;fill:#344054}.label-bg{fill:#fff;stroke:#edf0f5;rx:5}
+  </style>
+</head>
+<body>
+<div class="canvas">
+<svg viewBox="0 0 1450 1576" role="img" aria-label="RaycastHit field relationship graph">
+  <defs>
+    <marker id="arrowSource" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><path d="M0,0 L9,3 L0,6 Z" fill="#315f9f"/></marker>
+    <marker id="arrowTarget" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><path d="M0,0 L9,3 L0,6 Z" fill="#24724c"/></marker>
+  </defs>
+  <text x="36" y="44" class="title">RaycastHit 字段关系图</text>
+  <text x="36" y="70" class="note">只统计 dump.cs 字段声明：左边是谁的字段保存了 RaycastHit；右边是 RaycastHit 自己字段保存的类型。委托事件字段和基础值不画。</text>
+
+  <rect class="lane" x="40" y="110" width="390" height="1416"/>
+  <rect class="lane" x="530" y="110" width="370" height="1416"/>
+  <rect class="lane" x="980" y="110" width="420" height="1416"/>
+  <text x="70" y="148" class="lane-title">谁保存了这个类</text>
+  <text x="70" y="172" class="note">通俗说：其他类字段里有没有它</text>
+  <text x="70" y="196" class="count">统计：12 / 12 已画出</text>
+  <text x="70" y="220" class="note">分析：有 12 个类字段保存 RaycastHit</text>
+  <text x="560" y="148" class="lane-title">当前类</text>
+  <text x="560" y="172" class="note">分析直接写在类名下面</text>
+  <text x="1010" y="148" class="lane-title">它保存了哪些类型</text>
+  <text x="1010" y="172" class="note">通俗说：这个类字段里有哪些对象</text>
+  <text x="1010" y="196" class="count">统计：2 / 2 已画出</text>
+  <text x="1010" y="220" class="note">分析：RaycastHit 字段直接保存 2 种非基础类型</text>
+
+  <rect class="core" x="610" y="340" width="280" height="170"/>
+  <text x="750" y="382" text-anchor="middle" style="font-size:24px;font-weight:700;fill:#1f5fbf">RaycastHit</text>
+  <text x="750" y="414" text-anchor="middle" class="desc">字段关系中心</text>
+  <text x="750" y="454" text-anchor="middle" class="desc">功能翻译：Unity 射线命中信息：记录开火、瞄准或检测命中的物体和位置</text>
+  <text x="750" y="477" text-anchor="middle" class="desc">关系依据：只看 dump.cs 字段声明</text>
+  <text x="750" y="500" text-anchor="middle" class="desc">用途判断：看左侧谁保存它、右侧它保存哪些类型</text>
+
+  <g transform="translate(70 235)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">CinemachineCollider</text>
+    <text x="18" y="49" class="desc">相机/镜头控制类型：用于虚拟相机、镜头混合、视角参数或相机状态</text>
+    <text x="18" y="69" class="desc">字段依据：m_CornerBuffer</text>
+  </g>
+  <g transform="translate(70 333)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">GraphCollision</text>
+    <text x="18" y="49" class="desc">寻路/导航类型：用于 AI 路径搜索、导航网格、避障或路径节点</text>
+    <text x="18" y="69" class="desc">字段依据：hitBuffer</text>
+  </g>
+  <g transform="translate(70 431)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">Grounding</text>
+    <text x="18" y="49" class="desc">项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</text>
+    <text x="18" y="69" class="desc">字段依据：&lt;rootHit&gt;k__BackingField</text>
+  </g>
+  <g transform="translate(70 529)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">Grounding.Leg</text>
+    <text x="18" y="49" class="desc">项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</text>
+    <text x="18" y="69" class="desc">字段依据：&lt;heelHit&gt;k__BackingField / &lt;capsuleHit&gt;k__BackingField</text>
+  </g>
+  <g transform="translate(70 627)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">HUD_Crosshair</text>
+    <text x="18" y="49" class="desc">准星 HUD：根据玩家武器和状态显示准星</text>
+    <text x="18" y="69" class="desc">字段依据：zoomRaycastTemp</text>
+  </g>
+  <g transform="translate(70 725)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">InteractionSystem</text>
+    <text x="18" y="49" class="desc">项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</text>
+    <text x="18" y="69" class="desc">字段依据：raycastHit</text>
+  </g>
+  <g transform="translate(70 823)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">LayerGridGraph.HeightSample</text>
+    <text x="18" y="49" class="desc">寻路/导航类型：用于 AI 路径搜索、导航网格、避障或路径节点</text>
+    <text x="18" y="69" class="desc">字段依据：hit</text>
+  </g>
+  <g transform="translate(70 921)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">PhysicsRaycaster</text>
+    <text x="18" y="49" class="desc">物理检测类型：用于碰撞、射线检测、触发器或命中查询</text>
+    <text x="18" y="69" class="desc">字段依据：m_Hits</text>
+  </g>
+  <g transform="translate(70 1019)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">RuntimeUtility</text>
+    <text x="18" y="49" class="desc">项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</text>
+    <text x="18" y="69" class="desc">字段依据：s_HitBuffer</text>
+  </g>
+  <g transform="translate(70 1117)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">VFXRaycastBinder</text>
+    <text x="18" y="49" class="desc">视觉特效类型：用于粒子、屏幕特效、技能表现或受击反馈</text>
+    <text x="18" y="69" class="desc">字段依据：m_HitInfo</text>
+  </g>
+  <g transform="translate(70 1215)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">WallHackDetector</text>
+    <text x="18" y="49" class="desc">项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</text>
+    <text x="18" y="69" class="desc">字段依据：rayHits</text>
+  </g>
+  <g transform="translate(70 1313)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">Weapon</text>
+    <text x="18" y="49" class="desc">武器实例：实际可装备、发射、掉落的武器对象</text>
+    <text x="18" y="69" class="desc">字段依据：shootHitTemp</text>
+  </g>
+
+  <g transform="translate(1020 235)">
+    <rect class="target" width="360" height="78"/>
+    <text x="18" y="27" class="name">Vector2</text>
+    <text x="18" y="49" class="desc">二维向量：UI、坐标或平面数值</text>
+    <text x="18" y="69" class="desc">字段依据：m_UV</text>
+  </g>
+  <g transform="translate(1020 333)">
+    <rect class="target" width="360" height="78"/>
+    <text x="18" y="27" class="name">Vector3</text>
+    <text x="18" y="49" class="desc">三维向量：世界坐标、方向、命中位置</text>
+    <text x="18" y="69" class="desc">字段依据：m_Point / m_Normal</text>
+  </g>
+<path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 274 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 372 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 470 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 568 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 666 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 764 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 862 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 960 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 1058 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 1156 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 1254 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 1352 H575 V430 H660"/>
+<path class="edge target-edge" marker-end="url(#arrowTarget)" d="M840 430 H940 V274 H1020"/><path class="edge target-edge" marker-end="url(#arrowTarget)" d="M840 430 H940 V372 H1020"/>
+</svg>
+</div>
+</body>
+</html>

@@ -1,0 +1,456 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Vector2 字段关系图</title>
+  <style>
+    :root{--bg:#f3f5f8;--ink:#1f2633;--muted:#5f6878;--line:#cfd7e4;--core:#1f5fbf;--source:#315f9f;--target:#24724c}
+    *{box-sizing:border-box}html,body{margin:0;background:var(--bg);font-family:"Microsoft YaHei","Segoe UI",Arial,sans-serif;color:var(--ink)}
+    .canvas{width:100%;min-height:100vh;padding:12px}svg{display:block;width:100%;min-width:1180px;height:auto;background:#fff;border:1px solid var(--line);border-radius:8px}
+    .title{font-size:25px;font-weight:700;fill:var(--ink)}.note{font-size:13px;fill:var(--muted)}.lane{fill:#f8fafc;stroke:#e2e8f0;stroke-width:1;rx:12}
+    .core{fill:#eef5ff;stroke:var(--core);stroke-width:3;rx:12}.box,.source,.target,.empty{fill:#fff;stroke:#cbd5e1;stroke-width:1.5;rx:10}.source{fill:#f2f7ff}.target{fill:#f1fbf5}.empty{fill:#f8fafc}
+    .name{font-size:15px;font-weight:700;fill:#1f2633}.desc{font-size:12px;fill:var(--muted)}.count{font-size:14px;font-weight:700;fill:#1f7a4d}.lane-title{font-size:17px;font-weight:700;fill:#2d3748}
+    .edge{fill:none;stroke-width:2.7}.source-edge{stroke:var(--source)}.target-edge{stroke:var(--target)}.label{font-size:12px;fill:#344054}.label-bg{fill:#fff;stroke:#edf0f5;rx:5}
+  </style>
+</head>
+<body>
+<div class="canvas">
+<svg viewBox="0 0 1450 6868" role="img" aria-label="Vector2 field relationship graph">
+  <defs>
+    <marker id="arrowSource" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><path d="M0,0 L9,3 L0,6 Z" fill="#315f9f"/></marker>
+    <marker id="arrowTarget" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><path d="M0,0 L9,3 L0,6 Z" fill="#24724c"/></marker>
+  </defs>
+  <text x="36" y="44" class="title">Vector2 字段关系图</text>
+  <text x="36" y="70" class="note">只统计 dump.cs 字段声明：左边是谁的字段保存了 Vector2；右边是 Vector2 自己字段保存的类型。委托事件字段和基础值不画。</text>
+
+  <rect class="lane" x="40" y="110" width="390" height="6708"/>
+  <rect class="lane" x="530" y="110" width="370" height="6708"/>
+  <rect class="lane" x="980" y="110" width="420" height="6708"/>
+  <text x="70" y="148" class="lane-title">谁保存了这个类</text>
+  <text x="70" y="172" class="note">通俗说：其他类字段里有没有它</text>
+  <text x="70" y="196" class="count">统计：66 / 66 已画出</text>
+  <text x="70" y="220" class="note">分析：有 66 个类字段保存 Vector2</text>
+  <text x="560" y="148" class="lane-title">当前类</text>
+  <text x="560" y="172" class="note">分析直接写在类名下面</text>
+  <text x="1010" y="148" class="lane-title">它保存了哪些类型</text>
+  <text x="1010" y="172" class="note">通俗说：这个类字段里有哪些对象</text>
+  <text x="1010" y="196" class="count">统计：1 / 1 已画出</text>
+  <text x="1010" y="220" class="note">分析：Vector2 字段直接保存 1 种非基础类型</text>
+
+  <rect class="core" x="610" y="340" width="280" height="170"/>
+  <text x="750" y="382" text-anchor="middle" style="font-size:24px;font-weight:700;fill:#1f5fbf">Vector2</text>
+  <text x="750" y="414" text-anchor="middle" class="desc">字段关系中心</text>
+  <text x="750" y="454" text-anchor="middle" class="desc">功能翻译：二维向量：UI、坐标或平面数值</text>
+  <text x="750" y="477" text-anchor="middle" class="desc">关系依据：只看 dump.cs 字段声明</text>
+  <text x="750" y="500" text-anchor="middle" class="desc">用途判断：看左侧谁保存它、右侧它保存哪些类型</text>
+
+  <g transform="translate(70 235)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">AIBase</text>
+    <text x="18" y="49" class="desc">AI 行为类型：用于电脑角色、代理移动、决策或目标选择</text>
+    <text x="18" y="69" class="desc">字段依据：velocity2D / lastDeltaPosition</text>
+  </g>
+  <g transform="translate(70 333)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">Agent</text>
+    <text x="18" y="49" class="desc">AI 行为类型：用于电脑角色、代理移动、决策或目标选择</text>
+    <text x="18" y="69" class="desc">字段依据：position / currentVelocity / desiredTargetPointInVelocitySpace / desiredVelocity 等 9 个字段</text>
+  </g>
+  <g transform="translate(70 431)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">Agent.VO</text>
+    <text x="18" y="49" class="desc">AI 行为类型：用于电脑角色、代理移动、决策或目标选择</text>
+    <text x="18" y="69" class="desc">字段依据：line1 / line2 / dir1 / dir2 等 9 个字段</text>
+  </g>
+  <g transform="translate(70 529)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">AxisEventData</text>
+    <text x="18" y="49" class="desc">配置/数据类型：保存运行参数、资源引用、显示数据或系统配置</text>
+    <text x="18" y="69" class="desc">字段依据：&lt;moveVector&gt;k__BackingField</text>
+  </g>
+  <g transform="translate(70 627)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">CanvasScaler</text>
+    <text x="18" y="49" class="desc">UI 控件类型：用于界面布局、文本、按钮、滚动、图形或交互控件</text>
+    <text x="18" y="69" class="desc">字段依据：m_ReferenceResolution</text>
+  </g>
+  <g transform="translate(70 725)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">CinemachineComposer</text>
+    <text x="18" y="49" class="desc">相机/镜头控制类型：用于虚拟相机、镜头混合、视角参数或相机状态</text>
+    <text x="18" y="69" class="desc">字段依据：m_ScreenOffsetPrevFrame</text>
+  </g>
+  <g transform="translate(70 823)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">CinemachineConfiner</text>
+    <text x="18" y="49" class="desc">相机/镜头控制类型：用于虚拟相机、镜头混合、视角参数或相机状态</text>
+    <text x="18" y="69" class="desc">字段依据：m_pathCache</text>
+  </g>
+  <g transform="translate(70 921)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">CinemachineStoryboard</text>
+    <text x="18" y="49" class="desc">相机/镜头控制类型：用于虚拟相机、镜头混合、视角参数或相机状态</text>
+    <text x="18" y="69" class="desc">字段依据：m_Center / m_Scale</text>
+  </g>
+  <g transform="translate(70 1019)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">CircleOptions</text>
+    <text x="18" y="49" class="desc">项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</text>
+    <text x="18" y="69" class="desc">字段依据：center</text>
+  </g>
+  <g transform="translate(70 1117)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">Collision2D</text>
+    <text x="18" y="49" class="desc">物理检测类型：用于碰撞、射线检测、触发器或命中查询</text>
+    <text x="18" y="69" class="desc">字段依据：m_RelativeVelocity</text>
+  </g>
+  <g transform="translate(70 1215)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">CommonKillMark</text>
+    <text x="18" y="49" class="desc">通用击杀提示：显示击杀、连杀、爆头等战斗反馈</text>
+    <text x="18" y="69" class="desc">字段依据：startPos</text>
+  </g>
+  <g transform="translate(70 1313)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">ContactPoint2D</text>
+    <text x="18" y="49" class="desc">项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</text>
+    <text x="18" y="69" class="desc">字段依据：m_Point / m_Normal / m_RelativeVelocity</text>
+  </g>
+  <g transform="translate(70 1411)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">Cookie</text>
+    <text x="18" y="49" class="desc">项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</text>
+    <text x="18" y="69" class="desc">字段依据：sizes</text>
+  </g>
+  <g transform="translate(70 1509)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">DefaultControls</text>
+    <text x="18" y="49" class="desc">项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</text>
+    <text x="18" y="69" class="desc">字段依据：s_ThickElementSize / s_ThinElementSize / s_ImageElementSize</text>
+  </g>
+  <g transform="translate(70 1607)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">GameAsset</text>
+    <text x="18" y="49" class="desc">资源索引类型：保存可加载资源、图标、预制体或表现素材引用</text>
+    <text x="18" y="69" class="desc">字段依据：animSpeedData</text>
+  </g>
+  <g transform="translate(70 1705)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">Graphic</text>
+    <text x="18" y="49" class="desc">寻路/导航类型：用于 AI 路径搜索、导航网格、避障或路径节点</text>
+    <text x="18" y="69" class="desc">字段依据：m_CachedUvs</text>
+  </g>
+  <g transform="translate(70 1803)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">GridGraph</text>
+    <text x="18" y="49" class="desc">寻路/导航类型：用于 AI 路径搜索、导航网格、避障或路径节点</text>
+    <text x="18" y="69" class="desc">字段依据：unclampedSize / &lt;size&gt;k__BackingField</text>
+  </g>
+  <g transform="translate(70 1901)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">GridLayoutGroup</text>
+    <text x="18" y="49" class="desc">UI 控件类型：用于界面布局、文本、按钮、滚动、图形或交互控件</text>
+    <text x="18" y="69" class="desc">字段依据：m_CellSize / m_Spacing</text>
+  </g>
+  <g transform="translate(70 1999)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">HUD_Nano4T_AttributeIcon</text>
+    <text x="18" y="49" class="desc">HUD 界面组件：显示玩家状态、提示、图标或模式信息</text>
+    <text x="18" y="69" class="desc">字段依据：Pos_Nano / Pos_Center / Pos_Soldier</text>
+  </g>
+  <g transform="translate(70 2097)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">HUD_NanoDamageScore_Star</text>
+    <text x="18" y="49" class="desc">HUD 界面组件：显示玩家状态、提示、图标或模式信息</text>
+    <text x="18" y="69" class="desc">字段依据：targetPos1 / targetPos2</text>
+  </g>
+  <g transform="translate(70 2195)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">HUD_Nano_FinalBattle</text>
+    <text x="18" y="49" class="desc">HUD 界面组件：显示玩家状态、提示、图标或模式信息</text>
+    <text x="18" y="69" class="desc">字段依据：flashEndTime / heroIconPos / nanoIconPos</text>
+  </g>
+  <g transform="translate(70 2293)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">HUD_RadarIcon_Entity</text>
+    <text x="18" y="49" class="desc">雷达实体图标：小地图上显示普通实体位置</text>
+    <text x="18" y="69" class="desc">字段依据：normalPivot / farPivot</text>
+  </g>
+  <g transform="translate(70 2391)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">HUD_Spectate</text>
+    <text x="18" y="49" class="desc">HUD 界面组件：显示玩家状态、提示、图标或模式信息</text>
+    <text x="18" y="69" class="desc">字段依据：originPos / offsetPos</text>
+  </g>
+  <g transform="translate(70 2489)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">HUD_TabScoreBoard</text>
+    <text x="18" y="49" class="desc">HUD 界面组件：显示玩家状态、提示、图标或模式信息</text>
+    <text x="18" y="69" class="desc">字段依据：showStartPos / showEndPos / revengeSignLocalPos / myPlayerBGlocalPos</text>
+  </g>
+  <g transform="translate(70 2587)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">HUD_Weapon</text>
+    <text x="18" y="49" class="desc">HUD 界面组件：显示玩家状态、提示、图标或模式信息</text>
+    <text x="18" y="69" class="desc">字段依据：wpnNamePos_L / wpnNamePos_R / AmmoPos_below_1000 / AmmoPos_above_1000</text>
+  </g>
+  <g transform="translate(70 2685)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">HUD_WeaponSlot</text>
+    <text x="18" y="49" class="desc">HUD 界面组件：显示玩家状态、提示、图标或模式信息</text>
+    <text x="18" y="69" class="desc">字段依据：SpecialWeaponTipPos</text>
+  </g>
+  <g transform="translate(70 2783)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">HUD_WeaponSlotIndividual</text>
+    <text x="18" y="49" class="desc">HUD 界面组件：显示玩家状态、提示、图标或模式信息</text>
+    <text x="18" y="69" class="desc">字段依据：wpnOriginPos / wpnOffsetPos</text>
+  </g>
+  <g transform="translate(70 2881)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">Image</text>
+    <text x="18" y="49" class="desc">Unity UI 图片：显示图标、准星、血条等界面元素</text>
+    <text x="18" y="69" class="desc">字段依据：s_VertScratch / s_UVScratch</text>
+  </g>
+  <g transform="translate(70 2979)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">InteractionTrigger.CharacterPosition</text>
+    <text x="18" y="49" class="desc">空间数据类型：保存位置、方向、旋转、速度或坐标信息</text>
+    <text x="18" y="69" class="desc">字段依据：offset</text>
+  </g>
+  <g transform="translate(70 3077)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">LayoutGroup</text>
+    <text x="18" y="49" class="desc">UI 控件类型：用于界面布局、文本、按钮、滚动、图形或交互控件</text>
+    <text x="18" y="69" class="desc">字段依据：m_TotalMinSize / m_TotalPreferredSize / m_TotalFlexibleSize</text>
+  </g>
+  <g transform="translate(70 3175)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">LensSettings</text>
+    <text x="18" y="49" class="desc">相机/镜头控制类型：用于虚拟相机、镜头混合、视角参数或相机状态</text>
+    <text x="18" y="69" class="desc">字段依据：&lt;SensorSize&gt;k__BackingField / LensShift</text>
+  </g>
+  <g transform="translate(70 3273)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">Light2D</text>
+    <text x="18" y="49" class="desc">渲染/光照类型：用于渲染管线、光照、材质、后处理或屏幕效果</text>
+    <text x="18" y="69" class="desc">字段依据：m_ShapeLightFalloffOffset</text>
+  </g>
+  <g transform="translate(70 3371)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">LightUtility.SpriteLightMeshVertex</text>
+    <text x="18" y="49" class="desc">渲染/光照类型：用于渲染管线、光照、材质、后处理或屏幕效果</text>
+    <text x="18" y="69" class="desc">字段依据：uv</text>
+  </g>
+  <g transform="translate(70 3469)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">Line</text>
+    <text x="18" y="49" class="desc">项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</text>
+    <text x="18" y="69" class="desc">字段依据：point / dir</text>
+  </g>
+  <g transform="translate(70 3567)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">MasterHeroSkillFX</text>
+    <text x="18" y="49" class="desc">视觉特效类型：用于粒子、屏幕特效、技能表现或受击反馈</text>
+    <text x="18" y="69" class="desc">字段依据：targetPos</text>
+  </g>
+  <g transform="translate(70 3665)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">Mode_Nano4</text>
+    <text x="18" y="49" class="desc">具体玩法模式类：实现某种模式的规则和流程</text>
+    <text x="18" y="69" class="desc">字段依据：supplyArriveTip_Pos / supplyGetTip_Pos / heroKeyTip_Pos</text>
+  </g>
+  <g transform="translate(70 3763)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">NavmeshAdd</text>
+    <text x="18" y="49" class="desc">寻路/导航类型：用于 AI 路径搜索、导航网格、避障或路径节点</text>
+    <text x="18" y="69" class="desc">字段依据：rectangleSize</text>
+  </g>
+  <g transform="translate(70 3861)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">NavmeshCut</text>
+    <text x="18" y="49" class="desc">寻路/导航类型：用于 AI 路径搜索、导航网格、避障或路径节点</text>
+    <text x="18" y="69" class="desc">字段依据：rectangleSize</text>
+  </g>
+  <g transform="translate(70 3959)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">ObjImporter.meshStruct</text>
+    <text x="18" y="49" class="desc">项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</text>
+    <text x="18" y="69" class="desc">字段依据：uv / uv1 / uv2</text>
+  </g>
+  <g transform="translate(70 4057)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">ObscuredVector2</text>
+    <text x="18" y="49" class="desc">空间数据类型：保存位置、方向、旋转、速度或坐标信息</text>
+    <text x="18" y="69" class="desc">字段依据：zero / fakeValue</text>
+  </g>
+  <g transform="translate(70 4155)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">ObstacleVertex</text>
+    <text x="18" y="49" class="desc">项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</text>
+    <text x="18" y="69" class="desc">字段依据：dir</text>
+  </g>
+  <g transform="translate(70 4253)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">Player</text>
+    <text x="18" y="49" class="desc">玩家对象：本机/敌我玩家的战斗状态主体</text>
+    <text x="18" y="69" class="desc">字段依据：cameraRotation</text>
+  </g>
+  <g transform="translate(70 4351)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">PointerEventData</text>
+    <text x="18" y="49" class="desc">配置/数据类型：保存运行参数、资源引用、显示数据或系统配置</text>
+    <text x="18" y="69" class="desc">字段依据：&lt;position&gt;k__BackingField / &lt;delta&gt;k__BackingField / &lt;pressPosition&gt;k__BackingField / &lt;scrollDelta&gt;k__BackingField</text>
+  </g>
+  <g transform="translate(70 4449)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">ProceduralWorld.ProceduralPrefab</text>
+    <text x="18" y="49" class="desc">项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</text>
+    <text x="18" y="69" class="desc">字段依据：perlinOffset</text>
+  </g>
+  <g transform="translate(70 4547)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">RTHandle</text>
+    <text x="18" y="49" class="desc">项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</text>
+    <text x="18" y="69" class="desc">字段依据：&lt;scaleFactor&gt;k__BackingField</text>
+  </g>
+  <g transform="translate(70 4645)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">RVOQuadtree.QuadtreeQuery</text>
+    <text x="18" y="49" class="desc">寻路/导航类型：用于 AI 路径搜索、导航网格、避障或路径节点</text>
+    <text x="18" y="69" class="desc">字段依据：p</text>
+  </g>
+  <g transform="translate(70 4743)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">RVOSquareObstacle</text>
+    <text x="18" y="49" class="desc">寻路/导航类型：用于 AI 路径搜索、导航网格、避障或路径节点</text>
+    <text x="18" y="69" class="desc">字段依据：size / center</text>
+  </g>
+  <g transform="translate(70 4841)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">RaycastHit</text>
+    <text x="18" y="49" class="desc">Unity 射线命中信息：记录开火、瞄准或检测命中的物体和位置</text>
+    <text x="18" y="69" class="desc">字段依据：m_UV</text>
+  </g>
+  <g transform="translate(70 4939)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">RaycastHit2D</text>
+    <text x="18" y="49" class="desc">战斗结算类型：用于伤害、命中、击杀、爆头或战斗反馈</text>
+    <text x="18" y="69" class="desc">字段依据：m_Centroid / m_Point / m_Normal</text>
+  </g>
+  <g transform="translate(70 5037)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">RaycastResult</text>
+    <text x="18" y="49" class="desc">物理检测类型：用于碰撞、射线检测、触发器或命中查询</text>
+    <text x="18" y="69" class="desc">字段依据：screenPosition</text>
+  </g>
+  <g transform="translate(70 5135)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">Recoil</text>
+    <text x="18" y="49" class="desc">后坐力数据：控制开火时视角/枪口上跳</text>
+    <text x="18" y="69" class="desc">字段依据：perturbChangeSpeed</text>
+  </g>
+  <g transform="translate(70 5233)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">ScrollRect</text>
+    <text x="18" y="49" class="desc">UI 控件类型：用于界面布局、文本、按钮、滚动、图形或交互控件</text>
+    <text x="18" y="69" class="desc">字段依据：m_PointerStartLocalCursor / m_ContentStartPosition / m_Velocity / m_PrevPosition</text>
+  </g>
+  <g transform="translate(70 5331)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">Scrollbar</text>
+    <text x="18" y="49" class="desc">UI 控件类型：用于界面布局、文本、按钮、滚动、图形或交互控件</text>
+    <text x="18" y="69" class="desc">字段依据：m_Offset</text>
+  </g>
+  <g transform="translate(70 5429)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">Shadow</text>
+    <text x="18" y="49" class="desc">项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</text>
+    <text x="18" y="69" class="desc">字段依据：m_EffectDistance</text>
+  </g>
+  <g transform="translate(70 5527)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">Simulator.WorkerContext</text>
+    <text x="18" y="49" class="desc">项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</text>
+    <text x="18" y="69" class="desc">字段依据：bestPos / samplePos</text>
+  </g>
+  <g transform="translate(70 5625)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">Slider</text>
+    <text x="18" y="49" class="desc">UI 控件类型：用于界面布局、文本、按钮、滚动、图形或交互控件</text>
+    <text x="18" y="69" class="desc">字段依据：m_Offset</text>
+  </g>
+  <g transform="translate(70 5723)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">SoundManager</text>
+    <text x="18" y="49" class="desc">声音类型：用于音效资源、触发播放、脚步声、武器声或环境声</text>
+    <text x="18" y="69" class="desc">字段依据：CommonSndDistance</text>
+  </g>
+  <g transform="translate(70 5821)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">StandaloneInputModule</text>
+    <text x="18" y="49" class="desc">输入交互类型：用于鼠标、触摸、按键或输入模块状态</text>
+    <text x="18" y="69" class="desc">字段依据：m_LastMoveVector / m_LastMousePosition / m_MousePosition</text>
+  </g>
+  <g transform="translate(70 5919)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">TextEditor</text>
+    <text x="18" y="49" class="desc">UI 控件类型：用于界面布局、文本、按钮、滚动、图形或交互控件</text>
+    <text x="18" y="69" class="desc">字段依据：scrollOffset</text>
+  </g>
+  <g transform="translate(70 6017)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">TextGenerationSettings</text>
+    <text x="18" y="49" class="desc">UI 控件类型：用于界面布局、文本、按钮、滚动、图形或交互控件</text>
+    <text x="18" y="69" class="desc">字段依据：generationExtents / pivot</text>
+  </g>
+  <g transform="translate(70 6115)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">TextureDesc</text>
+    <text x="18" y="49" class="desc">UI 控件类型：用于界面布局、文本、按钮、滚动、图形或交互控件</text>
+    <text x="18" y="69" class="desc">字段依据：scale</text>
+  </g>
+  <g transform="translate(70 6213)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">Touch</text>
+    <text x="18" y="49" class="desc">输入交互类型：用于鼠标、触摸、按键或输入模块状态</text>
+    <text x="18" y="69" class="desc">字段依据：m_Position / m_RawPosition / m_PositionDelta</text>
+  </g>
+  <g transform="translate(70 6311)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">TouchInputModule</text>
+    <text x="18" y="49" class="desc">输入交互类型：用于鼠标、触摸、按键或输入模块状态</text>
+    <text x="18" y="69" class="desc">字段依据：m_LastMousePosition / m_MousePosition</text>
+  </g>
+  <g transform="translate(70 6409)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">UICharInfo</text>
+    <text x="18" y="49" class="desc">项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</text>
+    <text x="18" y="69" class="desc">字段依据：cursorPos</text>
+  </g>
+  <g transform="translate(70 6507)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">UniversalRenderPipelineAsset</text>
+    <text x="18" y="49" class="desc">渲染/光照类型：用于渲染管线、光照、材质、后处理或屏幕效果</text>
+    <text x="18" y="69" class="desc">字段依据：m_Cascade3Split</text>
+  </g>
+  <g transform="translate(70 6605)">
+    <rect class="source" width="330" height="78"/>
+    <text x="18" y="27" class="name">Vector2</text>
+    <text x="18" y="49" class="desc">二维向量：UI、坐标或平面数值</text>
+    <text x="18" y="69" class="desc">字段依据：zeroVector / oneVector / upVector / downVector 等 8 个字段</text>
+  </g>
+
+  <g transform="translate(1020 235)">
+    <rect class="target" width="360" height="78"/>
+    <text x="18" y="27" class="name">Vector2</text>
+    <text x="18" y="49" class="desc">二维向量：UI、坐标或平面数值</text>
+    <text x="18" y="69" class="desc">字段依据：zeroVector / oneVector / upVector / downVector 等 8 个字段</text>
+  </g>
+<path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 274 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 372 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 470 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 568 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 666 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 764 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 862 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 960 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 1058 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 1156 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 1254 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 1352 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 1450 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 1548 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 1646 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 1744 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 1842 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 1940 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 2038 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 2136 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 2234 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 2332 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 2430 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 2528 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 2626 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 2724 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 2822 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 2920 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 3018 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 3116 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 3214 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 3312 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 3410 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 3508 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 3606 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 3704 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 3802 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 3900 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 3998 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 4096 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 4194 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 4292 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 4390 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 4488 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 4586 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 4684 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 4782 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 4880 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 4978 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 5076 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 5174 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 5272 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 5370 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 5468 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 5566 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 5664 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 5762 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 5860 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 5958 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 6056 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 6154 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 6252 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 6350 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 6448 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 6546 H575 V430 H660"/><path class="edge source-edge" marker-end="url(#arrowSource)" d="M400 6644 H575 V430 H660"/>
+<path class="edge target-edge" marker-end="url(#arrowTarget)" d="M840 430 H940 V274 H1020"/>
+</svg>
+</div>
+</body>
+</html>

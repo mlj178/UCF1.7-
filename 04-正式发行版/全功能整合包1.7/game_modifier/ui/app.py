@@ -1756,28 +1756,37 @@ class App(ctk.CTk):
             self.battle_round_status_label.configure(text="状态: ⚪ 等待进入多人生化模式...", text_color="#888888")
 
     def _update_battle_round_realtime_status(self):
-        """实时更新决战回合状态"""
+        """实时更新决战回合状态（后台线程调用RPC，避免主线程阻塞）"""
         if not self._ready or not self._nano4t_ready or not self._battle_round_active:
             self.after(1000, self._update_battle_round_realtime_status)
             return
-        
+
+        def _fetch_status():
+            try:
+                result = self._frida.call_export('battleRoundGetStatus')
+                if result:
+                    import json
+                    data = json.loads(result) if isinstance(result, str) else result
+                    flag = data.get('currentIsBattleRound', -1)
+                    self.after(0, lambda f=flag: self._apply_battle_round_status(f))
+            except Exception:
+                pass
+            finally:
+                self.after(1000, self._update_battle_round_realtime_status)
+
+        threading.Thread(target=_fetch_status, daemon=True).start()
+
+    def _apply_battle_round_status(self, flag):
+        """在主线程中更新决战回合状态标签"""
         try:
-            result = self._frida.call_export('battleRoundGetStatus')
-            if result:
-                import json
-                data = json.loads(result) if isinstance(result, str) else result
-                flag = data.get('currentIsBattleRound', -1)
-                
-                if flag == 1:
-                    self.battle_round_status_label.configure(text="状态: ⚔️ 决战回合", text_color="#2ecc71")
-                elif flag == 0:
-                    self.battle_round_status_label.configure(text="状态: 🔄 普通回合", text_color="#f39c12")
-                else:
-                    self.battle_round_status_label.configure(text="状态: 读取中...", text_color="#888888")
+            if flag == 1:
+                self.battle_round_status_label.configure(text="状态: ⚔️ 决战回合", text_color="#2ecc71")
+            elif flag == 0:
+                self.battle_round_status_label.configure(text="状态: 🔄 普通回合", text_color="#f39c12")
+            else:
+                self.battle_round_status_label.configure(text="状态: 读取中...", text_color="#888888")
         except Exception:
             pass
-        
-        self.after(1000, self._update_battle_round_realtime_status)
 
     def _nano4t_apply(self):
         """应用按钮：验证参数并调用Frida"""

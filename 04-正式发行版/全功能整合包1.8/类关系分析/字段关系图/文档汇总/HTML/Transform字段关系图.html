@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Transform 字段关系图与字段说明</title>
+  <style>
+    :root { --bg:#f4f6f8; --panel:#ffffff; --ink:#1f2937; --muted:#667085; --line:#d9e1ec; --blue:#2457a6; --green:#207450; --amber:#9a5b13; }
+    * { box-sizing:border-box; }
+    body { margin:0; background:var(--bg); color:var(--ink); font-family:"Microsoft YaHei","Segoe UI",Arial,sans-serif; }
+    .page { max-width:1360px; margin:0 auto; padding:18px; }
+    header,.panel,table { background:var(--panel); border:1px solid var(--line); border-radius:8px; }
+    header { padding:18px 20px; }
+    h1 { margin:0 0 8px; font-size:26px; letter-spacing:0; }
+    h2 { margin:26px 0 12px; font-size:20px; }
+    p { margin:0; line-height:1.65; }
+    .summary { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; margin-top:16px; }
+    .metric { border:1px solid var(--line); border-radius:8px; padding:12px; background:#fafcff; }
+    .metric strong { display:block; font-size:24px; color:var(--blue); }
+    .metric span { color:var(--muted); font-size:13px; }
+    .graph { display:grid; grid-template-columns:1fr 1.1fr; gap:14px; margin-top:16px; }
+    .panel { padding:16px; }
+    .core { border:2px solid var(--blue); background:#eef5ff; border-radius:8px; padding:16px; }
+    .core strong { display:block; font-size:24px; color:var(--blue); margin-bottom:8px; }
+    .section-panel { margin-top:14px; }
+    .section-note { color:var(--muted); font-size:13px; margin-bottom:12px; }
+    .nodes { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; margin-top:12px; }
+    .node { border:1px solid #cbd8e8; background:#fbfdff; border-radius:8px; padding:10px; min-height:112px; }
+    .node b { display:block; color:var(--green); margin-bottom:4px; }
+    .node span { display:block; color:var(--muted); font-size:13px; line-height:1.45; }
+    .node p { color:#344054; font-size:13px; line-height:1.55; margin-top:8px; }
+    .stats { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; }
+    .stat-card { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:12px; min-height:116px; }
+    .stat-card strong { display:block; font-size:16px; margin-bottom:6px; }
+    .stat-card span { display:inline-block; color:#fff; background:var(--blue); border-radius:999px; padding:3px 9px; font-size:12px; margin-bottom:8px; }
+    .stat-card p { color:var(--muted); font-size:13px; }
+    .toolbar { display:flex; align-items:center; justify-content:space-between; gap:12px; margin:16px 0 8px; flex-wrap:wrap; }
+    .filters,.pager { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+    button,select { border:1px solid var(--line); background:#fff; color:var(--ink); border-radius:6px; padding:8px 12px; cursor:pointer; font:inherit; }
+    button.active { background:var(--blue); color:#fff; border-color:var(--blue); }
+    .hint,.footnote { color:var(--muted); font-size:13px; }
+    table { width:100%; border-collapse:separate; border-spacing:0; overflow:hidden; }
+    th,td { padding:11px 12px; border-bottom:1px solid #edf1f6; vertical-align:top; text-align:left; }
+    th { background:#f8fafc; font-size:13px; color:#344054; }
+    tr:last-child td { border-bottom:0; }
+    td.num { width:44px; color:var(--muted); }
+    td strong { display:block; margin-bottom:4px; }
+    td span, small { display:block; color:var(--muted); font-size:12px; line-height:1.45; }
+    code { white-space:nowrap; color:#344054; background:#f3f6fa; border:1px solid #e0e7ef; border-radius:5px; padding:2px 5px; }
+    .badge { display:inline-block; border-radius:999px; padding:3px 8px; font-size:12px; margin-top:8px; }
+    .badge.keep { background:#eaf7ef; color:var(--green); }
+    .badge.ignore { background:#fff4e5; color:var(--amber); }
+    .footnote { margin-top:14px; }
+    @media (max-width: 900px) { .summary,.graph,.stats,.nodes { grid-template-columns:1fr; } table { font-size:13px; } code { white-space:normal; } }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header>
+      <h1>Transform 字段关系图与字段说明</h1>
+      <p>Unity 变换组件：位置、旋转、层级挂点</p>
+      <div class="summary">
+        <div class="metric"><strong>0</strong><span>dump.cs 中字段总数</span></div>
+        <div class="metric"><strong>0</strong><span>建议重点分析字段</span></div>
+        <div class="metric"><strong>0</strong><span>可忽略但已统计字段</span></div>
+        <div class="metric"><strong>1</strong><span>字段表分页，每页 15 行</span></div>
+      </div>
+    </header>
+    <section class="graph">
+      <div class="panel"><div class="core"><strong>Transform</strong><p>Unity 变换组件：位置、旋转、层级挂点</p></div></div>
+      <div class="panel"><h2 style="margin-top:0">它直接保存的主要类型</h2><div class="nodes"><p class="section-note">没有字段直接保存其他主要类型。</p></div></div>
+    </section>
+    
+    <section class="panel section-panel">
+      <h2 style="margin-top:0">谁保存了这个类</h2>
+      <p class="section-note">只统计 dump.cs 里字段类型直接使用 Transform 的类。</p>
+      <div class="nodes"><div class="node"><b>AIBase</b><span>字段依据：tr / targetCompatibility</span><p>AI 行为类型：用于电脑角色、代理移动、决策或目标选择</p></div>
+<div class="node"><b>AIDestinationSetter</b><span>字段依据：target</span><p>AI 行为类型：用于电脑角色、代理移动、决策或目标选择</p></div>
+<div class="node"><b>AILerp</b><span>字段依据：tr / targetCompatibility</span><p>AI 行为类型：用于电脑角色、代理移动、决策或目标选择</p></div>
+<div class="node"><b>AimController</b><span>字段依据：target / lastTarget</span><p>项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</p></div>
+<div class="node"><b>Amplifier.Body</b><span>字段依据：transform / relativeTo</span><p>项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</p></div>
+<div class="node"><b>AstarSmoothFollow2</b><span>字段依据：target</span><p>寻路/导航类型：用于 AI 路径搜索、导航网格、避障或路径节点</p></div>
+<div class="node"><b>BA_Nano_WatchOutTeammate</b><span>字段依据：teammate</span><p>项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</p></div>
+<div class="node"><b>BakerHumanoidQT</b><span>字段依据：transform</span><p>项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</p></div>
+<div class="node"><b>BakerTransform</b><span>字段依据：transform</span><p>项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</p></div>
+<div class="node"><b>BipedReferences</b><span>字段依据：root / pelvis / leftThigh / leftCalf / leftFoot / rightThigh / rightCalf / rightFoot / leftUpperArm / leftForearm / leftHand / rightUpperArm / rightForearm / rightHand / head / spine / eyes</span><p>项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</p></div>
+<div class="node"><b>BlendSourceVirtualCamera</b><span>字段依据：&lt;LookAt&gt;k__BackingField / &lt;Follow&gt;k__BackingField</span><p>相机/镜头控制类型：用于虚拟相机、镜头混合、视角参数或相机状态</p></div>
+<div class="node"><b>BotEnemyInfo</b><span>字段依据：hitBox</span><p>Bot 敌人记忆：记录 AI 发现或正在攻击的目标信息</p></div>
+<div class="node"><b>Bot_JumpLink.Link</b><span>字段依据：endTransform</span><p>Bot 跳跃连接点：AI 寻路中跨越/跳跃路径段</p></div>
+<div class="node"><b>CameraData</b><span>字段依据：volumeTrigger</span><p>相机/镜头控制类型：用于虚拟相机、镜头混合、视角参数或相机状态</p></div>
+<div class="node"><b>CharacterEffect.FxData</b><span>字段依据：node</span><p>视觉特效类型：用于粒子、屏幕特效、技能表现或受击反馈</p></div>
+<div class="node"><b>CharacterModel</b><span>字段依据：spine / spine1 / neck / hitboxes</span><p>角色模型表现：身体、动画、材质和挂点</p></div>
+<div class="node"><b>CinemachineBlendListCamera</b><span>字段依据：m_LookAt / m_Follow</span><p>相机/镜头控制类型：用于虚拟相机、镜头混合、视角参数或相机状态</p></div>
+<div class="node"><b>CinemachineBrain</b><span>字段依据：m_WorldUpOverride</span><p>Cinemachine 相机大脑：混合和驱动虚拟相机输出</p></div>
+<div class="node"><b>CinemachineClearShot</b><span>字段依据：m_LookAt / m_Follow</span><p>相机/镜头控制类型：用于虚拟相机、镜头混合、视角参数或相机状态</p></div>
+<div class="node"><b>CinemachineComponentBase</b><span>字段依据：mCachedFollowTarget / mCachedLookAtTarget</span><p>相机/镜头控制类型：用于虚拟相机、镜头混合、视角参数或相机状态</p></div>
+<div class="node"><b>CinemachineExternalCamera</b><span>字段依据：m_LookAt / &lt;Follow&gt;k__BackingField</span><p>相机/镜头控制类型：用于虚拟相机、镜头混合、视角参数或相机状态</p></div>
+<div class="node"><b>CinemachineFreeLook</b><span>字段依据：m_LookAt / m_Follow</span><p>Cinemachine 自由视角相机：第三人称/观察视角控制</p></div>
+<div class="node"><b>CinemachineMixingCamera</b><span>字段依据：&lt;LookAt&gt;k__BackingField / &lt;Follow&gt;k__BackingField</span><p>相机/镜头控制类型：用于虚拟相机、镜头混合、视角参数或相机状态</p></div>
+<div class="node"><b>CinemachineOrbitalTransposer</b><span>字段依据：&lt;PreviousTarget&gt;k__BackingField</span><p>相机/镜头控制类型：用于虚拟相机、镜头混合、视角参数或相机状态</p></div>
+<div class="node"><b>CinemachineStateDrivenCamera</b><span>字段依据：m_LookAt / m_Follow</span><p>相机/镜头控制类型：用于虚拟相机、镜头混合、视角参数或相机状态</p></div>
+<div class="node"><b>CinemachineTargetGroup.Target</b><span>字段依据：target</span><p>相机/镜头控制类型：用于虚拟相机、镜头混合、视角参数或相机状态</p></div>
+<div class="node"><b>CinemachineTransposer</b><span>字段依据：m_previousTarget</span><p>相机/镜头控制类型：用于虚拟相机、镜头混合、视角参数或相机状态</p></div>
+<div class="node"><b>CinemachineVirtualCamera</b><span>字段依据：m_LookAt / m_Follow / m_ComponentOwner / mCachedLookAtTarget</span><p>Cinemachine 虚拟相机：玩家视角、观战或特殊镜头的相机配置</p></div>
+<div class="node"><b>CinemachineVolumeSettings</b><span>字段依据：m_FocusTarget</span><p>相机/镜头控制类型：用于虚拟相机、镜头混合、视角参数或相机状态</p></div>
+<div class="node"><b>Constraint</b><span>字段依据：transform</span><p>项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</p></div>
+<div class="node"><b>Constraints</b><span>字段依据：transform / target</span><p>项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</p></div>
+<div class="node"><b>DebugUIHandlerCanvas</b><span>字段依据：m_PrefabsMap / panelPrefab</span><p>UI 控件类型：用于界面布局、文本、按钮、滚动、图形或交互控件</p></div>
+<div class="node"><b>DebugUIHandlerGroup</b><span>字段依据：header</span><p>项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</p></div>
+<div class="node"><b>DynamicGridObstacle</b><span>字段依据：tr</span><p>项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</p></div>
+<div class="node"><b>EffectObj</b><span>字段依据：root / bindTransform</span><p>特效对象：命中、爆炸、枪口火光等视觉效果实例</p></div>
+<div class="node"><b>EuclideanEmbedding</b><span>字段依据：pivotPointRoot</span><p>项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</p></div>
+<div class="node"><b>FBBIKHeadEffector</b><span>字段依据：CCDBones / stretchBones / chestBones</span><p>视觉特效类型：用于粒子、屏幕特效、技能表现或受击反馈</p></div>
+<div class="node"><b>FBBIKHeadEffector.BendBone</b><span>字段依据：transform</span><p>视觉特效类型：用于粒子、屏幕特效、技能表现或受击反馈</p></div>
+<div class="node"><b>FBIKChain.ChildConstraint</b><span>字段依据：bone1 / bone2</span><p>动画/骨骼类型：用于角色动画、IK、布娃娃、状态机或动作桥接</p></div>
+<div class="node"><b>FKOffset.Offset</b><span>字段依据：t</span><p>项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</p></div>
+<div class="node"><b>Finger</b><span>字段依据：bone1 / bone2 / bone3 / tip / target</span><p>项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</p></div>
+<div class="node"><b>GenericBaker</b><span>字段依据：root / rootNode / ignoreList / bakePositionList</span><p>项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</p></div>
+<div class="node"><b>GenericPoser.Map</b><span>字段依据：bone / target</span><p>项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</p></div>
+<div class="node"><b>GrounderBipedIK</b><span>字段依据：feet</span><p>动画/骨骼类型：用于角色动画、IK、布娃娃、状态机或动作桥接</p></div>
+<div class="node"><b>GrounderFBBIK</b><span>字段依据：feet</span><p>动画/骨骼类型：用于角色动画、IK、布娃娃、状态机或动作桥接</p></div>
+<div class="node"><b>GrounderIK</b><span>字段依据：pelvis / characterRoot / feet</span><p>动画/骨骼类型：用于角色动画、IK、布娃娃、状态机或动作桥接</p></div>
+<div class="node"><b>GrounderQuadruped</b><span>字段依据：characterRoot / pelvis / lastSpineBone / head / forefeetRoot</span><p>项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</p></div>
+<div class="node"><b>GrounderQuadruped.Foot</b><span>字段依据：transform</span><p>项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</p></div>
+<div class="node"><b>GrounderVRIK</b><span>字段依据：feet</span><p>动画/骨骼类型：用于角色动画、IK、布娃娃、状态机或动作桥接</p></div>
+<div class="node"><b>Grounding</b><span>字段依据：&lt;root&gt;k__BackingField</span><p>项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</p></div>
+<div class="node"><b>Grounding.Leg</b><span>字段依据：&lt;transform&gt;k__BackingField</span><p>项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</p></div>
+<div class="node"><b>HUD_ProjectionSign</b><span>字段依据：bindTransform</span><p>HUD 界面组件：显示玩家状态、提示、图标或模式信息</p></div>
+<div class="node"><b>HUD_RadarIcon</b><span>字段依据：bindTransform</span><p>HUD 界面组件：显示玩家状态、提示、图标或模式信息</p></div>
+<div class="node"><b>HandPoser</b><span>字段依据：children / _poseRoot / poseChildren</span><p>项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</p></div>
+<div class="node"><b>HitReaction.HitPointBone.BoneLink</b><span>字段依据：bone</span><p>战斗结算类型：用于伤害、命中、击杀、爆头或战斗反馈</p></div>
+<div class="node"><b>IKConstraintBend</b><span>字段依据：bone1 / bone2 / bone3 / bendGoal</span><p>动画/骨骼类型：用于角色动画、IK、布娃娃、状态机或动作桥接</p></div>
+<div class="node"><b>IKEffector</b><span>字段依据：bone / target / childBones / planeBone1 / planeBone2 / planeBone3</span><p>视觉特效类型：用于粒子、屏幕特效、技能表现或受击反馈</p></div>
+<div class="node"><b>IKMapping.BoneMap</b><span>字段依据：transform / planeBone1 / planeBone2 / planeBone3</span><p>动画/骨骼类型：用于角色动画、IK、布娃娃、状态机或动作桥接</p></div>
+<div class="node"><b>IKMappingBone</b><span>字段依据：bone</span><p>动画/骨骼类型：用于角色动画、IK、布娃娃、状态机或动作桥接</p></div>
+<div class="node"><b>IKMappingLimb</b><span>字段依据：parentBone / bone1 / bone2 / bone3</span><p>动画/骨骼类型：用于角色动画、IK、布娃娃、状态机或动作桥接</p></div>
+<div class="node"><b>IKMappingSpine</b><span>字段依据：spineBones / leftUpperArmBone / rightUpperArmBone / leftThighBone / rightThighBone</span><p>动画/骨骼类型：用于角色动画、IK、布娃娃、状态机或动作桥接</p></div>
+<div class="node"><b>IKSolver</b><span>字段依据：root</span><p>动画/骨骼类型：用于角色动画、IK、布娃娃、状态机或动作桥接</p></div>
+<div class="node"><b>IKSolver.Point</b><span>字段依据：transform</span><p>动画/骨骼类型：用于角色动画、IK、布娃娃、状态机或动作桥接</p></div>
+<div class="node"><b>IKSolverAim</b><span>字段依据：transform / poleTarget / lastTransform</span><p>动画/骨骼类型：用于角色动画、IK、布娃娃、状态机或动作桥接</p></div>
+<div class="node"><b>IKSolverFullBodyBiped</b><span>字段依据：rootNode</span><p>动画/骨骼类型：用于角色动画、IK、布娃娃、状态机或动作桥接</p></div>
+<div class="node"><b>IKSolverHeuristic</b><span>字段依据：target</span><p>动画/骨骼类型：用于角色动画、IK、布娃娃、状态机或动作桥接</p></div>
+<div class="node"><b>IKSolverLimb</b><span>字段依据：bendGoal</span><p>动画/骨骼类型：用于角色动画、IK、布娃娃、状态机或动作桥接</p></div>
+<div class="node"><b>IKSolverLookAt</b><span>字段依据：target</span><p>动画/骨骼类型：用于角色动画、IK、布娃娃、状态机或动作桥接</p></div>
+<div class="node"><b>IKSolverTrigonometric</b><span>字段依据：target</span><p>动画/骨骼类型：用于角色动画、IK、布娃娃、状态机或动作桥接</p></div>
+<div class="node"><b>IKSolverVR</b><span>字段依据：solverTransforms</span><p>动画/骨骼类型：用于角色动画、IK、布娃娃、状态机或动作桥接</p></div>
+<div class="node"><b>IKSolverVR.Arm</b><span>字段依据：target / bendGoal</span><p>动画/骨骼类型：用于角色动画、IK、布娃娃、状态机或动作桥接</p></div>
+<div class="node"><b>IKSolverVR.Leg</b><span>字段依据：target / bendGoal</span><p>动画/骨骼类型：用于角色动画、IK、布娃娃、状态机或动作桥接</p></div>
+<div class="node"><b>IKSolverVR.Spine</b><span>字段依据：headTarget / pelvisTarget / chestGoal</span><p>动画/骨骼类型：用于角色动画、IK、布娃娃、状态机或动作桥接</p></div>
+<div class="node"><b>Inertia.Body</b><span>字段依据：transform</span><p>项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</p></div>
+<div class="node"><b>InteractionEffector</b><span>字段依据：target</span><p>视觉特效类型：用于粒子、屏幕特效、技能表现或受击反馈</p></div>
+<div class="node"><b>InteractionLookAt</b><span>字段依据：lookAtTarget</span><p>项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</p></div>
+<div class="node"><b>InteractionObject</b><span>字段依据：otherLookAtTarget / otherTargetsRoot / positionOffsetSpace</span><p>项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</p></div>
+<div class="node"><b>InteractionSystem</b><span>字段依据：FPSCamera</span><p>项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</p></div>
+<div class="node"><b>InteractionTarget</b><span>字段依据：pivot / lastPivot</span><p>项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</p></div>
+<div class="node"><b>LookAtController</b><span>字段依据：target / lastTarget</span><p>项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</p></div>
+<div class="node"><b>MapGun</b><span>字段依据：setPos</span><p>地图枪对象：地图上可拾取或使用的武器点</p></div>
+<div class="node"><b>MecanimBridge</b><span>字段依据：tr / footTransforms</span><p>动画/骨骼类型：用于角色动画、IK、布娃娃、状态机或动作桥接</p></div>
+<div class="node"><b>MineBotAnimation</b><span>字段依据：tr</span><p>AI 行为类型：用于电脑角色、代理移动、决策或目标选择</p></div>
+<div class="node"><b>Mode_Nano6</b><span>字段依据：buffIconTargets</span><p>具体玩法模式类：实现某种模式的规则和流程</p></div>
+<div class="node"><b>Model.Socket</b><span>字段依据：node</span><p>项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</p></div>
+<div class="node"><b>Msl_EvilFire</b><span>字段依据：ball</span><p>项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</p></div>
+<div class="node"><b>Navigator</b><span>字段依据：transform</span><p>项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</p></div>
+<div class="node"><b>NavmeshAdd</b><span>字段依据：tr</span><p>寻路/导航类型：用于 AI 路径搜索、导航网格、避障或路径节点</p></div>
+<div class="node"><b>NavmeshCut</b><span>字段依据：tr</span><p>寻路/导航类型：用于 AI 路径搜索、导航网格、避障或路径节点</p></div>
+<div class="node"><b>NodeLink</b><span>字段依据：end</span><p>项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</p></div>
+<div class="node"><b>NodeLink2</b><span>字段依据：end</span><p>项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</p></div>
+<div class="node"><b>NodeLink3</b><span>字段依据：end</span><p>项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</p></div>
+<div class="node"><b>ObjectPool</b><span>字段依据：&lt;container&gt;k__BackingField</span><p>缓存/对象池类型：用于复用对象、缓存计算结果或降低运行时分配</p></div>
+<div class="node"><b>PathOptions</b><span>字段依据：lookAtTransform / parent</span><p>寻路/导航类型：用于 AI 路径搜索、导航网格、避障或路径节点</p></div>
+<div class="node"><b>Patrol</b><span>字段依据：targets</span><p>项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</p></div>
+<div class="node"><b>PenetrationAvoidance.Avoider</b><span>字段依据：raycastFrom / raycastTo</span><p>项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</p></div>
+<div class="node"><b>Player</b><span>字段依据：&lt;characterContainer&gt;k__BackingField / &lt;climbStair&gt;k__BackingField</span><p>玩家战斗主体。保存生命、阵营、武器、输入、模型和 HUD 状态，是本机玩家、队友、敌人和 Bot 在战斗层的核心对象。</p></div>
+<div class="node"><b>PlayerCameraManager</b><span>字段依据：modelContainer</span><p>玩家相机控制：玩家视角、后坐力和观察点管理</p></div>
+<div class="node"><b>PointGraph</b><span>字段依据：root</span><p>寻路/导航类型：用于 AI 路径搜索、导航网格、避障或路径节点</p></div>
+<div class="node"><b>Poser</b><span>字段依据：poseRoot</span><p>项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</p></div>
+<div class="node"><b>ProceduralGridMover</b><span>字段依据：target</span><p>项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</p></div>
+<div class="node"><b>ProceduralWorld</b><span>字段依据：target</span><p>项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</p></div>
+<div class="node"><b>ProceduralWorld.ProceduralTile</b><span>字段依据：root</span><p>项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</p></div>
+<div class="node"><b>QVModel</b><span>字段依据：pickUpArea</span><p>第一人称手臂/武器模型：玩家自己视角的模型表现</p></div>
+<div class="node"><b>QVModel.Data</b><span>字段依据：Model</span><p>配置/数据类型：保存运行参数、资源引用、显示数据或系统配置</p></div>
+<div class="node"><b>RVOController</b><span>字段依据：tr</span><p>寻路/导航类型：用于 AI 路径搜索、导航网格、避障或路径节点</p></div>
+<div class="node"><b>RagdollUtility.Child</b><span>字段依据：t</span><p>动画/骨骼类型：用于角色动画、IK、布娃娃、状态机或动作桥接</p></div>
+<div class="node"><b>RagdollUtility.Rigidbone</b><span>字段依据：t</span><p>动画/骨骼类型：用于角色动画、IK、布娃娃、状态机或动作桥接</p></div>
+<div class="node"><b>RichSpecial</b><span>字段依据：first / second</span><p>项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</p></div>
+<div class="node"><b>Slider</b><span>字段依据：m_FillTransform / m_HandleTransform</span><p>UI 控件类型：用于界面布局、文本、按钮、滚动、图形或交互控件</p></div>
+<div class="node"><b>StaticPointVirtualCamera</b><span>字段依据：&lt;LookAt&gt;k__BackingField / &lt;Follow&gt;k__BackingField</span><p>相机/镜头控制类型：用于虚拟相机、镜头混合、视角参数或相机状态</p></div>
+<div class="node"><b>TargetMover</b><span>字段依据：target</span><p>项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</p></div>
+<div class="node"><b>TestPlayer</b><span>字段依据：destination / aim / escape</span><p>项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</p></div>
+<div class="node"><b>TombStone</b><span>字段依据：hitbox</span><p>墓碑/死亡标记：玩家死亡后场景中的标记对象</p></div>
+<div class="node"><b>TwistRelaxer</b><span>字段依据：parent / child</span><p>项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</p></div>
+<div class="node"><b>UniversalAdditionalCameraData</b><span>字段依据：m_VolumeTrigger</span><p>相机/镜头控制类型：用于虚拟相机、镜头混合、视角参数或相机状态</p></div>
+<div class="node"><b>UpdateTracker</b><span>字段依据：sToDelete</span><p>项目字段类型：在当前字段关系中作为数据、组件或资源引用出现，具体用途看字段名和保存它的类</p></div>
+<div class="node"><b>VFXHierarchyAttributeMapBinder</b><span>字段依据：HierarchyRoot</span><p>视觉特效类型：用于粒子、屏幕特效、技能表现或受击反馈</p></div>
+<div class="node"><b>VFXHierarchyAttributeMapBinder.Bone</b><span>字段依据：source / target</span><p>视觉特效类型：用于粒子、屏幕特效、技能表现或受击反馈</p></div>
+<div class="node"><b>VFXPlaneBinder</b><span>字段依据：Target</span><p>视觉特效类型：用于粒子、屏幕特效、技能表现或受击反馈</p></div>
+<div class="node"><b>VFXPositionBinder</b><span>字段依据：Target</span><p>视觉特效类型：用于粒子、屏幕特效、技能表现或受击反馈</p></div>
+<div class="node"><b>VFXPreviousPositionBinder</b><span>字段依据：Target</span><p>视觉特效类型：用于粒子、屏幕特效、技能表现或受击反馈</p></div>
+<div class="node"><b>VFXTransformBinder</b><span>字段依据：Target</span><p>视觉特效类型：用于粒子、屏幕特效、技能表现或受击反馈</p></div>
+<div class="node"><b>VFXVelocityBinder</b><span>字段依据：Target</span><p>视觉特效类型：用于粒子、屏幕特效、技能表现或受击反馈</p></div>
+<div class="node"><b>VRIK.References</b><span>字段依据：root / pelvis / spine / chest / neck / head / leftShoulder / leftUpperArm / leftForearm / leftHand / rightShoulder / rightUpperArm / rightForearm / rightHand / leftThigh / leftCalf / leftFoot / leftToes / rightThigh / rightCalf / rightFoot / rightToes</span><p>动画/骨骼类型：用于角色动画、IK、布娃娃、状态机或动作桥接</p></div>
+<div class="node"><b>VRIKRootController</b><span>字段依据：pelvisTarget / leftFootTarget / rightFootTarget</span><p>动画/骨骼类型：用于角色动画、IK、布娃娃、状态机或动作桥接</p></div>
+<div class="node"><b>Weapon.KnifeHitData</b><span>字段依据：bone</span><p>武器相关类型：用于武器数据、发射逻辑、弹药、投掷物或特殊武器表现</p></div></div>
+    </section>
+    
+    <h2>字段系统分类统计</h2>
+    <section class="stats"><article class="stat-card"><strong>无字段</strong><span>0 个字段</span><p>dump.cs 中没有该类型的字段声明，通常是 Unity 基础类型、外部类型、空壳类型或只通过方法使用的类型。</p></article></section>
+    
+    <h2>字段说明</h2>
+    <section class="panel section-panel">
+      <p>Transform 在 dump.cs 中没有普通字段或枚举值。它通常属于 Unity 基础组件、外部库类型、空壳类型，或者只通过方法和继承关系参与逻辑。本页重点看“谁保存了这个类”，用反向字段关系判断它在哪些系统里被使用。</p>
+    </section>
+    
+  </main>
+  <script>
+    const rows = Array.from(document.querySelectorAll('tbody tr[data-page]'));
+    const filter = document.getElementById('categoryFilter');
+    const pager = document.getElementById('pager');
+    const label = document.getElementById('pageLabel');
+    const visibleCount = document.getElementById('visibleCount');
+    const pageSize = 15;
+    let currentPage = 1;
+    function matchingRows() {
+      if (!filter) return rows;
+      const category = filter.value;
+      return rows.filter(row => category === '全部' || row.dataset.category === category);
+    }
+    function renderPager(totalPages) {
+      if (!pager) return;
+      pager.innerHTML = '';
+      for (let page = 1; page <= totalPages; page++) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.textContent = '第 ' + page + ' 页';
+        button.className = page === currentPage ? 'active' : '';
+        button.addEventListener('click', () => { currentPage = page; updateTable(); });
+        pager.appendChild(button);
+      }
+    }
+    function updateTable() {
+      const matched = matchingRows();
+      const totalPages = Math.max(1, Math.ceil(matched.length / pageSize));
+      if (currentPage > totalPages) currentPage = totalPages;
+      const start = (currentPage - 1) * pageSize;
+      const visibleSet = new Set(matched.slice(start, start + pageSize));
+      rows.forEach(row => row.style.display = visibleSet.has(row) ? '' : 'none');
+      if (visibleCount) visibleCount.textContent = matched.length;
+      if (label) label.textContent = '第 ' + currentPage + ' 页';
+      renderPager(totalPages);
+    }
+    if (filter) filter.addEventListener('change', () => { currentPage = 1; updateTable(); });
+    updateTable();
+  </script>
+</body>
+</html>
