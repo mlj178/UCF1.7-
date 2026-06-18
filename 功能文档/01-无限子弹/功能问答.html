@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>01-无限子弹 · 功能问答</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; color: #202830; background: #f4f6f7; font: 15px/1.75 "Microsoft YaHei", sans-serif; letter-spacing: 0; }
+    header { position: sticky; top: 0; z-index: 10; display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 14px 24px; color: #fff; background: #202832; }
+    header h1 { margin: 0; font-size: 20px; }
+    nav { display: flex; gap: 8px; }
+    nav a { padding: 7px 11px; color: #e9eef2; text-decoration: none; border: 1px solid #53606b; border-radius: 5px; }
+    nav a.active { color: #fff; background: #387666; border-color: #4a917e; }
+    main { max-width: 1180px; margin: 0 auto; padding: 26px 24px 60px; }
+    .question { margin-bottom: 18px; padding: 20px 22px; background: #fff; border: 1px solid #d9dee2; border-radius: 7px; }
+    h2 { margin: 0 0 12px; font-size: 20px; }
+    h3 { margin: 18px 0 8px; font-size: 16px; }
+    p { margin: 8px 0; }
+    code { color: #8a3f10; background: #f8eee7; padding: 1px 4px; border-radius: 3px; }
+    .answer { padding-left: 14px; border-left: 4px solid #3f8472; }
+    .key { font-weight: 700; color: #18604f; }
+    .warning { padding: 10px 12px; color: #7f351f; background: #fff0e9; border: 1px solid #eccbbb; border-radius: 5px; }
+    .diagram { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin: 16px 0; }
+    .tree { padding: 16px; background: #f8fafb; border: 1px solid #d8dfe4; border-radius: 6px; }
+    .tree h3 { margin-top: 0; }
+    .node { margin: 7px 0; padding: 8px 10px; background: #fff; border: 1px solid #cbd4da; border-radius: 5px; }
+    .node.runtime { border-left: 4px solid #377a69; }
+    .node.config { border-left: 4px solid #37729a; }
+    .node.data { border-left: 4px solid #b57231; }
+    .indent-1 { margin-left: 24px; }
+    .indent-2 { margin-left: 48px; }
+    .arrow { margin-left: 16px; color: #6d7881; }
+    table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+    th, td { padding: 9px 10px; text-align: left; vertical-align: top; border-bottom: 1px solid #dce1e5; }
+    th { color: #58646e; background: #f5f7f8; }
+    ul, ol { margin: 8px 0; padding-left: 22px; }
+    .flow { padding: 13px 15px; color: #e5edf2; background: #172029; border-radius: 6px; font: 13px/1.8 Consolas, monospace; white-space: pre-wrap; }
+    .hook-flow { display: grid; justify-items: center; gap: 7px; margin: 15px 0; }
+    .flow-step { width: min(760px, 100%); padding: 12px 15px; background: #f8fafb; border: 1px solid #ccd5db; border-left: 5px solid #3f8472; border-radius: 6px; }
+    .flow-step strong { display: block; margin-bottom: 3px; }
+    .flow-arrow { color: #3f8472; font-size: 21px; font-weight: 700; line-height: 1; }
+    .flow-split { width: min(900px, 100%); display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .flow-step.off { border-left-color: #a95c39; }
+    .mark-direct { color: #8ff0d1; }
+    .mark-inherit { color: #ffd38a; }
+    .mark-none { color: #aeb8c1; }
+    @media (max-width: 780px) { .diagram { grid-template-columns: 1fr; } header { align-items: flex-start; flex-direction: column; } }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>01 · 无限子弹功能问答</h1>
+    <nav>
+      <a href="../index.html">功能目录</a>
+      <a href="代码解读.html">代码解读</a>
+      <a class="active" href="功能问答.html">功能问答</a>
+    </nav>
+  </header>
+  <main>
+    <section class="question">
+      <h2>1. 这个功能解决了什么游戏问题？</h2>
+      <div class="answer">
+        <p>它解决的是<strong>开火后弹药被游戏正常扣除</strong>的问题。</p>
+        <p>普通枪械通过替换 <code>WPN_Gun.ConsumeAmmo</code> 和 <code>Weapon.ConsumeAmmo</code>，让游戏收到“扣弹成功”的返回值，但不执行原来的扣弹代码。RPG/AT4 不走普通枪械的扣弹路径，所以在 <code>WPN_RPG.Fire</code> 进入前调用 <code>WPN_RPG.FillAmmo</code>。</p>
+      </div>
+    </section>
+
+    <section class="question">
+      <h2>2. 这些武器类和数据是什么关系？</h2>
+      <p>最重要的区分：<span class="key">`WPN_*` 通常是房间中正在运行的武器对象；`WeaponData` / `WD_*` 是武器配置；另外几个是被对象持有的数据结构。</span></p>
+      <h3>完整运行时继承链（来自 dump.cs）</h3>
+      <div class="flow">CFAnimator
+└─ Weapon                          武器运行时基类  <span class="mark-direct">[直接 Hook：Weapon.ConsumeAmmo]</span>
+   ├─ WPN_Gun                      普通枪械；FAL CAMO  <span class="mark-direct">[直接 Hook：WPN_Gun.ConsumeAmmo]</span>
+   │  └─ WPN_GrenadeGun            枪械/榴弹双模式；FN FAL 榴弹版  <span class="mark-inherit">[复用父类扣弹时受影响]</span>
+   ├─ WPN_Knife                    近战基础  <span class="mark-none">[未直接处理]</span>
+   │  ├─ WPN_AsceticHero           苦行僧
+   │  ├─ WPN_EvilTerminator        邪恶终结者
+   │  ├─ WPN_MasterHero            Master Hero
+   │  ├─ WPN_MasterHunter          Master Hunter
+   │  ├─ WPN_MechanicHero          机械师英雄
+   │  ├─ WPN_OutlawTerminator      Outlaw 终结者
+   │  ├─ WPN_VoidTerminator        虚空终结者
+   │  ├─ WPN_ArmoredTerminator     装甲终结者
+   │  ├─ WPN_GhostBlade            幽灵之刃
+   │  └─ WPN_BoxingKing            拳王
+   ├─ WPN_RPG                      RPG / AT4；Nano AT4  <span class="mark-direct">[直接 Hook：Fire；调用 FillAmmo]</span>
+   ├─ WPN_Throw                    投掷武器  <span class="mark-none">[未直接处理]</span>
+   ├─ WPN_Arcane                   奥术投射武器  <span class="mark-none">[未直接处理]</span>
+   ├─ WPN_SentryGun                哨戒机枪部署工具  <span class="mark-none">[未直接处理]</span>
+   ├─ WPN_Disposable               一次性武器  <span class="mark-none">[未直接处理]</span>
+   └─ WPN_Rope                     绳索工具  <span class="mark-none">[未直接处理]</span></div>
+      <p>这棵树列出了 <code>dump.cs</code> 中 <code>Weapon</code> 的全部 public 直接和间接子类。中文说明依据类名、字段和现有项目资料；部分英雄名称在不同游戏版本中的界面译名可能不同，但继承关系不变。</p>
+      <p><code>dump.cs</code> 中 <code>WPN_Gun</code> 的子类只有 <code>WPN_GrenadeGun</code>，没有发现继续继承 <code>WPN_GrenadeGun</code> 的类。</p>
+
+      <h3>运行对象如何连接配置和临时数据</h3>
+      <div class="diagram">
+        <div class="tree">
+          <div class="node runtime"><strong>WPN_Gun</strong><br><code>realData → WeaponData_Gun</code><br><code>ammoData → WPN_Gun.AmmoData</code></div>
+          <div class="node runtime"><strong>WPN_GrenadeGun</strong><br><code>realData → WD_GrenadeGun</code><br>同时保存枪械弹药与榴弹弹药</div>
+          <div class="node runtime"><strong>WPN_RPG</strong><br><code>realData → WD_RPG → MissileData</code><br><code>ammo → WPN_Gun.AmmoData</code></div>
+          <div class="node runtime"><strong>WPN_Throw / WPN_Arcane</strong><br><code>realData → WD_Missile → MissileData</code></div>
+        </div>
+        <div class="tree">
+          <div class="node config"><strong>WeaponData : ScriptableObject</strong><br>名称、槽位、移动惩罚等共享配置基类</div>
+          <div class="node config"><strong>WeaponData_Gun</strong><br>弹匣、射速、伤害、射程、后坐力等枪械配置</div>
+          <div class="node data"><strong>WPN_Gun.AmmoData</strong><br>某一把运行时武器当前的 clip、ammo、maxClip、maxAmmo</div>
+          <div class="node data"><strong>MissileData</strong><br>投射物 prefab、伤害、射程、速度、重力、爆炸时间</div>
+          <div class="node data"><strong>Weapon.KnifeHitData</strong><br>一次近战检测的骨骼、距离和角度临时结果</div>
+        </div>
+      </div>
+
+      <h3>FAL CAMO、FN FAL 榴弹版和 Nano AT4 的区别</h3>
+      <ul>
+        <li><strong>FAL CAMO：</strong><code>WPN_Gun → Weapon</code>，数据类是 <code>WeaponData_Gun</code>。它属于普通枪械路径。</li>
+        <li><strong>FN FAL 榴弹版：</strong><code>WPN_GrenadeGun → WPN_Gun → Weapon</code>，数据类是 <code>WD_GrenadeGun</code>。普通射击仍属于枪械分支，但榴弹模式有独立状态和弹药数据；它不是 <code>WPN_RPG</code>。</li>
+        <li><strong>Nano AT4：</strong><code>WPN_RPG → Weapon</code>，数据类是 <code>WD_RPG</code>，不经过 <code>WPN_Gun</code>。</li>
+      </ul>
+      <p class="warning"><code>WPN_RPG.Fire</code> 主要覆盖实例化为 <code>WPN_RPG</code> 的 RPG/AT4 家族，包括项目资料中提到的补给箱 RPG、AT4 和 Nano AT4；它不包含 FAL CAMO，也不包含 FN FAL 榴弹版。某把外观像发射器的武器是否受影响，最终取决于运行时类是不是 <code>WPN_RPG</code>。</p>
+      <h3>问题：已经 Hook Weapon.ConsumeAmmo，WPN_Gun 的处理还有必要吗？</h3>
+      <div class="answer">
+        <p><strong>有必要，不能简单被基类 Hook 替代。</strong></p>
+        <p><code>Weapon.ConsumeAmmo</code> 是基类虚函数，<code>WPN_Gun.ConsumeAmmo</code> 是普通枪械自己的重写版本。WPN_Gun 实例通过虚函数分派时通常直接执行重写版本，不会先执行基类版本。</p>
+        <div class="flow">普通枪械 WPN_Gun
+→ 调用 WPN_Gun.ConsumeAmmo（override）
+→ 当前脚本必须 Hook 0xB61140
+
+其他没有重写 ConsumeAmmo 的 Weapon 子类
+→ 可能调用 Weapon.ConsumeAmmo（基类）
+→ 基类 Hook 0xB6C310 作为兜底</div>
+        <p>因此两者的职责是：<strong>WPN_Gun Hook 负责普通枪械，Weapon Hook 负责可能沿用基类实现的其他武器。</strong>如果只能保留一个，普通枪无限子弹应优先保留 <code>WPN_Gun.ConsumeAmmo</code>；基类 Hook 是否必需，可以通过逐类测试后再决定。</p>
+      </div>
+    </section>
+
+    <section class="question">
+      <h2>3. 普通枪械、基类兜底和 RPG 处理是否重复？覆盖全部武器吗？</h2>
+      <div class="answer">
+        <p><strong>有继承层面的重叠，但不是简单重复。</strong></p>
+        <ul>
+          <li><code>WPN_Gun.ConsumeAmmo</code> 是普通枪械的主要扣弹入口。</li>
+          <li><code>Weapon.ConsumeAmmo</code> 是基类函数，用于覆盖仍走基类实现的其他武器；一次开火不代表两个函数一定都会执行。</li>
+          <li><code>WPN_RPG : Weapon</code>，不属于 <code>WPN_Gun</code>，并且在自己的 <code>Fire</code> 内处理弹药，所以需要单独处理。</li>
+        </ul>
+        <p><strong>不能仅凭当前脚本认定覆盖了全部武器。</strong> `dump.cs` 里还有 <code>WPN_Throw</code>、<code>WPN_Arcane</code>、<code>WPN_SentryGun</code>、<code>WPN_Disposable</code>、<code>WPN_Rope</code> 等直接继承 <code>Weapon</code> 的类型。它们只有在实际调用被替换的基类 <code>ConsumeAmmo</code> 时才会生效；如果像 RPG 一样自己扣弹，就需要继续分析各自的开火函数。</p>
+      </div>
+    </section>
+
+    <section class="question">
+      <h2>4. 当前方案是否区分 MyPlayer 和 Bot？</h2>
+      <div class="answer">
+        <p><span class="key">没有显式区分。</span>当前 plan4 没有调用 <code>Weapon.get_isMyWeapon</code>，也没有读取 owner 后判断 <code>Player.get_isMyPlayer</code>。</p>
+        <p>它替换的是全局 Native 函数地址。因此，只要玩家武器或 Bot 武器执行同一个 <code>WPN_Gun.ConsumeAmmo</code>、<code>Weapon.ConsumeAmmo</code> 或 <code>WPN_RPG.Fire</code>，都会进入 Hook。</p>
+        <p class="warning">这表示“代码没有过滤 Bot”，但不能只靠静态脚本断言每一种 Bot 武器一定受到影响；还要确认 Bot 的实际射击逻辑是否调用这些函数。</p>
+        <h3>如果需要只修改 MyPlayer，怎么实现？</h3>
+        <ol>
+          <li>把 <code>Weapon.get_isMyWeapon</code>（RVA <code>0xB6E1D0</code>）包装为 <code>NativeFunction</code>。</li>
+          <li>每次进入扣弹或开火回调时，把当前武器的 <code>thisPtr</code> 传给它。</li>
+          <li>返回 true 才执行“不扣弹/补弹”；返回 false 时必须执行游戏原逻辑，不能直接返回 true。</li>
+        </ol>
+        <div class="flow">普通枪 / Weapon 基类：
+if (isMyWeapon(thisPtr, ptr(0)))
+    return true;                 // 本地玩家不扣弹
+else
+    return original(...);        // Bot 和其他玩家走原扣弹逻辑
+
+RPG / AT4：
+onEnter(args) {
+    if (isMyWeapon(args[0], ptr(0)))
+        FillAmmo(args[0], ptr(0));
+}</div>
+        <p>当前脚本使用 <code>Interceptor.replace</code>，要让非玩家安全调用原函数，需要保存可靠的原函数入口，例如使用 Frida 支持的原实现 trampoline；另一种更稳的现有思路是采用 <code>plan1_memory_lock.js</code>：只在 <code>isMyWeapon</code> 为 true 时缓存并回写玩家武器的 <code>AmmoData</code>。</p>
+      </div>
+    </section>
+
+    <section class="question">
+      <h2>5. <code>enabled</code> 如何控制功能开关？何时安装 Hook？</h2>
+      <div class="answer">
+        <p><span class="key">是的：在这个模块里，<code>enable()</code> 就是安装 Hook，<code>disable()</code> 就是尝试恢复或卸载 Hook。</span></p>
+        <ul>
+          <li><code>enable()</code> 调用 <code>Interceptor.replace</code> 和 <code>Interceptor.attach</code>，把拦截逻辑安装到目标函数地址。</li>
+          <li><code>disable()</code> 调用 <code>Interceptor.revert</code> 和 listener 的 <code>detach()</code>，让函数恢复原逻辑或移除旁路监听。</li>
+          <li><code>enabled</code> 本身不会修改游戏；它只是记录模块认为自己当前是否已安装 Hook，并阻止重复启用。</li>
+        </ul>
+        <div class="hook-flow" aria-label="无限子弹功能开关流程">
+          <div class="flow-step"><strong>1. 发现游戏进程</strong><code>core/game_session_manager.py · _find_game_process()</code><br>查找 UnityCrossFire.exe，取得 PID。</div>
+          <div class="flow-arrow">↓</div>
+          <div class="flow-step"><strong>2. 连接 Frida</strong><code>core/game_session_manager.py · _step_connecting_frida()</code><br>调用 FridaManager.connect(pid)。</div>
+          <div class="flow-arrow">↓</div>
+          <div class="flow-step"><strong>3. 拼接并加载脚本</strong><code>core/frida_manager.py · _build_js_code()</code><br>拼接公共函数、全部功能 JS、dispatcher 和 RPC。</div>
+          <div class="flow-arrow">↓</div>
+          <div class="flow-step"><strong>4. 注册无限子弹模块</strong><code>scripts/01-unlimited_ammo.js</code><br>创建 modules.ammo；enabled=false；此时尚未 Hook。</div>
+          <div class="flow-arrow">↓</div>
+          <div class="flow-step"><strong>5. 用户点击无限子弹开关</strong><code>ui/app.py · _toggle_feature('ammo')</code><br>通过 FridaManager.send_toggle() 发送 true 或 false。</div>
+          <div class="flow-arrow">↓</div>
+          <div class="flow-step"><strong>6. dispatcher 分发消息</strong><code>core/frida_manager.py · _build_dispatcher()</code><br>onToggle() 根据开关值选择 enable() 或 disable()。</div>
+          <div class="flow-arrow">↓</div>
+          <div class="flow-split">
+            <div class="flow-step"><strong>打开：modules.ammo.enable()</strong>安装 replace / attach Hook<br>成功后 enabled=true。</div>
+            <div class="flow-step off"><strong>关闭：modules.ammo.disable()</strong>执行 revert / detach 恢复或移除 Hook<br>最后 enabled=false。</div>
+          </div>
+        </div>
+        <p><code>enabled</code> 主要是模块内部的<strong>重复启用保护</strong>：已经为 true 时再次调用 <code>enable()</code> 会直接返回，避免重复 Hook。</p>
+        <p>正常情况下，<strong>检测到进程只会加载和注册脚本，不会立即启用无限子弹</strong>。点击开关后才安装 Hook。不过，如果修改器保存了“上次希望保持开启”的状态，重新连接游戏后可能自动重发开启消息，此时表现为连接后自动 Hook。</p>
+        <h3>“加载/注册脚本”和“安装 Hook”有什么区别？</h3>
+        <p><strong>加载/注册</strong>只是让 Frida JS 知道存在 <code>modules.ammo</code>，并准备好 <code>enable/disable</code> 方法；此时原游戏函数尚未被替换。<strong>安装 Hook</strong>发生在 <code>enable()</code> 中，会真正改变 <code>GameAssembly.dll</code> 函数的执行路径。</p>
+        <h3>Hook 是不是替换 DLL 中的函数？</h3>
+        <p><strong>要分 Hook 类型。</strong>它们都针对游戏进程内已经加载的 <code>GameAssembly.dll</code>，改变的是运行时内存和函数执行路径，不会直接修改硬盘上的 DLL 文件。</p>
+        <ul>
+          <li><code>Interceptor.replace</code>：把目标函数入口交给新的 <code>NativeCallback</code>。本功能用它替换 <code>ConsumeAmmo</code>，因此原扣弹函数不再执行。</li>
+          <li><code>Interceptor.attach</code>：不替换原函数，只在进入 <code>onEnter</code> 或返回 <code>onLeave</code> 时插入额外逻辑。本功能用它在 <code>WPN_RPG.Fire</code> 开始前补弹，之后原 <code>Fire</code> 仍继续执行。</li>
+          <li><code>Interceptor.revert</code>：撤销 <code>replace</code>，恢复原函数入口。</li>
+          <li><code>listener.detach()</code>：移除 <code>attach</code> 注册的监听，不再执行额外回调。</li>
+        </ul>
+        <h3>你的 replace / attach 理解是否正确？</h3>
+        <p><strong>你的理解：</strong><code>replace</code> 可以接管参数、返回值和内部逻辑；<code>attach</code> 用于监听，可以在 <code>onEnter</code> 修改参数、在 <code>onLeave</code> 修改返回值，但默认不会替换原函数内部逻辑。</p>
+        <p><strong>结论：基本正确。</strong><code>attach</code> 虽然保留原函数，但修改参数、内存或返回值后，仍能改变最终游戏行为。</p>
+        <div class="diagram">
+          <div class="tree">
+            <h3><code>onEnter</code>：进入原函数之前</h3>
+            <p>调用者刚准备进入目标函数时触发。这里可以读取或修改 <code>args</code>，所以原函数会看到修改后的参数；也可以提前修改对象内存、调用其他函数。</p>
+            <p>当前无限子弹脚本就在 <code>WPN_RPG.Fire</code> 的 <code>onEnter</code> 中调用 <code>FillAmmo</code>，然后才让原 <code>Fire</code> 继续。</p>
+          </div>
+          <div class="tree">
+            <h3><code>onLeave</code>：原函数执行结束之后</h3>
+            <p>原函数已经算出结果，但结果还没有返回给调用者时触发。这里可以读取返回值，并通过 <code>retval.replace(...)</code> 改成另一个返回值。</p>
+            <p>当前 RPG Hook 没有使用 <code>onLeave</code>；它只使用了 <code>onEnter</code>。</p>
+          </div>
+        </div>
+        <p><code>replace</code> 会用新回调整体接管函数：可以使用传入参数、自己执行新逻辑并决定返回值，原函数内部逻辑默认不再运行。<code>attach</code> 默认保留原函数内部逻辑，但可以通过改参数、改对象内存、调用额外函数或改返回值，显著改变最终行为；它只是不会像 <code>replace</code> 那样直接用一套新函数体取代原函数。</p>
+        <h3>RPG listener 没有正确保存，会有什么游戏表现？</h3>
+        <p class="warning">点击关闭后，普通枪的 <code>replace</code> 会恢复，所以普通枪重新扣弹；但 RPG/AT4 的 <code>attach</code> 可能仍然存在，开火前继续执行 <code>FillAmmo</code>，表现为界面显示“无限子弹已关闭”，RPG/AT4 却仍然近似无限弹。再次开启还可能叠加新的 listener，使一次开火触发多次补弹回调，增加额外开销和不稳定风险。</p>
+      </div>
+    </section>
+
+    <section class="question">
+      <h2>6. <code>sendStatus('ammo', true)</code> 发给谁？为什么要发？</h2>
+      <div class="answer">
+        <p>它通过 Frida 的 <code>send()</code> 从游戏进程内的 JavaScript 发给外部 Python 修改器：</p>
+        <div class="flow">scripts/01-unlimited_ammo.js
+→ 调用 scripts/_common.js 的 sendStatus('ammo', true)
+→ Frida send({ type: 'status', feature: 'ammo', enabled: true })
+→ core/frida_manager.py 的 FridaManager._on_message() 接收
+→ EventBus.emit('feature_status_changed', feature='ammo', enabled=true)
+→ ui/app.py 的 _on_feature_status() 接收事件
+→ 更新 self._features['ammo'] 和 ammo_switch</div>
+        <table>
+          <thead><tr><th>文件</th><th>职责</th></tr></thead>
+          <tbody>
+            <tr><td><code>scripts/_common.js</code></td><td>定义 <code>sendStatus()</code>，把状态包装为 Frida 消息。</td></tr>
+            <tr><td><code>core/frida_manager.py</code></td><td><code>_on_message()</code> 是 Python 端直接接收者；识别 <code>type='status'</code> 后发出事件总线消息。</td></tr>
+            <tr><td><code>ui/app.py</code></td><td>订阅 <code>feature_status_changed</code>，由 <code>_on_feature_status()</code> 更新内部状态和界面开关。</td></tr>
+          </tbody>
+        </table>
+        <p>发送它是为了让界面显示<strong>脚本实际执行后的状态</strong>，而不只是用户刚才点了什么。这样重新连接、启用失败、脚本主动关闭时，UI 与游戏内 Hook 状态更容易保持一致。</p>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

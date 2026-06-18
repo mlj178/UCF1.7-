@@ -1,0 +1,1288 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><title>11-自瞄 · 代码解读</title><style>*{box-sizing:border-box}body{margin:0;min-width:980px;color:#202830;background:#f4f6f7;font:14px/1.65 "Microsoft YaHei",sans-serif;letter-spacing:0}button{font:inherit;cursor:pointer}.top{min-height:64px;display:grid;grid-template-columns:1fr auto auto;align-items:center;gap:16px;padding:10px 18px;color:#fff;background:#202832}.top h1{margin:0;font-size:20px}.tabs{display:flex;padding:3px;background:#11171d;border:1px solid #46515c;border-radius:6px}.tabs button{padding:7px 12px;color:#bdc7cf;background:transparent;border:0;border-radius:4px}.tabs button[aria-selected=true]{color:#fff;background:#397868}.actions{display:flex;gap:8px}.actions a,.actions button{display:inline-flex;align-items:center;padding:8px 11px;color:#eaf0f3;text-decoration:none;background:#303a44;border:1px solid #4d5964;border-radius:5px}.summary{padding:14px 20px;background:#fff;border-bottom:1px solid #d8dee2}.summary strong{color:#206252}.workspace{display:grid;grid-template-columns:minmax(570px,3fr) minmax(370px,2fr);min-height:calc(100vh - 118px)}.code{min-width:0;color:#dce5eb;background:#10161c}.code-head{position:sticky;top:0;z-index:3;display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px 12px;padding:11px 15px;background:#182029;border-bottom:1px solid #303a44;font:12px Consolas,monospace}.source-meta{flex:1 1 100%;color:#aeb9c3;line-height:1.55;overflow-wrap:anywhere}.source-meta strong{color:#edf3f7}.source-meta code{color:#9fd5c7}.sync-note{display:block;color:#8e9aa5}.code-highlight-legend{flex:1 1 100%;display:flex;gap:12px;color:#aeb9c3;font:11px "Microsoft YaHei",sans-serif}.highlight-legend-item{display:inline-flex;align-items:center;gap:5px}.highlight-swatch{width:12px;height:8px;border-left:3px solid}.highlight-swatch.address{background:#275673;border-color:#4b9bc9}.highlight-swatch.hook{background:#672f32;border-color:#d46b6b}.highlight-swatch.effect{background:#205e4d;border-color:#50bd99}.highlight-swatch.risk{background:#6d451f;border-color:#e49a4f}.code-scroll{overflow-x:auto;padding:8px 0 26px}.block{min-width:760px;border-left:4px solid transparent}.block:hover{background:#151d24}.block.active{background:#17231f;border-left-color:#4fa58d}.label{display:inline-block;margin:9px 0 5px 48px;padding:2px 7px;color:#8ed7c1;background:#1d302c;border:1px solid #315249;border-radius:4px;font:11px Consolas,monospace}.line{display:grid;grid-template-columns:48px 1fr;min-height:22px;font:13px/1.7 Consolas,monospace}.no{padding-right:10px;color:#64717d;text-align:right;border-right:1px solid #27313a;user-select:none}.txt{padding:0 16px;white-space:pre}.line.key-address{background:rgba(45,108,148,.13);box-shadow:inset 3px 0 #397da5}.line.key-hook{background:rgba(167,65,65,.12);box-shadow:inset 3px 0 #b75555}.line.key-effect{background:rgba(32,126,97,.16);box-shadow:inset 3px 0 #319475}.line.key-risk{background:rgba(180,104,30,.15);box-shadow:inset 3px 0 #c47b34}.block.active .line.key-address{background:rgba(45,108,148,.30);box-shadow:inset 5px 0 #56a8d6}.block.active .line.key-hook{background:rgba(167,65,65,.28);box-shadow:inset 5px 0 #dd7474}.block.active .line.key-effect{background:rgba(32,126,97,.34);box-shadow:inset 5px 0 #59caa5}.block.active .line.key-risk{background:rgba(180,104,30,.31);box-shadow:inset 5px 0 #e5a25f}.address-note{display:inline-flex;margin-left:12px;padding:1px 7px;border:1px solid;border-radius:4px;font:700 11px "Microsoft YaHei",sans-serif}.address-note.reload,.address-note.move{color:#9fd5f3;background:#17384c;border-color:#397da5}.address-note.player{color:#78dabb;background:#173d33;border-color:#30866e}.address-note.weapon{color:#ffd18d;background:#49331a;border-color:#a97634}.address-note.knife{color:#ffb3b3;background:#492425;border-color:#a95357}.address-note.round{color:#d4b5f1;background:#37264a;border-color:#79549b}.explain{position:sticky;top:0;height:100vh;overflow:auto;padding:22px;background:#fff;border-left:1px solid #d8dee2}.eyebrow{margin:10px 0 6px;color:#28715f;font-size:12px;font-weight:700}.explain h2{margin:3px 0 13px;font-size:20px}.card{margin:11px 0;padding:14px;background:#f7f9fa;border:1px solid #d8dee2;border-radius:6px}.card h3{margin:0 0 8px;font-size:14px}.business-card{border-left:4px solid #39779f}.business-scene{margin:0 0 12px;color:#34414b}.business-path{display:grid}.business-step{padding:8px 10px;border:1px solid;border-radius:5px}.business-step.original{color:#1f5b80;background:#edf5fa;border-color:#b8d1e0}.business-step.hook{color:#8f3030;background:#fbeeee;border-color:#e0b6b6}.business-step.modify{color:#17634f;background:#e9f5f0;border-color:#afd2c6}.business-arrow{height:20px;text-align:center;color:#74808a;font-weight:800}.business-result{margin:12px 0 0;padding:9px 10px;color:#73420f;background:#fff3e3;border-left:3px solid #bd742c}.logic-line-ref{float:right;margin-left:10px;padding:1px 6px;color:#17634f;background:#d7ede5;border:1px solid #9bc9ba;border-radius:4px;font:700 11px Consolas,monospace}.address-note.gather,.address-note.gravity,.address-note.time{color:#9fd5f3;background:#17384c;border-color:#397da5}.address-note.transform{color:#ffd18d;background:#49331a;border-color:#a97634}.address-note.bot{color:#ffb3b3;background:#492425;border-color:#a95357}.address-note.aim,.address-note.hp,.address-note.weapon{color:#9fd5f3;background:#17384c;border-color:#397da5}.address-note.risk{color:#ffd18d;background:#49331a;border-color:#a97634}</style></head><body><header class="top"><h1>11 · 自瞄代码解读</h1><div class="tabs" id="tabs"></div><div class="actions"><a href="../index.html">功能目录</a><button id="copy">复制源码</button></div></header><section class="summary"><strong>解决的问题：</strong>扫描当前房间敌人，结合队伍、死亡状态、距离、视野角和可见性筛选目标，再按平滑与锁定配置写入本地玩家相机旋转。主方案通过 vischeck.dll 包装 Physics.Linecast 做遮挡检测。</section><div class="workspace"><main class="code"><div class="code-head"><span id="file"></span><span id="count"></span><div class="source-meta" id="meta"></div><div class="code-highlight-legend"><span class="highlight-legend-item"><span class="highlight-swatch address"></span>蓝：定位地址</span><span class="highlight-legend-item"><span class="highlight-swatch hook"></span>红：安装或恢复 Hook</span><span class="highlight-legend-item"><span class="highlight-swatch effect"></span>绿：改变游戏行为</span><span class="highlight-legend-item"><span class="highlight-swatch risk"></span>橙：风险或依赖</span></div></div><div class="code-scroll" id="code"></div></main><aside class="explain"><p class="eyebrow" id="cat"></p><h2 id="title"></h2><div id="body"></div></aside></div><script type="text/plain" id="src-release">// aim.js - 自瞄 v2 — 基于 UnityCrossFire.dll 逆向方案
+// 双定时器(aimLoop 16ms + targetScanner 30ms) + 角度计算 + FOV过滤 + 平滑插值 + 后坐力清零
+
+modules.aim = (function() {
+  var enabled = false;
+  var myPlayer = null;
+  var targetEnemy = null;
+  var timer = null;
+  var roomHooks = [];
+  var frameCount = 0;
+
+  var CONFIG = {
+    aimKey:          0,
+    aimBone:         7,
+    smoothness:      1.0,
+    maxAimDistance:  200.0,
+    maxAngleFOV:     30.0,
+    visibilityCheck: false,
+    autoAim:         false,
+    debugLog:        true,
+  };
+
+  var singletonGetter = null;
+  var compGetTransform = null;
+  var transformGetPos = null;
+  var isMyPlayerFn = null;
+  var isDeadFn = null;
+  var getTeamFn = null;
+  var addCamRotFn = null;
+  var getMouseBtnFn = null;
+  var linecastFn = null;
+
+  var aimTimer = null;
+  var scanTimer = null;
+  var debugTimer = null;
+  var cachedTarget = null;
+  var scanYawDeg = 0;
+  var scanPitchDeg = 0;
+
+  var RVA_AIM = {
+    SingletonGet:                    0x4A8170,
+    GM_Singleton_MethodInfo:         0xE1CE64,
+    Component_get_transform:         0x32CF40,
+    Transform_get_position:          0x3F42B0,
+    Player_get_isMyPlayer:           0xB55FD0,
+    Entity_get_isDead:               0xB400E0,
+    Entity_get_team:                 0x1E0070,
+    Player_AddCameraRotation:        0xB4F790,
+    Input_GetMouseButton:            0xACFB20,
+    Physics_Linecast:                0xAB9B80,
+  };
+
+  var OFF_AIM = {
+    GM_allPlayers:      0x1C,
+    GM_playersBL:       0x20,
+    GM_playersGR:       0x28,
+    E_team:             0x20,
+    P_cameraRotation:   0x4C,
+    P_recoil:           0x54,
+    P_characterContainer: 0x58,
+    Arr_len:            0x0C,
+    Arr_data:           0x10,
+    List_items:         0x08,
+    List_size:          0x0C,
+    ptrSize:            4,
+  };
+
+  function getGM() {
+    try {
+      var base = getGameAssembly().base;
+      var mi = base.add(RVA_AIM.GM_Singleton_MethodInfo).readPointer();
+      if (mi.isNull()) {
+        return singletonGetter(ptr(0));
+      }
+      var gm = singletonGetter(mi);
+      if (gm.isNull()) return null;
+      return gm;
+    } catch(e) { return null; }
+  }
+
+  function initNativeFunctions() {
+    var mod = getGameAssembly();
+    if (!mod) return false;
+    var base = mod.base;
+
+    try { singletonGetter = new NativeFunction(base.add(RVA_AIM.SingletonGet), 'pointer', ['pointer']); } catch(e) { return false; }
+    try { compGetTransform = new NativeFunction(base.add(RVA_AIM.Component_get_transform), 'pointer', ['pointer', 'pointer']); } catch(e) { return false; }
+    try { transformGetPos = new NativeFunction(base.add(RVA_AIM.Transform_get_position), 'void', ['pointer', 'pointer', 'pointer']); } catch(e) { return false; }
+    try { isMyPlayerFn = new NativeFunction(base.add(RVA_AIM.Player_get_isMyPlayer), 'bool', ['pointer', 'pointer']); } catch(e) { return false; }
+    try { isDeadFn = new NativeFunction(base.add(RVA_AIM.Entity_get_isDead), 'bool', ['pointer', 'pointer']); } catch(e) { return false; }
+    try { getTeamFn = new NativeFunction(base.add(RVA_AIM.Entity_get_team), 'int32', ['pointer', 'pointer']); } catch(e) { getTeamFn = null; }
+    try { addCamRotFn = new NativeFunction(base.add(RVA_AIM.Player_AddCameraRotation), 'void', ['pointer', 'float', 'float', 'pointer']); } catch(e) { return false; }
+    try { getMouseBtnFn = new NativeFunction(base.add(RVA_AIM.Input_GetMouseButton), 'bool', ['int32', 'pointer']); } catch(e) { getMouseBtnFn = null; }
+    try { linecastFn = new NativeFunction(base.add(RVA_AIM.Physics_Linecast), 'bool', ['pointer', 'pointer', 'int32', 'pointer']); } catch(e) { linecastFn = null; }
+
+    return true;
+  }
+
+  function isValidPlayer(pp) {
+    if (!pp || pp.isNull()) return false;
+    try {
+      var team = pp.add(OFF_AIM.E_team).readS32();
+      return (team === 0 || team === 1 || team === 2);
+    } catch(e) { return false; }
+  }
+
+  function readList(listPtr) {
+    var result = [];
+    if (!listPtr || listPtr.isNull()) return result;
+    try {
+      var items = listPtr.add(OFF_AIM.List_items).readPointer();
+      if (!items || items.isNull()) return result;
+      var count = listPtr.add(OFF_AIM.List_size).readS32();
+      for (var i = 0; i < count; i++) {
+        var elem = items.add(OFF_AIM.Arr_data + i * OFF_AIM.ptrSize).readPointer();
+        if (elem && !elem.isNull()) result.push(elem);
+      }
+    } catch(e) {}
+    return result;
+  }
+
+  function readArray(arrPtr) {
+    var result = [];
+    if (!arrPtr || arrPtr.isNull()) return result;
+    try {
+      var len = arrPtr.add(OFF_AIM.Arr_len).readU32();
+      for (var i = 0; i < len; i++) {
+        var elem = arrPtr.add(OFF_AIM.Arr_data + i * OFF_AIM.ptrSize).readPointer();
+        if (elem && !elem.isNull()) result.push(elem);
+      }
+    } catch(e) {}
+    return result;
+  }
+
+  function getAllPlayers(gm) {
+    var map = {};
+    var arr = readArray(gm.add(OFF_AIM.GM_allPlayers).readPointer());
+    for (var i = 0; i < arr.length; i++) {
+      if (isValidPlayer(arr[i])) map[arr[i].toString()] = arr[i];
+    }
+    var bl = readList(gm.add(OFF_AIM.GM_playersBL).readPointer());
+    for (var i = 0; i < bl.length; i++) {
+      if (isValidPlayer(bl[i])) map[bl[i].toString()] = bl[i];
+    }
+    var gr = readList(gm.add(OFF_AIM.GM_playersGR).readPointer());
+    for (var i = 0; i < gr.length; i++) {
+      if (isValidPlayer(gr[i])) map[gr[i].toString()] = gr[i];
+    }
+    return Object.values(map);
+  }
+
+  function getPlayerPos(player) {
+    if (!player || player.isNull()) return null;
+    try {
+      var transform = compGetTransform(player, ptr(0));
+      if (transform && !transform.isNull()) {
+        var posBuf = Memory.alloc(12);
+        transformGetPos(posBuf, transform, ptr(0));
+        var x = posBuf.readFloat();
+        var y = posBuf.add(4).readFloat();
+        var z = posBuf.add(8).readFloat();
+        if (Math.abs(x) < 5000 && Math.abs(y) < 5000 && Math.abs(z) < 5000) {
+          return { x: x, y: y, z: z };
+        }
+      }
+      var container = player.add(OFF_AIM.P_characterContainer).readPointer();
+      if (container && !container.isNull()) {
+        var x = container.add(0x38).readFloat();
+        var y = container.add(0x3C).readFloat();
+        var z = container.add(0x40).readFloat();
+        if (Math.abs(x) < 5000 && Math.abs(y) < 5000 && Math.abs(z) < 5000) {
+          return { x: x, y: y, z: z };
+        }
+      }
+    } catch(e) {}
+    return null;
+  }
+
+  function getBonePos(player, boneIndex) {
+    var pos = getPlayerPos(player);
+    if (!pos) return null;
+    var yOffsets = [1.65, 1.45, 1.05, 0.85, 0.75];
+    var yOff = yOffsets[boneIndex % yOffsets.length] || 1.05;
+    pos.y += yOff;
+    return pos;
+  }
+
+  function checkVisibility(from, to) {
+    if (!linecastFn) return true;
+    try {
+      var buf1 = Memory.alloc(12);
+      buf1.writeFloat(from.x); buf1.add(4).writeFloat(from.y); buf1.add(8).writeFloat(from.z);
+      var buf2 = Memory.alloc(12);
+      buf2.writeFloat(to.x); buf2.add(4).writeFloat(to.y); buf2.add(8).writeFloat(to.z);
+      return !linecastFn(buf1, buf2, -1, ptr(0));
+    } catch(e) { return true; }
+  }
+
+  function targetScanner() {
+    if (!enabled) return;
+    var gm = getGM();
+    if (!gm || gm.isNull()) return;
+
+    if (!myPlayer || myPlayer.isNull()) {
+      var all = getAllPlayers(gm);
+      for (var i = 0; i < all.length; i++) {
+        try { if (isMyPlayerFn(all[i], ptr(0))) { myPlayer = all[i]; break; } } catch(e) {}
+      }
+      if (!myPlayer) { cachedTarget = null; return; }
+    }
+
+    try { if (!isMyPlayerFn(myPlayer, ptr(0))) { myPlayer = null; cachedTarget = null; return; } } catch(e) { myPlayer = null; cachedTarget = null; return; }
+    try { if (isDeadFn(myPlayer, ptr(0))) return; } catch(e) { return; }
+
+    var myPos = getBonePos(myPlayer, CONFIG.aimBone);
+    if (!myPos) return;
+
+    scanYawDeg = myPlayer.add(OFF_AIM.P_cameraRotation).readFloat();
+    scanPitchDeg = myPlayer.add(OFF_AIM.P_cameraRotation + 4).readFloat();
+
+    var allPlayers = getAllPlayers(gm);
+    var myTeam = 0;
+    try {
+      if (getTeamFn) myTeam = getTeamFn(myPlayer, ptr(0));
+      else myTeam = myPlayer.add(OFF_AIM.E_team).readS32();
+    } catch(e) {}
+
+    var best = null;
+    var bestAngleDeg = 999999;
+
+    for (var i = 0; i < allPlayers.length; i++) {
+      var p = allPlayers[i];
+      try {
+        if (p.equals(myPlayer)) continue;
+        if (isDeadFn(p, ptr(0))) continue;
+        var team = getTeamFn ? getTeamFn(p, ptr(0)) : p.add(OFF_AIM.E_team).readS32();
+        var isEnemy = (myTeam === 2) || (team === 2) || (myTeam !== team);
+        if (!isEnemy) continue;
+
+        var targetPos = getBonePos(p, CONFIG.aimBone);
+        if (!targetPos) continue;
+
+        if (CONFIG.visibilityCheck) {
+          if (!checkVisibility(myPos, targetPos)) continue;
+        }
+
+        var dx = targetPos.x - myPos.x;
+        var dy = targetPos.y - myPos.y;
+        var dz = targetPos.z - myPos.z;
+        var dist = Math.sqrt(dx*dx + dy*dy + dz*dz);
+        if (dist > CONFIG.maxAimDistance) continue;
+
+        var targetYawDeg = Math.atan2(dx, dz) * 180.0 / Math.PI;
+        var targetPitchDeg = Math.atan2(dy, Math.sqrt(dx*dx + dz*dz)) * 180.0 / Math.PI;
+
+        var yawDiff = targetYawDeg - scanYawDeg;
+        var pitchDiff = targetPitchDeg - scanPitchDeg;
+        if (yawDiff > 180) yawDiff -= 360;
+        if (yawDiff < -180) yawDiff += 360;
+        if (pitchDiff > 180) pitchDiff -= 360;
+        if (pitchDiff < -180) pitchDiff += 360;
+        var angleDeg = Math.sqrt(yawDiff*yawDiff + pitchDiff*pitchDiff);
+
+        if (angleDeg > CONFIG.maxAngleFOV) continue;
+
+        if (angleDeg < bestAngleDeg) {
+          bestAngleDeg = angleDeg;
+          best = { player: p, pos: targetPos, targetYawDeg: targetYawDeg, targetPitchDeg: targetPitchDeg, angleDeg: angleDeg, dist: dist };
+        }
+      } catch(e) {}
+    }
+
+    cachedTarget = best;
+  }
+
+  function writeAimbot() {
+    if (!enabled || !myPlayer || !cachedTarget) return;
+
+    try {
+      var curYawDeg = myPlayer.add(OFF_AIM.P_cameraRotation).readFloat();
+      var curPitchDeg = myPlayer.add(OFF_AIM.P_cameraRotation + 4).readFloat();
+      var userYawDelta = curYawDeg - scanYawDeg;
+      var userPitchDelta = curPitchDeg - scanPitchDeg;
+      if (userYawDelta > 180) userYawDelta -= 360;
+      if (userYawDelta < -180) userYawDelta += 360;
+      if (userPitchDelta > 180) userPitchDelta -= 360;
+      if (userPitchDelta < -180) userPitchDelta += 360;
+      var userAngleDelta = Math.sqrt(userYawDelta*userYawDelta + userPitchDelta*userPitchDelta);
+
+      if (userAngleDelta > CONFIG.maxAngleFOV * 0.5) {
+        cachedTarget = null;
+        return;
+      }
+
+      var targetYawDeg = cachedTarget.targetYawDeg;
+      var targetPitchDeg = cachedTarget.targetPitchDeg;
+
+      var finalYawDeg = targetYawDeg;
+      var finalPitchDeg = targetPitchDeg;
+      if (CONFIG.smoothness < 1.0 && CONFIG.smoothness > 0.0) {
+        var yawDiff = targetYawDeg - curYawDeg;
+        var pitchDiff = targetPitchDeg - curPitchDeg;
+        if (yawDiff > 180) yawDiff -= 360;
+        if (yawDiff < -180) yawDiff += 360;
+        if (pitchDiff > 180) pitchDiff -= 360;
+        if (pitchDiff < -180) pitchDiff += 360;
+        finalYawDeg = curYawDeg + yawDiff * CONFIG.smoothness;
+        finalPitchDeg = curPitchDeg + pitchDiff * CONFIG.smoothness;
+      }
+
+      myPlayer.add(OFF_AIM.P_cameraRotation).writeFloat(finalYawDeg);
+      myPlayer.add(OFF_AIM.P_cameraRotation + 4).writeFloat(finalPitchDeg);
+
+      var recoil = myPlayer.add(OFF_AIM.P_recoil).readPointer();
+      if (recoil && !recoil.isNull()) {
+        recoil.add(0x10).writeU32(0);
+        recoil.add(0x24).writeU32(0);
+        recoil.add(0x40).writeU32(0);
+        recoil.add(0x54).writeU32(0);
+      }
+
+      frameCount++;
+    } catch(e) {}
+  }
+
+  function aimLoop() {
+    if (!enabled) return;
+
+    if (!CONFIG.autoAim) {
+      if (!getMouseBtnFn) return;
+      try {
+        var btnDown = getMouseBtnFn(CONFIG.aimKey, ptr(0));
+        if (!btnDown) return;
+      } catch(e) { return; }
+    }
+
+    if (!myPlayer) return;
+    if (!cachedTarget) return;
+
+    writeAimbot();
+  }
+
+  function installRoomHooks(base) {
+    var addrs = [0xAF9A90, 0xAEE370, 0xAF5B30];
+    for (var i = 0; i < addrs.length; i++) {
+      try {
+        var h = Interceptor.attach(base.add(addrs[i]), {
+          onEnter: function() {
+            myPlayer = null;
+            targetEnemy = null;
+            frameCount = 0;
+          }
+        });
+        roomHooks.push(h);
+      } catch(e) {}
+    }
+  }
+
+  return {
+    enable: function() {
+      if (enabled) return;
+      var mod = getGameAssembly();
+      if (!mod) { sendLog('error', '自瞄', '无 GameAssembly.dll'); return; }
+      if (!initNativeFunctions()) { sendLog('error', '自瞄', 'NativeFunction 初始化失败'); return; }
+      installRoomHooks(mod.base);
+      aimTimer = setInterval(aimLoop, 16);
+      scanTimer = setInterval(targetScanner, 30);
+      enabled = true;
+      sendLog('success', '自瞄', '已启用');
+      sendStatus('aim', true);
+    },
+    disable: function() {
+      if (!enabled) return;
+      if (aimTimer) { clearInterval(aimTimer); aimTimer = null; }
+      if (scanTimer) { clearInterval(scanTimer); scanTimer = null; }
+      if (debugTimer) { clearInterval(debugTimer); debugTimer = null; }
+      for (var i = 0; i < roomHooks.length; i++) { try { roomHooks[i].detach(); } catch(e) {} }
+      roomHooks = [];
+      myPlayer = null;
+      targetEnemy = null;
+      enabled = false;
+      sendLog('info', '自瞄', '已禁用');
+      sendStatus('aim', false);
+    },
+    isEnabled: function() { return enabled; },
+    setConfig: function(cfg) {
+      if (cfg.smoothness !== undefined) CONFIG.smoothness = cfg.smoothness;
+      if (cfg.maxAimDistance !== undefined) CONFIG.maxAimDistance = cfg.maxAimDistance;
+      if (cfg.maxAngleFOV !== undefined) CONFIG.maxAngleFOV = cfg.maxAngleFOV;
+      if (cfg.visibilityCheck !== undefined) CONFIG.visibilityCheck = cfg.visibilityCheck;
+      if (cfg.autoAim !== undefined) CONFIG.autoAim = cfg.autoAim;
+    },
+    getConfig: function() {
+      return { smoothness: CONFIG.smoothness, maxAngleFOV: CONFIG.maxAngleFOV, maxAimDistance: CONFIG.maxAimDistance, autoAim: CONFIG.autoAim, visibilityCheck: CONFIG.visibilityCheck };
+    }
+  };
+})();
+</script><script type="text/plain" id="src-main">// ====================================================================
+// 自瞄模块 v2 — 基于 UnityCrossFire.dll 逆向方案（BUG修复版）
+// 参考: 02-小工具dll逆向分析 copy.md
+//
+// 核心思路（完全还原 DLL 方案）:
+//   1. GetAsyncKeyState 检测热键（或 Input.GetMouseButton）
+//   2. 获取 GameManager → 找到 myPlayer
+//   3. 遍历 allPlayers/playersBL/playersGR
+//   4. 排除: 自己(isMyPlayer) / 死亡(isDead) / 同队(team)
+//   5. 获取目标位置: get_transform() → get_position()
+//   6. 计算角度: yaw=atan2(dx,dz) pitch=atan2(dy,distance)  单位: 弧度
+//   7. 平滑: curAng + (targetAng - curAng) * smoothFactor
+//   8. 写入角度: AddCameraRotation(deltaYaw, deltaPitch)
+//   9. 重置标志（防游戏拉回准星）
+//
+// 🐛 BUG FIX LIST:
+//   FIX #1: getGM() 获取方式 — 必须先用 0xE1CE64 读 MethodInfo 指针
+//   FIX #2: 标志重置 — 用 characterContainer(0x58) 而非 recoil(0x54)
+//   FIX #3: readList() — 用 List._size(0x0C) 而非 Array.length
+//   FIX #4: 新增独立 log 通道 — console.log 保证日志可观测
+//
+// RVA 来源: dump.cs + script.json (Il2CppDumper)
+// ====================================================================
+(function() {
+  'use strict';
+
+  // ================================================================
+  // 日志系统（双通道: send() + console.log()）
+  // ================================================================
+  var MAX_LOGS_PER_MODULE = 100;
+  var moduleLogCounts = {};
+
+  function sendLog(level, module, message) {
+    if (!moduleLogCounts[module]) moduleLogCounts[module] = 0;
+    if (moduleLogCounts[module] >= MAX_LOGS_PER_MODULE) return;
+    moduleLogCounts[module]++;
+    var fullMsg = '[' + module + '] ' + message;
+    console.log(fullMsg);
+    send({ type: 'log', level: level, module: module, message: message });
+  }
+
+  function sendStatus(feature, enabled) {
+    console.log('[状态] ' + feature + ' -> ' + (enabled ? '开' : '关'));
+    send({ type: 'status', feature: feature, enabled: enabled });
+  }
+
+  // ================================================================
+  // 获取 GameAssembly.dll
+  // ================================================================
+  var _gameAssembly = null;
+
+  function getGameAssembly() {
+    if (_gameAssembly) return _gameAssembly;
+    try {
+      var mod = Process.findModuleByName('GameAssembly.dll');
+      if (!mod) {
+        console.log('[系统] 未找到 GameAssembly.dll');
+        return null;
+      }
+      _gameAssembly = mod;
+      console.log('[系统] GameAssembly.dll: base=' + mod.base + ' size=' + mod.size);
+      return mod;
+    } catch(e) {
+      console.log('[系统] 获取模块失败: ' + e.message);
+      return null;
+    }
+  }
+
+  // ================================================================
+  // RVA 常量
+  // ================================================================
+  var RVA = {
+    SingletonGet:                    0x4A8170,   // Singleton<GameManager>.get_instance
+    GM_Singleton_MethodInfo:         0xE1CE64,   // MethodInfo* 元数据指针
+    Component_get_transform:         0x32CF40,   // Transform* (Component*, MethodInfo*)
+    Transform_get_position:          0x3F42B0,   // Vector3* (Vector3* ret, Transform*, MethodInfo*)
+    Player_get_isMyPlayer:           0xB55FD0,   // bool (Player*, MethodInfo*)
+    Entity_get_isDead:               0xB400E0,   // bool (Entity*, MethodInfo*)
+    Entity_get_team:                 0x1E0070,   // Team/int32 (Entity*, MethodInfo*)
+    Player_AddCameraRotation:        0xB4F790,   // void (Player*, float x, float y, MethodInfo*)
+    Input_GetMouseButton:            0xACFB20,   // bool (int32 button, MethodInfo*)
+    Physics_Linecast:                0xAB9B80,   // bool (Vector3 start, Vector3 end, int32 layerMask, MethodInfo*)
+  };
+
+  // ================================================================
+  // 字段偏移
+  // ================================================================
+  var OFF = {
+    // GameManager 字段
+    GM_allPlayers:      0x1C,   // Player[]     ← 所有玩家数组
+    GM_playersBL:       0x20,   // List<Player> ← 黑队列表
+    GM_playersGR:       0x28,   // List<Player> ← 红队列表
+
+    // Entity 字段
+    E_team:             0x20,   // Team (int32)
+
+    // Player 字段
+    P_cameraRotation:   0x4C,   // Vector2 (x=yaw, y=pitch) [弧度]
+    P_recoil:           0x54,   // Recoil pointer
+    P_characterContainer: 0x58, // Transform (characterContainer)
+
+    // IL2CPP 数组
+    Arr_len:            0x0C,   // il2cpp_array_size_t
+    Arr_data:           0x10,   // data start
+
+    // IL2CPP List
+    List_items:         0x08,   // T[] _items
+    List_size:          0x0C,   // int _size  ← 实际元素数量！
+
+    // 层值来: IDA反编译 LayerConstant..cctor() @0x10AE7CD0
+    //   Environment=0  AirWall=2  HitBox=3  Water=4  Entity=7
+    //   LM_OnlyEnvironment = 1<<0 = 1 (只有墙体,不含玩家HitBox/Entity)
+    LAYER_WALL:        25,     // LM_GunShoot = Environment(1) + Water(16) + HitBox(8), 游戏开枪检测用
+
+    // 指针大小
+    ptrSize:            4,
+  };
+
+  // ================================================================
+  // 骨骼索引
+  // ================================================================
+  var BONE = {
+    HEAD:  0,
+    NECK:  3,
+    CHEST: 7,
+    PELVIS: 10,
+    HAND:  6,
+  };
+
+  var BONE_Y_OFFSET = {};
+  BONE_Y_OFFSET[BONE.HEAD]   = 1.65;
+  BONE_Y_OFFSET[BONE.NECK]   = 1.45;
+  BONE_Y_OFFSET[BONE.CHEST]  = 1.05;
+  BONE_Y_OFFSET[BONE.PELVIS] = 0.85;
+  BONE_Y_OFFSET[BONE.HAND]   = 0.75;
+
+  // ================================================================
+  // 自瞄模块
+  // ================================================================
+  var aimModule = (function() {
+    var enabled = false;
+    var myPlayer = null;
+    var targetEnemy = null;
+    var timer = null;
+    var roomHooks = [];
+    var frameCount = 0;
+
+    // ——— 配置 ———
+    var CONFIG = {
+      aimKey:          0,      // 触发按键: 0=鼠标左键 (Input.GetMouseButton)
+      aimBone:         BONE.CHEST,
+      smoothness:      1.0,    // 1.0 = 瞬间瞄准
+      maxAimDistance:  200.0,
+      maxAngleFOV:     30.0,
+      visibilityCheck: true,   // 默认开启：只有可见敌人才瞄准
+      autoAim:         false,  // false=按按键才瞄, true=一直瞄
+      debugLog:        true,   // true=输出详细调试日志
+      vischeckDll:     'D:\\trae_project\\ucf1.7-modifier\\05-正式功能\\11-自瞄\\vischeck.dll',
+    };
+
+    // ——— NativeFunction 缓存 ———
+    var singletonGetter = null;
+    var compGetTransform = null;
+    var transformGetPos = null;
+    var isMyPlayerFn = null;
+    var isDeadFn = null;
+    var getTeamFn = null;
+    var addCamRotFn = null;
+    var getMouseBtnFn = null;
+    var linecastFn = null;
+
+    // ——— 定时器 ———
+    var aimTimer = null;
+    var scanTimer = null;
+    var debugTimer = null;
+
+    // ================================================================
+    // FIX #1: 修正 GM 获取方式
+    // 现有成功脚本模式:
+    //   1. 从 0xE1CE64 读 MethodInfo* 指针
+    //   2. 传给 0x4A8170 的函数去拿实例
+    // ================================================================
+    function getGM() {
+      try {
+        var base = getGameAssembly().base;
+        var mi = base.add(RVA.GM_Singleton_MethodInfo).readPointer();
+        if (mi.isNull()) {
+          return singletonGetter(ptr(0));
+        }
+        var gm = singletonGetter(mi);
+        if (gm.isNull()) {
+          return null;
+        }
+        return gm;
+      } catch(e) {
+        return null;
+      }
+    }
+
+    // ================================================================
+    // 初始化 NativeFunction
+    // ================================================================
+    function initNativeFunctions() {
+      var mod = getGameAssembly();
+      if (!mod) return false;
+      var base = mod.base;
+
+      try {
+        singletonGetter = new NativeFunction(base.add(RVA.SingletonGet), 'pointer', ['pointer']);
+      } catch(e) { console.log('[初始化] singletonGetter 失败: ' + e.message); return false; }
+
+      try {
+        compGetTransform = new NativeFunction(base.add(RVA.Component_get_transform), 'pointer', ['pointer', 'pointer']);
+      } catch(e) { console.log('[初始化] compGetTransform 失败: ' + e.message); return false; }
+
+      try {
+        transformGetPos = new NativeFunction(base.add(RVA.Transform_get_position), 'void', ['pointer', 'pointer', 'pointer']);
+      } catch(e) { console.log('[初始化] transformGetPos 失败: ' + e.message); return false; }
+
+      try {
+        isMyPlayerFn = new NativeFunction(base.add(RVA.Player_get_isMyPlayer), 'bool', ['pointer', 'pointer']);
+      } catch(e) { console.log('[初始化] isMyPlayerFn 失败: ' + e.message); return false; }
+
+      try {
+        isDeadFn = new NativeFunction(base.add(RVA.Entity_get_isDead), 'bool', ['pointer', 'pointer']);
+      } catch(e) { console.log('[初始化] isDeadFn 失败: ' + e.message); return false; }
+
+      try {
+        getTeamFn = new NativeFunction(base.add(RVA.Entity_get_team), 'int32', ['pointer', 'pointer']);
+      } catch(e) { console.log('[初始化] getTeamFn 失败(将用内存读): ' + e.message); getTeamFn = null; }
+
+      try {
+        addCamRotFn = new NativeFunction(base.add(RVA.Player_AddCameraRotation), 'void', ['pointer', 'float', 'float', 'pointer']);
+      } catch(e) { console.log('[初始化] addCamRotFn 失败: ' + e.message); return false; }
+
+      try {
+        getMouseBtnFn = new NativeFunction(base.add(RVA.Input_GetMouseButton), 'bool', ['int32', 'pointer']);
+      } catch(e) { console.log('[初始化] getMouseBtnFn 失败: ' + e.message); getMouseBtnFn = null; }
+
+      // ——— 可见性检测: 加载辅助 DLL (编译时自动处理 Vector3 按值传参) ———
+      try {
+        var visMod = Module.load(CONFIG.vischeckDll);
+        var setFn = new NativeFunction(visMod.findExportByName('SetLinecast'), 'void', ['pointer']);
+        setFn(base.add(RVA.Physics_Linecast));
+        linecastFn = new NativeFunction(visMod.findExportByName('CheckVisible'), 'bool', ['pointer', 'pointer', 'int32']);
+        console.log('[初始化] vischeck.dll 已加载, Linecast=0x' + RVA.Physics_Linecast.toString(16));
+      } catch(e) { console.log('[初始化] vischeck.dll 失败: ' + e.message); linecastFn = null; }
+
+      console.log('[初始化] 全部 NativeFunction 就绪');
+      return true;
+    }
+
+    // ================================================================
+    // 工具函数
+    // ================================================================
+
+    function isValidPlayer(pp) {
+      if (!pp || pp.isNull()) return false;
+      try {
+        var team = pp.add(OFF.E_team).readS32();
+        return (team === 0 || team === 1 || team === 2);
+      } catch(e) {
+        return false;
+      }
+    }
+
+    // 🐛 FIX #3: readList — 用 List._size (0x0C) 而非 Array.len
+    function readList(listPtr) {
+      var result = [];
+      if (!listPtr || listPtr.isNull()) return result;
+      try {
+        var items = listPtr.add(OFF.List_items).readPointer();
+        if (!items || items.isNull()) return result;
+        var count = listPtr.add(OFF.List_size).readS32();  // 实际元素数量
+        for (var i = 0; i < count; i++) {
+          var elem = items.add(OFF.Arr_data + i * OFF.ptrSize).readPointer();
+          if (elem && !elem.isNull()) result.push(elem);
+        }
+      } catch(e) {}
+      return result;
+    }
+
+    function readArray(arrPtr) {
+      var result = [];
+      if (!arrPtr || arrPtr.isNull()) return result;
+      try {
+        var len = arrPtr.add(OFF.Arr_len).readU32();
+        for (var i = 0; i < len; i++) {
+          var elem = arrPtr.add(OFF.Arr_data + i * OFF.ptrSize).readPointer();
+          if (elem && !elem.isNull()) result.push(elem);
+        }
+      } catch(e) {}
+      return result;
+    }
+
+    // 获取所有玩家（去重）
+    function getAllPlayers(gm) {
+      var map = {};
+
+      var arr = readArray(gm.add(OFF.GM_allPlayers).readPointer());
+      for (var i = 0; i < arr.length; i++) {
+        if (isValidPlayer(arr[i])) map[arr[i].toString()] = arr[i];
+      }
+
+      var bl = readList(gm.add(OFF.GM_playersBL).readPointer());
+      for (var i = 0; i < bl.length; i++) {
+        if (isValidPlayer(bl[i])) map[bl[i].toString()] = bl[i];
+      }
+
+      var gr = readList(gm.add(OFF.GM_playersGR).readPointer());
+      for (var i = 0; i < gr.length; i++) {
+        if (isValidPlayer(gr[i])) map[gr[i].toString()] = gr[i];
+      }
+
+      return Object.values(map);
+    }
+
+    // 获取玩家位置
+    function getPlayerPos(player) {
+      if (!player || player.isNull()) return null;
+      try {
+        var transform = compGetTransform(player, ptr(0));
+        if (transform && !transform.isNull()) {
+          var posBuf = Memory.alloc(12);
+          transformGetPos(posBuf, transform, ptr(0));
+          var x = posBuf.readFloat();
+          var y = posBuf.add(4).readFloat();
+          var z = posBuf.add(8).readFloat();
+          if (Math.abs(x) < 5000 && Math.abs(y) < 5000 && Math.abs(z) < 5000) {
+            return { x: x, y: y, z: z };
+          }
+        }
+        var container = player.add(OFF.P_characterContainer).readPointer();
+        if (container && !container.isNull()) {
+          var x = container.add(0x38).readFloat();
+          var y = container.add(0x3C).readFloat();
+          var z = container.add(0x40).readFloat();
+          if (Math.abs(x) < 5000 && Math.abs(y) < 5000 && Math.abs(z) < 5000) {
+            return { x: x, y: y, z: z };
+          }
+        }
+      } catch(e) {}
+      return null;
+    }
+
+    function getBonePos(player, boneIndex) {
+      var pos = getPlayerPos(player);
+      if (!pos) return null;
+      var yOff = BONE_Y_OFFSET[boneIndex];
+      if (yOff !== undefined) pos.y += yOff;
+      return pos;
+    }
+
+    function calcAngles(from, to) {
+      var dx = to.x - from.x;
+      var dy = to.y - from.y;
+      var dz = to.z - from.z;
+      var hDist = Math.sqrt(dx*dx + dz*dz);
+      if (hDist < 0.01) return null;
+      return { yaw: Math.atan2(dx, dz), pitch: Math.atan2(dy, hDist) };
+    }
+
+    function normalizeAngle(a) {
+      while (a > Math.PI) a -= 2 * Math.PI;
+      while (a < -Math.PI) a += 2 * Math.PI;
+      return a;
+    }
+
+    var _visLogCount = 0;
+    function checkVisibility(from, to) {
+      if (!linecastFn) {
+        if (_visLogCount < 3) { console.log('[可见性] linecastFn 未初始化! 返回可见(跳过检测)'); _visLogCount++; }
+        return true;
+      }
+      try {
+        var buf1 = Memory.alloc(12);
+        buf1.writeFloat(from.x);
+        buf1.add(4).writeFloat(from.y);
+        buf1.add(8).writeFloat(from.z);
+        var buf2 = Memory.alloc(12);
+        buf2.writeFloat(to.x);
+        buf2.add(4).writeFloat(to.y);
+        buf2.add(8).writeFloat(to.z);
+        var hit = linecastFn(buf1, buf2, OFF.LAYER_WALL);  // vischeck.dll: CheckVisible(float* from, float* to, int mask) → bool
+        if (_visLogCount < 10) { console.log('[可见性] Linecast: hit=' + hit + ' layerMask=' + OFF.LAYER_WALL); _visLogCount++; }
+        return !hit;  // hit=true → 有墙体遮挡 → 不可见
+      } catch(e) {
+        if (_visLogCount < 3) { console.log('[可见性] Linecast异常: ' + e.message); _visLogCount++; }
+        return true;  // 异常时默认可见(不跳过)
+      }
+    }
+
+    // ——— 目标缓存（成功脚本的 dword_1005A6C8 模式） ———
+    var cachedTarget = null;
+    var scanYawDeg = 0;    // 扫描时的视角，用于检测用户是否主动转视角
+    var scanPitchDeg = 0;
+
+    // ================================================================
+    // 目标扫描器（成功脚本模式: 独立定时器，仅选目标，不写角度）
+    // ================================================================
+    function targetScanner() {
+      if (!enabled) return;
+
+      var gm = getGM();
+      if (!gm || gm.isNull()) return;
+
+      if (!myPlayer || myPlayer.isNull()) {
+        var all = getAllPlayers(gm);
+        for (var i = 0; i < all.length; i++) {
+          try { if (isMyPlayerFn(all[i], ptr(0))) { myPlayer = all[i]; break; } } catch(e) {}
+        }
+        if (!myPlayer) { cachedTarget = null; return; }
+      }
+
+      try {
+        if (!isMyPlayerFn(myPlayer, ptr(0))) { myPlayer = null; cachedTarget = null; return; }
+      } catch(e) { myPlayer = null; cachedTarget = null; return; }
+
+      try { if (isDeadFn(myPlayer, ptr(0))) return; } catch(e) { return; }
+
+      var myPos = getBonePos(myPlayer, BONE.CHEST);
+      if (!myPos) return;
+
+      // 保存扫描时的视角（用于检测用户是否主动转视角）
+      scanYawDeg = myPlayer.add(OFF.P_cameraRotation).readFloat();
+      scanPitchDeg = myPlayer.add(OFF.P_cameraRotation + 4).readFloat();
+
+      var allPlayers = getAllPlayers(gm);
+      var myTeam = 0;
+      try {
+        if (getTeamFn) myTeam = getTeamFn(myPlayer, ptr(0));
+        else myTeam = myPlayer.add(OFF.E_team).readS32();
+      } catch(e) {}
+
+      var best = null;
+      var bestAngleDeg = 999999;
+
+      for (var i = 0; i < allPlayers.length; i++) {
+        var p = allPlayers[i];
+        try {
+          if (!p || p.isNull()) continue;
+          if (p.equals(myPlayer)) continue;
+          if (isDeadFn(p, ptr(0))) continue;
+          var team = getTeamFn ? getTeamFn(p, ptr(0)) : p.add(OFF.E_team).readS32();
+          var isEnemy = (myTeam === 2) || (team === 2) || (myTeam !== team);
+          if (!isEnemy) continue;
+
+          var targetPos = getBonePos(p, CONFIG.aimBone);
+          if (!targetPos) continue;
+
+
+          // 🚀 射线检测（穿墙判断）
+          if (CONFIG.visibilityCheck) {
+            if (!checkVisibility(myPos, targetPos)) {
+              continue;   // 墙体遮挡，跳过该敌人
+            }
+          }
+
+          var dx = targetPos.x - myPos.x;
+          var dy = targetPos.y - myPos.y;
+          var dz = targetPos.z - myPos.z;
+          var dist = Math.sqrt(dx*dx + dy*dy + dz*dz);
+          if (dist > CONFIG.maxAimDistance) continue;
+
+      
+
+          // 全部用度计算（和成功脚本一致）
+          var targetYawDeg = Math.atan2(dx, dz) * 180.0 / Math.PI;
+          var targetPitchDeg = Math.atan2(dy, Math.sqrt(dx*dx + dz*dz)) * 180.0 / Math.PI;
+
+          var yawDiff = targetYawDeg - scanYawDeg;
+          var pitchDiff = targetPitchDeg - scanPitchDeg;
+          if (yawDiff > 180) yawDiff -= 360;
+          if (yawDiff < -180) yawDiff += 360;
+          if (pitchDiff > 180) pitchDiff -= 360;
+          if (pitchDiff < -180) pitchDiff += 360;
+          var angleDeg = Math.sqrt(yawDiff*yawDiff + pitchDiff*pitchDiff);
+
+          if (angleDeg > CONFIG.maxAngleFOV) continue;
+
+          if (angleDeg < bestAngleDeg) {
+            bestAngleDeg = angleDeg;
+            best = {
+              player: p,
+              pos: targetPos,
+              targetYawDeg: targetYawDeg,
+              targetPitchDeg: targetPitchDeg,
+              angleDeg: angleDeg,
+              dist: dist,
+            };
+          }
+        } catch(e) {
+          if (frameCount < 5) console.log('[扫描] 敌人#' + i + ' 异常: ' + e.message);
+        }
+      }
+
+      if (best) {
+        cachedTarget = best;
+        if (frameCount < 5) {
+          console.log('[扫描] ✅ 目标: yaw=' + best.targetYawDeg.toFixed(1) + '° pitch=' + best.targetPitchDeg.toFixed(1) + '° 角差=' + best.angleDeg.toFixed(1) + '° 距离=' + best.dist.toFixed(1) + 'm');
+        }
+      } else {
+        cachedTarget = null;
+      }
+    }
+
+    // ================================================================
+    // DLL 方案: 写角度到内存（成功脚本模式: 只有按键检测+写入）
+    // ================================================================
+    function writeAimbot() {
+      if (!enabled || !myPlayer || !cachedTarget) return;
+
+      try {
+        // 检测用户是否主动转动了视角（与扫描时的视角对比）
+        // 如果用户自己转视角超过 FOV/2，释放目标重新扫描
+        var curYawDeg = myPlayer.add(OFF.P_cameraRotation).readFloat();
+        var curPitchDeg = myPlayer.add(OFF.P_cameraRotation + 4).readFloat();
+        var userYawDelta = curYawDeg - scanYawDeg;
+        var userPitchDelta = curPitchDeg - scanPitchDeg;
+        if (userYawDelta > 180) userYawDelta -= 360;
+        if (userYawDelta < -180) userYawDelta += 360;
+        if (userPitchDelta > 180) userPitchDelta -= 360;
+        if (userPitchDelta < -180) userPitchDelta += 360;
+        var userAngleDelta = Math.sqrt(userYawDelta*userYawDelta + userPitchDelta*userPitchDelta);
+
+        // 如果用户主动转了超过 FOV 的一半，释放目标让 scanner 重新选
+        if (userAngleDelta > CONFIG.maxAngleFOV * 0.5) {
+          cachedTarget = null;
+          return;
+        }
+
+        var targetYawDeg = cachedTarget.targetYawDeg;
+        var targetPitchDeg = cachedTarget.targetPitchDeg;
+
+        // 平滑: cur + (target-cur) * factor (度空间)
+        var finalYawDeg = targetYawDeg;
+        var finalPitchDeg = targetPitchDeg;
+        if (CONFIG.smoothness < 1.0 && CONFIG.smoothness > 0.0) {
+          var yawDiff = targetYawDeg - curYawDeg;
+          var pitchDiff = targetPitchDeg - curPitchDeg;
+          if (yawDiff > 180) yawDiff -= 360;
+          if (yawDiff < -180) yawDiff += 360;
+          if (pitchDiff > 180) pitchDiff -= 360;
+          if (pitchDiff < -180) pitchDiff += 360;
+          finalYawDeg = curYawDeg + yawDiff * CONFIG.smoothness;
+          finalPitchDeg = curPitchDeg + pitchDiff * CONFIG.smoothness;
+        }
+
+        // DLL: 直接写内存 (度)
+        myPlayer.add(OFF.P_cameraRotation).writeFloat(finalYawDeg);
+        myPlayer.add(OFF.P_cameraRotation + 4).writeFloat(finalPitchDeg);
+
+        // DLL: 重置 Recoil 标志
+        var recoil = myPlayer.add(OFF.P_recoil).readPointer();
+        if (recoil && !recoil.isNull()) {
+          recoil.add(0x10).writeU32(0);
+          recoil.add(0x24).writeU32(0);
+          recoil.add(0x40).writeU32(0);
+          recoil.add(0x54).writeU32(0);
+        }
+
+        frameCount++;
+        if (frameCount <= 5) {
+          console.log('[自瞄] ✅ 写入 #' + frameCount + ' 目标=' + targetYawDeg.toFixed(1) + '°/' + targetPitchDeg.toFixed(1) + '° 当前=' + curYawDeg.toFixed(1) + '°/' + curPitchDeg.toFixed(1) + '°');
+        }
+      } catch(e) {
+        console.log('[自瞄] 写入异常: ' + e.message);
+      }
+    }
+
+    // ================================================================
+    // 自瞄主循环（仅按键检测 + 调用 writeAimbot）
+    // ================================================================
+    var diagCount = 0;
+
+    function aimLoop() {
+      if (!enabled) return;
+
+      if (!CONFIG.autoAim) {
+        if (!getMouseBtnFn) {
+          if (frameCount === 0) console.log('[自瞄] ❌ getMouseBtnFn 未初始化');
+          return;
+        }
+        try {
+          var btnDown = getMouseBtnFn(CONFIG.aimKey, ptr(0));
+          if (!btnDown) return;
+        } catch(e) {
+          if (diagCount < 3) { diagCount++; console.log('[自瞄] ❌ getMouseBtnFn 异常: ' + e.message); }
+          return;
+        }
+      }
+
+      if (!myPlayer) return;
+      if (!cachedTarget) return;
+
+      writeAimbot();
+    }
+
+    // ================================================================
+    // 调试扫描（每 2 秒输出一次完整数据，无需按键）
+    // 用于验证: 坐标读取是否正确、角度计算是否正确
+    // ================================================================
+    function debugScan() {
+      if (!CONFIG.debugLog || !enabled) return;
+
+      var gm = getGM();
+      if (!gm || gm.isNull()) return;
+
+      // 找本地玩家
+      if (!myPlayer || myPlayer.isNull()) {
+        var all = getAllPlayers(gm);
+        for (var i = 0; i < all.length; i++) {
+          try { if (isMyPlayerFn(all[i], ptr(0))) { myPlayer = all[i]; break; } } catch(e) {}
+        }
+        if (!myPlayer) return;
+      }
+
+      // 自己位置
+      var myPos = getBonePos(myPlayer, BONE.CHEST);
+      if (!myPos) return;
+
+      var curYawDeg = myPlayer.add(OFF.P_cameraRotation).readFloat();
+      var curPitchDeg = myPlayer.add(OFF.P_cameraRotation + 4).readFloat();
+
+      console.log('');
+      console.log('========== 📊 自瞄调试数据 ==========');
+      console.log('[调试] 我的坐标: (' + myPos.x.toFixed(1) + ', ' + myPos.y.toFixed(1) + ', ' + myPos.z.toFixed(1) + ')');
+      console.log('[调试] 当前视角: yaw=' + curYawDeg.toFixed(2) + '°  pitch=' + curPitchDeg.toFixed(2) + '°');
+
+      // 遍历敌人
+      var allPlayers = getAllPlayers(gm);
+      var myTeam = 0;
+      try {
+        if (getTeamFn) myTeam = getTeamFn(myPlayer, ptr(0));
+        else myTeam = myPlayer.add(OFF.E_team).readS32();
+      } catch(e) {}
+
+      var enemies = [];
+      for (var i = 0; i < allPlayers.length; i++) {
+        var p = allPlayers[i];
+        try {
+          if (p.equals(myPlayer)) continue;
+          if (isDeadFn(p, ptr(0))) continue;
+          var team = getTeamFn ? getTeamFn(p, ptr(0)) : p.add(OFF.E_team).readS32();
+          if (team === myTeam) continue;
+          enemies.push(p);
+        } catch(e) {}
+      }
+
+      if (enemies.length === 0) {
+        console.log('[调试] ❌ 没有敌人');
+        console.log('========================================');
+        return;
+      }
+
+      console.log('[调试] 敌人总数: ' + enemies.length);
+      console.log('');
+
+      for (var i = 0; i < enemies.length; i++) {
+        try {
+          var enemyPos = getBonePos(enemies[i], CONFIG.aimBone);
+          if (!enemyPos) { console.log('[调试] 敌人#' + i + ' 坐标获取失败'); continue; }
+
+          var dx = enemyPos.x - myPos.x;
+          var dy = enemyPos.y - myPos.y;
+          var dz = enemyPos.z - myPos.z;
+          var dist = Math.sqrt(dx*dx + dy*dy + dz*dz);
+
+          var angles = calcAngles(myPos, enemyPos);
+          if (!angles) { console.log('[调试] 敌人#' + i + ' 角度计算失败'); continue; }
+
+          var targetYawDeg = angles.yaw * 180.0 / Math.PI;
+          var targetPitchDeg = angles.pitch * 180.0 / Math.PI;
+
+          // 当前视角直接是度, 目标角度转度后比较
+          var yawDiffDeg = targetYawDeg - curYawDeg;
+          var pitchDiffDeg = targetPitchDeg - curPitchDeg;
+          if (yawDiffDeg > 180) yawDiffDeg -= 360;
+          if (yawDiffDeg < -180) yawDiffDeg += 360;
+          if (pitchDiffDeg > 180) pitchDiffDeg -= 360;
+          if (pitchDiffDeg < -180) pitchDiffDeg += 360;
+          var fovDeg = Math.sqrt(yawDiffDeg*yawDiffDeg + pitchDiffDeg*pitchDiffDeg);
+          var targetYawRad = angles.yaw;
+          var targetPitchRad = angles.pitch;
+          var curYawRad = curYawDeg * Math.PI / 180.0;
+          var curPitchRad = curPitchDeg * Math.PI / 180.0;
+          var yawDiffRad = normalizeAngle(targetYawRad - curYawRad);
+          var pitchDiffRad = normalizeAngle(targetPitchRad - curPitchRad);
+
+          var visResult = checkVisibility(myPos, enemyPos);
+          var visible = visResult ? '[可见]' : '[遮挡]';
+          console.log('[调试] 敌人#' + i + ' ptr=' + enemies[i] + ' ' + visible +
+            ' 坐标=(' + enemyPos.x.toFixed(1) + ', ' + enemyPos.y.toFixed(1) + ', ' + enemyPos.z.toFixed(1) + ')' +
+            ' 距离=' + dist.toFixed(1) + 'm');
+          console.log('[调试]   → 目标: ' + targetYawDeg.toFixed(1) + '° 当前: ' + curYawDeg.toFixed(1) + '° 差: ' + yawDiffDeg.toFixed(1) + '° FOV=' + fovDeg.toFixed(1) + '°');
+          console.log('[调试]   → 验证: atan2(dx=' + dx.toFixed(1) + ', dz=' + dz.toFixed(1) + ')=' + targetYawDeg.toFixed(1) + '°' +
+            '  atan2(dy=' + dy.toFixed(1) + ', hDist=' + Math.sqrt(dx*dx+dz*dz).toFixed(1) + ')=' + targetPitchDeg.toFixed(1) + '°');
+        } catch(e) {
+          console.log('[调试] 敌人#' + i + ' 异常: ' + e.message);
+        }
+      }
+      console.log('========================================');
+      console.log('');
+    }
+
+    // ================================================================
+    // 房间切换 Hook
+    // ================================================================
+    function installRoomHooks(base) {
+      var addrs = [0xAF9A90, 0xAEE370, 0xAF5B30];
+      for (var i = 0; i < addrs.length; i++) {
+        try {
+          var h = Interceptor.attach(base.add(addrs[i]), {
+            onEnter: function() {
+              myPlayer = null;
+              targetEnemy = null;
+              frameCount = 0;
+              console.log('[自瞄] 房间切换，状态重置');
+            }
+          });
+          roomHooks.push(h);
+        } catch(e) {}
+      }
+    }
+
+    // ================================================================
+    // 公开接口
+    // ================================================================
+    return {
+      enable: function() {
+        if (enabled) {
+          console.log('[自瞄] 已启用，跳过');
+          return;
+        }
+        var mod = getGameAssembly();
+        if (!mod) {
+          console.log('[自瞄] 无 GameAssembly.dll');
+          return;
+        }
+
+        if (!initNativeFunctions()) {
+          console.log('[自瞄] NativeFunction 初始化失败');
+          return;
+        }
+
+        installRoomHooks(mod.base);
+
+        aimTimer = setInterval(aimLoop, 16);         // 按键检测+写角度
+        scanTimer = setInterval(targetScanner, 30); // 目标扫描
+        if (CONFIG.debugLog) {
+          debugTimer = setInterval(debugScan, 2000);
+          console.log('[自瞄] 📊 调试扫描已启动（每2秒输出一次）');
+        }
+        enabled = true;
+        console.log('[自瞄] ✅ 已启用 (触发键=' + CONFIG.aimKey +
+          ' 平滑=' + CONFIG.smoothness +
+          ' FOV=' + CONFIG.maxAngleFOV + '°' +
+          ' 距离=' + CONFIG.maxAimDistance + 'm' +
+          ' debugLog=' + CONFIG.debugLog + ')');
+        console.log('[自瞄] 💡 按鼠标左键(开枪)触发自瞄，查看控制台输出数据验证');
+        sendLog('success', '自瞄', '已启用');
+        sendStatus('自瞄', true);
+      },
+
+      disable: function() {
+        if (!enabled) return;
+        if (aimTimer) { clearInterval(aimTimer); aimTimer = null; }
+        if (scanTimer) { clearInterval(scanTimer); scanTimer = null; }
+        if (debugTimer) { clearInterval(debugTimer); debugTimer = null; }
+        for (var i = 0; i < roomHooks.length; i++) {
+          try { roomHooks[i].detach(); } catch(e) {}
+        }
+        roomHooks = [];
+        myPlayer = null;
+        targetEnemy = null;
+        enabled = false;
+        console.log('[自瞄] ❌ 已禁用');
+        sendLog('info', '自瞄', '已禁用');
+        sendStatus('自瞄', false);
+      },
+
+      toggle: function() {
+        if (enabled) this.disable();
+        else this.enable();
+      },
+
+      isEnabled: function() { return enabled; },
+
+      setConfig: function(cfg) {
+        if (cfg.aimKey !== undefined) CONFIG.aimKey = cfg.aimKey;
+        if (cfg.smoothness !== undefined) CONFIG.smoothness = cfg.smoothness;
+        if (cfg.maxAimDistance !== undefined) CONFIG.maxAimDistance = cfg.maxAimDistance;
+        if (cfg.maxAngleFOV !== undefined) CONFIG.maxAngleFOV = cfg.maxAngleFOV;
+        if (cfg.visibilityCheck !== undefined) CONFIG.visibilityCheck = cfg.visibilityCheck;
+        if (cfg.autoAim !== undefined) CONFIG.autoAim = cfg.autoAim;
+        if (cfg.debugLog !== undefined) {
+          CONFIG.debugLog = cfg.debugLog;
+          if (enabled) {
+            if (CONFIG.debugLog && !debugTimer) {
+              debugTimer = setInterval(debugScan, 2000);
+              console.log('[自瞄] 📊 调试扫描已启动');
+            } else if (!CONFIG.debugLog && debugTimer) {
+              clearInterval(debugTimer);
+              debugTimer = null;
+              console.log('[自瞄] 📊 调试扫描已关闭');
+            }
+          }
+        }
+        if (cfg.aimBone !== undefined) {
+          if (cfg.aimBone === 'head') CONFIG.aimBone = BONE.HEAD;
+          else if (cfg.aimBone === 'neck') CONFIG.aimBone = BONE.NECK;
+          else if (cfg.aimBone === 'chest') CONFIG.aimBone = BONE.CHEST;
+          else if (cfg.aimBone === 'pelvis') CONFIG.aimBone = BONE.PELVIS;
+          else CONFIG.aimBone = cfg.aimBone;
+        }
+        console.log('[自瞄] 配置更新: ' + JSON.stringify(cfg));
+      },
+
+      getTarget: function() { return cachedTarget ? cachedTarget.player : null; },
+      getConfig: function() {
+        return {
+          smoothness: CONFIG.smoothness,
+          aimBone: CONFIG.aimBone,
+          maxAngleFOV: CONFIG.maxAngleFOV,
+          maxAimDistance: CONFIG.maxAimDistance,
+          autoAim: CONFIG.autoAim,
+          visibilityCheck: CONFIG.visibilityCheck,
+          debugLog: CONFIG.debugLog,
+          frameCount: frameCount,
+        };
+      },
+    };
+  })();
+
+  // ================================================================
+  // rpc.exports
+  // ================================================================
+  rpc.exports = {
+    aimEnable: function() { aimModule.enable(); return 'ok'; },
+    aim_enable: function() { aimModule.enable(); return 'ok'; },
+    aimDisable: function() { aimModule.disable(); return 'ok'; },
+    aim_disable: function() { aimModule.disable(); return 'ok'; },
+    aimToggle: function() { aimModule.toggle(); return aimModule.isEnabled() ? 'enabled' : 'disabled'; },
+    aim_toggle: function() { aimModule.toggle(); return aimModule.isEnabled() ? 'enabled' : 'disabled'; },
+    aimStatus: function() { return aimModule.isEnabled() ? 'enabled' : 'disabled'; },
+    aim_status: function() { return aimModule.isEnabled() ? 'enabled' : 'disabled'; },
+    aimSetConfig: function(jsonStr) {
+      try { aimModule.setConfig(JSON.parse(jsonStr)); return 'ok'; }
+      catch(e) { return 'error: ' + e.message; }
+    },
+    aim_set_config: function(jsonStr) {
+      try { aimModule.setConfig(JSON.parse(jsonStr)); return 'ok'; }
+      catch(e) { return 'error: ' + e.message; }
+    },
+    aimGetStatus: function() {
+      var cfg = aimModule.getConfig();
+      return JSON.stringify({
+        enabled: aimModule.isEnabled(),
+        targetEnemy: aimModule.getTarget() ? aimModule.getTarget().toString() : null,
+        smoothness: cfg.smoothness,
+        aimBone: cfg.aimBone,
+        maxAngleFOV: cfg.maxAngleFOV,
+        maxAimDistance: cfg.maxAimDistance,
+        autoAim: cfg.autoAim,
+        visibilityCheck: cfg.visibilityCheck,
+        debugLog: cfg.debugLog,
+        frameCount: cfg.frameCount,
+      });
+    },
+    aim_get_status: function() {
+      var cfg = aimModule.getConfig();
+      return JSON.stringify({
+        enabled: aimModule.isEnabled(),
+        targetEnemy: aimModule.getTarget() ? aimModule.getTarget().toString() : null,
+        smoothness: cfg.smoothness,
+        aimBone: cfg.aimBone,
+        maxAngleFOV: cfg.maxAngleFOV,
+        maxAimDistance: cfg.maxAimDistance,
+        autoAim: cfg.autoAim,
+        visibilityCheck: cfg.visibilityCheck,
+        debugLog: cfg.debugLog,
+        frameCount: cfg.frameCount,
+      });
+    },
+  };
+
+  // 自动启用
+  console.log('[自瞄] 脚本加载完成，正在自动启用...');
+  aimModule.enable();
+})();
+</script><script>(function(){'use strict';var defs=[{"id":"release","label":"当前整合包","file":"04-正式发行版/全功能整合包1.7-修复版/game_modifier/scripts/11-auto_aim.js","sections":[{"id":"state","title":"配置、RVA与运行状态","start":1,"end":80,"category":"状态与地址"},{"id":"native","title":"Native方法与玩家列表","start":81,"end":149,"category":"对象访问"},{"id":"position","title":"位置读取与可见性","start":150,"end":207,"category":"目标检测"},{"id":"scan","title":"敌人筛选与目标扫描","start":208,"end":266,"category":"目标选择"},{"id":"aim","title":"视角计算与写入","start":267,"end":339,"category":"瞄准逻辑"},{"id":"control","title":"生命周期、启用与关闭","start":340,"end":397,"category":"功能控制"}]},{"id":"main","label":"功能目录主方案","file":"05-正式功能/11-自瞄/AAAAA-aimbot_v1_dll_approach v2.js","sections":[{"id":"state","title":"配置、RVA与运行状态","start":1,"end":200,"category":"状态与地址"},{"id":"native","title":"Native方法、列表与可见性DLL","start":201,"end":400,"category":"对象访问"},{"id":"scan","title":"敌人筛选与瞄准写入","start":401,"end":596,"category":"瞄准逻辑"},{"id":"debug","title":"调试扫描与房间生命周期","start":597,"end":735,"category":"诊断与生命周期"},{"id":"control","title":"启用、关闭与配置","start":736,"end":835,"category":"功能控制"},{"id":"rpc","title":"RPC接口与自动启动","start":836,"end":890,"category":"外部控制"}]}],sourceMeta={"release":{"modified":"2026-05-25 21:14:41","size":14711,"hash":"0C4EDF97A5078F6C5E3AFCEC2EDA398475C10D7E9F982A6FF1BAF57A763E235C"},"main":{"modified":"2026-05-27 03:26:16","size":36332,"hash":"32004AF51340F4C0160820746CA963F65EA3BBB31AA99589AA87980B5051DAD7"}},businessDetails={"release":{"state":{"scene":"自瞄脚本加载并等待房间对象。","original":["游戏使用玩家输入控制镜头。"],"modified":["保存FOV、平滑、锁定部位和RVA/字段偏移","通过GameManager单例取得房间玩家"],"result":"所有地址和偏移都依赖当前IL2CPP版本。"},"native":{"scene":"脚本需要读取玩家、队伍和相机。","original":["敌我玩家都存在GameManager列表。"],"modified":["包装Transform、isMyPlayer、isDead、team和相机旋转方法","合并allPlayers、BL、GR三条玩家来源"],"result":"得到去重后的候选玩家集合。"},"position":{"scene":"判断目标位置与墙体遮挡。","original":["角色位置来自Transform或characterContainer。"],"modified":["读取玩家世界坐标","使用Physics.Linecast或降级结果检查可见性"],"result":"遮挡检测可减少锁墙后敌人。"},"scan":{"scene":"每30ms选择最合适敌人。","original":["镜头不会自动选择目标。"],"modified":["确认MyPlayer和队伍","排除自己、队友、死亡与FOV外对象","按屏幕角度和距离选择目标"],"result":"得到targetEnemy供瞄准循环使用。"},"aim":{"scene":"玩家按住配置的瞄准按键。","original":["鼠标输入决定当前yaw/pitch。"],"modified":["计算目标yaw/pitch与当前视角差","应用平滑和最大步进","写Player.cameraRotation两个float"],"result":"镜头逐步转向目标；写的是视角，不是直接修改子弹轨迹。"},"control":{"scene":"进入/退出房间或开关自瞄。","original":["旧玩家和目标指针会失效。"],"modified":["监听生命周期清空目标","启用16ms瞄准循环与30ms扫描循环","关闭时清除定时器和状态"],"result":"房间切换后重新扫描对象。"}},"main":{"state":{"scene":"完整自瞄方案加载。","original":["原游戏没有目标筛选配置。"],"modified":["定义按键、FOV、平滑、可见性DLL和地址表","维护目标与房间状态"],"result":"主方案支持更完整配置与日志。"},"native":{"scene":"初始化游戏Native方法和遮挡检测。","original":["Physics.Linecast签名复杂。"],"modified":["包装游戏方法","加载vischeck.dll并注入Linecast地址","读取玩家列表和位置"],"result":"DLL只辅助可见性判断，主要逻辑仍在JS。"},"scan":{"scene":"持续扫描敌人并调整镜头。","original":["相机由玩家手动控制。"],"modified":["筛选敌队、存活、可见且位于FOV内目标","计算角度差和锁定点","写cameraRotation yaw/pitch"],"result":"按配置平滑锁定最近合适目标。"},"debug":{"scene":"调试或房间切换。","original":["目标列表与玩家实例会变化。"],"modified":["调试扫描输出候选信息","生命周期Hook清空缓存"],"result":"避免继续使用旧房间对象。"},"control":{"scene":"用户开关或修改自瞄参数。","original":["无定时器时镜头保持原逻辑。"],"modified":["enable启动扫描与瞄准定时器","disable清理定时器","setConfig更新FOV、平滑等参数"],"result":"配置可在运行时更新。"},"rpc":{"scene":"Python UI调用自瞄。","original":["脚本内部模块无法直接被外部界面调用。"],"modified":["导出enable/disable/toggle/config/status RPC","脚本末尾默认启用"],"result":"外部UI可查询目标和当前配置。"}}},businessLineRefs={"release":{"state":["L1-L68","L69-L79"],"native":["L81-L94","L107-L149"],"position":["L150-L177","L179-L207"],"scan":["L208-L226","L227-L256","L257-L266"],"aim":["L267-L300","L301-L310","L311-L312"],"control":["L340-L359","L360-L369","L370-L397"]},"main":{"state":["L1-L160","L161-L200"],"native":["L203-L237","L242-L245","L260-L337"],"scan":["L401-L480","L481-L549","L550-L551"],"debug":["L597-L700","L701-L735"],"control":["L736-L753","L754-L775","L776-L835"],"rpc":["L836-L884","L889"]}},addressNotes={"release":{"86":{"label":"Singleton.get_instance","type":"aim"},"87":{"label":"Component.get_transform","type":"aim"},"88":{"label":"Transform.get_position_Injected","type":"aim"},"89":{"label":"Player.get_isMyPlayer","type":"player"},"90":{"label":"Entity.get_isDead","type":"aim"},"92":{"label":"Player.AddCameraRotation","type":"player"},"94":{"label":"Physics.Linecast","type":"aim"}},"main":{"209":{"label":"Singleton.get_instance","type":"aim"},"221":{"label":"Player.get_isMyPlayer","type":"player"},"233":{"label":"Player.AddCameraRotation","type":"player"},"242":{"label":"vischeck.dll","type":"risk"}}},criticalLineStyles={"release":{"86":"address","87":"address","88":"address","89":"address","90":"address","92":"address","94":"address","311":"effect","312":"effect","347":"hook","366":"effect","367":"effect","374":"hook","375":"hook"},"main":{"209":"address","221":"address","233":"address","242":"risk","244":"effect","550":"effect","551":"effect","713":"hook","748":"effect","749":"effect","767":"hook","768":"hook"}};defs.forEach(d=>d.text=document.getElementById('src-'+d.id).textContent.trim());var active=0,tabs=document.getElementById('tabs'),code=document.getElementById('code');function e(v){return String(v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}function render(){var d=defs[active],ls=d.text.split(/\r?\n/);tabs.innerHTML='';defs.forEach((s,i)=>{var x=document.createElement('button');x.textContent=s.label;x.setAttribute('aria-selected',i===active);x.onclick=()=>{active=i;render()};tabs.appendChild(x)});file.textContent=d.file;count.textContent=ls.length+' 行';var m=sourceMeta[d.id];meta.innerHTML='<strong>文档生成时间：</strong>2026-06-18 20:22:53 +08:00　<strong>源码修改时间：</strong>'+m.modified+'　<strong>文件大小：</strong>'+m.size+' bytes<br><strong>SHA-256：</strong><code>'+m.hash+'</code><span class="sync-note">此指纹对应当前解读版本；JS 更新后哈希会变化。</span>';code.innerHTML='';d.sections.forEach((s,idx)=>{var z=document.createElement('section');z.className='block';var q='<div class="label">'+e(s.title)+' · L'+s.start+'-'+Math.min(s.end,ls.length)+'</div>';for(var n=s.start;n<=Math.min(s.end,ls.length);n++){var no=(addressNotes[d.id]||{})[n],nh=no?'<span class="address-note '+no.type+'">'+e(no.label)+'</span>':'',t=(criticalLineStyles[d.id]||{})[n];q+='<div class="line'+(t?' key-'+t:'')+'"><span class="no">'+n+'</span><span class="txt">'+e(ls[n-1]||' ')+nh+'</span></div>'}z.innerHTML=q;z.onclick=()=>select(idx);code.appendChild(z)});select(0)}function ph(v,r){return v.map((x,i)=>'<div class="business-step '+(i===v.length-1?'modify':'original')+'">'+e(x)+(r&&r[i]?'<span class="logic-line-ref">'+e(r[i])+'</span>':'')+'</div>'+(i<v.length-1?'<div class="business-arrow">↓</div>':'')).join('')}function select(i){document.querySelectorAll('.block').forEach((x,n)=>x.classList.toggle('active',n===i));var d=defs[active],s=d.sections[i],b=businessDetails[d.id][s.id],r=businessLineRefs[d.id][s.id];cat.textContent=s.category;title.textContent=s.title;body.innerHTML='<div class="card business-card"><h3>业务流程对应</h3><p class="business-scene"><strong>游戏场景：</strong>'+e(b.scene)+'</p><p class="eyebrow">原始游戏逻辑</p><div class="business-path">'+ph(b.original,[])+'</div><p class="eyebrow">修改后游戏逻辑</p><div class="business-path">'+ph(b.modified,r)+'</div><p class="business-result"><strong>游戏表现：</strong>'+e(b.result)+'</p></div>'}copy.onclick=function(){navigator.clipboard.writeText(defs[active].text);this.textContent='已复制';setTimeout(()=>this.textContent='复制源码',1200)};render()})();</script></body></html>

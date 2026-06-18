@@ -1,0 +1,1358 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><title>16-赋予武器-全模式 · 代码解读</title><style>*{box-sizing:border-box}body{margin:0;min-width:980px;color:#202830;background:#f4f6f7;font:14px/1.65 "Microsoft YaHei",sans-serif;letter-spacing:0}button{font:inherit;cursor:pointer}.top{min-height:64px;display:grid;grid-template-columns:1fr auto auto;align-items:center;gap:16px;padding:10px 18px;color:#fff;background:#202832}.top h1{margin:0;font-size:20px}.tabs{display:flex;padding:3px;background:#11171d;border:1px solid #46515c;border-radius:6px}.tabs button{padding:7px 12px;color:#bdc7cf;background:transparent;border:0;border-radius:4px}.tabs button[aria-selected=true]{color:#fff;background:#397868}.actions{display:flex;gap:8px}.actions a,.actions button{display:inline-flex;align-items:center;padding:8px 11px;color:#eaf0f3;text-decoration:none;background:#303a44;border:1px solid #4d5964;border-radius:5px}.summary{padding:14px 20px;background:#fff;border-bottom:1px solid #d8dee2}.summary strong{color:#206252}.workspace{display:grid;grid-template-columns:minmax(570px,3fr) minmax(370px,2fr);min-height:calc(100vh - 118px)}.code{min-width:0;color:#dce5eb;background:#10161c}.code-head{position:sticky;top:0;z-index:3;display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px 12px;padding:11px 15px;background:#182029;border-bottom:1px solid #303a44;font:12px Consolas,monospace}.source-meta{flex:1 1 100%;color:#aeb9c3;line-height:1.55;overflow-wrap:anywhere}.source-meta strong{color:#edf3f7}.source-meta code{color:#9fd5c7}.sync-note{display:block;color:#8e9aa5}.code-highlight-legend{flex:1 1 100%;display:flex;gap:12px;color:#aeb9c3;font:11px "Microsoft YaHei",sans-serif}.highlight-legend-item{display:inline-flex;align-items:center;gap:5px}.highlight-swatch{width:12px;height:8px;border-left:3px solid}.highlight-swatch.address{background:#275673;border-color:#4b9bc9}.highlight-swatch.hook{background:#672f32;border-color:#d46b6b}.highlight-swatch.effect{background:#205e4d;border-color:#50bd99}.highlight-swatch.risk{background:#6d451f;border-color:#e49a4f}.code-scroll{overflow-x:auto;padding:8px 0 26px}.block{min-width:760px;border-left:4px solid transparent}.block:hover{background:#151d24}.block.active{background:#17231f;border-left-color:#4fa58d}.label{display:inline-block;margin:9px 0 5px 48px;padding:2px 7px;color:#8ed7c1;background:#1d302c;border:1px solid #315249;border-radius:4px;font:11px Consolas,monospace}.line{display:grid;grid-template-columns:48px 1fr;min-height:22px;font:13px/1.7 Consolas,monospace}.no{padding-right:10px;color:#64717d;text-align:right;border-right:1px solid #27313a;user-select:none}.txt{padding:0 16px;white-space:pre}.line.key-address{background:rgba(45,108,148,.13);box-shadow:inset 3px 0 #397da5}.line.key-hook{background:rgba(167,65,65,.12);box-shadow:inset 3px 0 #b75555}.line.key-effect{background:rgba(32,126,97,.16);box-shadow:inset 3px 0 #319475}.line.key-risk{background:rgba(180,104,30,.15);box-shadow:inset 3px 0 #c47b34}.block.active .line.key-address{background:rgba(45,108,148,.30);box-shadow:inset 5px 0 #56a8d6}.block.active .line.key-hook{background:rgba(167,65,65,.28);box-shadow:inset 5px 0 #dd7474}.block.active .line.key-effect{background:rgba(32,126,97,.34);box-shadow:inset 5px 0 #59caa5}.block.active .line.key-risk{background:rgba(180,104,30,.31);box-shadow:inset 5px 0 #e5a25f}.address-note{display:inline-flex;margin-left:12px;padding:1px 7px;border:1px solid;border-radius:4px;font:700 11px "Microsoft YaHei",sans-serif}.address-note.reload,.address-note.move{color:#9fd5f3;background:#17384c;border-color:#397da5}.address-note.player{color:#78dabb;background:#173d33;border-color:#30866e}.address-note.weapon{color:#ffd18d;background:#49331a;border-color:#a97634}.address-note.knife{color:#ffb3b3;background:#492425;border-color:#a95357}.address-note.round{color:#d4b5f1;background:#37264a;border-color:#79549b}.explain{position:sticky;top:0;height:100vh;overflow:auto;padding:22px;background:#fff;border-left:1px solid #d8dee2}.eyebrow{margin:10px 0 6px;color:#28715f;font-size:12px;font-weight:700}.explain h2{margin:3px 0 13px;font-size:20px}.card{margin:11px 0;padding:14px;background:#f7f9fa;border:1px solid #d8dee2;border-radius:6px}.card h3{margin:0 0 8px;font-size:14px}.business-card{border-left:4px solid #39779f}.business-scene{margin:0 0 12px;color:#34414b}.business-path{display:grid}.business-step{padding:8px 10px;border:1px solid;border-radius:5px}.business-step.original{color:#1f5b80;background:#edf5fa;border-color:#b8d1e0}.business-step.hook{color:#8f3030;background:#fbeeee;border-color:#e0b6b6}.business-step.modify{color:#17634f;background:#e9f5f0;border-color:#afd2c6}.business-arrow{height:20px;text-align:center;color:#74808a;font-weight:800}.business-result{margin:12px 0 0;padding:9px 10px;color:#73420f;background:#fff3e3;border-left:3px solid #bd742c}.logic-line-ref{float:right;margin-left:10px;padding:1px 6px;color:#17634f;background:#d7ede5;border:1px solid #9bc9ba;border-radius:4px;font:700 11px Consolas,monospace}.address-note.gather,.address-note.gravity,.address-note.time{color:#9fd5f3;background:#17384c;border-color:#397da5}.address-note.transform{color:#ffd18d;background:#49331a;border-color:#a97634}.address-note.bot{color:#ffb3b3;background:#492425;border-color:#a95357}.address-note.aim,.address-note.hp,.address-note.weapon{color:#9fd5f3;background:#17384c;border-color:#397da5}.address-note.risk{color:#ffd18d;background:#49331a;border-color:#a97634}</style></head><body><header class="top"><h1>16 · 赋予武器-全模式代码解读</h1><div class="tabs" id="tabs"></div><div class="actions"><a href="../index.html">功能目录</a><button id="copy">复制源码</button></div></header><section class="summary"><strong>解决的问题：</strong>绕过正常拾取、购买或武器箱流程，取得本地 Player 后在 ModeBase.Update 主线程中调用 GameManager.GiveWeapon；同时处理死亡、复活和离开房间。</section><div class="workspace"><main class="code"><div class="code-head"><span id="file"></span><span id="count"></span><div class="source-meta" id="meta"></div><div class="code-highlight-legend"><span class="highlight-legend-item"><span class="highlight-swatch address"></span>蓝：定位地址</span><span class="highlight-legend-item"><span class="highlight-swatch hook"></span>红：安装或恢复 Hook</span><span class="highlight-legend-item"><span class="highlight-swatch effect"></span>绿：改变游戏行为</span><span class="highlight-legend-item"><span class="highlight-swatch risk"></span>橙：风险或依赖</span></div></div><div class="code-scroll" id="code"></div></main><aside class="explain"><p class="eyebrow" id="cat"></p><h2 id="title"></h2><div id="body"></div></aside></div><script type="text/plain" id="src-release">// weapon_giver.js - 武器赋予（主线程调度）
+// 核心功能：赋予武器、复活自动装备武器
+// 关键技术：Hook ModeBase.Update实现主线程调度（GiveWeapon必须在主线程执行）
+
+modules.weapon_giver = (function() {
+  var enabled = false;
+  var hooks = [];
+
+  var RVA = {
+    GameManager_TypeInfo: 0x0E2933C,
+    ModeBase_TypeInfo: 0x0E2CC54,
+    GiveWeapon: 0xAFB390,
+    GetWpnName: 0xAFB1F0,
+    ModeBase_Update: 0xAF6A00,
+    ModeBase_ExitGame: 0xAEE850,
+    GameManager_GameRoundEnd: 0xAFAA40,
+    GameManager_OnDestroy: 0xAFB6F0,
+    Player_OnEntityDeath: 0xB51210,
+    Player_OnDestroy: 0xB511C0,
+    Player_Spawn: 0xB53760,
+    Entity_get_isDead: 0xB400E0,
+    Player_get_isMyPlayer: 0xB55FD0,
+  };
+
+  var OFF = {
+    Klass_staticFields: 0x5C,
+    GM_myPlayer: 0x00,
+  };
+
+  var _giveWeaponFunc = null;
+  var _isDeadFunc = null;
+  var _isMyPlayerFunc = null;
+  var _initialized = false;
+  var _hookInstalled = false;
+  var _respawnHookInstalled = false;
+  var _spawnHookInstalled = false;
+
+  var _pendingTasks = [];
+  var _taskIdCounter = 0;
+  var _taskTtlMs = 5000;
+
+  var _isPlayerDead = false;
+  var _lastCheckFrame = 0;
+  var _cachedMyPlayer = null;
+  var _checkAliveInterval = 30;
+  var _waitingForRespawnWeaponId = null;
+  var _waitingForRespawnWeaponName = null;
+  var _modeBaseInstance = null;  // 当前ModeBase实例（用于检测模式切换）
+  var _lastModeUpdateTime = 0;
+  var _modeSwitchGraceUntil = 0;
+  var _roomActiveWindowMs = 1200;
+  var _modeSwitchGraceMs = 800;
+  var _roomShuttingDown = false;
+  var _exitingModeBaseInstance = null;
+  var _specialDoubleGiveWeaponIds = {
+    2978: true,
+    3494: true
+  };
+  var _firstRoomSpecialGiveDoneByWeaponId = {};
+
+  function isSpecialDoubleGiveWeapon(wpnId) {
+    return _specialDoubleGiveWeaponIds[wpnId] === true;
+  }
+
+  function resetFirstRoomSpecialGiveState() {
+    _firstRoomSpecialGiveDoneByWeaponId = {};
+  }
+
+  function resetRoomState(reason, shuttingDown, exitingInstance) {
+    _roomShuttingDown = shuttingDown === true;
+    _exitingModeBaseInstance = _roomShuttingDown && exitingInstance ? exitingInstance : null;
+    _modeBaseInstance = null;
+    _pendingTasks = [];
+    _cachedMyPlayer = null;
+    _isPlayerDead = false;
+    _lastCheckFrame = 0;
+    _lastModeUpdateTime = 0;
+    _modeSwitchGraceUntil = Date.now() + _modeSwitchGraceMs;
+    if (_roomShuttingDown) {
+      resetFirstRoomSpecialGiveState();
+    }
+    try {
+      if (modules.speedgun && modules.speedgun.clearRoomState) {
+        modules.speedgun.clearRoomState(_roomShuttingDown, _exitingModeBaseInstance);
+      }
+    } catch(e) {}
+    if (reason) {
+      sendLog('info', '武器赋予', reason);
+    }
+  }
+
+  function isRoomActive() {
+    var now = Date.now();
+    if (_roomShuttingDown) return false;
+    if (!_modeBaseInstance) return false;
+    if (now < _modeSwitchGraceUntil) return false;
+    return _lastModeUpdateTime > 0 && (now - _lastModeUpdateTime) <= _roomActiveWindowMs;
+  }
+
+  function notifySpeedgunWeaponAcquired(weapon) {
+    try {
+      if (!weapon || weapon.isNull()) return;
+      if (!modules.speedgun || !modules.speedgun.notifyWeaponAcquired) return;
+      modules.speedgun.notifyWeaponAcquired(weapon);
+    } catch(e) {
+      sendLog('warn', '武器赋予', '联动射速失败: ' + e.message);
+    }
+  }
+
+  function rollbackHooks(startIndex) {
+    while (hooks.length > startIndex) {
+      var hook = hooks.pop();
+      try { hook.detach(); } catch(e) {}
+    }
+  }
+
+  function readPtr(addr) {
+    try {
+      if (!addr || addr.isNull()) return null;
+      var v = addr.readPointer();
+      return (v && !v.isNull()) ? v : null;
+    } catch(e) {
+      return null;
+    }
+  }
+
+  function initNativeFunctions() {
+    if (_initialized) return true;
+
+    var mod = getGameAssembly();
+    if (!mod) {
+      sendLog('error', '武器赋予', '无法获取 GameAssembly.dll');
+      return false;
+    }
+    var base = mod.base;
+
+    try {
+      _giveWeaponFunc = new NativeFunction(
+        base.add(RVA.GiveWeapon),
+        'pointer',
+        ['pointer', 'int', 'int', 'int', 'pointer'],
+        'mscdecl'
+      );
+      _isDeadFunc = new NativeFunction(
+        base.add(RVA.Entity_get_isDead),
+        'int',
+        ['pointer', 'pointer'],
+        'mscdecl'
+      );
+      _isMyPlayerFunc = new NativeFunction(
+        base.add(RVA.Player_get_isMyPlayer),
+        'int',
+        ['pointer', 'pointer'],
+        'mscdecl'
+      );
+      sendLog('success', '武器赋予', 'GiveWeapon NativeFunction 初始化成功 (mscdecl)');
+    } catch(e) {
+      sendLog('error', '武器赋予', 'GiveWeapon 直接调用初始化失败: ' + e.message);
+      _giveWeaponFunc = null;
+      _isDeadFunc = null;
+      _isMyPlayerFunc = null;
+      return false;
+    }
+
+    _initialized = true;
+    return true;
+  }
+
+  function getMyPlayer() {
+    try {
+      var mod = getGameAssembly();
+      if (!mod) return null;
+      var base = mod.base;
+
+      var typeInfoSlot = base.add(RVA.GameManager_TypeInfo);
+      var klass = readPtr(typeInfoSlot);
+      if (!klass) return null;
+
+      var staticFields = readPtr(klass.add(OFF.Klass_staticFields));
+      if (!staticFields) return null;
+
+      var myPlayer = readPtr(staticFields.add(OFF.GM_myPlayer));
+      if (!myPlayer) return null;
+
+      return myPlayer;
+
+    } catch(e) {
+      sendLog('error', '武器赋予', '获取玩家异常: ' + e.message);
+      return null;
+    }
+  }
+
+  function checkGameManagerInit() {
+    try {
+      var mod = getGameAssembly();
+      if (!mod) return false;
+
+      var typeInfoSlot = mod.base.add(RVA.GameManager_TypeInfo);
+      var klass = readPtr(typeInfoSlot);
+      if (!klass) return false;
+
+      var staticFields = readPtr(klass.add(OFF.Klass_staticFields));
+      if (!staticFields) return false;
+
+      return true;
+
+    } catch(e) {
+      return false;
+    }
+  }
+
+  function isPlayerDead(player) {
+    try {
+      if (!_isDeadFunc || !player || player.isNull()) return true;
+      var result = _isDeadFunc(player, ptr(0));
+      return result !== 0;
+    } catch(e) {
+      return true;
+    }
+  }
+
+  function isPlayerValid(player) {
+    /**检查玩家实例是否有效
+     * 1. 地址不为null且在合理范围内
+     * 2. 地址可读
+     * 3. 玩家未死亡
+     */
+    try {
+      // 检查地址是否有效
+      if (!player || player.isNull()) {
+        return false;
+      }
+      
+      // 检查地址是否在合理范围内（避免访问无效内存）
+      if (player.compare(ptr(0x10000)) < 0) {
+        return false;
+      }
+      
+      // 尝试读取地址（检查是否可读）
+      player.readU8();
+
+      // IDA: Player.wpns 位于 +0xA0，GiveWeapon 内部会立即访问它。
+      var playerWeapons = readPtr(player.add(0xA0));
+      if (!playerWeapons) {
+        return false;
+      }
+
+      if (!isMyPlayer(player)) {
+        return false;
+      }
+      
+      // 检查玩家是否已死亡
+      if (isPlayerDead(player)) {
+        return false;
+      }
+      
+      return true;
+    } catch(e) {
+      return false;
+    }
+  }
+
+  function isMyPlayer(player) {
+    try {
+      if (!_isMyPlayerFunc || !player || player.isNull()) return false;
+      var result = _isMyPlayerFunc(player, ptr(0));
+      return result !== 0;
+    } catch(e) {
+      return false;
+    }
+  }
+
+  function executeGiveWeaponOnMainThread(wpnId, giveUpInt, selectInt) {
+    if (!isRoomActive()) {
+      sendLog('warn', '武器赋予', '当前不在稳定房间内，已忽略赋予任务');
+      return false;
+    }
+
+    var myPlayer = getMyPlayer();
+    if (!myPlayer) {
+      sendLog('error', '武器赋予', '主线程: 无法获取玩家实例');
+      return false;
+    }
+    
+    // 检查玩家实例有效性
+    if (!isPlayerValid(myPlayer)) {
+      sendLog('error', '武器赋予', '主线程: 玩家实例无效（可能已死亡或地址无效）');
+      return false;
+    }
+
+    if (!_giveWeaponFunc) {
+      sendLog('error', '武器赋予', 'GiveWeapon函数未初始化');
+      return false;
+    }
+
+    try {
+      // 与 HUD_Cheat / HUD_ChatBox 的游戏内部调用完全一致：
+      // GiveWeapon(player, weaponId, false, autoSelect, NULL)
+      var weapon = _giveWeaponFunc(myPlayer, wpnId, 0, selectInt, ptr(0));
+      if (!weapon || weapon.isNull()) {
+        sendLog('error', '武器赋予', 'GiveWeapon返回null，weaponId=' + wpnId);
+        return false;
+      }
+
+      notifySpeedgunWeaponAcquired(weapon);
+      sendLog('success', '武器赋予', '赋予武器成功! weaponId=' + wpnId);
+      return true;
+    } catch(e) {
+      _giveWeaponFunc = null;
+      _isDeadFunc = null;
+      _isMyPlayerFunc = null;
+      _initialized = false;
+      sendLog('error', '武器赋予', 'GiveWeapon直接调用异常: ' + e.message);
+      return false;
+    }
+  }
+
+  function handleModeBaseUpdate(instance) {
+    if (!instance || instance.isNull()) return false;
+
+    var now = Date.now();
+    if (_roomShuttingDown) {
+      if (_exitingModeBaseInstance && instance.equals(_exitingModeBaseInstance)) {
+        return false;
+      }
+      _roomShuttingDown = false;
+      _exitingModeBaseInstance = null;
+      _modeSwitchGraceUntil = now + _modeSwitchGraceMs;
+    }
+
+    if (!_modeBaseInstance) {
+      _modeBaseInstance = instance;
+      _lastCheckFrame = 0;
+      _modeSwitchGraceUntil = now + _modeSwitchGraceMs;
+      sendLog('info', '武器赋予', '检测到ModeBase实例: ' + instance);
+    } else if (!instance.equals(_modeBaseInstance)) {
+      _modeBaseInstance = instance;
+      resetFirstRoomSpecialGiveState();
+      _pendingTasks = [];
+      _cachedMyPlayer = null;
+      _isPlayerDead = false;
+      _lastCheckFrame = 0;
+      _modeSwitchGraceUntil = now + _modeSwitchGraceMs;
+      sendLog('info', '武器赋予', '检测到新ModeBase实例，已清理旧任务和旧玩家缓存: ' + instance);
+    }
+
+    _lastModeUpdateTime = now;
+    return now >= _modeSwitchGraceUntil;
+  }
+
+  function installMainThreadHook() {
+    if (_hookInstalled) return true;
+
+    var mod = getGameAssembly();
+    if (!mod) {
+      sendLog('error', '武器赋予', '无法获取 GameAssembly.dll');
+      return false;
+    }
+
+    var updateAddr = mod.base.add(RVA.ModeBase_Update);
+    var hookStartIndex = hooks.length;
+
+    try {
+      // Hook ModeBase.Update（主线程调度）
+      hooks.push(Interceptor.attach(updateAddr, {
+        onEnter: function(args) {
+          try {
+            var instance = args[0];
+            var roomStable = handleModeBaseUpdate(instance);
+            
+            var currentFrame = _lastCheckFrame + 1;
+            _lastCheckFrame = currentFrame;
+
+            // 限制每帧最多处理1个任务，避免阻塞游戏主线程
+            if (roomStable && _pendingTasks.length > 0) {
+              var task = _pendingTasks.shift();
+              try {
+                if (task.expiresAt && Date.now() > task.expiresAt) {
+                  send({
+                    type: 'giveWeaponResult',
+                    taskId: task.id,
+                    success: false
+                  });
+                  sendLog('warn', '武器赋予', '赋予任务已过期，已丢弃: taskId=' + task.id);
+                } else {
+                  var result = executeGiveWeaponOnMainThread(task.wpnId, task.giveUp, task.select);
+
+                  send({
+                    type: 'giveWeaponResult',
+                    taskId: task.id,
+                    success: result
+                  });
+                }
+              } catch(e) {
+                sendLog('error', '武器赋予', '执行赋予任务异常: ' + e.message);
+                send({
+                  type: 'giveWeaponResult',
+                  taskId: task.id,
+                  success: false
+                });
+              }
+            }
+
+            if (roomStable && _cachedMyPlayer && currentFrame % _checkAliveInterval === 0) {
+              try {
+                checkPlayerRespawn();
+              } catch(e) {
+                sendLog('error', '武器赋予', '检查玩家复活异常: ' + e.message);
+              }
+            }
+          } catch(e) {
+            sendLog('error', '武器赋予', 'ModeBase.Update Hook 异常: ' + e.message);
+          }
+        }
+      }));
+
+      // 回合结束只清理缓存，不进入退出状态。
+      hooks.push(Interceptor.attach(mod.base.add(RVA.GameManager_GameRoundEnd), {
+        onEnter: function() {
+          resetRoomState('检测到回合结束，已清空赋予任务和玩家缓存', false, null);
+        }
+      }));
+
+      // 退出房间开始时立即封锁全部旧指针和新任务。
+      hooks.push(Interceptor.attach(mod.base.add(RVA.ModeBase_ExitGame), {
+        onEnter: function(args) {
+          resetRoomState('检测到退出房间，已停止武器赋予', true, args[0]);
+        }
+      }));
+
+      // 场景销毁的最终保险。
+      hooks.push(Interceptor.attach(mod.base.add(RVA.GameManager_OnDestroy), {
+        onEnter: function() {
+          resetRoomState('检测到游戏场景销毁，已清理武器状态', true, _modeBaseInstance);
+        }
+      }));
+
+      _hookInstalled = true;
+      sendLog('success', '武器赋予', '主线程调度及退出清理 Hook 安装成功');
+      return true;
+
+    } catch(e) {
+      rollbackHooks(hookStartIndex);
+      sendLog('error', '武器赋予', 'Hook 安装失败: ' + e.message);
+      return false;
+    }
+  }
+
+  function checkPlayerRespawn() {
+    if (!isRoomActive()) return;
+    if (!_cachedMyPlayer) return;
+
+    var currentDead = isPlayerDead(_cachedMyPlayer);
+
+    if (_isPlayerDead && !currentDead) {
+      sendLog('success', '武器赋予', '检测到玩家复活!');
+      _isPlayerDead = false;
+
+      try {
+        send({ type: 'playerRespawned' });
+      } catch(e) {
+        sendLog('error', '武器赋予', '发送复活事件失败: ' + e.message);
+      }
+    } else if (!_isPlayerDead && currentDead) {
+      sendLog('info', '武器赋予', '检测到玩家死亡');
+      _isPlayerDead = true;
+    }
+  }
+
+  function installRespawnHook() {
+    if (_respawnHookInstalled) return true;
+
+    var mod = getGameAssembly();
+    if (!mod) {
+      sendLog('error', '武器赋予', '无法获取 GameAssembly.dll');
+      return false;
+    }
+
+    var deathAddr = mod.base.add(RVA.Player_OnEntityDeath);
+    var hookStartIndex = hooks.length;
+
+    try {
+      hooks.push(Interceptor.attach(deathAddr, {
+        onEnter: function(args) {
+          try {
+            if (_roomShuttingDown || !isRoomActive()) return;
+            var player = args[0];
+            var myPlayer = getMyPlayer();
+
+            if (player && myPlayer && player.equals(myPlayer)) {
+              sendLog('info', '武器赋予', '检测到本地玩家死亡');
+              _isPlayerDead = true;
+              _cachedMyPlayer = player;
+            }
+          } catch(e) {
+            sendLog('error', '武器赋予', 'OnEntityDeath Hook 异常: ' + e.message);
+          }
+        }
+      }));
+
+      hooks.push(Interceptor.attach(mod.base.add(RVA.Player_OnDestroy), {
+        onEnter: function(args) {
+          try {
+            var player = args[0];
+            if (_cachedMyPlayer && player && player.equals(_cachedMyPlayer)) {
+              _pendingTasks = [];
+              _cachedMyPlayer = null;
+              _isPlayerDead = false;
+              try {
+                if (modules.speedgun && modules.speedgun.clearRoomState) {
+                  modules.speedgun.clearRoomState(_roomShuttingDown, _exitingModeBaseInstance);
+                }
+              } catch(e) {}
+            }
+          } catch(e) {
+            _cachedMyPlayer = null;
+            _pendingTasks = [];
+          }
+        }
+      }));
+
+      _respawnHookInstalled = true;
+      sendLog('success', '武器赋予', 'Player.OnEntityDeath Hook 安装成功');
+
+      var myPlayer = isRoomActive() ? getMyPlayer() : null;
+      if (myPlayer && isPlayerValid(myPlayer)) {
+        _cachedMyPlayer = myPlayer;
+        _isPlayerDead = isPlayerDead(myPlayer);
+      }
+
+      return true;
+
+    } catch (e) {
+      rollbackHooks(hookStartIndex);
+      sendLog('error', '武器赋予', 'Hook 安装失败: ' + e.message);
+      return false;
+    }
+  }
+
+  function installSpawnHook() {
+    if (_spawnHookInstalled) return true;
+
+    var mod = getGameAssembly();
+    if (!mod) {
+      sendLog('error', '武器赋予', '无法获取 GameAssembly.dll');
+      return false;
+    }
+
+    var spawnAddr = mod.base.add(RVA.Player_Spawn);
+    var hookStartIndex = hooks.length;
+
+    try {
+      hooks.push(Interceptor.attach(spawnAddr, {
+        onEnter: function(args) {
+          this.player = args[0];
+        },
+        onLeave: function() {
+          try {
+            if (_roomShuttingDown || !isRoomActive()) return;
+            var player = this.player;
+            var myPlayer = getMyPlayer();
+
+            if (player && myPlayer && player.equals(myPlayer)) {
+              sendLog('info', '武器赋予', '检测到本地玩家复活');
+              _isPlayerDead = false;
+              _cachedMyPlayer = player;
+
+              if (_waitingForRespawnWeaponId !== null) {
+                sendLog('success', '武器赋予', '检测到复活，准备自动赋予武器: ' + _waitingForRespawnWeaponId);
+
+                try {
+                  if (initNativeFunctions() && installMainThreadHook()) {
+                    var taskId = ++_taskIdCounter;
+                    _pendingTasks.push({
+                      id: taskId,
+                      wpnId: parseInt(_waitingForRespawnWeaponId) || 0,
+                      giveUp: 1,
+                      select: 1,
+                      expiresAt: Date.now() + _taskTtlMs
+                    });
+                    sendLog('success', '武器赋予', '复活自动赋予任务已入队: taskId=' + taskId + ', weaponId=' + _waitingForRespawnWeaponId);
+                  } else {
+                    sendLog('error', '武器赋予', '复活自动赋予失败: 初始化未完成');
+                  }
+
+                  send({
+                    type: 'playerRespawnedWithWeapon',
+                    weaponId: _waitingForRespawnWeaponId,
+                    weaponName: _waitingForRespawnWeaponName
+                  });
+                } catch(e) {
+                  sendLog('error', '武器赋予', '复活自动赋予异常: ' + e.message);
+                }
+              } else {
+                send({ type: 'playerRespawned' });
+              }
+            }
+          } catch(e) {
+            sendLog('error', '武器赋予', 'Spawn Hook 异常: ' + e.message);
+          }
+        }
+      }));
+
+      _spawnHookInstalled = true;
+      sendLog('success', '武器赋予', 'Player.Spawn Hook 安装成功');
+
+      return true;
+
+    } catch (e) {
+      rollbackHooks(hookStartIndex);
+      sendLog('error', '武器赋予', 'Hook 安装失败: ' + e.message);
+      return false;
+    }
+  }
+
+  function giveWeapon(weaponIndex, autoGiveUp, autoSelect) {
+    try {
+      if (_roomShuttingDown) {
+        sendLog('warn', '武器赋予', '正在退出房间，已忽略赋予请求');
+        return false;
+      }
+
+      var wpnId = parseInt(weaponIndex) || 0;
+      var giveUpInt = (autoGiveUp === true || autoGiveUp === 1 || autoGiveUp === 'true') ? 1 : 0;
+      var selectInt = (autoSelect === true || autoSelect === 1 || autoSelect === 'true') ? 1 : 0;
+
+      if (!initNativeFunctions()) {
+        sendLog('error', '武器赋予', 'NativeFunction 初始化失败');
+        return false;
+      }
+
+      if (!checkGameManagerInit()) {
+        sendLog('error', '武器赋予', 'GameManager 未初始化!请确保已进入游戏房间');
+        return false;
+      }
+
+      if (!installMainThreadHook()) {
+        sendLog('error', '武器赋予', '主线程 Hook 安装失败');
+        return false;
+      }
+
+      if (!installRespawnHook()) {
+        sendLog('warn', '武器赋予', '复活 Hook 安装失败，但功能可用');
+      }
+
+      if (!installSpawnHook()) {
+        sendLog('warn', '武器赋予', 'Spawn Hook 安装失败，但功能可用');
+      }
+
+      var repeatCount = 1;
+      if (isSpecialDoubleGiveWeapon(wpnId) && !_firstRoomSpecialGiveDoneByWeaponId[wpnId]) {
+        repeatCount = 2;
+        _firstRoomSpecialGiveDoneByWeaponId[wpnId] = true;
+      }
+
+      var firstTaskId = null;
+      for (var i = 0; i < repeatCount; i++) {
+        var taskId = ++_taskIdCounter;
+        if (firstTaskId === null) firstTaskId = taskId;
+        _pendingTasks.push({
+          id: taskId,
+          wpnId: wpnId,
+          giveUp: giveUpInt,
+          select: selectInt,
+          expiresAt: Date.now() + _taskTtlMs
+        });
+      }
+
+      if (repeatCount > 1) {
+        sendLog('info', '武器赋予', '首次进入房间特殊武器，已入队2次赋予任务: weaponId=' + wpnId + ', firstTaskId=' + firstTaskId);
+      } else {
+        sendLog('info', '武器赋予', '任务已入队: taskId=' + firstTaskId + '，等待主线程执行...');
+      }
+
+      return 'pending:' + firstTaskId;
+
+    } catch(e) {
+      sendLog('error', '武器赋予', '异常: ' + e.message);
+      return false;
+    }
+  }
+
+  return {
+    enable: function() {
+      if (enabled) return;
+      resetRoomState(null, false, null);
+      enabled = true;
+      sendLog('success', '武器赋予', '武器赋予功能已启用');
+      sendStatus('weapon_giver', true);
+    },
+    disable: function() {
+      for (var i = 0; i < hooks.length; i++) {
+        try { hooks[i].detach(); } catch(e) {}
+      }
+      hooks = [];
+      _hookInstalled = false;
+      _respawnHookInstalled = false;
+      _spawnHookInstalled = false;
+      resetRoomState(null, true, _modeBaseInstance);
+      _giveWeaponFunc = null;
+      _isDeadFunc = null;
+      _isMyPlayerFunc = null;
+      _initialized = false;
+      enabled = false;
+      sendLog('info', '武器赋予', '武器赋予功能已禁用');
+      sendStatus('weapon_giver', false);
+    },
+    giveweapon: giveWeapon,
+    getmyplayer: getMyPlayer,
+    setrespawnweapon: function(weaponId, weaponName) {
+      try {
+        _waitingForRespawnWeaponId = weaponId;
+        _waitingForRespawnWeaponName = weaponName;
+        sendLog('success', '武器赋予', '设置复活自动武器: ' + weaponId + ' - ' + weaponName);
+        return true;
+      } catch (e) {
+        sendLog('error', '武器赋予', '设置复活武器失败: ' + e.message);
+        return false;
+      }
+    },
+    clearrespawnweapon: function() {
+      try {
+        _waitingForRespawnWeaponId = null;
+        _waitingForRespawnWeaponName = null;
+        sendLog('info', '武器赋予', '清除复活自动武器');
+        return true;
+      } catch (e) {
+        sendLog('error', '武器赋予', '清除复活武器失败: ' + e.message);
+        return false;
+      }
+    },
+    isEnabled: function() { return enabled; }
+  };
+})();
+</script><script type="text/plain" id="src-main">// ============================================================
+// weapon-hero-giver-fixed-v2.js - 武器赋予脚本（修复版v6）
+//
+// 修复历史:
+//   v2: 使用有效的 MethodInfo 指针
+//   v3: 改用直接原生调用，但缺少 cdecl 声明导致崩溃
+//   v4: 修复 ABI 名称 cdecl->mscdecl，但仍然 access violation 0x8
+//   v5: 根因修复 - GiveWeapon 必须在游戏主线程执行
+//       原因: GiveWeapon 内部调用 Unity API（Instantiate/GetComponent）
+//       这些 API 只能在主线程调用，Frida RPC 运行在独立线程
+//       方案: Hook ModeBase$$Update（主线程每帧调用），通过任务队列
+//       将 GiveWeapon 调度到主线程执行
+//   v6: 添加复活自动恢复武器功能
+//
+// IDA确认的函数签名:
+//   Weapon_o *__cdecl GameManager__GiveWeapon(
+//       Player_o *player, int32_t weaponIndex,
+//       bool autoGiveUp, bool autoSelect,
+//       const MethodInfo *method)
+//   void __cdecl ModeBase__Update(
+//       ModeBase_o *__this, const MethodInfo *method)
+// ============================================================
+
+(function() {
+  'use strict';
+
+  var MAX_LOGS_PER_MODULE = 100;
+  var moduleLogCounts = {};
+
+  function log(level, module, message) {
+    if (!moduleLogCounts[module]) moduleLogCounts[module] = 0;
+    if (moduleLogCounts[module] >= MAX_LOGS_PER_MODULE) return;
+    moduleLogCounts[module]++;
+    var fullMsg = '[' + module + '] ' + message;
+    console.log('[' + level + '] ' + fullMsg);
+    try {
+      send({ type: 'log', level: level, module: module, message: message });
+    } catch(e) {}
+  }
+
+  var _gameAssembly = null;
+
+  function getGameAssembly() {
+    if (_gameAssembly) return _gameAssembly;
+    try {
+      var mod = Process.findModuleByName('GameAssembly.dll');
+      if (!mod) {
+        log('error', '系统', '未找到 GameAssembly.dll');
+        return null;
+      }
+      _gameAssembly = mod;
+      log('success', '系统', 'GameAssembly.dll 基址: ' + mod.base);
+      return mod;
+    } catch(e) {
+      log('error', '系统', '获取模块失败: ' + e.message);
+      return null;
+    }
+  }
+
+  var RVA = {
+    GameManager_TypeInfo: 0x0E2933C,
+    ModeBase_TypeInfo: 0x0E2CC54,
+    GiveWeapon: 0xAFB390,
+    GetWpnName: 0xAFB1F0,
+    ModeBase_Update: 0xAF6A00,
+    Player_OnEntityDeath: 0xB51210,
+    Player_Spawn: 0xB53760,
+    Entity_get_isDead: 0xB400E0,
+    Player_get_isMyPlayer: 0xB55FD0,
+};
+
+  var OFF = {
+    Klass_staticFields: 0x5C,
+    GM_myPlayer: 0x00,
+  };
+
+  function readPtr(addr) {
+    try {
+      if (!addr || addr.isNull()) return null;
+      var v = addr.readPointer();
+      return (v && !v.isNull()) ? v : null;
+    } catch(e) {
+      return null;
+    }
+  }
+
+  var _giveWeaponFunc = null;
+  var _il2cpp_runtime_invoke = null;
+  var _giveWeaponMethodInfo = null;
+  var _initialized = false;
+  var _hookInstalled = false;
+  var _respawnHookInstalled = false;
+  var _spawnHookInstalled = false;
+
+  var _pendingTasks = [];
+  var _taskResults = {};
+  var _taskIdCounter = 0;
+
+  var _isPlayerDead = false;
+  var _lastCheckFrame = 0;
+  var _cachedMyPlayer = null;
+  var _checkAliveInterval = 30;
+  var _waitingForRespawnWeaponId = null;
+  var _waitingForRespawnWeaponName = null;
+
+  function getGameManagerKlass() {
+    try {
+      var mod = getGameAssembly();
+      if (!mod) return null;
+      var typeInfoSlot = mod.base.add(RVA.GameManager_TypeInfo);
+      return readPtr(typeInfoSlot);
+    } catch(e) {
+      log('error', 'MethodInfo', '获取GameManager klass失败: ' + e.message);
+      return null;
+    }
+  }
+
+  function getGiveWeaponMethodInfo() {
+    if (_giveWeaponMethodInfo) return _giveWeaponMethodInfo;
+
+    var mod = getGameAssembly();
+    if (!mod) return null;
+
+    var klass = getGameManagerKlass();
+    if (!klass) {
+      log('error', 'MethodInfo', '无法获取GameManager klass');
+      return null;
+    }
+
+    try {
+      var exportAddr = mod.getExportByName('il2cpp_class_get_method_from_name');
+      if (!exportAddr) {
+        log('error', 'MethodInfo', '未找到il2cpp_class_get_method_from_name导出');
+        return null;
+      }
+
+      var getClassMethod = new NativeFunction(exportAddr, 'pointer', ['pointer', 'pointer', 'uint32']);
+      var methodName = Memory.allocUtf8String('GiveWeapon');
+      var methodInfo = getClassMethod(klass, methodName, 4);
+
+      if (methodInfo && !methodInfo.isNull()) {
+        _giveWeaponMethodInfo = methodInfo;
+        log('success', 'MethodInfo', '成功获取GiveWeapon MethodInfo: ' + methodInfo);
+        return methodInfo;
+      }
+
+      log('error', 'MethodInfo', 'il2cpp_class_get_method_from_name返回null');
+      return null;
+
+    } catch(e) {
+      log('error', 'MethodInfo', '获取MethodInfo失败: ' + e.message);
+      return null;
+    }
+  }
+
+  function initNativeFunctions() {
+    if (_initialized) return true;
+
+    var mod = getGameAssembly();
+    if (!mod) {
+      log('error', 'Init', '无法获取 GameAssembly.dll');
+      return false;
+    }
+    var base = mod.base;
+
+    try {
+      var exportInvoke = mod.getExportByName('il2cpp_runtime_invoke');
+      if (!exportInvoke) {
+        log('error', 'Init', '未找到 il2cpp_runtime_invoke');
+        return false;
+      }
+      _il2cpp_runtime_invoke = new NativeFunction(
+        exportInvoke,
+        'pointer',
+        ['pointer', 'pointer', 'pointer', 'pointer']
+      );
+      log('success', 'Init', 'il2cpp_runtime_invoke 初始化成功');
+    } catch(e) {
+      log('error', 'Init', 'il2cpp_runtime_invoke 初始化失败: ' + e.message);
+      return false;
+    }
+
+    try {
+      _giveWeaponFunc = new NativeFunction(
+        base.add(RVA.GiveWeapon),
+        'pointer',
+        ['pointer', 'int', 'int', 'int', 'pointer'],
+        'mscdecl'
+      );
+      log('success', 'Init', 'GiveWeapon NativeFunction 初始化成功 (mscdecl)');
+    } catch(e) {
+      log('warn', 'Init', 'GiveWeapon 直接调用初始化失败: ' + e.message);
+      _giveWeaponFunc = null;
+    }
+
+    _initialized = true;
+    return true;
+  }
+
+  function getMyPlayer() {
+    try {
+      var mod = getGameAssembly();
+      if (!mod) return null;
+      var base = mod.base;
+
+      var typeInfoSlot = base.add(RVA.GameManager_TypeInfo);
+      var klass = readPtr(typeInfoSlot);
+      if (!klass) return null;
+
+      var staticFields = readPtr(klass.add(OFF.Klass_staticFields));
+      if (!staticFields) return null;
+
+      var myPlayer = readPtr(staticFields.add(OFF.GM_myPlayer));
+      if (!myPlayer) return null;
+
+      return myPlayer;
+
+    } catch(e) {
+      log('error', 'Player', '异常: ' + e.message);
+      return null;
+    }
+  }
+
+  function checkGameManagerInit() {
+    try {
+      var mod = getGameAssembly();
+      if (!mod) return false;
+
+      var typeInfoSlot = mod.base.add(RVA.GameManager_TypeInfo);
+      var klass = readPtr(typeInfoSlot);
+      if (!klass) return false;
+
+      var staticFields = readPtr(klass.add(OFF.Klass_staticFields));
+      if (!staticFields) return false;
+
+      return true;
+
+    } catch(e) {
+      return false;
+    }
+  }
+
+  function isPlayerDead(player) {
+    try {
+      var mod = getGameAssembly();
+      if (!mod) return false;
+
+      var funcAddr = mod.base.add(RVA.Entity_get_isDead);
+      var isDeadFunc = new NativeFunction(funcAddr, 'int', ['pointer', 'pointer'], 'mscdecl');
+      var result = isDeadFunc(player, ptr(0));
+      return result !== 0;
+    } catch(e) {
+      return false;
+    }
+  }
+
+  function isMyPlayer(player) {
+    try {
+      var mod = getGameAssembly();
+      if (!mod) return false;
+
+      var funcAddr = mod.base.add(RVA.Player_get_isMyPlayer);
+      var isMyPlayerFunc = new NativeFunction(funcAddr, 'int', ['pointer', 'pointer'], 'mscdecl');
+      var result = isMyPlayerFunc(player, ptr(0));
+      return result !== 0;
+    } catch(e) {
+      return false;
+    }
+  }
+
+  function executeGiveWeaponOnMainThread(wpnId, giveUpInt, selectInt) {
+    var myPlayer = getMyPlayer();
+    if (!myPlayer) {
+      log('error', 'Weapon', '主线程: 无法获取玩家实例');
+      return false;
+    }
+    log('success', 'Weapon', '主线程: 获取玩家实例: ' + myPlayer);
+
+    if (_giveWeaponFunc) {
+      try {
+        var methodInfo = getGiveWeaponMethodInfo();
+        var methodArg = methodInfo ? methodInfo : ptr(0);
+
+        log('info', 'Weapon', '主线程: 直接调用 GiveWeapon(player=' + myPlayer + ', wpnId=' + wpnId + ', giveUp=' + giveUpInt + ', select=' + selectInt + ', method=' + methodArg + ')');
+
+        var weapon = _giveWeaponFunc(myPlayer, wpnId, giveUpInt, selectInt, methodArg);
+
+        if (weapon && !weapon.isNull()) {
+          log('success', 'Weapon', '主线程直接调用成功! weapon=' + weapon);
+          return true;
+        } else {
+          log('error', 'Weapon', '主线程直接调用返回null');
+          return false;
+        }
+      } catch(e) {
+        log('error', 'Weapon', '主线程直接调用异常: ' + e.message);
+      }
+    }
+
+    if (_il2cpp_runtime_invoke) {
+      try {
+        var methodInfo = getGiveWeaponMethodInfo();
+        if (!methodInfo) {
+          log('error', 'Weapon', '主线程: 无法获取MethodInfo');
+          return false;
+        }
+
+        var playerBuf = Memory.alloc(Process.pointerSize);
+        playerBuf.writePointer(myPlayer);
+
+        var wpnIdBuf = Memory.alloc(4);
+        wpnIdBuf.writeS32(wpnId);
+
+        var giveUpBuf = Memory.alloc(4);
+        giveUpBuf.writeU8(giveUpInt);
+
+        var selectBuf = Memory.alloc(4);
+        selectBuf.writeU8(selectInt);
+
+        var params = Memory.alloc(Process.pointerSize * 4);
+        params.writePointer(playerBuf);
+        params.add(Process.pointerSize).writePointer(wpnIdBuf);
+        params.add(Process.pointerSize * 2).writePointer(giveUpBuf);
+        params.add(Process.pointerSize * 3).writePointer(selectBuf);
+
+        var exc = Memory.alloc(Process.pointerSize);
+        exc.writePointer(ptr(0));
+
+        log('info', 'Weapon', '主线程: il2cpp_runtime_invoke 调用中...');
+
+        var weapon = _il2cpp_runtime_invoke(methodInfo, ptr(0), params, exc);
+
+        var excVal = exc.readPointer();
+        if (!excVal.isNull()) {
+          log('error', 'Weapon', '主线程 IL2CPP 异常! exc=' + excVal);
+          return false;
+        }
+
+        if (weapon && !weapon.isNull()) {
+          log('success', 'Weapon', '主线程 invoke 成功! weapon=' + weapon);
+          return true;
+        } else {
+          log('error', 'Weapon', '主线程 invoke 返回null');
+          return false;
+        }
+      } catch(e) {
+        log('error', 'Weapon', '主线程 invoke 异常: ' + e.message);
+        return false;
+      }
+    }
+
+    log('error', 'Weapon', '无可用的调用方式');
+    return false;
+  }
+
+  function installMainThreadHook() {
+    if (_hookInstalled) return true;
+
+    var mod = getGameAssembly();
+    if (!mod) {
+      log('error', 'Hook', '无法获取 GameAssembly.dll');
+      return false;
+    }
+
+    var updateAddr = mod.base.add(RVA.ModeBase_Update);
+
+    try {
+      Interceptor.attach(updateAddr, {
+        onEnter: function(args) {
+          var currentFrame = _lastCheckFrame + 1;
+          _lastCheckFrame = currentFrame;
+
+          while (_pendingTasks.length > 0) {
+            var task = _pendingTasks.shift();
+            log('info', 'Hook', '主线程拾取任务: taskId=' + task.id + ', wpnId=' + task.wpnId);
+
+            var result = executeGiveWeaponOnMainThread(task.wpnId, task.giveUp, task.select);
+            _taskResults[task.id] = result;
+
+            send({
+              type: 'giveWeaponResult',
+              taskId: task.id,
+              success: result
+            });
+          }
+
+          if (_cachedMyPlayer && currentFrame % _checkAliveInterval === 0) {
+            checkPlayerRespawn();
+          }
+        }
+      });
+
+      _hookInstalled = true;
+      log('success', 'Hook', 'ModeBase$$Update Hook 安装成功（主线程调度）');
+      return true;
+
+    } catch(e) {
+      log('error', 'Hook', 'Hook 安装失败: ' + e.message);
+      return false;
+    }
+  }
+
+  function checkPlayerRespawn() {
+    if (!_cachedMyPlayer) return;
+
+    var currentDead = isPlayerDead(_cachedMyPlayer);
+
+    if (_isPlayerDead && !currentDead) {
+      log('success', 'Respawn', '检测到玩家复活!');
+      _isPlayerDead = false;
+
+      try {
+        send({ type: 'playerRespawned' });
+      } catch(e) {
+        log('error', 'Respawn', '发送复活事件失败: ' + e.message);
+      }
+    } else if (!_isPlayerDead && currentDead) {
+      log('info', 'Respawn', '检测到玩家死亡');
+      _isPlayerDead = true;
+    }
+  }
+
+  function installRespawnHook() {
+    if (_respawnHookInstalled) return true;
+
+    var mod = getGameAssembly();
+    if (!mod) {
+      log('error', 'RespawnHook', '无法获取 GameAssembly.dll');
+      return false;
+    }
+
+    var deathAddr = mod.base.add(RVA.Player_OnEntityDeath);
+
+    try {
+      Interceptor.attach(deathAddr, {
+        onEnter: function(args) {
+          var player = args[0];
+          var myPlayer = getMyPlayer();
+
+          if (player && myPlayer && player.equals(myPlayer)) {
+            log('info', 'RespawnHook', '检测到本地玩家死亡');
+            _isPlayerDead = true;
+            _cachedMyPlayer = player;
+          }
+        }
+      });
+
+      _respawnHookInstalled = true;
+      log('success', 'RespawnHook', 'Player_OnEntityDeath Hook 安装成功');
+
+      var myPlayer = getMyPlayer();
+      if (myPlayer) {
+        _cachedMyPlayer = myPlayer;
+        _isPlayerDead = isPlayerDead(myPlayer);
+        log('info', 'RespawnHook', '初始玩家状态: ' + (_isPlayerDead ? '死亡' : '存活'));
+      }
+
+      return true;
+
+    } catch (e) {
+      log('error', 'RespawnHook', 'Hook 安装失败: ' + e.message);
+      return false;
+    }
+  }
+
+  function installSpawnHook() {
+    if (_spawnHookInstalled) return true;
+
+    var mod = getGameAssembly();
+    if (!mod) {
+      log('error', 'SpawnHook', '无法获取 GameAssembly.dll');
+      return false;
+    }
+
+    var spawnAddr = mod.base.add(RVA.Player_Spawn);
+
+    try {
+      Interceptor.attach(spawnAddr, {
+        onEnter: function(args) {
+          var player = args[0];
+          var myPlayer = getMyPlayer();
+
+          if (player && myPlayer && player.equals(myPlayer)) {
+            log('info', 'SpawnHook', '检测到本地玩家复活 (Player.Spawn)');
+            _isPlayerDead = false;
+            _cachedMyPlayer = player;
+
+            if (_waitingForRespawnWeaponId !== null) {
+              log('success', 'SpawnHook', '检测到复活，准备自动赋予武器: ' + _waitingForRespawnWeaponId);
+              var weaponId = _waitingForRespawnWeaponId;
+              var weaponName = _waitingForRespawnWeaponName;
+              _waitingForRespawnWeaponId = null;
+              _waitingForRespawnWeaponName = null;
+
+              send({
+                type: 'playerRespawnedWithWeapon',
+                weaponId: weaponId,
+                weaponName: weaponName
+              });
+            } else {
+              send({ type: 'playerRespawned' });
+            }
+          }
+        }
+      });
+
+      _spawnHookInstalled = true;
+      log('success', 'SpawnHook', 'Player.Spawn Hook 安装成功');
+
+      return true;
+
+    } catch (e) {
+      log('error', 'SpawnHook', 'Hook 安装失败: ' + e.message);
+      return false;
+    }
+  }
+
+  function giveWeapon(weaponIndex, autoGiveUp, autoSelect) {
+    try {
+      log('info', 'Weapon', '开始赋予武器（主线程调度）');
+
+      var wpnId = parseInt(weaponIndex) || 0;
+      var giveUpInt = (autoGiveUp === true || autoGiveUp === 1 || autoGiveUp === 'true') ? 1 : 0;
+      var selectInt = (autoSelect === true || autoSelect === 1 || autoSelect === 'true') ? 1 : 0;
+
+      log('info', 'Weapon', '参数: weaponIndex=' + wpnId + ', autoGiveUp=' + giveUpInt + ', autoSelect=' + selectInt);
+
+      if (!initNativeFunctions()) {
+        log('error', 'Weapon', 'NativeFunction 初始化失败');
+        return false;
+      }
+
+      if (!checkGameManagerInit()) {
+        log('error', 'Weapon', 'GameManager 未初始化!请确保已进入游戏房间');
+        return false;
+      }
+
+      if (!installMainThreadHook()) {
+        log('error', 'Weapon', '主线程 Hook 安装失败');
+        return false;
+      }
+
+      if (!installRespawnHook()) {
+        log('warn', 'Weapon', '复活 Hook 安装失败，但功能可用');
+      }
+
+      if (!installSpawnHook()) {
+        log('warn', 'Weapon', 'Spawn Hook 安装失败，但功能可用');
+      }
+
+      var myPlayer = getMyPlayer();
+      if (myPlayer) {
+        _cachedMyPlayer = myPlayer;
+        _isPlayerDead = isPlayerDead(myPlayer);
+      }
+
+      var taskId = ++_taskIdCounter;
+      _pendingTasks.push({
+        id: taskId,
+        wpnId: wpnId,
+        giveUp: giveUpInt,
+        select: selectInt
+      });
+
+      log('info', 'Weapon', '任务已入队: taskId=' + taskId + '，等待主线程执行...');
+
+      return 'pending:' + taskId;
+
+    } catch(e) {
+      log('error', 'Weapon', '异常: ' + e.message);
+      return false;
+    }
+  }
+
+  function getWeaponName(weaponIndex) {
+    return null;
+  }
+
+  rpc.exports = {
+    giveweapon: giveWeapon,
+    getmyplayer: getMyPlayer,
+    getweaponname: getWeaponName,
+    setrespawnweapon: function(weaponId, weaponName) {
+      try {
+        _waitingForRespawnWeaponId = weaponId;
+        _waitingForRespawnWeaponName = weaponName;
+        log('success', 'Weapon', '设置复活自动武器: ' + weaponId + ' - ' + weaponName);
+        return true;
+      } catch (e) {
+        log('error', 'Weapon', '设置复活武器失败: ' + e.message);
+        return false;
+      }
+    },
+    clearrespawnweapon: function() {
+      try {
+        _waitingForRespawnWeaponId = null;
+        _waitingForRespawnWeaponName = null;
+        log('info', 'Weapon', '清除复活自动武器');
+        return true;
+      } catch (e) {
+        log('error', 'Weapon', '清除复活武器失败: ' + e.message);
+        return false;
+      }
+    },
+  };
+
+  log('success', '系统', '武器赋予脚本已加载（修复版v6：支持复活检测）');
+  log('info', '系统', '游戏进程: UnityCrossFire.exe');
+  log('info', '系统', '');
+  log('warn', '系统', 'v5修复说明:');
+  log('warn', '系统', '  1. 根因: GiveWeapon内部调用Unity API（Instantiate/GetComponent）');
+  log('warn', '系统', '     这些API只能在游戏主线程调用');
+  log('warn', '系统', '  2. Frida RPC运行在独立线程，直接调用会触发access violation');
+  log('warn', '系统', '  3. 方案: Hook ModeBase$$Update（主线程每帧执行）');
+  log('warn', '系统', '     RPC请求入队 -> 主线程Update回调拾取并执行GiveWeapon');
+  log('warn', '系统', '  4. 结果通过send()消息返回给Python端');
+  log('info', '系统', '');
+  log('info', '系统', 'v6新增: 复活自动恢复武器功能');
+  log('info', '系统', '  1. Hook Player_OnEntityDeath检测玩家死亡');
+  log('info', '系统', '  2. 每30帧检查玩家是否复活');
+  log('info', '系统', '  3. 检测到复活后发送playerRespawned事件给Python端');
+
+})();
+</script><script>(function(){'use strict';var P={"defs":[{"id":"release","label":"当前整合包","file":"04-正式发行版/全功能整合包1.7-修复版/game_modifier/scripts/16-weapon_giver.js","sections":[{"id":"s0","title":"地址、偏移与房间状态","start":1,"end":126,"category":"状态与定位"},{"id":"s1","title":"初始化 IL2CPP NativeFunction","start":127,"end":168,"category":"对象与数据"},{"id":"s2","title":"读取并验证本地 Player","start":169,"end":272,"category":"Hook 与线程"},{"id":"s3","title":"主线程执行 GiveWeapon","start":273,"end":317,"category":"游戏逻辑"},{"id":"s4","title":"任务队列与房间生命周期 Hook","start":318,"end":448,"category":"生命周期与控制"},{"id":"s5","title":"死亡、销毁与复活 Hook","start":449,"end":615,"category":"状态与定位"},{"id":"s6","title":"赋予接口和自动复活武器","start":616,"end":734,"category":"对象与数据"}]},{"id":"main","label":"功能目录主方案","file":"05-正式功能/16-赋予武器-全模式/weapon-hero-giver-fixed-v2.js","sections":[{"id":"s0","title":"方案说明与日志","start":1,"end":59,"category":"状态与定位"},{"id":"s1","title":"RVA、偏移和安全读指针","start":60,"end":105,"category":"对象与数据"},{"id":"s2","title":"解析 GameManager 与 MethodInfo","start":106,"end":155,"category":"Hook 与线程"},{"id":"s3","title":"初始化 NativeFunction","start":156,"end":199,"category":"游戏逻辑"},{"id":"s4","title":"获取并验证 MyPlayer","start":200,"end":270,"category":"生命周期与控制"},{"id":"s5","title":"调用 GameManager.GiveWeapon","start":271,"end":355,"category":"状态与定位"},{"id":"s6","title":"ModeBase.Update 主线程调度","start":356,"end":402,"category":"对象与数据"},{"id":"s7","title":"死亡与复活处理","start":403,"end":517,"category":"Hook 与线程"},{"id":"s8","title":"武器任务入口","start":518,"end":578,"category":"游戏逻辑"},{"id":"s9","title":"RPC 外部控制","start":579,"end":623,"category":"生命周期与控制"}]}],"sourceMeta":{"release":{"modified":"2026-06-10 18:03:20","size":22840,"hash":"BD3A887E30B1594900592BD7D3867883F3F13B0CFE78693713314C395E54E78E"},"main":{"modified":"2026-05-27 17:10:21","size":19118,"hash":"14EA42EA3C0B1E134A2B62BE1C9567C307E24F4FFC7CBD1932C381B670079CDA"}},"businessDetails":{"release":{"s0":{"scene":"玩家希望不经过掉落、购买或武器箱直接获得指定武器。 当前代码段：地址、偏移与房间状态。","original":["GameManager 按正常玩法和背包规则创建并装备武器。"],"modified":["从 GameManager.static_fields 读取 myPlayer","把武器 ID 请求放入队列","在 ModeBase.Update 主线程调用 GiveWeapon","死亡后等待 Player.Spawn 再次排队赋予"],"result":"指定武器由游戏原生创建流程生成；主线程调度避免 Unity Instantiate/GetComponent 跨线程崩溃。"},"s1":{"scene":"玩家希望不经过掉落、购买或武器箱直接获得指定武器。 当前代码段：初始化 IL2CPP NativeFunction。","original":["GameManager 按正常玩法和背包规则创建并装备武器。"],"modified":["从 GameManager.static_fields 读取 myPlayer","把武器 ID 请求放入队列","在 ModeBase.Update 主线程调用 GiveWeapon","死亡后等待 Player.Spawn 再次排队赋予"],"result":"指定武器由游戏原生创建流程生成；主线程调度避免 Unity Instantiate/GetComponent 跨线程崩溃。"},"s2":{"scene":"玩家希望不经过掉落、购买或武器箱直接获得指定武器。 当前代码段：读取并验证本地 Player。","original":["GameManager 按正常玩法和背包规则创建并装备武器。"],"modified":["从 GameManager.static_fields 读取 myPlayer","把武器 ID 请求放入队列","在 ModeBase.Update 主线程调用 GiveWeapon","死亡后等待 Player.Spawn 再次排队赋予"],"result":"指定武器由游戏原生创建流程生成；主线程调度避免 Unity Instantiate/GetComponent 跨线程崩溃。"},"s3":{"scene":"玩家希望不经过掉落、购买或武器箱直接获得指定武器。 当前代码段：主线程执行 GiveWeapon。","original":["GameManager 按正常玩法和背包规则创建并装备武器。"],"modified":["从 GameManager.static_fields 读取 myPlayer","把武器 ID 请求放入队列","在 ModeBase.Update 主线程调用 GiveWeapon","死亡后等待 Player.Spawn 再次排队赋予"],"result":"指定武器由游戏原生创建流程生成；主线程调度避免 Unity Instantiate/GetComponent 跨线程崩溃。"},"s4":{"scene":"玩家希望不经过掉落、购买或武器箱直接获得指定武器。 当前代码段：任务队列与房间生命周期 Hook。","original":["GameManager 按正常玩法和背包规则创建并装备武器。"],"modified":["从 GameManager.static_fields 读取 myPlayer","把武器 ID 请求放入队列","在 ModeBase.Update 主线程调用 GiveWeapon","死亡后等待 Player.Spawn 再次排队赋予"],"result":"指定武器由游戏原生创建流程生成；主线程调度避免 Unity Instantiate/GetComponent 跨线程崩溃。"},"s5":{"scene":"玩家希望不经过掉落、购买或武器箱直接获得指定武器。 当前代码段：死亡、销毁与复活 Hook。","original":["GameManager 按正常玩法和背包规则创建并装备武器。"],"modified":["从 GameManager.static_fields 读取 myPlayer","把武器 ID 请求放入队列","在 ModeBase.Update 主线程调用 GiveWeapon","死亡后等待 Player.Spawn 再次排队赋予"],"result":"指定武器由游戏原生创建流程生成；主线程调度避免 Unity Instantiate/GetComponent 跨线程崩溃。"},"s6":{"scene":"玩家希望不经过掉落、购买或武器箱直接获得指定武器。 当前代码段：赋予接口和自动复活武器。","original":["GameManager 按正常玩法和背包规则创建并装备武器。"],"modified":["从 GameManager.static_fields 读取 myPlayer","把武器 ID 请求放入队列","在 ModeBase.Update 主线程调用 GiveWeapon","死亡后等待 Player.Spawn 再次排队赋予"],"result":"指定武器由游戏原生创建流程生成；主线程调度避免 Unity Instantiate/GetComponent 跨线程崩溃。"}},"main":{"s0":{"scene":"玩家希望不经过掉落、购买或武器箱直接获得指定武器。 当前代码段：方案说明与日志。","original":["GameManager 按正常玩法和背包规则创建并装备武器。"],"modified":["从 GameManager.static_fields 读取 myPlayer","把武器 ID 请求放入队列","在 ModeBase.Update 主线程调用 GiveWeapon","死亡后等待 Player.Spawn 再次排队赋予"],"result":"指定武器由游戏原生创建流程生成；主线程调度避免 Unity Instantiate/GetComponent 跨线程崩溃。"},"s1":{"scene":"玩家希望不经过掉落、购买或武器箱直接获得指定武器。 当前代码段：RVA、偏移和安全读指针。","original":["GameManager 按正常玩法和背包规则创建并装备武器。"],"modified":["从 GameManager.static_fields 读取 myPlayer","把武器 ID 请求放入队列","在 ModeBase.Update 主线程调用 GiveWeapon","死亡后等待 Player.Spawn 再次排队赋予"],"result":"指定武器由游戏原生创建流程生成；主线程调度避免 Unity Instantiate/GetComponent 跨线程崩溃。"},"s2":{"scene":"玩家希望不经过掉落、购买或武器箱直接获得指定武器。 当前代码段：解析 GameManager 与 MethodInfo。","original":["GameManager 按正常玩法和背包规则创建并装备武器。"],"modified":["从 GameManager.static_fields 读取 myPlayer","把武器 ID 请求放入队列","在 ModeBase.Update 主线程调用 GiveWeapon","死亡后等待 Player.Spawn 再次排队赋予"],"result":"指定武器由游戏原生创建流程生成；主线程调度避免 Unity Instantiate/GetComponent 跨线程崩溃。"},"s3":{"scene":"玩家希望不经过掉落、购买或武器箱直接获得指定武器。 当前代码段：初始化 NativeFunction。","original":["GameManager 按正常玩法和背包规则创建并装备武器。"],"modified":["从 GameManager.static_fields 读取 myPlayer","把武器 ID 请求放入队列","在 ModeBase.Update 主线程调用 GiveWeapon","死亡后等待 Player.Spawn 再次排队赋予"],"result":"指定武器由游戏原生创建流程生成；主线程调度避免 Unity Instantiate/GetComponent 跨线程崩溃。"},"s4":{"scene":"玩家希望不经过掉落、购买或武器箱直接获得指定武器。 当前代码段：获取并验证 MyPlayer。","original":["GameManager 按正常玩法和背包规则创建并装备武器。"],"modified":["从 GameManager.static_fields 读取 myPlayer","把武器 ID 请求放入队列","在 ModeBase.Update 主线程调用 GiveWeapon","死亡后等待 Player.Spawn 再次排队赋予"],"result":"指定武器由游戏原生创建流程生成；主线程调度避免 Unity Instantiate/GetComponent 跨线程崩溃。"},"s5":{"scene":"玩家希望不经过掉落、购买或武器箱直接获得指定武器。 当前代码段：调用 GameManager.GiveWeapon。","original":["GameManager 按正常玩法和背包规则创建并装备武器。"],"modified":["从 GameManager.static_fields 读取 myPlayer","把武器 ID 请求放入队列","在 ModeBase.Update 主线程调用 GiveWeapon","死亡后等待 Player.Spawn 再次排队赋予"],"result":"指定武器由游戏原生创建流程生成；主线程调度避免 Unity Instantiate/GetComponent 跨线程崩溃。"},"s6":{"scene":"玩家希望不经过掉落、购买或武器箱直接获得指定武器。 当前代码段：ModeBase.Update 主线程调度。","original":["GameManager 按正常玩法和背包规则创建并装备武器。"],"modified":["从 GameManager.static_fields 读取 myPlayer","把武器 ID 请求放入队列","在 ModeBase.Update 主线程调用 GiveWeapon","死亡后等待 Player.Spawn 再次排队赋予"],"result":"指定武器由游戏原生创建流程生成；主线程调度避免 Unity Instantiate/GetComponent 跨线程崩溃。"},"s7":{"scene":"玩家希望不经过掉落、购买或武器箱直接获得指定武器。 当前代码段：死亡与复活处理。","original":["GameManager 按正常玩法和背包规则创建并装备武器。"],"modified":["从 GameManager.static_fields 读取 myPlayer","把武器 ID 请求放入队列","在 ModeBase.Update 主线程调用 GiveWeapon","死亡后等待 Player.Spawn 再次排队赋予"],"result":"指定武器由游戏原生创建流程生成；主线程调度避免 Unity Instantiate/GetComponent 跨线程崩溃。"},"s8":{"scene":"玩家希望不经过掉落、购买或武器箱直接获得指定武器。 当前代码段：武器任务入口。","original":["GameManager 按正常玩法和背包规则创建并装备武器。"],"modified":["从 GameManager.static_fields 读取 myPlayer","把武器 ID 请求放入队列","在 ModeBase.Update 主线程调用 GiveWeapon","死亡后等待 Player.Spawn 再次排队赋予"],"result":"指定武器由游戏原生创建流程生成；主线程调度避免 Unity Instantiate/GetComponent 跨线程崩溃。"},"s9":{"scene":"玩家希望不经过掉落、购买或武器箱直接获得指定武器。 当前代码段：RPC 外部控制。","original":["GameManager 按正常玩法和背包规则创建并装备武器。"],"modified":["从 GameManager.static_fields 读取 myPlayer","把武器 ID 请求放入队列","在 ModeBase.Update 主线程调用 GiveWeapon","死亡后等待 Player.Spawn 再次排队赋予"],"result":"指定武器由游戏原生创建流程生成；主线程调度避免 Unity Instantiate/GetComponent 跨线程崩溃。"}}},"businessLineRefs":{"release":{"s0":["L9","L10","L11","L12"],"s1":["L139","L145","L151","L157"],"s2":["L175","L187","L198","L207"],"s3":["L298","L300","L308","L273"],"s4":["L319","L322","L326","L360"],"s5":["L461","L479","L483","L486"],"s6":["L618","L651","L677","L693"]},"main":{"s0":["L16","L38","L54","L1"],"s1":["L60","L61","L62","L63"],"s2":["L110","L112","L141","L150"],"s3":["L178","L185","L191","L156"],"s4":["L206","L218","L229","L238"],"s5":["L284","L288","L295","L309"],"s6":["L365","L368","L397","L356"],"s7":["L414","L432","L435","L460"],"s8":["L569","L518","L518","L518"],"s9":["L589","L600","L579","L579"]}},"addressNotes":{"release":{"12":{"label":"GameManager.GiveWeapon","type":"weapon"},"14":{"label":"ModeBase.Update","type":"weapon"},"18":{"label":"Player.OnEntityDeath","type":"weapon"},"20":{"label":"Player.Spawn","type":"weapon"},"22":{"label":"Player.get_isMyPlayer","type":"weapon"}},"main":{"63":{"label":"GameManager.GiveWeapon","type":"weapon"},"65":{"label":"ModeBase.Update","type":"weapon"},"66":{"label":"Player.OnEntityDeath","type":"weapon"},"67":{"label":"Player.Spawn","type":"weapon"},"69":{"label":"Player.get_isMyPlayer","type":"weapon"}}},"criticalLineStyles":{"release":{"9":"address","10":"address","11":"address","12":"address","13":"address","14":"address","15":"address","16":"address","17":"address","18":"address","19":"address","20":"address","21":"address","22":"address","51":"risk","53":"risk","61":"effect","70":"risk","71":"risk","79":"risk","84":"risk","86":"risk","94":"risk","97":"risk","102":"risk","105":"risk","113":"risk","119":"risk","121":"risk","122":"risk","139":"address","145":"address","151":"address","157":"risk","175":"address","187":"risk","198":"address","207":"risk","214":"risk","217":"risk","230":"risk","235":"address","258":"risk","265":"risk","268":"risk","298":"effect","300":"risk","308":"risk","319":"risk","322":"risk","326":"risk","360":"address","365":"hook","369":"risk","375":"risk","394":"risk","404":"risk","407":"risk","411":"risk","418":"hook","425":"hook","432":"hook","442":"risk","461":"risk","479":"address","483":"hook","486":"risk","495":"risk","501":"hook","511":"risk","513":"risk","515":"risk","533":"risk","549":"address","553":"hook","559":"risk","591":"risk","598":"risk","609":"risk","618":"risk","651":"effect","677":"risk","693":"risk","716":"risk","727":"risk"},"main":{"16":"effect","38":"risk","54":"risk","60":"address","61":"address","62":"address","63":"address","64":"address","65":"address","66":"address","67":"address","68":"address","69":"address","79":"risk","81":"risk","82":"risk","110":"address","112":"risk","141":"risk","150":"risk","178":"risk","185":"address","191":"risk","206":"address","218":"risk","229":"address","238":"risk","248":"address","252":"risk","262":"address","266":"risk","284":"effect","288":"risk","295":"risk","309":"effect","312":"effect","315":"effect","318":"effect","321":"effect","322":"effect","323":"effect","324":"effect","327":"effect","334":"risk","339":"risk","346":"risk","365":"address","368":"hook","397":"risk","414":"risk","432":"address","435":"hook","460":"risk","475":"address","478":"hook","512":"risk","569":"risk","589":"risk","600":"risk"}}},defs=P.defs,sourceMeta=P.sourceMeta,businessDetails=P.businessDetails,businessLineRefs=P.businessLineRefs,addressNotes=P.addressNotes,criticalLineStyles=P.criticalLineStyles;defs.forEach(d=>d.text=document.getElementById('src-'+d.id).textContent.replace(/^\n/,'').replace(/\n$/,''));var active=0,tabs=document.getElementById('tabs'),code=document.getElementById('code');function e(v){return String(v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}function render(){var d=defs[active],ls=d.text.split(/\r?\n/);tabs.innerHTML='';defs.forEach((s,i)=>{var x=document.createElement('button');x.textContent=s.label;x.setAttribute('aria-selected',i===active);x.onclick=()=>{active=i;render()};tabs.appendChild(x)});file.textContent=d.file;count.textContent=ls.length+' 行';var m=sourceMeta[d.id];meta.innerHTML='<strong>文档生成时间：</strong>2026-06-18 20:45:16 +08:00　<strong>源码修改时间：</strong>'+m.modified+'　<strong>文件大小：</strong>'+m.size+' bytes<br><strong>SHA-256：</strong><code>'+m.hash+'</code><span class="sync-note">此指纹对应当前解读版本；源码更新后哈希会变化。</span>';code.innerHTML='';d.sections.forEach((s,idx)=>{var z=document.createElement('section');z.className='block';var q='<div class="label">'+e(s.title)+' · L'+s.start+'-'+Math.min(s.end,ls.length)+'</div>';for(var n=s.start;n<=Math.min(s.end,ls.length);n++){var no=(addressNotes[d.id]||{})[n],nh=no?'<span class="address-note '+no.type+'">'+e(no.label)+'</span>':'',t=(criticalLineStyles[d.id]||{})[n];q+='<div class="line'+(t?' key-'+t:'')+'"><span class="no">'+n+'</span><span class="txt">'+e(ls[n-1]||' ')+nh+'</span></div>'}z.innerHTML=q;z.onclick=()=>select(idx);code.appendChild(z)});select(0)}function ph(v,r){return v.map((x,i)=>'<div class="business-step '+(i===v.length-1?'modify':'original')+'">'+e(x)+(r&&r[i]?'<span class="logic-line-ref">'+e(r[i])+'</span>':'')+'</div>'+(i<v.length-1?'<div class="business-arrow">↓</div>':'')).join('')}function select(i){document.querySelectorAll('.block').forEach((x,n)=>x.classList.toggle('active',n===i));var d=defs[active],s=d.sections[i],b=businessDetails[d.id][s.id],r=businessLineRefs[d.id][s.id];cat.textContent=s.category;title.textContent=s.title;body.innerHTML='<div class="card business-card"><h3>业务流程对应</h3><p class="business-scene"><strong>游戏场景：</strong>'+e(b.scene)+'</p><p class="eyebrow">原始游戏逻辑</p><div class="business-path">'+ph(b.original,[])+'</div><p class="eyebrow">修改后游戏逻辑</p><div class="business-path">'+ph(b.modified,r)+'</div><p class="business-result"><strong>游戏表现：</strong>'+e(b.result)+'</p></div>'}copy.onclick=function(){navigator.clipboard.writeText(defs[active].text);this.textContent='已复制';setTimeout(()=>this.textContent='复制源码',1200)};render()})();</script></body></html>
