@@ -1,0 +1,51 @@
+<h2>无限子弹代码解读：选择阅读布局</h2>
+<p class="subtitle">三种方案都保持左侧代码、右侧解读，区别在于代码与说明如何同步。</p>
+
+<div class="cards">
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding:18px;background:#151a21;color:#d8dee9;min-height:250px">
+      <div style="display:grid;grid-template-columns:80px 1fr 1fr;gap:10px;height:210px">
+        <div style="background:#202833;padding:8px;font-size:10px;color:#9aa7b5">01 概览<br><br>02 基址<br><br>03 枪械<br><br>04 RPG</div>
+        <div style="background:#0d1117;padding:10px;font:10px monospace;color:#8bd5ca"><b style="color:#fff">代码</b><br><br>var mod = Process...<br>var base = mod.base;<br><br>Interceptor.replace(...)</div>
+        <div style="background:#f7f8fa;color:#27313d;padding:10px;font-size:10px"><b>对应解读</b><br><br>定位 IL2CPP 模块<br>计算真实函数地址<br><br>接管普通枪械扣弹</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A. 三栏同步阅读（推荐）</h3>
+      <p>窄目录 + 代码 + 解读。滚动到代码段时，右侧自动切换对应说明；适合新人从头阅读，也方便快速跳转。</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding:18px;background:#eef1f4;min-height:250px">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div style="grid-column:1/-1;background:#29313c;color:#fff;padding:8px;font-size:11px">模块 03 · 替换 ConsumeAmmo　　◀　3 / 8　▶</div>
+        <div style="height:170px;background:#10151c;color:#9fe3c8;padding:12px;font:10px monospace">Interceptor.replace(<br>&nbsp;&nbsp;addrConsumeAmmo,<br>&nbsp;&nbsp;new NativeCallback(...)</div>
+        <div style="height:170px;background:#fff;color:#28323d;padding:12px;font-size:10px"><b>它改变了什么</b><br><br>游戏认为扣弹成功，但弹药数据没有被修改。<br><br><b>涉及</b><br>IL2CPP · Native Hook · 开火</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B. 单段讲解器</h3>
+      <p>每屏只展示一个代码段及解释，通过上一段/下一段切换。对应关系最强，但不适合快速浏览完整源码。</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="c" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding:18px;background:#fafafa;min-height:250px">
+      <div style="display:flex;gap:8px;margin-bottom:8px"><span style="background:#222;color:#fff;padding:5px 8px;font-size:10px">整合包</span><span style="border:1px solid #bbb;padding:5px 8px;font-size:10px">主方案</span><span style="border:1px solid #bbb;padding:5px 8px;font-size:10px">其他方案</span></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div style="height:185px;background:#111820;color:#9fe3c8;padding:10px;font:9px monospace">完整代码持续滚动<br><br>01 modules.ammo<br>02 findModule<br>03 Interceptor.replace<br>04 RPG Fire hook<br>05 disable</div>
+        <div style="height:185px;background:#fff;border:1px solid #ddd;padding:10px;font-size:10px"><b>解读索引</b><br><br>▸ 模块状态<br>▸ 模块基址<br>▸ 普通枪械<br>▸ 特殊武器<br>▸ 禁用问题<br><br><span style="color:#687480">点击条目高亮左侧代码</span></div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>C. 源码浏览器</h3>
+      <p>左侧始终显示完整文件，右侧是可点击解读索引。搜索和定位最快，更像开发工具，但初学者阅读节奏稍弱。</p>
+    </div>
+  </div>
+</div>
+
+<div class="section" style="margin-top:24px">
+  <h3>我的建议</h3>
+  <p>选 A。它保留完整代码的上下文，同时用滚动联动把当前代码段和解释锁在同一视线里；桌面端三栏，手机端自动切换为“代码 / 解读”两个标签页。</p>
+</div>

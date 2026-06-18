@@ -1,0 +1,949 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>01-无限子弹 · 代码解读</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #18212a;
+      --muted: #65717d;
+      --line: #d9dee3;
+      --paper: #f5f7f8;
+      --panel: #ffffff;
+      --code: #10151b;
+      --code-soft: #171e26;
+      --code-line: #252e38;
+      --code-text: #d8e0e8;
+      --green: #16705a;
+      --green-soft: #e4f3ed;
+      --amber: #a05212;
+      --amber-soft: #fff0dc;
+      --red: #a33b3b;
+      --red-soft: #fbe9e7;
+      --blue: #25618a;
+      --blue-soft: #e8f1f7;
+      --shadow: 0 10px 30px rgba(20, 30, 40, .08);
+      --header-h: 72px;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: var(--paper);
+      font: 14px/1.65 "Microsoft YaHei", "PingFang SC", system-ui, sans-serif;
+      letter-spacing: 0;
+    }
+    button, input { font: inherit; letter-spacing: 0; }
+    button { cursor: pointer; }
+    button:focus-visible, input:focus-visible, [tabindex]:focus-visible {
+      outline: 3px solid rgba(37, 97, 138, .28);
+      outline-offset: 2px;
+    }
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      min-height: var(--header-h);
+      display: grid;
+      grid-template-columns: minmax(260px, 1fr) auto minmax(260px, 1fr);
+      align-items: center;
+      gap: 18px;
+      padding: 10px 20px;
+      color: #fff;
+      background: #202832;
+      border-bottom: 1px solid #39434d;
+    }
+    .brand { min-width: 0; }
+    .brand h1 { margin: 0; font-size: 19px; line-height: 1.25; font-weight: 700; }
+    .brand p { margin: 3px 0 0; color: #aeb9c3; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .source-switch, .mobile-tabs {
+      display: inline-flex;
+      padding: 3px;
+      background: #11171d;
+      border: 1px solid #3b4651;
+      border-radius: 7px;
+    }
+    .source-switch button, .mobile-tabs button {
+      min-height: 34px;
+      padding: 6px 12px;
+      color: #b8c2cc;
+      background: transparent;
+      border: 0;
+      border-radius: 5px;
+    }
+    .source-switch button[aria-selected="true"], .mobile-tabs button[aria-selected="true"] {
+      color: #fff;
+      background: #386c61;
+    }
+    .tools { display: flex; justify-content: flex-end; gap: 8px; min-width: 0; }
+    .search-wrap { position: relative; min-width: 0; flex: 1; max-width: 320px; }
+    .search-wrap input {
+      width: 100%; height: 38px; padding: 7px 76px 7px 12px;
+      color: #edf3f7; background: #11171d; border: 1px solid #46515c; border-radius: 6px;
+    }
+    .search-wrap input::placeholder { color: #82909d; }
+    .search-count { position: absolute; right: 10px; top: 8px; color: #95a2ae; font-size: 12px; }
+    .tool-button {
+      min-height: 38px; padding: 7px 11px; color: #e8edf1;
+      background: #303a44; border: 1px solid #4a5662; border-radius: 6px;
+    }
+    .tool-button:hover { background: #3a4651; }
+    a.tool-button { display: inline-flex; align-items: center; text-decoration: none; }
+    .intro {
+      display: grid;
+      grid-template-columns: minmax(0, 1.4fr) minmax(280px, .6fr);
+      gap: 18px;
+      padding: 22px 24px;
+      background: #fff;
+      border-bottom: 1px solid var(--line);
+    }
+    .intro h2 { margin: 0 0 8px; font-size: 22px; }
+    .intro p { margin: 0; color: #3f4a54; }
+    .logic-strip { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 13px; }
+    .tag { display: inline-flex; align-items: center; min-height: 26px; padding: 3px 8px; border-radius: 4px; font-size: 12px; font-weight: 650; }
+    .tag.il2cpp { color: var(--blue); background: var(--blue-soft); }
+    .tag.hook { color: var(--green); background: var(--green-soft); }
+    .tag.game { color: var(--amber); background: var(--amber-soft); }
+    .tag.risk { color: var(--red); background: var(--red-soft); }
+    .summary-flow { padding: 13px 15px; background: #f7f9fa; border: 1px solid var(--line); border-radius: 7px; }
+    .summary-flow strong { display: block; margin-bottom: 7px; }
+    .summary-flow ol { margin: 0; padding-left: 20px; color: #49545e; }
+    .business-card { border-left: 4px solid #39779f; }
+    .business-scene { margin: 0 0 12px; color: #34414b; }
+    .business-path { display: grid; gap: 0; }
+    .business-step { padding: 8px 10px; border: 1px solid; border-radius: 5px; }
+    .business-step.original { color: #1f5b80; background: #edf5fa; border-color: #b8d1e0; }
+    .business-step.hook { color: #8f3030; background: #fbeeee; border-color: #e0b6b6; }
+    .business-step.modify { color: #17634f; background: #e9f5f0; border-color: #afd2c6; }
+    .business-arrow { height: 20px; text-align: center; color: #74808a; font-weight: 800; }
+    .business-result { margin: 12px 0 0; padding: 9px 10px; color: #73420f; background: #fff3e3; border-left: 3px solid #bd742c; }
+    .logic-line-ref { float: right; margin-left: 10px; padding: 1px 6px; color: #17634f; background: #d7ede5; border: 1px solid #9bc9ba; border-radius: 4px; font: 700 11px/1.5 ui-monospace, monospace; }
+    .address-note { display: inline-flex; margin-left: 12px; padding: 1px 7px; border: 1px solid; border-radius: 4px; font: 700 11px/1.5 "Microsoft YaHei", sans-serif; vertical-align: 1px; }
+    .address-note.gun { color: #66d5b4; background: #163b32; border-color: #2e7f69; }
+    .address-note.base { color: #8fc9ef; background: #17364b; border-color: #37769f; }
+    .address-note.rpg { color: #ffc279; background: #4b3018; border-color: #a9692e; }
+    .address-note.room { color: #e8b0b0; background: #482426; border-color: #9b4f53; }
+    .workspace {
+      display: grid;
+      grid-template-columns: minmax(190px, .7fr) minmax(430px, 1.7fr) minmax(320px, 1fr);
+      min-height: calc(100vh - var(--header-h));
+    }
+    .sidebar, .explain { position: sticky; top: var(--header-h); height: calc(100vh - var(--header-h)); overflow: auto; }
+    .sidebar { padding: 18px 14px; background: #eef1f3; border-right: 1px solid var(--line); }
+    .sidebar-title { margin: 0 8px 8px; color: var(--muted); font-size: 11px; font-weight: 750; text-transform: uppercase; }
+    .nav-list { display: grid; gap: 3px; }
+    .nav-item {
+      width: 100%; min-height: 38px; display: grid; grid-template-columns: 26px 1fr; align-items: center;
+      padding: 6px 8px; text-align: left; color: #45515b; background: transparent; border: 0; border-radius: 6px;
+    }
+    .nav-item:hover { background: #e1e6e9; }
+    .nav-item[aria-current="true"] { color: #174f44; background: #dcece6; font-weight: 700; }
+    .nav-index { color: #89949d; font: 11px/1.2 ui-monospace, monospace; }
+    .context-nav { margin-top: 20px; padding-top: 16px; border-top: 1px solid #d2d8dd; }
+    .context-nav a { display: block; padding: 5px 8px; color: #596671; text-decoration: none; }
+    .context-nav a:hover { color: var(--blue); }
+    .code-panel { min-width: 0; background: var(--code); color: var(--code-text); }
+    .source-meta { flex: 1 1 100%; padding-top: 8px; color: #aeb9c3; font-size: 12px; line-height: 1.55; overflow-wrap: anywhere; }
+    .source-meta strong { color: #edf3f7; }
+    .source-meta code { color: #9fd5c7; }
+    .sync-note { display: block; color: #87939e; }
+    .code-highlight-legend { flex: 1 1 100%; display: flex; flex-wrap: wrap; gap: 12px; color: #aeb9c3; font-size: 11px; }
+    .highlight-legend-item { display: inline-flex; align-items: center; gap: 5px; }
+    .highlight-swatch { width: 12px; height: 8px; border-left: 3px solid; }
+    .highlight-swatch.address { background: rgba(45, 108, 148, .35); border-color: #4b9bc9; }
+    .highlight-swatch.hook { background: rgba(167, 65, 65, .32); border-color: #d46b6b; }
+    .highlight-swatch.effect { background: rgba(32, 126, 97, .36); border-color: #50bd99; }
+    .highlight-swatch.risk { background: rgba(180, 104, 30, .34); border-color: #e49a4f; }
+    .tech-grid { width: 100%; border-collapse: collapse; }
+    .tech-grid th, .tech-grid td { padding: 7px 8px; border-bottom: 1px solid #e0e5e8; text-align: left; vertical-align: top; }
+    .tech-grid th { width: 112px; color: #59646e; }
+    .code-head {
+      position: sticky; top: var(--header-h); z-index: 8;
+      min-height: 48px; display: flex; align-items: center; justify-content: space-between; gap: 12px;
+      padding: 8px 15px; background: #171e26; border-bottom: 1px solid #303943;
+    }
+    .code-file { min-width: 0; color: #c3cdd6; font: 12px/1.4 ui-monospace, "Cascadia Code", Consolas, monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .code-scroll { overflow-x: auto; padding: 8px 0 28px; }
+    .code-block { position: relative; min-width: 690px; border-left: 3px solid transparent; transition: background .16s, border-color .16s; }
+    .code-block.active { background: #151e24; border-left-color: #54b497; }
+    .code-block.search-hit { background: #272419; border-left-color: #d39a3c; }
+    .code-block-label {
+      position: sticky; left: 0; display: inline-block; margin: 9px 0 5px 48px; padding: 2px 7px;
+      color: #86cbb6; background: #1e302d; border: 1px solid #315149; border-radius: 4px; font: 11px/1.5 ui-monospace, monospace;
+    }
+    .code-line { display: grid; grid-template-columns: 48px 1fr; min-height: 22px; font: 13px/1.7 ui-monospace, "Cascadia Code", Consolas, monospace; }
+    .code-line.key-line { transition: background-color .16s ease, box-shadow .16s ease; }
+    .code-line.key-address { background: rgba(45, 108, 148, .13); box-shadow: inset 3px 0 #397da5; }
+    .code-line.key-hook { background: rgba(167, 65, 65, .12); box-shadow: inset 3px 0 #b75555; }
+    .code-line.key-effect { background: rgba(32, 126, 97, .16); box-shadow: inset 3px 0 #319475; }
+    .code-line.key-risk { background: rgba(180, 104, 30, .15); box-shadow: inset 3px 0 #c47b34; }
+    .code-block.active .code-line.key-address { background: rgba(45, 108, 148, .30); box-shadow: inset 5px 0 #56a8d6; }
+    .code-block.active .code-line.key-hook { background: rgba(167, 65, 65, .28); box-shadow: inset 5px 0 #dd7474; }
+    .code-block.active .code-line.key-effect { background: rgba(32, 126, 97, .34); box-shadow: inset 5px 0 #59caa5; }
+    .code-block.active .code-line.key-risk { background: rgba(180, 104, 30, .31); box-shadow: inset 5px 0 #e5a25f; }
+    .code-block.active .code-line.key-line .line-no { color: #d3dce4; }
+    .line-no { padding-right: 10px; color: #586573; text-align: right; user-select: none; border-right: 1px solid var(--code-line); }
+    .line-text { padding: 0 16px; white-space: pre; tab-size: 4; }
+    .tok-comment { color: #7f9089; }
+    .tok-string { color: #c6d38c; }
+    .tok-number { color: #e5aa79; }
+    .tok-keyword { color: #80b8e8; }
+    .explain { padding: 18px; background: var(--panel); border-left: 1px solid var(--line); }
+    .explain-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+    .eyebrow { margin: 0 0 3px; color: var(--green); font-size: 11px; font-weight: 800; }
+    .explain h2 { margin: 0; font-size: 19px; line-height: 1.35; }
+    .step-counter { flex: none; color: #7b8791; font: 12px/1.5 ui-monospace, monospace; }
+    .explain-card { margin: 12px 0; padding: 13px 14px; background: #f7f9fa; border: 1px solid var(--line); border-radius: 7px; }
+    .explain-card h3 { margin: 0 0 6px; font-size: 13px; }
+    .explain-card p { margin: 0; color: #46515b; }
+    .logic-list { margin: 0; padding-left: 18px; color: #46515b; }
+    .logic-list li + li { margin-top: 5px; }
+    .data-grid { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .data-grid th, .data-grid td { padding: 7px 8px; text-align: left; vertical-align: top; border-bottom: 1px solid #dde2e6; }
+    .data-grid th { color: #68747f; font-weight: 700; }
+    .data-grid code { color: #8c4311; font-family: ui-monospace, monospace; }
+    .warning { background: var(--red-soft); border-color: #efcbc7; }
+    .warning h3 { color: var(--red); }
+    .explain-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 15px; }
+    .explain-actions button { min-height: 38px; color: #3f4c56; background: #fff; border: 1px solid #cfd6dc; border-radius: 6px; }
+    .explain-actions button:hover { background: #f1f4f6; }
+    .reference {
+      padding: 36px 24px 50px; background: #fff; border-top: 1px solid var(--line);
+    }
+    .reference-inner { max-width: 1120px; margin: 0 auto; }
+    .reference h2 { margin: 0 0 17px; font-size: 22px; }
+    .reference-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+    .reference section { padding: 16px; border: 1px solid var(--line); border-radius: 7px; }
+    .reference h3 { margin: 0 0 8px; font-size: 15px; }
+    .reference p, .reference li { color: #4b5660; }
+    .reference ul, .reference ol { margin: 8px 0 0; padding-left: 20px; }
+    .reference code { color: #843e10; background: #f7eee8; padding: 1px 4px; border-radius: 3px; }
+    .flow { padding: 12px; color: #d8e2e8; background: #182128; border-radius: 6px; font: 12px/1.75 ui-monospace, monospace; white-space: pre-wrap; }
+    .mobile-tabs { display: none; }
+    .empty-search { display: none; padding: 14px; color: #8a4e13; background: #fff0dc; border-bottom: 1px solid #e9c89e; text-align: center; }
+    .empty-search.show { display: block; }
+    .toast { position: fixed; right: 18px; bottom: 18px; z-index: 50; padding: 9px 13px; color: #fff; background: #29343d; border-radius: 6px; box-shadow: var(--shadow); opacity: 0; transform: translateY(8px); pointer-events: none; transition: .18s; }
+    .toast.show { opacity: 1; transform: translateY(0); }
+    mark { color: inherit; background: #735b1f; border-radius: 2px; }
+    @media (max-width: 1100px) {
+      .topbar { grid-template-columns: 1fr auto; }
+      .tools { grid-column: 1 / -1; justify-content: stretch; }
+      .search-wrap { max-width: none; }
+      :root { --header-h: 124px; }
+      .workspace { grid-template-columns: 170px minmax(390px, 1.5fr) minmax(280px, 1fr); }
+    }
+    @media (max-width: 900px) {
+      :root { --header-h: 164px; }
+      .topbar { grid-template-columns: 1fr; gap: 8px; align-items: stretch; }
+      .brand p { display: none; }
+      .source-switch { width: 100%; }
+      .source-switch button { flex: 1; min-width: 0; }
+      .tools { grid-column: auto; display: grid; grid-template-columns: minmax(0, 1fr) auto auto; width: 100%; }
+      .search-wrap { width: auto; min-width: 0; }
+      .tool-button { padding-inline: 8px; white-space: nowrap; }
+      .intro { grid-template-columns: 1fr; padding: 18px 16px; }
+      .workspace { display: block; min-height: auto; }
+      .sidebar { display: none; }
+      .code-panel { min-height: calc(100vh - var(--header-h)); }
+      .code-head { top: var(--header-h); }
+      .explain { position: static; height: auto; min-height: calc(100vh - var(--header-h)); border-left: 0; }
+      .mobile-tabs { display: flex; position: sticky; top: var(--header-h); z-index: 12; margin: 0; border-radius: 0; border-width: 0 0 1px; }
+      .mobile-tabs button { flex: 1; min-height: 42px; }
+      body[data-mobile-view="code"] .explain { display: none; }
+      body[data-mobile-view="explain"] .code-panel { display: none; }
+      .reference-grid { grid-template-columns: 1fr; }
+      .code-block { min-width: 620px; }
+    }
+    @media (max-width: 520px) {
+      :root { --header-h: 174px; }
+      .topbar { padding: 8px 10px; }
+      .brand h1 { font-size: 17px; }
+      .intro h2 { font-size: 19px; }
+      .reference { padding-inline: 14px; }
+      .explain { padding: 14px; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+      *, *::before, *::after { transition-duration: .001ms !important; animation-duration: .001ms !important; }
+    }
+
+    /* 简化阅读模式：只保留源码与对应解读 */
+    :root { --header-h: 62px; }
+    body { min-width: 980px; overflow-x: auto; }
+    .topbar {
+      min-height: var(--header-h);
+      grid-template-columns: minmax(300px, 1fr) auto auto;
+      gap: 16px;
+      padding: 10px 18px;
+    }
+    .brand p, .intro, .sidebar, .reference, .mobile-tabs,
+    .search-wrap, #clearSearch { display: none !important; }
+    .tools { display: block; width: auto; }
+    .workspace {
+      display: grid !important;
+      grid-template-columns: minmax(560px, 3fr) minmax(360px, 2fr);
+      min-height: calc(100vh - var(--header-h));
+    }
+    .code-panel { display: block !important; min-width: 0; }
+    .code-head { top: var(--header-h); }
+    .explain {
+      display: block !important;
+      position: sticky;
+      top: var(--header-h);
+      height: calc(100vh - var(--header-h));
+      padding: 22px;
+    }
+    .code-block { min-width: 720px; }
+    .explain-card { padding: 14px 15px; }
+    .explain-actions { display: none; }
+  </style>
+</head>
+<body data-source="integrated" data-mobile-view="code">
+  <header class="topbar">
+    <div class="brand">
+      <h1>01 · 无限子弹代码解读</h1>
+      <p>穿越火线单机版 · Unity IL2CPP / Frida Native Hook</p>
+    </div>
+    <div class="source-switch" role="tablist" aria-label="选择源码">
+      <button type="button" role="tab" data-source-button="integrated" aria-selected="true">当前整合包</button>
+      <button type="button" role="tab" data-source-button="main" aria-selected="false">功能目录主方案</button>
+    </div>
+    <div class="tools">
+      <label class="search-wrap">
+        <span class="sr-only" hidden>搜索代码和解读</span>
+        <input id="searchInput" type="search" placeholder="搜索函数、RVA、逻辑…" autocomplete="off">
+        <span class="search-count" id="searchCount">0 匹配</span>
+      </label>
+      <button class="tool-button" id="clearSearch" type="button" title="清除搜索">清除</button>
+      <a class="tool-button" href="../index.html">功能目录</a>
+      <a class="tool-button" href="功能问答.html">功能问答</a>
+      <button class="tool-button" id="copySource" type="button">复制源码</button>
+    </div>
+  </header>
+
+  <section class="intro" id="overview">
+    <div>
+      <h2>它解决了什么游戏问题</h2>
+      <p>正常开火会进入武器弹药消耗流程。这个功能不把弹药改成一个很大的数字，而是接管“消耗子弹”函数：普通枪械直接返回扣弹成功但不修改弹药；RPG/AT4 在开火前调用填弹函数，抵消特殊武器内部的扣弹逻辑。</p>
+      <div class="logic-strip" aria-label="涉及技术分类">
+        <span class="tag il2cpp">Unity IL2CPP</span><span class="tag il2cpp">GameAssembly.dll</span>
+        <span class="tag hook">Frida Hook</span><span class="tag hook">Native 指针</span>
+        <span class="tag game">开火 / 弹药</span><span class="tag game">房间 / 回合</span>
+        <span class="tag risk">RVA 版本依赖</span>
+      </div>
+    </div>
+    <div class="summary-flow">
+      <strong>修改策略</strong>
+      <ol>
+        <li>基址 + RVA 定位 IL2CPP Native 函数</li>
+        <li>替换普通枪械与武器基类扣弹函数</li>
+        <li>单独 Hook RPG/AT4 开火并预先补弹</li>
+        <li>向修改器 UI 回传启用状态</li>
+      </ol>
+    </div>
+  </section>
+
+  <div class="mobile-tabs" role="tablist" aria-label="移动端阅读视图">
+    <button type="button" data-mobile-tab="code" aria-selected="true">代码</button>
+    <button type="button" data-mobile-tab="explain" aria-selected="false">解读</button>
+  </div>
+
+  <div class="workspace">
+    <nav class="sidebar" aria-label="代码组成目录">
+      <p class="sidebar-title">代码组成</p>
+      <div class="nav-list" id="sectionNav"></div>
+      <div class="context-nav">
+        <p class="sidebar-title">补充阅读</p>
+        <a href="#logic-flow">核心逻辑流程</a>
+        <a href="#key-data">关键数据</a>
+        <a href="#other-plans">其他方案</a>
+        <a href="#maintenance">接手注意事项</a>
+      </div>
+    </nav>
+
+    <main class="code-panel" aria-label="完整源码">
+      <div class="code-head">
+        <div class="code-file" id="codeFile"></div>
+        <span class="tag hook" id="lineCount"></span>
+        <div class="source-meta" id="sourceMeta"></div>
+        <div class="code-highlight-legend" aria-label="关键代码行颜色说明">
+          <span class="highlight-legend-item"><span class="highlight-swatch address"></span>蓝：定位地址</span>
+          <span class="highlight-legend-item"><span class="highlight-swatch hook"></span>红：安装或恢复 Hook</span>
+          <span class="highlight-legend-item"><span class="highlight-swatch effect"></span>绿：改变游戏行为</span>
+          <span class="highlight-legend-item"><span class="highlight-swatch risk"></span>橙：风险或副作用</span>
+        </div>
+      </div>
+      <div class="empty-search" id="emptySearch">没有找到匹配内容，源码仍保持完整显示。</div>
+      <div class="code-scroll" id="codeScroll"></div>
+    </main>
+
+    <aside class="explain" aria-live="polite" aria-label="当前代码段解读">
+      <div class="explain-head">
+        <div><p class="eyebrow" id="explainCategory">代码作用</p><h2 id="explainTitle"></h2></div>
+        <span class="step-counter" id="stepCounter"></span>
+      </div>
+      <div id="explainBody"></div>
+      <div class="explain-actions">
+        <button type="button" id="prevSection">上一段</button>
+        <button type="button" id="nextSection">下一段</button>
+      </div>
+    </aside>
+  </div>
+
+  <section class="reference" aria-label="补充技术解读">
+    <div class="reference-inner">
+      <h2>从游戏修改角度理解这个功能</h2>
+      <div class="reference-grid">
+        <section id="logic-flow">
+          <h3>核心逻辑流程</h3>
+          <div class="flow">用户启用无限子弹
+→ 查找 GameAssembly.dll 并取得运行时基址
+→ base + RVA 得到 ConsumeAmmo / Fire / FillAmmo 地址
+→ 普通枪：replace ConsumeAmmo，直接返回 true
+→ RPG/AT4：进入 Fire 前调用 FillAmmo
+→ 游戏继续执行开火，但弹药不再正常减少</div>
+        </section>
+        <section id="key-data">
+          <h3>关键数据</h3>
+          <table class="data-grid">
+            <thead><tr><th>数据</th><th>含义</th></tr></thead>
+            <tbody>
+              <tr><td><code>0xB61140</code></td><td><code>WPN_Gun.ConsumeAmmo</code>，普通枪械扣弹</td></tr>
+              <tr><td><code>0xB6C310</code></td><td><code>Weapon.ConsumeAmmo</code>，武器基类兜底</td></tr>
+              <tr><td><code>0xB670A0</code></td><td><code>WPN_RPG.Fire</code>，RPG/AT4 开火</td></tr>
+              <tr><td><code>0xB67070</code></td><td><code>WPN_RPG.FillAmmo</code>，特殊武器填弹</td></tr>
+              <tr><td><code>thisPtr / args[0]</code></td><td>当前 IL2CPP 武器实例的 Native 指针</td></tr>
+            </tbody>
+          </table>
+        </section>
+        <section id="other-plans">
+          <h3>功能目录中的其他方案</h3>
+          <p><code>plan1_memory_lock.js</code> 从开火函数取得玩家武器指针，再通过 <code>WPN_Gun + 0xF4</code> 找到 <code>ammoData</code>，定时回写 <code>ObscuredInt.hiddenValue</code>。它需要处理玩家/Bot 过滤、缓存指针和房间切换后的失效指针。</p>
+          <p><code>plan2_nop_consume.js</code> 直接把函数入口改为 <code>mov eax, 1; ret</code>。效果直接，但会改写 <code>.text</code> 机器码，面临代码校验、内存保护和版本偏移风险。</p>
+        </section>
+        <section id="maintenance">
+          <h3>新人接手注意事项</h3>
+          <ol>
+            <li>游戏更新后优先重新确认四个 RVA，旧地址 Hook 错位可能导致崩溃。</li>
+            <li>普通枪有效、RPG 无效时，单独检查 <code>WPN_RPG.Fire</code> 和 <code>FillAmmo</code>。</li>
+            <li>换弹动画不触发是方案副作用，因为弹药不会进入空弹匣状态。</li>
+            <li>整合包禁用逻辑保存的是地址而非 attach listener，RPG Hook 可能无法正确解绑。</li>
+            <li>该实现没有区分玩家与 Bot；共享同一 Native 扣弹函数的对象可能一并受影响。</li>
+          </ol>
+        </section>
+      </div>
+    </div>
+  </section>
+
+  <div class="toast" id="toast" role="status"></div>
+
+  <script type="text/plain" id="source-integrated">// ammo.js - 无限子弹 plan4
+// 替换 ConsumeAmmo 函数，消耗子弹时返回 true 但不扣弹
+
+modules.ammo = (function() {
+  var enabled = false;
+  var hooks = [];
+
+  return {
+    enable: function() {
+      if (enabled) return;
+      var mod = Process.findModuleByName('GameAssembly.dll');
+      if (!mod) { sendLog('error', '无限子弹', 'GameAssembly.dll 未找到'); return; }
+      var base = mod.base;
+
+      try {
+        var addrConsumeAmmo = base.add(0xB61140);
+        Interceptor.replace(addrConsumeAmmo, new NativeCallback(function(thisPtr, methodInfo) {
+          return 1;
+        }, 'bool', ['pointer', 'pointer']));
+        hooks.push({ type: 'replace', addr: addrConsumeAmmo });
+        sendLog('info', '无限子弹', 'WPN_Gun.ConsumeAmmo 已替换');
+      } catch (e) {
+        sendLog('error', '无限子弹', '替换 WPN_Gun.ConsumeAmmo 失败: ' + e);
+      }
+
+      try {
+        var addrConsumeBase = base.add(0xB6C310);
+        Interceptor.replace(addrConsumeBase, new NativeCallback(function(thisPtr, methodInfo) {
+          return 1;
+        }, 'bool', ['pointer', 'pointer']));
+        hooks.push({ type: 'replace', addr: addrConsumeBase });
+        sendLog('info', '无限子弹', 'Weapon.ConsumeAmmo 已替换');
+      } catch (e) {
+        sendLog('info', '无限子弹', '替换 Weapon.ConsumeAmmo 失败: ' + e);
+      }
+
+      try {
+        var addrRpgFire = base.add(0xB670A0);
+        var addrRpgFillAmmo = base.add(0xB67070);
+        var rpgFillAmmoFn = new NativeFunction(addrRpgFillAmmo, 'void', ['pointer', 'pointer']);
+        
+        Interceptor.attach(addrRpgFire, {
+          onEnter: function(args) {
+            try {
+              var self = args[0];
+              if (self && !self.isNull()) {
+                rpgFillAmmoFn(self, ptr(0));
+              }
+            } catch (e) {}
+          }
+        });
+        hooks.push({ type: 'attach', addr: addrRpgFire });
+        sendLog('info', '无限子弹', 'RPG/AT4 无限子弹已启用');
+      } catch (e) {
+        sendLog('error', '无限子弹', 'RPG/AT4 初始化失败: ' + e);
+      }
+
+      enabled = true;
+      sendLog('success', '无限子弹', '已启用 (Zero ammo consumption)');
+      sendStatus('ammo', true);
+    },
+    disable: function() {
+      if (!enabled) return;
+      for (var i = 0; i < hooks.length; i++) {
+        try {
+          if (hooks[i].type === 'replace') {
+            Interceptor.revert(hooks[i].addr);
+          } else {
+            hooks[i].addr.detach();
+          }
+        } catch(e) {}
+      }
+      hooks = [];
+      enabled = false;
+      sendLog('info', '无限子弹', '已禁用');
+      sendStatus('ammo', false);
+    }
+  };
+})();</script>
+
+  <script type="text/plain" id="source-main">// plan4_replace_consume.js
+// 方案4：Interceptor.replace ConsumeAmmo → 直接返回 true
+// 原理：用 Frida 的 Interceptor.replace 完全替换 ConsumeAmmo 函数
+//       不修改 .text 段，纯 Frida 层拦截，最安全
+//       替换 WPN_Gun.ConsumeAmmo + Weapon.ConsumeAmmo(基类)
+// 优点：零性能开销、无状态、无需缓存指针、不怕切房间
+// 注意：换弹动画不会触发（弹药永远不变空）
+
+console.log("[*] ======================================");
+console.log("[*]  PLAN 4: Interceptor.replace");
+console.log("[*]  Replace ConsumeAmmo → return true");
+console.log("[*]  No .text patch, pure Frida layer");
+console.log("[*] ======================================");
+
+(function () {
+    var mod = Process.findModuleByName("GameAssembly.dll");
+    if (!mod) { console.log("[-] GameAssembly.dll not found!"); return; }
+    var base = mod.base;
+
+    // 关键地址
+    var ADDR_CONSUME_AMMO   = base.add(0xB61140);   // WPN_Gun.ConsumeAmmo
+    var ADDR_CONSUME_BASE   = base.add(0xB6C310);   // Weapon.ConsumeAmmo（基类）
+    var ADDR_GAME_ROUND_END = base.add(0xAFAA40);
+    var ADDR_ON_START_ROUND = base.add(0xAF5B30);
+    var ADDR_NANO_START     = base.add(0xAF15D0);
+
+    // === 替换 WPN_Gun.ConsumeAmmo ===
+    // 函数签名: bool WPN_Gun.ConsumeAmmo()
+    // IL2CPP Native: bool (*)(this_ptr, methodInfo_ptr)
+    try {
+        Interceptor.replace(ADDR_CONSUME_AMMO, new NativeCallback(
+            function (thisPtr, methodInfo) {
+                // WPN_Gun 的 this 指针
+                // 不做任何消耗，直接返回 true
+                // 游戏内 HUD 可能需要额外刷新，但弹药值不会变
+                return 1;
+            },
+            "bool", ["pointer", "pointer"]
+        ));
+        console.log("[+] Replaced WPN_Gun.ConsumeAmmo (0xB61140)");
+    } catch (e) {
+        console.log("[-] Failed to replace WPN_Gun.ConsumeAmmo: " + e);
+    }
+
+    // === 替换 Weapon.ConsumeAmmo（基类，兜底） ===
+    try {
+        Interceptor.replace(ADDR_CONSUME_BASE, new NativeCallback(
+            function (thisPtr, methodInfo) {
+                return 1;
+            },
+            "bool", ["pointer", "pointer"]
+        ));
+        console.log("[+] Replaced Weapon.ConsumeAmmo (0xB6C310)");
+    } catch (e) {
+        console.log("[*] Could not replace Weapon.ConsumeAmmo: " + e);
+    }
+
+    // === 房间切换日志 ===
+    // Interceptor.replace 是永久的 → 不需要重新替换
+    function onRoomSwitch() {
+        console.log("[ROOM] Switched — replace hooks remain active");
+    }
+    Interceptor.attach(ADDR_GAME_ROUND_END, { onEnter: onRoomSwitch });
+    try { Interceptor.attach(ADDR_ON_START_ROUND, { onEnter: onRoomSwitch }); } catch (e) {}
+    try { Interceptor.attach(ADDR_NANO_START, { onEnter: onRoomSwitch }); } catch (e) {}
+    console.log("[+] Room hooks installed (monitor only)");
+
+    // === RPG/AT4 无限子弹（WPN_RPG 不走 ConsumeAmmo，需单独处理） ===
+    // WPN_RPG.FillAmmo  (0xB67070): 填满 clip+ammo 到满值
+    // WPN_RPG.Fire      (0xB670A0): RPG/AT4 发射函数，内部内联操作 ObscuredInt 扣弹
+    // 原理: 在 Fire() 扣弹前先填满，扣完后还是满的
+    var ADDR_RPG_FIRE     = base.add(0xB670A0);
+    var ADDR_RPG_FILLAMMO = base.add(0xB67070);
+
+    var rpgFillAmmo = new NativeFunction(ADDR_RPG_FILLAMMO, "void", ["pointer", "pointer"]);
+
+    Interceptor.attach(ADDR_RPG_FIRE, {
+        onEnter: function(args) {
+            try {
+                var self = args[0];
+                if (self && !self.isNull()) {
+                    rpgFillAmmo(self, ptr(0));
+                }
+            } catch (e) {
+                console.log("[RPG Ammo] Error: " + e);
+            }
+        }
+    });
+    console.log("[+] RPG/AT4 infinite ammo via FillAmmo on Fire() (0xB670A0)");
+
+    console.log("\n[+] PLAN4 ACTIVE — Zero ammo consumption");
+    console.log("[+]   - WPN_Gun.ConsumeAmmo replaced (0xB61140)");
+    console.log("[+]   - Weapon.ConsumeAmmo base fallback (0xB6C310)");
+    console.log("[+]   - RPG/AT4 FillAmmo on Fire enter (0xB67070)");
+    console.log("[!] Note: Reload animation will NOT trigger for guns");
+})();</script>
+
+  <script>
+    (function () {
+      "use strict";
+
+      var sources = {
+        integrated: {
+          label: "当前整合包",
+          file: "04-正式发行版\\全功能整合包1.7-修复版\\game_modifier\\scripts\\01-unlimited_ammo.js",
+          text: document.getElementById("source-integrated").textContent.replace(/^\n|\n\s*$/g, ""),
+          sections: [
+            info("purpose", "文件目标", 1, 2, "游戏修改入口", "先说明本脚本采用 plan4：不改弹药数值，而是让扣弹函数不再执行原逻辑。", ["普通枪械的开火流程仍继续。", "弹药变量不会因为 ConsumeAmmo 而减少。"], [["方案", "Interceptor.replace"], ["影响", "换弹动画通常不会触发"]]),
+            info("module-state", "模块与开关状态", 4, 10, "修改器模块", "把功能注册为 modules.ammo，并使用 enabled 防止重复 Hook，hooks 用于禁用时恢复。", ["这是整合包统一加载的功能模块。", "重复点击启用不会重复替换同一地址。"], [["enabled", "功能开关状态"], ["hooks", "已安装 Hook 记录"]]),
+            info("module-base", "定位 IL2CPP 模块", 11, 13, "Unity / IL2CPP", "通过 GameAssembly.dll 的运行时基址计算 Native 函数真实地址，解决 ASLR 导致的绝对地址变化。", ["C# 游戏逻辑经 IL2CPP 编译进 GameAssembly.dll。", "真实地址 = 模块基址 + RVA。"], [["mod.base", "模块运行时基址"], ["GameAssembly.dll", "IL2CPP Native 模块"]]),
+            info("gun-consume", "普通枪械扣弹替换", 15, 25, "开火 / 弹药", "替换 WPN_Gun.ConsumeAmmo。新回调直接返回 true，游戏认为扣弹成功，但实际扣弹代码没有执行。", ["thisPtr 是当前枪械实例指针。", "methodInfo 是 IL2CPP 方法信息，本实现未使用。", "返回 1 让后续开火逻辑继续。"], [["RVA", "0xB61140"], ["返回类型", "bool"], ["参数", "pointer, pointer"]]),
+            info("base-consume", "武器基类兜底", 26, 36, "武器继承逻辑", "同时替换 Weapon.ConsumeAmmo，覆盖没有直接走 WPN_Gun 实现、而是调用武器基类扣弹逻辑的武器。", ["WPN_Gun 是具体枪械类。", "Weapon 是更通用的武器基类。", "这一步减少特殊武器类型漏网。"], [["RVA", "0xB6C310"], ["角色", "基类兜底"]]),
+            info("rpg-hook", "RPG / AT4 特殊处理", 37, 57, "特殊武器开火", "RPG/AT4 在 Fire 内部直接处理弹药，不走普通 ConsumeAmmo。脚本在 Fire 进入前调用 FillAmmo，把当前武器补满。", ["args[0] 是当前 RPG/AT4 的 this 指针。", "NativeFunction 把 FillAmmo 地址包装成可调用函数。", "先补弹，再执行原 Fire 和内部扣弹。"], [["Fire RVA", "0xB670A0"], ["FillAmmo RVA", "0xB67070"], ["对象", "args[0]"]]),
+            info("status-report", "状态回传", 58, 61, "修改器 UI", "全部 Hook 安装完成后设置 enabled，并通过 sendLog 与 sendStatus 通知外部界面。", ["sendLog 用于显示运行日志。", "sendStatus('ammo', true) 同步开关状态。"], [["状态键", "ammo"], ["状态值", "true"]]),
+            info("disable", "禁用与恢复", 62, 79, "Hook 生命周期", "replace 类型使用 Interceptor.revert 恢复。RPG attach 的记录方式存在问题：代码保存的是地址，而不是 attach 返回的 listener。", ["正确做法是保存 Interceptor.attach 的返回值。", "禁用时应调用 listener.detach()。", "当前 try/catch 会吞掉解绑失败，因此 UI 可能显示关闭但 RPG Hook 仍在。"], [["replace", "Interceptor.revert(addr)"], ["attach 正确方式", "listener.detach()"]], true)
+          ]
+        },
+        main: {
+          label: "功能目录主方案",
+          file: "05-正式功能\\01-无限子弹\\AAAAA_plan4_replace_consume.js",
+          text: document.getElementById("source-main").textContent.replace(/^\n|\n\s*$/g, ""),
+          sections: [
+            info("purpose", "方案原理与副作用", 1, 7, "方案说明", "主方案明确选择纯 Frida 函数替换，不改 .text 代码段，也不维护武器对象缓存。", ["性能开销低，状态少。", "不依赖玩家指针，房间切换后替换仍在。", "弹药不变空，因此换弹动画不会自然触发。"], [["方案", "Plan 4"], ["方式", "Interceptor.replace"]]),
+            info("startup-log", "启动日志", 9, 14, "调试信息", "这些日志帮助确认加载的是哪个无限子弹方案，不参与游戏逻辑修改。", ["便于 Frida 控制台确认脚本注入。", "不会读取或写入游戏对象。"], [["影响游戏", "否"], ["用途", "识别方案"]]),
+            info("module-base", "模块基址与加载检查", 15, 19, "Unity / IL2CPP", "查找 GameAssembly.dll 并读取 base。如果模块未加载就立即退出，避免在无效地址上安装 Hook。", ["ASLR 会改变每次运行的模块基址。", "RVA 本身只适用于对应游戏版本。"], [["模块", "GameAssembly.dll"], ["失败行为", "return"]]),
+            info("address-table", "集中定义函数地址", 20, 26, "RVA / 房间", "把扣弹函数与回合函数的 RVA 转换为运行时地址。回合地址只用于监控，不负责重新安装 replace。", ["ADDR_GAME_ROUND_END 监听回合结束。", "ADDR_ON_START_ROUND 与 ADDR_NANO_START 监听新回合。"], [["ConsumeAmmo", "0xB61140"], ["基类", "0xB6C310"], ["回合结束", "0xAFAA40"]]),
+            info("gun-consume", "替换 WPN_Gun.ConsumeAmmo", 27, 44, "普通枪械开火", "NativeCallback 保持原函数签名，但跳过全部原始扣弹逻辑并直接返回 true。", ["函数签名推断为 bool(thisPtr, methodInfo)。", "没有字段偏移读取，也没有写弹药内存。", "HUD 若依赖扣弹后的刷新，可能需要额外处理。"], [["RVA", "0xB61140"], ["返回", "1 / true"]]),
+            info("base-consume", "替换 Weapon.ConsumeAmmo", 45, 57, "武器基类", "同样替换武器基类方法，作为具体枪械实现之外的第二层覆盖。", ["部分派生武器可能调用基类实现。", "这不是 RPG 的解决方案，RPG 仍需单独 Hook。"], [["RVA", "0xB6C310"], ["用途", "兜底"]]),
+            info("room-hooks", "房间与回合监听", 58, 67, "房间 / 回合", "三个 attach 只输出日志，验证切换房间或回合后 replace 仍然有效。它们不重新获取武器指针，也不重装扣弹 Hook。", ["Interceptor.replace 作用在函数地址，通常跨回合持续。", "房间切换不会改变 GameAssembly.dll 内函数地址。", "监听失败被 try/catch 容错。"], [["GameRoundEnd", "0xAFAA40"], ["OnStartNewGameRound", "0xAF5B30"], ["Nano 回合", "0xAF15D0"]]),
+            info("rpg-hook", "RPG/AT4 开火前补弹", 68, 90, "特殊武器 / 指针", "把 FillAmmo 包装为 NativeFunction，在 WPN_RPG.Fire 的 onEnter 中以当前武器指针调用。", ["RPG 内部可能直接操作 ObscuredInt。", "FillAmmo(this, null) 在原 Fire 扣弹前执行。", "异常只记录日志，不中断游戏原开火流程。"], [["Fire", "0xB670A0"], ["FillAmmo", "0xB67070"], ["this", "args[0]"]]),
+            info("summary", "激活结果汇总", 91, 96, "调试确认", "最后输出已覆盖的函数和已知副作用，便于测试时判断普通枪、基类和 RPG 三条路径是否全部启用。", ["不改变 Hook 状态。", "提醒测试人员换弹动画不会触发。"], [["普通枪", "已替换"], ["RPG", "开火前补弹"]])
+          ]
+        }
+      };
+
+      function info(id, title, start, end, category, summary, logic, data, warning) {
+        return { id: id, title: title, start: start, end: end, category: category, summary: summary, logic: logic, data: data, warning: !!warning };
+      }
+
+      var generatedAt = "2026-06-18 16:38:24 +08:00";
+      var sourceMetaData = {"integrated":{"modified":"2026-05-25 21:14:41","size":2770,"hash":"61A2749F6F321A8651193C6512BC9EEAC7654246E4737AF6FABBC31F690EF8A2"},"main":{"modified":"2026-05-25 21:14:41","size":4301,"hash":"0C0910D56696D33AB6F7CC9D5154FF9C43D8F92A7659F4C1769B351BEA55444D"}};
+      var techDetails = {"integrated":{"purpose":{"target":"WPN_Gun、Weapon、WPN_RPG","member":"ConsumeAmmo、Fire、FillAmmo","hook":"普通枪/基类使用 replace；RPG 使用 attach","read":"不读取弹药字段；RPG 从 args[0] 取得当前武器 this 指针","write":"replace 直接返回 true；RPG 调用 FillAmmo 间接补弹","api":"Module.findBaseAddress、Interceptor.replace/attach、NativeCallback、NativeFunction"},"module-state":{"target":"修改器 JS 模块 modules.ammo","member":"enabled、hooks","hook":"尚未安装 Hook，只维护生命周期","read":"读取 enabled 判断是否重复启用","write":"写 enabled 和 hooks 数组","api":"模块注册、enable()/disable()"},"module-base":{"target":"GameAssembly.dll","member":"模块运行时基址 base","hook":"为后续 Hook 计算地址","read":"读取已加载模块基址","write":"不写游戏内存","api":"Module.findBaseAddress"},"gun-consume":{"target":"WPN_Gun","member":"ConsumeAmmo()","hook":"完全替换函数入口","read":"只接收 thisPtr、methodInfo，不读取弹药字段","write":"返回 true，跳过原扣弹内部逻辑","api":"base.add、Interceptor.replace、NativeCallback"},"base-consume":{"target":"Weapon","member":"ConsumeAmmo()","hook":"完全替换武器基类函数入口","read":"只接收 thisPtr、methodInfo","write":"返回 true，阻止基类扣弹","api":"base.add、Interceptor.replace、NativeCallback"},"rpg-hook":{"target":"WPN_RPG","member":"Fire()、FillAmmo()","hook":"在 Fire.onEnter 前置监听","read":"从 args[0] 读取当前 WPN_RPG 实例指针","write":"未直接写字段；调用 FillAmmo(this, null) 让游戏方法补弹","api":"Interceptor.attach、onEnter、NativeFunction"},"status-report":{"target":"修改器通信层","member":"enabled、ammo 状态","hook":"Hook 安装完成后的状态通知","read":"读取安装结果/当前状态","write":"写 enabled=true，并向外部发送 ammo=true","api":"sendLog、sendStatus、Frida send"},"disable":{"target":"WPN_Gun/Weapon Hook 与 WPN_RPG listener","member":"Hook 地址和 listener","hook":"恢复 replace，尝试解绑 attach","read":"读取 hooks 保存项","write":"恢复函数入口并写 enabled=false","api":"Interceptor.revert；正确 attach 解绑应使用 listener.detach()"}},"main":{"purpose":{"target":"WPN_Gun、Weapon、WPN_RPG","member":"ConsumeAmmo、Fire、FillAmmo","hook":"独立脚本直接安装 replace/attach","read":"不读取具体弹药字段","write":"改变扣弹控制流，RPG 通过 FillAmmo 补弹","api":"Interceptor.replace/attach"},"startup-log":{"target":"Frida 脚本运行环境","member":"日志文本","hook":"无游戏 Hook 操作","read":"不读取游戏数据","write":"只输出日志","api":"console.log"},"module-base":{"target":"GameAssembly.dll","member":"模块基址","hook":"安装前定位 IL2CPP Native 模块","read":"读取模块是否加载及 base","write":"不写游戏内存","api":"Process.findModuleByName"},"address-table":{"target":"WPN_Gun、Weapon、GameManager、ModeBase、WPN_RPG","member":"Native 方法 RVA","hook":"把 RVA 转成可 Hook 地址","read":"读取 GameAssembly.dll base","write":"只写 JS 地址变量","api":"NativePointer.add"},"gun-consume":{"target":"WPN_Gun","member":"ConsumeAmmo()","hook":"replace 完全接管","read":"不读取弹药字段","write":"直接返回 1/true，原扣弹逻辑不执行","api":"Interceptor.replace、NativeCallback"},"base-consume":{"target":"Weapon","member":"ConsumeAmmo()","hook":"replace 基类兜底","read":"不读取弹药字段","write":"直接返回 1/true","api":"Interceptor.replace、NativeCallback"},"room-hooks":{"target":"GameManager、ModeBase","member":"GameRoundEnd、OnStartNewGameRound、Nano Start","hook":"attach 监听房间/回合事件","read":"不读取参数和游戏字段","write":"不写游戏内存，只输出状态日志","api":"Interceptor.attach、onEnter"},"rpg-hook":{"target":"WPN_RPG","member":"Fire()、FillAmmo()","hook":"Fire.onEnter 前置处理","read":"读取 args[0] 武器实例指针","write":"调用 FillAmmo 间接更新 RPG 弹药","api":"NativeFunction、Interceptor.attach、onEnter"},"summary":{"target":"脚本诊断输出","member":"已安装 Hook 列表","hook":"无新增修改","read":"读取预设地址说明","write":"只写控制台日志","api":"console.log"}}};
+      var fallbackTech = {"target":"无直接游戏类修改","member":"仅脚本状态或日志","hook":"无新增 Hook 行为","read":"不读取游戏内存","write":"不写游戏内存","api":"JavaScript 控制逻辑"};
+      var businessDetails = {
+        integrated: {
+          purpose: { scene: "玩家使用普通枪械或 RPG/AT4 按下开火键。", original: ["武器执行 Fire()", "游戏进入对应的弹药消耗逻辑", "弹匣或备用弹药减少"], modified: ["普通枪和基类扣弹函数被 replace", "RPG 在 Fire.onEnter 中先调用 FillAmmo", "原开火流程继续，但弹药不按正常方式减少"], result: "同一个功能用两种方案覆盖普通枪械和特殊火箭发射器。" },
+          "module-state": { scene: "玩家在修改器界面打开“无限子弹”。", original: ["功能未开启时，游戏正常执行扣弹"], modified: ["dispatcher 调用 modules.ammo.enable()", "enabled 防止重复安装 Hook", "hooks 保存需要恢复或解绑的记录"], result: "这里控制功能生命周期，还没有直接操作某一把枪。" },
+          "module-base": { scene: "修改器准备在 Unity IL2CPP 游戏进程中寻找武器函数。", original: ["Windows 每次启动可能改变 DLL 运行时基址"], modified: ["取得 GameAssembly.dll 的当前 base", "使用 base + RVA 计算 ConsumeAmmo、Fire、FillAmmo 的真实地址"], result: "先定位 Native 函数，后续 Hook 才能落在正确位置。" },
+          "gun-consume": { scene: "玩家用 AK47、M4A1、手枪、机枪或狙击枪开火。", original: ["WPN_Gun.Fire()", "调用 WPN_Gun.ConsumeAmmo()", "弹匣减少一发"], modified: ["ConsumeAmmo 入口被 replace", "新 NativeCallback 不执行原函数", "直接返回 true 表示扣弹调用成功"], result: "枪仍能正常开火，但原扣弹内部逻辑被完全跳过。" },
+          "base-consume": { scene: "某种武器没有走 WPN_Gun 的重写，而是调用 Weapon 基类扣弹。", original: ["派生武器调用 Weapon.ConsumeAmmo()", "基类实现修改弹药"], modified: ["Weapon.ConsumeAmmo 同样被 replace", "直接返回 true"], result: "这是第二层兜底；不能替代 WPN_Gun override，也不负责 RPG。" },
+          "rpg-hook": { scene: "玩家使用 RPG 或 AT4 发射火箭弹。", original: ["进入 WPN_RPG.Fire()", "检查并消耗火箭弹", "发射投射物"], modified: ["Fire.onEnter 先取得 args[0] 当前武器", "调用游戏自己的 FillAmmo(this, null)", "随后原 Fire 继续执行"], result: "不是跳过 Fire，而是在发射前补弹，让特殊发射器始终有弹。" },
+          "status-report": { scene: "Hook 安装完成后，修改器界面需要知道真实启用结果。", original: ["外部 UI 只知道用户点击过开关"], modified: ["脚本写 enabled=true", "sendStatus('ammo', true) 发回 Python", "UI 根据回传状态更新开关"], result: "游戏进程内状态与外部修改器界面保持同步。" },
+          disable: { scene: "玩家关闭“无限子弹”。", original: ["关闭后应恢复正常扣弹"], modified: ["replace 地址使用 Interceptor.revert 恢复", "RPG attach 应使用 listener.detach()", "enabled 写回 false"], result: "当前 RPG 保存的是函数地址而非 listener，可能出现界面已关闭但 RPG 仍自动补弹。" }
+        },
+        main: {
+          purpose: { scene: "独立注入脚本启动后，立即准备覆盖普通枪和 RPG 的扣弹路径。", original: ["不同武器使用不同扣弹实现"], modified: ["普通枪 replace ConsumeAmmo", "RPG attach Fire 并调用 FillAmmo"], result: "通过函数级 Hook 实现，不维护玩家武器对象缓存。" },
+          "startup-log": { scene: "测试人员注入脚本后查看 Frida 控制台。", original: ["无法直观看出当前加载了哪个实验方案"], modified: ["输出 PLAN 4 名称和原理", "提示换弹动画不会触发"], result: "只帮助调试，不改变游戏内存或武器行为。" },
+          "module-base": { scene: "脚本刚注入 UnityCrossFire.exe。", original: ["GameAssembly.dll 未加载时无法定位武器函数"], modified: ["查找模块并读取 base", "模块不存在则停止执行"], result: "避免对无效地址安装 Hook。" },
+          "address-table": { scene: "脚本把 dump.cs 中确认的 RVA 转为本次进程地址。", original: ["RVA 只是相对 GameAssembly.dll 的偏移"], modified: ["base + RVA 得到各函数 NativePointer", "保存普通枪、基类、回合和 RPG 地址"], result: "这一段只准备地址，还没有替换或监听函数。" },
+          "gun-consume": { scene: "普通枪械每次射击准备扣除一发子弹。", original: ["调用 WPN_Gun.ConsumeAmmo()", "执行内部扣弹", "返回扣弹结果"], modified: ["replace 接管整个方法", "不读取也不写弹药字段", "直接返回 1/true"], result: "改变的是业务控制流，不是把弹药数写成 999。" },
+          "base-consume": { scene: "派生武器回落到 Weapon 基类扣弹实现。", original: ["Weapon.ConsumeAmmo() 修改弹药"], modified: ["基类方法被 replace", "直接返回成功"], result: "用于补充覆盖，但不会自动拦截重写了方法的 WPN_Gun。" },
+          "room-hooks": { scene: "玩家退出房间、进入新房间或开始下一回合。", original: ["回合生命周期函数正常执行"], modified: ["attach 只在进入时输出日志", "不重新安装 ConsumeAmmo Hook"], result: "replace 绑定的是 DLL 函数地址，通常不会因换房或换回合失效。" },
+          "rpg-hook": { scene: "RPG/AT4 不经过普通枪的 ConsumeAmmo 路线。", original: ["WPN_RPG.Fire() 自己处理火箭弹", "发射后弹药减少"], modified: ["onEnter 取得当前 RPG this", "先调用 FillAmmo", "原 Fire 继续发射"], result: "保留火箭发射、伤害和投射物逻辑，只在发射前补充弹药。" },
+          summary: { scene: "脚本安装结束，测试人员准备进入游戏验证。", original: ["不知道哪些 Hook 已成功安装"], modified: ["输出普通枪、基类和 RPG 三条覆盖路径", "标明对应 RVA"], result: "只汇总结果，不再修改新的游戏逻辑。" }
+        }
+      };
+      var fallbackBusiness = { scene: "这一段主要负责脚本控制或诊断。", original: ["游戏按原逻辑运行"], modified: ["脚本维护状态或输出信息"], result: "没有直接修改具体武器对象。" };
+      var addressNotes = {
+        integrated: {
+          16: { label: "WPN_Gun.ConsumeAmmo", type: "gun" },
+          27: { label: "Weapon.ConsumeAmmo", type: "base" },
+          38: { label: "WPN_RPG.Fire", type: "rpg" },
+          39: { label: "WPN_RPG.FillAmmo", type: "rpg" }
+        },
+        main: {
+          21: { label: "WPN_Gun.ConsumeAmmo", type: "gun" },
+          22: { label: "Weapon.ConsumeAmmo", type: "base" },
+          23: { label: "GameManager.GameRoundEnd", type: "room" },
+          24: { label: "ModeBase.OnStartNewGameRound", type: "room" },
+          25: { label: "ModeBase_Nano.OnStartNewGameRound", type: "room" },
+          72: { label: "WPN_RPG.Fire", type: "rpg" },
+          73: { label: "WPN_RPG.FillAmmo", type: "rpg" }
+        }
+      };
+      var criticalLineStyles = {
+        integrated: {
+          16: "address", 17: "hook", 18: "effect",
+          27: "address", 28: "hook", 29: "effect",
+          38: "address", 39: "address", 42: "hook", 47: "effect",
+          67: "hook", 69: "risk"
+        },
+        main: {
+          21: "address", 22: "address", 23: "address", 24: "address", 25: "address",
+          31: "hook", 36: "effect", 47: "hook", 49: "effect",
+          63: "hook", 64: "hook", 65: "hook",
+          72: "address", 73: "address", 77: "hook", 82: "effect", 95: "risk"
+        }
+      };
+      var businessLineRefs = {
+        integrated: {
+          purpose: ["L17-L19", "L42-L47", "L17-L51"],
+          "module-state": ["L9", "L10", "L20 / L31 / L52"],
+          "module-base": ["L11-L13", "L16 / L27 / L38-L39"],
+          "gun-consume": ["L17", "L17-L19", "L18"],
+          "base-consume": ["L28-L30", "L29"],
+          "rpg-hook": ["L42-L45", "L47", "L42-L51"],
+          "status-report": ["L58", "L60", "L60"],
+          disable: ["L67", "L69", "L74"]
+        },
+        main: {
+          purpose: ["L31-L39", "L77-L88"],
+          "startup-log": ["L9-L13", "L95"],
+          "module-base": ["L16-L18", "L17"],
+          "address-table": ["L21-L25", "L21-L25"],
+          "gun-consume": ["L31", "L31-L39", "L36"],
+          "base-consume": ["L47-L52", "L49"],
+          "room-hooks": ["L63-L65", "L59-L65"],
+          "rpg-hook": ["L77-L80", "L82", "L77-L88"],
+          summary: ["L91-L94", "L92-L94"]
+        }
+      };
+
+      var state = { source: "integrated", active: 0, query: "", observer: null };
+      var nav = document.getElementById("sectionNav");
+      var codeScroll = document.getElementById("codeScroll");
+      var codeFile = document.getElementById("codeFile");
+      var lineCount = document.getElementById("lineCount");
+      var sourceMetaElement = document.getElementById("sourceMeta");
+      var explainTitle = document.getElementById("explainTitle");
+      var explainCategory = document.getElementById("explainCategory");
+      var explainBody = document.getElementById("explainBody");
+      var stepCounter = document.getElementById("stepCounter");
+      var searchInput = document.getElementById("searchInput");
+      var searchCount = document.getElementById("searchCount");
+      var emptySearch = document.getElementById("emptySearch");
+      var toast = document.getElementById("toast");
+
+      function escapeHtml(value) {
+        return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      }
+
+      function highlightLine(line) {
+        var escaped = escapeHtml(line);
+        if (/^\s*\/\//.test(line)) return '<span class="tok-comment">' + escaped + '</span>';
+        return escaped
+          .replace(/(&#39;[^&]*?&#39;|&quot;.*?&quot;)/g, '<span class="tok-string">$1</span>')
+          .replace(/\b(0x[0-9A-Fa-f]+|\d+)\b/g, '<span class="tok-number">$1</span>')
+          .replace(/\b(var|function|return|if|else|try|catch|new)\b/g, '<span class="tok-keyword">$1</span>');
+      }
+
+      function renderSource() {
+        if (state.observer) state.observer.disconnect();
+        var source = sources[state.source];
+        var lines = source.text.split(/\r?\n/);
+        nav.innerHTML = "";
+        codeScroll.innerHTML = "";
+        codeFile.textContent = source.file;
+        lineCount.textContent = lines.length + " 行";
+        var meta = sourceMetaData[state.source];
+        sourceMetaElement.innerHTML = '<strong>文档生成时间：</strong>' + generatedAt + '　<strong>源码修改时间：</strong>' + meta.modified + '　<strong>文件大小：</strong>' + meta.size + ' bytes<br><strong>SHA-256：</strong><code>' + meta.hash + '</code><span class="sync-note">此指纹对应当前解读版本；JS 更新后哈希会变化。</span>';
+
+        source.sections.forEach(function (section, index) {
+          var button = document.createElement("button");
+          button.type = "button";
+          button.className = "nav-item";
+          button.dataset.index = index;
+          button.innerHTML = '<span class="nav-index">' + String(index + 1).padStart(2, "0") + '</span><span>' + escapeHtml(section.title) + '</span>';
+          button.addEventListener("click", function () { activate(index, true); });
+          nav.appendChild(button);
+
+          var block = document.createElement("section");
+          block.className = "code-block";
+          block.dataset.index = index;
+          block.dataset.section = section.id;
+          block.tabIndex = 0;
+          block.setAttribute("aria-label", section.title + "，第 " + section.start + " 至 " + section.end + " 行");
+          var html = '<div class="code-block-label">' + escapeHtml(section.title) + ' · L' + section.start + '–' + Math.min(section.end, lines.length) + '</div>';
+          for (var i = section.start; i <= Math.min(section.end, lines.length); i++) {
+            var addressNote = (addressNotes[state.source] || {})[i];
+            var addressNoteHtml = addressNote ? '<span class="address-note ' + addressNote.type + '">' + escapeHtml(addressNote.label) + '</span>' : '';
+            var criticalType = (criticalLineStyles[state.source] || {})[i];
+            var criticalClass = criticalType ? ' key-line key-' + criticalType : '';
+            html += '<div class="code-line' + criticalClass + '"><span class="line-no">' + i + '</span><span class="line-text">' + highlightLine(lines[i - 1] || " ") + addressNoteHtml + '</span></div>';
+          }
+          block.innerHTML = html;
+          block.addEventListener("click", function () { activate(Number(this.dataset.index), false); });
+          codeScroll.appendChild(block);
+        });
+
+        applySearch();
+        activate(Math.min(state.active, source.sections.length - 1), false);
+      }
+
+      function renderExplanation(index) {
+        var sections = sources[state.source].sections;
+        var section = sections[index];
+        explainTitle.textContent = section.title;
+        explainCategory.textContent = section.category;
+        stepCounter.textContent = (index + 1) + " / " + sections.length;
+        var warning = section.warning ? '<div class="explain-card warning"><h3>维护风险</h3><p>当前整合包的 attach 解绑记录不正确。应保存 Interceptor.attach 返回的 listener，并在禁用时调用 listener.detach()。</p></div>' : "";
+        var business = (businessDetails[state.source] || {})[section.id] || fallbackBusiness;
+        var lineRefs = (businessLineRefs[state.source] || {})[section.id] || [];
+        function renderBusinessPath(items, finalType, refs) {
+          return items.map(function (item, itemIndex) {
+            var type = itemIndex === items.length - 1 && finalType ? finalType : "original";
+            var ref = refs && refs[itemIndex] ? '<span class="logic-line-ref">' + escapeHtml(refs[itemIndex]) + '</span>' : '';
+            return '<div class="business-step ' + type + '">' + escapeHtml(item) + ref + '</div>' + (itemIndex < items.length - 1 ? '<div class="business-arrow">↓</div>' : '');
+          }).join("");
+        }
+        var originalPath = renderBusinessPath(business.original, "hook", []);
+        var modifiedPath = renderBusinessPath(business.modified, "modify", lineRefs);
+        explainBody.innerHTML =
+          '<div class="explain-card business-card"><h3>业务流程对应</h3><p class="business-scene"><strong>游戏场景：</strong>' + escapeHtml(business.scene) + '</p>' +
+          '<p class="eyebrow">原始游戏逻辑</p><div class="business-path">' + originalPath + '</div>' +
+          '<p class="eyebrow">修改后游戏逻辑</p><div class="business-path">' + modifiedPath + '</div>' +
+          '<p class="business-result"><strong>游戏表现：</strong>' + escapeHtml(business.result) + '</p></div>' + warning;
+        document.getElementById("prevSection").disabled = index === 0;
+        document.getElementById("nextSection").disabled = index === sections.length - 1;
+      }
+
+      function activate(index, scroll) {
+        var sections = sources[state.source].sections;
+        if (index < 0 || index >= sections.length) return;
+        state.active = index;
+        document.querySelectorAll(".nav-item").forEach(function (item, i) { item.setAttribute("aria-current", i === index ? "true" : "false"); });
+        document.querySelectorAll(".code-block").forEach(function (item, i) { item.classList.toggle("active", i === index); });
+        renderExplanation(index);
+        if (scroll) {
+          var target = codeScroll.querySelector('[data-index="' + index + '"]');
+          if (target) target.scrollIntoView({ behavior: reducedMotion() ? "auto" : "smooth", block: "center" });
+        }
+        savePreference();
+      }
+
+      function setupObserver() {
+        if (!("IntersectionObserver" in window)) return;
+        state.observer = new IntersectionObserver(function (entries) {
+          var visible = entries.filter(function (entry) { return entry.isIntersecting; }).sort(function (a, b) { return Math.abs(a.boundingClientRect.top - 220) - Math.abs(b.boundingClientRect.top - 220); });
+          if (visible.length) activate(Number(visible[0].target.dataset.index), false);
+        }, { root: null, rootMargin: "-22% 0px -58% 0px", threshold: [0, .2, .5] });
+        document.querySelectorAll(".code-block").forEach(function (block) { state.observer.observe(block); });
+      }
+
+      function applySearch() {
+        var query = state.query.trim().toLowerCase();
+        var source = sources[state.source];
+        var hits = 0;
+        document.querySelectorAll(".code-block").forEach(function (block, index) {
+          var section = source.sections[index];
+          var haystack = [block.textContent, section.title, section.category, section.summary, section.logic.join(" "), section.data.flat().join(" ")].join(" ").toLowerCase();
+          var matched = !!query && haystack.indexOf(query) !== -1;
+          block.classList.toggle("search-hit", matched);
+          if (matched) hits++;
+        });
+        searchCount.textContent = query ? hits + " 匹配" : "0 匹配";
+        emptySearch.classList.toggle("show", !!query && hits === 0);
+        if (query && hits > 0) {
+          var first = codeScroll.querySelector(".search-hit");
+          if (first) activate(Number(first.dataset.index), true);
+        }
+      }
+
+      function switchSource(name) {
+        if (!sources[name]) return;
+        state.source = name;
+        state.active = 0;
+        document.body.dataset.source = name;
+        document.querySelectorAll("[data-source-button]").forEach(function (button) { button.setAttribute("aria-selected", button.dataset.sourceButton === name ? "true" : "false"); });
+        renderSource();
+        showToast("已切换到" + sources[name].label);
+      }
+
+      function copyText(text) {
+        if (navigator.clipboard && navigator.clipboard.writeText) return navigator.clipboard.writeText(text);
+        return new Promise(function (resolve, reject) {
+          var area = document.createElement("textarea");
+          area.value = text; area.style.position = "fixed"; area.style.opacity = "0";
+          document.body.appendChild(area); area.select();
+          try { document.execCommand("copy") ? resolve() : reject(new Error("copy failed")); } catch (error) { reject(error); }
+          area.remove();
+        });
+      }
+
+      function showToast(message) {
+        toast.textContent = message;
+        toast.classList.add("show");
+        clearTimeout(showToast.timer);
+        showToast.timer = setTimeout(function () { toast.classList.remove("show"); }, 1600);
+      }
+
+      function reducedMotion() { return window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches; }
+      function savePreference() {
+        try { localStorage.setItem("ammo-guide-state", JSON.stringify({ source: state.source, active: state.active })); } catch (error) {}
+      }
+      function loadPreference() {
+        try {
+          var saved = JSON.parse(localStorage.getItem("ammo-guide-state") || "null");
+          if (saved && sources[saved.source]) { state.source = saved.source; state.active = Number(saved.active) || 0; }
+        } catch (error) {}
+      }
+
+      document.querySelectorAll("[data-source-button]").forEach(function (button) { button.addEventListener("click", function () { switchSource(this.dataset.sourceButton); }); });
+      document.querySelectorAll("[data-mobile-tab]").forEach(function (button) {
+        button.addEventListener("click", function () {
+          var view = this.dataset.mobileTab;
+          document.body.dataset.mobileView = view;
+          document.querySelectorAll("[data-mobile-tab]").forEach(function (item) { item.setAttribute("aria-selected", item.dataset.mobileTab === view ? "true" : "false"); });
+          if (view === "explain") renderExplanation(state.active);
+        });
+      });
+      searchInput.addEventListener("input", function () { state.query = this.value; applySearch(); });
+      document.getElementById("clearSearch").addEventListener("click", function () { searchInput.value = ""; state.query = ""; applySearch(); searchInput.focus(); });
+      document.getElementById("copySource").addEventListener("click", function () {
+        var button = this;
+        copyText(sources[state.source].text).then(function () { button.textContent = "已复制"; showToast("完整源码已复制"); }).catch(function () { button.textContent = "复制失败"; showToast("浏览器未允许复制"); }).finally(function () { setTimeout(function () { button.textContent = "复制源码"; }, 1500); });
+      });
+      document.getElementById("prevSection").addEventListener("click", function () { activate(state.active - 1, true); });
+      document.getElementById("nextSection").addEventListener("click", function () { activate(state.active + 1, true); });
+
+      loadPreference();
+      document.body.dataset.source = state.source;
+      document.querySelectorAll("[data-source-button]").forEach(function (button) { button.setAttribute("aria-selected", button.dataset.sourceButton === state.source ? "true" : "false"); });
+      renderSource();
+    })();
+  </script>
+</body>
+</html>
