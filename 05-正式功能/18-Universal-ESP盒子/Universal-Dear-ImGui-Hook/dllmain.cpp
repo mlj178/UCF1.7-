@@ -234,7 +234,7 @@ static DWORD WINAPI UninjectThread(LPVOID)
         break;
     }
 
-    mousehooks::Remove();
+    // mousehooks::Remove(); // mousehooks::Init() is intentionally inactive.
     globals::activeBackend = globals::Backend::None;
 
     // Remove all hooks, then uninitialize MinHook.
@@ -308,7 +308,9 @@ static DWORD WINAPI onAttach(LPVOID lpParameter)
         }
     }
 
-    mousehooks::Init();
+    // The in-game ImGui menu is not used by the release ESP path, so do not
+    // hook SetCursorPos/ClipCursor. Box drawing does not require mouse hooks.
+    // mousehooks::Init();
 
     // Start named pipe server after all initialization is done
     // This ensures the pipe server thread won't interfere with hook setup
@@ -400,7 +402,7 @@ BOOL WINAPI DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserved
         default:
             break;
         }
-        mousehooks::Remove();
+        // mousehooks::Remove(); // mousehooks::Init() is intentionally inactive.
         MH_RemoveHook(MH_ALL_HOOKS);
         MH_Uninitialize();
         esp::GameManager::Cleanup();

@@ -1,4 +1,5 @@
 #include "stdafx.h"
+#include "esp/esp_state.h"
 
 namespace hooks_dx11 {
     using Microsoft::WRL::ComPtr;
@@ -56,6 +57,20 @@ namespace hooks_dx11 {
             loggedPresent = true;
         }
 
+        // The in-game ImGui menu remains available in the source tree, but the
+        // release ESP path is controlled only through the external pipe.
+        // if (GetAsyncKeyState(globals::openMenuKey) & 1)
+        // {
+        //     menu::isOpen = !menu::isOpen;
+        //     DebugLog("[d3d11hook] Toggle menu: %d\n", menu::isOpen);
+        // }
+
+        if (GetAsyncKeyState(globals::uninjectKey) & 1)
+        {
+            Uninject();
+            return;
+        }
+
         if (!gInitialized)
         {
             gSwapChain = pSwapChain;
@@ -72,22 +87,20 @@ namespace hooks_dx11 {
                 ImGui::StyleColorsDark();
                 ImGui_ImplWin32_Init(desc.OutputWindow);
                 ImGui_ImplDX11_Init(gDevice, gContext);
-                inputhook::Init(desc.OutputWindow);
+                // Menu input is intentionally inactive. Box drawing does not
+                // require a window procedure hook.
+                // inputhook::Init(desc.OutputWindow);
                 CreateRenderTarget();
                 gInitialized = true;
-                DebugLog("[d3d11hook] ImGui initialized.\n");
+                DebugLog("[d3d11hook] ImGui initialized for ESP drawing.\n");
             }
         }
 
-        if (GetAsyncKeyState(globals::openMenuKey) & 1)
+        // Backend initialization must run even while ESP is disabled because
+        // DllMain waits for gInitialized before it starts the control pipe.
+        // Skip only the recurring ImGui/ESP frame work.
+        if (!ESPState::Instance().IsBoxEnabled())
         {
-            menu::isOpen = !menu::isOpen;
-            DebugLog("[d3d11hook] Toggle menu: %d\n", menu::isOpen);
-        }
-
-        if (GetAsyncKeyState(globals::uninjectKey) & 1)
-        {
-            Uninject();
             return;
         }
 
@@ -133,8 +146,9 @@ namespace hooks_dx11 {
                 esp::ESPRenderer::Render();
             }
             
-            if (menu::isOpen)
-                menu::Init();
+            // The in-game menu implementation is retained but not referenced.
+            // if (menu::isOpen)
+            //     menu::Init();
             ImGui::EndFrame();
             ImGui::Render();
             gContext->OMSetRenderTargets(1, &gRTV, nullptr);

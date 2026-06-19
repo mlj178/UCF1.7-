@@ -1,17 +1,18 @@
 // battle_round_always.js - 多人生化模式：强制决战回合
-// Hook StartGenerateSupplyBox，强制写入 isBattleRound=1
+// Hook ModeBase_Nano.OnStartNewGameRound，在补给箱流程启动前强制写入 isBattleRound=1
 
 modules.battle_round_always = (function() {
     // RVA 地址常量
     var RVA = {
         Mode_Nano4_Terminator_TypeInfo: 0xE2CCB4,
-        StartGenerateSupplyBox: 0xB45AA0,
+        ModeBase_Nano_OnStartNewGameRound: 0xAF15D0,
     };
 
     // 状态变量
     var _enabled = false;
     var _hookInstalled = false;
-    var _cachedBase = null;  // 缓存 GameAssembly.base，避免 onEnter 每次调用 getGameAssembly
+    var _hookListener = null;
+    var _cachedBase = null;  // 缓存 GameAssembly.base，供 Hook 回调核对模块地址
 
     // 日志去重标志（模块级闭包变量，跨 Hook 调用持久化）
     var _loggedInvalidType = false;
@@ -85,18 +86,18 @@ modules.battle_round_always = (function() {
             return false;
         }
         var base = mod.base;
-        _cachedBase = base;  // 缓存 base 供 onEnter 复用
-        var targetAddr = base.add(RVA.StartGenerateSupplyBox);
+        _cachedBase = base;  // 缓存 base 供 Hook 回调核对
+        var targetAddr = base.add(RVA.ModeBase_Nano_OnStartNewGameRound);
 
         sendLogFile('info', 'BattleRound', '[INSTALL] GameAssembly base=' + base + ', cachedBase=' + _cachedBase);
 
         try {
-            Interceptor.attach(targetAddr, {
+            _hookListener = Interceptor.attach(targetAddr, {
                 onEnter: function(args) {
                     _hookCallCount++;
                     var callId = _hookCallCount;
 
-                    sendLogFile('info', 'BattleRound', '[HOOK#' + callId + '] onEnter 触发, _enabled=' + _enabled);
+                    sendLogFile('info', 'BattleRound', '[HOOK#' + callId + '] ModeBase_Nano.OnStartNewGameRound onEnter 触发, _enabled=' + _enabled);
 
                     if (!_enabled) {
                         sendLogFile('info', 'BattleRound', '[HOOK#' + callId + '] 功能未启用，跳过');
@@ -104,10 +105,7 @@ modules.battle_round_always = (function() {
                     }
 
                     try {
-                        // 方案1：用缓存的 base（可能导致闪退）
-                        // var currentBase = _cachedBase;
-
-                        // 方案2：每次动态获取（AAAAA版本的做法）
+                        // 每次动态获取模块和类型信息，不缓存 TypeInfo/static_fields 指针
                         var currentMod = getGameAssembly();
                         if (!currentMod) {
                             sendLogFile('warn', 'BattleRound', '[HOOK#' + callId + '] getGameAssembly 返回 null');
@@ -129,6 +127,15 @@ modules.battle_round_always = (function() {
                             }
                             return;
                         }
+
+                        // ModeBase_Nano 被多个生化模式共用，只允许精确的多人生化 Terminator 实例通过
+                        var modeInstance = args[0];
+                        var instanceClass = safeReadPointer(modeInstance);
+                        if (!instanceClass || !instanceClass.equals(typeInfo)) {
+                            sendLogFile('info', 'BattleRound', '[HOOK#' + callId + '] 非 Mode_Nano4_Terminator 实例，跳过');
+                            return;
+                        }
+                        sendLogFile('info', 'BattleRound', '[HOOK#' + callId + '] Mode_Nano4_Terminator 类指针校验通过');
 
                         var staticFields = safeReadPointer(typeInfo.add(0x5C));
                         sendLogFile('info', 'BattleRound', '[HOOK#' + callId + '] staticFields=' + staticFields);
@@ -180,6 +187,16 @@ modules.battle_round_always = (function() {
     // 清理函数：在 Frida 会话断开时调用
     function cleanup() {
         sendLogFile('info', 'BattleRound', '[CLEANUP] 开始清理');
+
+        if (_hookListener) {
+            try {
+                _hookListener.detach();
+                sendLogFile('info', 'BattleRound', '[CLEANUP] Hook 已解除');
+            } catch(e) {
+                sendLogFile('warn', 'BattleRound', '[CLEANUP] Hook 解除失败: ' + e.message);
+            }
+            _hookListener = null;
+        }
 
         // 重置状态
         _enabled = false;
