@@ -123,6 +123,8 @@ class UniversalHookManager:
         self._revision_file = os.path.join(APP_DIR, "data", "universal_revision.json")
         self._revision = self._load_revision()  # Load revision from file
         self.last_injection_attempted = False
+        self._last_ping_time = 0.0
+        self._ping_interval = 15.0  # minimum seconds between pings
 
     def _load_revision(self):
         """Load revision from file to support program restart takeover"""
@@ -334,11 +336,17 @@ class UniversalHookManager:
                 return None
 
     def ping(self):
-        """Ping the DLL"""
+        """Ping the DLL (throttled to avoid excessive I/O)"""
         if not self._pipe:
             return False
+        now = time.time()
+        if now - self._last_ping_time < self._ping_interval:
+            return True  # assume alive if recently pinged
         try:
-            return bool(self._send({"cmd": "ping"}).get("ok"))
+            result = bool(self._send({"cmd": "ping"}).get("ok"))
+            if result:
+                self._last_ping_time = now
+            return result
         except Exception:
             return False
 
