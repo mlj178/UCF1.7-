@@ -1,0 +1,625 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>01 · 无限子弹 · 背景信息</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; color: #202830; background: #f4f6f7; font: 15px/1.75 "Microsoft YaHei", sans-serif; letter-spacing: 0; }
+    header { position: sticky; top: 0; z-index: 10; display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 14px 24px; color: #fff; background: #202832; }
+    header h1 { margin: 0; font-size: 20px; }
+    nav { display: flex; gap: 8px; }
+    nav a { padding: 7px 11px; color: #e9eef2; text-decoration: none; border: 1px solid #53606b; border-radius: 5px; }
+    nav a.active { color: #fff; background: #387666; border-color: #4a917e; }
+    main { max-width: 1180px; margin: 0 auto; padding: 26px 24px 60px; }
+    .question { scroll-margin-top: 76px; margin-bottom: 18px; padding: 20px 22px; background: #fff; border: 1px solid #d9dee2; border-left: 4px solid transparent; border-radius: 7px; transition: border-color .16s, background .16s; cursor: pointer; }
+    .question:hover { border-left-color: #8bbdae; }
+    .question.selected { border-left-color: #3f8472; background: #fcfefd; box-shadow: 0 0 0 2px rgba(63,132,114,.08); }
+    h2 { margin: 0 0 12px; font-size: 20px; }
+    h3 { margin: 18px 0 8px; font-size: 16px; }
+    p { margin: 8px 0; }
+    code { color: #8a3f10; background: #f8eee7; padding: 1px 4px; border-radius: 3px; }
+    .answer { padding-left: 14px; border-left: 4px solid #3f8472; }
+    .key { font-weight: 700; color: #18604f; }
+    .warning { padding: 10px 12px; color: #7f351f; background: #fff0e9; border: 1px solid #eccbbb; border-radius: 5px; }
+    .diagram { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin: 16px 0; }
+    .tree { padding: 16px; background: #f8fafb; border: 1px solid #d8dfe4; border-radius: 6px; }
+    .tree h3 { margin-top: 0; }
+    .node { margin: 7px 0; padding: 8px 10px; background: #fff; border: 1px solid #cbd4da; border-radius: 5px; }
+    .node.runtime { border-left: 4px solid #377a69; }
+    .node.config { border-left: 4px solid #37729a; }
+    .node.data { border-left: 4px solid #b57231; }
+    .indent-1 { margin-left: 24px; }
+    .indent-2 { margin-left: 48px; }
+    .arrow { margin-left: 16px; color: #6d7881; }
+    table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+    th, td { padding: 9px 10px; text-align: left; vertical-align: top; border-bottom: 1px solid #dce1e5; }
+    th { color: #58646e; background: #f5f7f8; }
+    ul, ol { margin: 8px 0; padding-left: 22px; }
+    .flow { padding: 13px 15px; color: #e5edf2; background: #172029; border-radius: 6px; font: 13px/1.8 Consolas, monospace; white-space: pre-wrap; }
+    .hook-flow { display: grid; justify-items: center; gap: 7px; margin: 15px 0; }
+    .flow-step { width: min(760px, 100%); padding: 12px 15px; background: #f8fafb; border: 1px solid #ccd5db; border-left: 5px solid #3f8472; border-radius: 6px; }
+    .flow-step strong { display: block; margin-bottom: 3px; }
+    .flow-arrow { color: #3f8472; font-size: 21px; font-weight: 700; line-height: 1; }
+    .flow-split { width: min(900px, 100%); display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .flow-step.off { border-left-color: #a95c39; }
+    .mark-direct { color: #8ff0d1; }
+    .mark-inherit { color: #ffd38a; }
+    .mark-none { color: #aeb8c1; }
+    button, textarea, input { font: inherit; }
+    button { cursor: pointer; }
+    .qa-panel { margin-top: 24px; background: #fff; border: 1px solid #d9dee2; border-radius: 8px; overflow: hidden; }
+    .qa-head { padding: 18px 20px 14px; border-bottom: 1px solid #d7dee2; }
+    .qa-title-row, .card-head, .answer-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+    .qa-title-row h2 { margin: 0; }
+    .save-state { color: #27705d; font-size: 12px; white-space: nowrap; }
+    .save-state.dirty { color: #9a581f; }
+    .qa-sub { margin: 4px 0 0; color: #68747e; }
+    .file-actions { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 12px; }
+    .btn { min-height: 34px; padding: 6px 10px; color: #35434c; background: #f7f9fa; border: 1px solid #cbd3d8; border-radius: 5px; }
+    .btn.primary { color: #fff; background: #2f806b; border-color: #2f806b; }
+    .btn.danger { color: #8e3c3d; }
+    .qa-body { padding: 0 20px 24px; }
+    .composer { margin-top: 14px; padding: 13px; background: #f7f9fa; border: 1px solid #d7dee2; border-radius: 6px; }
+    .field-label { display: block; margin: 8px 0 4px; color: #59666e; font-size: 12px; font-weight: 700; }
+    textarea { width: 100%; color: #202830; background: #fff; border: 1px solid #c8d1d6; border-radius: 5px; padding: 9px 10px; outline: none; }
+    textarea:focus { border-color: #4b927f; box-shadow: 0 0 0 2px #dceee8; }
+    #newQuestion { min-height: 78px; overflow-y: hidden; resize: none; }
+    .context-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 9px; color: #68747e; font-size: 12px; }
+    .context-chip { display: inline-block; max-width: 76%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 3px 7px; color: #315f52; background: #e7f2ee; border: 1px solid #c7dfd7; border-radius: 4px; }
+    .question-list { display: grid; gap: 11px; margin-top: 14px; }
+    .question-card { padding: 13px; border: 1px solid #d7dee2; border-left: 4px solid #b86f2d; border-radius: 6px; background: #f7f9fa; }
+    .question-card.answered { border-left-color: #2f806b; }
+    .question-card.needs-review { border-left-color: #c28a2d; }
+    .status { padding: 2px 7px; color: #8a4e1c; background: #fff0e2; border-radius: 4px; font-size: 12px; }
+    .answered .status { color: #23604f; background: #e3f2ed; }
+    .needs-review .status { color: #7a4a13; background: #fff0d5; }
+    .card-tools { display: flex; gap: 5px; }
+    .icon-btn, .copy-answer { min-height: 29px; padding: 3px 8px; color: #59666e; background: #fff; border: 1px solid #d2d9dd; border-radius: 4px; }
+    .copy-answer { color: #315f52; background: #e7f2ee; border-color: #b9d7cd; font-size: 12px; }
+    .question-text { min-height: 58px; overflow-y: hidden; resize: none; font-weight: 700; }
+    .answer-text { min-height: 76px; overflow-y: hidden; resize: none; }
+    .background-context { margin-top: 10px; padding: 8px 10px; color: #315f52; background: #e7f2ee; border: 1px solid #c7dfd7; border-left: 4px solid #2f806b; border-radius: 5px; font-size: 12px; overflow-wrap: anywhere; }
+    .empty { padding: 28px 12px; color: #78858d; text-align: center; border: 1px dashed #cbd4d9; border-radius: 6px; }
+    .page-jump { position: fixed; right: 20px; bottom: 20px; z-index: 40; display: grid; gap: 7px; }
+    .page-jump button { min-width: 72px; padding: 8px 10px; color: #fff; background: #27333d; border: 1px solid #52606b; border-radius: 6px; box-shadow: 0 3px 10px rgba(20,30,38,.2); }
+    .page-jump button:hover { background: #2f806b; }
+    .toast { position: fixed; right: 20px; bottom: 112px; z-index: 50; padding: 9px 12px; color: #fff; background: #202832; border-radius: 5px; opacity: 0; transform: translateY(8px); transition: .18s; pointer-events: none; }
+    .toast.show { opacity: 1; transform: translateY(0); }
+    .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+    @media (max-width: 780px) { .diagram, .flow-split { grid-template-columns: 1fr; } header, .qa-title-row, .context-row { align-items: flex-start; flex-direction: column; } .context-chip { max-width: 100%; } .page-jump { right: 10px; bottom: 10px; } }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>01 · 无限子弹 · 背景信息</h1>
+    <nav>
+      <a href="../index.html">功能目录</a>
+      <a href="代码解读.html">代码解读</a>
+      <a href="功能问答.html">功能问答</a>
+      <a class="active" href="背景信息.html">背景信息</a>
+    </nav>
+  </header>
+  <main>
+    <section class="question background-section selected" data-background-section data-section-id="game-problem" data-section-title="功能解决的游戏问题">
+      <h2>1. 这个功能解决了什么游戏问题？</h2>
+      <div class="answer">
+        <p>它解决的是<strong>开火后弹药被游戏正常扣除</strong>的问题。</p>
+        <p>普通枪械通过替换 <code>WPN_Gun.ConsumeAmmo</code> 和 <code>Weapon.ConsumeAmmo</code>，让游戏收到“扣弹成功”的返回值，但不执行原来的扣弹代码。RPG/AT4 不走普通枪械的扣弹路径，所以在 <code>WPN_RPG.Fire</code> 进入前调用 <code>WPN_RPG.FillAmmo</code>。</p>
+      </div>
+    </section>
+
+    <section class="question background-section" data-background-section data-section-id="object-data" data-section-title="武器类与数据关系">
+      <h2>2. 这些武器类和数据是什么关系？</h2>
+      <p>最重要的区分：<span class="key">`WPN_*` 通常是房间中正在运行的武器对象；`WeaponData` / `WD_*` 是武器配置；另外几个是被对象持有的数据结构。</span></p>
+      <h3>完整运行时继承链（来自 dump.cs）</h3>
+      <div class="flow">CFAnimator
+└─ Weapon                          武器运行时基类  <span class="mark-direct">[直接 Hook：Weapon.ConsumeAmmo]</span>
+   ├─ WPN_Gun                      普通枪械；FAL CAMO  <span class="mark-direct">[直接 Hook：WPN_Gun.ConsumeAmmo]</span>
+   │  └─ WPN_GrenadeGun            枪械/榴弹双模式；FN FAL 榴弹版  <span class="mark-inherit">[复用父类扣弹时受影响]</span>
+   ├─ WPN_Knife                    近战基础  <span class="mark-none">[未直接处理]</span>
+   │  ├─ WPN_AsceticHero           苦行僧
+   │  ├─ WPN_EvilTerminator        邪恶终结者
+   │  ├─ WPN_MasterHero            Master Hero
+   │  ├─ WPN_MasterHunter          Master Hunter
+   │  ├─ WPN_MechanicHero          机械师英雄
+   │  ├─ WPN_OutlawTerminator      Outlaw 终结者
+   │  ├─ WPN_VoidTerminator        虚空终结者
+   │  ├─ WPN_ArmoredTerminator     装甲终结者
+   │  ├─ WPN_GhostBlade            幽灵之刃
+   │  └─ WPN_BoxingKing            拳王
+   ├─ WPN_RPG                      RPG / AT4；Nano AT4  <span class="mark-direct">[直接 Hook：Fire；调用 FillAmmo]</span>
+   ├─ WPN_Throw                    投掷武器  <span class="mark-none">[未直接处理]</span>
+   ├─ WPN_Arcane                   奥术投射武器  <span class="mark-none">[未直接处理]</span>
+   ├─ WPN_SentryGun                哨戒机枪部署工具  <span class="mark-none">[未直接处理]</span>
+   ├─ WPN_Disposable               一次性武器  <span class="mark-none">[未直接处理]</span>
+   └─ WPN_Rope                     绳索工具  <span class="mark-none">[未直接处理]</span></div>
+      <p>这棵树列出了 <code>dump.cs</code> 中 <code>Weapon</code> 的全部 public 直接和间接子类。中文说明依据类名、字段和现有项目资料；部分英雄名称在不同游戏版本中的界面译名可能不同，但继承关系不变。</p>
+      <p><code>dump.cs</code> 中 <code>WPN_Gun</code> 的子类只有 <code>WPN_GrenadeGun</code>，没有发现继续继承 <code>WPN_GrenadeGun</code> 的类。</p>
+
+      <h3>运行对象如何连接配置和临时数据</h3>
+      <div class="diagram">
+        <div class="tree">
+          <div class="node runtime"><strong>WPN_Gun</strong><br><code>realData → WeaponData_Gun</code><br><code>ammoData → WPN_Gun.AmmoData</code></div>
+          <div class="node runtime"><strong>WPN_GrenadeGun</strong><br><code>realData → WD_GrenadeGun</code><br>同时保存枪械弹药与榴弹弹药</div>
+          <div class="node runtime"><strong>WPN_RPG</strong><br><code>realData → WD_RPG → MissileData</code><br><code>ammo → WPN_Gun.AmmoData</code></div>
+          <div class="node runtime"><strong>WPN_Throw / WPN_Arcane</strong><br><code>realData → WD_Missile → MissileData</code></div>
+        </div>
+        <div class="tree">
+          <div class="node config"><strong>WeaponData : ScriptableObject</strong><br>名称、槽位、移动惩罚等共享配置基类</div>
+          <div class="node config"><strong>WeaponData_Gun</strong><br>弹匣、射速、伤害、射程、后坐力等枪械配置</div>
+          <div class="node data"><strong>WPN_Gun.AmmoData</strong><br>某一把运行时武器当前的 clip、ammo、maxClip、maxAmmo</div>
+          <div class="node data"><strong>MissileData</strong><br>投射物 prefab、伤害、射程、速度、重力、爆炸时间</div>
+          <div class="node data"><strong>Weapon.KnifeHitData</strong><br>一次近战检测的骨骼、距离和角度临时结果</div>
+        </div>
+      </div>
+
+      <h3>FAL CAMO、FN FAL 榴弹版和 Nano AT4 的区别</h3>
+      <ul>
+        <li><strong>FAL CAMO：</strong><code>WPN_Gun → Weapon</code>，数据类是 <code>WeaponData_Gun</code>。它属于普通枪械路径。</li>
+        <li><strong>FN FAL 榴弹版：</strong><code>WPN_GrenadeGun → WPN_Gun → Weapon</code>，数据类是 <code>WD_GrenadeGun</code>。普通射击仍属于枪械分支，但榴弹模式有独立状态和弹药数据；它不是 <code>WPN_RPG</code>。</li>
+        <li><strong>Nano AT4：</strong><code>WPN_RPG → Weapon</code>，数据类是 <code>WD_RPG</code>，不经过 <code>WPN_Gun</code>。</li>
+      </ul>
+      <p class="warning"><code>WPN_RPG.Fire</code> 主要覆盖实例化为 <code>WPN_RPG</code> 的 RPG/AT4 家族，包括项目资料中提到的补给箱 RPG、AT4 和 Nano AT4；它不包含 FAL CAMO，也不包含 FN FAL 榴弹版。某把外观像发射器的武器是否受影响，最终取决于运行时类是不是 <code>WPN_RPG</code>。</p>
+      <h3>问题：已经 Hook Weapon.ConsumeAmmo，WPN_Gun 的处理还有必要吗？</h3>
+      <div class="answer">
+        <p><strong>有必要，不能简单被基类 Hook 替代。</strong></p>
+        <p><code>Weapon.ConsumeAmmo</code> 是基类虚函数，<code>WPN_Gun.ConsumeAmmo</code> 是普通枪械自己的重写版本。WPN_Gun 实例通过虚函数分派时通常直接执行重写版本，不会先执行基类版本。</p>
+        <div class="flow">普通枪械 WPN_Gun
+→ 调用 WPN_Gun.ConsumeAmmo（override）
+→ 当前脚本必须 Hook 0xB61140
+
+其他没有重写 ConsumeAmmo 的 Weapon 子类
+→ 可能调用 Weapon.ConsumeAmmo（基类）
+→ 基类 Hook 0xB6C310 作为兜底</div>
+        <p>因此两者的职责是：<strong>WPN_Gun Hook 负责普通枪械，Weapon Hook 负责可能沿用基类实现的其他武器。</strong>如果只能保留一个，普通枪无限子弹应优先保留 <code>WPN_Gun.ConsumeAmmo</code>；基类 Hook 是否必需，可以通过逐类测试后再决定。</p>
+      </div>
+    </section>
+
+    <section class="question background-section" data-background-section data-section-id="weapon-coverage" data-section-title="武器处理范围与覆盖关系">
+      <h2>3. 普通枪械、基类兜底和 RPG 处理是否重复？覆盖全部武器吗？</h2>
+      <div class="answer">
+        <p><strong>有继承层面的重叠，但不是简单重复。</strong></p>
+        <ul>
+          <li><code>WPN_Gun.ConsumeAmmo</code> 是普通枪械的主要扣弹入口。</li>
+          <li><code>Weapon.ConsumeAmmo</code> 是基类函数，用于覆盖仍走基类实现的其他武器；一次开火不代表两个函数一定都会执行。</li>
+          <li><code>WPN_RPG : Weapon</code>，不属于 <code>WPN_Gun</code>，并且在自己的 <code>Fire</code> 内处理弹药，所以需要单独处理。</li>
+        </ul>
+        <p><strong>不能仅凭当前脚本认定覆盖了全部武器。</strong> `dump.cs` 里还有 <code>WPN_Throw</code>、<code>WPN_Arcane</code>、<code>WPN_SentryGun</code>、<code>WPN_Disposable</code>、<code>WPN_Rope</code> 等直接继承 <code>Weapon</code> 的类型。它们只有在实际调用被替换的基类 <code>ConsumeAmmo</code> 时才会生效；如果像 RPG 一样自己扣弹，就需要继续分析各自的开火函数。</p>
+      </div>
+    </section>
+
+    <section class="question background-section" data-background-section data-section-id="player-bot" data-section-title="MyPlayer 与 Bot 区分">
+      <h2>4. 当前方案是否区分 MyPlayer 和 Bot？</h2>
+      <div class="answer">
+        <p><span class="key">没有显式区分。</span>当前 plan4 没有调用 <code>Weapon.get_isMyWeapon</code>，也没有读取 owner 后判断 <code>Player.get_isMyPlayer</code>。</p>
+        <p>它替换的是全局 Native 函数地址。因此，只要玩家武器或 Bot 武器执行同一个 <code>WPN_Gun.ConsumeAmmo</code>、<code>Weapon.ConsumeAmmo</code> 或 <code>WPN_RPG.Fire</code>，都会进入 Hook。</p>
+        <p class="warning">这表示“代码没有过滤 Bot”，但不能只靠静态脚本断言每一种 Bot 武器一定受到影响；还要确认 Bot 的实际射击逻辑是否调用这些函数。</p>
+        <h3>如果需要只修改 MyPlayer，怎么实现？</h3>
+        <ol>
+          <li>把 <code>Weapon.get_isMyWeapon</code>（RVA <code>0xB6E1D0</code>）包装为 <code>NativeFunction</code>。</li>
+          <li>每次进入扣弹或开火回调时，把当前武器的 <code>thisPtr</code> 传给它。</li>
+          <li>返回 true 才执行“不扣弹/补弹”；返回 false 时必须执行游戏原逻辑，不能直接返回 true。</li>
+        </ol>
+        <div class="flow">普通枪 / Weapon 基类：
+if (isMyWeapon(thisPtr, ptr(0)))
+    return true;                 // 本地玩家不扣弹
+else
+    return original(...);        // Bot 和其他玩家走原扣弹逻辑
+
+RPG / AT4：
+onEnter(args) {
+    if (isMyWeapon(args[0], ptr(0)))
+        FillAmmo(args[0], ptr(0));
+}</div>
+        <p>当前脚本使用 <code>Interceptor.replace</code>，要让非玩家安全调用原函数，需要保存可靠的原函数入口，例如使用 Frida 支持的原实现 trampoline；另一种更稳的现有思路是采用 <code>plan1_memory_lock.js</code>：只在 <code>isMyWeapon</code> 为 true 时缓存并回写玩家武器的 <code>AmmoData</code>。</p>
+      </div>
+    </section>
+
+    <section class="question background-section" data-background-section data-section-id="enable-lifecycle" data-section-title="功能开关与 Hook 生命周期">
+      <h2>5. <code>enabled</code> 如何控制功能开关？何时安装 Hook？</h2>
+      <div class="answer">
+        <p><span class="key">是的：在这个模块里，<code>enable()</code> 就是安装 Hook，<code>disable()</code> 就是尝试恢复或卸载 Hook。</span></p>
+        <ul>
+          <li><code>enable()</code> 调用 <code>Interceptor.replace</code> 和 <code>Interceptor.attach</code>，把拦截逻辑安装到目标函数地址。</li>
+          <li><code>disable()</code> 调用 <code>Interceptor.revert</code> 和 listener 的 <code>detach()</code>，让函数恢复原逻辑或移除旁路监听。</li>
+          <li><code>enabled</code> 本身不会修改游戏；它只是记录模块认为自己当前是否已安装 Hook，并阻止重复启用。</li>
+        </ul>
+        <div class="hook-flow" aria-label="无限子弹功能开关流程">
+          <div class="flow-step"><strong>1. 发现游戏进程</strong><code>core/game_session_manager.py · _find_game_process()</code><br>查找 UnityCrossFire.exe，取得 PID。</div>
+          <div class="flow-arrow">↓</div>
+          <div class="flow-step"><strong>2. 连接 Frida</strong><code>core/game_session_manager.py · _step_connecting_frida()</code><br>调用 FridaManager.connect(pid)。</div>
+          <div class="flow-arrow">↓</div>
+          <div class="flow-step"><strong>3. 拼接并加载脚本</strong><code>core/frida_manager.py · _build_js_code()</code><br>拼接公共函数、全部功能 JS、dispatcher 和 RPC。</div>
+          <div class="flow-arrow">↓</div>
+          <div class="flow-step"><strong>4. 注册无限子弹模块</strong><code>scripts/01-unlimited_ammo.js</code><br>创建 modules.ammo；enabled=false；此时尚未 Hook。</div>
+          <div class="flow-arrow">↓</div>
+          <div class="flow-step"><strong>5. 用户点击无限子弹开关</strong><code>ui/app.py · _toggle_feature('ammo')</code><br>通过 FridaManager.send_toggle() 发送 true 或 false。</div>
+          <div class="flow-arrow">↓</div>
+          <div class="flow-step"><strong>6. dispatcher 分发消息</strong><code>core/frida_manager.py · _build_dispatcher()</code><br>onToggle() 根据开关值选择 enable() 或 disable()。</div>
+          <div class="flow-arrow">↓</div>
+          <div class="flow-split">
+            <div class="flow-step"><strong>打开：modules.ammo.enable()</strong>安装 replace / attach Hook<br>成功后 enabled=true。</div>
+            <div class="flow-step off"><strong>关闭：modules.ammo.disable()</strong>执行 revert / detach 恢复或移除 Hook<br>最后 enabled=false。</div>
+          </div>
+        </div>
+        <p><code>enabled</code> 主要是模块内部的<strong>重复启用保护</strong>：已经为 true 时再次调用 <code>enable()</code> 会直接返回，避免重复 Hook。</p>
+        <p>正常情况下，<strong>检测到进程只会加载和注册脚本，不会立即启用无限子弹</strong>。点击开关后才安装 Hook。不过，如果修改器保存了“上次希望保持开启”的状态，重新连接游戏后可能自动重发开启消息，此时表现为连接后自动 Hook。</p>
+        <h3>“加载/注册脚本”和“安装 Hook”有什么区别？</h3>
+        <p><strong>加载/注册</strong>只是让 Frida JS 知道存在 <code>modules.ammo</code>，并准备好 <code>enable/disable</code> 方法；此时原游戏函数尚未被替换。<strong>安装 Hook</strong>发生在 <code>enable()</code> 中，会真正改变 <code>GameAssembly.dll</code> 函数的执行路径。</p>
+        <h3>Hook 是不是替换 DLL 中的函数？</h3>
+        <p><strong>要分 Hook 类型。</strong>它们都针对游戏进程内已经加载的 <code>GameAssembly.dll</code>，改变的是运行时内存和函数执行路径，不会直接修改硬盘上的 DLL 文件。</p>
+        <ul>
+          <li><code>Interceptor.replace</code>：把目标函数入口交给新的 <code>NativeCallback</code>。本功能用它替换 <code>ConsumeAmmo</code>，因此原扣弹函数不再执行。</li>
+          <li><code>Interceptor.attach</code>：不替换原函数，只在进入 <code>onEnter</code> 或返回 <code>onLeave</code> 时插入额外逻辑。本功能用它在 <code>WPN_RPG.Fire</code> 开始前补弹，之后原 <code>Fire</code> 仍继续执行。</li>
+          <li><code>Interceptor.revert</code>：撤销 <code>replace</code>，恢复原函数入口。</li>
+          <li><code>listener.detach()</code>：移除 <code>attach</code> 注册的监听，不再执行额外回调。</li>
+        </ul>
+        <h3>你的 replace / attach 理解是否正确？</h3>
+        <p><strong>你的理解：</strong><code>replace</code> 可以接管参数、返回值和内部逻辑；<code>attach</code> 用于监听，可以在 <code>onEnter</code> 修改参数、在 <code>onLeave</code> 修改返回值，但默认不会替换原函数内部逻辑。</p>
+        <p><strong>结论：基本正确。</strong><code>attach</code> 虽然保留原函数，但修改参数、内存或返回值后，仍能改变最终游戏行为。</p>
+        <div class="diagram">
+          <div class="tree">
+            <h3><code>onEnter</code>：进入原函数之前</h3>
+            <p>调用者刚准备进入目标函数时触发。这里可以读取或修改 <code>args</code>，所以原函数会看到修改后的参数；也可以提前修改对象内存、调用其他函数。</p>
+            <p>当前无限子弹脚本就在 <code>WPN_RPG.Fire</code> 的 <code>onEnter</code> 中调用 <code>FillAmmo</code>，然后才让原 <code>Fire</code> 继续。</p>
+          </div>
+          <div class="tree">
+            <h3><code>onLeave</code>：原函数执行结束之后</h3>
+            <p>原函数已经算出结果，但结果还没有返回给调用者时触发。这里可以读取返回值，并通过 <code>retval.replace(...)</code> 改成另一个返回值。</p>
+            <p>当前 RPG Hook 没有使用 <code>onLeave</code>；它只使用了 <code>onEnter</code>。</p>
+          </div>
+        </div>
+        <p><code>replace</code> 会用新回调整体接管函数：可以使用传入参数、自己执行新逻辑并决定返回值，原函数内部逻辑默认不再运行。<code>attach</code> 默认保留原函数内部逻辑，但可以通过改参数、改对象内存、调用额外函数或改返回值，显著改变最终行为；它只是不会像 <code>replace</code> 那样直接用一套新函数体取代原函数。</p>
+        <h3>RPG listener 没有正确保存，会有什么游戏表现？</h3>
+        <p class="warning">点击关闭后，普通枪的 <code>replace</code> 会恢复，所以普通枪重新扣弹；但 RPG/AT4 的 <code>attach</code> 可能仍然存在，开火前继续执行 <code>FillAmmo</code>，表现为界面显示“无限子弹已关闭”，RPG/AT4 却仍然近似无限弹。再次开启还可能叠加新的 listener，使一次开火触发多次补弹回调，增加额外开销和不稳定风险。</p>
+      </div>
+    </section>
+
+    <section class="question background-section" data-background-section data-section-id="status-flow" data-section-title="功能状态消息流程">
+      <h2>6. <code>sendStatus('ammo', true)</code> 发给谁？为什么要发？</h2>
+      <div class="answer">
+        <p>它通过 Frida 的 <code>send()</code> 从游戏进程内的 JavaScript 发给外部 Python 修改器：</p>
+        <div class="flow">scripts/01-unlimited_ammo.js
+→ 调用 scripts/_common.js 的 sendStatus('ammo', true)
+→ Frida send({ type: 'status', feature: 'ammo', enabled: true })
+→ core/frida_manager.py 的 FridaManager._on_message() 接收
+→ EventBus.emit('feature_status_changed', feature='ammo', enabled=true)
+→ ui/app.py 的 _on_feature_status() 接收事件
+→ 更新 self._features['ammo'] 和 ammo_switch</div>
+        <table>
+          <thead><tr><th>文件</th><th>职责</th></tr></thead>
+          <tbody>
+            <tr><td><code>scripts/_common.js</code></td><td>定义 <code>sendStatus()</code>，把状态包装为 Frida 消息。</td></tr>
+            <tr><td><code>core/frida_manager.py</code></td><td><code>_on_message()</code> 是 Python 端直接接收者；识别 <code>type='status'</code> 后发出事件总线消息。</td></tr>
+            <tr><td><code>ui/app.py</code></td><td>订阅 <code>feature_status_changed</code>，由 <code>_on_feature_status()</code> 更新内部状态和界面开关。</td></tr>
+          </tbody>
+        </table>
+        <p>发送它是为了让界面显示<strong>脚本实际执行后的状态</strong>，而不只是用户刚才点了什么。这样重新连接、启用失败、脚本主动关闭时，UI 与游戏内 Hook 状态更容易保持一致。</p>
+      </div>
+    </section>
+
+    <section class="qa-panel" id="backgroundQuestions" aria-label="背景信息问题和回答">
+      <div class="qa-head">
+        <div class="qa-title-row"><h2>我的问题与回答</h2><span class="save-state" id="saveState">浏览器与文件已同步</span></div>
+        <p class="qa-sub">问题和回答都可编辑并自动保存；内容会按文字多少自动展开。这里的数据与功能问答页完全独立。</p>
+        <div class="file-actions">
+          <button class="btn" id="openButton" type="button">打开数据</button>
+          <button class="btn" id="saveButton" type="button">保存到文件</button>
+          <button class="btn" id="saveAsButton" type="button">另存数据</button>
+          <button class="btn danger" id="newButton" type="button">新建空白</button>
+          <input class="sr-only" id="fileInput" type="file" accept="application/json,.json">
+        </div>
+      </div>
+      <div class="qa-body">
+        <div class="composer">
+          <label class="field-label" for="newQuestion">新增问题</label>
+          <textarea id="newQuestion" placeholder="例如：WPN_Gun 和 WeaponData_Gun 有什么区别？"></textarea>
+          <div class="context-row"><span class="context-chip" id="selectedContext"></span><button class="btn primary" id="addButton" type="button">添加问题</button></div>
+        </div>
+        <div class="question-list" id="questionList"></div>
+      </div>
+    </section>
+  </main>
+
+  <div class="page-jump" aria-label="页面快速跳转">
+    <button id="toTopButton" type="button" title="返回页面顶部">↑ 置顶</button>
+    <button id="toBottomButton" type="button" title="前往页面底部">↓ 置底</button>
+  </div>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <script>
+    (function () {
+      'use strict';
+
+      var feature = { number: '01', name: '无限子弹', sourceFile: '背景信息.html', documentType: 'background-info' };
+      var storageKey = 'background-info-qa::01::无限子弹';
+      var defaultFileName = '01-无限子弹-背景信息问答.json';
+      var state = loadLocal() || emptyState();
+      var fileHandle = null;
+      var dirtyForFile = false;
+      var selectedSection = null;
+      var toastTimer = null;
+      var sectionElements = Array.prototype.slice.call(document.querySelectorAll('[data-background-section]'));
+      var questionList = document.getElementById('questionList');
+      var newQuestion = document.getElementById('newQuestion');
+      var selectedContext = document.getElementById('selectedContext');
+      var saveState = document.getElementById('saveState');
+      var fileInput = document.getElementById('fileInput');
+
+      function emptyState() {
+        return { schemaVersion: 1, feature: feature, updatedAt: new Date().toISOString(), questions: [] };
+      }
+
+      function makeId() {
+        return 'bgq-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
+      }
+
+      function escapeHtml(value) {
+        return String(value).replace(/[&<>"']/g, function (char) {
+          return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char];
+        });
+      }
+
+      function showToast(message) {
+        var toast = document.getElementById('toast');
+        toast.textContent = message;
+        toast.classList.add('show');
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(function () { toast.classList.remove('show'); }, 2200);
+      }
+
+      function autoResizeTextarea(textarea) {
+        textarea.style.height = 'auto';
+        textarea.style.height = textarea.scrollHeight + 'px';
+      }
+
+      function normalizeData(data) {
+        if (!data || data.schemaVersion !== 1 || !Array.isArray(data.questions)) throw new Error('不是受支持的背景信息问答数据文件');
+        data.feature = data.feature || feature;
+        data.questions = data.questions.map(function (item) {
+          var answer = String(item.answer || '');
+          var questionRevision = Number(item.questionRevision) > 0 ? Number(item.questionRevision) : 1;
+          var answeredRevision = Number(item.answeredRevision) >= 0 ? Number(item.answeredRevision) : (answer.trim() ? questionRevision : 0);
+          return {
+            id: item.id || makeId(), question: String(item.question || ''), answer: answer,
+            status: !answer.trim() ? 'pending' : (answeredRevision === questionRevision ? 'answered' : 'needs-review'),
+            questionRevision: questionRevision, answeredRevision: answeredRevision,
+            answeredAt: item.answeredAt || null, createdAt: item.createdAt || new Date().toISOString(),
+            updatedAt: item.updatedAt || new Date().toISOString(), sourceContext: item.sourceContext || null
+          };
+        });
+        data.questions.sort(function (left, right) { return String(left.createdAt).localeCompare(String(right.createdAt)); });
+        return data;
+      }
+
+      function loadLocal() {
+        try {
+          var raw = localStorage.getItem(storageKey);
+          return raw ? normalizeData(JSON.parse(raw)) : null;
+        } catch (error) {
+          return null;
+        }
+      }
+
+      function persist(markDirty) {
+        state.updatedAt = new Date().toISOString();
+        localStorage.setItem(storageKey, JSON.stringify(state));
+        if (markDirty !== false) dirtyForFile = true;
+        updateSaveState();
+      }
+
+      function updateSaveState() {
+        saveState.textContent = dirtyForFile ? '已存浏览器，文件待保存' : '浏览器与文件已同步';
+        saveState.classList.toggle('dirty', dirtyForFile);
+      }
+
+      function sectionContext(section) {
+        return { sectionId: section.dataset.sectionId, title: section.dataset.sectionTitle, sourceFile: feature.sourceFile, contextType: 'background-section' };
+      }
+
+      function selectBackgroundSection(section) {
+        selectedSection = section;
+        sectionElements.forEach(function (item) { item.classList.toggle('selected', item === section); });
+        var context = sectionContext(section);
+        selectedContext.textContent = '当前背景章节：' + context.title;
+        selectedContext.title = context.sourceFile + ' · ' + context.title;
+      }
+
+      function currentContext() {
+        if (!selectedSection && sectionElements.length) selectBackgroundSection(sectionElements[0]);
+        return selectedSection ? sectionContext(selectedSection) : null;
+      }
+
+      function addQuestion() {
+        var text = newQuestion.value.trim();
+        if (!text) { newQuestion.focus(); showToast('请先输入问题'); return; }
+        var now = new Date().toISOString();
+        state.questions.push({
+          id: makeId(), question: text, answer: '', status: 'pending',
+          questionRevision: 1, answeredRevision: 0, answeredAt: null,
+          createdAt: now, updatedAt: now, sourceContext: currentContext()
+        });
+        newQuestion.value = '';
+        autoResizeTextarea(newQuestion);
+        persist();
+        renderQuestions();
+        showToast('问题已添加并自动保存');
+      }
+
+      function statusLabel(status) {
+        if (status === 'answered') return '已回答';
+        if (status === 'needs-review') return '需重新回答';
+        return '待回答';
+      }
+
+      function refreshCardStatus(id) {
+        var item = state.questions.find(function (question) { return question.id === id; });
+        var card = document.querySelector('[data-question-id="' + id + '"]');
+        if (!item || !card) return;
+        card.classList.toggle('answered', item.status === 'answered');
+        card.classList.toggle('needs-review', item.status === 'needs-review');
+        card.querySelector('.status').textContent = statusLabel(item.status);
+      }
+
+      function updateQuestion(id, value) {
+        var item = state.questions.find(function (question) { return question.id === id; });
+        if (!item || item.question === value) return;
+        item.question = value;
+        item.questionRevision = (Number(item.questionRevision) || 1) + 1;
+        item.status = item.answer.trim() ? 'needs-review' : 'pending';
+        item.updatedAt = new Date().toISOString();
+        persist();
+        refreshCardStatus(id);
+      }
+
+      function updateAnswer(id, value) {
+        var item = state.questions.find(function (question) { return question.id === id; });
+        if (!item || item.answer === value) return;
+        var now = new Date().toISOString();
+        item.answer = value;
+        item.status = value.trim() ? 'answered' : 'pending';
+        item.answeredRevision = value.trim() ? item.questionRevision : 0;
+        item.answeredAt = value.trim() ? now : null;
+        item.updatedAt = now;
+        persist();
+        refreshCardStatus(id);
+      }
+
+      function deleteQuestion(id) {
+        if (!confirm('删除这个问题及其回答？')) return;
+        state.questions = state.questions.filter(function (item) { return item.id !== id; });
+        persist();
+        renderQuestions();
+      }
+
+      function copyText(text, message) {
+        if (!text.trim()) { showToast('没有可复制的内容'); return; }
+        if (!navigator.clipboard) { showToast('当前浏览器未提供复制权限'); return; }
+        navigator.clipboard.writeText(text).then(function () { showToast(message); }, function () { showToast('浏览器未允许复制'); });
+      }
+
+      function renderQuestions() {
+        questionList.innerHTML = '';
+        if (!state.questions.length) {
+          questionList.innerHTML = '<div class="empty">还没有背景信息问题。先选择一个背景章节，再提出你真正想弄清楚的问题。</div>';
+          return;
+        }
+        state.questions.forEach(function (item, index) {
+          var card = document.createElement('article');
+          card.className = 'question-card' + (item.status === 'answered' ? ' answered' : '') + (item.status === 'needs-review' ? ' needs-review' : '');
+          card.dataset.questionId = item.id;
+          var contextText = item.sourceContext ? item.sourceContext.sourceFile + ' · ' + item.sourceContext.title : '未绑定背景章节';
+          card.innerHTML =
+            '<div class="card-head"><span class="status">' + statusLabel(item.status) + '</span>' +
+            '<div class="card-tools"><button class="icon-btn copy-question" type="button">复制问题</button><button class="icon-btn delete-question" type="button">删除</button></div></div>' +
+            '<label class="field-label">问题 ' + (index + 1) + '</label><textarea class="question-text"></textarea>' +
+            '<div class="answer-head"><label class="field-label">回答</label><button class="copy-answer" type="button">复制回答</button></div>' +
+            '<textarea class="answer-text" placeholder="在 ChatGPT 网页版获得回答后粘贴到这里。"></textarea>' +
+            '<div class="background-context"><strong>背景上下文：</strong>' + escapeHtml(contextText) + '</div>';
+          var questionInput = card.querySelector('.question-text');
+          var answerInput = card.querySelector('.answer-text');
+          questionInput.value = item.question;
+          answerInput.value = item.answer;
+          questionInput.addEventListener('input', function () { autoResizeTextarea(questionInput); updateQuestion(item.id, questionInput.value); });
+          answerInput.addEventListener('input', function () { autoResizeTextarea(answerInput); updateAnswer(item.id, answerInput.value); });
+          card.querySelector('.copy-question').addEventListener('click', function () { copyText(item.question, '问题已复制'); });
+          card.querySelector('.copy-answer').addEventListener('click', function () { copyText(item.answer, '回答已复制'); });
+          card.querySelector('.delete-question').addEventListener('click', function () { deleteQuestion(item.id); });
+          questionList.appendChild(card);
+          autoResizeTextarea(questionInput);
+          autoResizeTextarea(answerInput);
+        });
+      }
+
+      function validateIncoming(data) {
+        var normalized = normalizeData(data);
+        if (normalized.feature && normalized.feature.documentType && normalized.feature.documentType !== 'background-info') throw new Error('这个 JSON 不是背景信息问答数据');
+        if (normalized.feature && normalized.feature.number !== feature.number && !confirm('数据属于功能 ' + normalized.feature.number + '，仍要打开吗？')) return null;
+        return normalized;
+      }
+
+      function openDataFile() {
+        fileInput.value = '';
+        fileInput.click();
+      }
+
+      function loadFile(file) {
+        var reader = new FileReader();
+        reader.onload = function () {
+          try {
+            var incoming = validateIncoming(JSON.parse(reader.result));
+            if (!incoming) return;
+            if (state.questions.length && !confirm('打开数据会替换当前背景信息问答，是否继续？')) return;
+            state = incoming;
+            fileHandle = null;
+            dirtyForFile = false;
+            persist(false);
+            renderQuestions();
+            showToast('背景信息问答数据已打开');
+          } catch (error) {
+            showToast(error.message || '无法读取这个 JSON 文件');
+          }
+        };
+        reader.readAsText(file, 'utf-8');
+      }
+
+      function downloadJson() {
+        var blob = new Blob([JSON.stringify(state, null, 2) + '\n'], { type: 'application/json;charset=utf-8' });
+        var url = URL.createObjectURL(blob);
+        var link = document.createElement('a');
+        link.href = url;
+        link.download = defaultFileName;
+        link.click();
+        setTimeout(function () { URL.revokeObjectURL(url); }, 0);
+      }
+
+      async function saveDataFile(saveAs) {
+        try {
+          if (window.showSaveFilePicker) {
+            if (saveAs || !fileHandle) {
+              fileHandle = await window.showSaveFilePicker({ suggestedName: defaultFileName, types: [{ description: '背景信息问答 JSON', accept: { 'application/json': ['.json'] } }] });
+            }
+            var writable = await fileHandle.createWritable();
+            await writable.write(JSON.stringify(state, null, 2) + '\n');
+            await writable.close();
+          } else {
+            downloadJson();
+          }
+          dirtyForFile = false;
+          updateSaveState();
+          showToast('数据文件已保存');
+        } catch (error) {
+          if (error && error.name !== 'AbortError') showToast('保存失败：' + error.message);
+        }
+      }
+
+      function newBlank() {
+        if (state.questions.length && !confirm('新建空白会清除当前背景信息问答。建议先另存数据，是否继续？')) return;
+        state = emptyState();
+        fileHandle = null;
+        persist();
+        renderQuestions();
+        showToast('已新建空白背景信息问答');
+      }
+
+      sectionElements.forEach(function (section) { section.addEventListener('click', function () { selectBackgroundSection(section); }); });
+      document.getElementById('addButton').addEventListener('click', addQuestion);
+      document.getElementById('openButton').addEventListener('click', openDataFile);
+      document.getElementById('saveButton').addEventListener('click', function () { saveDataFile(false); });
+      document.getElementById('saveAsButton').addEventListener('click', function () { saveDataFile(true); });
+      document.getElementById('newButton').addEventListener('click', newBlank);
+      fileInput.addEventListener('change', function () { if (fileInput.files && fileInput.files[0]) loadFile(fileInput.files[0]); });
+      newQuestion.addEventListener('input', function () { autoResizeTextarea(newQuestion); });
+      newQuestion.addEventListener('keydown', function (event) { if (event.ctrlKey && event.key === 'Enter') { event.preventDefault(); addQuestion(); } });
+      document.getElementById('toTopButton').addEventListener('click', function () { window.scrollTo({ top: 0, behavior: 'smooth' }); });
+      document.getElementById('toBottomButton').addEventListener('click', function () { window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'smooth' }); });
+
+      if (sectionElements.length) selectBackgroundSection(sectionElements[0]);
+      autoResizeTextarea(newQuestion);
+      renderQuestions();
+      updateSaveState();
+    })();
+  </script>
+</body>
+</html>
