@@ -8,21 +8,16 @@ import psutil
 
 from core.config import SCRIPTS_DIR
 from core.event_bus import EventBus
+from core.log_manager import log_to_file, get_logger
 
 
 class LogManager:
-    """日志文件管理器"""
+    """日志文件管理器 - bridges to standard logging"""
     _instance = None
     _lock = threading.Lock()
 
     def __init__(self):
-        self._log_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'logs')
-        self._ensure_log_dir()
-
-    def _ensure_log_dir(self):
-        """确保日志目录存在"""
-        if not os.path.exists(self._log_dir):
-            os.makedirs(self._log_dir)
+        pass
 
     @classmethod
     def get_instance(cls):
@@ -33,31 +28,12 @@ class LogManager:
         return cls._instance
 
     def write_log(self, module, level, message):
-        """写入日志到文件"""
-        try:
-            timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]
-            log_line = f"[{timestamp}] [{level}] [{module}] {message}\n"
-            
-            # 按模块分文件
-            log_file = os.path.join(self._log_dir, f'{module}.log')
-            
-            with open(log_file, 'a', encoding='utf-8') as f:
-                f.write(log_line)
-        except Exception:
-            pass  # 静默失败，避免影响主流程
+        """写入日志到文件 (via standard logging)"""
+        log_to_file(level, module, message)
 
     def write_log_unified(self, level, module, message):
-        """写入日志到统一文件"""
-        try:
-            timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]
-            log_line = f"[{timestamp}] [{level}] [{module}] {message}\n"
-            
-            log_file = os.path.join(self._log_dir, 'game_modifier.log')
-            
-            with open(log_file, 'a', encoding='utf-8') as f:
-                f.write(log_line)
-        except Exception:
-            pass
+        """写入日志到统一文件 (via standard logging)"""
+        log_to_file(level, module, message)
 
 
 class FridaManager:

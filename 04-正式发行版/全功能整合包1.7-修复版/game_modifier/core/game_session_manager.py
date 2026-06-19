@@ -61,13 +61,18 @@ class GameSessionManager:
         self._applied_states = {}
         
         # Retry configuration
-        self._retry_delays = [1, 2, 4, 5]  # Exponential backoff
+        self._retry_delays = [1, 2, 4, 8, 16]  # Exponential backoff
         self._retry_index = 0
         self._last_universal_retry = 0.0
+        self._universal_retry_interval = 10.0  # seconds between DLL reconnect attempts
         self._injection_attempt_identity = None
         
         # Process stability check
         self._stability_wait = 0.5  # Wait 0.5 seconds after process detection
+        
+        # Step interval: keep 2s for all states (cheap checks: psutil + flag)
+        # Expensive operations (DLL ping, reconnect) are throttled individually
+        self._step_interval = 2.0
         
     def start(self):
         """Start the session manager worker thread"""
@@ -135,7 +140,7 @@ class GameSessionManager:
                 self._bus.emit('log_message', level='error', module='SessionManager',
                               message=f'State machine error: {e}')
             
-            time.sleep(2)
+            time.sleep(self._step_interval)
     
     def _state_machine_step(self):
         """Execute one step of the state machine"""
@@ -403,7 +408,7 @@ class GameSessionManager:
                     pid=pid,
                 )
 
-        if not self._universal_manager and time.time() - self._last_universal_retry >= 5:
+        if not self._universal_manager and time.time() - self._last_universal_retry >= self._universal_retry_interval:
             self._last_universal_retry = time.time()
             with self._lock:
                 self._state = SessionState.CONNECTING_EXISTING_DLL

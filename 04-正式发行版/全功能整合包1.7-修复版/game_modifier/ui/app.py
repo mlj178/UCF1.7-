@@ -12,6 +12,7 @@ from core.feature_registry import FeatureRegistry
 from core.sound_manager import SoundManager
 from core.hotkey_manager import HotkeyManager
 from core.game_session_manager import GameSessionManager
+from core.log_manager import setup_logging, log_to_file
 
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
@@ -93,6 +94,8 @@ TYPE_COLORS = {
 class App(ctk.CTk):
     def __init__(self):
         super().__init__()
+        # Initialize file logging first
+        setup_logging()
         self.title("游戏修改器控制台 - 全功能整合包 v1.7")
         self.geometry("610x700+10+10")
         self.resizable(True, True)
@@ -798,6 +801,8 @@ class App(ctk.CTk):
         level = kwargs.get('level', 'info')
         module = kwargs.get('module', '')
         message = kwargs.get('message', '')
+        # Persist to log file
+        log_to_file(level, module, message)
         icon_map = {'success': '✅', 'error': '❌', 'info': 'ℹ️', 'warn': '⚠️'}
         icon = icon_map.get(level, 'ℹ️')
         self._log(f"{icon} [{module}] {message}")
