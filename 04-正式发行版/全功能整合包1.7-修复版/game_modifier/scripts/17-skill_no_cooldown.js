@@ -1,172 +1,222 @@
-// skill_cd.js - 生化模式-英雄技能无冷却
-// 3路Hook(isMyPlayer replace + Player.Update attach + get_nickName attach) + 200ms定时器调用 EndCold()
+// skill_cd.js - 生化模式英雄技能无冷却
+// 精确捕获本地玩家，并在该玩家的 Update 游戏线程中节流调用 EndCold。
 
 modules.skillcd = (function() {
   var enabled = false;
   var myPlayerPtr = null;
-  var _endColdFn = null;
-  var _noCdTimer = null;
+  var endColdFn = null;
+  var lastEndColdTime = 0;
+  var processing = false;
   var hooks = [];
 
-  function readPtr(addr) {
-    try { if (!addr || addr.isNull()) return null; var v = addr.readPointer(); return (v && !v.isNull()) ? v : null; } catch (e) { return null; }
-  }
-  function readI32(addr) { try { return addr ? addr.readS32() : null; } catch (e) { return null; } }
-  function readF32(addr) { try { return addr ? addr.readFloat() : null; } catch (e) { return null; } }
-  function readU8(addr) { try { return addr ? addr.readU8() : null; } catch (e) { return null; } }
+  var RVA = {
+    EndCold: 0xAE1BC0,
+    PlayerGetIsMyPlayer: 0xB55FD0,
+    PlayerUpdate: 0xB551D0,
+    PlayerOnDestroy: 0xB511C0,
+    GameManagerOnDestroy: 0xAFB6F0
+  };
 
-  function scanSkillSteps(pp) {
-    var ps = readPtr(pp.add(0xB0));
-    if (!ps) { sendLog('error', '技能CD', 'PlayerSkills 为空'); return; }
-    var arr = readPtr(ps.add(0x08));
-    if (!arr) { sendLog('error', '技能CD', 'Skill[] 为空'); return; }
-    var len = readI32(arr.add(0x0C));
-    if (!len || len <= 0 || len > 20) return;
-    var found = 0;
-    for (var i = 0; i < len; i++) {
-      var sp = readPtr(arr.add(0x10 + 4 * i));
-      if (!sp) continue;
-      var coldFinish = readF32(sp.add(0x1C));
-      var coldTime = readF32(sp.add(0x24));
-      if (coldFinish !== null || coldTime !== null) {
-        found++;
-      }
+  function readPtr(addr) {
+    try {
+      if (!addr || addr.isNull()) return null;
+      var value = addr.readPointer();
+      return value && !value.isNull() ? value : null;
+    } catch (e) {
+      return null;
     }
+  }
+
+  function readI32(addr) {
+    try { return addr ? addr.readS32() : null; } catch (e) { return null; }
+  }
+
+  function readF32(addr) {
+    try { return addr ? addr.readFloat() : null; } catch (e) { return null; }
+  }
+
+  function clearPlayerState(reason) {
+    if (myPlayerPtr && reason) {
+      sendLog('info', '技能CD', reason);
+    }
+    myPlayerPtr = null;
+    lastEndColdTime = 0;
+    processing = false;
+  }
+
+  function scanSkillSteps(playerPtr) {
+    var playerSkills = readPtr(playerPtr.add(0xB0));
+    if (!playerSkills) return;
+
+    var skillArray = readPtr(playerSkills.add(0x08));
+    if (!skillArray) return;
+
+    var length = readI32(skillArray.add(0x0C));
+    if (!length || length <= 0 || length > 20) return;
+
+    var found = 0;
+    for (var i = 0; i < length; i++) {
+      var skill = readPtr(skillArray.add(0x10 + 4 * i));
+      if (!skill) continue;
+      var coldFinish = readF32(skill.add(0x1C));
+      var coldTime = readF32(skill.add(0x24));
+      if (coldFinish !== null && coldTime !== null) found++;
+    }
+
     if (found > 0) {
       sendLog('info', '技能CD', '找到 ' + found + ' 个技能');
     }
   }
 
-  function scanAndEndCold() {
-    if (!myPlayerPtr) return;
-    var ps = readPtr(myPlayerPtr.add(0xB0));
-    if (!ps) return;
-    var arr = readPtr(ps.add(0x08));
-    if (!arr) return;
-    var len = readI32(arr.add(0x0C));
-    if (!len || len <= 0 || len > 20) return;
+  function scanAndEndCold(playerPtr) {
+    if (!enabled || processing || !endColdFn || !playerPtr || playerPtr.isNull()) return;
+    if (!myPlayerPtr || !myPlayerPtr.equals(playerPtr)) return;
 
-    var called = 0;
-    for (var i = 0; i < len; i++) {
-      var sp = readPtr(arr.add(0x10 + 4 * i));
-      if (!sp) continue;
-      var coldFinish = readF32(sp.add(0x1C));
-      var coldTime = readF32(sp.add(0x24));
-      if (coldFinish !== null || coldTime !== null) {
-        try {
-          _endColdFn(sp);
-          called++;
-        } catch (e) {}
+    processing = true;
+    try {
+      var playerSkills = readPtr(playerPtr.add(0xB0));
+      if (!playerSkills) return;
+
+      var skillArray = readPtr(playerSkills.add(0x08));
+      if (!skillArray) return;
+
+      var length = readI32(skillArray.add(0x0C));
+      if (!length || length <= 0 || length > 20) return;
+
+      for (var i = 0; i < length; i++) {
+        var skill = readPtr(skillArray.add(0x10 + 4 * i));
+        if (!skill) continue;
+
+        // IL2CPP object must have a readable class pointer and class metadata pointer.
+        var klass = readPtr(skill);
+        if (!klass || !readPtr(klass)) continue;
+
+        var coldFinish = readF32(skill.add(0x1C));
+        var coldTime = readF32(skill.add(0x24));
+        if (coldFinish === null || coldTime === null) continue;
+        if (!isFinite(coldFinish) || !isFinite(coldTime)) continue;
+
+        endColdFn(skill);
       }
+    } catch (e) {
+      // Frida can catch read errors, but native access violations are prevented
+      // primarily by correct identity, thread context and lifecycle cleanup.
+    } finally {
+      processing = false;
     }
+  }
+
+  function detachHooks() {
+    for (var i = 0; i < hooks.length; i++) {
+      try { hooks[i].detach(); } catch (e) {}
+    }
+    hooks = [];
+  }
+
+  function rollbackEnable(message) {
+    enabled = false;
+    clearPlayerState(null);
+    detachHooks();
+    endColdFn = null;
+    sendLog('error', '技能CD', '启用失败，已回滚全部 Hook: ' + message);
+    sendStatus('skillcd', false);
   }
 
   return {
     enable: function() {
       if (enabled) return;
-      var mod = getGameAssembly();
-      if (!mod) { sendLog('error', '技能CD', '未找到 GameAssembly.dll'); return; }
-      var base = mod.base;
 
-      try {
-        _endColdFn = new NativeFunction(base.add(0xAE1BC0), 'void', ['pointer']);
-        sendLog('info', '技能CD', 'EndCold 函数就绪 (RVA 0xAE1BC0)');
-      } catch (e) {
-        sendLog('error', '技能CD', 'EndCold 创建失败: ' + e);
+      var mod = getGameAssembly();
+      if (!mod) {
+        sendLog('error', '技能CD', '未找到 GameAssembly.dll');
         return;
       }
 
-      // Hook isMyPlayer 来捕获玩家指针（支持房间切换时自动更新）
+      var base = mod.base;
       try {
-        var addrIsMy = base.add(0xB55FD0);
-        var origIsMy = new NativeFunction(addrIsMy, 'bool', ['pointer', 'pointer']);
-        Interceptor.replace(addrIsMy, new NativeCallback(function (playerPtr, methodInfo) {
-          try {
-            var result = origIsMy(playerPtr, methodInfo);
-            if (result) {
-              if (!myPlayerPtr || !myPlayerPtr.equals(playerPtr)) {
-                myPlayerPtr = playerPtr;
-                scanSkillSteps(playerPtr);
-                sendLog('info', '技能CD', '玩家指针已更新: ' + playerPtr);
-              }
-            }
-            return result;
-          } catch (e) { return false; }
-        }, 'bool', ['pointer', 'pointer']));
-        hooks.push({ type: 'replace', addr: addrIsMy, orig: origIsMy });
-        sendLog('success', '技能CD', 'isMyPlayer Hook OK');
-      } catch (e) { sendLog('error', '技能CD', 'isMyPlayer Hook 失败: ' + e); }
+        endColdFn = new NativeFunction(base.add(RVA.EndCold), 'void', ['pointer']);
+        sendLog('info', '技能CD', 'EndCold 函数就绪 (RVA 0xAE1BC0)');
 
-      // 兜底 Hook Player.Update 来捕获玩家（支持房间切换时自动更新）
-      try {
-        var addrUpdate = base.add(0xB551D0);
-        hooks.push(Interceptor.attach(addrUpdate, {
-          onEnter: function (args) {
-            var p = args[0];
-            if (!p || p.isNull()) return;
-            var cd = readPtr(p.add(0x94));
-            if (!cd) return;
-            if (readU8(cd.add(0x1C))) return;
-            if (!myPlayerPtr || !myPlayerPtr.equals(p)) {
-              myPlayerPtr = p;
-              scanSkillSteps(p);
+        // Observe the game's real result; do not replace get_isMyPlayer.
+        hooks.push(Interceptor.attach(base.add(RVA.PlayerGetIsMyPlayer), {
+          onEnter: function(args) {
+            this.candidatePlayer = args[0];
+          },
+          onLeave: function(retval) {
+            try {
+              var playerPtr = this.candidatePlayer;
+              // IL2CPP bool is returned in AL on x86. The upper 24 bits of EAX
+              // are not guaranteed to be zero, so reading the full Int32 can
+              // turn a false result into true.
+              var isMyPlayer = (retval.toUInt32() & 0xFF) !== 0;
+              if (!isMyPlayer || !playerPtr || playerPtr.isNull()) return;
+              if (myPlayerPtr && myPlayerPtr.equals(playerPtr)) return;
+
+              myPlayerPtr = playerPtr;
+              lastEndColdTime = 0;
+              scanSkillSteps(playerPtr);
+              sendLog('info', '技能CD', '本地玩家指针已更新: ' + playerPtr);
+            } catch (e) {
+              clearPlayerState('本地玩家识别异常，已清空缓存');
             }
+          }
+        }));
+        sendLog('success', '技能CD', 'isMyPlayer Hook OK');
+
+        // Player.Update is a game-thread callback. Only the confirmed local
+        // player is processed, at most once every 200 ms.
+        hooks.push(Interceptor.attach(base.add(RVA.PlayerUpdate), {
+          onEnter: function(args) {
+            var playerPtr = args[0];
+            if (!enabled || !myPlayerPtr || !playerPtr || playerPtr.isNull()) return;
+            if (!myPlayerPtr.equals(playerPtr)) return;
+
+            var now = Date.now();
+            if (now - lastEndColdTime < 200) return;
+            lastEndColdTime = now;
+            scanAndEndCold(playerPtr);
           }
         }));
         sendLog('success', '技能CD', 'Player.Update Hook OK');
-      } catch (e) { sendLog('warn', '技能CD', 'Player.Update Hook 失败: ' + e); }
 
-      // 兜底 Hook get_nickName 来捕获玩家（支持房间切换时自动更新）
-      try {
-        var addrNick = base.add(0xB50810);
-        hooks.push(Interceptor.attach(addrNick, {
-          onEnter: function (args) {
-            var p = args[0];
-            if (!p || p.isNull()) return;
-            var cd = readPtr(p.add(0x94));
-            if (!cd) return;
-            if (readU8(cd.add(0x1C))) return;
-            if (!myPlayerPtr || !myPlayerPtr.equals(p)) {
-              myPlayerPtr = p;
-              scanSkillSteps(p);
+        hooks.push(Interceptor.attach(base.add(RVA.PlayerOnDestroy), {
+          onEnter: function(args) {
+            var playerPtr = args[0];
+            if (myPlayerPtr && playerPtr && !playerPtr.isNull() && myPlayerPtr.equals(playerPtr)) {
+              clearPlayerState('本地玩家已销毁，已清空技能缓存');
             }
           }
         }));
-        sendLog('success', '技能CD', 'get_nickName Hook OK');
-      } catch (e) { sendLog('warn', '技能CD', 'get_nickName Hook 失败: ' + e); }
+        sendLog('success', '技能CD', 'Player.OnDestroy Hook OK');
 
-      // 立即执行一次，然后设置定时器
-      scanAndEndCold();
-      _noCdTimer = setInterval(scanAndEndCold, 200);
-
-      enabled = true;
-      sendLog('success', '技能CD', '已开启 — 每 200ms 调用 EndCold()');
-      sendStatus('skillcd', true);
-    },
-    disable: function() {
-      if (!enabled) return;
-
-      for (var i = 0; i < hooks.length; i++) {
-        try {
-          if (hooks[i].type === 'replace') {
-            Interceptor.revert(hooks[i].addr);
-          } else {
-            hooks[i].detach();
+        hooks.push(Interceptor.attach(base.add(RVA.GameManagerOnDestroy), {
+          onEnter: function() {
+            clearPlayerState('GameManager 已销毁，已清空技能缓存');
           }
-        } catch(e) {}
-      }
-      hooks = [];
+        }));
+        sendLog('success', '技能CD', 'GameManager.OnDestroy Hook OK');
 
-      if (_noCdTimer) {
-        clearInterval(_noCdTimer);
-        _noCdTimer = null;
+        enabled = true;
+        sendLog('success', '技能CD', '已开启 — 本地玩家 Update 中每 200ms 调用 EndCold()');
+        sendStatus('skillcd', true);
+      } catch (e) {
+        rollbackEnable(e.message || String(e));
       }
+    },
 
-      myPlayerPtr = null;
+    disable: function() {
+      if (!enabled && hooks.length === 0) return;
+
       enabled = false;
+      clearPlayerState(null);
+      detachHooks();
+      endColdFn = null;
       sendLog('info', '技能CD', '已关闭');
       sendStatus('skillcd', false);
     },
-    isEnabled: function() { return enabled; }
+
+    isEnabled: function() {
+      return enabled;
+    }
   };
 })();

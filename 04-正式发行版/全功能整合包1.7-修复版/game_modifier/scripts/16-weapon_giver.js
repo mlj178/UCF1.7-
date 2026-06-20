@@ -97,11 +97,11 @@ modules.weapon_giver = (function() {
     return _lastModeUpdateTime > 0 && (now - _lastModeUpdateTime) <= _roomActiveWindowMs;
   }
 
-  function notifySpeedgunWeaponAcquired(weapon) {
+  function notifySpeedgunWeaponAcquired(weapon, weaponId) {
     try {
       if (!weapon || weapon.isNull()) return;
       if (!modules.speedgun || !modules.speedgun.notifyWeaponAcquired) return;
-      modules.speedgun.notifyWeaponAcquired(weapon);
+      modules.speedgun.notifyWeaponAcquired(weapon, weaponId);
     } catch(e) {
       sendLog('warn', '武器赋予', '联动射速失败: ' + e.message);
     }
@@ -270,6 +270,17 @@ modules.weapon_giver = (function() {
     }
   }
 
+  function getCurrentInUseWeapon(player) {
+    try {
+      if (!player || player.isNull()) return null;
+      var playerWeapons = readPtr(player.add(0xA0));
+      if (!playerWeapons) return null;
+      return readPtr(playerWeapons.add(0x18));
+    } catch(e) {
+      return null;
+    }
+  }
+
   function executeGiveWeaponOnMainThread(wpnId, giveUpInt, selectInt) {
     if (!isRoomActive()) {
       sendLog('warn', '武器赋予', '当前不在稳定房间内，已忽略赋予任务');
@@ -302,7 +313,9 @@ modules.weapon_giver = (function() {
         return false;
       }
 
-      notifySpeedgunWeaponAcquired(weapon);
+      // autoSelect 的 Select 已在 GiveWeapon 返回前完成，优先处理最终的 inUse 活动武器。
+      var activeWeapon = selectInt !== 0 ? getCurrentInUseWeapon(myPlayer) : null;
+      notifySpeedgunWeaponAcquired(activeWeapon || weapon, wpnId);
       sendLog('success', '武器赋予', '赋予武器成功! weaponId=' + wpnId);
       return true;
     } catch(e) {
@@ -398,6 +411,15 @@ modules.weapon_giver = (function() {
                   taskId: task.id,
                   success: false
                 });
+              }
+            }
+
+            // GiveWeapon 返回的新武器延迟到下一帧处理，确保仍在游戏主线程。
+            if (roomStable && modules.speedgun && modules.speedgun.processPendingWeaponSpeed) {
+              try {
+                modules.speedgun.processPendingWeaponSpeed();
+              } catch(e) {
+                sendLog('warn', '武器赋予', '处理新武器射速联动失败: ' + e.message);
               }
             }
 
@@ -661,7 +683,8 @@ modules.weapon_giver = (function() {
           id: taskId,
           wpnId: wpnId,
           giveUp: giveUpInt,
-          select: selectInt,
+          // AT4/FN FAL榴弹版的第二次赋予必须进入Select/Deploy，才能立即应用射速。
+          select: (repeatCount > 1 && i === repeatCount - 1) ? 1 : selectInt,
           expiresAt: Date.now() + _taskTtlMs
         });
       }
