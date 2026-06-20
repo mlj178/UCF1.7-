@@ -41,3 +41,10 @@ Thumbs.db
 *.tar.gz
 *.tar.bz2
 *.tar.xz
+
+# Runtime logs and data
+**/game_modifier/logs/
+**/game_modifier/data/*.json
+**/plugins/universal_hook/inject_log.txt
+**/plugins/universal_hook/esp_debug.log
+**/plugins/universal_hook/esp_dllmain_test.txt
