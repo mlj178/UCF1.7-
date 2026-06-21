@@ -313,10 +313,10 @@ modules.weapon_giver = (function() {
         return false;
       }
 
-      // autoSelect 的 Select 已在 GiveWeapon 返回前完成，优先处理最终的 inUse 活动武器。
-      var activeWeapon = selectInt !== 0 ? getCurrentInUseWeapon(myPlayer) : null;
-      notifySpeedgunWeaponAcquired(activeWeapon || weapon, wpnId);
-      sendLog('success', '武器赋予', '赋予武器成功! weaponId=' + wpnId);
+      // 直接处理 GiveWeapon 返回的新武器，避免 inUse 仍指向旧武器时联动到错误对象。
+      notifySpeedgunWeaponAcquired(weapon, wpnId);
+      var specialTag = isSpecialDoubleGiveWeapon(wpnId) ? ' [特殊武器]' : '';
+      sendLog('success', '武器赋予', '赋予武器成功! weaponId=' + wpnId + ' select=' + selectInt + specialTag);
       return true;
     } catch(e) {
       _giveWeaponFunc = null;
@@ -679,14 +679,18 @@ modules.weapon_giver = (function() {
       for (var i = 0; i < repeatCount; i++) {
         var taskId = ++_taskIdCounter;
         if (firstTaskId === null) firstTaskId = taskId;
+        var taskSelect = (repeatCount > 1 && i === repeatCount - 1) ? 1 : selectInt;
         _pendingTasks.push({
           id: taskId,
           wpnId: wpnId,
           giveUp: giveUpInt,
           // AT4/FN FAL榴弹版的第二次赋予必须进入Select/Deploy，才能立即应用射速。
-          select: (repeatCount > 1 && i === repeatCount - 1) ? 1 : selectInt,
+          select: taskSelect,
           expiresAt: Date.now() + _taskTtlMs
         });
+        if (repeatCount > 1) {
+          sendLog('info', '武器赋予', '入队第' + (i + 1) + '/' + repeatCount + '次赋予: weaponId=' + wpnId + ' select=' + taskSelect);
+        }
       }
 
       if (repeatCount > 1) {

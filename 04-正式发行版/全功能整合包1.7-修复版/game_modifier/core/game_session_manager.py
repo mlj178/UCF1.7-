@@ -7,9 +7,9 @@ This module provides a single point of control for:
 - Universal DLL connection lifecycle
 - Feature state synchronization
 
-State machine:
-NO_GAME -> WAITING_GAME_READY -> CONNECTING_EXISTING_DLL -> INJECTING_DLL
--> SYNCING_FEATURES -> CONNECTING_FRIDA -> READY -> DISCONNECTED
+Core state machine:
+NO_GAME -> WAITING_GAME_READY -> CONNECTING_FRIDA -> READY -> DISCONNECTED
+Universal DLL is optional and handled inside READY only when ESP is desired.
 """
 
 import threading
@@ -24,9 +24,6 @@ class SessionState(Enum):
     NO_GAME = "no_game"
     WAITING_GAME_READY = "waiting_game_ready"
     CONNECTING_FRIDA = "connecting_frida"
-    CONNECTING_EXISTING_DLL = "connecting_existing_dll"
-    INJECTING_DLL = "injecting_dll"
-    SYNCING_FEATURES = "syncing_features"
     READY = "ready"
     DISCONNECTED = "disconnected"
 
@@ -50,6 +47,7 @@ class GameSessionManager:
         self._pid_create_time = None
         self._lock = threading.Lock()
         self._stop_event = threading.Event()
+        self._wake_event = threading.Event()
         self._worker_thread = None
         self._frida_manager = None
         self._universal_manager = None
@@ -66,13 +64,14 @@ class GameSessionManager:
         self._last_universal_retry = 0.0
         self._universal_retry_interval = 10.0  # seconds between DLL reconnect attempts
         self._injection_attempt_identity = None
+        self._next_retry_at = 0.0
+        self._process_detected_at = 0.0
         
         # Process stability check
         self._stability_wait = 0.5  # Wait 0.5 seconds after process detection
         
-        # Step interval: keep 2s for all states (cheap checks: psutil + flag)
-        # Expensive operations (DLL ping, reconnect) are throttled individually
-        self._step_interval = 2.0
+        self._process_poll_interval = 0.8
+        self._ready_check_interval = 3.0
         
     def start(self):
         """Start the session manager worker thread"""
@@ -81,6 +80,7 @@ class GameSessionManager:
 
         self._load_desired_states()
         self._stop_event.clear()
+        self._wake_event.clear()
         self._worker_thread = threading.Thread(target=self._worker_loop, daemon=True)
         self._worker_thread.start()
 
@@ -91,6 +91,7 @@ class GameSessionManager:
     def stop(self):
         """Stop the session manager"""
         self._stop_event.set()
+        self._wake_event.set()
         if self._worker_thread:
             self._worker_thread.join(timeout=5)
         if self._universal_manager:
@@ -110,6 +111,7 @@ class GameSessionManager:
             if self._universal_manager.set_esp_box(enabled):
                 with self._lock:
                     self._applied_states[feature_id] = enabled
+        self._wake_event.set()
     
     def get_desired_state(self, feature_id: str) -> bool:
         """Get desired feature state"""
@@ -132,15 +134,26 @@ class GameSessionManager:
             return self._pid
     
     def _worker_loop(self):
-        """Main worker loop - serial state machine"""
+        """Run transitions immediately; wait only when the current state has no progress."""
         while not self._stop_event.is_set():
+            with self._lock:
+                before = self._state
             try:
                 self._state_machine_step()
             except Exception as e:
                 self._bus.emit('log_message', level='error', module='SessionManager',
                               message=f'State machine error: {e}')
-            
-            time.sleep(self._step_interval)
+            with self._lock:
+                after = self._state
+
+            if after != before:
+                continue
+
+            wait_time = self._ready_check_interval if after == SessionState.READY else self._process_poll_interval
+            if after == SessionState.DISCONNECTED and self._next_retry_at > 0:
+                wait_time = max(0.05, min(wait_time, self._next_retry_at - time.monotonic()))
+            self._wake_event.wait(max(0.05, wait_time))
+            self._wake_event.clear()
     
     def _state_machine_step(self):
         """Execute one step of the state machine"""
@@ -153,12 +166,6 @@ class GameSessionManager:
             self._step_waiting_game_ready()
         elif current_state == SessionState.CONNECTING_FRIDA:
             self._step_connecting_frida()
-        elif current_state == SessionState.CONNECTING_EXISTING_DLL:
-            self._step_connecting_existing_dll()
-        elif current_state == SessionState.INJECTING_DLL:
-            self._step_injecting_dll()
-        elif current_state == SessionState.SYNCING_FEATURES:
-            self._step_syncing_features()
         elif current_state == SessionState.READY:
             self._step_ready()
         elif current_state == SessionState.DISCONNECTED:
@@ -176,6 +183,7 @@ class GameSessionManager:
                 self._injection_attempt_identity = None
             self._pid = pid
             self._pid_create_time = create_time
+            self._process_detected_at = time.monotonic()
             self._state = SessionState.WAITING_GAME_READY
         
         self._bus.emit('log_message', level='info', module='SessionManager',
@@ -195,6 +203,7 @@ class GameSessionManager:
             with self._lock:
                 self._pid = pid
                 self._pid_create_time = create_time
+                self._process_detected_at = time.monotonic()
             self._bus.emit('log_message', level='info', module='SessionManager',
                           message=f'游戏进程变化 PID:{pid}')
             return
@@ -209,8 +218,9 @@ class GameSessionManager:
                           message='游戏进程不稳定，重新检测')
             return
         
-        # Wait for stability
-        time.sleep(self._stability_wait)
+        # Non-blocking stability window; the worker wakes again after the short poll interval.
+        if time.monotonic() - self._process_detected_at < self._stability_wait:
+            return
         
         # Check again after wait
         if not self._is_process_stable(pid):
@@ -220,9 +230,9 @@ class GameSessionManager:
                 self._pid_create_time = None
             return
         
-        # Universal DLL lifecycle is independent from Frida.
+        # Core features become available first. Universal DLL is handled later in READY.
         with self._lock:
-            self._state = SessionState.CONNECTING_EXISTING_DLL
+            self._state = SessionState.CONNECTING_FRIDA
     
     def _step_connecting_frida(self):
         """Step: Connect Frida to game process"""
@@ -279,102 +289,6 @@ class GameSessionManager:
             
             self._handle_connection_failure(f"Frida 连接异常: {e}")
     
-    def _step_connecting_existing_dll(self):
-        """Step: Try to connect to existing DLL in game process"""
-        with self._lock:
-            pid = self._pid
-        
-        if pid is None:
-            with self._lock:
-                self._state = SessionState.NO_GAME
-            return
-        
-        # Import here to avoid circular dependency
-        from .universal_hook_manager import UniversalHookManager
-        universal = UniversalHookManager.get_instance()
-        
-        # Try to connect to existing DLL
-        if universal.try_connect_existing(pid):
-            self._universal_manager = universal
-            with self._lock:
-                self._state = SessionState.SYNCING_FEATURES
-            self._bus.emit('log_message', level='success', module='SessionManager',
-                          message='连接到现有 DLL')
-        else:
-            identity = (pid, self._pid_create_time)
-            if self._injection_attempt_identity == identity:
-                self._universal_manager = None
-                self._last_universal_retry = time.time()
-                with self._lock:
-                    self._state = (
-                        SessionState.READY
-                        if self._frida_manager
-                        else SessionState.CONNECTING_FRIDA
-                    )
-                return
-
-            # No existing DLL and this process has not had a real injection attempt.
-            with self._lock:
-                self._state = SessionState.INJECTING_DLL
-    
-    def _step_injecting_dll(self):
-        """Step: Inject DLL into game process"""
-        with self._lock:
-            pid = self._pid
-        
-        if pid is None:
-            with self._lock:
-                self._state = SessionState.NO_GAME
-            return
-        
-        # Import here to avoid circular dependency
-        from .universal_hook_manager import UniversalHookManager
-        universal = UniversalHookManager.get_instance()
-        identity = (pid, self._pid_create_time)
-
-        if self._injection_attempt_identity == identity:
-            self._mark_universal_unavailable(
-                "当前游戏进程已尝试注入，不再重复注入"
-            )
-            return
-
-        connected = universal.inject_and_connect(pid)
-        if universal.last_injection_attempted:
-            self._injection_attempt_identity = identity
-
-        if connected:
-            self._universal_manager = universal
-            with self._lock:
-                self._state = SessionState.SYNCING_FEATURES
-            self._bus.emit('log_message', level='success', module='SessionManager',
-                          message='DLL 注入成功')
-        else:
-            self._mark_universal_unavailable("DLL 注入失败")
-    
-    def _step_syncing_features(self):
-        """Step: Sync desired states to DLL"""
-        with self._lock:
-            desired = self._desired_states.copy()
-        
-        # Sync all desired states to DLL
-        success = True
-        for feature_id, enabled in desired.items():
-            if feature_id == 'esp_box':
-                if self._universal_manager:
-                    if not self._universal_manager.set_esp_box(enabled):
-                        success = False
-                    else:
-                        with self._lock:
-                            self._applied_states[feature_id] = enabled
-        
-        if success:
-            with self._lock:
-                self._state = SessionState.CONNECTING_FRIDA
-            self._bus.emit('log_message', level='success', module='SessionManager',
-                          message='功能状态同步完成')
-        else:
-            self._mark_universal_unavailable("状态同步失败")
-    
     def _step_ready(self):
         """Step: Monitor game process and connection health"""
         with self._lock:
@@ -408,19 +322,23 @@ class GameSessionManager:
                     pid=pid,
                 )
 
-        if not self._universal_manager and time.time() - self._last_universal_retry >= self._universal_retry_interval:
-            self._last_universal_retry = time.time()
-            with self._lock:
-                self._state = SessionState.CONNECTING_EXISTING_DLL
+        with self._lock:
+            esp_wanted = bool(self._desired_states.get('esp_box', False))
+
+        # ESP关闭时不连接、不注入DLL；普通Frida功能不受影响。
+        if not esp_wanted or self._universal_manager:
+            return
+
+        if time.time() - self._last_universal_retry < self._universal_retry_interval:
+            return
+
+        self._last_universal_retry = time.time()
+        self._connect_universal_for_esp(pid)
     
     def _step_disconnected(self):
-        """Step: Handle disconnection"""
-        # Wait before retrying
-        if self._retry_index < len(self._retry_delays):
-            delay = self._retry_delays[self._retry_index]
-            time.sleep(delay)
-            self._retry_index += 1
-        
+        """Step: Handle disconnection without blocking the worker thread."""
+        if time.monotonic() < self._next_retry_at:
+            return
         with self._lock:
             self._state = SessionState.NO_GAME
     
@@ -429,8 +347,47 @@ class GameSessionManager:
         self._bus.emit('log_message', level='error', module='SessionManager',
                       message=reason)
         
+        delay = self._retry_delays[min(self._retry_index, len(self._retry_delays) - 1)]
+        self._retry_index = min(self._retry_index + 1, len(self._retry_delays) - 1)
+        self._next_retry_at = time.monotonic() + delay
         with self._lock:
             self._state = SessionState.DISCONNECTED
+
+    def _connect_universal_for_esp(self, pid: int):
+        """Connect or inject Universal DLL only after Frida is ready and ESP is desired."""
+        from .universal_hook_manager import UniversalHookManager
+
+        universal = UniversalHookManager.get_instance()
+        if universal.try_connect_existing(pid):
+            self._universal_manager = universal
+            with self._lock:
+                esp_wanted = bool(self._desired_states.get('esp_box', False))
+            if universal.set_esp_box(esp_wanted):
+                with self._lock:
+                    self._applied_states['esp_box'] = esp_wanted
+            self._bus.emit('log_message', level='success', module='SessionManager',
+                          message='ESP DLL 已连接')
+            return
+
+        identity = (pid, self._pid_create_time)
+        if self._injection_attempt_identity == identity:
+            return
+
+        connected = universal.inject_and_connect(pid)
+        if universal.last_injection_attempted:
+            self._injection_attempt_identity = identity
+        if not connected:
+            self._mark_universal_unavailable('ESP DLL 注入失败')
+            return
+
+        self._universal_manager = universal
+        with self._lock:
+            esp_wanted = bool(self._desired_states.get('esp_box', False))
+        if universal.set_esp_box(esp_wanted):
+            with self._lock:
+                self._applied_states['esp_box'] = esp_wanted
+        self._bus.emit('log_message', level='success', module='SessionManager',
+                      message='ESP DLL 已在后台就绪')
 
     def _mark_universal_unavailable(self, reason: str):
         """Continue with Frida while keeping ESP unavailable for this process."""
@@ -463,6 +420,7 @@ class GameSessionManager:
             self._state = SessionState.NO_GAME
             self._pid = None
             self._pid_create_time = None
+            self._process_detected_at = 0.0
             self._applied_states.clear()
         
         if universal:
@@ -473,6 +431,8 @@ class GameSessionManager:
         self._frida_manager = None
         self._universal_manager = None
         self._retry_index = 0
+        self._next_retry_at = 0.0
+        self._wake_event.set()
         self._bus.emit('connection_status', status='disconnected')
     
     def _find_game_process(self) -> tuple:

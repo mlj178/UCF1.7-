@@ -6,13 +6,16 @@ modules.battle_round_always = (function() {
     var RVA = {
         Mode_Nano4_Terminator_TypeInfo: 0xE2CCB4,
         ModeBase_Nano_OnStartNewGameRound: 0xAF15D0,
+        Mode_Nano4_Terminator_OnDestroy: 0xB44320,
     };
 
     // 状态变量
     var _enabled = false;
     var _hookInstalled = false;
     var _hookListener = null;
+    var _exitHookListener = null;
     var _cachedBase = null;  // 缓存 GameAssembly.base，供 Hook 回调核对模块地址
+    var _modeActive = false;
 
     // 日志去重标志（模块级闭包变量，跨 Hook 调用持久化）
     var _loggedInvalidType = false;
@@ -97,13 +100,6 @@ modules.battle_round_always = (function() {
                     _hookCallCount++;
                     var callId = _hookCallCount;
 
-                    sendLogFile('info', 'BattleRound', '[HOOK#' + callId + '] ModeBase_Nano.OnStartNewGameRound onEnter 触发, _enabled=' + _enabled);
-
-                    if (!_enabled) {
-                        sendLogFile('info', 'BattleRound', '[HOOK#' + callId + '] 功能未启用，跳过');
-                        return;
-                    }
-
                     try {
                         // 每次动态获取模块和类型信息，不缓存 TypeInfo/static_fields 指针
                         var currentMod = getGameAssembly();
@@ -137,6 +133,28 @@ modules.battle_round_always = (function() {
                         }
                         sendLogFile('info', 'BattleRound', '[HOOK#' + callId + '] Mode_Nano4_Terminator 类指针校验通过');
 
+                        if (!_modeActive) {
+                            _modeActive = true;
+                            send(JSON.stringify({ type: 'battle_round_mode_enter' }));
+                        }
+
+                        // 进入正确模式时再初始化Buff模块；不需要Python定时轮询。
+                        try {
+                            if (modules.nano4t) {
+                                modules.nano4t.onModeRound();
+                            }
+                        } catch(e) {}
+
+                        if (!_enabled) {
+                            send(JSON.stringify({
+                                type: 'battle_round_round',
+                                enabled: false,
+                                applied: false,
+                                currentIsBattleRound: -1
+                            }));
+                            return;
+                        }
+
                         var staticFields = safeReadPointer(typeInfo.add(0x5C));
                         sendLogFile('info', 'BattleRound', '[HOOK#' + callId + '] staticFields=' + staticFields);
 
@@ -168,8 +186,24 @@ modules.battle_round_always = (function() {
                         } else {
                             sendLogFile('info', 'BattleRound', '[HOOK#' + callId + '] isBattleRound 已是 1，无需写入');
                         }
+
+                        send(JSON.stringify({
+                            type: 'battle_round_round',
+                            enabled: true,
+                            applied: true,
+                            currentIsBattleRound: 1
+                        }));
                     } catch(e) {
                         sendLogFile('error', 'BattleRound', '[HOOK#' + callId + '] 异常: ' + e.message);
+                    }
+                }
+            });
+
+            _exitHookListener = Interceptor.attach(base.add(RVA.Mode_Nano4_Terminator_OnDestroy), {
+                onEnter: function() {
+                    if (_modeActive) {
+                        _modeActive = false;
+                        send(JSON.stringify({ type: 'battle_round_mode_exit' }));
                     }
                 }
             });
@@ -179,6 +213,14 @@ modules.battle_round_always = (function() {
             return true;
 
         } catch(e) {
+            if (_hookListener) {
+                try { _hookListener.detach(); } catch(detachError) {}
+                _hookListener = null;
+            }
+            if (_exitHookListener) {
+                try { _exitHookListener.detach(); } catch(detachError) {}
+                _exitHookListener = null;
+            }
             sendLogFile('error', 'BattleRound', 'Hook 安装失败: ' + e.message);
             return false;
         }
@@ -197,11 +239,16 @@ modules.battle_round_always = (function() {
             }
             _hookListener = null;
         }
+        if (_exitHookListener) {
+            try { _exitHookListener.detach(); } catch(e) {}
+            _exitHookListener = null;
+        }
 
         // 重置状态
         _enabled = false;
         _hookInstalled = false;
         _cachedBase = null;
+        _modeActive = false;
 
         // 重置日志去重标志
         _loggedInvalidType = false;
@@ -229,37 +276,7 @@ modules.battle_round_always = (function() {
 
                 _enabled = true;
                 sendLogFile('info', 'BattleRound', '[ENABLE] _enabled 已设为 true');
-
-                // 启用时立即强制写入一次
-                try {
-                    var mod = getGameAssembly();
-                    if (mod) {
-                        var base = mod.base;
-                        sendLogFile('info', 'BattleRound', '[ENABLE] 立即写入: base=' + base);
-
-                        var typeInfo = safeReadPointer(base.add(RVA.Mode_Nano4_Terminator_TypeInfo));
-                        if (typeInfo) {
-                            var staticFields = safeReadPointer(typeInfo.add(0x5C));
-                            if (staticFields) {
-                                var oldVal = safeReadU8(staticFields.add(1));
-                                sendLogFile('info', 'BattleRound', '[ENABLE] 立即写入: oldVal=' + oldVal);
-
-                                safeWriteU8(staticFields.add(1), 1);
-                                sendLogFile('success', 'BattleRound', '[ENABLE] 已立即强制写入 isBattleRound=1');
-                            } else {
-                                sendLogFile('warn', 'BattleRound', '[ENABLE] staticFields 为 null');
-                            }
-                        } else {
-                            sendLogFile('warn', 'BattleRound', '[ENABLE] typeInfo 为 null');
-                        }
-                    } else {
-                        sendLogFile('warn', 'BattleRound', '[ENABLE] getGameAssembly 返回 null');
-                    }
-                } catch(e) {
-                    sendLogFile('error', 'BattleRound', '[ENABLE] 立即写入异常: ' + e.message);
-                }
-
-                sendLogFile('success', 'BattleRound', '[ENABLE] 强制决战回合已启用');
+                sendLogFile('success', 'BattleRound', '[ENABLE] 已预约，仅在多人生化新回合写入');
             } catch(e) {
                 sendLogFile('error', 'BattleRound', '[ENABLE] 启用失败: ' + e.message);
             }
@@ -270,31 +287,7 @@ modules.battle_round_always = (function() {
                 sendLogFile('info', 'BattleRound', '[DISABLE] 开始禁用');
 
                 _enabled = false;
-
-                // 禁用时恢复 isBattleRound 为 0，清理残留标志
-                try {
-                    var mod = getGameAssembly();
-                    if (mod) {
-                        var base = mod.base;
-                        sendLogFile('info', 'BattleRound', '[DISABLE] 恢复写入: base=' + base + ', cachedBase=' + _cachedBase);
-
-                        var typeInfo = safeReadPointer(base.add(RVA.Mode_Nano4_Terminator_TypeInfo));
-                        if (typeInfo) {
-                            var staticFields = safeReadPointer(typeInfo.add(0x5C));
-                            if (staticFields) {
-                                var oldVal = safeReadU8(staticFields.add(1));
-                                sendLogFile('info', 'BattleRound', '[DISABLE] 恢复写入: oldVal=' + oldVal);
-
-                                safeWriteU8(staticFields.add(1), 0);
-                                sendLogFile('info', 'BattleRound', '[DISABLE] 已恢复 isBattleRound=0');
-                            }
-                        }
-                    }
-                } catch(e) {
-                    sendLogFile('error', 'BattleRound', '[DISABLE] 恢复异常: ' + e.message);
-                }
-
-                sendLogFile('info', 'BattleRound', '[DISABLE] 强制决战回合已禁用');
+                sendLogFile('info', 'BattleRound', '[DISABLE] 已停止后续回合写入');
             } catch(e) {
                 sendLogFile('error', 'BattleRound', '[DISABLE] 禁用失败: ' + e.message);
             }
@@ -302,12 +295,15 @@ modules.battle_round_always = (function() {
 
         cleanup: cleanup,
 
+        startMonitor: installHook,
+
         getStatus: function() {
             try {
                 var flag = readBattleRoundFlag();
                 return JSON.stringify({
                     enabled: _enabled,
                     hookInstalled: _hookInstalled,
+                    modeActive: _modeActive,
                     currentIsBattleRound: flag,
                     cachedBase: _cachedBase ? _cachedBase.toString() : null,
                     hookCallCount: _hookCallCount
@@ -327,3 +323,6 @@ modules.battle_round_always = (function() {
 if (typeof registerCleanup === 'function' && modules.battle_round_always) {
     registerCleanup(modules.battle_round_always.cleanup);
 }
+
+// Frida连接后立即安装低频生命周期监听；未启用时只识别模式，不写字段。
+modules.battle_round_always.startMonitor();

@@ -58,17 +58,20 @@ def setup_logging():
     root.setLevel(logging.DEBUG)
 
     # File handler: rotating, 5MB per file, keep 3 backups
+    # 只在开发环境写日志文件，打包后不写日志文件
     fmt = logging.Formatter(
         f'[%(asctime)s.%(msecs)03d] [%(levelname)s] [{TRACE_ID}] [%(name)s] %(message)s',
         datefmt='%Y-%m-%d %H:%M:%S'
     )
 
-    fh = RotatingFileHandler(log_file, maxBytes=5*1024*1024, backupCount=3, encoding='utf-8')
-    fh.setLevel(logging.DEBUG)
-    fh.setFormatter(fmt)
-    root.addHandler(fh)
+    if not getattr(sys, 'frozen', False):
+        # 开发环境：写入日志文件
+        fh = RotatingFileHandler(log_file, maxBytes=5*1024*1024, backupCount=3, encoding='utf-8')
+        fh.setLevel(logging.DEBUG)
+        fh.setFormatter(fmt)
+        root.addHandler(fh)
 
-    # Console handler (for debug in IDE)
+    # Console handler: 所有环境都输出到控制台
     ch = logging.StreamHandler(sys.stdout)
     ch.setLevel(logging.INFO)
     ch.setFormatter(fmt)

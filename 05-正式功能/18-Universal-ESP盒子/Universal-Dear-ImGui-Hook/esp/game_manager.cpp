@@ -7,6 +7,9 @@ namespace esp {
 static void* s_gameManagerInstance = nullptr;
 static bool s_initialized = false;
 static bool s_hasActiveSession = false;
+// GameManager::OnDestroy can run before its static instance field is cleared.
+// Block render-side reacquisition until the next real round-start event.
+static volatile LONG s_BlockSessionRefresh = 0;
 
 // Static member initialization
 std::unordered_map<void*, BotPlayerEntry> GameManager::s_BotPlayers;
@@ -179,6 +182,10 @@ void GameManager::Cleanup() {
 bool GameManager::RefreshSession() {
     if (!s_initialized || !IL2CPPBridge::IsInitialized() || !IL2CPPBridge::IsGameAssemblyReady()) {
         ClearRuntimeCaches("bridge unavailable");
+        return false;
+    }
+
+    if (InterlockedCompareExchange(&s_BlockSessionRefresh, 0, 0) != 0) {
         return false;
     }
 
@@ -410,12 +417,14 @@ void GameManager::InitializeBotHook() {
 
 // Room/Round change detection - Key RVA addresses
 static constexpr uintptr_t RVA_ModeBase_OnStartNewGameRound = 0xAF5B30;
+static constexpr uintptr_t RVA_ModeBase_Nano_OnStartNewGameRound = 0xAF15D0;
 static constexpr uintptr_t RVA_GameManager_OnDestroy = 0xAFB6F0;
 
 typedef void (__cdecl *RoundStartFunc)(void* modeBase, void* methodInfo);
 typedef void (__cdecl *GameDestroyFunc)(void* gm, void* methodInfo);
 
 static RoundStartFunc s_OriginalRoundStart = nullptr;
+static RoundStartFunc s_OriginalNanoRoundStart = nullptr;
 static GameDestroyFunc s_OriginalGameDestroy = nullptr;
 
 static void __cdecl HookedRoundStart(void* modeBase, void* methodInfo) {
@@ -431,6 +440,24 @@ static void __cdecl HookedRoundStart(void* modeBase, void* methodInfo) {
 #else
         SAFE_TRY {
             s_OriginalRoundStart(modeBase, methodInfo);
+        } SAFE_EXCEPT_NOP
+#endif
+    }
+}
+
+static void __cdecl HookedNanoRoundStart(void* modeBaseNano, void* methodInfo) {
+    GameManager::OnRoundStart();
+
+    if (s_OriginalNanoRoundStart) {
+#if defined(_MSC_VER)
+        __try {
+            s_OriginalNanoRoundStart(modeBaseNano, methodInfo);
+        } __except(EXCEPTION_EXECUTE_HANDLER) {
+            return;
+        }
+#else
+        SAFE_TRY {
+            s_OriginalNanoRoundStart(modeBaseNano, methodInfo);
         } SAFE_EXCEPT_NOP
 #endif
     }
@@ -473,8 +500,30 @@ void GameManager::InitializeRoomHooks() {
             DebugLog("[GameManager] RoomHooks: Failed to hook OnStartNewGameRound: %s\n", MH_StatusToString(status));
         }
     }
+
+    // Hook 2: ModeBase_Nano$$OnStartNewGameRound (0xAF15D0).
+    // Nano4, Nano4_Terminator and Nano6 call this shared implementation, while
+    // it does not call ModeBase$$OnStartNewGameRound. Hooking it restores the
+    // ESP session after leaving another room without weakening stale-pointer protection.
+    void* addrNano = (void*)((uintptr_t)gameModule + RVA_ModeBase_Nano_OnStartNewGameRound);
+    if (IsExecutableAddress(addrNano)) {
+        MH_STATUS status = MH_CreateHook(addrNano, &HookedNanoRoundStart,
+                                         reinterpret_cast<LPVOID*>(&s_OriginalNanoRoundStart));
+        if (status == MH_OK) {
+            MH_STATUS enableStatus = MH_EnableHook(addrNano);
+            if (enableStatus == MH_OK) {
+                DebugLog("[GameManager] RoomHooks: ModeBase_Nano$$OnStartNewGameRound hooked at 0x%p\n", addrNano);
+            } else {
+                DebugLog("[GameManager] RoomHooks: Failed to enable Nano OnStartNewGameRound: %s\n",
+                         MH_StatusToString(enableStatus));
+            }
+        } else {
+            DebugLog("[GameManager] RoomHooks: Failed to hook Nano OnStartNewGameRound: %s\n",
+                     MH_StatusToString(status));
+        }
+    }
     
-    // Hook 2: GameManager$$OnDestroy (0xAFB6F0)
+    // Hook 3: GameManager$$OnDestroy (0xAFB6F0)
     void* addr2 = (void*)((uintptr_t)gameModule + RVA_GameManager_OnDestroy);
     if (IsExecutableAddress(addr2)) {
         MH_STATUS status = MH_CreateHook(addr2, &HookedGameDestroy,
@@ -490,6 +539,9 @@ void GameManager::InitializeRoomHooks() {
 
 void GameManager::OnRoundStart() {
     DWORD currentTime = GetTickCount();
+
+    // A real round-start means the new room lifecycle is ready for ESP reads.
+    InterlockedExchange(&s_BlockSessionRefresh, 0);
     
     // Increment session epoch
     s_SessionEpoch++;
@@ -512,6 +564,10 @@ void GameManager::OnRoundStart() {
 
 void GameManager::OnGameDestroy() {
     DebugLog("[GameManager] OnGameDestroy: GameManager destroyed, epoch=%lu\n", s_SessionEpoch);
+
+    // Set this before clearing caches so the render thread cannot immediately
+    // reacquire the stale static GameManager pointer during scene teardown.
+    InterlockedExchange(&s_BlockSessionRefresh, 1);
     
     // Increment session epoch
     s_SessionEpoch++;
