@@ -23,17 +23,15 @@ scripts_dir = os.path.join(current_dir, "scripts")
 if os.path.exists(scripts_dir):
     datas.append((scripts_dir, "game_modifier/scripts"))
 
-# 3. 添加 data 目录下的所有 JSON 文件
-data_dir = os.path.join(current_dir, "data")
-if os.path.exists(data_dir):
-    datas.append((data_dir, "game_modifier/data"))
-
-# 4. 添加 plugins 目录
+# 3. 只添加 Universal Hook 运行所需文件，不打包运行日志
 plugins_dir = os.path.join(current_dir, "plugins")
-if os.path.exists(plugins_dir):
-    datas.append((plugins_dir, "game_modifier/plugins"))
+universal_hook_dir = os.path.join(plugins_dir, "universal_hook")
+for plugin_file in ("inject.exe", "Universal-ImGui-Hook.dll", "universal_hook.json"):
+    plugin_path = os.path.join(universal_hook_dir, plugin_file)
+    if os.path.isfile(plugin_path):
+        datas.append((plugin_path, "game_modifier/plugins/universal_hook"))
 
-# 5. 添加 ui 目录下的文件（如果有资源）
+# 4. 添加 ui 目录下的文件（如果有资源）
 ui_dir = os.path.join(current_dir, "ui")
 if os.path.exists(ui_dir):
     for root, dirs, files in os.walk(ui_dir):
@@ -58,26 +56,26 @@ a = Analysis(
         'pygame',
         'PIL',
         'features',
-        'features.aim',
-        'features.ammo',
-        'features.battle_round_always',
-        'features.esp_box',
-        'features.gather',
-        'features.godmode',
-        'features.gravity',
-        'features.is_bot',
-        'features.knife',
-        'features.knife_range',
-        'features.move_speed',
-        'features.nano4t',
-        'features.recoil',
-        'features.reload_speed',
-        'features.round_skip',
-        'features.skill_cd',
-        'features.speed_gun',
-        'features.time_freeze',
-        'features.time_scale',
-        'features.weapon_giver',
+        'features.feature_01_unlimited_ammo',
+        'features.feature_02_no_recoil',
+        'features.feature_03_unlimited_time',
+        'features.feature_04_fast_knife',
+        'features.feature_05_fast_reload_buff',
+        'features.feature_06_movement_speed',
+        'features.feature_07_knife_attack_range',
+        'features.feature_08_gather_enemies',
+        'features.feature_09_high_jump_low_gravity',
+        'features.feature_10_skip_round',
+        'features.feature_11_auto_aim',
+        'features.feature_12_invincibility',
+        'features.feature_13_fire_rate_auto_sniper',
+        'features.feature_14_become_bot',
+        'features.feature_15_buff_selector',
+        'features.feature_16_weapon_giver',
+        'features.feature_17_skill_no_cooldown',
+        'features.feature_18_universal_esp_box',
+        'features.feature_19_battle_round',
+        'features.feature_20_unity_time_acceleration',
         'core.config',
         'core.event_bus',
         'core.feature_registry',
@@ -114,7 +112,7 @@ exe = EXE(
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=True,
+    upx=False,
     upx_exclude=[],
     runtime_tmpdir=None,
     console=False,  # 不显示控制台窗口
@@ -124,5 +122,5 @@ exe = EXE(
     codesign_identity=None,
     entitlements_file=None,
     icon=None,  # 如果有图标文件，可以在这里指定路径
-    manifest='app.manifest',  # 使用清单文件请求管理员权限
+    uac_admin=True,
 )

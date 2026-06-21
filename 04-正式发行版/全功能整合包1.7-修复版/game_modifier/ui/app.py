@@ -119,6 +119,8 @@ class App(ctk.CTk):
         self._skip_count = 0
         self._gravity_debounce_timer = None
         self._monitoring = True
+        self._ui_ready = False
+        self._early_log_messages = []
 
         self._features = {fid: False for fid in FEATURES_INFO}
         self._knife_speed = 5.0
@@ -152,6 +154,7 @@ class App(ctk.CTk):
         # 强制决战回合状态变量
         self._battle_round_enabled = False  # 开关状态（持久化）
         self._battle_round_active = False   # 实际生效状态
+        self._battle_mode_active = False    # 是否已精确识别为多人生化房间
 
         self.settings_window = None
         
@@ -164,30 +167,43 @@ class App(ctk.CTk):
 
         self._build_ui()
         self._load_feature_state()
+        self._update_battle_round_button_state()
         self._hotkey.set_app(self)
-        self._hotkey.setup_hotkeys(self._on_hotkey_toggle, silent=True)
-        self._setup_tk_hotkeys()
-        self._setup_events()
         self._log("游戏修改器控制台 v1.7 — 全功能整合包")
         self._log("正在检测游戏进程...")
 
-        # Start unified session manager (replaces old _auto_connect_bg)
+        # 配置文件保持同步读取；全局快捷键在窗口显示后再注册。
+        self.after(100, self._initialize_hotkeys_after_ui)
+
         session = GameSessionManager.get_instance()
-        session.start()
         self._features['esp_box'] = session.get_desired_state('esp_box')
         self._update_switch('esp_box')
-
-        threading.Thread(target=self._nano4t_auto_health_bg, daemon=True).start()
-
-        # 启动强制决战回合实时状态更新
-        self.after(1000, self._update_battle_round_realtime_status)
+        self.after(0, self._sync_initial_session_state)
 
     def _build_ui(self):
         self._build_status_bar()
         self._build_hint_bar()
+        # 基础状态区就绪后立即开始检测游戏，不等待完整功能页面构建。
+        self._setup_events()
+        GameSessionManager.get_instance().start()
         self._build_tab_view()
         self._build_connect_button()
         self._build_log_panel()
+        self._ui_ready = True
+        for message in self._early_log_messages:
+            self._log(message)
+        self._early_log_messages = []
+
+    def _initialize_hotkeys_after_ui(self):
+        if self._stop:
+            return
+        self._hotkey.setup_hotkeys(self._on_hotkey_toggle, silent=True)
+        self._setup_tk_hotkeys()
+
+    def _sync_initial_session_state(self):
+        """补偿完整UI构建期间可能已经完成的后台连接事件。"""
+        if not self._ready and self._frida.is_connected:
+            self._on_connection_status(status='connected', pid=self._frida.pid)
 
     def _build_status_bar(self):
         self.status_frame = ctk.CTkFrame(self, corner_radius=8, fg_color="#2b2b2b")
@@ -666,7 +682,7 @@ class App(ctk.CTk):
         self.battle_round_switch = ctk.CTkSwitch(battle_round_top, text="",
                                                   font=("Microsoft YaHei", 12),
                                                   command=self._toggle_battle_round,
-                                                  state="disabled")
+                                                  state="normal")
         self.battle_round_switch.pack(side="right")
 
         ctk.CTkLabel(battle_round_frame, text="每局强制触发决战回合（保底局）",
@@ -796,6 +812,7 @@ class App(ctk.CTk):
         self._event_bus.subscribe('gather_result', self._on_gather_result)
         self._event_bus.subscribe('round_skipped', self._on_round_skipped)
         self._event_bus.subscribe('nano4t_event', self._on_nano4t_event)
+        self._event_bus.subscribe('battle_round_event', self._on_battle_round_event)
 
     def _on_log_message(self, **kwargs):
         level = kwargs.get('level', 'info')
@@ -805,7 +822,11 @@ class App(ctk.CTk):
         log_to_file(level, module, message)
         icon_map = {'success': '✅', 'error': '❌', 'info': 'ℹ️', 'warn': '⚠️'}
         icon = icon_map.get(level, 'ℹ️')
-        self._log(f"{icon} [{module}] {message}")
+        ui_message = f"{icon} [{module}] {message}"
+        if not self._ui_ready:
+            self._early_log_messages.append(ui_message)
+            return
+        self._log(ui_message)
 
     def _on_connection_status(self, **kwargs):
         status = kwargs.get('status', 'disconnected')
@@ -818,6 +839,9 @@ class App(ctk.CTk):
                 self._ready = True
                 self._pid = pid
                 self._restore_features()
+                if self._battle_round_enabled:
+                    self._frida.send_toggle('battle_round_always', True)
+                self._update_battle_round_button_state()
                 threading.Thread(target=self._nano4t_auto_init_bg, daemon=True).start()
                 
                 # 初始化武器快捷键管理器
@@ -827,6 +851,9 @@ class App(ctk.CTk):
             else:
                 self._set_status("red", "连接断开，正在重连...")
                 self._ready = False
+                self._battle_round_active = False
+                self._battle_mode_active = False
+                self._update_battle_round_button_state()
                 try:
                     from core.weapon_hotkey_manager import WeaponHotkeyManager
                     WeaponHotkeyManager.get_instance().pause_hotkeys()
@@ -864,6 +891,7 @@ class App(ctk.CTk):
         if event_type == 'nano4t_ready':
             ids = payload.get('ids', [])
             self._nano4t_ready = True
+            self._battle_mode_active = True
             self.after(0, lambda: self._nano4t_on_ready(len(ids)))
             self.after(0, self._update_battle_round_button_state)
         elif event_type == 'nano4t_destroyed':
@@ -910,6 +938,28 @@ class App(ctk.CTk):
             if not self._nano4t_ready and self._ready:
                 self._log("ℹ️ [多人生化] 检测到已进入多人生化模式，正在初始化...")
                 threading.Thread(target=self._nano4t_auto_init_if_needed, daemon=True).start()
+
+    def _on_battle_round_event(self, **kwargs):
+        event_type = kwargs.get('msg_type', '')
+        payload = kwargs.get('payload', {})
+
+        def update():
+            if event_type == 'battle_round_mode_enter':
+                self._battle_mode_active = True
+                self._battle_round_active = self._battle_round_enabled
+                self._update_battle_round_button_state()
+            elif event_type == 'battle_round_mode_exit':
+                self._battle_mode_active = False
+                self._battle_round_active = False
+                self._update_battle_round_button_state()
+            elif event_type == 'battle_round_round':
+                self._battle_round_active = bool(payload.get('enabled', False))
+                if payload.get('applied', False):
+                    self._apply_battle_round_status(payload.get('currentIsBattleRound', 1))
+                else:
+                    self._update_battle_round_button_state()
+
+        self.after(0, update)
 
     def _log(self, msg):
         ts = time.strftime("%H:%M:%S")
@@ -1657,7 +1707,6 @@ class App(ctk.CTk):
         self._log("[多人生化] 当前未激活，游戏将正常运行。选择特性后点击应用 → 下一回合生效")
         self.nano4t_next_label.configure(text="💡 请选择特性后点击「应用」按钮")
         threading.Thread(target=self._nano4t_get_current_bg, daemon=True).start()
-        threading.Thread(target=self._nano4t_auto_getcurrent_bg, daemon=True).start()
 
     def _handle_nano4t_mode_exit(self):
         """处理退出多人生化模式，统一清理运行状态并调度 UI 重置。"""
@@ -1665,9 +1714,8 @@ class App(ctk.CTk):
         self._nano4t_activated = False
         self._nano4t_current_ghost = -1
         self._nano4t_current_human = -1
+        self._battle_mode_active = False
 
-        if self._battle_round_active and self._frida.is_connected:
-            self._frida.send_toggle('battle_round_always', False)
         self._battle_round_active = False
 
         self.after(0, self._nano4t_on_destroyed)
@@ -1679,11 +1727,8 @@ class App(ctk.CTk):
         self.nano4t_round_label.configure(text="当前回合: 等待进入多人生化模式...")
         self.nano4t_ghost_status_label.configure(text="[未激活]", text_color="#888888")
         self.nano4t_human_status_label.configure(text="[未激活]", text_color="#888888")
-        self.battle_round_switch.configure(state="disabled")
-        self.battle_round_status_label.configure(
-            text="状态: ⚪ 等待进入多人生化模式...",
-            text_color="#888888",
-        )
+        self.battle_round_switch.configure(state="normal")
+        self._update_battle_round_button_state()
 
     def _nano4t_update_round_label(self, g, h):
         self._nano4t_current_ghost = g
@@ -1715,71 +1760,42 @@ class App(ctk.CTk):
             self._log(f"❌ [多人生化] 连接失败: {e}")
 
     def _toggle_battle_round(self):
-        """切换强制决战回合开关"""
-        if not self._ready:
-            self._log("⚠ 请先连接游戏")
-            return
-        
-        if not self._nano4t_ready:
-            self._log("⚠ 请先进入多人生化模式")
-            return
-        
+        """保存用户意愿；只有精确识别多人生化的新回合Hook才写字段。"""
         current = self.battle_round_switch.get()
+        self._battle_round_enabled = bool(current)
+        self._battle_round_active = bool(current and self._battle_mode_active)
+
+        if self._ready:
+            self._frida.send_toggle('battle_round_always', bool(current))
+
         if current:
-            self._frida.send_toggle('battle_round_always', True)
-            self._battle_round_enabled = True
-            self._battle_round_active = True
-            self._log("✅ 强制决战回合已启用")
-            self.battle_round_status_label.configure(text="状态: ✅ 已启用", text_color="#2ecc71")
+            if not self._ready:
+                self._log("✅ 强制决战回合已预约，等待连接游戏")
+            elif not self._battle_mode_active:
+                self._log("✅ 强制决战回合已预约，等待进入多人生化")
+            else:
+                self._log("✅ 强制决战回合已启用，将在下一回合生效")
         else:
-            self._frida.send_toggle('battle_round_always', False)
-            self._battle_round_enabled = False
-            self._battle_round_active = False
-            self._log("强制决战回合已禁用")
-            self.battle_round_status_label.configure(text="状态: 🟢 模式就绪，等待开启", text_color="#f39c12")
+            self._log("强制决战回合已关闭，后续回合不再写入")
+
+        self._update_battle_round_button_state()
+        self._schedule_save_state()
 
     def _update_battle_round_button_state(self):
-        """更新强制决战回合按钮状态（根据多人生化模式）"""
-        if self._nano4t_ready:
-            # 多人生化模式就绪，按钮可点击
-            self.battle_round_switch.configure(state="normal")
-            
-            # 如果之前是开启状态，自动启用
-            if self._battle_round_enabled and not self._battle_round_active:
-                self.battle_round_switch.select()
-                self._frida.send_toggle('battle_round_always', True)
-                self._battle_round_active = True
-                self._log("✅ 检测到多人生化模式，自动启用强制决战回合")
-                self.battle_round_status_label.configure(text="状态: ✅ 已启用", text_color="#2ecc71")
-            else:
-                # 模式就绪但未开启
-                self.battle_round_status_label.configure(text="状态: 🟢 模式就绪，等待开启", text_color="#f39c12")
+        """开关始终可操作，状态标签区分用户意愿和实际生效状态。"""
+        self.battle_round_switch.configure(state="normal")
+        if not self._battle_round_enabled:
+            self.battle_round_switch.deselect()
+            self.battle_round_status_label.configure(text="状态: 已关闭", text_color="#888888")
+        elif not self._ready:
+            self.battle_round_switch.select()
+            self.battle_round_status_label.configure(text="状态: 已预约，等待连接游戏", text_color="#f39c12")
+        elif not self._battle_mode_active:
+            self.battle_round_switch.select()
+            self.battle_round_status_label.configure(text="状态: 已预约，等待多人生化", text_color="#f39c12")
         else:
-            # 多人生化模式未就绪，按钮禁用
-            self.battle_round_switch.configure(state="disabled")
-            self._battle_round_active = False
-            self.battle_round_status_label.configure(text="状态: ⚪ 等待进入多人生化模式...", text_color="#888888")
-
-    def _update_battle_round_realtime_status(self):
-        """实时更新决战回合状态（后台线程调用RPC，避免主线程阻塞）"""
-        if not self._ready or not self._nano4t_ready or not self._battle_round_active:
-            self.after(1000, self._update_battle_round_realtime_status)
-            return
-
-        def _fetch_status():
-            try:
-                result = self._frida.call_export('battleRoundGetStatus')
-                if result:
-                    import json
-                    data = json.loads(result) if isinstance(result, str) else result
-                    flag = data.get('currentIsBattleRound', -1)
-                    self.after(0, lambda f=flag: self._apply_battle_round_status(f))
-            except Exception:
-                pass
-            finally:
-                self.after(1000, self._update_battle_round_realtime_status)
-
-        threading.Thread(target=_fetch_status, daemon=True).start()
+            self.battle_round_switch.select()
+            self.battle_round_status_label.configure(text="状态: 已启用，下回合生效", text_color="#2ecc71")
 
     def _apply_battle_round_status(self, flag):
         """在主线程中更新决战回合状态标签"""
@@ -1840,7 +1856,6 @@ class App(ctk.CTk):
             ))
 
     def _nano4t_auto_init_bg(self):
-        time.sleep(2)
         if self._frida.is_connected and not self._nano4t_ready:
             try:
                 self._frida.call_export('nano4tinit')
@@ -1854,39 +1869,6 @@ class App(ctk.CTk):
             self._frida.call_export('nano4tgetcurrent')
         except Exception:
             pass
-
-    def _nano4t_auto_health_bg(self):
-        time.sleep(2)
-        auto_check_logged = False
-        while not self._stop:
-            time.sleep(2)
-            if not self._frida.is_connected:
-                auto_check_logged = False
-                continue
-            if self._nano4t_ready:
-                auto_check_logged = False
-                try:
-                    self._frida.call_export('nano4thealthcheck')
-                except Exception:
-                    pass
-            else:
-                if not auto_check_logged:
-                    auto_check_logged = True
-                    self._log("ℹ️ [多人生化] 后台自动检测中，进入多人生化模式后将自动初始化")
-                try:
-                    self._frida.call_export('nano4tinit')
-                except Exception:
-                    pass
-
-    def _nano4t_auto_getcurrent_bg(self):
-        time.sleep(3)
-        while not self._stop:
-            time.sleep(5)
-            if self._nano4t_ready and self._frida.is_connected:
-                try:
-                    self._frida.call_export('nano4tgetcurrent')
-                except Exception:
-                    pass
 
     def _nano4t_auto_init_if_needed(self):
         if self._frida.is_connected and not self._nano4t_ready:

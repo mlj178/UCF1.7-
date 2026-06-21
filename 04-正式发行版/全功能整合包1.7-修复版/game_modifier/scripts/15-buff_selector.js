@@ -173,6 +173,12 @@ modules.nano4t = (function() {
       _pendingRequests.current = false;
       performGetCurrent();
     }
+
+    // 主线程任务已处理完，立即解除Update Hook，避免每帧空跑。
+    if (schedulerHook) {
+      try { schedulerHook.detach(); } catch(e) {}
+      schedulerHook = null;
+    }
   }
 
   function ensureMainThreadHook() {
@@ -203,11 +209,12 @@ modules.nano4t = (function() {
       this.destroy();
     },
     init: function() {
+      _pendingRequests.init = true;
       if (!ensureMainThreadHook()) {
+        _pendingRequests.init = false;
         send(JSON.stringify({ type: 'nano4t_error', msg: '未检测到游戏进程' }));
         return JSON.stringify({ ok: false });
       }
-      _pendingRequests.init = true;
       return JSON.stringify({ ok: true, queued: true });
     },
     set: function(g, h) {
@@ -217,14 +224,26 @@ modules.nano4t = (function() {
       send(JSON.stringify({ type: 'nano4t_set', g: g, h: h }));
     },
     getCurrent: function() {
-      if (!ensureMainThreadHook()) return JSON.stringify({ ok: false });
       _pendingRequests.current = true;
+      if (!ensureMainThreadHook()) {
+        _pendingRequests.current = false;
+        return JSON.stringify({ ok: false });
+      }
       return JSON.stringify({ ok: true, queued: true });
     },
     healthCheck: function() {
-      if (!ensureMainThreadHook()) return JSON.stringify({ ok: false });
       _pendingRequests.health = true;
+      if (!ensureMainThreadHook()) {
+        _pendingRequests.health = false;
+        return JSON.stringify({ ok: false });
+      }
       return JSON.stringify({ ok: true, queued: true });
+    },
+    onModeRound: function() {
+      if (!NANO4T_READY || NANO4T_MODE_DESTROYED) {
+        return this.init();
+      }
+      return this.getCurrent();
     },
     destroy: function() {
       clearHooks();
@@ -233,6 +252,10 @@ modules.nano4t = (function() {
       NANO4T_ACTIVE = false;  // 重置激活状态
       NANO4T_ATTR_PTR = {};
       _pendingRequests = { init: false, health: false, current: false };
+      if (schedulerHook) {
+        try { schedulerHook.detach(); } catch(e) {}
+        schedulerHook = null;
+      }
     }
   };
 })();

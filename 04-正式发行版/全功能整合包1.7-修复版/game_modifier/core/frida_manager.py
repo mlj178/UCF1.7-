@@ -442,6 +442,11 @@ setTimeout(function() { getGameAssembly(); }, 100);
                                  msg_type=msg_type,
                                  payload=payload)
 
+        elif msg_type.startswith('battle_round_'):
+            self._event_bus.emit('battle_round_event',
+                                 msg_type=msg_type,
+                                 payload=payload)
+
     def restore_features(self, features_state):
         for feature_id, enabled in features_state.items():
             if enabled:

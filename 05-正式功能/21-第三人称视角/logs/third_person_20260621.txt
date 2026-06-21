@@ -1,0 +1,133 @@
+
+[19:53:25] [INFO] ============================================================
+[19:53:25] [INFO] 第三人称视角修改器 v4 日志
+[19:53:25] [INFO] JS 脚本: D:\trae_project\ucf1.7-modifier\05-正式功能\21-第三人称视角\AAAAA-third_person_v1.js
+[19:53:25] [INFO] ============================================================
+[19:53:28] [INFO] 尝试连接 PID=27856
+[19:53:29] [INFO] Frida 已附加到 PID=27856
+[19:53:29] [INFO] JS 脚本大小: 68831 字节
+[19:53:29] [INFO] [TP] base=0x6be70000 size=16461824
+[19:53:29] [INFO] [TP] NativeFunction 声明完成 (v8)
+[19:53:29] [INFO] [TP] 脚本 v8 加载完成
+[19:53:29] [INFO] JS 脚本已加载，调用 installhook...
+[19:53:29] [INFO] [TP] 开始安装 Hooks (v8, RVA 已验证)...
+[19:53:29] [INFO] [TP] Hook 1: CameraManager.Awake (0xb35550)
+[19:53:29] [INFO] [TP] Hook 2: GameManager.Awake (0xafa250)
+[19:53:29] [INFO] [TP] Hook 3: GameManager.OnDestroy
+[19:53:29] [INFO] [TP] Hook 4: CameraManager.OnDestroy
+[19:53:29] [INFO] [TP] Hook 5: NewGameRoundStart
+[19:53:29] [INFO] [TP] Hook 6: AddPlayer
+[19:53:29] [INFO] [TP] Hook 7: SpawnEvent
+[19:53:29] [INFO] [TP] Hook 8: ChangePVandCV (v8: onLeave 重新激活 FreeLook)
+[19:53:29] [INFO] [TP] Hook 9: CameraRotation
+[19:53:29] [INFO] [TP] 所有 Hook 安装完成
+[19:53:29] [INFO] [TP] 修改器 v8 已启动
+[19:53:29] [INFO] installhook 返回: {'ok': True}
+[19:53:29] [ERROR] [TP] CameraManager 获取失败: Error: access violation accessing 0xc000b8c9
+[19:53:32] [ERROR] [TP] CameraManager 获取失败: Error: access violation accessing 0xc000b8c9
+[19:53:50] [ERROR] [TP] CameraManager 获取失败: Error: access violation accessing 0xc000b8c9
+[19:53:53] [ERROR] [TP] CameraManager 获取失败: Error: access violation accessing 0xc000b8c9
+[19:53:56] [ERROR] [TP] CameraManager 获取失败: Error: access violation accessing 0xc000b8c9
+[19:53:59] [ERROR] [TP] CameraManager 获取失败: Error: access violation accessing 0xc000b8c9
+[19:54:02] [ERROR] [TP] CameraManager 获取失败: Error: access violation accessing 0xc000b8c9
+[19:54:05] [ERROR] [TP] CameraManager 获取失败: Error: access violation accessing 0xc000b8c9
+[19:54:08] [ERROR] [TP] CameraManager 获取失败: Error: access violation accessing 0xc000b8c9
+[19:54:11] [ERROR] [TP] CameraManager 获取失败: Error: access violation accessing 0xc000b8c9
+[19:54:14] [ERROR] [TP] CameraManager 获取失败: Error: access violation accessing 0xc000b8c9
+[19:54:17] [ERROR] [TP] CameraManager 获取失败: Error: access violation accessing 0xc000b8c9
+[19:54:20] [ERROR] [TP] CameraManager 获取失败: Error: access violation accessing 0xc000b8c9
+[19:54:23] [ERROR] [TP] CameraManager 获取失败: Error: access violation accessing 0xc000b8c9
+[19:54:26] [ERROR] [TP] CameraManager 获取失败: Error: access violation accessing 0xc000b8c9
+[19:54:29] [ERROR] [TP] CameraManager 获取失败: Error: access violation accessing 0xc000b8c9
+[19:54:32] [ERROR] [TP] CameraManager 获取失败: Error: access violation accessing 0xc000b8c9
+[19:54:35] [ERROR] [TP] CameraManager 获取失败: Error: access violation accessing 0xc000b8c9
+[19:54:38] [ERROR] [TP] CameraManager 获取失败: Error: access violation accessing 0xc000b8c9
+[19:54:41] [ERROR] [TP] CameraManager 获取失败: Error: access violation accessing 0xc000b8c9
+[19:54:44] [ERROR] [TP] CameraManager 获取失败: Error: access violation accessing 0xc000b8c9
+[19:54:47] [ERROR] [TP] CameraManager 获取失败: Error: access violation accessing 0xc000b8c9
+[19:54:50] [ERROR] [TP] CameraManager 获取失败: Error: access violation accessing 0xc000b8c9
+[19:54:53] [ERROR] [TP] CameraManager 获取失败: Error: access violation accessing 0xc000b8c9
+[19:54:56] [ERROR] [TP] CameraManager 获取失败: Error: access violation accessing 0xc000b8c9
+[19:54:59] [ERROR] [TP] CameraManager 获取失败: Error: access violation accessing 0xc000b8c9
+[19:55:02] [ERROR] [TP] CameraManager 获取失败: Error: access violation accessing 0xc000b8c9
+[19:55:05] [ERROR] [TP] CameraManager 获取失败: Error: access violation accessing 0xc000b8c9
+[19:55:08] [ERROR] [TP] CameraManager 获取失败: Error: access violation accessing 0xc000b8c9
+[19:55:09] [INFO] [TP] CameraManager.Awake 捕获: 0x3538ec90
+[19:55:09] [INFO] [TP] GameManager.Awake 捕获: 0x2274b230
+[19:55:09] [INFO] [TP] 状态: NO_GAME -> WAITING_ROOM
+[19:55:09] [INFO] 状态变化: NO_GAME -> WAITING_ROOM
+[19:55:10] [INFO] [TP] 房间开始 (NewGameRoundStart)
+[19:55:10] [INFO] 状态变化: WAITING_ROOM -> ROOM_READY
+[19:55:16] [INFO] [TP] [Model] 原始 observeMode=1 playerViewModelVisible=true
+[19:55:16] [INFO] [TP] [Model] 保存 PV 对象状态: 0 个
+[19:55:16] [INFO] [TP] [Model] 保存 CV 对象状态: 0 个
+[19:55:16] [INFO] [TP] [Model] SetObserveMode(Character=0) 已调用
+[19:55:16] [INFO] [TP] [Model] OnOwnerObserveModeChange(Character=0) 已调用
+[19:55:16] [INFO] [TP] [Model] PV 对象显式隐藏: 0/0 个 (从 active 变为 inactive)
+[19:55:16] [INFO] [TP] [Model] CV 对象显式显示: 0/0 个 (从 inactive 变为 active)
+[19:55:16] [INFO] [TP] [Model] SetModelLayer(Character, Default) 已调用
+[19:55:16] [ERROR] [TP] set_modelVisible 失败: Error: expected an integer
+[19:55:16] [INFO] [TP] [Model] playerViewModelVisible = false
+[19:55:16] [INFO] [TP] [Weapon] SynchronizeHand 已调用
+[19:55:16] [INFO] [TP] [Camera] 原始轨道: Top(5,3) Mid(0,5.5) Bot(-1,3)
+[19:55:16] [INFO] [TP] [Camera] 轨道已设置: Top(1.8,3) Mid(1.4,3) Bot(0.6,2.55)
+[19:55:16] [INFO] [TP] [Camera] Rig0 Composer: 原始 ScreenX=0.00 ScreenY=0.00 -> ScreenX=0.4 ScreenY=0.5 TrackedOffset=(0.5,0.3,0)
+[19:55:16] [INFO] [TP] [Camera] Rig1 Composer: 原始 ScreenX=0.00 ScreenY=0.00 -> ScreenX=0.4 ScreenY=0.5 TrackedOffset=(0.5,0.3,0)
+[19:55:17] [INFO] [TP] [Camera] Rig2 Composer: 原始 ScreenX=0.00 ScreenY=0.00 -> ScreenX=0.4 ScreenY=0.5 TrackedOffset=(0.5,0.3,0)
+[19:55:17] [INFO] [TP] [Camera] Follow=charContainer LookAt=spine1
+[19:55:17] [INFO] [TP] 状态: ROOM_READY -> TP_ENABLED
+[19:55:17] [INFO] 状态变化: ROOM_READY -> TP_ENABLED
+[19:55:17] [INFO] [TP] 第三人称已启用 (v8) - 距离=3
+[19:56:37] [INFO] [TP] [Restore] OnOwnerObserveModeChange(PlayerView=1) 已调用
+[19:56:37] [INFO] [TP] [Restore] SetObserveMode 恢复为 1
+[19:56:37] [INFO] [TP] [Restore] playerViewModelVisible 恢复为 true
+[19:56:37] [INFO] [TP] [Restore] PV 对象已恢复: 0 个
+[19:56:37] [INFO] [TP] [Restore] CV 对象已恢复: 0 个
+[19:56:37] [INFO] [TP] [Restore] SetModelLayer(PlayerView, Layer8) 已调用
+[19:56:37] [INFO] [TP] [Restore] PlayerViewSetting 已调用
+[19:56:37] [INFO] [TP] [Restore] FreeLook 已停用
+[19:56:37] [INFO] [TP] [Restore] 轨道参数已恢复
+[19:56:37] [INFO] [TP] [Restore] Composer 参数已恢复
+[19:56:37] [INFO] [TP] 状态: TP_ENABLED -> ROOM_READY
+[19:56:37] [INFO] 状态变化: TP_ENABLED -> ROOM_READY
+[19:56:37] [WARNING] [TP] 关闭第三人称有错误: 恢复 modelVisible 失败: Error: expected an integer
+[19:56:37] [INFO] [TP] [Model] 原始 observeMode=1 playerViewModelVisible=true
+[19:56:37] [INFO] [TP] [Model] 保存 PV 对象状态: 0 个
+[19:56:37] [INFO] [TP] [Model] 保存 CV 对象状态: 0 个
+[19:56:37] [INFO] [TP] [Model] SetObserveMode(Character=0) 已调用
+[19:56:37] [INFO] [TP] [Model] OnOwnerObserveModeChange(Character=0) 已调用
+[19:56:37] [INFO] [TP] [Model] PV 对象显式隐藏: 0/0 个 (从 active 变为 inactive)
+[19:56:37] [INFO] [TP] [Model] CV 对象显式显示: 0/0 个 (从 inactive 变为 active)
+[19:56:37] [INFO] [TP] [Model] SetModelLayer(Character, Default) 已调用
+[19:56:37] [ERROR] [TP] set_modelVisible 失败: Error: expected an integer
+[19:56:37] [INFO] [TP] [Model] playerViewModelVisible = false
+[19:56:37] [INFO] [TP] [Weapon] SynchronizeHand 已调用
+[19:56:37] [INFO] [TP] [Camera] 原始轨道: Top(5,3) Mid(0,5.5) Bot(-1,3)
+[19:56:37] [INFO] [TP] [Camera] 轨道已设置: Top(1.8,3) Mid(1.4,3) Bot(0.6,2.55)
+[19:56:37] [INFO] [TP] [Camera] Rig0 Composer: 原始 ScreenX=0.00 ScreenY=0.00 -> ScreenX=0.4 ScreenY=0.5 TrackedOffset=(0.5,0.3,0)
+[19:56:37] [INFO] [TP] [Camera] Rig1 Composer: 原始 ScreenX=0.00 ScreenY=0.00 -> ScreenX=0.4 ScreenY=0.5 TrackedOffset=(0.5,0.3,0)
+[19:56:37] [INFO] [TP] [Camera] Rig2 Composer: 原始 ScreenX=0.00 ScreenY=0.00 -> ScreenX=0.4 ScreenY=0.5 TrackedOffset=(0.5,0.3,0)
+[19:56:37] [INFO] [TP] [Camera] Follow=charContainer LookAt=spine1
+[19:56:37] [INFO] 状态变化: ROOM_READY -> TP_ENABLED
+[19:56:37] [INFO] [TP] 第三人称已启用 (v8) - 距离=3
+[19:58:06] [INFO] [TP] [Restore] OnOwnerObserveModeChange(PlayerView=1) 已调用
+[19:58:06] [INFO] [TP] [Restore] SetObserveMode 恢复为 1
+[19:58:06] [INFO] [TP] [Restore] playerViewModelVisible 恢复为 true
+[19:58:06] [INFO] [TP] [Restore] PV 对象已恢复: 0 个
+[19:58:06] [INFO] [TP] [Restore] CV 对象已恢复: 0 个
+[19:58:06] [INFO] [TP] [Restore] SetModelLayer(PlayerView, Layer8) 已调用
+[19:58:06] [INFO] [TP] [Restore] PlayerViewSetting 已调用
+[19:58:06] [INFO] [TP] 状态: TP_ENABLED -> ROOM_READY
+[19:58:06] [INFO] 状态变化: TP_ENABLED -> ROOM_READY
+[19:58:06] [WARNING] [TP] 关闭第三人称有错误: 恢复 modelVisible 失败: Error: expected an integer
+[19:58:06] [INFO] 状态变化: ROOM_READY -> NO_GAME
+[19:58:06] [INFO] [TP] GameManager.OnDestroy
+[20:00:01] [INFO] [TP] CameraManager.Awake 捕获: 0x42001690
+[20:00:01] [INFO] [TP] GameManager.Awake 捕获: 0x41feef00
+[20:00:01] [INFO] [TP] 状态: NO_GAME -> WAITING_ROOM
+[20:00:01] [INFO] 状态变化: NO_GAME -> WAITING_ROOM
+[20:00:01] [INFO] 状态变化: WAITING_ROOM -> ROOM_READY
+[20:00:40] [INFO] [TP] 状态: ROOM_READY -> NO_GAME
+[20:00:40] [INFO] 状态变化: ROOM_READY -> NO_GAME
+[20:00:40] [INFO] [TP] GameManager.OnDestroy
+[20:00:40] [ERROR] Frida 断开: reason=process-terminated, crash=None
