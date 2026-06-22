@@ -1,0 +1,265 @@
+NativeFunction 签名列表（32位 x86 __cdecl）
+========================================
+
+重要：32位 IL2CPP 调用约定为 __cdecl，Frida 应使用 "mscdecl"
+所有 IL2CPP 实例方法都包含隐藏的 MethodInfo* 参数（最后一个参数）
+
+--- isMyPlayer ---
+  地址表达式: base.add(RVA.Player_get_isMyPlayer)
+  当前声明: bool('pointer')
+  推荐正确声明: 未确认（需 dump.cs/script.json/IDA 验证）
+  是否包含 MethodInfo*: 未知
+
+--- singletonGetter ---
+  地址表达式: base.add(RVA.Singleton_GetInstance)
+  当前声明: pointer('pointer')
+  推荐正确声明: 未确认（需 dump.cs/script.json/IDA 验证）
+  是否包含 MethodInfo*: 未知
+
+--- cflSetFollow ---
+  地址表达式: base.add(RVA.CFL_set_Follow)
+  当前声明: void('pointer', 'pointer')
+  推荐正确声明: 未确认（需 dump.cs/script.json/IDA 验证）
+  是否包含 MethodInfo*: 未知
+
+--- cflSetLookAt ---
+  地址表达式: base.add(RVA.CFL_set_LookAt)
+  当前声明: void('pointer', 'pointer')
+  推荐正确声明: 未确认（需 dump.cs/script.json/IDA 验证）
+  是否包含 MethodInfo*: 未知
+
+--- setFreeLookActive ---
+  地址表达式: base.add(RVA.CameraManager_SetFreeLookCameraActive)
+  当前声明: void('pointer', 'bool')
+  推荐正确声明: 未确认（需 dump.cs/script.json/IDA 验证）
+  是否包含 MethodInfo*: 未知
+
+--- setModelLayer ---
+  地址表达式: base.add(RVA.Model_SetModelLayer)
+  当前声明: void('pointer', 'int', 'int')
+  推荐正确声明: 未确认（需 dump.cs/script.json/IDA 验证）
+  是否包含 MethodInfo*: 未知
+
+--- setObserveMode ---
+  地址表达式: base.add(RVA.PlayerData_SetObserveMode)
+  当前声明: void('pointer', 'int')
+  推荐正确声明: 未确认（需 dump.cs/script.json/IDA 验证）
+  是否包含 MethodInfo*: 未知
+
+--- getObserveMode ---
+  地址表达式: base.add(RVA.PlayerData_get_observeMode)
+  当前声明: int('pointer')
+  推荐正确声明: 未确认（需 dump.cs/script.json/IDA 验证）
+  是否包含 MethodInfo*: 未知
+
+--- setModelVisible ---
+  地址表达式: base.add(RVA.PCM_set_modelVisible)
+  当前声明: void('pointer', 'bool')
+  推荐正确声明: 未确认（需 dump.cs/script.json/IDA 验证）
+  是否包含 MethodInfo*: 未知
+
+--- playerViewSetting ---
+  地址表达式: base.add(RVA.Weapon_PlayerViewSetting)
+  当前声明: void('pointer')
+  推荐正确声明: 未确认（需 dump.cs/script.json/IDA 验证）
+  是否包含 MethodInfo*: 未知
+
+--- synchronizeHand ---
+  地址表达式: base.add(RVA.Weapon_SynchronizeHand)
+  当前声明: void('pointer')
+  推荐正确声明: 未确认（需 dump.cs/script.json/IDA 验证）
+  是否包含 MethodInfo*: 未知
+
+--- gameObjectSetActive ---
+  地址表达式: base.add(RVA.GameObject_SetActive)
+  当前声明: void('pointer', 'bool')
+  推荐正确声明: 未确认（需 dump.cs/script.json/IDA 验证）
+  是否包含 MethodInfo*: 未知
+
+--- gameObjectGetActiveSelf ---
+  地址表达式: base.add(RVA.GameObject_get_activeSelf)
+  当前声明: bool('pointer')
+  推荐正确声明: 未确认（需 dump.cs/script.json/IDA 验证）
+  是否包含 MethodInfo*: 未知
+
+--- gameObjectGetLayer ---
+  地址表达式: base.add(RVA.GameObject_get_layer)
+  当前声明: int('pointer')
+  推荐正确声明: 未确认（需 dump.cs/script.json/IDA 验证）
+  是否包含 MethodInfo*: 未知
+
+--- gameObjectSetLayer ---
+  地址表达式: base.add(RVA.GameObject_set_layer)
+  当前声明: void('pointer', 'int')
+  推荐正确声明: 未确认（需 dump.cs/script.json/IDA 验证）
+  是否包含 MethodInfo*: 未知
+
+--- gameObjectGetName ---
+  地址表达式: base.add(RVA.GameObject_get_name)
+  当前声明: pointer('pointer')
+  推荐正确声明: 未确认（需 dump.cs/script.json/IDA 验证）
+  是否包含 MethodInfo*: 未知
+
+--- rendererGetEnabled ---
+  地址表达式: base.add(RVA.Renderer_get_enabled)
+  当前声明: bool('pointer')
+  推荐正确声明: 未确认（需 dump.cs/script.json/IDA 验证）
+  是否包含 MethodInfo*: 未知
+
+--- rendererSetEnabled ---
+  地址表达式: base.add(RVA.Renderer_set_enabled)
+  当前声明: void('pointer', 'bool')
+  推荐正确声明: 未确认（需 dump.cs/script.json/IDA 验证）
+  是否包含 MethodInfo*: 未知
+
+--- getRig ---
+  地址表达式: base.add(RVA.CFL_GetRig)
+  当前声明: pointer('pointer', 'int')
+  推荐正确声明: 未确认（需 dump.cs/script.json/IDA 验证）
+  是否包含 MethodInfo*: 未知
+
+--- getComponentPipeline ---
+  地址表达式: base.add(RVA.CVC_GetComponentPipeline)
+  当前声明: pointer('pointer')
+  推荐正确声明: 未确认（需 dump.cs/script.json/IDA 验证）
+  是否包含 MethodInfo*: 未知
+
+--- onOwnerObserveModeChange ---
+  地址表达式: base.add(RVA.Model_OnOwnerObserveModeChange)
+  当前声明: void('pointer', 'int')
+  推荐正确声明: 未确认（需 dump.cs/script.json/IDA 验证）
+  是否包含 MethodInfo*: 未知
+
+--- transformGetPosition ---
+  地址表达式: base.add(0x3F4280)
+  当前声明: void('pointer', 'pointer', 'pointer')
+  推荐正确声明: 未确认（需 dump.cs/script.json/IDA 验证）
+  是否包含 MethodInfo*: 未知
+
+--- transformGetRotation ---
+  地址表达式: base.add(0x3F4380)
+  当前声明: void('pointer', 'pointer', 'pointer')
+  推荐正确声明: 未确认（需 dump.cs/script.json/IDA 验证）
+  是否包含 MethodInfo*: 未知
+
+--- transformGetForward ---
+  地址表达式: base.add(0x3F3F20)
+  当前声明: void('pointer', 'pointer', 'pointer')
+  推荐正确声明: 未确认（需 dump.cs/script.json/IDA 验证）
+  是否包含 MethodInfo*: 未知
+
+--- transformGetRight ---
+  地址表达式: base.add(0x3F42F0)
+  当前声明: void('pointer', 'pointer', 'pointer')
+  推荐正确声明: 未确认（需 dump.cs/script.json/IDA 验证）
+  是否包含 MethodInfo*: 未知
+
+--- transformGetUp ---
+  地址表达式: base.add(0x3F43F0)
+  当前声明: void('pointer', 'pointer', 'pointer')
+  推荐正确声明: 未确认（需 dump.cs/script.json/IDA 验证）
+  是否包含 MethodInfo*: 未知
+
+--- transformGetParent ---
+  地址表达式: base.add(0x3F31D0)
+  当前声明: pointer('pointer', 'pointer')
+  推荐正确声明: 未确认（需 dump.cs/script.json/IDA 验证）
+  是否包含 MethodInfo*: 未知
+
+--- transformGetChild ---
+  地址表达式: base.add(0x3F3150)
+  当前声明: pointer('pointer', 'int', 'pointer')
+  推荐正确声明: 未确认（需 dump.cs/script.json/IDA 验证）
+  是否包含 MethodInfo*: 未知
+
+--- transformGetChildCount ---
+  地址表达式: base.add(0x3F3E80)
+  当前声明: int('pointer', 'pointer')
+  推荐正确声明: 未确认（需 dump.cs/script.json/IDA 验证）
+  是否包含 MethodInfo*: 未知
+
+--- transformGetName ---
+  地址表达式: base.add(0x4EA1B0)
+  当前声明: pointer('pointer', 'pointer')
+  推荐正确声明: 未确认（需 dump.cs/script.json/IDA 验证）
+  是否包含 MethodInfo*: 未知
+
+--- cameraGetMain ---
+  地址表达式: base.add(0x328310)
+  当前声明: pointer('pointer')
+  推荐正确声明: 未确认（需 dump.cs/script.json/IDA 验证）
+  是否包含 MethodInfo*: 未知
+
+--- cameraGetCurrent ---
+  地址表达式: base.add(0x3281C0)
+  当前声明: pointer('pointer')
+  推荐正确声明: 未确认（需 dump.cs/script.json/IDA 验证）
+  是否包含 MethodInfo*: 未知
+
+--- cameraGetFieldOfView ---
+  地址表达式: base.add(0x328270)
+  当前声明: float('pointer', 'pointer')
+  推荐正确声明: 未确认（需 dump.cs/script.json/IDA 验证）
+  是否包含 MethodInfo*: 未知
+
+--- cameraGetPixelWidth ---
+  地址表达式: base.add(0x328490)
+  当前声明: int('pointer', 'pointer')
+  推荐正确声明: 未确认（需 dump.cs/script.json/IDA 验证）
+  是否包含 MethodInfo*: 未知
+
+--- cameraGetPixelHeight ---
+  地址表达式: base.add(0x3283F0)
+  当前声明: int('pointer', 'pointer')
+  推荐正确声明: 未确认（需 dump.cs/script.json/IDA 验证）
+  是否包含 MethodInfo*: 未知
+
+--- cameraGetAspect ---
+  地址表达式: base.add(0x328090)
+  当前声明: float('pointer', 'pointer')
+  推荐正确声明: 未确认（需 dump.cs/script.json/IDA 验证）
+  是否包含 MethodInfo*: 未知
+
+--- cameraScreenPointToRay ---
+  地址表达式: base.add(0x327AD0)
+  当前声明: void('pointer', 'pointer', 'int', 'pointer', 'pointer')
+  推荐正确声明: 未确认（需 dump.cs/script.json/IDA 验证）
+  是否包含 MethodInfo*: 未知
+
+--- cameraWorldToScreenPoint ---
+  地址表达式: base.add(0x327EE0)
+  当前声明: void('pointer', 'pointer', 'int', 'pointer', 'pointer')
+  推荐正确声明: 未确认（需 dump.cs/script.json/IDA 验证）
+  是否包含 MethodInfo*: 未知
+
+--- brainGetOutputCamera ---
+  地址表达式: base.add(0x82CDB0)
+  当前声明: pointer('pointer', 'pointer')
+  推荐正确声明: 未确认（需 dump.cs/script.json/IDA 验证）
+  是否包含 MethodInfo*: 未知
+
+--- physicsRaycast ---
+  地址表达式: base.add(0xABAF40)
+  当前声明: bool('pointer', 'pointer', 'float', 'pointer')
+  推荐正确声明: 未确认（需 dump.cs/script.json/IDA 验证）
+  是否包含 MethodInfo*: 未知
+
+重点检查项（来自 IDA 验证）：
+  - PlayerCameraManager.set_modelVisible: IDA 签名 = void(this, bool, MethodInfo*)
+    JS 当前声明: void(pointer, bool) -> 缺少 MethodInfo*
+    修复: new NativeFunction(base.add(RVA), "void", ["pointer", "bool", "pointer"])
+
+  - PlayerData.SetObserveMode: IDA 签名 = void(this, int32_t, MethodInfo*)
+    JS 当前声明: void(pointer, int) -> 可能缺少 MethodInfo*
+
+  - Model.OnOwnerObserveModeChange: IDA 签名 = void(this, int32_t, MethodInfo*)
+    JS 当前声明: void(pointer, int) -> 可能缺少 MethodInfo*
+
+  - Model.SetModelLayer: IDA 签名 = void(this, int32_t, int32_t, MethodInfo*)
+    JS 当前声明: void(pointer, int, int) -> 可能缺少 MethodInfo*
+
+  - Weapon.SynchronizeHand: IDA 签名 = void(this, MethodInfo*)
+    JS 当前声明: void(pointer) -> 可能缺少 MethodInfo*
+
+  - Singleton_GetInstance: 签名 pointer(pointer)
+    问题: 传入的是 MethodInfo* 地址，需确认是地址本身还是地址中的指针

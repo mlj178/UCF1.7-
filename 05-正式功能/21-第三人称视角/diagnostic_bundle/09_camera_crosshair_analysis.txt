@@ -1,0 +1,53 @@
+相机与准星分析
+==============
+
+说明：以下为静态分析，基于 JS 代码中的瞄准诊断系统。
+实际值需运行时采集。
+
+采集内容 (来自 JS captureStaticSnapshot):
+
+1. 最终实际 Unity Camera 地址: 通过 getActualCamera() 获取
+   - 方法1: CinemachineBrain.OutputCamera (brainGetOutputCamera)
+   - 方法2: Camera.current (cameraGetCurrent)
+   - 方法3: Camera.main (cameraGetMain)
+
+2. Camera Transform 属性:
+   - position: transformGetPosition_Injected
+   - rotation: transformGetRotation_Injected
+   - forward: transformGetForward (x64 ABI 返回 Vector3)
+   - right: transformGetRight
+   - up: transformGetUp
+
+3. Camera 属性:
+   - FOV: cameraGetFieldOfView -> float
+   - Aspect: cameraGetAspect -> float
+   - pixelWidth: cameraGetPixelWidth -> int
+   - pixelHeight: cameraGetPixelHeight -> int
+
+4. 准星位置:
+   - 假设屏幕中心: (pixelWidth/2, pixelHeight/2)
+
+5. 准星射线 (Camera.ScreenPointToRay):
+   - 使用 _Injected 版本: void(Camera*, Vector2* pos, int eye, Ray* ret, MethodInfo*)
+   - 地址: 0x327AD0
+
+6. FreeLook 参数:
+   - Follow: freeLook.add(0x44).readPointer()
+   - LookAt: freeLook.add(0x40).readPointer()
+   - XAxis: freeLook.add(0x104).readFloat()
+   - YAxis: freeLook.add(0x88).readFloat()
+   - Orbits: freeLook.add(0x194).readPointer() -> 数组 [height, radius] x3
+
+7. Rig Composer:
+   - ScreenX: comp.add(0x48).readFloat()
+   - ScreenY: comp.add(0x4C).readFloat()
+   - TrackedObjectOffset: comp.add(0x28).readFloat() (x,y,z)
+
+8. 枪口与准星误差:
+   - muzzle.forward 与 cameraRay.direction 的夹角: angleBetween()
+   - desiredDirection: normalize(cameraRay.hitPoint - muzzle.position)
+   - muzzle.forward 投影到屏幕后与准星的像素误差: callWorldToScreenPoint
+
+未确认:
+  - 所有实际运行时数值未采集（游戏未运行）
+  - Physics.Raycast 是否成功命中未确认

@@ -1,0 +1,47 @@
+1. set_modelVisible: Error: expected an integer
+   ---------------------------------------------------
+   当前 NativeFunction 声明: void(pointer, bool)
+   当前调用参数: setModelVisible(pcm, false)
+   IDA 验证签名: void __cdecl(PlayerCameraManager_o *this, bool value, const MethodInfo *method)
+   IDA 地址: il2cpp:10B12370 = 0x10000000 + 0x0B12370
+   应传类型: bool + MethodInfo* (第三个参数)
+   是否缺少 MethodInfo*: 是！
+   推荐修复: new NativeFunction(base.add(RVA), 'void', ['pointer', 'bool', 'pointer'])
+            调用: setModelVisible(pcm, false, ptr(0))
+   根因确认状态: 已确认 - 缺少 MethodInfo* 参数
+
+2. CameraManager Singleton: access violation accessing 0xc000b8c9
+   -----------------------------------------------------------
+   MethodInfo 地址: base.add(RVA.CameraManager_SingletonMethodInfo).readPointer()
+   问题: Awake 前调用 Singleton 获取导致访问越界
+   推荐安全方案: 仅在 Awake Hook 的 onEnter 中捕获实例，不要提前调用 Singleton 获取
+   根因确认状态: 已确认 - Awake 前 IL2CPP 对象尚未初始化
+
+3. PV/CV 数量为 0
+   ---------------
+   根因确认状态: 尚未确认
+   高概率原因: 偏移错误（但 dump.cs 验证为 0x34/0x38）或对象类型不对
+   注意: 32 位对象布局 [0x0]=klass, [0x4]=monitor, [0x8]=第一个字段，偏移可能不同
+
+4. 准星与枪口方向不一致
+   根因确认状态: 尚未确认
+   高概率原因: 第一人称射击 Ray 未修改，枪口节点未对准相机方向
+   需确认: Recoil.GetShootRay 正确地址（IDA: il2cpp:10B195C0 = 0x0B195C0 vs JS: 0x0B185C0 相差 0x1000）
+
+5. 角色遮挡准星
+   根因确认状态: 尚未确认
+   高概率原因: 相机距离过近、Composer 偏移不够、LookAt 目标过高
+
+6. 相机俯视明显
+   根因确认状态: 尚未确认
+   高概率原因: Orbit 高度设置偏高、LookAt 目标为 spine1 而非 neck
+
+7. 射击相关 Hook 地址错误（重大！）
+   ---------------------------------------------------
+   来源文件: AAAAA-third_person_v1.js（瞄准诊断系统部分）
+   Recoil.GetShootRay:    JS 使用 0x0B185C0, IDA 实际 il2cpp:10B195C0 = 0x0B195C0 (差 0x1000)
+   WPN_Gun.Damage:        JS 使用 0x0B603D0, IDA 实际 il2cpp:10B613D0 = 0x0B613D0 (差 0x1000)
+   WPN_Gun.GunShoot:      JS 使用 0x0B614C0, IDA 实际 il2cpp:10B624C0 = 0x0B624C0 (差 0x1000)
+   WPN_Gun.GunShoot_Logic:JS 使用 0x0B61170, IDA 实际 il2cpp:10B62170 = 0x0B62170 (差 0x1000)
+   影响: 瞄准诊断 Hook 可能附加到错误地址，导致无效或崩溃
+   根因确认状态: 已确认

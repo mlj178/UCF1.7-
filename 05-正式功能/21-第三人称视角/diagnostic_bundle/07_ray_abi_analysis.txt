@@ -1,0 +1,42 @@
+UnityEngine.Ray ABI 分析（32位 x86 __cdecl）
+=============================================
+
+1. 当前进程位数: 32 位（x86，pointerSize=4）
+2. 调用约定: __cdecl（Windows x86 IL2CPP）
+3. Ray.origin 偏移: 0x0 (Vector3, 12 bytes: 3 x float)
+4. Ray.direction 偏移: 0x0C (Vector3, 12 bytes)
+5. Ray 结构体总大小: 24 bytes
+6. 对齐方式: 4 字节对齐 (float 组件)
+
+7. Recoil.GetShootRay 返回 Ray 的方式:
+   IDA 签名: UnityEngine_Ray_o __cdecl Recoil__GetShootRay(Recoil_o *this, const MethodInfo *method)
+   32 位 __cdecl 返回值（大于 8 字节的结构体）：
+   - 调用者分配返回缓冲区，作为隐藏的第一个参数传递
+   - 函数栈帧: [ebp+08]=this, [ebp+0C]=retBuf, [ebp+10]=methodInfo
+   来源: IDA 汇编分析
+
+8. WPN_Gun.Damage 接收 Ray 的方式:
+   IDA 签名: void __cdecl WPN_Gun__Damage(WPN_Gun_o *this, UnityEngine_Ray_o ray, const MethodInfo *method)
+   IDA 栈帧:
+     this   = dword ptr  8
+     ray    = UnityEngine_Ray_o ptr  0Ch  (24 bytes inline on stack)
+     method = dword ptr  24h
+   结论：Ray 在 32 位 __cdecl 下通过栈内联传递（24 bytes 放在栈上）
+   来源: IDA 汇编分析
+
+9. 是否使用隐藏返回缓冲区:
+   - GetShootRay 返回值：是（调用者分配 24 byte retBuf）
+   - Damage 参数：否（Ray 通过栈内联传递）
+
+10. Frida Hook 应怎样读取/修改:
+    - 32 位 __cdecl：args[0]=this, args[1]=retBuf/GetShootRay, args[2]=methodInfo
+    - GetShootRay 返回值读取: args[1] 指向 24 byte 缓冲区
+    - Damage 中 Ray 读取: 从 this 指针偏移 0x0C 处读取 24 bytes
+
+11. 修改 Ray 时可能的崩溃风险:
+    - 32 位栈空间有限，Ray 内联在栈上，修改时可能破坏栈帧
+    - 必须确保在正确的栈偏移处读写
+
+未确认项:
+  - GetShootRay 具体 retBuf 参数索引需运行时验证（IDA 显示 [ebp+0C]=retBuf）
+  - Damage 中 Ray 的具体栈布局需运行时确认

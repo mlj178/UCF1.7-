@@ -181,6 +181,60 @@
     // v8 新增：Model.OnOwnerObserveModeChange(Model.Type mode) — private 方法
     var onOwnerObserveModeChange = new NativeFunction(base.add(RVA.Model_OnOwnerObserveModeChange), 'void', ['pointer', 'int']);
 
+    // ---- 瞄准诊断新增：Unity API NativeFunction ----
+    // 所有 RVA 均经过 script.json 验证 (2026-06-21)
+    //
+    // IL2CPP x64 值类型 ABI 说明:
+    // - 返回值 > 8 字节 (Vector3=12B, Quaternion=16B, Ray=24B): 调用者分配 retBuf 作为第一隐藏参数
+    // - 参数 > 8 字节: 通过引用传递 (指针)
+    // - 优先使用 _Injected 版本，签名更清晰: void(this, ..., ret, methodInfo)
+    //
+    // Transform 方法 (script.json 验证)
+    // get_position_Injected: void(Transform*, Vector3* ret, MethodInfo*) → 0x3F4280
+    var transformGetPosition = new NativeFunction(base.add(0x3F4280), 'void', ['pointer', 'pointer', 'pointer']);
+    // get_rotation_Injected: void(Transform*, Quaternion* ret, MethodInfo*) → 0x3F4380
+    var transformGetRotation = new NativeFunction(base.add(0x3F4380), 'void', ['pointer', 'pointer', 'pointer']);
+    // get_forward: 返回 Vector3 (12B > 8B), x64 ABI: void(Vector3* retBuf, Transform*, MethodInfo*) → 0x3F3F20
+    var transformGetForward  = new NativeFunction(base.add(0x3F3F20), 'void', ['pointer', 'pointer', 'pointer']);
+    // get_right: 同上 → 0x3F42F0
+    var transformGetRight    = new NativeFunction(base.add(0x3F42F0), 'void', ['pointer', 'pointer', 'pointer']);
+    // get_up: 同上 → 0x3F43F0
+    var transformGetUp       = new NativeFunction(base.add(0x3F43F0), 'void', ['pointer', 'pointer', 'pointer']);
+    // get_parent: 返回 Transform* (指针, ≤8B), 正常调用 → 0x3F31D0
+    var transformGetParent   = new NativeFunction(base.add(0x3F31D0), 'pointer', ['pointer', 'pointer']);
+    // GetChild: 返回 Transform* (指针), 参数 (this, index, methodInfo) → 0x3F3150
+    var transformGetChild    = new NativeFunction(base.add(0x3F3150), 'pointer', ['pointer', 'int', 'pointer']);
+    // get_childCount: 返回 int32 → 0x3F3E80
+    var transformGetChildCount = new NativeFunction(base.add(0x3F3E80), 'int', ['pointer', 'pointer']);
+    // Object.get_name: 返回 String* → 0x4EA1B0 (已验证)
+    var transformGetName     = new NativeFunction(base.add(0x4EA1B0), 'pointer', ['pointer', 'pointer']);
+
+    // Camera 方法 (script.json 验证)
+    // get_main: static, 返回 Camera* → 0x328310
+    var cameraGetMain        = new NativeFunction(base.add(0x328310), 'pointer', ['pointer']);
+    // get_current: static, 返回 Camera* → 0x3281C0
+    var cameraGetCurrent     = new NativeFunction(base.add(0x3281C0), 'pointer', ['pointer']);
+    // get_fieldOfView: 返回 float → 0x328270
+    var cameraGetFieldOfView = new NativeFunction(base.add(0x328270), 'float', ['pointer', 'pointer']);
+    // get_pixelWidth: 返回 int → 0x328490
+    var cameraGetPixelWidth  = new NativeFunction(base.add(0x328490), 'int', ['pointer', 'pointer']);
+    // get_pixelHeight: 返回 int → 0x3283F0
+    var cameraGetPixelHeight = new NativeFunction(base.add(0x3283F0), 'int', ['pointer', 'pointer']);
+    // get_aspect: 返回 float → 0x328090
+    var cameraGetAspect      = new NativeFunction(base.add(0x328090), 'float', ['pointer', 'pointer']);
+    // ScreenPointToRay_Injected: void(Camera*, Vector2* pos, int eye, Ray* ret, MethodInfo*) → 0x327AD0
+    // 使用 _Injected 版本避免值类型 ABI 问题; eye=0 表示默认
+    var cameraScreenPointToRay = new NativeFunction(base.add(0x327AD0), 'void', ['pointer', 'pointer', 'int', 'pointer', 'pointer']);
+    // WorldToScreenPoint_Injected: void(Camera*, Vector3* position, int eye, Vector3* ret, MethodInfo*) → 0x327EE0
+    var cameraWorldToScreenPoint = new NativeFunction(base.add(0x327EE0), 'void', ['pointer', 'pointer', 'int', 'pointer', 'pointer']);
+
+    // CinemachineBrain.get_OutputCamera: 返回 Camera* → 0x82CDB0
+    var brainGetOutputCamera = new NativeFunction(base.add(0x82CDB0), 'pointer', ['pointer', 'pointer']);
+
+    // Physics.Raycast(Ray, RaycastHit*, float): bool → 0xABAF40
+    // Ray 是 24B 值类型, x64 ABI 通过引用传递; 签名: bool(Ray*, RaycastHit*, float, MethodInfo*)
+    var physicsRaycast = new NativeFunction(base.add(0xABAF40), 'bool', ['pointer', 'pointer', 'float', 'pointer']);
+
     send({type:'log', level:'info', module:'TP', message:'NativeFunction 声明完成 (v8)'});
 
     // ============================================================
@@ -1253,6 +1307,1253 @@
     }
 
     // ============================================================
+    // 瞄准诊断系统
+    // ============================================================
+    var aimDiag = {
+        active: false,
+        sessionId: '',
+        shotId: 0,
+        startTime: 0,
+        duration: 15,
+        intervalId: null,
+        logLines: [],      // 缓冲区，最终写入文件
+        shootHooksInstalled: false,
+        lastShotData: null, // 最近一次射击数据
+    };
+
+    // 读取 Vector3 (3 个 float)
+    function readVec3(p) {
+        if (isNull(p)) return { x: 0, y: 0, z: 0, valid: false };
+        try {
+            return {
+                x: p.readFloat(),
+                y: p.add(4).readFloat(),
+                z: p.add(8).readFloat(),
+                valid: true
+            };
+        } catch(e) {
+            return { x: 0, y: 0, z: 0, valid: false, error: String(e) };
+        }
+    }
+
+    // 格式化 Vector3
+    function fmtVec3(v) {
+        if (!v.valid) return '(invalid)';
+        return '(' + v.x.toFixed(4) + ', ' + v.y.toFixed(4) + ', ' + v.z.toFixed(4) + ')';
+    }
+
+    // 读取 Quaternion (4 个 float)
+    function readQuat(p) {
+        if (isNull(p)) return { x: 0, y: 0, z: 0, w: 0, valid: false };
+        try {
+            return {
+                x: p.readFloat(),
+                y: p.add(4).readFloat(),
+                z: p.add(8).readFloat(),
+                w: p.add(12).readFloat(),
+                valid: true
+            };
+        } catch(e) {
+            return { x: 0, y: 0, z: 0, w: 0, valid: false, error: String(e) };
+        }
+    }
+
+    function fmtQuat(q) {
+        if (!q.valid) return '(invalid)';
+        return '(' + q.x.toFixed(4) + ', ' + q.y.toFixed(4) + ', ' + q.z.toFixed(4) + ', ' + q.w.toFixed(4) + ')';
+    }
+
+    // 读取 Ray (origin: Vector3, direction: Vector3, 共 24 字节)
+    function readRay(p) {
+        if (isNull(p)) return { origin: { x:0,y:0,z:0,valid:false }, direction: { x:0,y:0,z:0,valid:false }, valid: false };
+        try {
+            return {
+                origin: readVec3(p),
+                direction: readVec3(p.add(12)),
+                valid: true
+            };
+        } catch(e) {
+            return { origin: { x:0,y:0,z:0,valid:false }, direction: { x:0,y:0,z:0,valid:false }, valid: false, error: String(e) };
+        }
+    }
+
+    function fmtRay(r) {
+        if (!r.valid) return 'origin=(invalid) direction=(invalid)';
+        return 'origin=' + fmtVec3(r.origin) + ' direction=' + fmtVec3(r.direction);
+    }
+
+    // 向量运算
+    function vec3Sub(a, b) { return { x: a.x - b.x, y: a.y - b.y, z: a.z - b.z, valid: true }; }
+    function vec3Add(a, b) { return { x: a.x + b.x, y: a.y + b.y, z: a.z + b.z, valid: true }; }
+    function vec3Scale(a, s) { return { x: a.x * s, y: a.y * s, z: a.z * s, valid: true }; }
+    function vec3Length(a) { return Math.sqrt(a.x * a.x + a.y * a.y + a.z * a.z); }
+    function vec3Normalize(a) { var l = vec3Length(a); if (l < 0.0001) return { x:0,y:0,z:0,valid:true }; return { x:a.x/l, y:a.y/l, z:a.z/l, valid:true }; }
+    function vec3Dot(a, b) { return a.x * b.x + a.y * b.y + a.z * b.z; }
+    function angleBetween(a, b) {
+        var na = vec3Normalize(a), nb = vec3Normalize(b);
+        var d = vec3Dot(na, nb);
+        if (d > 1.0) d = 1.0; if (d < -1.0) d = -1.0;
+        return Math.acos(d) * 180.0 / Math.PI;
+    }
+
+    // 安全获取 Transform 的 position/forward 等
+    // 注意: 所有值类型返回的 NativeFunction 现在使用 _Injected 或 x64 ABI,
+    //       调用方式为 func(retBuf, thisPtr, methodInfo), 结果写入 retBuf
+    function safeGetTransformPos(tPtr) {
+        if (isNull(tPtr)) return { x:0,y:0,z:0,valid:false,reason:'null_transform' };
+        try {
+            var retBuf = Memory.alloc(12); // Vector3 = 12 bytes
+            transformGetPosition(retBuf, tPtr, ptr(0));
+            return readVec3(retBuf);
+        } catch(e) { return { x:0,y:0,z:0,valid:false,reason:String(e) }; }
+    }
+
+    function safeGetTransformForward(tPtr) {
+        if (isNull(tPtr)) return { x:0,y:0,z:0,valid:false,reason:'null_transform' };
+        try {
+            var retBuf = Memory.alloc(12);
+            transformGetForward(retBuf, tPtr, ptr(0));
+            return readVec3(retBuf);
+        } catch(e) { return { x:0,y:0,z:0,valid:false,reason:String(e) }; }
+    }
+
+    function safeGetTransformRight(tPtr) {
+        if (isNull(tPtr)) return { x:0,y:0,z:0,valid:false,reason:'null_transform' };
+        try {
+            var retBuf = Memory.alloc(12);
+            transformGetRight(retBuf, tPtr, ptr(0));
+            return readVec3(retBuf);
+        } catch(e) { return { x:0,y:0,z:0,valid:false,reason:String(e) }; }
+    }
+
+    function safeGetTransformUp(tPtr) {
+        if (isNull(tPtr)) return { x:0,y:0,z:0,valid:false,reason:'null_transform' };
+        try {
+            var retBuf = Memory.alloc(12);
+            transformGetUp(retBuf, tPtr, ptr(0));
+            return readVec3(retBuf);
+        } catch(e) { return { x:0,y:0,z:0,valid:false,reason:String(e) }; }
+    }
+
+    function safeGetTransformRotation(tPtr) {
+        if (isNull(tPtr)) return { x:0,y:0,z:0,w:0,valid:false,reason:'null_transform' };
+        try {
+            var retBuf = Memory.alloc(16); // Quaternion = 16 bytes
+            transformGetRotation(retBuf, tPtr, ptr(0));
+            return readQuat(retBuf);
+        } catch(e) { return { x:0,y:0,z:0,w:0,valid:false,reason:String(e) }; }
+    }
+
+    // 获取实际渲染的 Unity Camera
+    function getActualCamera() {
+        // 方法1: 通过 CinemachineBrain.OutputCamera
+        var camMgr = tryGetCameraManager();
+        if (!isNull(camMgr)) {
+            try {
+                var brainPtr = camMgr.add(OFF.CM_brain).readPointer();
+                if (!isNull(brainPtr)) {
+                    var outCam = brainGetOutputCamera(brainPtr, ptr(0));
+                    if (!isNull(outCam)) return outCam;
+                }
+            } catch(e) {}
+        }
+        // 方法2: Camera.current
+        try {
+            var cur = cameraGetCurrent(ptr(0));
+            if (!isNull(cur)) return cur;
+        } catch(e) {}
+        // 方法3: Camera.main
+        try {
+            var main = cameraGetMain(ptr(0));
+            if (!isNull(main)) return main;
+        } catch(e) {}
+        return null;
+    }
+
+    // 查找枪口 Transform：枚举武器子节点
+    var MUZZLE_KEYWORDS = ['muzzle', 'firepoint', 'fire_point', 'fire', 'shotpoint', 'shot_point', 'bulletpoint', 'bullet_point', 'barrel', 'weaponroot', 'weapon_root', 'socket'];
+    var MUZZLE_EXACT = ['muzzle', 'firePoint', 'fire_point', 'shotPoint', 'bulletPoint', 'barrelEnd'];
+
+    function findMuzzleTransform(weaponPtr) {
+        if (isNull(weaponPtr)) return { found: false, reason: 'weapon_null' };
+        try {
+            // 尝试从 Weapon 字段获取 muzzle/firePoint
+            // WPN_Gun 继承自 Weapon，可能有 muzzle 相关字段
+            // 先枚举 Weapon 的 GameObject 子节点
+            var goPtr = weaponPtr; // MonoBehaviour.this -> Component.this -> 第一个字段是 m_GameObject
+            // Il2Cpp MonoBehaviour 布局: 0x0 = klass, 0x8 = monitor, 0x10 = m_CachedPtr (GameObject*)
+            var cachedGo = weaponPtr.add(0x10).readPointer();
+            if (isNull(cachedGo)) return { found: false, reason: 'cachedGo_null' };
+
+            // GameObject -> Transform: 0x30 = m_Transform
+            var transformPtr = cachedGo.add(0x30).readPointer();
+            if (isNull(transformPtr)) return { found: false, reason: 'transform_null' };
+
+            // 递归搜索子节点
+            var candidates = [];
+            searchChildrenForMuzzle(transformPtr, '', 0, candidates);
+
+            if (candidates.length === 0) {
+                return { found: false, reason: 'no_muzzle_keyword_found', candidates: [] };
+            }
+
+            // 优先精确匹配
+            for (var i = 0; i < candidates.length; i++) {
+                var nameLower = candidates[i].name.toLowerCase();
+                for (var j = 0; j < MUZZLE_EXACT.length; j++) {
+                    if (nameLower === MUZZLE_EXACT[j]) {
+                        return { found: true, transform: candidates[i].transform, name: candidates[i].name, matchType: 'exact' };
+                    }
+                }
+            }
+
+            // 模糊匹配
+            return { found: true, transform: candidates[0].transform, name: candidates[0].name, matchType: 'fuzzy', candidates: candidates };
+        } catch(e) {
+            return { found: false, reason: String(e) };
+        }
+    }
+
+    function searchChildrenForMuzzle(tPtr, parentName, depth, results) {
+        if (depth > 6 || isNull(tPtr)) return;
+        try {
+            var childCount = transformGetChildCount(tPtr, ptr(0));
+            for (var i = 0; i < childCount && i < 20; i++) {
+                var child = transformGetChild(tPtr, i, ptr(0));
+                if (isNull(child)) continue;
+                var name = getTransformName(child);
+                var nameLower = name.toLowerCase();
+                for (var k = 0; k < MUZZLE_KEYWORDS.length; k++) {
+                    if (nameLower.indexOf(MUZZLE_KEYWORDS[k]) >= 0) {
+                        results.push({ name: name, transform: child });
+                        break;
+                    }
+                }
+                searchChildrenForMuzzle(child, name, depth + 1, results);
+            }
+        } catch(e) {}
+    }
+
+    function getTransformName(tPtr) {
+        if (isNull(tPtr)) return '<null>';
+        try {
+            var namePtr = transformGetName(tPtr, ptr(0));
+            return readIl2cppString(namePtr);
+        } catch(e) { return '<name_err>'; }
+    }
+
+    // 写入诊断日志行
+    function diagLog(line) {
+        aimDiag.logLines.push(line);
+        // 同时通过 send 发送到 Python
+        send({type:'aim_diag', line: line});
+    }
+
+    // ---- Unity API 辅助函数 (封装 _Injected 和 x64 ABI 调用) ----
+    // Camera.ScreenPointToRay: 使用 _Injected 版本
+    // 签名: void(Camera*, Vector2* pos, int eye, Ray* ret, MethodInfo*)
+    function callScreenPointToRay(camPtr, pixelX, pixelY) {
+        try {
+            var posBuf = Memory.alloc(8);  // Vector2 = 8 bytes
+            posBuf.writeFloat(pixelX);
+            posBuf.add(4).writeFloat(pixelY);
+            var rayBuf = Memory.alloc(24); // Ray = 24 bytes (origin + direction)
+            cameraScreenPointToRay(camPtr, posBuf, 0, rayBuf, ptr(0));
+            return readRay(rayBuf);
+        } catch(e) {
+            return { origin: {x:0,y:0,z:0,valid:false}, direction: {x:0,y:0,z:0,valid:false}, valid: false, error: String(e) };
+        }
+    }
+
+    // Camera.WorldToScreenPoint: 使用 _Injected 版本
+    // 签名: void(Camera*, Vector3* position, int eye, Vector3* ret, MethodInfo*)
+    function callWorldToScreenPoint(camPtr, wx, wy, wz) {
+        try {
+            var posBuf = Memory.alloc(12); // Vector3 = 12 bytes
+            posBuf.writeFloat(wx);
+            posBuf.add(4).writeFloat(wy);
+            posBuf.add(8).writeFloat(wz);
+            var retBuf = Memory.alloc(12);
+            cameraWorldToScreenPoint(camPtr, posBuf, 0, retBuf, ptr(0));
+            return readVec3(retBuf);
+        } catch(e) {
+            return { x:0, y:0, z:0, valid: false, error: String(e) };
+        }
+    }
+
+    // Physics.Raycast: 签名 bool(Ray*, RaycastHit*, float, MethodInfo*)
+    function callPhysicsRaycast(rayData, maxDist) {
+        try {
+            var rayBuf = Memory.alloc(24); // Ray = 24 bytes
+            if (rayData.origin && rayData.origin.valid) {
+                rayBuf.writeFloat(rayData.origin.x);
+                rayBuf.add(4).writeFloat(rayData.origin.y);
+                rayBuf.add(8).writeFloat(rayData.origin.z);
+            }
+            if (rayData.direction && rayData.direction.valid) {
+                rayBuf.add(12).writeFloat(rayData.direction.x);
+                rayBuf.add(16).writeFloat(rayData.direction.y);
+                rayBuf.add(20).writeFloat(rayData.direction.z);
+            }
+            var hitBuf = Memory.alloc(256); // RaycastHit 结构体
+            var hit = physicsRaycast(rayBuf, hitBuf, maxDist, ptr(0));
+            if (hit) {
+                return {
+                    hit: true,
+                    point: readVec3(hitBuf),
+                    normal: readVec3(hitBuf.add(12)),
+                    distance: (function() { try { return hitBuf.add(0x30).readFloat(); } catch(e) { return -1; } })(),
+                };
+            }
+            return { hit: false };
+        } catch(e) {
+            return { hit: false, error: String(e) };
+        }
+    }
+
+    // Camera 属性读取辅助
+    function callCameraGetPixelWidth(camPtr) { return cameraGetPixelWidth(camPtr, ptr(0)); }
+    function callCameraGetPixelHeight(camPtr) { return cameraGetPixelHeight(camPtr, ptr(0)); }
+
+    // ---- 静态快照 ----
+    function captureStaticSnapshot(tag) {
+        var ts = new Date().toISOString();
+        diagLog('');
+        diagLog('========== STATIC SNAPSHOT [' + tag + '] BEGIN ==========');
+        diagLog('sessionId=' + aimDiag.sessionId);
+        diagLog('timestamp=' + ts);
+        diagLog('tag=' + tag);
+
+        // [Session]
+        diagLog('');
+        diagLog('[Session]');
+        diagLog('sessionId=' + aimDiag.sessionId);
+        diagLog('gamePID=' + Process.id);
+        diagLog('gameAssemblyBase=' + base);
+        diagLog('stateMachineState=' + fsm.current);
+        diagLog('thirdPersonEnabled=' + (fsm.current === STATE.TP_ENABLED));
+        diagLog('cameraDistance=' + fsm.cameraDistance);
+        diagLog('cameraSensitivity=' + fsm.cameraSensitivity);
+
+        // [Pointers]
+        diagLog('');
+        diagLog('[Pointers]');
+        var player = findMyPlayer();
+        diagLog('GameManager=' + gm + ' readable=' + isReadable(gm));
+        diagLog('CameraManager=' + cameraManager + ' readable=' + isReadable(cameraManager));
+
+        // CinemachineBrain
+        var brainPtr = null;
+        try {
+            var camMgr = tryGetCameraManager();
+            if (!isNull(camMgr)) brainPtr = camMgr.add(OFF.CM_brain).readPointer();
+        } catch(e) {}
+        diagLog('CinemachineBrain=' + brainPtr + ' readable=' + isReadable(brainPtr));
+
+        // FreeLook
+        var freeLook = null;
+        try {
+            var camMgr = tryGetCameraManager();
+            if (!isNull(camMgr)) freeLook = camMgr.add(OFF.CM_freeLookCamera).readPointer();
+        } catch(e) {}
+        diagLog('FreeLook=' + freeLook + ' readable=' + isReadable(freeLook));
+
+        diagLog('localPlayer=' + player + ' readable=' + isReadable(player));
+
+        // PlayerController
+        var playerCtrl = null;
+        try { if (player) playerCtrl = player.add(0x50).readPointer(); } catch(e) {}
+        diagLog('PlayerController=' + playerCtrl + ' readable=' + isReadable(playerCtrl));
+
+        // PlayerCameraManager
+        var pcm = null;
+        try { if (player) pcm = player.add(OFF.Player_cameraManager).readPointer(); } catch(e) {}
+        diagLog('PlayerCameraManager=' + pcm + ' readable=' + isReadable(pcm));
+
+        // CharacterModel
+        var character = null;
+        try { if (player) character = player.add(OFF.Player_currentCharacter).readPointer(); } catch(e) {}
+        diagLog('CharacterModel=' + character + ' readable=' + isReadable(character));
+
+        // CharacterContainer
+        var charContainer = null;
+        try { if (player) charContainer = player.add(OFF.Player_characterContainer).readPointer(); } catch(e) {}
+        diagLog('characterContainer=' + charContainer + ' readable=' + isReadable(charContainer));
+
+        // 骨骼
+        var spine = null, spine1 = null, neck = null;
+        try {
+            if (!isNull(character)) {
+                spine = character.add(OFF.CM_spine).readPointer();
+                spine1 = character.add(OFF.CM_spine1).readPointer();
+                neck = character.add(OFF.CM_neck).readPointer();
+            }
+        } catch(e) {}
+        diagLog('spine=' + spine + ' readable=' + isReadable(spine));
+        diagLog('spine1=' + spine1 + ' readable=' + isReadable(spine1));
+        diagLog('neck=' + neck + ' readable=' + isReadable(neck));
+
+        // Animators
+        var charAnim = null, handAnim = null;
+        try {
+            if (!isNull(character)) {
+                charAnim = character.add(OFF.CM_characterAnimator).readPointer();
+                handAnim = character.add(OFF.CM_handAnimator).readPointer();
+            }
+        } catch(e) {}
+        diagLog('characterAnimator=' + charAnim + ' readable=' + isReadable(charAnim));
+        diagLog('handAnimator=' + handAnim + ' readable=' + isReadable(handAnim));
+
+        // Weapon
+        var weapon = null;
+        try {
+            if (player) {
+                var wpns = player.add(OFF.Player_wpns).readPointer();
+                if (!isNull(wpns)) weapon = wpns.add(OFF.PW_inUse).readPointer();
+            }
+        } catch(e) {}
+        diagLog('currentWeapon=' + weapon + ' readable=' + isReadable(weapon));
+
+        // Muzzle 查找
+        var muzzleResult = findMuzzleTransform(weapon);
+        diagLog('muzzleFound=' + muzzleResult.found + (muzzleResult.found ? ' name=' + muzzleResult.name + ' matchType=' + muzzleResult.matchType : ' reason=' + muzzleResult.reason));
+
+        // [Camera Data]
+        diagLog('');
+        diagLog('[CameraData]');
+        var actualCam = getActualCamera();
+        diagLog('actualCamera=' + actualCam + ' readable=' + isReadable(actualCam));
+
+        if (!isNull(actualCam)) {
+            try {
+                // Camera Transform
+                var camGo = actualCam.add(0x10).readPointer(); // m_CachedPtr
+                var camTransform = camGo.add(0x30).readPointer(); // m_Transform
+                if (!isNull(camTransform)) {
+                    var camPos = safeGetTransformPos(camTransform);
+                    var camFwd = safeGetTransformForward(camTransform);
+                    var camRight = safeGetTransformForward(camTransform); // 暂用 forward
+                    var camUp = safeGetTransformForward(camTransform);
+                    // 使用新的 safeGetTransformRight/Up
+                    camRight = safeGetTransformRight(camTransform);
+                    camUp = safeGetTransformUp(camTransform);
+                    var camRot = safeGetTransformRotation(camTransform);
+
+                    diagLog('actualCamera.position=' + fmtVec3(camPos));
+                    diagLog('actualCamera.rotation=' + fmtQuat(camRot));
+                    diagLog('actualCamera.forward=' + fmtVec3(camFwd));
+                    diagLog('actualCamera.right=' + fmtVec3(camRight));
+                    diagLog('actualCamera.up=' + fmtVec3(camUp));
+                }
+
+                // Camera 属性 (所有方法需要 MethodInfo* 参数)
+                try {
+                    var fov = cameraGetFieldOfView(actualCam, ptr(0));
+                    var pw = cameraGetPixelWidth(actualCam, ptr(0));
+                    var ph = cameraGetPixelHeight(actualCam, ptr(0));
+                    var asp = cameraGetAspect(actualCam, ptr(0));
+                    diagLog('actualCamera.fieldOfView=' + fov.toFixed(4));
+                    diagLog('actualCamera.pixelWidth=' + pw);
+                    diagLog('actualCamera.pixelHeight=' + ph);
+                    diagLog('actualCamera.aspect=' + asp.toFixed(4));
+                    diagLog('screen.width=' + pw + ' screen.height=' + ph);
+                } catch(e) {
+                    diagLog('camera_properties_error=' + e);
+                }
+            } catch(e) {
+                diagLog('actualCamera_read_error=' + e);
+            }
+        }
+
+        // FreeLook 参数
+        if (!isNull(freeLook)) {
+            try {
+                var followPtr = freeLook.add(OFF.CFL_m_Follow).readPointer();
+                var lookAtPtr = freeLook.add(OFF.CFL_m_LookAt).readPointer();
+                diagLog('freeLook.follow=' + followPtr);
+                diagLog('freeLook.lookAt=' + lookAtPtr);
+
+                if (!isNull(followPtr)) {
+                    var followPos = safeGetTransformPos(followPtr);
+                    diagLog('freeLook.follow.position=' + fmtVec3(followPos));
+                }
+                if (!isNull(lookAtPtr)) {
+                    var lookAtPos = safeGetTransformPos(lookAtPtr);
+                    diagLog('freeLook.lookAt.position=' + fmtVec3(lookAtPos));
+                }
+
+                var yAxis = freeLook.add(OFF.CFL_m_YAxis).readFloat();
+                var xAxis = freeLook.add(OFF.CFL_m_XAxis).readFloat();
+                diagLog('freeLook.yAxis=' + yAxis.toFixed(4));
+                diagLog('freeLook.xAxis=' + xAxis.toFixed(4));
+
+                // Orbits
+                var orbitsPtr = freeLook.add(OFF.CFL_m_Orbits).readPointer();
+                if (!isNull(orbitsPtr)) {
+                    for (var i = 0; i < 3; i++) {
+                        var h = orbitsPtr.add(0x10 + i * 8).readFloat();
+                        var r = orbitsPtr.add(0x14 + i * 8).readFloat();
+                        diagLog('orbit[' + i + '].height=' + h.toFixed(4) + ' radius=' + r.toFixed(4));
+                    }
+                }
+
+                // Rig Composer 参数
+                for (var rigIdx = 0; rigIdx < 3; rigIdx++) {
+                    var rig = getRig(freeLook, rigIdx);
+                    if (isNull(rig)) continue;
+                    var pipeline = getComponentPipeline(rig);
+                    if (isNull(pipeline)) continue;
+                    var pipeLen = pipeline.add(0xC).readU32();
+                    for (var ci = 0; ci < pipeLen && ci < 10; ci++) {
+                        var comp = pipeline.add(0x10 + ci * 8).readPointer();
+                        if (isNull(comp)) continue;
+                        try {
+                            var sx = comp.add(OFF.CC_m_ScreenX).readFloat();
+                            var sy = comp.add(OFF.CC_m_ScreenY).readFloat();
+                            if (sx < -1 || sx > 2 || sy < -1 || sy > 2) continue;
+                            diagLog('rig[' + rigIdx + '].composer.screenX=' + sx.toFixed(4));
+                            diagLog('rig[' + rigIdx + '].composer.screenY=' + sy.toFixed(4));
+                            var tx = comp.add(OFF.CC_m_TrackedObjectOffset).readFloat();
+                            var ty = comp.add(OFF.CC_m_TrackedObjectOffset + 4).readFloat();
+                            var tz = comp.add(OFF.CC_m_TrackedObjectOffset + 8).readFloat();
+                            diagLog('rig[' + rigIdx + '].composer.trackedObjectOffset=(' + tx.toFixed(4) + ',' + ty.toFixed(4) + ',' + tz.toFixed(4) + ')');
+                            var dzw = comp.add(OFF.CC_m_DeadZoneWidth).readFloat();
+                            var dzh = comp.add(OFF.CC_m_DeadZoneHeight).readFloat();
+                            diagLog('rig[' + rigIdx + '].composer.deadZone=(' + dzw.toFixed(4) + ',' + dzh.toFixed(4) + ')');
+                        } catch(e) {}
+                    }
+                }
+
+                // 相机与角色距离
+                if (!isNull(actualCam) && !isNull(charContainer)) {
+                    try {
+                        var camGo2 = actualCam.add(0x10).readPointer();
+                        var camT = camGo2.add(0x30).readPointer();
+                        var camP = safeGetTransformPos(camT);
+                        var charP = safeGetTransformPos(charContainer);
+                        if (camP.valid && charP.valid) {
+                            var diff = vec3Sub(camP, charP);
+                            var dist = vec3Length(diff);
+                            diagLog('cameraToCharacter.distance=' + dist.toFixed(4));
+                            diagLog('cameraToCharacter.localOffset=' + fmtVec3(diff));
+                        }
+                    } catch(e) {}
+                }
+            } catch(e) {
+                diagLog('freeLook_read_error=' + e);
+            }
+        }
+
+        // [Crosshair Ray]
+        diagLog('');
+        diagLog('[CrosshairRay]');
+        if (!isNull(actualCam)) {
+            try {
+                var pw2 = callCameraGetPixelWidth(actualCam);
+                var ph2 = callCameraGetPixelHeight(actualCam);
+                var cx = pw2 / 2.0;
+                var cy = ph2 / 2.0;
+                diagLog('crosshair.pixelX=' + cx.toFixed(4));
+                diagLog('crosshair.pixelY=' + cy.toFixed(4));
+
+                // ScreenPointToRay (使用 _Injected 版本)
+                var crosshairRay = callScreenPointToRay(actualCam, cx, cy);
+                if (crosshairRay.valid) {
+                    diagLog('cameraRay.origin=' + fmtVec3(crosshairRay.origin));
+                    diagLog('cameraRay.direction=' + fmtVec3(crosshairRay.direction));
+
+                    // Physics.Raycast
+                    try {
+                        var rayHit = callPhysicsRaycast(crosshairRay, 1000.0);
+                        diagLog('cameraRay.hit=' + rayHit.hit);
+                        if (rayHit.hit) {
+                            diagLog('cameraRay.hitPoint=' + fmtVec3(rayHit.point));
+                            diagLog('cameraRay.hitNormal=' + fmtVec3(rayHit.normal));
+                            try { diagLog('cameraRay.hitDistance=' + rayHit.distance.toFixed(4)); } catch(e) {}
+                        }
+                    } catch(e) {
+                        diagLog('cameraRay.raycast_error=' + e);
+                    }
+                } else {
+                    diagLog('cameraRay=FAILED_TO_COMPUTE' + (crosshairRay.error ? ' error=' + crosshairRay.error : ''));
+                }
+            } catch(e) {
+                diagLog('crosshair_error=' + e);
+            }
+        }
+
+        // [Weapon & Muzzle]
+        diagLog('');
+        diagLog('[WeaponMuzzle]');
+        if (!isNull(weapon)) {
+            try {
+                var wpnGo = weapon.add(0x10).readPointer();
+                var wpnName = getGameObjectName(wpnGo);
+                diagLog('weapon.name=' + wpnName);
+
+                // weaponRoot
+                var wpnTransform = wpnGo.add(0x30).readPointer();
+                if (!isNull(wpnTransform)) {
+                    var wpnPos = safeGetTransformPos(wpnTransform);
+                    var wpnFwd = safeGetTransformForward(wpnTransform);
+                    var wpnRot = safeGetTransformRotation(wpnTransform);
+                    diagLog('weaponRoot.position=' + fmtVec3(wpnPos));
+                    diagLog('weaponRoot.rotation=' + fmtQuat(wpnRot));
+                    diagLog('weaponRoot.forward=' + fmtVec3(wpnFwd));
+
+                    // Parent
+                    try {
+                        var parent = transformGetParent(wpnTransform, ptr(0));
+                        if (!isNull(parent)) {
+                            var parentName = getTransformName(parent);
+                            diagLog('weaponRoot.parent=' + parentName);
+                        }
+                    } catch(e) {}
+                }
+            } catch(e) {
+                diagLog('weapon_read_error=' + e);
+            }
+        }
+
+        // Muzzle 数据
+        if (muzzleResult.found) {
+            var mPos = safeGetTransformPos(muzzleResult.transform);
+            var mFwd = safeGetTransformForward(muzzleResult.transform);
+            var mRot = safeGetTransformRotation(muzzleResult.transform);
+            diagLog('muzzle.name=' + muzzleResult.name);
+            diagLog('muzzle.position=' + fmtVec3(mPos));
+            diagLog('muzzle.rotation=' + fmtQuat(mRot));
+            diagLog('muzzle.forward=' + fmtVec3(mFwd));
+
+            try {
+                var mParent = transformGetParent(muzzleResult.transform, ptr(0));
+                if (!isNull(mParent)) {
+                    diagLog('muzzle.parent=' + getTransformName(mParent));
+                }
+            } catch(e) {}
+        } else {
+            diagLog('muzzle=NOT_FOUND');
+            // 枚举武器子节点名称
+            if (!isNull(weapon)) {
+                try {
+                    var wpnGo2 = weapon.add(0x10).readPointer();
+                    var wpnT2 = wpnGo2.add(0x30).readPointer();
+                    diagLog('weapon_children:');
+                    enumerateChildren(wpnT2, '  ', 0, 4);
+                } catch(e) {
+                    diagLog('weapon_children_error=' + e);
+                }
+            }
+        }
+
+        // [Skeleton]
+        diagLog('');
+        diagLog('[Skeleton]');
+        try {
+            if (!isNull(spine)) {
+                diagLog('spine.position=' + fmtVec3(safeGetTransformPos(spine)));
+                diagLog('spine.forward=' + fmtVec3(safeGetTransformForward(spine)));
+            }
+            if (!isNull(spine1)) {
+                diagLog('spine1.position=' + fmtVec3(safeGetTransformPos(spine1)));
+                diagLog('spine1.forward=' + fmtVec3(safeGetTransformForward(spine1)));
+            }
+            if (!isNull(neck)) {
+                diagLog('neck.position=' + fmtVec3(safeGetTransformPos(neck)));
+                diagLog('neck.forward=' + fmtVec3(safeGetTransformForward(neck)));
+            }
+            if (!isNull(charContainer)) {
+                diagLog('characterRoot.position=' + fmtVec3(safeGetTransformPos(charContainer)));
+                diagLog('characterRoot.forward=' + fmtVec3(safeGetTransformForward(charContainer)));
+            }
+        } catch(e) {
+            diagLog('skeleton_error=' + e);
+        }
+
+        // [Animator State]
+        diagLog('');
+        diagLog('[AnimatorState]');
+        try {
+            // 读取 Player.cameraRotation
+            if (player) {
+                try {
+                    var camRotX = player.add(OFF.Player_cameraRotation).readFloat();
+                    var camRotY = player.add(OFF.Player_cameraRotation + 4).readFloat();
+                    diagLog('player.cameraRotation.x=' + camRotX.toFixed(4));
+                    diagLog('player.cameraRotation.y=' + camRotY.toFixed(4));
+                } catch(e) {
+                    diagLog('player.cameraRotation_error=' + e);
+                }
+            }
+            // 读取角色根节点 rotation
+            if (!isNull(charContainer)) {
+                var rootRot = safeGetTransformRotation(charContainer);
+                diagLog('characterRoot.rotation=' + fmtQuat(rootRot));
+                diagLog('characterRoot.forward=' + fmtVec3(safeGetTransformForward(charContainer)));
+            }
+            // 读取 handAnimator 和 characterAnimator 的基本信息
+            if (!isNull(character)) {
+                try {
+                    var handAnim = character.add(OFF.CM_handAnimator).readPointer();
+                    var charAnim = character.add(OFF.CM_characterAnimator).readPointer();
+                    diagLog('handAnimator=' + handAnim + ' readable=' + isReadable(handAnim));
+                    diagLog('characterAnimator=' + charAnim + ' readable=' + isReadable(charAnim));
+                    // 尝试读取 Animator 的参数 (如果可读)
+                    if (!isNull(charAnim)) {
+                        try {
+                            // Il2CppObject.klass 在 offset 0x0
+                            var klass = charAnim.readPointer();
+                            if (!isNull(klass)) {
+                                // klass.name 在 offset 0x10 (const char*)
+                                var namePtr = klass.add(0x10).readPointer();
+                                if (!isNull(namePtr)) {
+                                    diagLog('characterAnimator.klassName=' + namePtr.readUtf8String());
+                                }
+                            }
+                        } catch(e2) {
+                            diagLog('characterAnimator.klass_error=' + e2);
+                        }
+                    }
+                } catch(e) {
+                    diagLog('animator_read_error=' + e);
+                }
+            }
+        } catch(e) {
+            diagLog('animator_state_error=' + e);
+        }
+
+        // [Screen Projection Error]
+        diagLog('');
+        diagLog('[ScreenProjection]');
+        if (!isNull(actualCam) && muzzleResult.found) {
+            try {
+                var mPos2 = safeGetTransformPos(muzzleResult.transform);
+                var mFwd2 = safeGetTransformForward(muzzleResult.transform);
+                var pw3 = callCameraGetPixelWidth(actualCam);
+                var ph3 = callCameraGetPixelHeight(actualCam);
+                var cx2 = pw3 / 2.0;
+                var cy2 = ph3 / 2.0;
+
+                // 投影各点
+                var points = [
+                    { label: 'muzzle.position', v: mPos2 },
+                    { label: 'muzzle.position+muzzle.forward*10', v: vec3Add(mPos2, vec3Scale(mFwd2, 10)) },
+                    { label: 'muzzle.position+muzzle.forward*100', v: vec3Add(mPos2, vec3Scale(mFwd2, 100)) },
+                ];
+
+                // 如果有准星射线命中点，添加 desiredDirection 投影
+                var crosshairRay2 = callScreenPointToRay(actualCam, cx2, cy2);
+                var rayHit2 = null;
+                if (crosshairRay2 && crosshairRay2.valid) {
+                    rayHit2 = callPhysicsRaycast(crosshairRay2, 1000.0);
+                    if (rayHit2 && rayHit2.hit) {
+                        points.push({ label: 'cameraRay.hitPoint', v: rayHit2.point });
+                        // desiredDirection: 从枪口到命中点
+                        if (mPos2.valid) {
+                            var desiredDir = vec3Normalize(vec3Sub(rayHit2.point, mPos2));
+                            points.push({ label: 'muzzle.position+desiredDirection*10', v: vec3Add(mPos2, vec3Scale(desiredDir, 10)) });
+                            points.push({ label: 'muzzle.position+desiredDirection*100', v: vec3Add(mPos2, vec3Scale(desiredDir, 100)) });
+                        }
+                    }
+                }
+
+                for (var pi = 0; pi < points.length; pi++) {
+                    var pt = points[pi];
+                    if (!pt.v.valid) continue;
+                    try {
+                        var screenPt = callWorldToScreenPoint(actualCam, pt.v.x, pt.v.y, pt.v.z);
+                        if (screenPt.valid) {
+                            var sx = screenPt.x;
+                            var sy = screenPt.y;
+                            var sz = screenPt.z;
+                            var dx = sx - cx2;
+                            var dy = sy - cy2;
+                            var errPx = Math.sqrt(dx * dx + dy * dy);
+                            diagLog(pt.label + '.screen=(' + sx.toFixed(1) + ',' + sy.toFixed(1) + ',' + sz.toFixed(4) + ') dx=' + dx.toFixed(1) + ' dy=' + dy.toFixed(1) + ' errorPixels=' + errPx.toFixed(1));
+                        }
+                    } catch(e) {
+                        diagLog(pt.label + '.screen_error=' + e);
+                    }
+                }
+            } catch(e) {
+                diagLog('screen_projection_error=' + e);
+            }
+        }
+
+        // [PV/CV 异常检查]
+        diagLog('');
+        diagLog('[PV_CV_Anomaly]');
+        if (!isNull(character)) {
+            try {
+                var pvListPtr = character.add(OFF.Model_objectInPV).readPointer();
+                var cvListPtr = character.add(OFF.Model_objectInCV).readPointer();
+                var pvCount = 0, cvCount = 0;
+                if (!isNull(pvListPtr)) {
+                    pvCount = pvListPtr.add(0x18).readU32();
+                }
+                if (!isNull(cvListPtr)) {
+                    cvCount = cvListPtr.add(0x18).readU32();
+                }
+                diagLog('objectInPV.count=' + pvCount);
+                diagLog('objectInCV.count=' + cvCount);
+
+                if (pvCount === 0) {
+                    diagLog('ANOMALY: objectInPV is empty! Checking if character is really Model base...');
+                    // 检查 0x34/0x38 是否真的是 List
+                    try {
+                        var pvFieldPtr = character.add(OFF.Model_objectInPV).readPointer();
+                        diagLog('character+0x34=' + pvFieldPtr + ' readable=' + isReadable(pvFieldPtr));
+                        if (!isNull(pvFieldPtr)) {
+                            // List 布局: 0x0 = klass, 0x8 = monitor, 0x10 = _items, 0x18 = _size, 0x1C = _version
+                            var klassPtr = pvFieldPtr.readPointer();
+                            diagLog('PV_list.klass=' + klassPtr);
+                        }
+                    } catch(e) {
+                        diagLog('PV_list_inspect_error=' + e);
+                    }
+                }
+                if (cvCount === 0) {
+                    diagLog('ANOMALY: objectInCV is empty!');
+                }
+            } catch(e) {
+                diagLog('pv_cv_anomaly_error=' + e);
+            }
+        }
+
+        // PlayerCameraManager.set_modelVisible 检查
+        diagLog('');
+        diagLog('[PCM_Anomaly]');
+        try {
+            if (!isNull(pcm)) {
+                diagLog('PlayerCameraManager=' + pcm);
+                // 尝试调用 set_modelVisible 并捕获异常
+                try {
+                    setModelVisible(pcm, true);
+                    diagLog('set_modelVisible(true)=OK');
+                    setModelVisible(pcm, false);
+                    diagLog('set_modelVisible(false)=OK');
+                    // 恢复
+                    if (fsm.current === STATE.TP_ENABLED) {
+                        setModelVisible(pcm, false);
+                    } else {
+                        setModelVisible(pcm, true);
+                    }
+                } catch(e) {
+                    diagLog('set_modelVisible_ERROR=' + e);
+                }
+            }
+        } catch(e) {
+            diagLog('pcm_anomaly_error=' + e);
+        }
+
+        diagLog('========== STATIC SNAPSHOT [' + tag + '] END ==========');
+        diagLog('');
+    }
+
+    function enumerateChildren(tPtr, prefix, depth, maxDepth) {
+        if (depth > maxDepth || isNull(tPtr)) return;
+        try {
+            var count = transformGetChildCount(tPtr, ptr(0));
+            for (var i = 0; i < count && i < 15; i++) {
+                var child = transformGetChild(tPtr, i, ptr(0));
+                if (isNull(child)) continue;
+                var name = getTransformName(child);
+                diagLog(prefix + '[' + i + '] ' + name);
+                enumerateChildren(child, prefix + '  ', depth + 1, maxDepth);
+            }
+        } catch(e) {}
+    }
+
+    // ---- 射击快照 ----
+    function captureShotSnapshot(hookName, thisPtr, inputRay, tag) {
+        aimDiag.shotId++;
+        var sid = aimDiag.shotId;
+        var ts = new Date().toISOString();
+
+        diagLog('');
+        diagLog('========== SHOT ' + String(sid).padStart(4, '0') + ' BEGIN ==========');
+        diagLog('sessionId=' + aimDiag.sessionId);
+        diagLog('shotId=' + sid);
+        diagLog('timestamp=' + ts);
+        diagLog('hookName=' + hookName);
+        diagLog('thisPtr=' + thisPtr);
+        diagLog('tag=' + tag);
+
+        // 实际相机
+        var actualCam = getActualCamera();
+        if (!isNull(actualCam)) {
+            try {
+                var camGo = actualCam.add(0x10).readPointer();
+                var camT = camGo.add(0x30).readPointer();
+                diagLog('actualCamera.position=' + fmtVec3(safeGetTransformPos(camT)));
+                diagLog('actualCamera.forward=' + fmtVec3(safeGetTransformForward(camT)));
+            } catch(e) {}
+        }
+
+        // 准星射线 (使用 _Injected 版本)
+        var cRay = null;
+        var rayHitResult = null;
+        if (!isNull(actualCam)) {
+            try {
+                var pw = callCameraGetPixelWidth(actualCam);
+                var ph = callCameraGetPixelHeight(actualCam);
+                diagLog('crosshair=(' + (pw / 2.0).toFixed(1) + ',' + (ph / 2.0).toFixed(1) + ')');
+                cRay = callScreenPointToRay(actualCam, pw / 2.0, ph / 2.0);
+                if (cRay && cRay.valid) {
+                    diagLog('cameraRay.origin=' + fmtVec3(cRay.origin));
+                    diagLog('cameraRay.direction=' + fmtVec3(cRay.direction));
+
+                    // Raycast
+                    try {
+                        rayHitResult = callPhysicsRaycast(cRay, 1000.0);
+                        if (rayHitResult.hit) {
+                            diagLog('cameraRay.hitPoint=' + fmtVec3(rayHitResult.point));
+                        }
+                    } catch(e) {}
+                }
+            } catch(e) {}
+        }
+
+        // 武器和枪口
+        var player = findMyPlayer();
+        var weapon = null;
+        try {
+            if (player) {
+                var wpns = player.add(OFF.Player_wpns).readPointer();
+                if (!isNull(wpns)) weapon = wpns.add(OFF.PW_inUse).readPointer();
+            }
+        } catch(e) {}
+        diagLog('weapon=' + weapon);
+
+        var muzzleResult = findMuzzleTransform(weapon);
+        if (muzzleResult.found) {
+            var mPos = safeGetTransformPos(muzzleResult.transform);
+            var mFwd = safeGetTransformForward(muzzleResult.transform);
+            diagLog('muzzle.position=' + fmtVec3(mPos));
+            diagLog('muzzle.forward=' + fmtVec3(mFwd));
+
+            // desiredDirection
+            if (!isNull(actualCam) && cRay && cRay.valid) {
+                try {
+                    if (rayHitResult && rayHitResult.hit && mPos.valid) {
+                        var hitPt = rayHitResult.point;
+                        var desired = vec3Sub(hitPt, mPos);
+                        var desiredNorm = vec3Normalize(desired);
+                        diagLog('desiredDirection=' + fmtVec3(desiredNorm));
+
+                        var angleMuzzleTarget = angleBetween(mFwd, desiredNorm);
+                        diagLog('angle.muzzle_to_target=' + angleMuzzleTarget.toFixed(4) + ' degrees');
+
+                        var distMuzzleToTarget = vec3Length(desired);
+                        diagLog('distance.muzzle_to_target=' + distMuzzleToTarget.toFixed(4));
+                    }
+
+                    // 输入 Ray 与 cameraRay 的夹角
+                    if (inputRay && inputRay.valid && cRay.valid) {
+                        var angleInputCam = angleBetween(inputRay.direction, cRay.direction);
+                        diagLog('angle.shootRay_to_cameraRay=' + angleInputCam.toFixed(4) + ' degrees');
+
+                        var angleInputMuzzle = angleBetween(inputRay.direction, mFwd);
+                        diagLog('angle.shootRay_to_muzzleForward=' + angleInputMuzzle.toFixed(4) + ' degrees');
+
+                        // 输入 Ray 起点到 muzzle 的距离
+                        if (inputRay.origin.valid && mPos.valid) {
+                            var distInputToMuzzle = vec3Length(vec3Sub(inputRay.origin, mPos));
+                            diagLog('distance.shootRayOrigin_to_muzzle=' + distInputToMuzzle.toFixed(4));
+                        }
+                    }
+                } catch(e) {
+                    diagLog('desired_direction_error=' + e);
+                }
+            }
+
+            // 屏幕投影误差
+            if (!isNull(actualCam) && mPos.valid) {
+                try {
+                    var pw3 = callCameraGetPixelWidth(actualCam);
+                    var ph3 = callCameraGetPixelHeight(actualCam);
+                    var cx = pw3 / 2.0;
+                    var cy = ph3 / 2.0;
+
+                    // muzzle forward 投影
+                    var mFwdEnd = vec3Add(mPos, vec3Scale(mFwd, 100));
+                    var screenMuzzleFwd = callWorldToScreenPoint(actualCam, mFwdEnd.x, mFwdEnd.y, mFwdEnd.z);
+                    if (screenMuzzleFwd.valid) {
+                        var sx = screenMuzzleFwd.x;
+                        var sy = screenMuzzleFwd.y;
+                        var dx = sx - cx;
+                        var dy = sy - cy;
+                        diagLog('errorPixels.muzzleForward100=(' + sx.toFixed(1) + ',' + sy.toFixed(1) + ') dx=' + dx.toFixed(1) + ' dy=' + dy.toFixed(1) + ' error=' + Math.sqrt(dx*dx+dy*dy).toFixed(1));
+                    }
+                } catch(e) {}
+            }
+        } else {
+            diagLog('muzzle=NOT_FOUND');
+        }
+
+        // 输入 Ray
+        if (inputRay && inputRay.valid) {
+            diagLog('inputRay.origin=' + fmtVec3(inputRay.origin));
+            diagLog('inputRay.direction=' + fmtVec3(inputRay.direction));
+        }
+
+        diagLog('========== SHOT ' + String(sid).padStart(4, '0') + ' END ==========');
+        diagLog('');
+    }
+
+    // ---- 射击观察 Hook ----
+    function installShootHooks() {
+        if (aimDiag.shootHooksInstalled) return;
+        aimDiag.shootHooksInstalled = true;
+
+        // Hook: Recoil.GetShootRay — RVA 0xB185C0
+        // 签名: Ray Recoil__GetShootRay(Recoil_o* __this, MethodInfo*)
+        // Ray 是值类型返回值 (24 bytes: origin + direction)
+        // IL2CPP x64: 值类型返回通过隐藏指针参数 (rcx=this, rdx=retBuf, r8=methodInfo)
+        try {
+            Interceptor.attach(base.add(0xB185C0), {
+                onEnter: function(args) {
+                    if (!aimDiag.active) return;
+                    // x64 IL2CPP 值类型返回: args[0]=this, args[1]=retBuf, args[2]=methodInfo
+                    this._retBuf = args[1];
+                    this._thisPtr = args[0];
+                },
+                onLeave: function(retval) {
+                    if (!aimDiag.active) return;
+                    try {
+                        var retBuf = this._retBuf;
+                        if (!isNull(retBuf)) {
+                            var ray = readRay(retBuf);
+                            aimDiag.lastShotData = { ray: ray, hook: 'GetShootRay', thisPtr: String(this._thisPtr) };
+                            captureShotSnapshot('GetShootRay', this._thisPtr, ray, 'auto');
+                        }
+                    } catch(e) {
+                        diagLog('GetShootRay_onLeave_error=' + e);
+                    }
+                }
+            });
+            log('info', '[AimDiag] Hook: Recoil.GetShootRay (0xB185C0)');
+        } catch(e) {
+            logError('aim_hook_gsr', 'GetShootRay Hook 失败: ' + e);
+        }
+
+        // Hook: WPN_Gun.GunShoot — RVA 0xB614C0
+        // 签名: void WPN_Gun__GunShoot(WPN_Gun_o* __this, MethodInfo*)
+        try {
+            Interceptor.attach(base.add(0xB614C0), {
+                onEnter: function(args) {
+                    if (!aimDiag.active) return;
+                    this._thisPtr = args[0];
+                },
+                onLeave: function(retval) {
+                    if (!aimDiag.active) return;
+                    captureShotSnapshot('GunShoot', this._thisPtr, null, 'auto');
+                }
+            });
+            log('info', '[AimDiag] Hook: WPN_Gun.GunShoot (0xB614C0)');
+        } catch(e) {
+            logError('aim_hook_gs', 'GunShoot Hook 失败: ' + e);
+        }
+
+        // Hook: WPN_Gun.GunShoot_Logic — RVA 0xB61170
+        try {
+            Interceptor.attach(base.add(0xB61170), {
+                onEnter: function(args) {
+                    if (!aimDiag.active) return;
+                    this._thisPtr = args[0];
+                },
+                onLeave: function(retval) {
+                    if (!aimDiag.active) return;
+                    captureShotSnapshot('GunShoot_Logic', this._thisPtr, null, 'auto');
+                }
+            });
+            log('info', '[AimDiag] Hook: WPN_Gun.GunShoot_Logic (0xB61170)');
+        } catch(e) {
+            logError('aim_hook_gsl', 'GunShoot_Logic Hook 失败: ' + e);
+        }
+
+        // Hook: WPN_Gun.Damage(Ray ray) — RVA 0xB603D0
+        // 签名: void WPN_Gun__Damage(WPN_Gun_o* __this, UnityEngine_Ray_o ray, MethodInfo*)
+        // Ray 是值类型参数，在 x64 下通过寄存器传递 (rcx=this, rdx=ray.origin.x/y/z, r8=ray.direction.x/y/z, r9=methodInfo)
+        // 但 IL2CPP 可能将 Ray 放在栈上或通过隐藏指针传递
+        // 安全做法：在 onEnter 中从 args 读取，如果失败则记录寄存器候选值
+        try {
+            Interceptor.attach(base.add(0xB603D0), {
+                onEnter: function(args) {
+                    if (!aimDiag.active) return;
+                    this._thisPtr = args[0];
+                    // Ray 作为值类型参数传递，尝试多种读取方式
+                    // 方式1: Ray 直接在 args[1] 的内存中
+                    var ray = null;
+                    try {
+                        // 在 x64 IL2CPP 中，大于 8 字节的值类型参数通过引用传递
+                        // Ray = 24 bytes，所以 args[1] 应该是 Ray*
+                        var rayPtr = args[1];
+                        if (!isNull(rayPtr)) {
+                            ray = readRay(rayPtr);
+                        }
+                    } catch(e) {}
+
+                    if (ray && ray.valid) {
+                        aimDiag.lastShotData = { ray: ray, hook: 'Damage', thisPtr: String(this._thisPtr) };
+                        captureShotSnapshot('Damage', this._thisPtr, ray, 'auto');
+                    } else {
+                        // 记录原始寄存器值用于分析
+                        diagLog('Damage.ray_read_failed: args[1]=' + args[1] + ' args[2]=' + args[2]);
+                        captureShotSnapshot('Damage', this._thisPtr, null, 'auto_ray_read_failed');
+                    }
+                }
+            });
+            log('info', '[AimDiag] Hook: WPN_Gun.Damage (0xB603D0)');
+        } catch(e) {
+            logError('aim_hook_dmg', 'Damage Hook 失败: ' + e);
+        }
+    }
+
+    // ---- 动态采集定时器 ----
+    function startDynamicCapture(intervalMs) {
+        if (aimDiag.intervalId) clearInterval(aimDiag.intervalId);
+        var captureCount = 0;
+        aimDiag.intervalId = setInterval(function() {
+            if (!aimDiag.active) {
+                clearInterval(aimDiag.intervalId);
+                aimDiag.intervalId = null;
+                return;
+            }
+            captureCount++;
+            var elapsed = Date.now() - aimDiag.startTime;
+            if (elapsed >= aimDiag.duration * 1000) {
+                stopAimDiagnostic();
+                return;
+            }
+            // 动态快照（精简版，只记录关键变化）
+            diagLog('[Dynamic #' + captureCount + ' t=' + (elapsed / 1000).toFixed(1) + 's]');
+
+            var actualCam = getActualCamera();
+            if (!isNull(actualCam)) {
+                try {
+                    var camGo = actualCam.add(0x10).readPointer();
+                    var camT = camGo.add(0x30).readPointer();
+                    diagLog('  camera.pos=' + fmtVec3(safeGetTransformPos(camT)));
+                    diagLog('  camera.fwd=' + fmtVec3(safeGetTransformForward(camT)));
+                } catch(e) {}
+            }
+
+            // Player cameraRotation
+            var player = findMyPlayer();
+            if (player) {
+                try {
+                    var camRot = player.add(OFF.Player_cameraRotation);
+                    var rotX = camRot.readFloat();
+                    var rotY = camRot.add(4).readFloat();
+                    diagLog('  player.cameraRotation=(' + rotX.toFixed(4) + ',' + rotY.toFixed(4) + ')');
+                } catch(e) {}
+            }
+
+            // FreeLook YAxis/XAxis
+            var camMgr = tryGetCameraManager();
+            if (!isNull(camMgr)) {
+                try {
+                    var fl = camMgr.add(OFF.CM_freeLookCamera).readPointer();
+                    if (!isNull(fl)) {
+                        diagLog('  freeLook.yAxis=' + fl.add(OFF.CFL_m_YAxis).readFloat().toFixed(4) +
+                            ' xAxis=' + fl.add(OFF.CFL_m_XAxis).readFloat().toFixed(4));
+                    }
+                } catch(e) {}
+            }
+
+            // Muzzle position/forward
+            if (player) {
+                try {
+                    var wpns = player.add(OFF.Player_wpns).readPointer();
+                    if (!isNull(wpns)) {
+                        var weapon = wpns.add(OFF.PW_inUse).readPointer();
+                        var muzzleResult = findMuzzleTransform(weapon);
+                        if (muzzleResult.found) {
+                            diagLog('  muzzle.pos=' + fmtVec3(safeGetTransformPos(muzzleResult.transform)));
+                            diagLog('  muzzle.fwd=' + fmtVec3(safeGetTransformForward(muzzleResult.transform)));
+                        }
+                    }
+                } catch(e) {}
+            }
+        }, intervalMs);
+    }
+
+    // ---- 诊断控制函数 ----
+    // ---- 启动瞄准诊断 ----
+    // 测试步骤 (请依次完成):
+    //   A. 站在空旷处，不开枪，水平和垂直转动视角
+    //   B. 距离平整墙壁约 2 米，准星对准固定点，单发 3 次
+    //   C. 距离墙壁约 10 米，单发 3 次
+    //   D. 距离墙壁约 30 米，单发 3 次
+    //   E. 角色贴墙，枪口靠近墙体，单发 3 次
+    //   F. 待机、开火、换弹时分别调用 captureaimsnapshot('idle'/'fire'/'reload')
+    //   G. 切换一次武器后再射击
+    function startAimDiagnostic(durationSeconds) {
+        if (aimDiag.active) {
+            return { ok: false, error: '诊断已在进行中, sessionId=' + aimDiag.sessionId };
+        }
+
+        aimDiag.active = true;
+        aimDiag.sessionId = 'aim_' + Date.now().toString(36);
+        aimDiag.shotId = 0;
+        aimDiag.startTime = Date.now();
+        aimDiag.duration = durationSeconds || 15;
+        aimDiag.logLines = [];
+        aimDiag.lastShotData = null;
+
+        // 安装射击 Hook
+        installShootHooks();
+
+        // 初始静态快照
+        captureStaticSnapshot('start');
+
+        // 启动动态采集 (200ms)
+        startDynamicCapture(200);
+
+        log('info', '[AimDiag] 瞄准诊断已启动: sessionId=' + aimDiag.sessionId + ' duration=' + aimDiag.duration + 's');
+        return { ok: true, sessionId: aimDiag.sessionId, duration: aimDiag.duration };
+    }
+
+    function stopAimDiagnostic() {
+        if (!aimDiag.active) {
+            return { ok: false, error: '诊断未在运行' };
+        }
+
+        aimDiag.active = false;
+
+        // 停止定时器
+        if (aimDiag.intervalId) {
+            clearInterval(aimDiag.intervalId);
+            aimDiag.intervalId = null;
+        }
+
+        // 结束标记
+        var elapsed = Date.now() - aimDiag.startTime;
+        diagLog('');
+        diagLog('========== DIAGNOSTIC SESSION END ==========');
+        diagLog('sessionId=' + aimDiag.sessionId);
+        diagLog('duration=' + (elapsed / 1000).toFixed(1) + 's');
+        diagLog('totalShots=' + aimDiag.shotId);
+        diagLog('totalLines=' + aimDiag.logLines.length);
+        diagLog('========== END ==========');
+
+        // 将日志发送到 Python 写入文件
+        send({type:'aim_diag_complete', sessionId: aimDiag.sessionId, lines: aimDiag.logLines, shotCount: aimDiag.shotId});
+
+        log('info', '[AimDiag] 瞄准诊断已停止: shots=' + aimDiag.shotId + ' lines=' + aimDiag.logLines.length);
+        return { ok: true, sessionId: aimDiag.sessionId, shotCount: aimDiag.shotId, lineCount: aimDiag.logLines.length };
+    }
+
+    function captureAimSnapshot(tag) {
+        if (!aimDiag.active) {
+            return { ok: false, error: '诊断未在运行' };
+        }
+        captureStaticSnapshot(tag || 'manual');
+        return { ok: true, tag: tag };
+    }
+
+    // ============================================================
     // RPC 接口
     // ============================================================
     rpc.exports = {
@@ -1343,8 +2644,7 @@
         },
 
         // v8 增强：诊断 RPC，输出模型详细信息
-        debugmodel: function() {
-            var result = {
+        debugmodel: function() {            var result = {
                 player: null, character: null, playerData: null,
                 pvCount: 0, cvCount: 0, pvItems: [], cvItems: [],
                 weapon: null, sockets: [], freeLookRigs: [],
@@ -1550,6 +2850,30 @@
             }
 
             return { ok: true, result: result };
+        },
+
+        // ---- 瞄准诊断 RPC ----
+        startaimdiagnostic: function(durationSeconds) {
+            return startAimDiagnostic(durationSeconds);
+        },
+
+        stopaimdiagnostic: function() {
+            return stopAimDiagnostic();
+        },
+
+        captureaimsnapshot: function(tag) {
+            return captureAimSnapshot(tag);
+        },
+
+        getaimdiagstatus: function() {
+            return {
+                active: aimDiag.active,
+                sessionId: aimDiag.sessionId,
+                shotId: aimDiag.shotId,
+                elapsed: aimDiag.active ? ((Date.now() - aimDiag.startTime) / 1000).toFixed(1) + 's' : '0s',
+                duration: aimDiag.duration + 's',
+                lineCount: aimDiag.logLines.length,
+            };
         },
     };
 
