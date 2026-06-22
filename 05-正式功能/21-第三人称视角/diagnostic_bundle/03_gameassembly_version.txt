@@ -1,0 +1,54 @@
+GameAssembly 版本与文件信息
+================================
+
+--- UnityCrossFire.exe ---
+完整路径: D:\BaiduNetdiskDownload\UnityCrossFire1.7.1\UnityCrossFire1.7.1\UnityCrossFire.exe
+文件大小: 641536 bytes
+修改时间: 未确认
+SHA256: 未确认
+当前是否存在: 是
+是否与第三人称代码中的 RVA 对应: 未确认（需反汇编验证）
+判断依据: 文件存在，但需运行时确认 GameAssembly.dll 基址与 RVA 相加后的实际地址
+
+--- GameAssembly.dll ---
+完整路径: D:\BaiduNetdiskDownload\UnityCrossFire1.7.1\UnityCrossFire1.7.1\GameAssembly.dll
+文件大小: 15925248 bytes
+修改时间: 未确认
+SHA256: 未确认
+当前是否存在: 是
+是否与第三人称代码中的 RVA 对应: 未确认（需反汇编验证）
+判断依据: 文件存在，但需运行时确认 GameAssembly.dll 基址与 RVA 相加后的实际地址
+
+--- UnityPlayer.dll ---
+完整路径: D:\BaiduNetdiskDownload\UnityCrossFire1.7.1\UnityCrossFire1.7.1\UnityPlayer.dll
+文件大小: 22093400 bytes
+修改时间: 未确认
+SHA256: 未确认
+当前是否存在: 是
+是否与第三人称代码中的 RVA 对应: 未确认（需反汇编验证）
+判断依据: 文件存在，但需运行时确认 GameAssembly.dll 基址与 RVA 相加后的实际地址
+
+--- dump.cs ---
+完整路径: D:\trae_project\ucf1.7-modifier\01-游戏逆向分析-相关信息\Il2CppDumper\dump.cs
+文件大小: 9545146 bytes
+修改时间: 未确认
+SHA256: 未确认
+当前是否存在: 是
+是否与第三人称代码中的 RVA 对应: 未确认（需反汇编验证）
+判断依据: 文件存在，但需运行时确认 GameAssembly.dll 基址与 RVA 相加后的实际地址
+
+--- script.json ---
+完整路径: D:\trae_project\ucf1.7-modifier\01-游戏逆向分析-相关信息\Il2CppDumper\script.json
+文件大小: 26844651 bytes
+修改时间: 未确认
+SHA256: 未确认
+当前是否存在: 是
+是否与第三人称代码中的 RVA 对应: 未确认（需反汇编验证）
+判断依据: 文件存在，但需运行时确认 GameAssembly.dll 基址与 RVA 相加后的实际地址
+
+--- 运行时基址信息（来自日志）---
+GameAssembly.dll 模块基址: 0x6be70000 (来自运行时日志: base=0x6be70000 size=16461824)
+模块大小: 16461824 bytes (0xFB7A00)
+代码中所有 base.add(RVA) 是否基于这个模块: 是，JS 中明确使用 Process.findModuleByName("GameAssembly.dll").base
+
+注意：每次运行时 GameAssembly.dll 基址可能不同（ASLR），但 RVA 是固定的。

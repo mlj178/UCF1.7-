@@ -1,0 +1,80 @@
+项目目标
+========
+为 UCF1.7 (Unity IL2CPP 穿越火线) 实现第三人称视角 (TPS) 修改器，
+通过 Python UI + Frida JS 注入方式，在运行时切换本地玩家从第一人称 (FPV) 到第三人称视角。
+
+当前实现架构
+============
+1. Python UI (customtkinter + frida + psutil)
+   - 自动发现 UnityCrossFire.exe 进程并 attach
+   - 加载并执行 Frida JS 脚本
+   - 提供开启/关闭第三人称按钮
+   - 提供模型诊断和瞄准诊断功能
+   - 状态同步、断线重连、日志限流
+
+2. Frida JS (AAAAA-third_person_v1.js)
+   - 通过 Interceptor.attach Hook 关键 Unity 函数
+   - 在 CameraManager.Awake / GameManager.Awake 捕获单例实例
+   - 修改 CinemachineFreeLook 轨道参数实现肩后视角
+   - 调用原生 IL2CPP 方法切换模型和武器
+
+Python UI 职责
+==============
+- 进程查找与 Frida attach
+- JS 脚本加载和 installhook 调用
+- UI 状态同步（每 1 秒轮询）
+- 日志收集和文件写入
+- 瞄准诊断日志保存为独立文件
+
+Frida JS 职责
+=============
+- 状态机管理 (NO_GAME -> WAITING_ROOM -> ROOM_READY -> TP_ENABLED)
+- Hook 安装与生命周期管理
+- 第三人称启用/禁用逻辑
+- 模型诊断 (debugmodel RPC)
+- 瞄准诊断 (startaimdiagnostic / stopaimdiagnostic RPC)
+
+当前第三人称实现流程
+====================
+1. 用户进入房间后，Python 捕获 GameManager.Awake 和 CameraManager.Awake
+2. 点击"开启第三人称"：
+   a. 获取本地 Player、CharacterModel、CameraManager
+   b. 保存原始 observeMode、PV/CV 对象状态
+   c. 调用 PlayerData.SetObserveMode(Character=0)
+   d. 调用 Model.OnOwnerObserveModeChange(Character=0)
+   e. 显式隐藏 PV 对象，显示 CV 对象
+   f. 设置模型 Layer 为 Default
+   g. 设置 PlayerData.playerViewModelVisible = false
+   h. 调用 PlayerCameraManager.set_modelVisible(false)  <-- 报错
+   i. 调用 Weapon.SynchronizeHand()
+   j. 配置 CinemachineFreeLook 轨道和 Composer
+   k. 激活 FreeLook 相机
+
+当前已正常工作的部分
+====================
+1. Python 可以连接游戏并注入 Frida JS。
+2. 可以获取 GameManager 和 CameraManager（通过 Awake Hook）。
+3. 可以激活 CinemachineFreeLook。
+4. 可以显示本地角色全身模型。
+5. 当前武器已经出现在角色手中。
+6. 可以开启和关闭第三人称。
+7. 已有状态机、断线重连、日志限流和模型诊断功能。
+8. 瞄准诊断系统已安装 Hook：Recoil.GetShootRay、WPN_Gun.GunShoot、WPN_Gun.GunShoot_Logic、WPN_Gun.Damage。
+
+当前存在的问题
+==============
+1. 绿色准星和可见枪口方向明显不一致。
+2. 枪口没有正确指向准星。
+3. 实际子弹可能仍沿用第一人称射击 Ray。
+4. 角色身体靠近准星中心，遮挡前方视野。
+5. 相机仍有一定俯视感。
+6. objectInPV 和 objectInCV 读取数量都是 0。
+7. PlayerCameraManager.set_modelVisible 调用报：Error: expected an integer
+8. CameraManager.Awake 之前主动获取 Singleton 会出现：access violation accessing 0xc000b8c9
+9. 尚未确认真实枪口 Transform。
+10. 尚未确认 Ray 在当前进程中的 ABI 和传递方式。
+
+本次诊断任务的目标
+==================
+收集完整技术上下文，供后续代码模型分析和修改。
+不直接修改第三人称瞄准、枪口方向或射击 Ray。

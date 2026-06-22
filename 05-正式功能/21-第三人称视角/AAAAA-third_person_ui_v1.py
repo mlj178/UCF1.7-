@@ -67,6 +67,7 @@ class ThirdPersonApp(ctk.CTk):
         self.is_enabled = False
         self.attached_pid = None
         self._stop = False
+        self._aim_diag_lines = []  # 瞄准诊断日志缓冲
 
         # 操作并发控制
         self.operation_in_progress = False
@@ -174,6 +175,45 @@ class ThirdPersonApp(ctk.CTk):
             command=self._run_diagnostic
         )
         self.diag_btn.pack(pady=4, padx=10, fill="x")
+
+        # === 瞄准诊断按钮 ===
+        self.aim_diag_frame = ctk.CTkFrame(self.main_frame)
+        self.aim_diag_frame.pack(pady=4, padx=15, fill="x")
+
+        aim_btn_row = ctk.CTkFrame(self.aim_diag_frame, fg_color="transparent")
+        aim_btn_row.pack(pady=4, padx=5, fill="x")
+
+        self.aim_start_btn = ctk.CTkButton(
+            aim_btn_row, text="开始瞄准诊断",
+            font=ctk.CTkFont(size=13), height=32, width=160,
+            fg_color="#17a2b8", hover_color="#138496",
+            command=self._start_aim_diagnostic
+        )
+        self.aim_start_btn.pack(side="left", padx=5, expand=True, fill="x")
+
+        self.aim_stop_btn = ctk.CTkButton(
+            aim_btn_row, text="停止瞄准诊断",
+            font=ctk.CTkFont(size=13), height=32, width=160,
+            fg_color="#fd7e14", hover_color="#e06b0a",
+            command=self._stop_aim_diagnostic,
+            state="disabled"
+        )
+        self.aim_stop_btn.pack(side="left", padx=5, expand=True, fill="x")
+
+        self.aim_diag_label = ctk.CTkLabel(
+            self.aim_diag_frame, text="采集15秒 | 射击时自动记录",
+            font=ctk.CTkFont(size=11), text_color="gray"
+        )
+        self.aim_diag_label.pack(pady=2)
+
+        # 测试步骤提示
+        aim_test_tip = ctk.CTkLabel(
+            self.aim_diag_frame,
+            text="测试步骤: A.空旷转视角 B.2m墙单发3次 C.10m墙单发3次 D.30m墙单发3次 E.贴墙单发3次 F.待机/开火/换弹快照 G.换枪后射击",
+            font=ctk.CTkFont(size=10), text_color="#888888",
+            wraplength=380, justify="left"
+        )
+        aim_test_tip.pack(pady=1, padx=5)
 
         # === 日志 ===
         self.log_frame = ctk.CTkFrame(self.main_frame)
@@ -433,6 +473,22 @@ class ThirdPersonApp(ctk.CTk):
                 new_state = payload.get('newState', '')
                 file_log.info(f"状态变化: {old_state} -> {new_state}")
 
+            elif isinstance(payload, dict) and payload.get('type') == 'aim_diag':
+                # 瞄准诊断日志行
+                line = payload.get('line', '')
+                if line:
+                    self._aim_diag_lines.append(line)
+                    # 写入文件日志
+                    file_log.debug(f"[AimDiag] {line}")
+
+            elif isinstance(payload, dict) and payload.get('type') == 'aim_diag_complete':
+                # 瞄准诊断完成
+                session_id = payload.get('sessionId', 'unknown')
+                shot_count = payload.get('shotCount', 0)
+                lines = list(self._aim_diag_lines)
+                self._aim_diag_lines.clear()
+                self._write_aim_diag_file(session_id, lines, shot_count)
+
             else:
                 # 简单字符串消息
                 msg_str = str(payload)
@@ -580,6 +636,93 @@ class ThirdPersonApp(ctk.CTk):
             file_log.error(f"诊断异常: {e}")
         finally:
             self.after(0, lambda: self.diag_btn.configure(state="normal", text="模型诊断"))
+
+    # ============================================================
+    # 瞄准诊断
+    # ============================================================
+    def _start_aim_diagnostic(self):
+        if not self.is_connected or not self.script:
+            self._log_ui("未连接，无法启动瞄准诊断")
+            return
+        self.aim_start_btn.configure(state="disabled")
+        threading.Thread(target=self._start_aim_diag_bg, daemon=True).start()
+
+    def _start_aim_diag_bg(self):
+        try:
+            result = self.script.exports_sync.startaimdiagnostic(15)
+            if result.get('ok'):
+                sid = result.get('sessionId', '?')
+                dur = result.get('duration', 15)
+                self._safe_log(f"瞄准诊断已启动: {sid} ({dur}s)")
+                self._safe_config(self.aim_start_btn, state="disabled")
+                self._safe_config(self.aim_stop_btn, state="normal")
+                self._safe_config(self.aim_diag_label, text=f"诊断中... {sid}")
+                file_log.info(f"瞄准诊断启动: sessionId={sid} duration={dur}s")
+            else:
+                err = result.get('error', '未知错误')
+                self._safe_log(f"启动失败: {err}")
+                self._safe_config(self.aim_start_btn, state="normal")
+        except frida.InvalidOperationError:
+            self._safe_log("脚本已断开")
+            self._cleanup_session()
+            self.after(0, self._update_ui_disconnected)
+        except Exception as e:
+            self._safe_log(f"启动异常: {e}")
+            self._safe_config(self.aim_start_btn, state="normal")
+
+    def _stop_aim_diagnostic(self):
+        if not self.is_connected or not self.script:
+            self._log_ui("未连接")
+            return
+        self.aim_stop_btn.configure(state="disabled")
+        threading.Thread(target=self._stop_aim_diag_bg, daemon=True).start()
+
+    def _stop_aim_diag_bg(self):
+        try:
+            result = self.script.exports_sync.stopaimdiagnostic()
+            if result.get('ok'):
+                shots = result.get('shotCount', 0)
+                lines = result.get('lineCount', 0)
+                self._safe_log(f"瞄准诊断已停止: {shots}次射击, {lines}行日志")
+                file_log.info(f"瞄准诊断停止: shots={shots} lines={lines}")
+            else:
+                err = result.get('error', '未知')
+                self._safe_log(f"停止失败: {err}")
+        except frida.InvalidOperationError:
+            self._safe_log("脚本已断开")
+            self._cleanup_session()
+            self.after(0, self._update_ui_disconnected)
+        except Exception as e:
+            self._safe_log(f"停止异常: {e}")
+        finally:
+            self._safe_config(self.aim_start_btn, state="normal")
+            self._safe_config(self.aim_stop_btn, state="disabled")
+            self._safe_config(self.aim_diag_label, text="采集15秒 | 射击时自动记录")
+
+    def _write_aim_diag_file(self, session_id, lines, shot_count):
+        """将瞄准诊断日志写入独立文件"""
+        try:
+            os.makedirs(LOG_DIR, exist_ok=True)
+            ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"aim_diagnostic_{ts}_{session_id}.txt"
+            filepath = os.path.join(LOG_DIR, filename)
+
+            with open(filepath, 'w', encoding='utf-8') as f:
+                f.write(f"UCF1.7 瞄准诊断日志\n")
+                f.write(f"sessionId: {session_id}\n")
+                f.write(f"生成时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+                f.write(f"射击次数: {shot_count}\n")
+                f.write(f"日志行数: {len(lines)}\n")
+                f.write("=" * 60 + "\n\n")
+                for line in lines:
+                    f.write(line + "\n")
+
+            self._safe_log(f"诊断日志已保存: {filename}")
+            self._safe_config(self.aim_diag_label, text=f"已保存: {filename}")
+            file_log.info(f"瞄准诊断日志已保存: {filepath} ({len(lines)} 行, {shot_count} 次射击)")
+        except Exception as e:
+            self._safe_log(f"保存诊断日志失败: {e}")
+            file_log.error(f"保存瞄准诊断日志失败: {e}")
 
     # ============================================================
     # 滑块回调
