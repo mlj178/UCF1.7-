@@ -206,6 +206,14 @@ class ThirdPersonApp(ctk.CTk):
         )
         self.aim_diag_label.pack(pady=2)
 
+        # v9: 瞄准诊断状态显示
+        self.aim_diag_status = ctk.CTkLabel(
+            self.aim_diag_frame, text="",
+            font=ctk.CTkFont(size=10), text_color="#aaaaaa",
+            wraplength=380, justify="left"
+        )
+        self.aim_diag_status.pack(pady=1, padx=5)
+
         # 测试步骤提示
         aim_test_tip = ctk.CTkLabel(
             self.aim_diag_frame,
@@ -259,6 +267,56 @@ class ThirdPersonApp(ctk.CTk):
     def _safe_config(self, widget, **kw):
         """线程安全的控件配置"""
         self.after(0, lambda: widget.configure(**kw))
+
+    # ============================================================
+    # 带超时的 RPC 调用 (防止卡死)
+    # ============================================================
+    def _rpc_call(self, func_name, *args, timeout=5.0):
+        """带超时的 RPC 调用，防止 Frida 阻塞导致程序卡死"""
+        if not self.script:
+            return None
+
+        result = [None]
+        exception = [None]
+        completed = [False]
+
+        def call():
+            try:
+                func = getattr(self.script.exports_sync, func_name)
+                result[0] = func(*args)
+                completed[0] = True
+            except frida.InvalidOperationError as e:
+                exception[0] = e
+                # 会话已失效，需要清理
+                self.after(0, self._cleanup_session)
+            except frida.TransportError as e:
+                exception[0] = e
+            except Exception as e:
+                exception[0] = e
+
+        thread = threading.Thread(target=call, daemon=True)
+        thread.start()
+        thread.join(timeout=timeout)
+
+        if thread.is_alive():
+            # 超时，线程仍在运行
+            file_log.error(f"RPC 调用超时: {func_name}({args})")
+            # v10: 超时后标记会话可能失效
+            self.after(0, lambda: self._safe_log(f"RPC 调用超时: {func_name}"))
+            return None
+
+        if exception[0]:
+            # 有异常
+            if isinstance(exception[0], frida.InvalidOperationError):
+                file_log.error(f"RPC 调用失败 (InvalidOperation): {func_name}")
+                self.after(0, self._cleanup_session)
+            elif isinstance(exception[0], frida.TransportError):
+                file_log.error(f"RPC 调用失败 (Transport): {exception[0]}")
+            else:
+                file_log.error(f"RPC 调用失败: {exception[0]}")
+            return None
+
+        return result[0]
 
     # ============================================================
     # 进程查找
@@ -324,7 +382,14 @@ class ThirdPersonApp(ctk.CTk):
 
                 file_log.info("JS 脚本已加载，调用 installhook...")
 
-                result = self.script.exports_sync.installhook()
+                result = self._rpc_call('installhook', timeout=10.0)
+                if result is None:
+                    file_log.error("installhook 超时")
+                    self._safe_log("Hook 安装超时")
+                    self._cleanup_session()
+                    time.sleep(5)
+                    continue
+
                 file_log.info(f"installhook 返回: {result}")
 
                 if result.get('ok'):
@@ -374,6 +439,15 @@ class ThirdPersonApp(ctk.CTk):
 
     def _cleanup_session(self):
         """清理 Frida 会话"""
+        # 先调用 JS 清理函数
+        if self.script and self.is_connected:
+            try:
+                self._rpc_call('cleanup', timeout=2.0)
+                file_log.info("已调用 JS cleanup 函数")
+            except Exception as e:
+                file_log.error(f"调用 cleanup 失败: {e}")
+
+        # 然后卸载脚本
         try:
             if self.script:
                 self.script.unload()
@@ -391,13 +465,16 @@ class ThirdPersonApp(ctk.CTk):
         self.attached_pid = None
 
     # ============================================================
-    # 状态同步循环 (后台线程，每 1 秒查询一次)
+    # 状态同步循环 (后台线程，每 2 秒查询一次)
     # ============================================================
     def _status_sync_loop(self):
         while not self._stop:
             if self.is_connected and self.script:
                 try:
-                    status = self.script.exports_sync.getstatus()
+                    status = self._rpc_call('getstatus', timeout=3.0)
+                    if status is None:
+                        # 超时，但不立即断开，可能是临时阻塞
+                        continue
                     self.after(0, lambda s=status: self._sync_ui_from_status(s))
                 except frida.InvalidOperationError:
                     file_log.error("状态同步: 脚本已断开")
@@ -410,7 +487,7 @@ class ThirdPersonApp(ctk.CTk):
                 except Exception as e:
                     # 静默忽略偶尔的同步失败
                     pass
-            time.sleep(1)
+            time.sleep(2)  # v10: 1秒 -> 2秒，减少同步频率
 
     def _sync_ui_from_status(self, status):
         """根据 JS 状态同步 UI (主线程)"""
@@ -480,6 +557,19 @@ class ThirdPersonApp(ctk.CTk):
                     self._aim_diag_lines.append(line)
                     # 写入文件日志
                     file_log.debug(f"[AimDiag] {line}")
+                    # v9: 检测射击事件更新状态
+                    if 'SHOT' in line and 'BEGIN' in line:
+                        try:
+                            # 尝试获取当前诊断状态
+                            if self.script:
+                                status = self._rpc_call('getaimdiagstatus', timeout=2.0)
+                                if status:
+                                    sid = status.get('sessionId', '?')
+                                    shots = status.get('shotId', 0)
+                                    self._safe_config(self.aim_diag_status,
+                                        text=f"sessionId={sid} | 射击={shots}次 | 采集中...")
+                        except Exception:
+                            pass
 
             elif isinstance(payload, dict) and payload.get('type') == 'aim_diag_complete':
                 # 瞄准诊断完成
@@ -522,7 +612,10 @@ class ThirdPersonApp(ctk.CTk):
     def _toggle_bg(self):
         try:
             if self.is_enabled:
-                result = self.script.exports_sync.disable()
+                result = self._rpc_call('disable', timeout=8.0)
+                if result is None:
+                    self._safe_log("关闭操作超时")
+                    return
                 if result.get('ok'):
                     self.is_enabled = False
                     self.after(0, lambda: self.toggle_btn.configure(
@@ -532,7 +625,10 @@ class ThirdPersonApp(ctk.CTk):
                 else:
                     self._safe_log(f"关闭失败: {result.get('error', '未知')}")
             else:
-                result = self.script.exports_sync.enable()
+                result = self._rpc_call('enable', timeout=8.0)
+                if result is None:
+                    self._safe_log("开启操作超时")
+                    return
                 if result.get('ok') and result.get('enabled'):
                     self.is_enabled = True
                     self.after(0, lambda: self.toggle_btn.configure(
@@ -557,8 +653,9 @@ class ThirdPersonApp(ctk.CTk):
             file_log.error(f"操作失败: {e}")
             # 重新查询真实状态
             try:
-                status = self.script.exports_sync.getstatus()
-                self.after(0, lambda s=status: self._sync_ui_from_status(s))
+                status = self._rpc_call('getstatus', timeout=3.0)
+                if status:
+                    self.after(0, lambda s=status: self._sync_ui_from_status(s))
             except Exception:
                 pass
         finally:
@@ -577,7 +674,10 @@ class ThirdPersonApp(ctk.CTk):
 
     def _diagnostic_bg(self):
         try:
-            result = self.script.exports_sync.debugmodel()
+            result = self._rpc_call('debugmodel', timeout=10.0)
+            if result is None:
+                self._safe_log("诊断操作超时")
+                return
             if result.get('ok'):
                 r = result.get('result', {})
                 self._safe_log("=== 模型诊断结果 ===")
@@ -649,7 +749,11 @@ class ThirdPersonApp(ctk.CTk):
 
     def _start_aim_diag_bg(self):
         try:
-            result = self.script.exports_sync.startaimdiagnostic(15)
+            result = self._rpc_call('startaimdiagnostic', 15, timeout=5.0)
+            if result is None:
+                self._safe_log("启动瞄准诊断超时")
+                self._safe_config(self.aim_start_btn, state="normal")
+                return
             if result.get('ok'):
                 sid = result.get('sessionId', '?')
                 dur = result.get('duration', 15)
@@ -657,11 +761,13 @@ class ThirdPersonApp(ctk.CTk):
                 self._safe_config(self.aim_start_btn, state="disabled")
                 self._safe_config(self.aim_stop_btn, state="normal")
                 self._safe_config(self.aim_diag_label, text=f"诊断中... {sid}")
+                self._safe_config(self.aim_diag_status, text=f"sessionId={sid} | 等待射击数据...")
                 file_log.info(f"瞄准诊断启动: sessionId={sid} duration={dur}s")
             else:
                 err = result.get('error', '未知错误')
                 self._safe_log(f"启动失败: {err}")
                 self._safe_config(self.aim_start_btn, state="normal")
+                self._safe_config(self.aim_diag_status, text=f"启动失败: {err}")
         except frida.InvalidOperationError:
             self._safe_log("脚本已断开")
             self._cleanup_session()
@@ -679,7 +785,10 @@ class ThirdPersonApp(ctk.CTk):
 
     def _stop_aim_diag_bg(self):
         try:
-            result = self.script.exports_sync.stopaimdiagnostic()
+            result = self._rpc_call('stopaimdiagnostic', timeout=5.0)
+            if result is None:
+                self._safe_log("停止瞄准诊断超时")
+                return
             if result.get('ok'):
                 shots = result.get('shotCount', 0)
                 lines = result.get('lineCount', 0)
@@ -698,6 +807,7 @@ class ThirdPersonApp(ctk.CTk):
             self._safe_config(self.aim_start_btn, state="normal")
             self._safe_config(self.aim_stop_btn, state="disabled")
             self._safe_config(self.aim_diag_label, text="采集15秒 | 射击时自动记录")
+            self._safe_config(self.aim_diag_status, text="")
 
     def _write_aim_diag_file(self, session_id, lines, shot_count):
         """将瞄准诊断日志写入独立文件"""
@@ -719,6 +829,7 @@ class ThirdPersonApp(ctk.CTk):
 
             self._safe_log(f"诊断日志已保存: {filename}")
             self._safe_config(self.aim_diag_label, text=f"已保存: {filename}")
+            self._safe_config(self.aim_diag_status, text=f"射击={shot_count}次 | 日志={len(lines)}行 | {filename}")
             file_log.info(f"瞄准诊断日志已保存: {filepath} ({len(lines)} 行, {shot_count} 次射击)")
         except Exception as e:
             self._safe_log(f"保存诊断日志失败: {e}")

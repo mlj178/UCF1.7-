@@ -1,0 +1,78 @@
+QVModel 结构体和枪口定位验证
+=============================
+
+来源: dump.cs + IDA汇编 + 运行时验证
+
+一、QVModel 结构体定义 (dump.cs)
+-------------------------------
+
+类定义: public class QVModel : MonoBehaviour // TypeDefIndex: 5389
+
+【字段】
+  public QVModel.Data left;    // offset 0x44
+  public QVModel.Data right;   // offset 0x7C
+
+【Data 结构体】
+  public struct Data {
+    public Transform model;    // offset 0x00
+    public Vector3 offset;     // offset 0x04
+    public Vector3 euler;      // offset 0x10
+  }
+
+二、CharacterModel.bindQvMdl 偏移验证
+------------------------------------
+
+类定义: public class CharacterModel : Model // TypeDefIndex: 5394
+
+【字段】
+  public QVModel bindQvMdl;    // offset 0xB4 (已验证)
+
+三、枪口定位方案
+---------------
+
+1. 从 Player 获取 CharacterModel
+   - Player.currentCharacter (offset 0x18)
+   - CharacterModel.bindQvMdl (offset 0xB4)
+
+2. 从 QVModel 获取武器模型 Transform
+   - QVModel.left (offset 0x44) 或 QVModel.right (offset 0x7C)
+   - Data.model (offset 0x00)
+
+3. 递归枚举子节点查找枪口
+   - Transform.GetChild (RVA: 0x03F3150)
+   - Transform.get_childCount (RVA: 0x03F3E80)
+   - 节点名称关键词: muzzle, firePoint, shotPoint, barrel
+
+四、运行时验证结果
+-----------------
+
+✅ 已验证:
+  1. QVModel.left 偏移 0x44
+  2. QVModel.right 偏移 0x7C
+  3. CharacterModel.bindQvMdl 偏移 0xB4
+  4. Data.model 偏移 0x00
+
+⚠️ 高概率但未运行验证:
+  1. left/right 选择逻辑（可能根据 handedness）
+  2. 枪口节点名称可能不标准
+
+❌ 仍然缺失:
+  1. 运行时枪口 Transform 枚举
+  2. left/right QVModel 选择逻辑确认
+
+五、实现建议
+-----------
+
+1. 使用 QVModel 定位第三人称武器模型
+2. 递归枚举子节点查找枪口候选
+3. 根据节点名称评分选择最佳候选
+4. 缓存枪口 Transform，避免每帧查找
+
+六、相关文件
+-----------
+
+| 文件 | 说明 |
+|------|------|
+| dump.cs | QVModel 和 CharacterModel 类定义 |
+| IDA汇编 | 偏移验证 |
+| AAAAA-third_person_v1.js | 实现代码 |

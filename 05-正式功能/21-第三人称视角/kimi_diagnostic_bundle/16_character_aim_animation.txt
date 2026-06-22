@@ -1,0 +1,59 @@
+角色瞄准与动画分析
+===================
+
+来源: dump.cs + IDA汇编
+
+一、CharacterModel 关键字段 (dump.cs)
+------------------------------------
+
+类定义: public class CharacterModel : Model // TypeDefIndex: 5394
+
+【字段】
+  public CharacterModel.Sex sex;                            // 0x40
+  [Tooltip] public bool recycle;                            // 0x44
+  public Animator characterAnimator;                        // 0x48
+  public Animator handAnimator;                             // 0x4C
+  [SerializeField] private CharacterEffect characterEffect; // 0x50
+  private Renderer[] cvRenderers;                           // 0x54
+  [SerializeField] private AudioClip dieVoice;              // 0x58
+  public Transform spine;                                   // 0x5C
+  public Transform spine1;                                  // 0x60
+  public Transform neck;                                    // 0x64
+  [Tooltip] public string[] socketItemsName;              // 0x68
+  public float targetLowerAngle;                            // 0x78
+  public float lowerAngle;                                  // 0x7C
+  public QVModel bindQvMdl;                                 // 0xB4
+  public bool reverseSpineRotation;                         // 0xB0
+
+二、CharacterModel 关键函数 (IDA)
+---------------------------------
+
+  LateUpdate: RVA 0xB385C0 (IDA: il2cpp:10B385C0)
+  Update: RVA 0xB3A5D0 (IDA: il2cpp:10B3A5D0)
+  UpdateLowerAngle: RVA 0xB3A540 (IDA: il2cpp:10B3A540)
+  UpdateAnim: RVA 0xB3A0C0 (IDA: il2cpp:10B3A0C0)
+  SetWeaponAnim: RVA 0xB39EB0 (IDA: il2cpp:10B39EB0)
+
+三、UpdateLowerAngle 汇编片段 (IDA)
+-----------------------------------
+
+  来源: GameAssembly_part3.lst, 行号 1198304
+  (汇编过长，此处仅记录行号，需手动读取)
+  行号范围: 1198304 - 1198339
+
+四、结论
+--------
+
+✅ 已验证:
+  1. targetLowerAngle/lowerAngle 存在，偏移 0x78/0x7C
+  2. reverseSpineRotation 存在，偏移 0xB0
+  3. spine/spine1/neck 的 Transform 偏移已确认
+
+⚠️ 高概率但未运行验证:
+  1. LateUpdate 可能旋转 spine/spine1
+  2. lowerAngle 单位可能是度或弧度
+
+❌ 仍然缺失:
+  1. 未提取 UpdateLowerAngle 完整汇编
+  2. 未确认 CameraRotation 是否传入 CharacterModel
+  3. 未确认最适合 Hook 的函数位置

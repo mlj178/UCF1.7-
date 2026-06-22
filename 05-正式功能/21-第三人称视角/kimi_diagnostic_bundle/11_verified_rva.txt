@@ -1,0 +1,81 @@
+已验证总结（合并版）
+===================
+
+来源: codex_diagnostic_bundle + kimi_diagnostic_bundle 合并（以 codex 为准）
+
+一、运行时架构
+-------------
+
+1. 进程: 32位 x86, pointerSize=4
+2. 调用约定: __cdecl (Windows x86)
+3. Frida NativeFunction: 应使用 "mscdecl"
+4. Unity: 2020.3.30f1 (IL2CPP)
+5. Frida: 17.9.1, frida-tools: 14.8.1
+
+二、地址修正
+-----------
+
+6. 4个射击Hook地址错误 (JS+0x1000=IDA)
+   - Recoil.GetShootRay: 0x0B195C0
+   - WPN_Gun.Damage: 0x0B613D0
+   - WPN_Gun.GunShoot: 0x0B624C0
+   - WPN_Gun.GunShoot_Logic: 0x0B62170
+
+三、结构体偏移
+-------------
+
+7. QVModel.Data 结构体大小 0x38
+   - Model: offset 0x00
+   - GunFire: offset 0x34
+
+8. QVModel 关键偏移
+   - left: offset 0x44
+   - right: offset 0x7C
+
+9. CharacterModel.bindQvMdl offset 0xB4
+
+10. Recoil.aimIK offset 0x18 (OffsetModifier版本)
+
+11. AimIK.solver offset 0x1C -> IKSolverAim
+
+12. IKSolver.IKPosition offset 0x8
+
+四、ABI 验证
+-----------
+
+13. GetShootRay retBuf 隐藏参数 (最先压栈)
+
+14. Damage Ray inline 栈内联 [ebp+0C]~[ebp+23]
+
+15. Transform 读/写函数 RVA (script.json)
+    - get_position_Injected: 0x03F4280
+    - set_position_Injected: 0x03F4810
+    - get_rotation_Injected: 0x03F4380
+    - set_rotation_Injected: 0x03F4870
+
+16. Physics Raycast/SphereCast 存在 (script.json)
+    - Raycast: 0x0ABAF40 (Ray, RaycastHit*, float, MethodInfo*)
+    - SphereCast: 0x0ABB5C0 (Ray, radius, RaycastHit*, maxDistance, layerMask, MethodInfo*)
+
+五、Camera 函数
+-------------
+
+17. Camera.ScreenPointToRay_Injected: 0x0327AD0
+    参数: Camera*, Vector2*, int eye, Ray* retBuf, MethodInfo*
+
+18. Camera.WorldToScreenPoint_Injected: 0x0327EE0
+    参数: Camera*, Vector3*, int eye, Vector3* retBuf, MethodInfo*
+
+19. Camera.get_main: 0x0328310
+20. Camera.get_current: 0x03281C0
+21. Camera.get_pixelWidth: 0x0328490
+22. Camera.get_pixelHeight: 0x03283F0
+
+六、Transform 函数
+----------------
+
+23. Transform.GetChild: 0x03F3150
+24. Transform.get_childCount: 0x03F3E80
+25. Transform.get_forward: 0x03F3F20
+26. Component.get_transform: 0x032CF40
+27. Object.get_name: 0x04EA1B0

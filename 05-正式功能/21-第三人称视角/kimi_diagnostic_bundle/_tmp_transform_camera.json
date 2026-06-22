@@ -1,0 +1,163 @@
+{
+  "UnityEngine.Camera$$get_fieldOfView": {
+    "name": "UnityEngine.Camera$$get_fieldOfView",
+    "address": "0x328270",
+    "rva": "0x0328270",
+    "signature": "float UnityEngine_Camera__get_fieldOfView (UnityEngine_Camera_o* __this, const MethodInfo* method);",
+    "typeSignature": "fii"
+  },
+  "UnityEngine.Camera$$get_aspect": {
+    "name": "UnityEngine.Camera$$get_aspect",
+    "address": "0x328090",
+    "rva": "0x0328090",
+    "signature": "float UnityEngine_Camera__get_aspect (UnityEngine_Camera_o* __this, const MethodInfo* method);",
+    "typeSignature": "fii"
+  },
+  "UnityEngine.Camera$$get_pixelWidth": {
+    "name": "UnityEngine.Camera$$get_pixelWidth",
+    "address": "0x328490",
+    "rva": "0x0328490",
+    "signature": "int32_t UnityEngine_Camera__get_pixelWidth (UnityEngine_Camera_o* __this, const MethodInfo* method);",
+    "typeSignature": "iii"
+  },
+  "UnityEngine.Camera$$get_pixelHeight": {
+    "name": "UnityEngine.Camera$$get_pixelHeight",
+    "address": "0x3283f0",
+    "rva": "0x03283F0",
+    "signature": "int32_t UnityEngine_Camera__get_pixelHeight (UnityEngine_Camera_o* __this, const MethodInfo* method);",
+    "typeSignature": "iii"
+  },
+  "UnityEngine.Camera$$WorldToScreenPoint": {
+    "name": "UnityEngine.Camera$$WorldToScreenPoint",
+    "address": "0x327f70",
+    "rva": "0x0327F70",
+    "signature": "UnityEngine_Vector3_o UnityEngine_Camera__WorldToScreenPoint (UnityEngine_Camera_o* __this, UnityEngine_Vector3_o position, const MethodInfo* method);",
+    "typeSignature": "iiii"
+  },
+  "UnityEngine.Camera$$ScreenPointToRay": {
+    "name": "UnityEngine.Camera$$ScreenPointToRay",
+    "address": "0x327b90",
+    "rva": "0x0327B90",
+    "signature": "UnityEngine_Ray_o UnityEngine_Camera__ScreenPointToRay (UnityEngine_Camera_o* __this, UnityEngine_Vector3_o pos, const MethodInfo* method);",
+    "typeSignature": "iiii"
+  },
+  "UnityEngine.Camera$$get_main": {
+    "name": "UnityEngine.Camera$$get_main",
+    "address": "0x328310",
+    "rva": "0x0328310",
+    "signature": "UnityEngine_Camera_o* UnityEngine_Camera__get_main (const MethodInfo* method);",
+    "typeSignature": "ii"
+  },
+  "UnityEngine.Camera$$get_current": {
+    "name": "UnityEngine.Camera$$get_current",
+    "address": "0x3281c0",
+    "rva": "0x03281C0",
+    "signature": "UnityEngine_Camera_o* UnityEngine_Camera__get_current (const MethodInfo* method);",
+    "typeSignature": "ii"
+  },
+  "UnityEngine.Camera$$WorldToScreenPoint_Injected": {
+    "name": "UnityEngine.Camera$$WorldToScreenPoint_Injected",
+    "address": "0x327ee0",
+    "rva": "0x0327EE0",
+    "signature": "void UnityEngine_Camera__WorldToScreenPoint_Injected (UnityEngine_Camera_o* __this, UnityEngine_Vector3_o* position, int32_t eye, UnityEngine_Vector3_o* ret, const MethodInfo* method);",
+    "typeSignature": "viiiii"
+  },
+  "UnityEngine.Camera$$ScreenPointToRay_Injected": {
+    "name": "UnityEngine.Camera$$ScreenPointToRay_Injected",
+    "address": "0x327ad0",
+    "rva": "0x0327AD0",
+    "signature": "void UnityEngine_Camera__ScreenPointToRay_Injected (UnityEngine_Camera_o* __this, UnityEngine_Vector2_o* pos, int32_t eye, UnityEngine_Ray_o* ret, const MethodInfo* method);",
+    "typeSignature": "viiiii"
+  },
+  "UnityEngine.Component$$get_transform": {
+    "name": "UnityEngine.Component$$get_transform",
+    "address": "0x32cf40",
+    "rva": "0x032CF40",
+    "signature": "UnityEngine_Transform_o* UnityEngine_Component__get_transform (UnityEngine_Component_o* __this, const MethodInfo* method);",
+    "typeSignature": "iii"
+  },
+  "UnityEngine.Object$$get_name": {
+    "name": "UnityEngine.Object$$get_name",
+    "address": "0x4ea1b0",
+    "rva": "0x04EA1B0",
+    "signature": "System_String_o* UnityEngine_Object__get_name (UnityEngine_Object_o* __this, const MethodInfo* method);",
+    "typeSignature": "iii"
+  },
+  "UnityEngine.Transform$$get_position": {
+    "name": "UnityEngine.Transform$$get_position",
+    "address": "0x3f42b0",
+    "rva": "0x03F42B0",
+    "signature": "UnityEngine_Vector3_o UnityEngine_Transform__get_position (UnityEngine_Transform_o* __this, const MethodInfo* method);",
+    "typeSignature": "iii"
+  },
+  "UnityEngine.Transform$$get_right": {
+    "name": "UnityEngine.Transform$$get_right",
+    "address": "0x3f42f0",
+    "rva": "0x03F42F0",
+    "signature": "UnityEngine_Vector3_o UnityEngine_Transform__get_right (UnityEngine_Transform_o* __this, const MethodInfo* method);",
+    "typeSignature": "iii"
+  },
+  "UnityEngine.Transform$$get_up": {
+    "name": "UnityEngine.Transform$$get_up",
+    "address": "0x3f43f0",
+    "rva": "0x03F43F0",
+    "signature": "UnityEngine_Vector3_o UnityEngine_Transform__get_up (UnityEngine_Transform_o* __this, const MethodInfo* method);",
+    "typeSignature": "iii"
+  },
+  "UnityEngine.Transform$$get_forward": {
+    "name": "UnityEngine.Transform$$get_forward",
+    "address": "0x3f3f20",
+    "rva": "0x03F3F20",
+    "signature": "UnityEngine_Vector3_o UnityEngine_Transform__get_forward (UnityEngine_Transform_o* __this, const MethodInfo* method);",
+    "typeSignature": "iii"
+  },
+  "UnityEngine.Transform$$get_rotation": {
+    "name": "UnityEngine.Transform$$get_rotation",
+    "address": "0x3f43b0",
+    "rva": "0x03F43B0",
+    "signature": "UnityEngine_Quaternion_o UnityEngine_Transform__get_rotation (UnityEngine_Transform_o* __this, const MethodInfo* method);",
+    "typeSignature": "iii"
+  },
+  "UnityEngine.Transform$$get_parent": {
+    "name": "UnityEngine.Transform$$get_parent",
+    "address": "0x3f31d0",
+    "rva": "0x03F31D0",
+    "signature": "UnityEngine_Transform_o* UnityEngine_Transform__get_parent (UnityEngine_Transform_o* __this, const MethodInfo* method);",
+    "typeSignature": "iii"
+  },
+  "UnityEngine.Transform$$get_childCount": {
+    "name": "UnityEngine.Transform$$get_childCount",
+    "address": "0x3f3e80",
+    "rva": "0x03F3E80",
+    "signature": "int32_t UnityEngine_Transform__get_childCount (UnityEngine_Transform_o* __this, const MethodInfo* method);",
+    "typeSignature": "iii"
+  },
+  "UnityEngine.Transform$$GetChild": {
+    "name": "UnityEngine.Transform$$GetChild",
+    "address": "0x3f3150",
+    "rva": "0x03F3150",
+    "signature": "UnityEngine_Transform_o* UnityEngine_Transform__GetChild (UnityEngine_Transform_o* __this, int32_t index, const MethodInfo* method);",
+    "typeSignature": "iiii"
+  },
+  "UnityEngine.Transform$$get_position_Injected": {
+    "name": "UnityEngine.Transform$$get_position_Injected",
+    "address": "0x3f4280",
+    "rva": "0x03F4280",
+    "signature": "void UnityEngine_Transform__get_position_Injected (UnityEngine_Transform_o* __this, UnityEngine_Vector3_o* ret, const MethodInfo* method);",
+    "typeSignature": "viii"
+  },
+  "UnityEngine.Transform$$get_rotation_Injected": {
+    "name": "UnityEngine.Transform$$get_rotation_Injected",
+    "address": "0x3f4380",
+    "rva": "0x03F4380",
+    "signature": "void UnityEngine_Transform__get_rotation_Injected (UnityEngine_Transform_o* __this, UnityEngine_Quaternion_o* ret, const MethodInfo* method);",
+    "typeSignature": "viii"
+  },
+  "Cinemachine.CinemachineBrain$$get_OutputCamera": {
+    "name": "Cinemachine.CinemachineBrain$$get_OutputCamera",
+    "address": "0x82cdb0",
+    "rva": "0x082CDB0",
+    "signature": "UnityEngine_Camera_o* Cinemachine_CinemachineBrain__get_OutputCamera (Cinemachine_CinemachineBrain_o* __this, const MethodInfo* method);",
+    "typeSignature": "iii"
+  }
+}

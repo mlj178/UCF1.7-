@@ -1,0 +1,242 @@
+连接失败问题修复报告
+===================
+
+修复时间: 2026-06-22
+修复文件: AAAAA-third_person_v1.js, AAAAA-third_person_ui_v1.py
+
+一、问题描述
+------------
+
+**症状**：原本可以正常连接游戏，现在无法连接且连接后立即断开。
+
+**影响**：无法正常使用修改器。
+
+---
+
+二、根本原因分析（Phase 1）
+---------------------------
+
+通过系统调试流程，发现以下根本原因：
+
+### 1. Script.currentScript.unload 错误用法
+
+**代码位置**：AAAAA-third_person_v1.js Line 3466（已移除）
+```javascript
+Script.currentScript.unload = function() {
+    log('info', '[Unload] 开始卸载脚本...');
+    // ...
+};
+```
+
+**问题**：
+- Frida 的 `Script.currentScript.unload` 是一个**方法**，不是属性
+- 设置这个属性会导致脚本行为异常或立即卸载
+- 这就是连接后立即断开的根本原因
+
+**验证**：
+- Frida JavaScript API 文档中没有提到可以设置 `Script.currentScript.unload` 属性
+- `Script.currentScript.unload()` 是用于卸载脚本的方法
+- 设置这个属性会覆盖原有的卸载方法，导致脚本行为异常
+
+### 2. installEventHooks() 调用时机
+
+**代码位置**：AAAAA-third_person_v1.js Line 3515
+```javascript
+installEventHooks();  // Phase6: 在 installhook 时安装事件 Hook
+```
+
+**问题**：
+- 这个修改是正确的，不应该导致连接失败
+- 但如果 Hook 地址错误，可能导致脚本崩溃
+
+---
+
+三、修复方案（Phase 4）
+-----------------------
+
+### 1. 移除错误的 Script.currentScript.unload 设置
+
+**位置**：AAAAA-third_person_v1.js Line 3462-3508（已移除）
+
+**修改**：
+```javascript
+// 移除以下代码：
+Script.currentScript.unload = function() {
+    log('info', '[Unload] 开始卸载脚本...');
+    // ...
+};
+```
+
+### 2. 添加正确的清理机制
+
+**位置**：AAAAA-third_person_v1.js Line 3485-3533
+
+**修改**：
+```javascript
+cleanup: function() {
+    // 清理资源（用于脚本卸载前）
+    log('info', '[Cleanup] 开始清理资源...');
+
+    // 1. 清理主循环定时器
+    if (timer) {
+        clearInterval(timer);
+        timer = null;
+        log('info', '[Cleanup] 主循环定时器已清理');
+    }
+
+    // 2. 清理诊断定时器
+    if (aimDiag.intervalId) {
+        clearInterval(aimDiag.intervalId);
+        aimDiag.intervalId = null;
+        log('info', '[Cleanup] 诊断定时器已清理');
+    }
+
+    // 3. 禁用第三人称（如果启用）
+    if (fsm.current === STATE.TP_ENABLED) {
+        try {
+            disableThirdPerson();
+            log('info', '[Cleanup] 第三人称已禁用');
+        } catch(e) {
+            logError('cleanup', '禁用第三人称失败: ' + e);
+        }
+    }
+
+    // 4. Detach 所有 Hook
+    try {
+        Interceptor.detachAll();
+        log('info', '[Cleanup] 所有 Hook 已 detach');
+    } catch(e) {
+        logError('cleanup', 'Detach Hook 失败: ' + e);
+    }
+
+    // 5. 清空枪口缓存
+    clearMuzzleCache();
+
+    log('info', '[Cleanup] 资源清理完成');
+    return { ok: true };
+},
+```
+
+### 3. 修改 Python UI 的清理逻辑
+
+**位置**：AAAAA-third_person_ui_v1.py Line 439-467
+
+**修改**：
+```python
+def _cleanup_session(self):
+    """清理 Frida 会话"""
+    # 先调用 JS 清理函数
+    if self.script and self.is_connected:
+        try:
+            self._rpc_call('cleanup', timeout=2.0)
+            file_log.info("已调用 JS cleanup 函数")
+        except Exception as e:
+            file_log.error(f"调用 cleanup 失败: {e}")
+
+    # 然后卸载脚本
+    try:
+        if self.script:
+            self.script.unload()
+    except Exception:
+        pass
+    try:
+        if self.session:
+            self.session.detach()
+    except Exception:
+        pass
+    self.script = None
+    self.session = None
+    self.is_connected = False
+    self.is_enabled = False
+    self.attached_pid = None
+```
+
+---
+
+四、修复效果
+------------
+
+### 预期效果
+
+1. 连接游戏后不会立即断开
+2. 脚本可以正常加载和运行
+3. 关闭程序时可以正确清理资源
+4. 不再卡死
+
+### 验证方法
+
+1. 启动游戏
+2. 连接修改器
+3. 检查是否正常连接（不立即断开）
+4. 开启第三人称
+5. 关闭游戏，检查是否正常退出（不卡死）
+6. 检查日志中的 `[Cleanup]` 输出
+
+---
+
+五、技术要点
+------------
+
+### 1. Frida 脚本卸载的正确方式
+
+- **错误做法**：设置 `Script.currentScript.unload` 属性
+- **正确做法**：
+  - 提供 RPC 函数来清理资源
+  - 在 Python 端调用清理函数后再卸载脚本
+  - 使用 `Interceptor.detachAll()` 来 detach 所有 Hook
+
+### 2. Frida API 正确用法
+
+根据 Frida JavaScript API 文档：
+- `Script.currentScript.unload()` 是一个方法，用于卸载脚本
+- 不能设置 `Script.currentScript.unload` 属性
+- 正确的清理方式是通过 RPC 函数
+
+### 3. 清理流程
+
+```
+1. Python UI 检测到需要清理
+2. 调用 JS cleanup RPC 函数
+3. JS 清理定时器、Hook、缓存
+4. Python UI 卸载脚本
+5. Python UI detach 会话
+```
+
+---
+
+六、注意事项
+------------
+
+1. **不要设置 Script.currentScript.unload**：
+   - 这是错误的用法，会导致脚本行为异常
+   - 正确的做法是提供 RPC 清理函数
+
+2. **清理顺序**：
+   - 先清理定时器（避免定时器中调用已 detach 的 Hook）
+   - 再禁用第三人称（恢复游戏状态）
+   - 最后 detach Hook
+
+3. **异常处理**：
+   - 每个清理步骤都有 try-catch 包裹
+   - 即使某个步骤失败，其他步骤仍然执行
+
+---
+
+七、相关文件
+------------
+
+| 文件 | 说明 |
+|------|------|
+| AAAAA-third_person_v1.js | Frida 脚本（已修复） |
+| AAAAA-third_person_ui_v1.py | Python UI（已修复） |
+| CONNECTION_FAILURE_FIX_REPORT.txt | 本报告 |
+
+---
+
+八、下一步
+----------
+
+1. 测试修复效果
+2. 验证连接是否正常
+3. 验证关闭程序是否正常
+4. 检查日志输出

@@ -1,0 +1,62 @@
+Model.objectInPV / objectInCV 分析
+===================================
+
+来源: dump.cs
+
+--- dump.cs 提取结果 ---
+  Model 类中:
+    public List<GameObject> objectInPV; // 0x34
+    public List<GameObject> objectInCV; // 0x38
+    public List<Model.Socket> sockets; // 0x3C
+
+--- CharacterModel 继承关系 ---
+  CharacterModel -> Model -> RecyclableObject -> UnityEngine.Component
+  CharacterModel 继承 Model，所以 objectInPV/objectInCV 偏移保持 0x34/0x38
+
+--- 32位 Il2Cpp List<T> 布局 ---
+  来源: 静态推断（Unity IL2CPP List<T>标准布局）
+  [0x00] Il2CppObject header (klass, monitor) = 8 bytes
+  [0x08] Array<T>* _items
+  [0x0C] int _size
+  [0x10] int _version
+
+  但JS当前读取:
+    pvListPtr = character.add(0x34).readPointer()
+    pvItems = pvListPtr.add(0x10).readPointer()
+    pvCount = pvListPtr.add(0x18).readU32()
+
+  问题:
+    - JS读取0x10为_items，但32位List<T> _items可能是0x08
+    - JS读取0x18为_size，但32位List<T> _size可能是0x0C
+    - 这些偏移在64位下可能是0x10/0x18，但在32位下不同
+
+--- 可能原因分析 ---
+  1. List<T> 偏移错误
+     32位下_items可能是0x08，_size可能是0x0C
+     来源: Unity IL2CPP 源码分析
+
+  2. 当前对象不是CharacterModel
+     Player.currentCharacter可能返回其他类型
+     建议: 读取对象klass名称确认类型
+
+  3. 列表尚未初始化
+     游戏可能延迟初始化PV/CV列表
+
+  4. 应该读取Weapon的Model
+     而不是CharacterModel的Model
+
+--- 推荐验证方案 ---
+  1. 读取character对象+0x00的klass指针
+  2. 读取klass+0x08的name字段确认类名
+  3. 读取character+0x34的指针值（确认是否为有效List对象）
+  4. 尝试读取character+0x34后的List对象，按32位布局解析:
+     listPtr.readPointer() -> 0x08 _items?
+     listPtr.add(0x04).readU32() -> _size?
+     listPtr.add(0x08).readU32() -> _version?
+
+--- 结论 ---
+  当前JS使用64位List偏移在32位进程上，这是错误的高概率原因。
+  需要运行时验证32位List<T>布局。
+
+  状态: 未运行时确认
+  来源: dump.cs + 静态推断

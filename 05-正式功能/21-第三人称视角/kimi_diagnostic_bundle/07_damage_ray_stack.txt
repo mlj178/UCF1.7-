@@ -1,0 +1,63 @@
+Damage Ray 栈布局确认
+=====================
+
+函数: WPN_Gun.Damage
+RVA: 0x0B613D0
+IDA: il2cpp:10B613D0
+
+IDA 签名:
+  void __cdecl WPN_Gun__Damage(WPN_Gun_o *this, UnityEngine_Ray_o ray, const MethodInfo *method)
+
+IDA 栈帧定义:
+  this   = dword ptr  8
+  ray    = UnityEngine_Ray_o ptr  0Ch  (24 bytes inline)
+  method = dword ptr  24h
+
+栈布局计算:
+  [ebp+08] = this (WPN_Gun*)
+  [ebp+0C] = ray.origin.x   (float)
+  [ebp+10] = ray.origin.y   (float)
+  [ebp+14] = ray.origin.z   (float)
+  [ebp+18] = ray.direction.x (float)
+  [ebp+1C] = ray.direction.y (float)
+  [ebp+20] = ray.direction.z (float)
+  [ebp+24] = method (MethodInfo*)
+
+32位 __cdecl 压栈顺序（从右到左）:
+  push method
+  push ray.direction.z
+  push ray.direction.y
+  push ray.direction.x
+  push ray.origin.z
+  push ray.origin.y
+  push ray.origin.x
+  push this
+
+Frida Interceptor.attach onEnter:
+  args[0] = this (WPN_Gun*)
+  args[1] = [ebp+0C] 的4 bytes值 (ray.origin.x 的 float bits)
+  args[2] = [ebp+10] 的4 bytes值 (ray.origin.y)
+  ...
+  但 args 数组可能无法正确读取24 bytes inline结构体
+
+推荐读取方式 (使用 ebp):
+  onEnter: function(args) {
+    var thisPtr = args[0];
+    var ebp = this.context.ebp;
+    var rayOriginX = ebp.add(0x0C).readFloat();
+    var rayOriginY = ebp.add(0x10).readFloat();
+    var rayOriginZ = ebp.add(0x14).readFloat();
+    var rayDirX = ebp.add(0x18).readFloat();
+    var rayDirY = ebp.add(0x1C).readFloat();
+    var rayDirZ = ebp.add(0x20).readFloat();
+    var methodInfo = ebp.add(0x24).readPointer();
+  }
+
+重要:
+  IDA [ebp+0C] 是栈帧偏移，不是 this+0x0C
+  Ray 是 inline 结构体，不是指针
+  必须使用 ebp 或 esp 读取，不能依赖 args 数组
+
+未确认:
+  - Ray 在栈上的具体 float 顺序（需要运行时验证）
+  - 结构体压栈时是大端还是小端分量
