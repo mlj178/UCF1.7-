@@ -1,0 +1,52 @@
+仍然缺失
+========
+
+来源: codex_diagnostic_bundle + kimi_diagnostic_bundle 合并
+
+一、运行时验证缺失
+-----------------
+
+1. 运行时枪口 Transform 枚举
+   影响: 无法确认 muzzle/firePoint/barrel 真实节点
+
+2. left/right QVModel 选择逻辑
+   影响: 可能选择错误的武器模型
+
+3. UpdateLowerAngle 完整汇编
+   影响: 无法确认 spine 旋转逻辑
+
+4. AimIK 是否挂载及生效确认
+   影响: 无法确认角色瞄准是否生效
+
+二、参数和 ABI 缺失
+------------------
+
+5. GenerateBullet 参数
+   影响: 无法确认弹道生成逻辑
+
+6. 弹痕/曳光/枪口特效调用链
+   影响: 无法确认视觉效果修改点
+
+7. Physics Raycast 具体 ABI
+   影响: 需要运行时验证参数传递
+
+8. CinemachineCollider 是否存在
+   影响: 相机碰撞检测方案
+
+三、根因分析缺失
+---------------
+
+9. objectInPV/CV 为0的根因
+   影响: 模型切换可能不完整
+
+10. 32位 List<T> 布局确认
+    影响: 读取列表数据可能错误
+
+四、下一步建议
+-------------
+
+1. 运行时枚举武器子节点，确认枪口位置
+2. 运行时验证 AimIK 是否挂载
+3. 运行时验证 32位 List<T> 布局
+4. 运行时验证 Physics.Raycast 参数传递
+5. 检查 CinemachineCollider 是否存在

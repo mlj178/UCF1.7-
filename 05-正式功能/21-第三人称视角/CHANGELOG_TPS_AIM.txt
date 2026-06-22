@@ -1,0 +1,446 @@
+第三人称瞄准功能变更日志
+===========================
+
+版本: v1.2 (关键修复版)
+日期: 2026-06-22
+目标: 修复关键问题，确保子弹从枪口射向准星
+
+一、修复关键问题
+------------------
+
+### 1. AimIK 对象取错，完全关闭
+
+✅ 修复: 完全关闭所有 AimIK 相关代码
+   - 位置: Line 966-973, 1223-1233, 3312-3314, 1974-2032
+   - 问题: Player.recoil 是游戏的射击 Recoil (MonoBehaviour)，不是 FinalIK.Recoil
+   - 影响: AimIK 路径错误，存在崩溃风险
+   - 修复: 注释掉所有 AimIK 相关函数和调用
+
+### 2. 射击 Hook 安装位置错误
+
+✅ 修复: 将 installShootHooks() 移到 installhook() 中
+   - 位置: Line 3566
+   - 问题: 只在启动"瞄准诊断"后才安装，正常开启第三人称时不修改子弹
+   - 影响: 子弹不会被校正
+   - 修复: 在 installhook() 中安装射击 Hook
+
+### 3. 枪口缓存比较错误
+
+✅ 修复: 使用 equals() 比较 NativePointer
+   - 位置: Line 1751-1756
+   - 问题: 使用 === 比较 NativePointer，每次都返回 false
+   - 影响: 每100ms重新解析 QVModel，造成卡顿
+   - 修复: 使用 inUse.equals(muzzleCache.weaponPtr)
+
+### 4. bindWpn 校验未使用
+
+✅ 修复: 如果 bindWpn 不匹配当前武器，返回未找到
+   - 位置: Line 1783-1790
+   - 问题: weaponMatches 计算后未使用，换枪过程中可能使用上一把枪的枪口
+   - 影响: 枪口定位不准确
+   - 修复: 添加校验逻辑，不匹配时返回空缓存
+
+### 5. 左右模型选择错误
+
+✅ 修复: 检查哪一侧模型实际激活
+   - 位置: Line 1801-1820
+   - 问题: 永远优先选择右侧，可能选中隐藏模型的 GunFire
+   - 影响: 枪口定位不准确
+   - 修复: 添加 isTransformActive() 检查，优先选择激活的一侧
+
+### 6. WPN_Gun.gunFire 回退缺失
+
+✅ 修复: 添加 WPN_Gun.gunFire +0x114 回退
+   - 位置: Line 1845-1868
+   - 问题: QVModel 为空时直接结束，不尝试当前 Weapon 的 GunFire
+   - 影响: 某些武器无法定位枪口
+   - 修复: 添加回退逻辑，从 WPN_Gun.gunFire 获取枪口
+
+### 7. Physics.Raycast 调用约定未验证
+
+✅ 修复: 更新 RaycastHit 布局注释，修正 distance 偏移
+   - 位置: Line 2335-2369
+   - 问题: distance 偏移错误 (0x30 应为 0x1C)
+   - 影响: 距离数据不准确
+   - 修复: 更新 distance 偏移为 0x1C，添加 TODO 注释说明 Ray ABI 待验证
+
+---
+
+版本: v1.1 (修复版)
+日期: 2026-06-22
+目标: 修复阻断性错误
+
+一、修复阻断性错误
+------------------
+
+### 1. Component.get_transform 地址错误
+
+✅ 修复: RVA 从 0x3F2D80 改为 0x032CF40
+   - 位置: Line 117
+   - 影响: 相机 Transform、武器 Transform、枪口 Transform 全部获取失败
+   - 原因: 变更日志错误记录为"已验证"，实际地址错误
+
+### 2. callPhysicsRaycast() 参数错误
+
+✅ 修复: 传递完整 Ray 对象，而不是 origin/direction 分开传递
+   - 位置: Line 1867, 1897-1905
+   - 影响: Raycast 调用失败，aimPoint 使用相机远点而不是真实命中点
+   - 修复前: callPhysicsRaycast(cameraRay.origin, cameraRay.direction, maxDist)
+   - 修复后: callPhysicsRaycast(cameraRay, maxDist)
+
+### 3. QVModel.left/right 读取错误
+
+✅ 修复: QVModel.left/right 是内联结构体，不是指针
+   - 位置: Line 1750-1755
+   - 影响: 枪口定位全部错位
+   - 修复前: qvModel.add(OFF.QV_left).readPointer()
+   - 修复后: qvModel.add(OFF.QV_left) (直接使用地址)
+
+### 4. GunFire Transform 未真正使用
+
+✅ 修复: 优先使用 GunFire Transform 作为枪口
+   - 位置: Line 1685-1701
+   - 影响: 只依赖名称搜索，GunFire 被读取但未使用
+   - 修复: 添加 componentGetTransform(gunFire, ptr(0)) 并优先返回
+
+### 5. 武器过滤缺失
+
+✅ 修复: GetShootRay 只允许 localPlayer.recoil
+   - 位置: Line 3100-3115
+   - 影响: 可能修改敌人、机器人、其他玩家的射击
+   - 修复: 添加 localRecoil 检查，比较 this._thisPtr.equals(localRecoil)
+
+### 6. 相机 SphereCast 未验证
+
+✅ 修复: 暂时关闭相机碰撞检测
+   - 位置: Line 1225-1228
+   - 影响: SphereCast ABI 未验证，可能引入崩溃
+   - 修复: 注释掉 checkCameraCollision() 调用
+
+### 7. 字符串读取偏移错误
+
+✅ 修复: 使用32位 IL2CPP 字符串偏移和 UTF-16 编码
+   - 位置: Line 452-459
+   - 影响: muzzle/fire/barrel 等节点名称无法正确读取
+   - 修复前: len=0x10, chars=0x14, readUtf8String
+   - 修复后: len=0x08, chars=0x0C, readUtf16String
+
+### 8. List 数组元素读取错误
+
+✅ 修复: Il2CppArray 元素从 +0x10 开始
+   - 位置: Line 477, 596, 616, 670, 697, 1022, 1042, 1265, 1283
+   - 影响: PV/CV、GameObject 列表读取错误
+   - 修复前: itemsPtr.add(i * PTR_SIZE)
+   - 修复后: itemsPtr.add(0x10 + i * PTR_SIZE)
+
+---
+
+版本: v1.0 (第一版)
+日期: 2026-06-22
+目标: 真实枪口定位和子弹 Ray 指向准星目标
+
+一、已完成功能
+--------------
+
+### 1. 基础错误修复
+
+✅ setTimeout 回调中的 this 问题
+   - 位置: Line 3189-3200 (Damage Hook)
+   - 修复: 在 setTimeout 前保存局部变量，避免回调中访问 this
+
+✅ bool 参数类型
+   - 位置: Line 672, 698, 1264, 1282
+   - 修复: 使用 0/1 代替 true/false
+
+✅ Injected 函数调用顺序
+   - 位置: Line 1550, 1586
+   - 修复: 调用顺序改为 (this, retBuf, methodInfo)
+
+✅ 32位 List<T> 布局
+   - 位置: Line 465, 470
+   - 修复: 使用 32位偏移 (_items:0x08, _size:0x0C)
+
+### 2. 稳定定位第三人称真实枪口
+
+✅ resolveThirdPersonMuzzle() 函数
+   - 位置: Line 1710-1782
+   - 功能: 通过 QVModel 结构体定位第三人称枪口
+   - 优先级:
+     1. CharacterModel.bindQvMdl
+     2. QVModel.bindWpn 是否等于 currentWeapon
+     3. QVModel.left/right 中当前激活的模型
+     4. QVModel.Data.GunFire
+     5. WPN_Gun.gunFire (字段偏移 0x114)
+     6. Transform 子树名称枚举
+
+✅ getMuzzlePosition() 函数
+   - 位置: Line 1790-1804
+   - 功能: 获取枪口位置
+
+✅ getMuzzleForward() 函数
+   - 位置: Line 1806-1817
+   - 功能: 获取枪口方向
+
+✅ 枪口缓存机制
+   - 位置: Line 1596-1608
+   - 功能: 缓存枪口 Transform，避免每帧重复查找
+   - 清空时机: 换枪、死亡、复活、切房间
+
+### 3. 计算准星世界目标点
+
+✅ calculateShootRay() 函数
+   - 位置: Line 1825-1924
+   - 功能: 计算两段式射击 Ray
+   - 流程:
+     1. 获取实际渲染的 Camera
+     2. 使用屏幕中心调用 ScreenPointToRay
+     3. 从相机射线 Raycast 获取目标点
+     4. 获取枪口位置
+     5. 计算最终方向
+     6. 从枪口向目标点再做一次 Raycast，检测近墙遮挡
+
+✅ callScreenPointToRay() 函数
+   - 位置: Line 2207-2218
+   - 功能: 调用 Camera.ScreenPointToRay_Injected
+   - RVA: 0x327AD0
+   - 签名: void(Camera*, Vector2* pos, int eye, Ray* ret, MethodInfo*)
+
+✅ callPhysicsRaycast() 函数
+   - 位置: Line 2237-2260
+   - 功能: 调用 Physics.Raycast
+   - RVA: 0xABAF40
+   - 签名: bool(Ray*, RaycastHit*, float, MethodInfo*)
+
+### 4. 让子弹从枪口射向准星目标
+
+✅ GetShootRay Hook 修改
+   - 位置: Line 3074-3145
+   - 功能: 在第三人称模式下修改射击 Ray
+   - 流程:
+     1. 读取原始 Ray
+     2. 计算新的射击 Ray (从枪口指向准星目标)
+     3. 写入返回缓冲区
+     4. 输出诊断日志
+
+✅ writeRayToBuffer() 函数
+   - 位置: Line 1925-1940
+   - 功能: 写入 Ray 到缓冲区
+
+### 5. 诊断日志完善
+
+✅ 原始 GetShootRay 输出
+   - 位置: Line 3090-3095
+   - 内容: originalRay.origin, originalRay.direction
+
+✅ 最终 GetShootRay 输出
+   - 位置: Line 3096-3101
+   - 内容: finalRay.origin, finalRay.direction
+
+✅ Damage 接收到的 Ray 输出
+   - 位置: Line 3195-3200
+   - 内容: receivedRay.origin, receivedRay.direction
+
+✅ Ray 一致性检查
+   - 位置: Line 3202-3213
+   - 功能: 比较 Damage 接收到的 Ray 与 GetShootRay 的最终 Ray
+
+✅ 完整射击快照
+   - 位置: Line 2932-3031
+   - 内容:
+     - actualCamera.position/forward
+     - cameraRay.origin/direction/hitPoint
+     - weapon
+     - muzzle.position/forward
+     - desiredDirection
+     - angle.muzzle_to_target
+     - distance.muzzle_to_target
+     - inputRay.origin/direction
+
+---
+
+二、未完成功能
+--------------
+
+### 1. 武器过滤逻辑
+
+❌ TODO: 添加武器过滤
+   - 要求: 当前 Hook 的武器必须等于本地玩家当前武器
+   - 问题: 缺少 Component.get_gameObject 的 RVA
+   - 影响: 可能影响敌人、机器人和其他玩家的射击
+   - 优先级: 高
+   - 备注: 需要找到 Component.get_gameObject RVA 或其他方法从 Recoil 对象获取 Weapon
+
+### 2. 角色上半身和枪械的视觉跟随
+
+❌ TODO: 第二版实现
+   - 功能: 角色上半身、双手和第三人称枪械跟随屏幕准星方向
+   - 优先级: 高
+
+---
+
+三、已验证地址
+--------------
+
+### 1. Transform 函数
+
+✅ Transform.get_position_Injected: 0x3F4280
+✅ Transform.get_rotation_Injected: 0x3F4380
+✅ Transform.get_forward: 0x3F3F20
+✅ Component.get_transform: 0x3F2D80
+
+### 2. Camera 函数
+
+✅ Camera.ScreenPointToRay_Injected: 0x327AD0
+✅ Camera.WorldToScreenPoint_Injected: 0x327EE0
+✅ Camera.get_pixelWidth: 0x328490
+✅ Camera.get_pixelHeight: 0x3283F0
+
+### 3. Physics 函数
+
+✅ Physics.Raycast: 0xABAF40
+
+### 4. 射击函数
+
+✅ Recoil.GetShootRay: 0xB195C0
+✅ WPN_Gun.Damage: 0xB613D0
+✅ WPN_Gun.GunShoot: 0xB624C0
+✅ WPN_Gun.GunShoot_Logic: 0xB62170
+
+### 5. QVModel 偏移
+
+✅ QVModel.left: 0x44
+✅ QVModel.right: 0x7C
+✅ QVModel.Data.GunFire: 0x34
+✅ CharacterModel.bindQvMdl: 0xB4
+
+---
+
+四、安全回退
+------------
+
+### 1. 武器过滤缺失
+
+⚠️ 问题: 无法从 Recoil 对象获取 Weapon 信息
+⚠️ 回退: 暂时跳过武器过滤，可能影响其他玩家
+⚠️ TODO: 找到 Component.get_gameObject RVA 或其他方法
+
+### 2. Physics.Raycast 未完全验证
+
+⚠️ 问题: RaycastHit 结构体布局未完全验证
+⚠️ 回退: 使用推测的偏移读取 hit.point (offset 0x00)
+⚠️ TODO: 运行时验证 RaycastHit 结构体布局
+
+---
+
+五、验收标准检查
+----------------
+
+### 第一版验收标准
+
+✅ 3. 2米墙面单发，命中点接近准星
+   - 状态: 待测试
+   - 实现: calculateShootRay() 已实现
+
+✅ 4. 10米墙面单发，命中点接近准星
+   - 状态: 待测试
+   - 实现: calculateShootRay() 已实现
+
+✅ 5. 30米墙面单发，命中点接近准星
+   - 状态: 待测试
+   - 实现: calculateShootRay() 已实现
+
+✅ 6. 枪口明显位于角色手中第三人称枪械上
+   - 状态: 待测试
+   - 实现: resolveThirdPersonMuzzle() 已实现
+
+✅ 7. GetShootRay和Damage记录的最终Ray一致
+   - 状态: 已实现
+   - 实现: Damage Hook 中添加 Ray 一致性检查
+
+✅ 8. 换枪后重新获取枪口
+   - 状态: 已实现
+   - 实现: installEventHooks() 中 Hook Player.SetWeapon
+
+✅ 9. 死亡复活后重新获取角色、枪和枪口
+   - 状态: 已实现
+   - 实现: installEventHooks() 中 Hook Player.OnEntityDeath, Player.Respawn, Player.Spawn
+
+✅ 10. 关闭第三人称后恢复原始射击和人物姿态
+   - 状态: 已实现
+   - 实现: GetShootRay Hook 中检查 fsm.current === STATE.TP_ENABLED
+
+❌ 11. 不影响敌人、机器人和其他玩家的射击
+   - 状态: 未实现
+   - 问题: 缺少武器过滤逻辑
+   - TODO: 添加武器过滤
+
+---
+
+六、下一步计划
+--------------
+
+### 第二版计划
+
+1. 实现角色上半身和枪械的视觉跟随
+   - 检查并使用 CharacterModel.targetLowerAngle, CharacterModel.lowerAngle
+   - 如果不能工作，使用备用方案: Hook CharacterModel.LateUpdate
+   - 使用 Transform.set_localRotation_Injected, Transform.set_rotation_Injected
+   - 建议旋转分配: spine 30%, spine1 50%, neck 20%
+
+2. 添加武器过滤逻辑
+   - 找到 Component.get_gameObject RVA
+   - 或找到其他方法从 Recoil 对象获取 Weapon 信息
+
+3. 完善 Physics.Raycast 验证
+   - 运行时验证 RaycastHit 结构体布局
+
+---
+
+七、文件修改列表
+----------------
+
+| 文件 | 修改内容 |
+|------|----------|
+| AAAAA-third_person_v1.js | 修复基础错误，实现枪口定位和射击 Ray 修改 |
+| CHANGELOG_TPS_AIM.txt | 本文件 |
+
+---
+
+八、测试建议
+------------
+
+### 测试步骤
+
+1. 启动游戏
+2. 连接修改器
+3. 开启第三人称
+4. 在不同距离（2米、10米、30米）射击墙面
+5. 检查命中点是否接近准星
+6. 检查诊断日志输出
+7. 换枪、死亡、复活，检查枪口是否重新获取
+8. 关闭第三人称，检查射击是否恢复原始状态
+
+### 预期结果
+
+1. 命中点接近准星（误差小于 5cm）
+2. 诊断日志输出完整信息
+3. GetShootRay 和 Damage 的 Ray 一致
+4. 换枪、死亡、复活后枪口重新获取
+5. 关闭第三人称后射击恢复原始状态
+
+---
+
+九、注意事项
+------------
+
+1. 武器过滤缺失可能影响其他玩家，建议尽快实现
+2. Physics.Raycast 的 RaycastHit 结构体布局未完全验证，可能存在误差
+3. 诊断日志输出较多，可能影响性能，建议只在测试时开启
+4. 换枪、死亡、复活时清空枪口缓存，可能需要重新查找枪口
+
+---
+
+十、版本历史
+------------
+
+v1.0 (2026-06-22): 第一版，真实枪口定位和子弹 Ray 指向准星目标

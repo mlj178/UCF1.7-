@@ -1,0 +1,22 @@
+运行时架构确认
+==============
+
+进程: 32位 (x86)
+pointerSize: 4
+调用约定: __cdecl (Windows x86)
+Frida NativeFunction: 应使用 "mscdecl"
+Unity: 2020.3.30f1 (IL2CPP)
+Frida: 17.9.1, frida-tools: 14.8.1
+
+IL2CPP 32位对象布局:
+  [0x00] Il2CppClass* klass
+  [0x04] MonitorData* monitor
+  [0x08] 第一个用户字段
+
+IL2CPP 实例方法签名规则:
+  所有实例方法都包含隐藏的 MethodInfo* 参数（最后一个参数）
+  32位 __cdecl: 参数从右到左压栈
+
+值类型返回 (>8 bytes):
+  调用者分配返回缓冲区，作为隐藏的第一个参数传递
+  压栈顺序: retBuf (最先压), 然后其他参数从右到左

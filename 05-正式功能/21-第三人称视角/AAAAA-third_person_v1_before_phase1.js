@@ -94,15 +94,6 @@
         WPN_Gun_GunShoot:                     0xB624C0,  // IDA: il2cpp:10B624C0, 原0xB614C0错误
         WPN_Gun_GunShoot_Logic:               0xB62170,  // IDA: il2cpp:10B62170, 原0xB61170错误
 
-        // Phase6: 事件处理 (dump.cs)
-        Player_OnEntityDeath:                 0xB51210,  // Player.OnEntityDeath
-        Player_SetWeapon:                     0xB53650,  // Player.SetWeapon
-        Player_Respawn:                       0xB527A0,  // Player.Respawn
-        Player_Spawn:                         0xB53760,  // Player.Spawn
-
-        // Phase5: 相机碰撞
-        Physics_SphereCast:                   0xABB560,  // Physics.SphereCast
-
         // v9: Unity API (32位 _Injected 版本)
         // Transform
         Transform_get_position_Injected:      0x3F4280,
@@ -114,7 +105,7 @@
         Transform_GetChild:                   0x3F3150,
         Transform_get_childCount:             0x3F3E80,
         // Component.get_transform: 返回 Transform*
-        Component_get_transform:              0x032CF40,  // 修复: 正确 RVA
+        Component_get_transform:              0x3F2D80,
         // Object.get_name: 返回 String*
         Object_get_name:                      0x4EA1B0,
         // Camera
@@ -142,7 +133,6 @@
         // Player
         Player_cameraManager:   0x48,
         Player_cameraRotation:  0x4C,
-        Player_recoil:          0x54,  // Phase4: Player.recoil -> Recoil
         Player_characterContainer: 0x58,
         Player_currentCharacter:   0x5C,
         Player_playerData:      0x98,
@@ -168,23 +158,6 @@
         CM_characterAnimator:   0x48,
         CM_cvRenderers:         0x54,
         CM_socketItemsName:     0x68,
-        // Phase2: QVModel 相关偏移 (Kimi 验证)
-        CM_bindQvMdl:           0xB4,  // CharacterModel.bindQvMdl -> QVModel
-
-        // Phase2: QVModel (Kimi 验证)
-        QV_left:                0x44,  // QVModel.left -> QVModel.Data
-        QV_right:               0x7C,  // QVModel.right -> QVModel.Data
-        QV_bindWpn:             0xB8,  // QVModel.bindWpn -> Weapon
-
-        // Phase2: QVModel.Data (Kimi 验证, 大小 0x38)
-        QVD_Model:              0x00,  // QVModel.Data.Model -> Transform
-        QVD_GunFire:            0x34,  // QVModel.Data.GunFire -> ParticleSystem
-
-        // Phase4: AimIK (Kimi 验证)
-        Recoil_aimIK:           0x18,  // Recoil.aimIK -> AimIK
-        AimIK_solver:           0x1C,  // AimIK.solver -> IKSolverAim
-        IKSolver_IKPosition:    0x08,  // IKSolver.IKPosition -> Vector3
-        IKSolver_IKPositionWeight: 0x14, // IKSolver.IKPositionWeight -> float
 
         // CinemachineFreeLook
         CFL_m_LookAt:           0x40,
@@ -292,9 +265,6 @@
     // Physics.Raycast: bool(Ray*, RaycastHit*, float, MethodInfo*)
     var physicsRaycast = new NativeFunction(base.add(RVA.Physics_Raycast), 'bool', ['pointer', 'pointer', 'float', 'pointer'], CALL_CONV);
 
-    // Physics.SphereCast: bool(Vector3* origin, float radius, Vector3* direction, RaycastHit* hitInfo, float maxDistance, int layerMask, MethodInfo*)
-    var physicsSphereCast = new NativeFunction(base.add(RVA.Physics_SphereCast), 'bool', ['pointer', 'float', 'pointer', 'pointer', 'float', 'int', 'pointer'], CALL_CONV);
-
     send({type:'log', level:'info', module:'TP', message:'NativeFunction 声明完成 (v9, mscdecl + MethodInfo*)'});
 
     // ============================================================
@@ -322,11 +292,6 @@
         var old = fsm.current;
         fsm.current = newState;
         logOnce('state_change', '状态: ' + old + ' -> ' + newState);
-
-        // Phase2: 离开房间或游戏时清空枪口缓存
-        if (newState === STATE.NO_GAME || newState === STATE.WAITING_ROOM) {
-            clearMuzzleCache();
-        }
         send({type:'state_changed', oldState: old, newState: newState});
     }
 
@@ -452,56 +417,10 @@
     function readIl2cppString(strPtr) {
         if (isNull(strPtr)) return '<null>';
         try {
-            // 修复: 32位 IL2CPP 字符串偏移
-            // +0x08 length (int32)
-            // +0x0C characters (UTF-16)
-            var len = strPtr.add(0x08).readS32();
-            if (len < 0 || len > 1024) return '<invalid_len>';
-            return strPtr.add(0x0C).readUtf16String(len);
-        } catch(e) { return '<read_err>'; }
-    }
-
-    // Phase1: 32位 List<T> 布局
-    // +0x08 _items (T[])
-    // +0x0C _size (int)
-    // +0x10 _version (int)
-    function readListItems(listPtr, label) {
-        var result = { items: [], count: 0 };
-        if (isNull(listPtr)) return result;
-        try {
-            // Phase1: 修正 32 位 List 偏移
-            var itemsPtr = listPtr.add(0x08).readPointer();  // _items (Il2CppArray*)
-            var count = listPtr.add(0x0C).readS32();          // _size
-            if (count < 0 || count > 100) return result;
-            result.count = count;
-            // 修复: Il2CppArray 元素从 +0x10 开始
-            for (var i = 0; i < count; i++) {
-                var itemPtr = itemsPtr.add(0x10 + i * PTR_SIZE).readPointer();
-                result.items.push(itemPtr);
-            }
-        } catch(e) {}
-        return result;
-    }
-
-    // Phase1: 32位 Il2CppArray 布局
-    // +0x10 第一个元素
-    function readArrayItems(arrayPtr, elementSize) {
-        var result = { items: [], count: 0 };
-        if (isNull(arrayPtr)) return result;
-        try {
-            var bounds = arrayPtr.add(0x04).readPointer();  // bounds
-            if (!isNull(bounds)) {
-                var count = bounds.readU32();  // length
-                if (count < 0 || count > 100) return result;
-                result.count = count;
-                var dataPtr = arrayPtr.add(0x10);  // 第一个元素
-                for (var i = 0; i < count; i++) {
-                    var itemPtr = dataPtr.add(i * elementSize);
-                    result.items.push(itemPtr);
-                }
-            }
-        } catch(e) {}
-        return result;
+            var len = strPtr.add(0x10).readS32();
+            if (len < 0 || len > 256) return '<bad_len:' + len + '>';
+            return strPtr.add(0x14).readUtf8String(len);
+        } catch(e) { return '<err>'; }
     }
 
     function getGameObjectName(goPtr) {
@@ -513,7 +432,6 @@
     }
 
     // 读取 List<GameObject> 的信息（含 Renderer.enabled）
-    // Phase1: 使用 32 位 List 偏移
     function readGameObjectList(listPtr, label) {
         var result = { count: 0, items: [] };
         if (isNull(listPtr)) {
@@ -521,9 +439,8 @@
             return result;
         }
         try {
-            // Phase1: 修正 32 位 List 偏移
-            var itemsPtr = listPtr.add(0x08).readPointer();  // _items
-            var count = listPtr.add(0x0C).readS32();          // _size
+            var itemsPtr = listPtr.add(0x10).readPointer();
+            var count = listPtr.add(0x18).readU32();
             result.count = count;
             log('info', '[诊断] ' + label + ' 数量: ' + count);
             for (var i = 0; i < count && i < 30; i++) {
@@ -588,13 +505,11 @@
                 savedState.cvLayerStates = [];
 
                 // 保存 PV 对象状态
-                // Phase1: 使用 32 位 List 偏移
                 if (!isNull(pvListPtr)) {
-                    var pvItems = pvListPtr.add(0x08).readPointer();  // _items (Il2CppArray*)
-                    var pvCount = pvListPtr.add(0x0C).readS32();      // _size
+                    var pvItems = pvListPtr.add(0x10).readPointer();
+                    var pvCount = pvListPtr.add(0x18).readU32();
                     for (var i = 0; i < pvCount && i < 30; i++) {
-                        // 修复: Il2CppArray 元素从 +0x10 开始
-                        var goPtr = pvItems.add(0x10 + i * PTR_SIZE).readPointer();
+                        var goPtr = pvItems.add(i * PTR_SIZE).readPointer();
                         if (!isNull(goPtr)) {
                             try {
                                 savedState.pvActiveStates.push(gameObjectGetActiveSelf(goPtr, ptr(0)));
@@ -609,13 +524,11 @@
                 }
 
                 // 保存 CV 对象状态
-                // Phase1: 使用 32 位 List 偏移
                 if (!isNull(cvListPtr)) {
-                    var cvItems = cvListPtr.add(0x08).readPointer();  // _items (Il2CppArray*)
-                    var cvCount = cvListPtr.add(0x0C).readS32();      // _size
+                    var cvItems = cvListPtr.add(0x10).readPointer();
+                    var cvCount = cvListPtr.add(0x18).readU32();
                     for (var i = 0; i < cvCount && i < 30; i++) {
-                        // 修复: Il2CppArray 元素从 +0x10 开始
-                        var goPtr = cvItems.add(0x10 + i * PTR_SIZE).readPointer();
+                        var goPtr = cvItems.add(i * PTR_SIZE).readPointer();
                         if (!isNull(goPtr)) {
                             try {
                                 savedState.cvActiveStates.push(gameObjectGetActiveSelf(goPtr, ptr(0)));
@@ -660,23 +573,21 @@
         }
 
         // 5. 显式隐藏 PV 对象（双重保险，确保第一人称枪模消失）
-        // Phase1: 使用 32 位 List 偏移
         if (!isNull(character)) {
             try {
                 var pvListPtr = character.add(OFF.Model_objectInPV).readPointer();
                 if (!isNull(pvListPtr)) {
-                    var pvItems = pvListPtr.add(0x08).readPointer();  // _items (Il2CppArray*)
-                    var pvCount = pvListPtr.add(0x0C).readS32();      // _size
+                    var pvItems = pvListPtr.add(0x10).readPointer();
+                    var pvCount = pvListPtr.add(0x18).readU32();
                     var hiddenCount = 0;
                     for (var i = 0; i < pvCount && i < 30; i++) {
-                        // 修复: Il2CppArray 元素从 +0x10 开始
-                        var goPtr = pvItems.add(0x10 + i * PTR_SIZE).readPointer();
+                        var goPtr = pvItems.add(i * PTR_SIZE).readPointer();
                         if (!isNull(goPtr)) {
                             try {
                                 // 先检查当前状态
                                 var wasActive = gameObjectGetActiveSelf(goPtr, ptr(0));
                                 if (wasActive) {
-                                    gameObjectSetActive(goPtr, 0, ptr(0));  // Phase1: bool -> 0
+                                    gameObjectSetActive(goPtr, false, ptr(0));
                                     hiddenCount++;
                                 }
                             } catch(e) {}
@@ -689,21 +600,19 @@
             }
 
             // 6. 显式显示 CV 对象（双重保险）
-            // Phase1: 使用 32 位 List 偏移
             try {
                 var cvListPtr = character.add(OFF.Model_objectInCV).readPointer();
                 if (!isNull(cvListPtr)) {
-                    var cvItems = cvListPtr.add(0x08).readPointer();  // _items (Il2CppArray*)
-                    var cvCount = cvListPtr.add(0x0C).readS32();      // _size
+                    var cvItems = cvListPtr.add(0x10).readPointer();
+                    var cvCount = cvListPtr.add(0x18).readU32();
                     var shownCount = 0;
                     for (var i = 0; i < cvCount && i < 30; i++) {
-                        // 修复: Il2CppArray 元素从 +0x10 开始
-                        var goPtr = cvItems.add(0x10 + i * PTR_SIZE).readPointer();
+                        var goPtr = cvItems.add(i * PTR_SIZE).readPointer();
                         if (!isNull(goPtr)) {
                             try {
                                 var wasActive = gameObjectGetActiveSelf(goPtr, ptr(0));
                                 if (!wasActive) {
-                                    gameObjectSetActive(goPtr, 1, ptr(0));  // Phase1: bool -> 1
+                                    gameObjectSetActive(goPtr, true, ptr(0));
                                     shownCount++;
                                 }
                             } catch(e) {}
@@ -728,7 +637,7 @@
         try {
             var pcm = player.add(OFF.Player_cameraManager).readPointer();
             if (!isNull(pcm)) {
-                setModelVisible(pcm, 0, ptr(0));  // Phase1: bool -> 0
+                setModelVisible(pcm, false, ptr(0));
                 log('info', '[Model] PlayerCameraManager.modelVisible = false');
             }
         } catch(e) {
@@ -960,23 +869,6 @@
     function disableThirdPerson() {
         var errors = [];
 
-        // Phase2: 清空枪口缓存
-        clearMuzzleCache();
-
-        // Phase4: 重置 AimIK 权重
-        // 修复: AimIK 对象取错，暂时关闭
-        // try {
-        //     var player = findMyPlayer();
-        //     if (player) {
-        //         resetAimIKWeight(player);
-        //         log('info', '[AimIK] 权重已重置');
-        //     }
-        // } catch(e) {}
-
-        // Phase5: 重置相机碰撞状态
-        cameraCollisionState.currentDistance = fsm.cameraDistance;
-        cameraCollisionState.targetDistance = fsm.cameraDistance;
-
         try {
             // 1. 恢复观察模式
             var player = findMyPlayer();
@@ -1018,14 +910,12 @@
                 if (!isNull(character)) {
                     try {
                         // 恢复 PV 对象
-                        // Phase1: 使用 32 位 List 偏移
                         var pvListPtr = character.add(OFF.Model_objectInPV).readPointer();
                         if (!isNull(pvListPtr)) {
-                            var pvItems = pvListPtr.add(0x08).readPointer();  // _items (Il2CppArray*)
-                            var pvCount = pvListPtr.add(0x0C).readS32();      // _size
+                            var pvItems = pvListPtr.add(0x10).readPointer();
+                            var pvCount = pvListPtr.add(0x18).readU32();
                             for (var i = 0; i < pvCount && i < savedState.pvActiveStates.length; i++) {
-                                // 修复: Il2CppArray 元素从 +0x10 开始
-                                var goPtr = pvItems.add(0x10 + i * PTR_SIZE).readPointer();
+                                var goPtr = pvItems.add(i * PTR_SIZE).readPointer();
                                 if (!isNull(goPtr)) {
                                     try {
                                         gameObjectSetActive(goPtr, savedState.pvActiveStates[i], ptr(0));
@@ -1039,14 +929,12 @@
                         }
 
                         // 恢复 CV 对象
-                        // Phase1: 使用 32 位 List 偏移
                         var cvListPtr = character.add(OFF.Model_objectInCV).readPointer();
                         if (!isNull(cvListPtr)) {
-                            var cvItems = cvListPtr.add(0x08).readPointer();  // _items (Il2CppArray*)
-                            var cvCount = cvListPtr.add(0x0C).readS32();      // _size
+                            var cvItems = cvListPtr.add(0x10).readPointer();
+                            var cvCount = cvListPtr.add(0x18).readU32();
                             for (var i = 0; i < cvCount && i < savedState.cvActiveStates.length; i++) {
-                                // 修复: Il2CppArray 元素从 +0x10 开始
-                                var goPtr = cvItems.add(0x10 + i * PTR_SIZE).readPointer();
+                                var goPtr = cvItems.add(i * PTR_SIZE).readPointer();
                                 if (!isNull(goPtr)) {
                                     try {
                                         gameObjectSetActive(goPtr, savedState.cvActiveStates[i], ptr(0));
@@ -1075,7 +963,7 @@
                 try {
                     var pcm = player.add(OFF.Player_cameraManager).readPointer();
                     if (!isNull(pcm)) {
-                        setModelVisible(pcm, 1, ptr(0));  // Phase1: bool -> 1
+                        setModelVisible(pcm, true, ptr(0));
                         log('info', '[Restore] modelVisible = true');
                     }
                 } catch(e) {
@@ -1221,25 +1109,6 @@
             var freeLook = camMgr.add(OFF.CM_freeLookCamera).readPointer();
             if (isNull(freeLook)) return;
 
-            // Phase4: 每帧更新 AimIK 目标点
-            // 修复: AimIK 对象取错，暂时关闭
-            // try {
-            //     var shootRay = calculateShootRay(player);
-            //     if (shootRay.valid && shootRay.aimPoint) {
-            //         var aimIKResult = setAimIKTarget(player, shootRay.aimPoint);
-            //         // 只在首次成功时记录日志
-            //         if (aimIKResult.ok && loopCounter === 1) {
-            //             log('info', '[AimIK] 目标点设置成功');
-            //         }
-            //     }
-            // } catch(e) {}
-
-            // Phase5: 相机碰撞检测
-            // 修复: 暂时关闭相机 SphereCast，避免未验证的 ABI 问题
-            // try {
-            //     checkCameraCollision(freeLook, player);
-            // } catch(e) {}
-
             // v10: 100ms 间隔，计数器调整
             // 每 500ms 重新激活 FreeLook (5 次)
             if (loopCounter % 5 === 0) {
@@ -1264,18 +1133,16 @@
                 try {
                     var character = player.add(OFF.Player_currentCharacter).readPointer();
                     if (!isNull(character)) {
-                        // Phase1: 使用 32 位 List 偏移
                         var pvListPtr = character.add(OFF.Model_objectInPV).readPointer();
                         if (!isNull(pvListPtr)) {
-                            var pvItems = pvListPtr.add(0x08).readPointer();  // _items (Il2CppArray*)
-                            var pvCount = pvListPtr.add(0x0C).readS32();      // _size
+                            var pvItems = pvListPtr.add(0x10).readPointer();
+                            var pvCount = pvListPtr.add(0x18).readU32();
                             for (var i = 0; i < pvCount && i < 30; i++) {
-                                // 修复: Il2CppArray 元素从 +0x10 开始
-                                var goPtr = pvItems.add(0x10 + i * PTR_SIZE).readPointer();
+                                var goPtr = pvItems.add(i * PTR_SIZE).readPointer();
                                 if (!isNull(goPtr)) {
                                     try {
                                         if (gameObjectGetActiveSelf(goPtr, ptr(0))) {
-                                            gameObjectSetActive(goPtr, 0, ptr(0));  // Phase1: bool -> 0
+                                            gameObjectSetActive(goPtr, false, ptr(0));
                                         }
                                     } catch(e) {}
                                 }
@@ -1283,18 +1150,16 @@
                         }
 
                         // v8: 同时确保 CV 对象仍然显示
-                        // Phase1: 使用 32 位 List 偏移
                         var cvListPtr = character.add(OFF.Model_objectInCV).readPointer();
                         if (!isNull(cvListPtr)) {
-                            var cvItems = cvListPtr.add(0x08).readPointer();  // _items (Il2CppArray*)
-                            var cvCount = cvListPtr.add(0x0C).readS32();      // _size
+                            var cvItems = cvListPtr.add(0x10).readPointer();
+                            var cvCount = cvListPtr.add(0x18).readU32();
                             for (var i = 0; i < cvCount && i < 30; i++) {
-                                // 修复: Il2CppArray 元素从 +0x10 开始
-                                var goPtr = cvItems.add(0x10 + i * PTR_SIZE).readPointer();
+                                var goPtr = cvItems.add(i * PTR_SIZE).readPointer();
                                 if (!isNull(goPtr)) {
                                     try {
                                         if (!gameObjectGetActiveSelf(goPtr, ptr(0))) {
-                                            gameObjectSetActive(goPtr, 1, ptr(0));  // Phase1: bool -> 1
+                                            gameObjectSetActive(goPtr, true, ptr(0));
                                         }
                                     } catch(e) {}
                                 }
@@ -1477,7 +1342,6 @@
         intervalId: null,
         logLines: [],      // 缓冲区，最终写入文件
         shootHooksInstalled: false,
-        eventHooksInstalled: false,  // Phase6: 事件 Hook 标志
         lastShotData: null, // 最近一次射击数据
     };
 
@@ -1556,30 +1420,14 @@
         return Math.acos(d) * 180.0 / Math.PI;
     }
 
-    // 检查 Transform 是否激活（通过 GameObject.activeSelf）
-    function isTransformActive(tPtr) {
-        if (isNull(tPtr)) return false;
-        try {
-            // Transform -> Component -> GameObject
-            // 需要调用 Component.get_gameObject，但 RVA 未验证
-            // 暂时使用简化方法：检查 Transform 的 hierarchyCount 或 childCount
-            // 如果 hierarchyCount > 0，说明该节点在场景中是激活的
-            var childCount = transformGetChildCount(tPtr, ptr(0));
-            // 注意: 这个方法不准确，只是临时方案
-            // 真正的激活检查需要 Component.get_gameObject -> GameObject.activeSelf
-            return true;  // 暂时假设所有 Transform 都是激活的
-        } catch(e) {
-            return false;
-        }
-    }
-
     // 安全获取 Transform 的 position/forward 等
-    // Phase1 修复: _Injected 函数调用顺序为 (this, retBuf, MethodInfo*)
+    // 注意: 所有值类型返回的 NativeFunction 现在使用 _Injected 或 x64 ABI,
+    //       调用方式为 func(retBuf, thisPtr, methodInfo), 结果写入 retBuf
     function safeGetTransformPos(tPtr) {
         if (isNull(tPtr)) return { x:0,y:0,z:0,valid:false,reason:'null_transform' };
         try {
             var retBuf = Memory.alloc(12); // Vector3 = 12 bytes
-            transformGetPosition(tPtr, retBuf, ptr(0));  // Phase1: 修正调用顺序 (this, retBuf, MethodInfo*)
+            transformGetPosition(retBuf, tPtr, ptr(0));
             return readVec3(retBuf);
         } catch(e) { return { x:0,y:0,z:0,valid:false,reason:String(e) }; }
     }
@@ -1615,563 +1463,9 @@
         if (isNull(tPtr)) return { x:0,y:0,z:0,w:0,valid:false,reason:'null_transform' };
         try {
             var retBuf = Memory.alloc(16); // Quaternion = 16 bytes
-            transformGetRotation(tPtr, retBuf, ptr(0));  // Phase1: 修正调用顺序 (this, retBuf, MethodInfo*)
+            transformGetRotation(retBuf, tPtr, ptr(0));
             return readQuat(retBuf);
         } catch(e) { return { x:0,y:0,z:0,w:0,valid:false,reason:String(e) }; }
-    }
-
-    // ========================================
-    // Phase2: 第三人称枪口定位
-    // ========================================
-
-    // 枪口缓存
-    var muzzleCache = {
-        transform: null,        // 枪口 Transform
-        position: null,         // 缓存的位置
-        forward: null,          // 缓存的方向
-        lastUpdateTime: 0,      // 上次更新时间
-        cacheValid: false,      // 缓存是否有效
-        weaponPtr: null,        // 当前武器指针（用于检测换枪）
-        qvModelPtr: null,       // 当前 QVModel 指针
-        selectedSide: null,     // 选择的 left/right
-        muzzleName: null,       // 枪口节点名称
-    };
-
-    // 清空枪口缓存（换枪、死亡、复活、离开房间时调用）
-    function clearMuzzleCache() {
-        muzzleCache.transform = null;
-        muzzleCache.position = null;
-        muzzleCache.forward = null;
-        muzzleCache.lastUpdateTime = 0;
-        muzzleCache.cacheValid = false;
-        muzzleCache.weaponPtr = null;
-        muzzleCache.qvModelPtr = null;
-        muzzleCache.selectedSide = null;
-        muzzleCache.muzzleName = null;
-    }
-
-    // 枚举 Transform 子节点，查找枪口候选
-    function findMuzzleCandidates(parentTransform, depth, maxDepth, candidates) {
-        if (depth > maxDepth || isNull(parentTransform)) return;
-        try {
-            var childCount = transformGetChildCount(parentTransform, ptr(0));
-            for (var i = 0; i < childCount && i < 20; i++) {
-                var child = transformGetChild(parentTransform, i, ptr(0));
-                if (isNull(child)) continue;
-
-                // 获取名称
-                var goPtr = componentGetTransform(child, ptr(0)); // Transform -> GameObject (需要反向)
-                // 注意: Transform 是 Component，可以通过 Component.gameObject 获取 GameObject
-                // 但这里我们直接使用 Object.get_name
-                var namePtr = objectGetName(child, ptr(0));
-                var name = readIl2cppString(namePtr);
-                var lowerName = name.toLowerCase();
-
-                // 检查是否是枪口候选
-                var isCandidate = false;
-                var priority = 0;
-                if (lowerName.indexOf('muzzle') >= 0) { isCandidate = true; priority = 10; }
-                else if (lowerName.indexOf('firepoint') >= 0) { isCandidate = true; priority = 9; }
-                else if (lowerName.indexOf('shotpoint') >= 0) { isCandidate = true; priority = 8; }
-                else if (lowerName.indexOf('bulletpoint') >= 0) { isCandidate = true; priority = 7; }
-                else if (lowerName.indexOf('barrel') >= 0) { isCandidate = true; priority = 6; }
-                else if (lowerName.indexOf('fire') >= 0 && lowerName.indexOf('gunfire') < 0) { isCandidate = true; priority = 5; }
-
-                if (isCandidate) {
-                    var pos = safeGetTransformPos(child);
-                    var fwd = safeGetTransformForward(child);
-                    candidates.push({
-                        name: name,
-                        transform: child,
-                        position: pos,
-                        forward: fwd,
-                        priority: priority,
-                        depth: depth
-                    });
-                }
-
-                // 递归查找
-                findMuzzleCandidates(child, depth + 1, maxDepth, candidates);
-            }
-        } catch(e) {}
-    }
-
-    // 从 QVModel.Data 获取枪口
-    function getMuzzleFromQVData(qvDataPtr, side) {
-        if (isNull(qvDataPtr)) return null;
-
-        var result = {
-            modelTransform: null,
-            gunFire: null,
-            muzzleTransform: null,
-            muzzleName: null,
-            candidates: []
-        };
-
-        try {
-            // 读取 Model Transform
-            var modelTf = qvDataPtr.add(OFF.QVD_Model).readPointer();
-            result.modelTransform = modelTf;
-
-            // 读取 GunFire ParticleSystem
-            var gunFire = qvDataPtr.add(OFF.QVD_GunFire).readPointer();
-            result.gunFire = gunFire;
-
-            // 修复: 优先使用 GunFire Transform 作为枪口
-            if (!isNull(gunFire)) {
-                var gunFireTf = componentGetTransform(gunFire, ptr(0));
-                if (!isNull(gunFireTf)) {
-                    result.muzzleTransform = gunFireTf;
-                    result.muzzleName = 'GunFire';
-                    result.candidates.push({
-                        transform: gunFireTf,
-                        name: 'GunFire',
-                        priority: 100,  // 最高优先级
-                        depth: 0
-                    });
-                    return result;  // 直接返回，不再枚举子节点
-                }
-            }
-
-            // 从 Model Transform 枚举子节点查找枪口（备用方案）
-            if (!isNull(modelTf)) {
-                findMuzzleCandidates(modelTf, 0, 8, result.candidates);
-
-                // 按优先级排序
-                result.candidates.sort(function(a, b) {
-                    if (a.priority !== b.priority) return b.priority - a.priority;
-                    return a.depth - b.depth;
-                });
-
-                // 选择最高优先级的候选
-                if (result.candidates.length > 0) {
-                    result.muzzleTransform = result.candidates[0].transform;
-                    result.muzzleName = result.candidates[0].name;
-                }
-            }
-        } catch(e) {}
-
-        return result;
-    }
-
-    // 解析第三人称枪口（主函数）
-    function resolveThirdPersonMuzzle(player) {
-        // 检查缓存是否仍然有效
-        var now = Date.now();
-        if (muzzleCache.cacheValid && (now - muzzleCache.lastUpdateTime < 1000)) {
-            // 检查武器是否变化
-            try {
-                var wpns = player.add(OFF.Player_wpns).readPointer();
-                var inUse = !isNull(wpns) ? wpns.add(OFF.PW_inUse).readPointer() : null;
-                // 修复: NativePointer 应使用 equals() 比较，而不是 ===
-                if (!isNull(inUse) && !isNull(muzzleCache.weaponPtr) && inUse.equals(muzzleCache.weaponPtr)) {
-                    // 武器未变化，返回缓存
-                    return muzzleCache;
-                }
-            } catch(e) {}
-        }
-
-        // 清空缓存
-        clearMuzzleCache();
-
-        try {
-            // 1. 获取 CharacterModel
-            var character = player.add(OFF.Player_currentCharacter).readPointer();
-            if (isNull(character)) {
-                log('info', '[Muzzle] character is null');
-                return muzzleCache;
-            }
-
-            // 2. 获取 QVModel
-            var qvModel = character.add(OFF.CM_bindQvMdl).readPointer();
-            if (isNull(qvModel)) {
-                log('info', '[Muzzle] bindQvMdl is null');
-                return muzzleCache;
-            }
-            muzzleCache.qvModelPtr = qvModel;
-
-            // 3. 获取当前武器
-            var wpns = player.add(OFF.Player_wpns).readPointer();
-            var inUse = !isNull(wpns) ? wpns.add(OFF.PW_inUse).readPointer() : null;
-            muzzleCache.weaponPtr = inUse;
-
-            // 4. 检查 bindWpn 是否匹配当前武器
-            var bindWpn = qvModel.add(OFF.QV_bindWpn).readPointer();
-            var weaponMatches = (!isNull(inUse) && inUse.equals(bindWpn));
-
-            // 修复: 如果 bindWpn 不匹配当前武器，返回未找到
-            if (!weaponMatches) {
-                log('info', '[Muzzle] bindWpn 不匹配当前武器，跳过此 QVModel');
-                return muzzleCache;  // 返回空缓存
-            }
-
-            // 5. 尝试从 left 和 right 获取枪口
-            // 修复: QVModel.left/right 是内联结构体，不是指针
-            var leftData = qvModel.add(OFF.QV_left);  // 直接使用地址，不调用 readPointer()
-            var rightData = qvModel.add(OFF.QV_right);
-
-            var leftResult = getMuzzleFromQVData(leftData, 'left');
-            var rightResult = getMuzzleFromQVData(rightData, 'right');
-
-            // 6. 选择合适的枪口
-            // 修复: 检查哪一侧模型实际激活，而不是永远优先选择右侧
-            var selectedResult = null;
-            var selectedSide = null;
-
-            // 检查 left 和 right 的 modelTransform 是否激活
-            var leftActive = leftResult && leftResult.modelTransform && isTransformActive(leftResult.modelTransform);
-            var rightActive = rightResult && rightResult.modelTransform && isTransformActive(rightResult.modelTransform);
-
-            // 优先选择激活且有枪口的一侧
-            if (rightActive && rightResult.muzzleTransform) {
-                selectedResult = rightResult;
-                selectedSide = 'right';
-            } else if (leftActive && leftResult.muzzleTransform) {
-                selectedResult = leftResult;
-                selectedSide = 'left';
-            } else if (rightResult && rightResult.muzzleTransform) {
-                // 如果两侧都不激活，但右侧有枪口，使用右侧（备用）
-                selectedResult = rightResult;
-                selectedSide = 'right (inactive)';
-            } else if (leftResult && leftResult.muzzleTransform) {
-                // 如果两侧都不激活，但左侧有枪口，使用左侧（备用）
-                selectedResult = leftResult;
-                selectedSide = 'left (inactive)';
-            }
-
-            if (selectedResult) {
-                muzzleCache.transform = selectedResult.muzzleTransform;
-                muzzleCache.muzzleName = selectedResult.muzzleName;
-                muzzleCache.selectedSide = selectedSide;
-                muzzleCache.cacheValid = true;
-                muzzleCache.lastUpdateTime = now;
-
-                log('info', '[Muzzle] 找到枪口: side=' + selectedSide + ' name=' + selectedResult.muzzleName +
-                    ' candidates=' + selectedResult.candidates.length);
-            } else {
-                // 修复: 添加 WPN_Gun.gunFire +0x114 回退
-                log('info', '[Muzzle] QVModel 未找到枪口，尝试 WPN_Gun.gunFire 回退');
-                try {
-                    if (!isNull(inUse)) {
-                        // WPN_Gun.gunFire 偏移 0x114
-                        var wpnGunFire = inUse.add(0x114).readPointer();
-                        if (!isNull(wpnGunFire)) {
-                            var gunFireTf = componentGetTransform(wpnGunFire, ptr(0));
-                            if (!isNull(gunFireTf)) {
-                                muzzleCache.transform = gunFireTf;
-                                muzzleCache.muzzleName = 'WPN_Gun.gunFire';
-                                muzzleCache.selectedSide = 'weapon_fallback';
-                                muzzleCache.cacheValid = true;
-                                muzzleCache.lastUpdateTime = now;
-                                log('info', '[Muzzle] 使用 WPN_Gun.gunFire 作为枪口');
-                            }
-                        }
-                    }
-                } catch(e) {
-                    log('info', '[Muzzle] WPN_Gun.gunFire 回退失败: ' + e);
-                }
-            }
-
-        } catch(e) {
-            logError('muzzle_resolve', 'resolveThirdPersonMuzzle 失败: ' + e);
-        }
-
-        return muzzleCache;
-    }
-
-    // 获取枪口位置
-    function getMuzzlePosition(player) {
-        var cache = resolveThirdPersonMuzzle(player);
-        if (!cache.cacheValid || isNull(cache.transform)) {
-            return { x:0, y:0, z:0, valid: false, reason: 'no_muzzle' };
-        }
-
-        // 每帧更新位置
-        var pos = safeGetTransformPos(cache.transform);
-        cache.position = pos;
-        return pos;
-    }
-
-    // 获取枪口方向
-    function getMuzzleForward(player) {
-        var cache = resolveThirdPersonMuzzle(player);
-        if (!cache.cacheValid || isNull(cache.transform)) {
-            return { x:0, y:0, z:0, valid: false, reason: 'no_muzzle' };
-        }
-
-        // 每帧更新方向
-        var fwd = safeGetTransformForward(cache.transform);
-        cache.forward = fwd;
-        return fwd;
-    }
-
-    // ========================================
-    // Phase3: 两段式射击 Ray
-    // ========================================
-
-    // 计算最终的射击 Ray
-    // 返回: { origin: Vector3, direction: Vector3, valid: boolean, reason: string }
-    function calculateShootRay(player) {
-        var result = { origin: null, direction: null, valid: false, reason: 'unknown' };
-
-        try {
-            // 1. 获取实际渲染的 Camera
-            var actualCam = getActualCamera();
-            if (isNull(actualCam)) {
-                result.reason = 'no_camera';
-                return result;
-            }
-
-            // 2. 获取 Camera Transform
-            var camTransform = getCameraTransform(actualCam);
-            if (isNull(camTransform)) {
-                result.reason = 'no_camera_transform';
-                return result;
-            }
-
-            // 3. 获取 Camera 位置和方向
-            var camPos = safeGetTransformPos(camTransform);
-            var camFwd = safeGetTransformForward(camTransform);
-            if (!camPos.valid || !camFwd.valid) {
-                result.reason = 'camera_pos_or_fwd_invalid';
-                return result;
-            }
-
-            // 4. 获取屏幕尺寸
-            var screenWidth = cameraGetPixelWidth(actualCam, ptr(0));
-            var screenHeight = cameraGetPixelHeight(actualCam, ptr(0));
-            if (screenWidth <= 0 || screenHeight <= 0) {
-                result.reason = 'invalid_screen_size';
-                return result;
-            }
-
-            // 5. 使用屏幕中心调用 ScreenPointToRay
-            var centerX = screenWidth / 2;
-            var centerY = screenHeight / 2;
-            var cameraRay = callScreenPointToRay(actualCam, centerX, centerY);
-            if (!cameraRay.valid) {
-                result.reason = 'screenpointtoray_failed';
-                return result;
-            }
-
-            // 6. 从相机射线 Raycast 获取目标点
-            var maxDist = 1000.0;  // 最大距离
-            var raycastResult = callPhysicsRaycast(cameraRay, maxDist);  // 修复: 传递完整 Ray 对象
-
-            var aimPoint = null;
-            if (raycastResult.hit) {
-                aimPoint = raycastResult.point;
-            } else {
-                // 未命中，使用相机射线远点
-                aimPoint = vec3Add(cameraRay.origin, vec3Scale(cameraRay.direction, maxDist));
-            }
-
-            // 7. 获取枪口位置
-            var muzzlePos = getMuzzlePosition(player);
-            if (!muzzlePos.valid) {
-                result.reason = 'no_muzzle_position';
-                return result;
-            }
-
-            // 8. 计算最终方向
-            var toTarget = vec3Sub(aimPoint, muzzlePos);
-            var finalDirection = vec3Normalize(toTarget);
-            if (vec3Length(finalDirection) < 0.1) {
-                result.reason = 'direction_too_short';
-                return result;
-            }
-
-            // 9. 从枪口向目标点再做一次 Raycast，检测近墙遮挡
-            var nearWallDist = vec3Length(toTarget);
-            // 修复: 构造完整的 Ray 对象
-            var muzzleRay = {
-                origin: muzzlePos,
-                direction: finalDirection,
-                valid: true
-            };
-            var nearWallResult = callPhysicsRaycast(muzzleRay, nearWallDist);
-
-            // 10. 设置最终 Ray
-            result.origin = muzzlePos;
-            result.direction = finalDirection;
-            result.valid = true;
-            result.reason = 'ok';
-            result.aimPoint = aimPoint;
-            result.cameraRay = cameraRay;
-            result.nearWallHit = nearWallResult.hit;
-
-            return result;
-
-        } catch(e) {
-            result.reason = 'exception: ' + e;
-            return result;
-        }
-    }
-
-    // 写入 Ray 到缓冲区
-    function writeRayToBuffer(rayBuf, origin, direction) {
-        if (isNull(rayBuf)) return false;
-        try {
-            // Ray 结构: origin (12 bytes) + direction (12 bytes)
-            rayBuf.writeFloat(origin.x);
-            rayBuf.add(4).writeFloat(origin.y);
-            rayBuf.add(8).writeFloat(origin.z);
-            rayBuf.add(12).writeFloat(direction.x);
-            rayBuf.add(16).writeFloat(direction.y);
-            rayBuf.add(20).writeFloat(direction.z);
-            return true;
-        } catch(e) {
-            return false;
-        }
-    }
-
-    // ========================================
-    // Phase4: 角色和武器视觉瞄准 (AimIK)
-    // ========================================
-
-    // 修复: AimIK 对象取错，暂时关闭所有 AimIK 相关代码
-    // Player.recoil 是游戏的射击 Recoil (MonoBehaviour)，不是 FinalIK.Recoil
-    // FinalIK.Recoil 的 +0x18 才是 AimIK，但 Player.recoil 指向的是另一个类
-    // 因此 player.add(0x54).readPointer().add(0x18).readPointer() 是错误的路径
-
-    // 设置 AimIK 目标点 (暂时禁用)
-    // function setAimIKTarget(player, aimPoint) {
-    //     try {
-    //         // 1. 获取 Recoil 组件
-    //         var recoil = player.add(OFF.Player_recoil).readPointer();
-    //         if (isNull(recoil)) {
-    //             return { ok: false, reason: 'no_recoil' };
-    //         }
-    //
-    //         // 2. 获取 AimIK 组件
-    //         var aimIK = recoil.add(OFF.Recoil_aimIK).readPointer();
-    //         if (isNull(aimIK)) {
-    //             return { ok: false, reason: 'no_aimIK' };
-    //         }
-    //
-    //         // 3. 获取 IKSolverAim
-    //         var solver = aimIK.add(OFF.AimIK_solver).readPointer();
-    //         if (isNull(solver)) {
-    //             return { ok: false, reason: 'no_solver' };
-    //         }
-    //
-    //         // 4. 设置 IKPosition (目标点)
-    //         solver.add(OFF.IKSolver_IKPosition).writeFloat(aimPoint.x);
-    //         solver.add(OFF.IKSolver_IKPosition + 4).writeFloat(aimPoint.y);
-    //         solver.add(OFF.IKSolver_IKPosition + 8).writeFloat(aimPoint.z);
-    //
-    //         // 5. 设置 IKPositionWeight = 1.0
-    //         solver.add(OFF.IKSolver_IKPositionWeight).writeFloat(1.0);
-    //
-    //         return { ok: true, reason: 'ok' };
-    //
-    //     } catch(e) {
-    //         return { ok: false, reason: 'exception: ' + e };
-    //     }
-    // }
-
-    // 重置 AimIK 权重 (暂时禁用)
-    // function resetAimIKWeight(player) {
-    //     try {
-    //         var recoil = player.add(OFF.Player_recoil).readPointer();
-    //         if (isNull(recoil)) return;
-    //
-    //         var aimIK = recoil.add(OFF.Recoil_aimIK).readPointer();
-    //         if (isNull(aimIK)) return;
-    //         var solver = aimIK.add(OFF.AimIK_solver).readPointer();
-    //         if (isNull(solver)) return;
-    //
-    //         // 设置 IKPositionWeight = 0.0
-    //         solver.add(OFF.IKSolver_IKPositionWeight).writeFloat(0.0);
-    //
-    //     } catch(e) {}
-    // }
-
-    // ========================================
-    // Phase5: 相机碰撞检测
-    // ========================================
-
-    // 相机碰撞状态
-    var cameraCollisionState = {
-        lastDistance: 3.0,        // 上次有效距离
-        targetDistance: 3.0,      // 目标距离
-        currentDistance: 3.0,     // 当前插值距离
-        smoothing: 0.15,          // 平滑系数 (0~1, 越小越平滑)
-        minDistance: 0.5,         // 最小距离
-        collisionLayerMask: 0xFFFFFFFF, // 碰撞层掩码（默认所有层）
-    };
-
-    // 检测相机碰撞并调整距离
-    function checkCameraCollision(freeLook, player) {
-        try {
-            // 1. 获取 Follow 目标位置（角色位置）
-            var followPtr = freeLook.add(OFF.CFL_m_LookAt).readPointer();
-            if (isNull(followPtr)) {
-                followPtr = freeLook.add(OFF.CFL_m_Follow).readPointer();
-            }
-            if (isNull(followPtr)) return;
-
-            var characterPos = safeGetTransformPos(followPtr);
-            if (!characterPos.valid) return;
-
-            // 2. 获取实际相机位置
-            var actualCam = getActualCamera();
-            if (isNull(actualCam)) return;
-
-            var camTransform = getCameraTransform(actualCam);
-            if (isNull(camTransform)) return;
-
-            var camPos = safeGetTransformPos(camTransform);
-            if (!camPos.valid) return;
-
-            // 3. 计算方向和距离
-            var toCam = vec3Sub(camPos, characterPos);
-            var currentDist = vec3Length(toCam);
-            var direction = vec3Normalize(toCam);
-
-            // 4. 使用 SphereCast 检测碰撞（半径 0.3 米）
-            var sphereRadius = 0.3;
-            var maxDist = fsm.cameraDistance;
-            var raycastResult = callPhysicsSphereCast(
-                characterPos,
-                sphereRadius,
-                direction,
-                maxDist
-            );
-
-            // 5. 计算目标距离
-            var targetDist = maxDist;
-            if (raycastResult.hit) {
-                // 碰撞，使用碰撞点距离（留一点余量）
-                targetDist = Math.max(raycastResult.distance - sphereRadius - 0.1, cameraCollisionState.minDistance);
-            }
-
-            // 6. 平滑插值
-            cameraCollisionState.targetDistance = targetDist;
-            cameraCollisionState.currentDistance = cameraCollisionState.currentDistance +
-                (targetDist - cameraCollisionState.currentDistance) * cameraCollisionState.smoothing;
-
-            // 7. 更新 Orbit Radius
-            var orbitsPtr = freeLook.add(OFF.CFL_m_Orbits).readPointer();
-            if (!isNull(orbitsPtr)) {
-                var arrLen = orbitsPtr.add(0xC).readU32();
-                if (arrLen >= 3) {
-                    var newRadius = cameraCollisionState.currentDistance;
-                    // 更新所有轨道的 Radius
-                    for (var i = 0; i < 3; i++) {
-                        orbitsPtr.add(0x14 + i * 8).writeFloat(newRadius);
-                    }
-                }
-            }
-
-            // 8. 记录日志（仅在有碰撞时）
-            if (raycastResult.hit && loopCounter % 30 === 0) {
-                log('info', '[CameraCollision] 检测到碰撞，距离: ' + targetDist.toFixed(2) + 'm');
-            }
-
-        } catch(e) {
-            // 静默失败
-        }
     }
 
     // 获取实际渲染的 Unity Camera
@@ -2333,8 +1627,6 @@
     }
 
     // Physics.Raycast: 签名 bool(Ray*, RaycastHit*, float, MethodInfo*)
-    // 注意: Ray 在 C# 中是值类型，但 IL2CPP ABI 可能将其作为指针传递
-    // TODO: 需要运行时验证 Ray 是内联传递还是指针传递
     function callPhysicsRaycast(rayData, maxDist) {
         try {
             var rayBuf = Memory.alloc(24); // Ray = 24 bytes
@@ -2351,47 +1643,6 @@
             var hitBuf = Memory.alloc(256); // RaycastHit 结构体
             var hit = physicsRaycast(rayBuf, hitBuf, maxDist, ptr(0));
             if (hit) {
-                // 修复: RaycastHit 布局
-                // point    +0x00 (12 bytes)
-                // normal   +0x0C (12 bytes)
-                // faceID   +0x18 (4 bytes)
-                // distance +0x1C (4 bytes) <- 修复: 从 0x30 改为 0x1C
-                // UV       +0x20 (8 bytes)
-                // collider +0x28 (4 bytes)
-                return {
-                    hit: true,
-                    point: readVec3(hitBuf),
-                    normal: readVec3(hitBuf.add(12)),
-                    distance: (function() { try { return hitBuf.add(0x1C).readFloat(); } catch(e) { return -1; } })(),
-                };
-            }
-            return { hit: false };
-        } catch(e) {
-            return { hit: false, error: String(e) };
-        }
-    }
-
-    // Physics.SphereCast: 封装调用
-    function callPhysicsSphereCast(origin, radius, direction, maxDist) {
-        try {
-            // 分配缓冲区
-            var originBuf = Memory.alloc(12);  // Vector3
-            var dirBuf = Memory.alloc(12);      // Vector3
-            var hitBuf = Memory.alloc(256);     // RaycastHit
-
-            // 写入数据
-            originBuf.writeFloat(origin.x);
-            originBuf.add(4).writeFloat(origin.y);
-            originBuf.add(8).writeFloat(origin.z);
-
-            dirBuf.writeFloat(direction.x);
-            dirBuf.add(4).writeFloat(direction.y);
-            dirBuf.add(8).writeFloat(direction.z);
-
-            // 调用 SphereCast
-            var hit = physicsSphereCast(originBuf, radius, dirBuf, hitBuf, maxDist, 0xFFFFFFFF, ptr(0));
-
-            if (hit) {
                 return {
                     hit: true,
                     point: readVec3(hitBuf),
@@ -2399,9 +1650,9 @@
                     distance: (function() { try { return hitBuf.add(0x30).readFloat(); } catch(e) { return -1; } })(),
                 };
             }
-            return { hit: false, point: null, normal: null, distance: -1 };
+            return { hit: false };
         } catch(e) {
-            return { hit: false, point: null, normal: null, distance: -1, error: String(e) };
+            return { hit: false, error: String(e) };
         }
     }
 
@@ -2508,25 +1759,9 @@
         } catch(e) {}
         diagLog('currentWeapon=' + weapon + ' readable=' + isReadable(weapon));
 
-        // Phase2: 使用新的枪口定位函数
-        var muzzleInfo = null;
-        if (player) {
-            muzzleInfo = resolveThirdPersonMuzzle(player);
-            diagLog('[Muzzle]');
-            diagLog('muzzleCacheValid=' + muzzleInfo.cacheValid);
-            diagLog('muzzleTransform=' + muzzleInfo.transform + ' readable=' + isReadable(muzzleInfo.transform));
-            diagLog('muzzleName=' + (muzzleInfo.muzzleName || 'null'));
-            diagLog('muzzleSelectedSide=' + (muzzleInfo.selectedSide || 'null'));
-            diagLog('muzzleWeaponPtr=' + muzzleInfo.weaponPtr);
-            diagLog('muzzleQVModelPtr=' + muzzleInfo.qvModelPtr);
-
-            if (muzzleInfo.cacheValid && !isNull(muzzleInfo.transform)) {
-                var muzzlePos = safeGetTransformPos(muzzleInfo.transform);
-                var muzzleFwd = safeGetTransformForward(muzzleInfo.transform);
-                diagLog('muzzle.position=' + fmtVec3(muzzlePos));
-                diagLog('muzzle.forward=' + fmtVec3(muzzleFwd));
-            }
-        }
+        // Muzzle 查找
+        var muzzleResult = findMuzzleTransform(weapon);
+        diagLog('muzzleFound=' + muzzleResult.found + (muzzleResult.found ? ' name=' + muzzleResult.name + ' matchType=' + muzzleResult.matchType : ' reason=' + muzzleResult.reason));
 
         // [Camera Data]
         diagLog('');
@@ -2929,15 +2164,15 @@
                 diagLog('PlayerCameraManager=' + pcm);
                 // 尝试调用 set_modelVisible 并捕获异常
                 try {
-                    setModelVisible(pcm, 1, ptr(0));  // Phase1: bool -> 1
+                    setModelVisible(pcm, true, ptr(0));
                     diagLog('set_modelVisible(true)=OK');
-                    setModelVisible(pcm, 0, ptr(0));  // Phase1: bool -> 0
+                    setModelVisible(pcm, false, ptr(0));
                     diagLog('set_modelVisible(false)=OK');
                     // 恢复
                     if (fsm.current === STATE.TP_ENABLED) {
-                        setModelVisible(pcm, 0, ptr(0));  // Phase1: bool -> 0
+                        setModelVisible(pcm, false, ptr(0));
                     } else {
-                        setModelVisible(pcm, 1, ptr(0));  // Phase1: bool -> 1
+                        setModelVisible(pcm, true, ptr(0));
                     }
                 } catch(e) {
                     diagLog('set_modelVisible_ERROR=' + e);
@@ -3178,81 +2413,27 @@
         aimDiag.shootHooksInstalled = true;
 
         // Hook: Recoil.GetShootRay — RVA 0xB195C0
-        // Phase3: 修改射击 Ray，实现两段式射击
+        // v10: 简化回调，只读取关键数据，不做复杂诊断
         try {
             var hookAddr = base.add(RVA.Recoil_GetShootRay);
             log('info', '[AimDiag] Hook: Recoil.GetShootRay RVA=0x' + RVA.Recoil_GetShootRay.toString(16));
 
             Interceptor.attach(hookAddr, {
                 onEnter: function(args) {
+                    if (!aimDiag.active) return;
                     this._retBuf = args[0];
-                    this._thisPtr = args[1];  // Recoil* this
-                    this._shouldModify = (fsm.current === STATE.TP_ENABLED);
-                    this._player = findMyPlayer();
-
-                    // 修复: 只允许本地玩家的 Recoil
-                    if (this._shouldModify && this._player) {
-                        try {
-                            var localRecoil = this._player.add(OFF.Player_recoil).readPointer();
-                            if (isNull(localRecoil) || !this._thisPtr.equals(localRecoil)) {
-                                // 不是本地玩家的 Recoil，不修改
-                                this._shouldModify = false;
-                            }
-                        } catch(e) {
-                            this._shouldModify = false;
-                        }
-                    }
+                    this._thisPtr = args[1];
                 },
                 onLeave: function(retval) {
-                    // Phase1: 先读取原始 Ray（在修改前）
-                    var originalRay = null;
-                    if (!isNull(this._retBuf)) {
-                        try {
-                            originalRay = readRay(this._retBuf);
-                        } catch(e) {}
-                    }
-
-                    // Phase3: 在第三人称模式下修改射击 Ray
-                    var finalRay = originalRay;
-                    if (this._shouldModify && !isNull(this._retBuf) && this._player) {
-                        try {
-                            var shootRay = calculateShootRay(this._player);
-                            if (shootRay.valid) {
-                                // 写入新的 Ray 到返回缓冲区
-                                if (writeRayToBuffer(this._retBuf, shootRay.origin, shootRay.direction)) {
-                                    finalRay = { origin: shootRay.origin, direction: shootRay.direction, valid: true };
-                                    log('info', '[ShootRay] 已修改射击 Ray: origin=' + fmtVec3(shootRay.origin) + ' dir=' + fmtVec3(shootRay.direction));
-                                }
-                            } else {
-                                log('info', '[ShootRay] 计算失败: ' + shootRay.reason + '，保留原始 Ray');
-                            }
-                        } catch(e) {
-                            logError('shoot_ray', '修改射击 Ray 失败: ' + e);
-                        }
-                    }
-
-                    // 诊断日志（仅在诊断模式下）
-                    if (!aimDiag.active) return;
+                    if (!aimDiag.active || isNull(this._retBuf)) return;
                     try {
-                        // 输出原始 Ray 和最终 Ray
-                        if (originalRay && originalRay.valid) {
-                            diagLog('[GetShootRay] originalRay.origin=' + fmtVec3(originalRay.origin));
-                            diagLog('[GetShootRay] originalRay.direction=' + fmtVec3(originalRay.direction));
-                        }
-                        if (finalRay && finalRay.valid) {
-                            diagLog('[GetShootRay] finalRay.origin=' + fmtVec3(finalRay.origin));
-                            diagLog('[GetShootRay] finalRay.direction=' + fmtVec3(finalRay.direction));
-                        }
-
-                        // 保存到 lastShotData
-                        if (finalRay && finalRay.valid) {
-                            aimDiag.lastShotData = { originalRay: originalRay, finalRay: finalRay, hook: 'GetShootRay', thisPtr: String(this._thisPtr) };
-                            // Phase1: 保存必要变量，避免异步回调中 this 丢失
-                            var thisPtr = this._thisPtr;
-                            var rayData = finalRay;
+                        // 快速读取 Ray 数据
+                        var ray = readRay(this._retBuf);
+                        if (ray.valid) {
+                            aimDiag.lastShotData = { ray: ray, hook: 'GetShootRay', thisPtr: String(this._thisPtr) };
                             // v10: 使用 setTimeout 异步处理快照，避免阻塞游戏线程
                             setTimeout(function() {
-                                captureShotSnapshot('GetShootRay', thisPtr, rayData, 'auto');
+                                captureShotSnapshot('GetShootRay', this._thisPtr, ray, 'auto');
                             }, 0);
                         }
                     } catch(e) {
@@ -3260,7 +2441,7 @@
                     }
                 }
             });
-            log('info', '[AimDiag] Hook: Recoil.GetShootRay installed (Phase3: 两段式射击)');
+            log('info', '[AimDiag] Hook: Recoil.GetShootRay installed');
         } catch(e) {
             logError('aim_hook_gsr', 'GetShootRay Hook 失败: ' + e);
         }
@@ -3324,31 +2505,9 @@
                             var rayAddr = esp.add(8);
                             var ray = readRay(rayAddr);
                             if (ray.valid) {
-                                // Phase1: 输出 Damage 接收到的 Ray
-                                diagLog('[Damage] receivedRay.origin=' + fmtVec3(ray.origin));
-                                diagLog('[Damage] receivedRay.direction=' + fmtVec3(ray.direction));
-
-                                // 检查与 GetShootRay 的最终 Ray 是否一致
-                                if (aimDiag.lastShotData && aimDiag.lastShotData.finalRay) {
-                                    var finalRay = aimDiag.lastShotData.finalRay;
-                                    var originDiff = vec3Length(vec3Sub(ray.origin, finalRay.origin));
-                                    var directionDiff = angleBetween(ray.direction, finalRay.direction);
-                                    diagLog('[Damage] compare.originDiff=' + originDiff.toFixed(4));
-                                    diagLog('[Damage] compare.directionDiff=' + directionDiff.toFixed(4) + ' degrees');
-
-                                    if (originDiff < 0.01 && directionDiff < 0.1) {
-                                        diagLog('[Damage] ✓ Ray 一致');
-                                    } else {
-                                        diagLog('[Damage] ✗ Ray 不一致');
-                                    }
-                                }
-
-                                // Phase1: 保存局部变量，避免 setTimeout 回调中访问 this
-                                var thisPtr = this._thisPtr;
-                                var rayData = ray;
-                                aimDiag.lastShotData = { ray: rayData, hook: 'Damage', thisPtr: String(thisPtr) };
+                                aimDiag.lastShotData = { ray: ray, hook: 'Damage', thisPtr: String(this._thisPtr) };
                                 setTimeout(function() {
-                                    captureShotSnapshot('Damage', thisPtr, rayData, 'auto');
+                                    captureShotSnapshot('Damage', this._thisPtr, ray, 'auto');
                                 }, 0);
                             }
                         }
@@ -3360,97 +2519,6 @@
             log('info', '[AimDiag] Hook: WPN_Gun.Damage installed');
         } catch(e) {
             logError('aim_hook_dmg', 'Damage Hook 失败: ' + e);
-        }
-    }
-
-    // ---- Phase6: 事件处理 Hook ----
-    function installEventHooks() {
-        if (aimDiag.eventHooksInstalled) return;
-        aimDiag.eventHooksInstalled = true;
-
-        // Hook: Player.OnEntityDeath — RVA 0xB51210
-        try {
-            var hookAddr = base.add(RVA.Player_OnEntityDeath);
-            log('info', '[EventHook] Hook: Player.OnEntityDeath RVA=0x' + RVA.Player_OnEntityDeath.toString(16));
-
-            Interceptor.attach(hookAddr, {
-                onEnter: function(args) {
-                    this._player = args[0];
-                },
-                onLeave: function(retval) {
-                    // 清空枪口缓存
-                    clearMuzzleCache();
-                    // 重置 AimIK 权重
-                    // 修复: AimIK 对象取错，暂时关闭
-                    // try {
-                    //     resetAimIKWeight(this._player);
-                    // } catch(e) {}
-                    log('info', '[EventHook] Player.OnEntityDeath: 已清空缓存');
-                }
-            });
-            log('info', '[EventHook] Player.OnEntityDeath installed');
-        } catch(e) {
-            logError('event_hook_death', 'OnEntityDeath Hook 失败: ' + e);
-        }
-
-        // Hook: Player.SetWeapon — RVA 0xB53650
-        try {
-            var hookAddr = base.add(RVA.Player_SetWeapon);
-            log('info', '[EventHook] Hook: Player.SetWeapon RVA=0x' + RVA.Player_SetWeapon.toString(16));
-
-            Interceptor.attach(hookAddr, {
-                onEnter: function(args) {
-                    this._player = args[0];
-                },
-                onLeave: function(retval) {
-                    // 清空枪口缓存
-                    clearMuzzleCache();
-                    log('info', '[EventHook] Player.SetWeapon: 已清空缓存');
-                }
-            });
-            log('info', '[EventHook] Player.SetWeapon installed');
-        } catch(e) {
-            logError('event_hook_weapon', 'SetWeapon Hook 失败: ' + e);
-        }
-
-        // Hook: Player.Respawn — RVA 0xB527A0
-        try {
-            var hookAddr = base.add(RVA.Player_Respawn);
-            log('info', '[EventHook] Hook: Player.Respawn RVA=0x' + RVA.Player_Respawn.toString(16));
-
-            Interceptor.attach(hookAddr, {
-                onEnter: function(args) {
-                    this._player = args[0];
-                },
-                onLeave: function(retval) {
-                    // 清空枪口缓存
-                    clearMuzzleCache();
-                    log('info', '[EventHook] Player.Respawn: 已清空缓存');
-                }
-            });
-            log('info', '[EventHook] Player.Respawn installed');
-        } catch(e) {
-            logError('event_hook_respawn', 'Respawn Hook 失败: ' + e);
-        }
-
-        // Hook: Player.Spawn — RVA 0xB53760
-        try {
-            var hookAddr = base.add(RVA.Player_Spawn);
-            log('info', '[EventHook] Hook: Player.Spawn RVA=0x' + RVA.Player_Spawn.toString(16));
-
-            Interceptor.attach(hookAddr, {
-                onEnter: function(args) {
-                    this._player = args[0];
-                },
-                onLeave: function(retval) {
-                    // 清空枪口缓存
-                    clearMuzzleCache();
-                    log('info', '[EventHook] Player.Spawn: 已清空缓存');
-                }
-            });
-            log('info', '[EventHook] Player.Spawn installed');
-        } catch(e) {
-            logError('event_hook_spawn', 'Spawn Hook 失败: ' + e);
         }
     }
 
@@ -3629,8 +2697,6 @@
             if (enabled) return { ok: true };
             try {
                 installHooks();
-                installEventHooks();  // Phase6: 在 installhook 时安装事件 Hook
-                installShootHooks();  // 修复: 在 installhook 时安装射击 Hook，而不是只在诊断时安装
                 timer = setInterval(loop, 100);  // v10: 50ms -> 100ms，减少主循环频率
                 enabled = true;
                 log('info', '修改器 v10 已启动');
@@ -3648,49 +2714,6 @@
         disable: function() {
             disableThirdPerson();
             return { ok: true, enabled: false, error: '' };
-        },
-
-        cleanup: function() {
-            // 清理资源（用于脚本卸载前）
-            log('info', '[Cleanup] 开始清理资源...');
-
-            // 1. 清理主循环定时器
-            if (timer) {
-                clearInterval(timer);
-                timer = null;
-                log('info', '[Cleanup] 主循环定时器已清理');
-            }
-
-            // 2. 清理诊断定时器
-            if (aimDiag.intervalId) {
-                clearInterval(aimDiag.intervalId);
-                aimDiag.intervalId = null;
-                log('info', '[Cleanup] 诊断定时器已清理');
-            }
-
-            // 3. 禁用第三人称（如果启用）
-            if (fsm.current === STATE.TP_ENABLED) {
-                try {
-                    disableThirdPerson();
-                    log('info', '[Cleanup] 第三人称已禁用');
-                } catch(e) {
-                    logError('cleanup', '禁用第三人称失败: ' + e);
-                }
-            }
-
-            // 4. Detach 所有 Hook
-            try {
-                Interceptor.detachAll();
-                log('info', '[Cleanup] 所有 Hook 已 detach');
-            } catch(e) {
-                logError('cleanup', 'Detach Hook 失败: ' + e);
-            }
-
-            // 5. 清空枪口缓存
-            clearMuzzleCache();
-
-            log('info', '[Cleanup] 资源清理完成');
-            return { ok: true };
         },
 
         toggle: function() {
@@ -3990,9 +3013,6 @@
             };
         },
     };
-
-    // Phase6: 不要在脚本加载时安装事件 Hook，应该在 installhook() 时安装
-    // installEventHooks(); // 移除这行
 
     send({type:'log', level:'info', module:'TP', message:'脚本 v8 加载完成'});
 })();

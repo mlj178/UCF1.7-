@@ -439,15 +439,6 @@ class ThirdPersonApp(ctk.CTk):
 
     def _cleanup_session(self):
         """清理 Frida 会话"""
-        # 先调用 JS 清理函数
-        if self.script and self.is_connected:
-            try:
-                self._rpc_call('cleanup', timeout=2.0)
-                file_log.info("已调用 JS cleanup 函数")
-            except Exception as e:
-                file_log.error(f"调用 cleanup 失败: {e}")
-
-        # 然后卸载脚本
         try:
             if self.script:
                 self.script.unload()

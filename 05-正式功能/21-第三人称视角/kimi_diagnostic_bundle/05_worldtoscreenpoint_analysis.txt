@@ -1,0 +1,29 @@
+WorldToScreenPoint 分析
+========================
+
+来源: script.json
+
+--- UnityEngine.Camera$$WorldToScreenPoint ---
+  RVA: 0x0327F70
+  签名: UnityEngine_Vector3_o UnityEngine_Camera__WorldToScreenPoint(...)
+  状态: 有多个重载
+
+--- UnityEngine.Camera$$WorldToScreenPoint_Injected ---
+  RVA: 0x0327EE0
+  签名: void UnityEngine_Camera__WorldToScreenPoint_Injected(Camera*, Vector3*, int, Vector3*, MethodInfo*)
+  来源: script.json
+  参数:
+    [1] Camera* this
+    [2] Vector3* worldPos
+    [3] int eye
+    [4] Vector3* retBuf (12 bytes)
+    [5] MethodInfo*
+
+JS当前使用: 0x327EE0 (WorldToScreenPoint_Injected)
+核对: JS值与script.json一致 ✅
+
+Frida NativeFunction建议:
+  new NativeFunction(base.add(0x0327EE0), "void", ["pointer", "pointer", "int", "pointer", "pointer"], "mscdecl")
+
+未确认:
+  - 没有IDA调用方汇编验证

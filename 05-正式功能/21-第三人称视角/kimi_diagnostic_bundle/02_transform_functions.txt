@@ -1,0 +1,124 @@
+Transform函数分析
+=================
+
+来源: script.json + IDA汇编
+
+--- UnityEngine.Transform$$get_position ---
+  RVA: 0x03F42B0
+  IDA: 0x103F42B0 (0x10000000 + 0x03F42B0)
+  返回: UnityEngine_Vector3_o
+  参数: UnityEngine_Transform_o*
+  MethodInfo*: True
+  隐藏返回缓冲区: True
+  32位栈顺序: retBuf(最先压), this, MethodInfo*
+  Frida声明: new NativeFunction(base.add(0x03F42B0), "void", ["pointer", "pointer", "pointer"], "mscdecl")
+
+--- UnityEngine.Transform$$get_position_Injected ---
+  RVA: 0x03F4280
+  IDA: 0x103F4280 (0x10000000 + 0x03F4280)
+  返回: void
+  参数: UnityEngine_Transform_o*, UnityEngine_Vector3_o*
+  MethodInfo*: True
+  隐藏返回缓冲区: False
+  Frida声明: new NativeFunction(base.add(0x03F4280), "void", ["pointer", ...], "mscdecl")
+
+--- UnityEngine.Transform$$get_rotation ---
+  RVA: 0x03F43B0
+  IDA: 0x103F43B0 (0x10000000 + 0x03F43B0)
+  返回: UnityEngine_Quaternion_o
+  参数: UnityEngine_Transform_o*
+  MethodInfo*: True
+  隐藏返回缓冲区: True
+  32位栈顺序: retBuf(最先压), this, MethodInfo*
+  Frida声明: new NativeFunction(base.add(0x03F43B0), "void", ["pointer", "pointer", "pointer"], "mscdecl")
+
+--- UnityEngine.Transform$$get_rotation_Injected ---
+  RVA: 0x03F4380
+  IDA: 0x103F4380 (0x10000000 + 0x03F4380)
+  返回: void
+  参数: UnityEngine_Transform_o*, UnityEngine_Quaternion_o*
+  MethodInfo*: True
+  隐藏返回缓冲区: False
+  Frida声明: new NativeFunction(base.add(0x03F4380), "void", ["pointer", ...], "mscdecl")
+
+--- UnityEngine.Transform$$get_forward ---
+  RVA: 0x03F3F20
+  IDA: 0x103F3F20 (0x10000000 + 0x03F3F20)
+  返回: UnityEngine_Vector3_o
+  参数: UnityEngine_Transform_o*
+  MethodInfo*: True
+  隐藏返回缓冲区: True
+  32位栈顺序: retBuf(最先压), this, MethodInfo*
+  Frida声明: new NativeFunction(base.add(0x03F3F20), "void", ["pointer", "pointer", "pointer"], "mscdecl")
+
+--- UnityEngine.Transform$$get_right ---
+  RVA: 0x03F42F0
+  IDA: 0x103F42F0 (0x10000000 + 0x03F42F0)
+  返回: UnityEngine_Vector3_o
+  参数: UnityEngine_Transform_o*
+  MethodInfo*: True
+  隐藏返回缓冲区: True
+  32位栈顺序: retBuf(最先压), this, MethodInfo*
+  Frida声明: new NativeFunction(base.add(0x03F42F0), "void", ["pointer", "pointer", "pointer"], "mscdecl")
+
+--- UnityEngine.Transform$$get_up ---
+  RVA: 0x03F43F0
+  IDA: 0x103F43F0 (0x10000000 + 0x03F43F0)
+  返回: UnityEngine_Vector3_o
+  参数: UnityEngine_Transform_o*
+  MethodInfo*: True
+  隐藏返回缓冲区: True
+  32位栈顺序: retBuf(最先压), this, MethodInfo*
+  Frida声明: new NativeFunction(base.add(0x03F43F0), "void", ["pointer", "pointer", "pointer"], "mscdecl")
+
+--- UnityEngine.Transform$$get_childCount ---
+  RVA: 0x03F3E80
+  IDA: 0x103F3E80 (0x10000000 + 0x03F3E80)
+  返回: int32_t
+  参数: UnityEngine_Transform_o*
+  MethodInfo*: True
+  隐藏返回缓冲区: False
+  Frida声明: new NativeFunction(base.add(0x03F3E80), "int32", ["pointer", ...], "mscdecl")
+
+--- UnityEngine.Transform$$GetChild ---
+  RVA: 0x03F3150
+  IDA: 0x103F3150 (0x10000000 + 0x03F3150)
+  返回: UnityEngine_Transform_o*
+  参数: UnityEngine_Transform_o*, int32_t
+  MethodInfo*: True
+  隐藏返回缓冲区: False
+  Frida声明: new NativeFunction(base.add(0x03F3150), "unityengine", ["pointer", ...], "mscdecl")
+
+--- UnityEngine.Transform$$get_parent ---
+  RVA: 0x03F31D0
+  IDA: 0x103F31D0 (0x10000000 + 0x03F31D0)
+  返回: UnityEngine_Transform_o*
+  参数: UnityEngine_Transform_o*
+  MethodInfo*: True
+  隐藏返回缓冲区: False
+  Frida声明: new NativeFunction(base.add(0x03F31D0), "unityengine", ["pointer", ...], "mscdecl")
+
+--- UnityEngine.Component$$get_transform ---
+  RVA: 0x032CF40
+  IDA: 0x1032CF40 (0x10000000 + 0x032CF40)
+  返回: UnityEngine_Transform_o*
+  参数: UnityEngine_Component_o*
+  MethodInfo*: True
+  隐藏返回缓冲区: False
+  Frida声明: new NativeFunction(base.add(0x032CF40), "unityengine", ["pointer", ...], "mscdecl")
+
+--- UnityEngine.Object$$get_name ---
+  RVA: 0x04EA1B0
+  IDA: 0x104EA1B0 (0x10000000 + 0x04EA1B0)
+  返回: System_String_o*
+  参数: UnityEngine_Object_o*
+  MethodInfo*: True
+  隐藏返回缓冲区: False
+  Frida声明: new NativeFunction(base.add(0x04EA1B0), "system", ["pointer", ...], "mscdecl")
+
+关键结论:
+  get_position 返回 Vector3 (12 bytes) -> 使用隐藏返回缓冲区
+  get_position_Injected 直接写入传入的 Vector3* -> 无隐藏缓冲区
+  get_rotation 返回 Quaternion (16 bytes) -> 使用隐藏返回缓冲区
+  get_rotation_Injected 直接写入传入的 Quaternion* -> 无隐藏缓冲区
+  推荐: 使用 _Injected 版本更可靠，避免隐藏缓冲区ABI问题
