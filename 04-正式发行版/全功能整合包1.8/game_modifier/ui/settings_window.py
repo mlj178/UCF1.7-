@@ -159,9 +159,9 @@ class SettingsWindow(ctk.CTkToplevel):
         about_frame = ctk.CTkScrollableFrame(tab, corner_radius=0)
         about_frame.pack(fill="both", expand=True, padx=4, pady=4)
 
-        ctk.CTkLabel(about_frame, text="游戏修改器控制台 - 全功能整合包 v1.7",
+        ctk.CTkLabel(about_frame, text="游戏修改器控制台 - 全功能整合包 v1.8",
                      font=("Microsoft YaHei", 18, "bold")).pack(pady=(12, 4))
-        ctk.CTkLabel(about_frame, text="版本: v1.7",
+        ctk.CTkLabel(about_frame, text="版本: v1.8",
                      font=("Microsoft YaHei", 12)).pack(pady=2)
         ctk.CTkLabel(about_frame, text="作者: 挂呱呱呱",
                      font=("Microsoft YaHei", 12)).pack(pady=2)

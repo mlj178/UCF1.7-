@@ -108,7 +108,7 @@ exe = EXE(
     a.zipfiles,
     a.datas,
     [],
-    name='UCF1.7修改器',
+    name='UCF1.8修改器',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
