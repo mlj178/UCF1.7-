@@ -1,0 +1,1744 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>游戏修改器控制台 v1.8 - 界面分区文档</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Microsoft YaHei', sans-serif;
+            background: #1a1a2e;
+            color: #e0e0e0;
+            padding: 20px;
+        }
+        .window {
+            width: 610px;
+            background: #1a1a2e;
+            border-radius: 12px;
+            overflow: hidden;
+            border: 1px solid #3a3a3a;
+        }
+        
+        /* 分区标注样式 */
+        .zone-container {
+            position: relative;
+            border: 2px solid #FF6B6B;
+            margin: 4px;
+            padding: 10px 8px 8px 8px;
+        }
+        .zone-marker {
+            position: absolute;
+            top: -10px;
+            left: -10px;
+            background: #FF6B6B;
+            color: white;
+            font-size: 11px;
+            font-weight: bold;
+            padding: 3px 8px;
+            border-radius: 4px;
+            z-index: 1000;
+        }
+        .zone-name {
+            position: absolute;
+            top: 0;
+            right: 8px;
+            background: #4C9F9F;
+            color: white;
+            font-size: 11px;
+            padding: 3px 8px;
+            border-radius: 4px;
+        }
+        
+        /* 子分区标注 */
+        .sub-zone {
+            position: relative;
+            border: 1px dashed #4C9F9F;
+            margin: 3px;
+            padding: 6px 4px 4px 4px;
+        }
+        .sub-marker {
+            position: absolute;
+            top: -6px;
+            left: 4px;
+            background: #4C9F9F;
+            color: white;
+            font-size: 9px;
+            font-weight: bold;
+            padding: 1px 4px;
+            border-radius: 2px;
+        }
+        .sub-name {
+            position: absolute;
+            top: 0;
+            right: 4px;
+            background: #FFB347;
+            color: #1a1a2e;
+            font-size: 9px;
+            padding: 1px 4px;
+            border-radius: 2px;
+        }
+        
+        /* 组件标注 */
+        .component-tag {
+            display: inline-block;
+            background: #A855F7;
+            color: white;
+            font-size: 8px;
+            padding: 1px 3px;
+            border-radius: 2px;
+            margin-left: 4px;
+            vertical-align: middle;
+        }
+        
+        /* 状态栏 */
+        .status-bar {
+            background: #2b2b2b;
+            border-radius: 8px;
+            padding: 8px 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .status-dot { font-size: 18px; }
+        .status-text { font-size: 14px; flex: 1; }
+        .pid-text { font-size: 11px; color: #888; }
+        .btn-small {
+            background: #3a3a3a;
+            color: #e0e0e0;
+            padding: 6px 12px;
+            border-radius: 4px;
+            font-size: 11px;
+            cursor: pointer;
+            border: none;
+            transition: background 0.2s;
+        }
+        .btn-small:hover { background: #555; }
+        
+        /* 提示栏 */
+        .hint-bar {
+            background: #2a2a00;
+            border-radius: 6px;
+            padding: 4px 8px;
+            color: #ffcc00;
+            font-size: 11px;
+        }
+        
+        /* 标签页 */
+        .tabview {
+            background: #2b2b2b;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        .tab-header {
+            display: flex;
+            background: #2b2b2b;
+            padding: 4px 8px 0 8px;
+        }
+        .tab-btn {
+            background: #3a3a3a;
+            color: #e0e0e0;
+            padding: 8px 16px;
+            border-radius: 6px 6px 0 0;
+            font-size: 13px;
+            cursor: pointer;
+            margin-right: 4px;
+            border: none;
+            transition: all 0.2s;
+        }
+        .tab-btn:hover { background: #4a4a4a; }
+        .tab-btn.active {
+            background: #1a1a2e;
+            color: #4C9F9F;
+            font-weight: bold;
+        }
+        .tab-content {
+            background: #1a1a2e;
+            padding: 8px;
+            min-height: 280px;
+            display: none;
+        }
+        .tab-content.active { display: block; }
+        
+        /* 功能卡片 */
+        .feature-card {
+            background: #3a3a3a;
+            border-radius: 6px;
+            border: 1px solid #555;
+            padding: 8px;
+            margin: 4px;
+            display: inline-block;
+            width: 280px;
+            vertical-align: top;
+        }
+        .feature-card.full { width: 100%; }
+        
+        .card-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 2px 0;
+        }
+        .card-title {
+            font-size: 15px;
+            font-weight: bold;
+        }
+        
+        /* 开关 */
+        .switch-container {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .switch {
+            width: 40px;
+            height: 20px;
+            background: #555;
+            border-radius: 10px;
+            position: relative;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .switch.on { background: #4C9F9F; }
+        .switch-thumb {
+            width: 16px;
+            height: 16px;
+            background: white;
+            border-radius: 50%;
+            position: absolute;
+            top: 2px;
+            right: 2px;
+            transition: all 0.2s;
+        }
+        .switch:not(.on) .switch-thumb { right: 22px; }
+        
+        /* 滑块 */
+        .slider-container {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 0;
+        }
+        .slider-track {
+            width: 100px;
+            height: 4px;
+            background: #555;
+            border-radius: 2px;
+            position: relative;
+            cursor: pointer;
+        }
+        .slider-fill {
+            height: 100%;
+            background: #4C9F9F;
+            border-radius: 2px;
+            width: 50%;
+            transition: width 0.1s;
+        }
+        .slider-thumb {
+            width: 12px;
+            height: 12px;
+            background: #fff;
+            border-radius: 50%;
+            position: absolute;
+            top: -4px;
+            right: -6px;
+            cursor: grab;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+        }
+        .slider-value {
+            font-size: 11px;
+            width: 40px;
+            color: #e0e0e0;
+        }
+        
+        /* 按钮 */
+        .action-btn {
+            background: #b45309;
+            color: white;
+            padding: 8px 12px;
+            border-radius: 4px;
+            font-size: 12px;
+            cursor: pointer;
+            border: none;
+            font-weight: bold;
+            transition: background 0.2s;
+        }
+        .action-btn:hover { background: #d45309; }
+        .action-btn.blue { background: #007acc; }
+        .action-btn.blue:hover { background: #0099dd; }
+        .action-btn.red { background: #e74c3c; }
+        .action-btn.red:hover { background: #c0392b; }
+        
+        /* 描述文字 */
+        .card-desc {
+            font-size: 12px;
+            color: #a0a0a0;
+            padding: 2px 0;
+        }
+        
+        /* 连接按钮 */
+        .connect-btn {
+            background: #2a6e2a;
+            color: white;
+            padding: 10px;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: bold;
+            text-align: center;
+            cursor: pointer;
+            border: none;
+            transition: background 0.2s;
+        }
+        .connect-btn:hover { background: #3a8e3a; }
+        
+        /* 日志面板 */
+        .log-panel {
+            background: #1a1a1a;
+            border-radius: 6px;
+            padding: 8px;
+            font-family: 'Consolas', monospace;
+            font-size: 11px;
+            color: #a0a0a0;
+            min-height: 60px;
+        }
+        .log-line { margin: 2px 0; }
+        .log-success { color: #2ecc71; }
+        .log-info { color: #4C9F9F; }
+        
+        /* 多人生化区域 */
+        .nano4t-status {
+            background: #2b2b2b;
+            border-radius: 8px;
+            padding: 6px 12px;
+            margin: 8px 4px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .nano4t-selector {
+            display: flex;
+            gap: 8px;
+            margin: 4px;
+        }
+        .nano4t-side {
+            background: #3a1a1a;
+            border-radius: 6px;
+            padding: 8px;
+            width: 280px;
+        }
+        .nano4t-side.human { background: #1a1a3a; }
+        .nano4t-header {
+            font-size: 14px;
+            font-weight: bold;
+            padding: 4px 0;
+        }
+        .nano4t-combo {
+            background: #2a2a2a;
+            border: 1px solid #555;
+            border-radius: 4px;
+            padding: 6px 8px;
+            font-size: 13px;
+            margin: 4px 0;
+            cursor: pointer;
+        }
+        .nano4t-desc {
+            font-size: 11px;
+            color: #cc8888;
+        }
+        
+        /* 武器卡片 */
+        .weapon-section {
+            background: #1e3a5f;
+            border-radius: 6px;
+            padding: 8px;
+            margin: 6px 0;
+        }
+        .weapon-section.hero { background: #3a1e5f; }
+        .weapon-section-title {
+            font-size: 12px;
+            font-weight: bold;
+            color: #ecf0f1;
+            margin-bottom: 6px;
+        }
+        .weapon-card {
+            background: #1a1a2e;
+            border-radius: 4px;
+            padding: 6px;
+            margin: 2px;
+            display: inline-block;
+            width: 120px;
+            text-align: center;
+        }
+        .weapon-card.hero {
+            background: #2c3e50;
+            border: 1px solid #e74c3c;
+        }
+        .weapon-name {
+            font-size: 10px;
+            font-weight: bold;
+            color: #ecf0f1;
+        }
+        .weapon-btn {
+            background: #3498db;
+            color: white;
+            padding: 4px 8px;
+            border-radius: 3px;
+            font-size: 9px;
+            margin: 2px;
+            cursor: pointer;
+            border: none;
+            transition: background 0.2s;
+        }
+        .weapon-btn:hover { background: #2980b9; }
+        .weapon-btn.hero { background: #e74c3c; }
+        .weapon-btn.hero:hover { background: #c0392b; }
+        .weapon-btn.hotkey { background: #9b59b6; }
+        .weapon-btn.hotkey:hover { background: #8e44ad; }
+        
+        /* 设置窗口 */
+        .settings-window {
+            width: 500px;
+            background: #1a1a2e;
+            border-radius: 12px;
+            border: 1px solid #3a3a3a;
+            margin-top: 20px;
+        }
+        .settings-title {
+            background: #2b2b2b;
+            padding: 10px;
+            text-align: center;
+            font-size: 14px;
+        }
+        .hotkey-row {
+            background: #2a2a2a;
+            padding: 6px 8px;
+            margin: 3px 8px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            border-radius: 4px;
+        }
+        .hotkey-label {
+            font-size: 12px;
+            color: #aaa;
+            width: 60px;
+        }
+        .hotkey-combo {
+            background: #3a3a3a;
+            border: 1px solid #555;
+            border-radius: 4px;
+            padding: 4px 8px;
+            font-size: 11px;
+            width: 150px;
+            cursor: pointer;
+        }
+        
+        /* 关于区域 */
+        .about-section {
+            padding: 12px;
+            text-align: center;
+        }
+        .about-title {
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 8px;
+        }
+        .about-info {
+            font-size: 12px;
+            margin: 4px 0;
+        }
+        
+        /* 下拉框 */
+        .dropdown {
+            background: #2a2a2a;
+            border: 1px solid #555;
+            border-radius: 4px;
+            padding: 4px 8px;
+            font-size: 11px;
+            cursor: pointer;
+            display: inline-block;
+        }
+        
+        /* 复选框 */
+        .checkbox-container {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .checkbox {
+            width: 16px;
+            height: 16px;
+            border: 2px solid #555;
+            border-radius: 3px;
+            cursor: pointer;
+            position: relative;
+            transition: all 0.2s;
+        }
+        .checkbox.checked {
+            background: #4C9F9F;
+            border-color: #4C9F9F;
+        }
+        .checkbox.checked::after {
+            content: '✓';
+            color: white;
+            font-size: 10px;
+            position: absolute;
+            top: -1px;
+            left: 2px;
+        }
+        
+        /* 索引表 */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: #2b2b2b;
+            border-radius: 8px;
+        }
+        th, td {
+            padding: 8px;
+            border: 1px solid #555;
+        }
+        th {
+            background: #3a3a3a;
+            color: #FFB347;
+        }
+        td { background: #2a2a2a; }
+        
+        /* 提示 */
+        .tip {
+            background: #2a2a00;
+            color: #ffcc00;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 10px;
+            margin: 4px 0;
+        }
+        
+        /* 特殊卡片样式 */
+        .special-card {
+            background: #3a3a1a;
+            border-radius: 6px;
+            border: 1px solid #555;
+            padding: 8px;
+            margin: 4px;
+        }
+    </style>
+</head>
+<body>
+
+<h1 style="text-align: center; color: #FF6B6B; margin-bottom: 10px;">游戏修改器控制台 v1.8 - 界面分区文档</h1>
+<p style="text-align: center; color: #888; margin-bottom: 20px;">点击标签页按钮可切换查看不同界面 | 红框为主分区，青框为子分区，紫标签为组件 | 滑块可拖动，开关可点击</p>
+
+<!-- ==================== 主界面 ==================== -->
+<div class="window">
+    
+    <!-- 【①】状态栏 -->
+    <div class="zone-container">
+        <div class="zone-marker">①</div>
+        <div class="zone-name">status_frame</div>
+        <div class="status-bar">
+            <!-- ①-1 状态指示器 -->
+            <div class="sub-zone" style="border: none; padding: 0;">
+                <span class="sub-marker" style="top: -3px;">①-1</span>
+                <span class="status-dot">🟢</span>
+                <span class="component-tag">status_dot</span>
+            </div>
+            <!-- ①-2 状态文本 -->
+            <div class="sub-zone" style="border: none; padding: 0;">
+                <span class="sub-marker" style="top: -3px;">①-2</span>
+                <span class="status-text">已连接</span>
+                <span class="component-tag">status_label</span>
+            </div>
+            <!-- ①-3 PID -->
+            <div class="sub-zone" style="border: none; padding: 0;">
+                <span class="sub-marker" style="top: -3px;">①-3</span>
+                <span class="pid-text">PID: 12345</span>
+                <span class="component-tag">pid_label</span>
+            </div>
+            <!-- ①-4 设置按钮 -->
+            <div class="sub-zone" style="border: none; padding: 0;">
+                <span class="sub-marker" style="top: -3px;">①-4</span>
+                <button class="btn-small" onclick="alert('打开设置窗口')">⚙ 设置</button>
+                <span class="component-tag">settings_btn</span>
+            </div>
+            <!-- ①-5 折叠按钮 -->
+            <div class="sub-zone" style="border: none; padding: 0;">
+                <span class="sub-marker" style="top: -3px;">①-5</span>
+                <button class="btn-small" onclick="alert('折叠/展开界面')">▼ 折叠界面</button>
+                <span class="component-tag">collapse_btn</span>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 【②】提示栏 -->
+    <div class="zone-container">
+        <div class="zone-marker">②</div>
+        <div class="zone-name">hint_frame</div>
+        <div class="hint-bar">
+            <span class="sub-marker" style="top: -3px; left: 0;">②-1</span>
+            ① 启动游戏 → ② 进入任意模式 → ③ 打开本工具 → ④ 开启功能开关
+            <span class="component-tag" style="margin-left: 8px;">hint_label</span>
+        </div>
+    </div>
+    
+    <!-- 【③】标签页视图 -->
+    <div class="zone-container">
+        <div class="zone-marker">③</div>
+        <div class="zone-name">tab_view</div>
+        <div class="tabview">
+            <!-- 标签页按钮 -->
+            <div class="tab-header">
+                <button class="tab-btn active" onclick="switchTab(0)">武器<span class="component-tag">tab_weapon</span></button>
+                <button class="tab-btn" onclick="switchTab(1)">人物属性<span class="component-tag">tab_player</span></button>
+                <button class="tab-btn" onclick="switchTab(2)">其他<span class="component-tag">tab_other</span></button>
+                <button class="tab-btn" onclick="switchTab(3)">多人生化Buff选择<span class="component-tag">tab_nano4t</span></button>
+                <button class="tab-btn" onclick="switchTab(4)">赋予武器<span class="component-tag">tab_weapon_giver</span></button>
+            </div>
+            
+            <!-- ==================== 【③-1】武器标签页 ==================== -->
+            <div class="tab-content active" id="tab0">
+                <div class="zone-container" style="border-color: #4C9F9F;">
+                    <div class="zone-marker" style="background: #4C9F9F;">③-1</div>
+                    <div class="zone-name" style="background: #FFB347;">武器标签页内容</div>
+                    
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px;">
+                        
+                        <!-- 快刀卡片 -->
+                        <div class="feature-card">
+                            <div class="sub-zone">
+                                <div class="sub-marker">③-1-1</div>
+                                <div class="sub-name">快刀卡片</div>
+                                
+                                <div class="card-row">
+                                    <span class="card-title" style="color: #FFB347;">🔪 快刀</span>
+                                    <div class="switch-container">
+                                        <div class="switch on" onclick="toggleSwitch(this)">
+                                            <div class="switch-thumb"></div>
+                                        </div>
+                                        <span class="component-tag">knife_switch</span>
+                                    </div>
+                                </div>
+                                
+                                <div class="slider-container">
+                                    <span class="sub-marker" style="top: -2px;">③-1-1-1</span>
+                                    <div class="slider-track" onclick="updateSlider(this, event)">
+                                        <div class="slider-fill" style="width: 50%;"></div>
+                                        <div class="slider-thumb" style="left: calc(50% - 6px);"></div>
+                                    </div>
+                                    <span class="slider-value">5.0x</span>
+                                    <span class="component-tag">knife_speed_var</span>
+                                </div>
+                                
+                                <div class="card-desc">
+                                    <span class="sub-marker" style="top: -2px;">③-1-1-2</span>
+                                    提升挥刀速度（人类+生化幽灵通用）
+                                    <span class="component-tag">描述文字</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- 无后座力卡片 -->
+                        <div class="feature-card">
+                            <div class="sub-zone">
+                                <div class="sub-marker">③-1-2</div>
+                                <div class="sub-name">无后座力卡片</div>
+                                
+                                <div class="card-row">
+                                    <span class="card-title" style="color: #6A9FB5;">🎯 无后座力</span>
+                                    <div class="switch-container">
+                                        <div class="switch" onclick="toggleSwitch(this)">
+                                            <div class="switch-thumb"></div>
+                                        </div>
+                                        <span class="component-tag">recoil_switch</span>
+                                    </div>
+                                </div>
+                                
+                                <div class="card-desc">
+                                    <span class="sub-marker" style="top: -2px;">③-1-2-1</span>
+                                    消除所有枪械后座力
+                                    <span class="component-tag">描述文字</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- 无限子弹卡片 -->
+                        <div class="feature-card">
+                            <div class="sub-zone">
+                                <div class="sub-marker">③-1-3</div>
+                                <div class="sub-name">无限子弹卡片</div>
+                                
+                                <div class="card-row">
+                                    <span class="card-title" style="color: #E5B73B;">🔫 无限子弹</span>
+                                    <div class="switch-container">
+                                        <div class="switch" onclick="toggleSwitch(this)">
+                                            <div class="switch-thumb"></div>
+                                        </div>
+                                        <span class="component-tag">ammo_switch</span>
+                                    </div>
+                                </div>
+                                
+                                <div class="card-desc">
+                                    <span class="sub-marker" style="top: -2px;">③-1-3-1</span>
+                                    子弹永不消耗
+                                    <span class="component-tag">描述文字</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- 快速换弹卡片 -->
+                        <div class="feature-card">
+                            <div class="sub-zone">
+                                <div class="sub-marker">③-1-4</div>
+                                <div class="sub-name">快速换弹卡片</div>
+                                
+                                <div class="card-row">
+                                    <span class="card-title" style="color: #D4AF37;">⚡ 快速换弹</span>
+                                    <div class="switch-container">
+                                        <div class="switch" onclick="toggleSwitch(this)">
+                                            <div class="switch-thumb"></div>
+                                        </div>
+                                        <span class="component-tag">ammoplus_switch</span>
+                                    </div>
+                                </div>
+                                
+                                <div class="card-desc">
+                                    <span class="sub-marker" style="top: -2px;">③-1-4-1</span>
+                                    换弹速度加快
+                                    <span class="component-tag">描述文字</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- 剑气化丝卡片 -->
+                        <div class="feature-card full">
+                            <div class="sub-zone">
+                                <div class="sub-marker">③-1-5</div>
+                                <div class="sub-name">剑气化丝卡片</div>
+                                
+                                <div class="card-row">
+                                    <span class="card-title" style="color: #AF69EF;">⚔️ 剑气化丝</span>
+                                    <div class="switch-container">
+                                        <div class="switch" onclick="toggleSwitch(this)">
+                                            <div class="switch-thumb"></div>
+                                        </div>
+                                        <span class="component-tag">range_switch</span>
+                                    </div>
+                                </div>
+                                
+                                <div class="slider-container">
+                                    <span class="sub-marker" style="top: -2px;">③-1-5-1</span>
+                                    <div class="slider-track" onclick="updateSlider(this, event)">
+                                        <div class="slider-fill" style="width: 50%;"></div>
+                                        <div class="slider-thumb" style="left: calc(50% - 6px);"></div>
+                                    </div>
+                                    <span class="slider-value">50.0x</span>
+                                    <span class="component-tag">range_var</span>
+                                </div>
+                                
+                                <div class="card-desc">
+                                    <span class="sub-marker" style="top: -2px;">③-1-5-2</span>
+                                    扩大近战攻击距离（人类+生化幽灵通用）
+                                    <span class="component-tag">描述文字</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- 自瞄卡片 -->
+                        <div class="feature-card">
+                            <div class="sub-zone">
+                                <div class="sub-marker">③-1-6</div>
+                                <div class="sub-name">自瞄卡片</div>
+                                
+                                <div class="card-row">
+                                    <span class="card-title" style="color: #FF6B6B;">🎯 自瞄</span>
+                                    <div class="switch-container">
+                                        <div class="switch" onclick="toggleSwitch(this)">
+                                            <div class="switch-thumb"></div>
+                                        </div>
+                                        <span class="component-tag">aim_switch</span>
+                                    </div>
+                                </div>
+                                
+                                <div class="card-desc">
+                                    <span class="sub-marker" style="top: -2px;">③-1-6-1</span>
+                                    自动瞄准敌方玩家
+                                    <span class="component-tag">描述文字</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- 射速变快+连狙卡片 -->
+                        <div class="feature-card">
+                            <div class="sub-zone">
+                                <div class="sub-marker">③-1-7</div>
+                                <div class="sub-name">射速变快+连狙卡片</div>
+                                
+                                <div class="card-row">
+                                    <span class="card-title" style="color: #FFD93D;">⚡ 射速变快+连狙</span>
+                                    <div class="switch-container">
+                                        <div class="switch" onclick="toggleSwitch(this)">
+                                            <div class="switch-thumb"></div>
+                                        </div>
+                                        <span class="component-tag">speedgun_switch</span>
+                                    </div>
+                                </div>
+                                
+                                <div class="card-desc">
+                                    <span class="sub-marker" style="top: -2px;">③-1-7-1</span>
+                                    • 射速10倍加速
+                                    <span class="component-tag">描述文字</span>
+                                </div>
+                                <div class="card-desc">
+                                    <span class="sub-marker" style="top: -2px;">③-1-7-2</span>
+                                    • 连狙：半自动→全自动，狙击镜常开
+                                    <span class="component-tag">描述文字</span>
+                                </div>
+                                <div class="card-desc">
+                                    <span class="sub-marker" style="top: -2px;">③-1-7-3</span>
+                                    • 后坐力清零 + 扩散归零
+                                    <span class="component-tag">描述文字</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                    </div>
+                </div>
+            </div>
+            
+            <!-- ==================== 【③-2】人物属性标签页 ==================== -->
+            <div class="tab-content" id="tab1">
+                <div class="zone-container" style="border-color: #5FAD56;">
+                    <div class="zone-marker" style="background: #5FAD56;">③-2</div>
+                    <div class="zone-name" style="background: #FFB347;">人物属性标签页内容</div>
+                    
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px;">
+                        
+                        <!-- 滑板鞋卡片 -->
+                        <div class="feature-card">
+                            <div class="sub-zone">
+                                <div class="sub-marker">③-2-1</div>
+                                <div class="sub-name">滑板鞋卡片</div>
+                                
+                                <div class="card-row">
+                                    <span class="card-title" style="color: #5FAD56;">👟 滑板鞋</span>
+                                    <div class="switch-container">
+                                        <div class="switch" onclick="toggleSwitch(this)">
+                                            <div class="switch-thumb"></div>
+                                        </div>
+                                        <span class="component-tag">movespeed_switch</span>
+                                    </div>
+                                </div>
+                                
+                                <div class="slider-container">
+                                    <span class="sub-marker" style="top: -2px;">③-2-1-1</span>
+                                    <div class="slider-track" onclick="updateSlider(this, event)">
+                                        <div class="slider-fill" style="width: 40%;"></div>
+                                        <div class="slider-thumb" style="left: calc(40% - 6px);"></div>
+                                    </div>
+                                    <span class="slider-value">3.0x</span>
+                                    <span class="component-tag">move_speed_var</span>
+                                </div>
+                                
+                                <div class="card-desc">
+                                    <span class="sub-marker" style="top: -2px;">③-2-1-2</span>
+                                    提升移动速度
+                                    <span class="component-tag">描述文字</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- 无限时间卡片 -->
+                        <div class="feature-card">
+                            <div class="sub-zone">
+                                <div class="sub-marker">③-2-2</div>
+                                <div class="sub-name">无限时间卡片</div>
+                                
+                                <div class="card-row">
+                                    <span class="card-title" style="color: #4C9F9F;">⏰ 无限时间</span>
+                                    <div class="switch-container">
+                                        <div class="switch" onclick="toggleSwitch(this)">
+                                            <div class="switch-thumb"></div>
+                                        </div>
+                                        <span class="component-tag">time_switch</span>
+                                    </div>
+                                </div>
+                                
+                                <div class="card-desc">
+                                    <span class="sub-marker" style="top: -2px;">③-2-2-1</span>
+                                    设定时间为99:59
+                                    <span class="component-tag">描述文字</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- 轻重力/高跳卡片 -->
+                        <div class="feature-card full">
+                            <div class="sub-zone">
+                                <div class="sub-marker">③-2-3</div>
+                                <div class="sub-name">轻重力/高跳卡片</div>
+                                
+                                <div class="card-row">
+                                    <span class="card-title" style="color: #F4A261;">🌌 轻重力/高跳</span>
+                                    <div class="switch-container">
+                                        <div class="switch" onclick="toggleSwitch(this)">
+                                            <div class="switch-thumb"></div>
+                                        </div>
+                                        <span class="component-tag">gravity_switch</span>
+                                    </div>
+                                </div>
+                                
+                                <div class="slider-container">
+                                    <span class="sub-marker" style="top: -2px;">③-2-3-1</span>
+                                    <span style="font-size: 11px; color: #e0e0e0;">重力:</span>
+                                    <div class="slider-track" onclick="updateSlider(this, event)">
+                                        <div class="slider-fill" style="width: 10%;"></div>
+                                        <div class="slider-thumb" style="left: calc(10% - 6px);"></div>
+                                    </div>
+                                    <span class="slider-value">1.0x</span>
+                                    <span class="component-tag">gravity_var</span>
+                                </div>
+                                
+                                <div class="slider-container">
+                                    <span class="sub-marker" style="top: -2px;">③-2-3-2</span>
+                                    <span style="font-size: 11px; color: #e0e0e0;">跳跃:</span>
+                                    <div class="slider-track" onclick="updateSlider(this, event)">
+                                        <div class="slider-fill" style="width: 10%;"></div>
+                                        <div class="slider-thumb" style="left: calc(10% - 6px);"></div>
+                                    </div>
+                                    <span class="slider-value">1.0x</span>
+                                    <span class="component-tag">jump_var</span>
+                                </div>
+                                
+                                <div class="card-desc">
+                                    <span class="sub-marker" style="top: -2px;">③-2-3-3</span>
+                                    调整重力强度和跳跃高度
+                                    <span class="component-tag">描述文字</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- 金刚不坏卡片 -->
+                        <div class="feature-card">
+                            <div class="sub-zone">
+                                <div class="sub-marker">③-2-4</div>
+                                <div class="sub-name">金刚不坏卡片</div>
+                                
+                                <div class="card-row">
+                                    <span class="card-title" style="color: #E74C3C;">🛡️ 金刚不坏</span>
+                                    <div class="switch-container">
+                                        <div class="switch" onclick="toggleSwitch(this)">
+                                            <div class="switch-thumb"></div>
+                                        </div>
+                                        <span class="component-tag">godmode_switch</span>
+                                    </div>
+                                </div>
+                                
+                                <div class="card-desc">
+                                    <span class="sub-marker" style="top: -2px;">③-2-4-1</span>
+                                    角色受到攻击时不会受伤
+                                    <span class="component-tag">描述文字</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- 技能无冷却卡片 -->
+                        <div class="feature-card">
+                            <div class="sub-zone">
+                                <div class="sub-marker">③-2-5</div>
+                                <div class="sub-name">技能无冷却卡片</div>
+                                
+                                <div class="card-row">
+                                    <span class="card-title" style="color: #A855F7;">✨ 技能无冷却</span>
+                                    <div class="switch-container">
+                                        <div class="switch" onclick="toggleSwitch(this)">
+                                            <div class="switch-thumb"></div>
+                                        </div>
+                                        <span class="component-tag">skillcd_switch</span>
+                                    </div>
+                                </div>
+                                
+                                <div class="card-desc">
+                                    <span class="sub-marker" style="top: -2px;">③-2-5-1</span>
+                                    生化模式，所有技能无冷却
+                                    <span class="component-tag">描述文字</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                    </div>
+                </div>
+            </div>
+            
+            <!-- ==================== 【③-3】其他标签页 ==================== -->
+            <div class="tab-content" id="tab2">
+                <div class="zone-container" style="border-color: #9B59B6;">
+                    <div class="zone-marker" style="background: #9B59B6;">③-3</div>
+                    <div class="zone-name" style="background: #FFB347;">其他标签页内容</div>
+                    
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px;">
+                        
+                        <!-- 聚怪卡片 -->
+                        <div class="feature-card">
+                            <div class="sub-zone">
+                                <div class="sub-marker">③-3-1</div>
+                                <div class="sub-name">聚怪卡片</div>
+                                
+                                <div class="card-row">
+                                    <span class="card-title" style="color: #E76F51;">👾 聚怪</span>
+                                    <div class="switch-container">
+                                        <div class="switch" onclick="toggleSwitch(this)">
+                                            <div class="switch-thumb"></div>
+                                        </div>
+                                        <span class="component-tag">gather_switch</span>
+                                    </div>
+                                </div>
+                                
+                                <div class="card-desc">
+                                    <span class="sub-marker" style="top: -2px;">③-3-1-1</span>
+                                    将所有人机聚集
+                                    <span class="component-tag">描述文字</span>
+                                </div>
+                                
+                                <button class="action-btn" onclick="alert('一键聚怪')">
+                                    <span class="sub-marker" style="top: -2px;">③-3-1-2</span>
+                                    📍 一键聚怪
+                                    <span class="component-tag">gather_btn</span>
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <!-- 天机傀儡卡片 -->
+                        <div class="feature-card">
+                            <div class="sub-zone">
+                                <div class="sub-marker">③-3-2</div>
+                                <div class="sub-name">天机傀儡卡片</div>
+                                
+                                <div class="card-row">
+                                    <span class="card-title" style="color: #00D4FF;">🧠 天机傀儡</span>
+                                    <div class="switch-container">
+                                        <div class="switch" onclick="toggleSwitch(this)">
+                                            <div class="switch-thumb"></div>
+                                        </div>
+                                        <span class="component-tag">isbot_switch</span>
+                                    </div>
+                                </div>
+                                
+                                <div class="card-desc">
+                                    <span class="sub-marker" style="top: -2px;">③-3-2-1</span>
+                                    玩家由人机控制
+                                    <span class="component-tag">描述文字</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- 回合跳过卡片 -->
+                        <div class="feature-card">
+                            <div class="sub-zone">
+                                <div class="sub-marker">③-3-3</div>
+                                <div class="sub-name">回合跳过卡片</div>
+                                
+                                <div class="card-row">
+                                    <span class="card-title" style="color: #e0e0e0;">⏭️ 回合跳过</span>
+                                    <span class="component-tag">roundskip_label</span>
+                                </div>
+                                
+                                <div class="card-desc">
+                                    <span class="sub-marker" style="top: -2px;">③-3-3-1</span>
+                                    已跳过: 0 回合
+                                    <span class="component-tag">skip_count_label</span>
+                                </div>
+                                
+                                <button class="action-btn" onclick="alert('跳过回合')">
+                                    <span class="sub-marker" style="top: -2px;">③-3-3-2</span>
+                                    ▶ 第一次跳过需要点击两次
+                                    <span class="component-tag">skip_round_btn</span>
+                                </button>
+                                
+                                <div class="card-desc">
+                                    <span class="sub-marker" style="top: -2px;">③-3-3-3</span>
+                                    结束当前回合
+                                    <span class="component-tag">描述文字</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- 方框透视卡片 -->
+                        <div class="feature-card full">
+                            <div class="sub-zone">
+                                <div class="sub-marker">③-3-4</div>
+                                <div class="sub-name">方框透视卡片</div>
+                                
+                                <div class="card-row">
+                                    <span class="card-title" style="color: #3498DB;">📦 方框透视</span>
+                                    <div class="switch-container">
+                                        <div class="switch" onclick="toggleSwitch(this)">
+                                            <div class="switch-thumb"></div>
+                                        </div>
+                                        <span class="component-tag">esp_box_switch</span>
+                                    </div>
+                                </div>
+                                
+                                <div class="card-desc">
+                                    <span class="sub-marker" style="top: -2px;">③-3-4-1</span>
+                                    开启敌人方框显示
+                                    <span class="component-tag">描述文字</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- 时间加速卡片 -->
+                        <div class="feature-card full">
+                            <div class="sub-zone">
+                                <div class="sub-marker">③-3-5</div>
+                                <div class="sub-name">时间加速卡片</div>
+                                
+                                <div class="card-row">
+                                    <span class="card-title" style="color: #F39C12;">⏩ 时间加速</span>
+                                    <div class="switch-container">
+                                        <div class="switch" onclick="toggleSwitch(this)">
+                                            <div class="switch-thumb"></div>
+                                        </div>
+                                        <span class="component-tag">timescale_switch</span>
+                                    </div>
+                                </div>
+                                
+                                <div class="slider-container">
+                                    <span class="sub-marker" style="top: -2px;">③-3-5-1</span>
+                                    <div class="slider-track" onclick="updateSlider(this, event)">
+                                        <div class="slider-fill" style="width: 10%;"></div>
+                                        <div class="slider-thumb" style="left: calc(10% - 6px);"></div>
+                                    </div>
+                                    <span class="slider-value">1.0x</span>
+                                    <span class="component-tag">timescale_var</span>
+                                </div>
+                                
+                                <div class="card-desc">
+                                    <span class="sub-marker" style="top: -2px;">③-3-5-2</span>
+                                    调整游戏时间倍速
+                                    <span class="component-tag">描述文字</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                    </div>
+                </div>
+            </div>
+            
+            <!-- ==================== 【③-4】多人生化Buff选择标签页 ==================== -->
+            <div class="tab-content" id="tab3">
+                <div class="zone-container" style="border-color: #E74C3C;">
+                    <div class="zone-marker" style="background: #E74C3C;">③-4</div>
+                    <div class="zone-name" style="background: #FFB347;">多人生化Buff选择标签页内容</div>
+                    
+                    <!-- 多人生化状态栏 -->
+                    <div class="nano4t-status">
+                        <span class="sub-marker" style="top: -3px;">③-4-1</span>
+                        <span style="color: #4C9F9F;">●</span>
+                        <span style="font-size: 13px;">等待游戏启动...</span>
+                        <span class="component-tag">nano4t_status_label</span>
+                    </div>
+                    
+                    <!-- 阵营选择器 -->
+                    <div class="nano4t-selector">
+                        <!-- 生化幽灵阵营 -->
+                        <div class="nano4t-side">
+                            <div class="sub-zone">
+                                <div class="sub-marker">③-4-2</div>
+                                <div class="sub-name">生化幽灵阵营</div>
+                                
+                                <div class="nano4t-header" style="color: #ff6666;">
+                                    <span class="sub-marker" style="top: -2px;">③-4-2-1</span>
+                                    👻 幽灵方特性
+                                    <span class="component-tag">nano4t_ghost_header</span>
+                                </div>
+                                
+                                <div class="nano4t-combo">
+                                    <span class="sub-marker" style="top: -2px;">③-4-2-2</span>
+                                    0: 基因变异
+                                    <span class="component-tag">nano4t_ghost_combo</span>
+                                </div>
+                                
+                                <div class="nano4t-desc">
+                                    <span class="sub-marker" style="top: -2px;">③-4-2-3</span>
+                                    效果: 缩短技能冷却时间
+                                    <span class="component-tag">nano4t_ghost_desc</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- 人类阵营 -->
+                        <div class="nano4t-side human">
+                            <div class="sub-zone">
+                                <div class="sub-marker">③-4-3</div>
+                                <div class="sub-name">人类阵营</div>
+                                
+                                <div class="nano4t-header" style="color: #6688ff;">
+                                    <span class="sub-marker" style="top: -2px;">③-4-3-1</span>
+                                    🛡️ 人类方特性
+                                    <span class="component-tag">nano4t_human_header</span>
+                                </div>
+                                
+                                <div class="nano4t-combo">
+                                    <span class="sub-marker" style="top: -2px;">③-4-3-2</span>
+                                    10: 救世主
+                                    <span class="component-tag">nano4t_human_combo</span>
+                                </div>
+                                
+                                <div class="nano4t-desc">
+                                    <span class="sub-marker" style="top: -2px;">③-4-3-3</span>
+                                    效果: 回合开始时救世主英雄登场
+                                    <span class="component-tag">nano4t_human_desc</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 应用按钮 -->
+                    <button class="action-btn" onclick="alert('应用多人生化特性')">
+                        <span class="sub-marker" style="top: -2px;">③-4-4</span>
+                        ✅ 应用
+                        <span class="component-tag">nano4t_apply_btn</span>
+                    </button>
+                </div>
+            </div>
+            
+            <!-- ==================== 【③-5】赋予武器标签页 ==================== -->
+            <div class="tab-content" id="tab4">
+                <div class="zone-container" style="border-color: #F39C12;">
+                    <div class="zone-marker" style="background: #F39C12;">③-5</div>
+                    <div class="zone-name" style="background: #FFB347;">赋予武器标签页内容</div>
+                    
+                    <!-- 武器赋予标题 -->
+                    <div class="zone-container" style="border: none; padding: 0;">
+                        <span class="sub-marker" style="top: -3px;">③-5-1</span>
+                        <span class="card-title" style="color: #FF6B6B;">🔫 武器赋予</span>
+                        <span class="component-tag">weapon_giver_title</span>
+                    </div>
+                    
+                    <!-- 复选框 -->
+                    <div class="hotkey-row">
+                        <span class="sub-marker" style="top: -2px;">③-5-2</span>
+                        <div class="checkbox-container">
+                            <div class="checkbox" onclick="toggleCheckbox(this)"></div>
+                            <span style="font-size: 12px;">复活自动装备武器</span>
+                        </div>
+                        <span class="component-tag">respawn_weapon_check</span>
+                    </div>
+                    
+                    <!-- 当前武器标签 -->
+                    <div style="padding: 8px;">
+                        <span class="sub-marker" style="top: -2px;">③-5-3</span>
+                        <span style="font-size: 11px; color: #2ecc71;">当前武器: 无</span>
+                        <span class="component-tag">current_weapon_label</span>
+                    </div>
+                    
+                    <!-- 普通武器区域 -->
+                    <div class="weapon-section">
+                        <div class="sub-zone">
+                            <div class="sub-marker">③-5-4</div>
+                            <div class="sub-name">步枪武器区域</div>
+                            
+                            <div class="weapon-section-title">
+                                <span class="sub-marker" style="top: -2px;">③-5-4-1</span>
+                                【步枪】(共N个)
+                                <span class="component-tag">rifle_section_title</span>
+                            </div>
+                            
+                            <div style="display: flex; flex-wrap: wrap; gap: 4px;">
+                                <!-- AK47-火麒麟 -->
+                                <div class="weapon-card">
+                                    <div class="sub-zone" style="border: none; padding: 2px;">
+                                        <span class="sub-marker" style="top: -2px; font-size: 8px;">③-5-4-2</span>
+                                        <div class="weapon-name">AK47-火麒麟</div>
+                                        <button class="weapon-btn" onclick="alert('赋予AK47-火麒麟')">赋予</button>
+                                        <button class="weapon-btn hotkey" onclick="alert('设置热键')">⌨</button>
+                                        <span class="component-tag" style="font-size: 7px;">ak47_firekirin_card</span>
+                                    </div>
+                                </div>
+                                
+                                <!-- M4A1-黑龙 -->
+                                <div class="weapon-card">
+                                    <div class="sub-zone" style="border: none; padding: 2px;">
+                                        <span class="sub-marker" style="top: -2px; font-size: 8px;">③-5-4-3</span>
+                                        <div class="weapon-name">M4A1-黑龙</div>
+                                        <button class="weapon-btn" onclick="alert('赋予M4A1-黑龙')">赋予</button>
+                                        <button class="weapon-btn hotkey" onclick="alert('设置热键')">⌨</button>
+                                        <span class="component-tag" style="font-size: 7px;">m4a1_blackdragon_card</span>
+                                    </div>
+                                </div>
+                                
+                                <!-- M4A1-雷神 -->
+                                <div class="weapon-card">
+                                    <div class="sub-zone" style="border: none; padding: 2px;">
+                                        <span class="sub-marker" style="top: -2px; font-size: 8px;">③-5-4-4</span>
+                                        <div class="weapon-name">M4A1-雷神</div>
+                                        <button class="weapon-btn" onclick="alert('赋予M4A1-雷神')">赋予</button>
+                                        <button class="weapon-btn hotkey" onclick="alert('设置热键')">⌨</button>
+                                        <span class="component-tag" style="font-size: 7px;">m4a1_thor_card</span>
+                                    </div>
+                                </div>
+                                
+                                <!-- M4A1-黑骑士 -->
+                                <div class="weapon-card">
+                                    <div class="sub-zone" style="border: none; padding: 2px;">
+                                        <span class="sub-marker" style="top: -2px; font-size: 8px;">③-5-4-5</span>
+                                        <div class="weapon-name">M4A1-黑骑士</div>
+                                        <button class="weapon-btn" onclick="alert('赋予M4A1-黑骑士')">赋予</button>
+                                        <button class="weapon-btn hotkey" onclick="alert('设置热键')">⌨</button>
+                                        <span class="component-tag" style="font-size: 7px;">m4a1_blackknight_card</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 英雄武器区域 -->
+                    <div class="weapon-section hero">
+                        <div class="sub-zone">
+                            <div class="sub-marker">③-5-5</div>
+                            <div class="sub-name">英雄武器区域</div>
+                            
+                            <div class="weapon-section-title">
+                                <span class="sub-marker" style="top: -2px;">③-5-5-1</span>
+                                【英雄】(共N个)
+                                <span class="component-tag">hero_section_title</span>
+                            </div>
+                            
+                            <div style="display: flex; flex-wrap: wrap; gap: 4px;">
+                                <!-- 终结者 -->
+                                <div class="weapon-card hero">
+                                    <div class="sub-zone" style="border: none; padding: 2px;">
+                                        <span class="sub-marker" style="top: -2px; font-size: 8px;">③-5-5-2</span>
+                                        <div class="weapon-name" style="color: #e74c3c;">终结者</div>
+                                        <button class="weapon-btn hero" onclick="alert('赋予终结者')">赋予</button>
+                                        <button class="weapon-btn hotkey" onclick="alert('设置热键')">⌨</button>
+                                        <span class="component-tag" style="font-size: 7px;">terminator_card</span>
+                                    </div>
+                                </div>
+                                
+                                <!-- 大终结者 -->
+                                <div class="weapon-card hero">
+                                    <div class="sub-zone" style="border: none; padding: 2px;">
+                                        <span class="sub-marker" style="top: -2px; font-size: 8px;">③-5-5-3</span>
+                                        <div class="weapon-name" style="color: #3498db;">大终结者</div>
+                                        <button class="weapon-btn hero" onclick="alert('赋予大终结者')">赋予</button>
+                                        <button class="weapon-btn hotkey" onclick="alert('设置热键')">⌨</button>
+                                        <span class="component-tag" style="font-size: 7px;">grandterminator_card</span>
+                                    </div>
+                                </div>
+                                
+                                <!-- 屠龙 -->
+                                <div class="weapon-card hero">
+                                    <div class="sub-zone" style="border: none; padding: 2px;">
+                                        <span class="sub-marker" style="top: -2px; font-size: 8px;">③-5-5-4</span>
+                                        <div class="weapon-name" style="color: #9b59b6;">屠龙</div>
+                                        <button class="weapon-btn hero" onclick="alert('赋予屠龙')">赋予</button>
+                                        <button class="weapon-btn hotkey" onclick="alert('设置热键')">⌨</button>
+                                        <span class="component-tag" style="font-size: 7px;">屠龙_card</span>
+                                    </div>
+                                </div>
+                                
+                                <!-- 幽灵之刃 -->
+                                <div class="weapon-card hero">
+                                    <div class="sub-zone" style="border: none; padding: 2px;">
+                                        <span class="sub-marker" style="top: -2px; font-size: 8px;">③-5-5-5</span>
+                                        <div class="weapon-name" style="color: #f39c12;">幽灵之刃</div>
+                                        <button class="weapon-btn hero" onclick="alert('赋予幽灵之刃')">赋予</button>
+                                        <button class="weapon-btn hotkey" onclick="alert('设置热键')">⌨</button>
+                                        <span class="component-tag" style="font-size: 7px;">ghostblade_card</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 操作提示 -->
+                    <div class="tip" style="margin-top: 8px;">
+                        <span class="sub-marker" style="top: -2px;">③-5-6</span>
+                        💡 点击"赋予"按钮立即获得武器，点击"⌨"设置快捷键
+                        <span class="component-tag">weapon_tip_label</span>
+                    </div>
+                </div>
+            </div>
+            
+        </div>
+    </div>
+    
+    <!-- 【④】连接按钮 -->
+    <div class="zone-container">
+        <div class="zone-marker">④</div>
+        <div class="zone-name">connect_frame</div>
+        <button class="connect-btn" onclick="alert('连接到游戏进程')">
+            <span class="sub-marker" style="top: -3px;">④-1</span>
+            🔗 连接游戏
+            <span class="component-tag">connect_btn</span>
+        </button>
+    </div>
+    
+    <!-- 【⑤】日志面板 -->
+    <div class="zone-container">
+        <div class="zone-marker">⑤</div>
+        <div class="zone-name">log_frame</div>
+        <div class="log-panel">
+            <div class="log-line">
+                <span class="sub-marker" style="top: -2px;">⑤-1</span>
+                <span class="log-success">[SUCCESS]</span> 已连接到游戏进程 (PID: 12345)
+                <span class="component-tag">log_line_1</span>
+            </div>
+            <div class="log-line">
+                <span class="sub-marker" style="top: -2px;">⑤-2</span>
+                <span class="log-info">[INFO]</span> 功能模块加载完成
+                <span class="component-tag">log_line_2</span>
+            </div>
+            <div class="log-line">
+                <span class="sub-marker" style="top: -2px;">⑤-3</span>
+                <span class="log-info">[INFO]</span> 等待用户操作...
+                <span class="component-tag">log_line_3</span>
+            </div>
+        </div>
+    </div>
+    
+</div>
+
+<!-- ==================== 设置窗口 ==================== -->
+<div class="settings-window">
+    
+    <!-- 【⑥】设置窗口标题 -->
+    <div class="zone-container" style="border-radius: 12px 12px 0 0;">
+        <div class="zone-marker">⑥</div>
+        <div class="zone-name">settings_title_frame</div>
+        <div class="settings-title">
+            <span class="sub-marker" style="top: -3px;">⑥-1</span>
+            ⚙️ 设置
+            <span class="component-tag">settings_title</span>
+        </div>
+    </div>
+    
+    <!-- 【⑦】热键设置区域 -->
+    <div class="zone-container">
+        <div class="zone-marker">⑦</div>
+        <div class="zone-name">hotkey_frame</div>
+        
+        <div style="padding: 8px;">
+            <div style="font-size: 13px; font-weight: bold; margin-bottom: 8px;">
+                <span class="sub-marker" style="top: -2px;">⑦-1</span>
+                ⌨️ 热键设置
+                <span class="component-tag">hotkey_section_title</span>
+            </div>
+            
+            <!-- 快刀热键 -->
+            <div class="hotkey-row">
+                <span class="sub-marker" style="top: -2px;">⑦-2</span>
+                <span class="hotkey-label">快刀:</span>
+                <div class="hotkey-combo" onclick="alert('按下新热键...')">F1</div>
+                <span class="component-tag">knife_hotkey</span>
+            </div>
+            
+            <!-- 无后座力热键 -->
+            <div class="hotkey-row">
+                <span class="sub-marker" style="top: -2px;">⑦-3</span>
+                <span class="hotkey-label">无后座:</span>
+                <div class="hotkey-combo" onclick="alert('按下新热键...')">F2</div>
+                <span class="component-tag">recoil_hotkey</span>
+            </div>
+            
+            <!-- 无限子弹热键 -->
+            <div class="hotkey-row">
+                <span class="sub-marker" style="top: -2px;">⑦-4</span>
+                <span class="hotkey-label">无限弹:</span>
+                <div class="hotkey-combo" onclick="alert('按下新热键...')">F3</div>
+                <span class="component-tag">ammo_hotkey</span>
+            </div>
+            
+            <!-- 快速换弹热键 -->
+            <div class="hotkey-row">
+                <span class="sub-marker" style="top: -2px;">⑦-5</span>
+                <span class="hotkey-label">快换弹:</span>
+                <div class="hotkey-combo" onclick="alert('按下新热键...')">F4</div>
+                <span class="component-tag">ammoplus_hotkey</span>
+            </div>
+            
+        </div>
+    </div>
+    
+    <!-- 【⑧】其他设置区域 -->
+    <div class="zone-container">
+        <div class="zone-marker">⑧</div>
+        <div class="zone-name">other_settings_frame</div>
+        
+        <div style="padding: 8px;">
+            <div style="font-size: 13px; font-weight: bold; margin-bottom: 8px;">
+                <span class="sub-marker" style="top: -2px;">⑧-1</span>
+                🔧 其他设置
+                <span class="component-tag">other_settings_title</span>
+            </div>
+            
+            <!-- 自动连接复选框 -->
+            <div class="hotkey-row">
+                <span class="sub-marker" style="top: -2px;">⑧-2</span>
+                <div class="checkbox-container">
+                    <div class="checkbox checked" onclick="toggleCheckbox(this)"></div>
+                    <span style="font-size: 12px;">启动时自动连接</span>
+                </div>
+                <span class="component-tag">auto_connect_checkbox</span>
+            </div>
+            
+            <!-- 最小化到托盘复选框 -->
+            <div class="hotkey-row">
+                <span class="sub-marker" style="top: -2px;">⑧-3</span>
+                <div class="checkbox-container">
+                    <div class="checkbox" onclick="toggleCheckbox(this)"></div>
+                    <span style="font-size: 12px;">关闭时最小化到托盘</span>
+                </div>
+                <span class="component-tag">minimize_to_tray_checkbox</span>
+            </div>
+            
+            <!-- 显示日志复选框 -->
+            <div class="hotkey-row">
+                <span class="sub-marker" style="top: -2px;">⑧-4</span>
+                <div class="checkbox-container">
+                    <div class="checkbox checked" onclick="toggleCheckbox(this)"></div>
+                    <span style="font-size: 12px;">显示详细日志</span>
+                </div>
+                <span class="component-tag">show_log_checkbox</span>
+            </div>
+            
+        </div>
+    </div>
+    
+    <!-- 【⑨】关于区域 -->
+    <div class="zone-container" style="border-radius: 0 0 12px 12px;">
+        <div class="zone-marker">⑨</div>
+        <div class="zone-name">about_frame</div>
+        
+        <div class="about-section">
+            <div class="about-title">
+                <span class="sub-marker" style="top: -2px;">⑨-1</span>
+                游戏修改器控制台 v1.8
+                <span class="component-tag">about_title</span>
+            </div>
+            <div class="about-info">
+                <span class="sub-marker" style="top: -2px;">⑨-2</span>
+                作者: UCF1.7-Modifier Team
+                <span class="component-tag">about_author</span>
+            </div>
+            <div class="about-info">
+                <span class="sub-marker" style="top: -2px;">⑨-3</span>
+                版本: 1.8.0
+                <span class="component-tag">about_version</span>
+            </div>
+            <div class="about-info">
+                <span class="sub-marker" style="top: -2px;">⑨-4</span>
+                发布日期: 2024-01-01
+                <span class="component-tag">about_date</span>
+            </div>
+        </div>
+    </div>
+    
+</div>
+
+<!-- ==================== 索引表 ==================== -->
+<div class="window" style="margin-top: 20px; padding: 20px;">
+    <h2 style="text-align: center; color: #FF6B6B; margin-bottom: 15px;">界面元素索引表</h2>
+    
+    <table>
+        <thead>
+            <tr>
+                <th>序号</th>
+                <th>名称</th>
+                <th>类型</th>
+                <th>说明</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td>①</td>
+                <td>status_frame</td>
+                <td>Frame</td>
+                <td>状态栏主容器</td>
+            </tr>
+            <tr>
+                <td>①-1</td>
+                <td>status_dot</td>
+                <td>Label</td>
+                <td>状态指示器（绿点）</td>
+            </tr>
+            <tr>
+                <td>①-2</td>
+                <td>status_label</td>
+                <td>Label</td>
+                <td>状态文本</td>
+            </tr>
+            <tr>
+                <td>①-3</td>
+                <td>pid_label</td>
+                <td>Label</td>
+                <td>进程ID显示</td>
+            </tr>
+            <tr>
+                <td>①-4</td>
+                <td>settings_btn</td>
+                <td>Button</td>
+                <td>设置按钮</td>
+            </tr>
+            <tr>
+                <td>①-5</td>
+                <td>collapse_btn</td>
+                <td>Button</td>
+                <td>折叠界面按钮</td>
+            </tr>
+            <tr>
+                <td>②</td>
+                <td>hint_frame</td>
+                <td>Frame</td>
+                <td>提示栏容器</td>
+            </tr>
+            <tr>
+                <td>②-1</td>
+                <td>hint_label</td>
+                <td>Label</td>
+                <td>操作提示文本</td>
+            </tr>
+            <tr>
+                <td>③</td>
+                <td>tab_view</td>
+                <td>Tabview</td>
+                <td>标签页视图容器</td>
+            </tr>
+            <tr>
+                <td>③-1</td>
+                <td>武器标签页</td>
+                <td>Tab</td>
+                <td>武器功能标签页</td>
+            </tr>
+            <tr>
+                <td>③-1-1</td>
+                <td>快刀卡片</td>
+                <td>Card</td>
+                <td>快刀功能卡片</td>
+            </tr>
+            <tr>
+                <td>③-1-1-1</td>
+                <td>knife_speed_var</td>
+                <td>Slider</td>
+                <td>快刀速度滑块</td>
+            </tr>
+            <tr>
+                <td>③-1-2</td>
+                <td>无后座力卡片</td>
+                <td>Card</td>
+                <td>无后座力功能卡片</td>
+            </tr>
+            <tr>
+                <td>③-1-3</td>
+                <td>无限子弹卡片</td>
+                <td>Card</td>
+                <td>无限子弹功能卡片</td>
+            </tr>
+            <tr>
+                <td>③-1-4</td>
+                <td>快速换弹卡片</td>
+                <td>Card</td>
+                <td>快速换弹功能卡片</td>
+            </tr>
+            <tr>
+                <td>③-1-5</td>
+                <td>剑气化丝卡片</td>
+                <td>Card</td>
+                <td>剑气化丝功能卡片</td>
+            </tr>
+            <tr>
+                <td>③-1-6</td>
+                <td>自瞄卡片</td>
+                <td>Card</td>
+                <td>自瞄功能卡片</td>
+            </tr>
+            <tr>
+                <td>③-1-7</td>
+                <td>射速变快+连狙卡片</td>
+                <td>Card</td>
+                <td>射速变快+连狙功能卡片</td>
+            </tr>
+            <tr>
+                <td>③-2</td>
+                <td>人物属性标签页</td>
+                <td>Tab</td>
+                <td>人物属性功能标签页</td>
+            </tr>
+            <tr>
+                <td>③-2-1</td>
+                <td>滑板鞋卡片</td>
+                <td>Card</td>
+                <td>滑板鞋功能卡片</td>
+            </tr>
+            <tr>
+                <td>③-2-2</td>
+                <td>无限时间卡片</td>
+                <td>Card</td>
+                <td>无限时间功能卡片</td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+
+<!-- ==================== JavaScript交互功能 ==================== -->
+<script>
+    // 标签页切换功能
+    function switchTab(index) {
+        // 移除所有标签页按钮的active状态
+        const tabBtns = document.querySelectorAll('.tab-btn');
+        tabBtns.forEach(btn => btn.classList.remove('active'));
+        
+        // 添加当前标签页按钮的active状态
+        tabBtns[index].classList.add('active');
+        
+        // 隐藏所有标签页内容
+        const tabContents = document.querySelectorAll('.tab-content');
+        tabContents.forEach(content => content.classList.remove('active'));
+        
+        // 显示当前标签页内容
+        tabContents[index].classList.add('active');
+    }
+    
+    // 开关切换功能
+    function toggleSwitch(element) {
+        if (element.classList.contains('on')) {
+            element.classList.remove('on');
+        } else {
+            element.classList.add('on');
+        }
+    }
+    
+    // 复选框切换功能
+    function toggleCheckbox(element) {
+        if (element.classList.contains('checked')) {
+            element.classList.remove('checked');
+        } else {
+            element.classList.add('checked');
+        }
+    }
+    
+    // 滑块更新功能
+    function updateSlider(trackElement, event) {
+        const rect = trackElement.getBoundingClientRect();
+        const clickX = event.clientX - rect.left;
+        const percentage = (clickX / rect.width) * 100;
+        
+        // 更新滑块填充和滑块位置
+        const fill = trackElement.querySelector('.slider-fill');
+        const thumb = trackElement.querySelector('.slider-thumb');
+        
+        fill.style.width = percentage + '%';
+        thumb.style.left = 'calc(' + percentage + '% - 6px)';
+        
+        // 更新数值显示（假设滑块范围是1.0-10.0）
+        const value = 1.0 + (percentage / 100) * 9.0;
+        const valueDisplay = trackElement.parentElement.querySelector('.slider-value');
+        if (valueDisplay) {
+            valueDisplay.textContent = value.toFixed(1) + 'x';
+        }
+    }
+</script>
+
+</body>
+</html>

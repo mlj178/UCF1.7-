@@ -343,7 +343,7 @@
                     writeFloat(_timeScaleVarAddr, _desiredScale);
                 }
             }
-        }, 500);
+        }, 5000);
         log('info', 'TimeScale', '定时刷新已启动');
     }
 

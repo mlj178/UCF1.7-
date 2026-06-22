@@ -96,7 +96,7 @@ class App(ctk.CTk):
         super().__init__()
         # Initialize file logging first
         setup_logging()
-        self.title("游戏修改器控制台 - 全功能整合包 v1.7")
+        self.title("游戏修改器控制台 - 全功能整合包 v1.8")
         self.geometry("610x700+10+10")
         self.resizable(True, True)
         self.minsize(610, 400)
@@ -169,7 +169,7 @@ class App(ctk.CTk):
         self._load_feature_state()
         self._update_battle_round_button_state()
         self._hotkey.set_app(self)
-        self._log("游戏修改器控制台 v1.7 — 全功能整合包")
+        self._log("游戏修改器控制台 v1.8 — 全功能整合包")
         self._log("正在检测游戏进程...")
 
         # 配置文件保持同步读取；全局快捷键在窗口显示后再注册。
@@ -446,7 +446,7 @@ class App(ctk.CTk):
 
         gather_frame = ctk.CTkFrame(scroll, corner_radius=6, fg_color="#3a3a3a",
                                      border_width=1, border_color="#555555", cursor="hand2")
-        gather_frame.grid(row=0, column=0, columnspan=2, sticky="ew", padx=3, pady=3)
+        gather_frame.grid(row=0, column=0, columnspan=1, sticky="ew", padx=3, pady=3)
         gather_frame.bind("<Button-1>", lambda e: self._toggle_feature('gather'))
 
         top8 = ctk.CTkFrame(gather_frame, fg_color="transparent")
@@ -465,18 +465,38 @@ class App(ctk.CTk):
                                           fg_color="#b45309", hover_color="#92400e")
         self.gather_btn.pack(fill="x", padx=4, pady=4)
         ctk.CTkLabel(gather_frame, font=("Microsoft YaHei", 15),
-                     text="将所有人机聚集。一般用于多人生化模式",
-                     text_color="#a0a0a0", wraplength=560, justify="left", anchor="w").pack(
-            fill="x", expand=False, padx=5, pady=5)
+                     text="将所有人机聚集",
+                     text_color="#a0a0a0", wraplength=280, justify="left", anchor="w").pack(
+            fill="x", expand=False, padx=8, pady=(2, 6))
 
-        _, self.isbot_switch, _ = self._make_feature_card(
-            scroll, 1, 0, 2, "#1a3a3a", 'isbot', '🧠', '天机傀儡',
-            '玩家由人机控制，化身机器傀儡（开启后，重新进入房间才能生效）',
-            title_color="#00D4FF")
+        # 天机傀儡 - 自定义卡片布局（与方框透视高度匹配）
+        isbot_frame = ctk.CTkFrame(scroll, corner_radius=6, fg_color="#3a3a3a",
+                                     border_width=1, border_color="#555555", cursor="hand2")
+        isbot_frame.grid(row=1, column=0, sticky="ew", padx=3, pady=3)
+        isbot_frame.bind("<Button-1>", lambda e: self._toggle_feature('isbot'))
+
+        # 第一行：标题 + 开关
+        isbot_top = ctk.CTkFrame(isbot_frame, fg_color="transparent")
+        isbot_top.pack(fill="x", padx=8, pady=(6, 0))
+        ctk.CTkLabel(isbot_top, text="🧠 天机傀儡", font=("Microsoft YaHei", 15, "bold"),
+                     text_color="#00D4FF").pack(side="left", padx=4)
+        self.isbot_switch = ctk.CTkSwitch(isbot_top, text="", font=("Microsoft YaHei", 12),
+                                           width=50, command=lambda: self._toggle_feature('isbot'))
+        self.isbot_switch.pack(side="right", padx=6)
+
+        # 第二行：占位（减小间距）
+        isbot_placeholder = ctk.CTkFrame(isbot_frame, fg_color="transparent", height=20)
+        isbot_placeholder.pack(fill="x", padx=8, pady=(0, 0))
+        isbot_placeholder.pack_propagate(False)  # 固定高度
+
+        # 第三行：文字说明
+        ctk.CTkLabel(isbot_frame, font=("Microsoft YaHei", 15), text="玩家由人机控制",
+                     text_color="#a0a0a0", wraplength=280, justify="left", anchor="w").pack(
+            fill="x", expand=False, padx=8, pady=(0, 4))
 
         skip_frame = ctk.CTkFrame(scroll, corner_radius=6, fg_color="#3a3a3a",
                                    border_width=1, border_color="#555555")
-        skip_frame.grid(row=2, column=0, columnspan=2, sticky="ew", padx=3, pady=3)
+        skip_frame.grid(row=0, column=1, columnspan=1, sticky="ew", padx=3, pady=3)
         top10 = ctk.CTkFrame(skip_frame, fg_color="transparent")
         top10.pack(fill="x", padx=8, pady=(6, 0))
         ctk.CTkLabel(top10, text="⏭️ 回合跳过", font=("Microsoft YaHei", 15, "bold"),
@@ -492,14 +512,14 @@ class App(ctk.CTk):
                                               height=45, command=self._skip_round,
                                               fg_color="#b45309", hover_color="#92400e")
         self.skip_round_btn.pack(fill="x", padx=4, pady=4)
-        ctk.CTkLabel(skip_frame, font=("Microsoft YaHei", 15), text="结束当前回合（需要等待几秒）",
+        ctk.CTkLabel(skip_frame, font=("Microsoft YaHei", 15), text="结束当前回合",
                      text_color="#a0a0a0", wraplength=280, justify="left", anchor="w").pack(
-            fill="x", expand=False, padx=5, pady=5)
+            fill="x", expand=False, padx=8, pady=(2, 6))
 
         # 方框透视 - 自定义卡片布局（与时间加速高度匹配）
         esp_box_frame = ctk.CTkFrame(scroll, corner_radius=6, fg_color="#3a3a3a",
                                       border_width=1, border_color="#555555", cursor="hand2")
-        esp_box_frame.grid(row=3, column=0, sticky="ew", padx=3, pady=3)
+        esp_box_frame.grid(row=1, column=1, sticky="ew", padx=3, pady=3)
         esp_box_frame.bind("<Button-1>", lambda e: self._toggle_feature('esp_box'))
 
         # 第一行：标题 + 开关
@@ -511,25 +531,25 @@ class App(ctk.CTk):
                                              width=50, command=lambda: self._toggle_feature('esp_box'))
         self.esp_box_switch.pack(side="right", padx=6)
 
-        # 第二行：占位（与时间加速滑块行对齐）
-        esp_box_placeholder = ctk.CTkFrame(esp_box_frame, fg_color="transparent", height=28)
-        esp_box_placeholder.pack(fill="x", padx=8, pady=(4, 0))
+        # 第二行：占位（减小间距）
+        esp_box_placeholder = ctk.CTkFrame(esp_box_frame, fg_color="transparent", height=20)
+        esp_box_placeholder.pack(fill="x", padx=8, pady=(0, 0))
         esp_box_placeholder.pack_propagate(False)  # 固定高度
 
         # 第三行：文字说明
         ctk.CTkLabel(esp_box_frame, font=("Microsoft YaHei", 15), text="开启敌人方框显示",
                      text_color="#a0a0a0", wraplength=280, justify="left", anchor="w").pack(
-            fill="x", expand=False, padx=8, pady=(2, 6))
+            fill="x", expand=False, padx=8, pady=(0, 4))
 
-        # 时间加速 - 自定义卡片布局
+        # 时间加速 - 自定义卡片布局（半宽）
         timescale_frame = ctk.CTkFrame(scroll, corner_radius=6, fg_color="#3a3a3a",
                                         border_width=1, border_color="#555555", cursor="hand2")
-        timescale_frame.grid(row=3, column=1, sticky="ew", padx=3, pady=3)
+        timescale_frame.grid(row=2, column=0, columnspan=1, sticky="ew", padx=3, pady=3)
         timescale_frame.bind("<Button-1>", lambda e: self._toggle_feature('timescale'))
 
         # 第一行：标题 + 开关
         timescale_top = ctk.CTkFrame(timescale_frame, fg_color="transparent")
-        timescale_top.pack(fill="x", padx=8, pady=(6, 0))
+        timescale_top.pack(fill="x", padx=8, pady=(4, 0))
         ctk.CTkLabel(timescale_top, text="⏩ 时间加速", font=("Microsoft YaHei", 15, "bold"),
                      text_color="#00CED1").pack(side="left", padx=4)
         self.timescale_switch = ctk.CTkSwitch(timescale_top, text="", font=("Microsoft YaHei", 12),
@@ -546,13 +566,12 @@ class App(ctk.CTk):
         self.timescale_slider.pack(side="left", padx=4)
         self.timescale_label = ctk.CTkLabel(timescale_slider_frame, text="1.0x",
                                              font=("Microsoft YaHei", 12), text_color="#e0e0e0", width=50)
-        self.timescale_label.pack(side="left", padx=4)
+        self.timescale_label.pack(side="left")
 
         # 第三行：文字说明
         ctk.CTkLabel(timescale_frame, font=("Microsoft YaHei", 15), text="调整游戏时间倍速",
                      text_color="#a0a0a0", wraplength=280, justify="left", anchor="w").pack(
             fill="x", expand=False, padx=8, pady=(2, 6))
-
     def _build_nano4t_tab(self, scroll):
         self.nano4t_top_frame = ctk.CTkFrame(scroll, corner_radius=8, fg_color="#2b2b2b")
         self.nano4t_top_frame.pack(fill="x", padx=8, pady=(8, 4))
