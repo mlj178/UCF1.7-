@@ -1,0 +1,38 @@
+il2cpp:10402300                 dd 468BE045h, 45110F0Ch, 7E0FF3C8h, 0F66F445h, 8BD845D6h
+il2cpp:10402314                 dd 308B6040h, 0BA86F6h, 75010000h, 0D9E85609h, 83FFD36Ah
+il2cpp:10402328                 dd 458D04C4h, 0E85650C8h, 0FFD0702Ch, 5E08C483h, 0C35DE58Bh
+il2cpp:1040233C                 dd 0CCCCCCCCh
+il2cpp:1040233C System_Collections_Generic_Dictionary_ValueCollection_Vector3__Quaternion_$$System_Collections_IEnumerable_GetEnumerator endp ; sp-analysis failed
+il2cpp:1040233C
+il2cpp:10402340
+il2cpp:10402340 ; =============== S U B R O U T I N E =======================================
+il2cpp:10402340
+il2cpp:10402340 ; Attributes: bp-based frame
+il2cpp:10402340
+il2cpp:10402340 ; System_Collections_IEnumerator_o *__cdecl System_Collections_Generic_Dictionary_ValueCollection_Quaternion__Vector3___System_Collections_IEnumerable_GetEnumerator(System_Collections_Generic_Dictionary_ValueCollection_TKey__TValue__o *this, const MethodInfo_402340 *method)
+il2cpp:10402340 System_Collections_Generic_Dictionary_ValueCollection_Quaternion__Vector3_$$System_Collections_IEnumerable_GetEnumerator proc near
+il2cpp:10402340                                         ; DATA XREF: .rdata:10C68150o
+il2cpp:10402340                                         ; .rdata:10C6815Co ...
+il2cpp:10402340
+il2cpp:10402340 this            = dword ptr  8
+il2cpp:10402340 method          = dword ptr  0Ch
+il2cpp:10402340
+il2cpp:10402340                 push    ebp
+il2cpp:10402341                 mov     ebp, esp
+il2cpp:10402343                 sub     esp, 30h
+il2cpp:10402346                 push    esi
+il2cpp:10402347                 mov     esi, [ebp+method]
+il2cpp:10402347 ; ---------------------------------------------------------------------------
+il2cpp:1040234A                 dw 570Fh
+il2cpp:1040234C                 dd 45110FC0h, 0D60F66E8h, 468BF845h, 60408B0Ch, 8B0470FFh
+il2cpp:10402360                 dd 70FF0845h, 0E8458D08h, 0E6B2E850h, 100FFFF8h, 468BE845h
+il2cpp:10402374                 dd 0CC4830Ch, 0D045110Fh, 457E0FF3h, 0D60F66F8h, 408BE045h
+il2cpp:10402388                 dd 0F6308B60h, 0BA86h, 9750100h, 6A66E856h, 0C483FFD3h
+il2cpp:1040239C                 dd 0D0458D04h, 0B9E85650h, 83FFD06Fh, 8B5E08C4h, 0CCC35DE5h
+il2cpp:1040239C System_Collections_Generic_Dictionary_ValueCollection_Quaternion__Vector3_$$System_Collections_IEnumerable_GetEnumerator endp ; sp-analysis failed
+il2cpp:1040239C
+il2cpp:104023B0
+il2cpp:104023B0 ; =============== S U B R O U T I N E =======================================
+il2cpp:104023B0
+il2cpp:104023B0 ; Attributes: bp-based frame
+il2cpp:104023B0
