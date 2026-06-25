@@ -1,16 +1,16 @@
-// is_bot.js - 天机傀儡 — 修改 ClientData.isBot (v2)
-// replace isMyPlayer 捕获localPlayer → 读取clientData → 直接写 isBot 字节
+// is_bot.js - 天机傀儡，修改 ClientData.isBot
+// 通过替换 isMyPlayer 捕获 localPlayer，再直接写入 isBot 字节。
 
 modules.isbot = (function() {
   var enabled = false;
   var localPlayer = null;
   var clientData = null;
-  var dumped = false;
   var logCount = 0;
   var MAX_LOG = 15;
   var hookInstalled = false;
   var retryInterval = null;
   var addrIsMy = null;
+  var roomCaptureCount = 0;
 
   var RVA_IS_MY_PLAYER = 0xB55FD0;
   var OFF_CLIENT = 0x94;
@@ -23,6 +23,10 @@ modules.isbot = (function() {
     send({ type: 'log', level: level, module: 'isBot', message: msg });
   }
 
+  function sendUiState(state) {
+    send({ type: 'isbot_state', state: state });
+  }
+
   function readStr(p) {
     try {
       var obj = p.readPointer();
@@ -30,7 +34,9 @@ modules.isbot = (function() {
       var len = obj.add(-4).readS32();
       if (len < 0 || len > 64) return '?';
       return obj.readUtf8String(len);
-    } catch(e) { return '?'; }
+    } catch (e) {
+      return '?';
+    }
   }
 
   function dump() {
@@ -45,58 +51,90 @@ modules.isbot = (function() {
     try {
       clientData.add(OFF_ISBOT).writeU8(val);
       var after = clientData.add(OFF_ISBOT).readU8();
-      log('info', 'isBot=' + after + ' (写入' + val + ')');
+      log('info', 'isBot=' + after + ' (写入 ' + val + ')');
       return true;
-    } catch(e) { return false; }
+    } catch (e) {
+      return false;
+    }
   }
 
   function tryWriteBotOnCapture() {
-    if (clientData) {
-      writeBot(1);
-      sendLog('info', '天机傀儡', 'Bot 模式已应用');
+    if (!clientData) {
+      return false;
+    }
+
+    var ok = writeBot(1);
+    if (ok) {
+      sendLog('info', '天机傀儡', 'Bot 模式已写入');
       if (retryInterval) {
         clearInterval(retryInterval);
         retryInterval = null;
       }
-      return true;
     }
-    return false;
+    return ok;
+  }
+
+  function handlePlayerCapture(playerPtr) {
+    if (localPlayer && playerPtr.equals(localPlayer)) {
+      return;
+    }
+
+    localPlayer = playerPtr;
+
+    var cd = playerPtr.add(OFF_CLIENT).readPointer();
+    if (!cd || cd.isNull()) {
+      return;
+    }
+
+    clientData = cd;
+    roomCaptureCount += 1;
+    setTimeout(dump, 2000);
+
+    if (!enabled) {
+      return;
+    }
+
+    if (tryWriteBotOnCapture()) {
+      if (roomCaptureCount >= 2) {
+        sendUiState('active');
+      } else {
+        sendUiState('awaiting_reenter');
+      }
+    }
   }
 
   function installHook() {
     if (hookInstalled) return;
     try {
       var mod = getGameAssembly();
-      if (!mod) { sendLog('error', '天机傀儡', '未找到 GameAssembly.dll'); return; }
+      if (!mod) {
+        sendBothLog('error', '天机傀儡', '天机傀儡暂未就绪，请重新连接游戏后重试', 'IsBot GameAssembly.dll not found');
+        return;
+      }
 
       var base = mod.base;
       addrIsMy = base.add(RVA_IS_MY_PLAYER);
       var origIsMy = new NativeFunction(addrIsMy, 'bool', ['pointer', 'pointer']);
 
-      Interceptor.replace(addrIsMy, new NativeCallback(function (playerPtr, methodInfo) {
+      Interceptor.replace(addrIsMy, new NativeCallback(function(playerPtr, methodInfo) {
         var result = origIsMy(playerPtr, methodInfo);
-        if (result && !localPlayer) {
-          localPlayer = playerPtr;
-          var cd = playerPtr.add(OFF_CLIENT).readPointer();
-          if (cd) {
-            clientData = cd;
-            dumped = true;
-            setTimeout(dump, 2000);
-            tryWriteBotOnCapture();
-          }
+        if (result) {
+          handlePlayerCapture(playerPtr);
         }
         return result;
       }, 'bool', ['pointer', 'pointer']));
 
       hookInstalled = true;
-    } catch(e) {
-      sendLog('error', '天机傀儡', 'Hook安装失败: ' + (e.message || e));
+    } catch (e) {
+      sendBothLog('error', '天机傀儡', '天机傀儡初始化失败，请稍后重试', 'IsBot hook install failed: ' + (e.message || e));
     }
   }
 
   function uninstallHook() {
     if (hookInstalled && addrIsMy) {
-      try { Interceptor.revert(addrIsMy); } catch(e) {}
+      try {
+        Interceptor.revert(addrIsMy);
+      } catch (e) {}
       hookInstalled = false;
       addrIsMy = null;
     }
@@ -107,11 +145,13 @@ modules.isbot = (function() {
       if (enabled) return;
 
       installHook();
+      enabled = true;
+      sendUiState('awaiting_room');
 
       if (tryWriteBotOnCapture()) {
-        enabled = true;
         sendLog('success', '天机傀儡', '已启用');
         sendStatus('isbot', true);
+        sendUiState(roomCaptureCount >= 2 ? 'active' : 'awaiting_reenter');
         return;
       }
 
@@ -124,11 +164,10 @@ modules.isbot = (function() {
         if (retries > 20) {
           clearInterval(retryInterval);
           retryInterval = null;
-          sendLog('error', '天机傀儡', '等待本地玩家超时');
+          sendBothLog('warn', '天机傀儡', '暂未捕获本地玩家，请进入房间后重新尝试', 'IsBot waiting for local player timed out');
         }
       }, 500);
 
-      enabled = true;
       sendLog('success', '天机傀儡', '已启用（等待本地玩家）');
       sendStatus('isbot', true);
     },
@@ -143,10 +182,14 @@ modules.isbot = (function() {
       enabled = false;
       localPlayer = null;
       clientData = null;
+      roomCaptureCount = 0;
       log('info', '已禁用');
       sendStatus('isbot', false);
+      sendUiState('off');
     },
-    isEnabled: function() { return enabled; },
+    isEnabled: function() {
+      return enabled;
+    },
     modify: function() {
       if (writeBot(1)) return JSON.stringify({ success: true, bot: 1 });
       return JSON.stringify({ success: false });
@@ -163,7 +206,8 @@ modules.isbot = (function() {
       return JSON.stringify({
         player: localPlayer ? localPlayer.toString() : null,
         cd: clientData ? clientData.toString() : null,
-        bot: clientData ? clientData.add(OFF_ISBOT).readU8() : null
+        bot: clientData ? clientData.add(OFF_ISBOT).readU8() : null,
+        roomCaptureCount: roomCaptureCount
       });
     }
   };

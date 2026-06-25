@@ -82,6 +82,7 @@ modules.nano4t = (function() {
         NANO4T_MODE_DESTROYED = true;
         NANO4T_READY = false;
         NANO4T_ACTIVE = false;  // 重置激活状态
+        sendDevLog('info', 'Nano4T', '多人生化模式实例已销毁', 'Nano4T OnDestroy triggered');
         send(JSON.stringify({ type: 'nano4t_destroyed' }));
       }
     }));
@@ -89,21 +90,26 @@ modules.nano4t = (function() {
 
   function performInit() {
     try {
+      sendDevLog('info', 'Nano4T', '开始初始化多人生化特性系统', 'Nano4T performInit start');
       clearHooks();
       NANO4T_READY = false;
       NANO4T_MODE_DESTROYED = false;
       NANO4T_ATTR_PTR = {};
       var n4 = getNanoInstance();
       if (!n4) {
+        sendDevLog('warn', 'Nano4T', '未进入多人生化模式', 'Nano4T getInstance returned null');
         send(JSON.stringify({ type: 'nano4t_error', msg: '未进入多人生化模式' }));
       } else if (!loadAttrs()) {
+        sendDevLog('warn', 'Nano4T', '未进入多人生化模式房间', 'Nano4T loadAttrs failed');
         send(JSON.stringify({ type: 'nano4t_error', msg: '未进入多人生化模式房间' }));
       } else {
         installHooks();
         NANO4T_READY = true;
+        sendDevLog('success', 'Nano4T', '多人生化特性系统已就绪', 'Nano4T ready, attrCount=' + Object.keys(NANO4T_ATTR_PTR).length);
         send(JSON.stringify({ type: 'nano4t_ready', ids: Object.keys(NANO4T_ATTR_PTR).sort() }));
       }
     } catch(e) {
+      sendDevLog('error', 'Nano4T', '初始化异常: ' + (e.message || e), 'Nano4T performInit exception');
       send(JSON.stringify({ type: 'nano4t_error', msg: '初始化异常: ' + (e.message || e) }));
     }
   }
@@ -212,21 +218,25 @@ modules.nano4t = (function() {
       _pendingRequests.init = true;
       if (!ensureMainThreadHook()) {
         _pendingRequests.init = false;
+        sendDevLog('error', 'Nano4T', '无法安装主线程调度 Hook', 'Nano4T ensureMainThreadHook failed during init');
         send(JSON.stringify({ type: 'nano4t_error', msg: '未检测到游戏进程' }));
         return JSON.stringify({ ok: false });
       }
+      sendDevLog('info', 'Nano4T', '初始化任务已排队', 'Nano4T init queued on ModeBase.Update');
       return JSON.stringify({ ok: true, queued: true });
     },
     set: function(g, h) {
       NANO4T_WANTED_GHOST = g;
       NANO4T_WANTED_HUMAN = h;
       NANO4T_ACTIVE = true;  // 设置时激活
+      sendDevLog('info', 'Nano4T', '已设置目标特性 g=' + g + ', h=' + h, 'Nano4T wanted traits updated');
       send(JSON.stringify({ type: 'nano4t_set', g: g, h: h }));
     },
     getCurrent: function() {
       _pendingRequests.current = true;
       if (!ensureMainThreadHook()) {
         _pendingRequests.current = false;
+        sendDevLog('warn', 'Nano4T', '读取当前特性失败：无法安装主线程调度 Hook', 'Nano4T getCurrent ensureMainThreadHook failed');
         return JSON.stringify({ ok: false });
       }
       return JSON.stringify({ ok: true, queued: true });
@@ -235,6 +245,7 @@ modules.nano4t = (function() {
       _pendingRequests.health = true;
       if (!ensureMainThreadHook()) {
         _pendingRequests.health = false;
+        sendDevLog('warn', 'Nano4T', '健康检查失败：无法安装主线程调度 Hook', 'Nano4T healthCheck ensureMainThreadHook failed');
         return JSON.stringify({ ok: false });
       }
       return JSON.stringify({ ok: true, queued: true });

@@ -96,7 +96,10 @@ modules.gather = (function() {
     tn++;
     sendLog('info', '聚怪', ''); sendLog('info', '聚怪', '传送 #' + tn);
     getGM(); getMM();
-    if (!gm || !mm) { sendLog('error', '聚怪', 'GM/MM 未就绪'); return; }
+    if (!gm || !mm) {
+      sendBothLog('warn', '聚怪', '聚怪暂未捕获房间信息，请进入房间后再试', 'GatherEnemies GM/MM not ready');
+      return;
+    }
     sendLog('info', '聚怪', '出生点: (' + spawn.x.toFixed(1) + ',' + spawn.y.toFixed(1) + ',' + spawn.z.toFixed(1) + ')');
     posBuf.writeFloat(spawn.x); posBuf.add(4).writeFloat(spawn.y); posBuf.add(8).writeFloat(spawn.z);
 
@@ -142,7 +145,10 @@ modules.gather = (function() {
     enable: function() {
       if (enabled) return;
       var mod = getGameAssembly();
-      if (!mod) { sendLog('error', '聚怪', '无 GameAssembly.dll'); return; }
+      if (!mod) {
+        sendBothLog('error', '聚怪', '聚怪暂未就绪，请重新连接游戏后重试', 'GatherEnemies GameAssembly.dll not found');
+        return;
+      }
       var base = mod.base;
       isMy = new NativeFunction(base.add(R.P_isMy), 'bool', ['pointer','pointer']);
       isDead = new NativeFunction(base.add(R.E_isDead), 'bool', ['pointer','pointer']);

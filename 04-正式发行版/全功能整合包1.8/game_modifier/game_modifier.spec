@@ -41,6 +41,33 @@ if os.path.exists(ui_dir):
                 rel_path = os.path.relpath(root, current_dir)
                 datas.append((file_path, rel_path))
 
+# 5. 生成 exe 图标（使用统一的图标处理工具）
+app_icon_png = os.path.join(resource_dir, "App Icon.png")
+app_icon_ico = os.path.join(current_dir, "app_icon.ico")
+
+# 导入图标处理工具
+import sys
+sys.path.insert(0, current_dir)
+from core.icon_utils import generate_app_icon_ico
+
+# 生成应用图标 ICO
+# 不再盲目生成种子点，改为使用配置
+# 如果源 PNG 已有有效 Alpha，默认保留原始透明，不进行 flood fill
+# 每次构建强制重新生成 ICO，但不强制重新处理背景
+if os.path.exists(app_icon_png):
+    app_icon_ico = generate_app_icon_ico(
+        app_icon_png,
+        app_icon_ico,
+        force_ico_regenerate=True,  # 每次构建强制重新生成 ICO
+        force_background_removal=False  # 不强制重新处理背景
+    )
+    
+    # 如果图标生成或验证失败，抛出 RuntimeError 中止构建
+    if app_icon_ico is None:
+        raise RuntimeError(f"[ICON] App Icon ICO 生成失败，中止构建")
+else:
+    raise RuntimeError(f"[ICON] App Icon PNG 不存在: {app_icon_png}，中止构建")
+
 a = Analysis(
     ['main.py'],
     pathex=[current_dir],
@@ -121,6 +148,6 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=None,  # 如果有图标文件，可以在这里指定路径
+    icon=app_icon_ico if (isinstance(app_icon_ico, str) and os.path.exists(app_icon_ico)) else None,  # App Icon 作为 exe 图标
     uac_admin=True,
 )

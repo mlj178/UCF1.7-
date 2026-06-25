@@ -18,7 +18,7 @@ modules.range = (function() {
     enable: function() {
       if (enabled) return;
       var mod = getGameAssembly();
-      if (!mod) { sendLog('error', '剑气化丝', '无 GameAssembly.dll'); return; }
+      if (!mod) { sendBothLog('error', '剑气化丝', '剑气化丝暂未就绪，请重新连接游戏后重试', 'KnifeRange GameAssembly.dll not found'); return; }
 
       var base = mod.base;
       isMyPlayerFn = new NativeFunction(base.add(0xB55FD0), 'bool', ['pointer']);
@@ -46,7 +46,7 @@ modules.range = (function() {
         });
         sendLog('info', '剑气化丝', 'get_KnifeSpeed attach @ ' + getKnifeSpeedAddr + ' (兼容模式)');
       } catch(e) {
-        sendLog('warn', '剑气化丝', 'get_KnifeSpeed hook失败: ' + e.message);
+        sendDevLog('warn', '剑气化丝', 'get_KnifeSpeed hook失败: ' + e.message, 'KnifeRange compatible player capture hook failed');
       }
 
       try {
@@ -73,13 +73,13 @@ modules.range = (function() {
                 sendLog('info', '剑气化丝', '攻击距离 ' + orig.toFixed(2) + ' → ' + after.toFixed(2) + ' (' + KNIFE_RANGE_MULTIPLIER + 'x)');
               }
             } catch(e) {
-              if (callCount <= 5) sendLog('error', '剑气化丝', '异常: ' + e.message);
+              if (callCount <= 5) sendDevLog('error', '剑气化丝', '攻击距离 Hook 回调异常: ' + e.message, 'KnifeRange callback exception');
             }
           }
         });
         hookHandles.push(h);
         sendLog('info', '剑气化丝', 'Hook GetKnifeAttackData @ ' + getKnifeAttackDataAddr);
-      } catch(e) { sendLog('error', '剑气化丝', 'Hook 失败: ' + e.message); }
+      } catch(e) { sendBothLog('error', '剑气化丝', '剑气化丝启用失败，请稍后重试', 'KnifeRange GetKnifeAttackData hook failed: ' + e.message); }
 
       var cleanupAddrs = [0xAFAA40, 0xAF5B30, 0xAF15D0];
       for (var i = 0; i < cleanupAddrs.length; i++) {

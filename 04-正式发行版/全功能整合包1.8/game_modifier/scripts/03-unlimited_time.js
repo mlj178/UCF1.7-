@@ -32,7 +32,10 @@ modules.time = (function() {
     enable: function() {
       if (enabled) return;
       var mod = getGameAssembly();
-      if (!mod) { sendLog('error', '无限时间', '无 GameAssembly.dll'); return; }
+      if (!mod) {
+        sendBothLog('error', '无限时间', '无限时间暂未就绪，请重新连接游戏后重试', 'UnlimitedTime GameAssembly.dll not found');
+        return;
+      }
 
       var base = mod.base;
 

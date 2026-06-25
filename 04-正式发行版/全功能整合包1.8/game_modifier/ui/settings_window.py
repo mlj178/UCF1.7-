@@ -5,6 +5,7 @@ import webbrowser
 from core.config import FEATURES_INFO, DATA_DIR, RESOURCE_DIR, HOTKEY_POSITIONS, HOTKEY_DISPLAY_NAMES, HOTKEY_EXCLUDED
 from core.hotkey_manager import HotkeyManager
 from core.sound_manager import SoundManager
+from core.weapon_catalog import get_weapon_name
 
 
 class SettingsWindow(ctk.CTkToplevel):
@@ -148,12 +149,7 @@ class SettingsWindow(ctk.CTkToplevel):
             weapon_label.pack(side="left", padx=8)
     
     def _get_weapon_name_by_id(self, weapon_id):
-        """根据武器ID查找武器名称"""
-        # 从父窗口获取WEAPON_LIST
-        if hasattr(self._parent, '_get_weapon_name_by_id'):
-            return self._parent._get_weapon_name_by_id(weapon_id)
-        return f"武器{weapon_id}"
-
+        return get_weapon_name(weapon_id)
     def _setup_about_tab(self):
         tab = self._tabview.add("关于")
         about_frame = ctk.CTkScrollableFrame(tab, corner_radius=0)
@@ -176,6 +172,13 @@ class SettingsWindow(ctk.CTkToplevel):
                                    width=100, command=self._open_bilibili)
         bili_btn.pack(side="left")
 
+        # 历代版本更新说明链接
+        version_frame = ctk.CTkFrame(about_frame, fg_color="transparent")
+        version_frame.pack(pady=(8, 4))
+        version_btn = ctk.CTkButton(version_frame, text="🔗 历代版本更新说明", font=("Microsoft YaHei", 11),
+                                     width=160, command=self._open_version_history)
+        version_btn.pack(side="left")
+
         ctk.CTkLabel(about_frame, text="\n微信赞赏码:",
                      font=("Microsoft YaHei", 12)).pack(pady=4)
         donate_image_path = os.path.join(RESOURCE_DIR, "微信赞赏码.png")
@@ -197,6 +200,9 @@ class SettingsWindow(ctk.CTkToplevel):
 
     def _open_bilibili(self):
         webbrowser.open("https://space.bilibili.com/481324794")
+
+    def _open_version_history(self):
+        webbrowser.open("https://mlj178.github.io/UCF1.7.1--/")
 
     def _on_save(self):
         self._hotkey.save_and_apply(

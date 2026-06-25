@@ -69,7 +69,10 @@ modules.gravity = (function() {
     enable: function() {
       if (enabled) return;
       var mod = getGameAssembly();
-      if (!mod) { sendLog('error', '轻重力', '无 GameAssembly.dll'); return; }
+      if (!mod) {
+        sendBothLog('error', '轻重力', '轻重力暂未就绪，请重新连接游戏后重试', 'Gravity GameAssembly.dll not found');
+        return;
+      }
       var base = mod.base;
       isMyPlayer = new NativeFunction(base.add(0xB55FD0), 'bool', ['pointer']);
       singletonGetter = new NativeFunction(base.add(0x4A8170), 'pointer', ['pointer']);

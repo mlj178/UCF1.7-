@@ -354,7 +354,9 @@ setTimeout(function() { getGameAssembly(); }, 100);
             self._script.post(msg)
         except Exception as e:
             self._event_bus.emit('log_message', level='error', module='系统',
-                                 message=f'发送指令失败: {e}')
+                                 message='发送指令失败，请重新连接游戏后重试',
+                                 audience='both',
+                                 dev_detail=f'Frida send_toggle failed: {e}')
 
     def call_export(self, name, *args):
         if not self._script:
@@ -387,21 +389,17 @@ setTimeout(function() { getGameAssembly(); }, 100);
             self._event_bus.emit('log_message',
                                  level=payload.get('level', 'info'),
                                  module=payload.get('module', ''),
-                                 message=payload.get('message', ''))
+                                 message=payload.get('message', ''),
+                                 audience=payload.get('audience', 'dev'),
+                                 dev_detail=payload.get('dev_detail', ''))
 
         elif msg_type == 'log_file':
-            # 写入日志文件
-            log_manager = LogManager.get_instance()
-            log_manager.write_log(
-                module=payload.get('module', 'Unknown'),
-                level=payload.get('level', 'info'),
-                message=payload.get('message', '')
-            )
-            # 同时发送到事件总线（控制台显示）
             self._event_bus.emit('log_message',
                                  level=payload.get('level', 'info'),
                                  module=payload.get('module', ''),
-                                 message=payload.get('message', ''))
+                                 message=payload.get('message', ''),
+                                 audience=payload.get('audience', 'dev'),
+                                 dev_detail=payload.get('dev_detail', ''))
 
         elif msg_type == 'status':
             self._event_bus.emit('feature_status_changed',
@@ -422,20 +420,28 @@ setTimeout(function() { getGameAssembly(); }, 100);
             success = payload.get('success', False)
             if success:
                 self._event_bus.emit('log_message', level='success', module='武器赋予',
-                                     message=f'赋予武器任务 #{task_id} 执行成功')
+                                     message='武器赋予执行成功',
+                                     audience='both',
+                                     dev_detail=f'WeaponGiver task #{task_id} succeeded')
             else:
                 self._event_bus.emit('log_message', level='error', module='武器赋予',
-                                     message=f'赋予武器任务 #{task_id} 执行失败')
+                                     message='武器赋予执行失败，请稍后重试',
+                                     audience='both',
+                                     dev_detail=f'WeaponGiver task #{task_id} failed')
 
         elif msg_type == 'playerRespawned':
             self._event_bus.emit('log_message', level='info', module='武器赋予',
-                                 message='检测到玩家复活')
+                                 message='检测到玩家复活',
+                                 audience='dev',
+                                 dev_detail='WeaponGiver detected local player respawn')
 
         elif msg_type == 'playerRespawnedWithWeapon':
             weapon_id = payload.get('weaponId', '')
             weapon_name = payload.get('weaponName', '')
             self._event_bus.emit('log_message', level='success', module='武器赋予',
-                                 message=f'复活自动装备武器: {weapon_name} (ID: {weapon_id})')
+                                 message=f'复活后已自动装备: {weapon_name}',
+                                 audience='both',
+                                 dev_detail=f'WeaponGiver respawn equipped weaponId={weapon_id}, weaponName={weapon_name}')
 
         elif msg_type.startswith('nano4t_'):
             self._event_bus.emit('nano4t_event',
@@ -445,6 +451,11 @@ setTimeout(function() { getGameAssembly(); }, 100);
         elif msg_type.startswith('battle_round_'):
             self._event_bus.emit('battle_round_event',
                                  msg_type=msg_type,
+                                 payload=payload)
+
+        elif msg_type == 'isbot_state':
+            self._event_bus.emit('isbot_event',
+                                 state=payload.get('state', 'off'),
                                  payload=payload)
 
     def restore_features(self, features_state):

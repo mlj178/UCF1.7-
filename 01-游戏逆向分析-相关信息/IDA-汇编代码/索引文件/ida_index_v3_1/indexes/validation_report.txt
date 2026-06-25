@@ -1,0 +1,89 @@
+================================================================================
+IDA Index V3.1 Validation Report
+(Stats re-read from final files)
+================================================================================
+
+Chunk Validation:
+  Expected: 42
+  Scanned: 42
+
+Function Statistics:
+  Total Functions: 49852
+  IL2CPP Named: 37438
+  Native Sub: 12414
+  Classes: 6124
+
+Data Statistics:
+  Data Symbols: 87768
+  XREFs: 595257
+
+dump.cs Statistics:
+  Classes: 5563
+  Methods: 33278 (class method_count sum: 33278, consistent: True)
+  Fields: 17609 (class field_count sum: 17609, consistent: True)
+
+Mapping Statistics:
+  unique_exact_va_matches: 26418
+  ambiguous_exact_va_matches: 172
+  unique_exact_rva_matches: 0
+  ambiguous_exact_rva_matches: 0
+  exact_name_matches: 1
+  candidate_only_matches: 4006
+  unmatched_ida: 6841
+  unmatched_dump: 6860
+  records_with_ambiguity_candidates: 5220
+
+Error Statistics:
+  cross_chunk_functions: 21
+  unmatched_endp: 0
+  duplicate_addresses: 0
+  parser_errors: 0
+  JSONL invalid lines: 0
+
+Address Ranges:
+  Min: 0x100011A0
+  Max: 0x10B809A0
+
+Chunk Distribution (all 42 chunks):
+  GameAssembly_part1.chunk000: Functions=4208, DataSymbols=80, XREFs=6651
+  GameAssembly_part1.chunk001: Functions=4505, DataSymbols=56, XREFs=14990
+  GameAssembly_part1.chunk002: Functions=1497, DataSymbols=121, XREFs=10061
+  GameAssembly_part1.chunk003: Functions=2731, DataSymbols=277, XREFs=14703
+  GameAssembly_part1.chunk004: Functions=1649, DataSymbols=109, XREFs=16319
+  GameAssembly_part1.chunk005: Functions=1889, DataSymbols=80, XREFs=18314
+  GameAssembly_part1.chunk006: Functions=2398, DataSymbols=110, XREFs=15890
+  GameAssembly_part1.chunk007: Functions=1477, DataSymbols=81, XREFs=16132
+  GameAssembly_part1.chunk008: Functions=1943, DataSymbols=46, XREFs=17054
+  GameAssembly_part1.chunk009: Functions=1, DataSymbols=0, XREFs=0
+  GameAssembly_part2.chunk000: Functions=1924, DataSymbols=119, XREFs=15334
+  GameAssembly_part2.chunk001: Functions=1991, DataSymbols=184, XREFs=14595
+  GameAssembly_part2.chunk002: Functions=1603, DataSymbols=80, XREFs=15199
+  GameAssembly_part2.chunk003: Functions=1674, DataSymbols=107, XREFs=14213
+  GameAssembly_part2.chunk004: Functions=1356, DataSymbols=37, XREFs=17100
+  GameAssembly_part2.chunk005: Functions=1660, DataSymbols=52, XREFs=16235
+  GameAssembly_part2.chunk006: Functions=1585, DataSymbols=122, XREFs=16215
+  GameAssembly_part2.chunk007: Functions=1691, DataSymbols=164, XREFs=14607
+  GameAssembly_part2.chunk008: Functions=1519, DataSymbols=131, XREFs=14946
+  GameAssembly_part2.chunk009: Functions=0, DataSymbols=0, XREFs=3
+  GameAssembly_part3.chunk000: Functions=1487, DataSymbols=88, XREFs=16488
+  GameAssembly_part3.chunk001: Functions=1374, DataSymbols=37, XREFs=15172
+  GameAssembly_part3.chunk002: Functions=1540, DataSymbols=68, XREFs=15593
+  GameAssembly_part3.chunk003: Functions=899, DataSymbols=19, XREFs=20355
+  GameAssembly_part3.chunk004: Functions=1488, DataSymbols=81, XREFs=13036
+  GameAssembly_part3.chunk005: Functions=2037, DataSymbols=138, XREFs=14138
+  GameAssembly_part3.chunk006: Functions=2213, DataSymbols=133, XREFs=15320
+  GameAssembly_part3.chunk007: Functions=1513, DataSymbols=3361, XREFs=9156
+  GameAssembly_part3.chunk008: Functions=0, DataSymbols=4051, XREFs=0
+  GameAssembly_part3.chunk009: Functions=0, DataSymbols=0, XREFs=0
+  GameAssembly_part4.chunk000: Functions=0, DataSymbols=187, XREFs=0
+  GameAssembly_part4.chunk001: Functions=0, DataSymbols=5461, XREFs=0
+  GameAssembly_part4.chunk002: Functions=0, DataSymbols=0, XREFs=0
+  GameAssembly_part4.chunk003: Functions=0, DataSymbols=6, XREFs=0
+  GameAssembly_part4.chunk004: Functions=0, DataSymbols=0, XREFs=0
+  GameAssembly_part4.chunk005: Functions=0, DataSymbols=8847, XREFs=0
+  GameAssembly_part4.chunk006: Functions=0, DataSymbols=20551, XREFs=0
+  GameAssembly_part4.chunk007: Functions=0, DataSymbols=22310, XREFs=0
+  GameAssembly_part4.chunk008: Functions=0, DataSymbols=20452, XREFs=0
+  GameAssembly_part4.chunk009: Functions=0, DataSymbols=0, XREFs=0
+  GameAssembly_part5.chunk000: Functions=0, DataSymbols=6, XREFs=0
+  GameAssembly_part5.chunk001: Functions=0, DataSymbols=16, XREFs=0

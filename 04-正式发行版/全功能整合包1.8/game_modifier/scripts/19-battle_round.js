@@ -276,9 +276,9 @@ modules.battle_round_always = (function() {
 
                 _enabled = true;
                 sendLogFile('info', 'BattleRound', '[ENABLE] _enabled 已设为 true');
-                sendLogFile('success', 'BattleRound', '[ENABLE] 已预约，仅在多人生化新回合写入');
+                sendDevLog('success', 'BattleRound', '[ENABLE] 已预约，仅在多人生化新回合写入', 'BattleRound enabled and waiting for next Nano4T round');
             } catch(e) {
-                sendLogFile('error', 'BattleRound', '[ENABLE] 启用失败: ' + e.message);
+                sendBothLog('error', 'BattleRound', '决战回合启用失败，请重新连接游戏后重试', 'BattleRound enable failed: ' + e.message);
             }
         },
 
@@ -287,9 +287,9 @@ modules.battle_round_always = (function() {
                 sendLogFile('info', 'BattleRound', '[DISABLE] 开始禁用');
 
                 _enabled = false;
-                sendLogFile('info', 'BattleRound', '[DISABLE] 已停止后续回合写入');
+                sendDevLog('info', 'BattleRound', '[DISABLE] 已停止后续回合写入', 'BattleRound disabled');
             } catch(e) {
-                sendLogFile('error', 'BattleRound', '[DISABLE] 禁用失败: ' + e.message);
+                sendBothLog('error', 'BattleRound', '决战回合关闭失败，请稍后重试', 'BattleRound disable failed: ' + e.message);
             }
         },
 

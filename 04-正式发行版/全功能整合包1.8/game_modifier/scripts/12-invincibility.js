@@ -226,8 +226,14 @@ modules.godmode = (function() {
         return;
       }
       var mod = getGameAssembly();
-      if (!mod) { sendLog('error', 'HP', '未找到 GameAssembly.dll'); return; }
-      if (!initNativeFunctions()) { sendLog('error', 'HP', 'NativeFunction 初始化失败'); return; }
+      if (!mod) {
+        sendBothLog('error', 'HP', '无敌暂未就绪，请重新连接游戏后重试', 'Invincibility GameAssembly.dll not found');
+        return;
+      }
+      if (!initNativeFunctions()) {
+        sendBothLog('error', 'HP', '无敌初始化失败，请稍后重试', 'Invincibility NativeFunction init failed');
+        return;
+      }
       installHooks(mod.base);
       cachedMyPlayer = findMyPlayer();
       if (cachedMyPlayer) {
