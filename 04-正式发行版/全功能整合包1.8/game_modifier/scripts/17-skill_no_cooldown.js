@@ -118,7 +118,7 @@ modules.skillcd = (function() {
     clearPlayerState(null);
     detachHooks();
     endColdFn = null;
-    sendLog('error', '技能CD', '启用失败，已回滚全部 Hook: ' + message);
+    sendBothLog('error', '技能CD', '技能无冷却启用失败，请稍后重试', 'SkillCD enable failed and rolled back: ' + message);
     sendStatus('skillcd', false);
   }
 
@@ -128,7 +128,7 @@ modules.skillcd = (function() {
 
       var mod = getGameAssembly();
       if (!mod) {
-        sendLog('error', '技能CD', '未找到 GameAssembly.dll');
+        sendBothLog('error', '技能CD', '技能无冷却暂未就绪，请重新连接游戏后重试', 'SkillCD GameAssembly.dll not found');
         return;
       }
 

@@ -70,41 +70,41 @@ modules.speedgun = (function() {
 
   // 只处理 GiveWeapon 明确返回的新武器；数据对象就绪后写入一次，不扫描武器列表。
   function applyAcquiredWeaponSpeed(weapon, weaponId) {
-    if (!enabled || !weapon || weapon.isNull()) { sendLog('warn', '射速', 'applyAcquired: 前置检查失败 enabled=' + enabled); return false; }
-    if (!isMyWeaponFn || !getCharAnim || !setAnimSpeed) { sendLog('warn', '射速', 'applyAcquired: NativeFunction未初始化'); return false; }
+    if (!enabled || !weapon || weapon.isNull()) { sendDevLog('warn', '射速', 'applyAcquired: 前置检查失败 enabled=' + enabled, 'SpeedGun applyAcquired precheck failed'); return false; }
+    if (!isMyWeaponFn || !getCharAnim || !setAnimSpeed) { sendDevLog('warn', '射速', 'applyAcquired: NativeFunction未初始化', 'SpeedGun NativeFunction not initialized'); return false; }
 
     try {
       weapon.readU8();
-      if (!isMyWeaponFn(weapon, ptr(0))) { sendLog('warn', '射速', 'applyAcquired: isMyWeapon=false weaponId=' + weaponId); return false; }
+      if (!isMyWeaponFn(weapon, ptr(0))) { sendDevLog('warn', '射速', 'applyAcquired: isMyWeapon=false weaponId=' + weaponId, 'SpeedGun skipped non-local weapon'); return false; }
 
       var data = safeReadPointer(weapon, 0x68);
-      if (!data) { sendLog('warn', '射速', 'applyAcquired: data=null weaponId=' + weaponId); return false; }
+      if (!data) { sendDevLog('warn', '射速', 'applyAcquired: data=null weaponId=' + weaponId, 'SpeedGun weapon data pointer is null'); return false; }
 
       var gunApplied = applyGunDataSpeed(weapon, false);
       var rpgApplied = applyRpgDataSpeed(weapon);
       var applied = gunApplied || rpgApplied;
 
-      if (!applied) { sendLog('warn', '射速', 'applyAcquired: 数据写入失败 gun=' + gunApplied + ' rpg=' + rpgApplied + ' weaponId=' + weaponId); return false; }
+      if (!applied) { sendDevLog('warn', '射速', 'applyAcquired: 数据写入失败 gun=' + gunApplied + ' rpg=' + rpgApplied + ' weaponId=' + weaponId, 'SpeedGun weapon data write failed'); return false; }
 
       var anim = getCharAnim(weapon, ptr(0));
       var animValid = anim && !anim.isNull();
       if (animValid) {
         setAnimSpeed(anim, 10.0, ptr(0));
       }
-      sendLog('info', '射速', 'applyAcquired: 数据写入成功 gun=' + gunApplied + ' rpg=' + rpgApplied + ' anim=' + animValid + ' weaponId=' + weaponId);
+      sendDevLog('info', '射速', 'applyAcquired: 数据写入成功 gun=' + gunApplied + ' rpg=' + rpgApplied + ' anim=' + animValid + ' weaponId=' + weaponId);
 
       // 按实际武器结构选择动画倍率函数，避免特殊武器ID与运行时类型映射不一致。
       if (rpgApplied && rpgAnimSpeedFn) {
         rpgAnimSpeedFn(weapon, ptr(0));
-        sendLog('info', '射速', 'applyAcquired: 已调用rpgAnimSpeedFn weaponId=' + weaponId);
+        sendDevLog('info', '射速', 'applyAcquired: 已调用rpgAnimSpeedFn weaponId=' + weaponId);
       } else if (gunApplied && grenadeAnimSpeedFn &&
                  getObjectClassName(data) === 'WD_GrenadeGun') {
         grenadeAnimSpeedFn(weapon, ptr(0));
-        sendLog('info', '射速', 'applyAcquired: 已调用grenadeAnimSpeedFn weaponId=' + weaponId);
+        sendDevLog('info', '射速', 'applyAcquired: 已调用grenadeAnimSpeedFn weaponId=' + weaponId);
       }
       return true;
     } catch(e) {
-      sendLog('error', '射速', 'applyAcquired: 异常 weaponId=' + weaponId + ' ' + e.message);
+      sendDevLog('error', '射速', 'applyAcquired: 异常 weaponId=' + weaponId + ' ' + e.message, 'SpeedGun applyAcquired exception');
       return false;
     }
   }
@@ -123,7 +123,7 @@ modules.speedgun = (function() {
       delayFrames: 1,
       framesLeft: acquiredWeaponRetryFrames
     }];
-    sendLog('info', '射速', 'notifyWeaponAcquired: weaponId=' + weaponId + ' delayFrames=1 retryFrames=' + acquiredWeaponRetryFrames);
+    sendDevLog('info', '射速', 'notifyWeaponAcquired: weaponId=' + weaponId + ' delayFrames=1 retryFrames=' + acquiredWeaponRetryFrames);
   }
 
   function processPendingWeaponSpeed() {
@@ -133,7 +133,7 @@ modules.speedgun = (function() {
     for (var i = 0; i < pendingAcquiredWeapons.length; i++) {
       var task = pendingAcquiredWeapons[i];
       if (!task || !task.weapon || task.weapon.isNull()) {
-        sendLog('warn', '射速', 'processPending: 任务武器指针无效，已跳过');
+        sendDevLog('warn', '射速', 'processPending: 任务武器指针无效，已跳过');
         continue;
       }
 
@@ -144,7 +144,7 @@ modules.speedgun = (function() {
       }
 
       if (applyAcquiredWeaponSpeed(task.weapon, task.weaponId)) {
-        sendLog('info', '射速', 'processPending: 成功应用 weaponId=' + task.weaponId);
+        sendDevLog('info', '射速', 'processPending: 成功应用 weaponId=' + task.weaponId);
         continue;
       }
 
@@ -158,7 +158,7 @@ modules.speedgun = (function() {
     enable: function() {
       if (enabled) return;
       var mod = getGameAssembly();
-      if (!mod) { sendLog('error', '射速', '未找到 GameAssembly.dll'); return; }
+      if (!mod) { sendBothLog('error', '射速', '射速连狙暂未就绪，请重新连接游戏后重试', 'SpeedGun GameAssembly.dll not found'); return; }
       var base = mod.base;
 
       try {
@@ -168,7 +168,7 @@ modules.speedgun = (function() {
         rpgAnimSpeedFn = new NativeFunction(base.add(0xB66CA0), "void", ["pointer", "pointer"]);
         grenadeAnimSpeedFn = new NativeFunction(base.add(0xB5F7A0), "void", ["pointer", "pointer"]);
       } catch(e) {
-        sendLog('error', '射速', 'NativeFunction 初始化失败: ' + e.message);
+        sendBothLog('error', '射速', '射速连狙初始化失败，请稍后重试', 'SpeedGun NativeFunction init failed: ' + e.message);
         return;
       }
 
@@ -207,7 +207,7 @@ modules.speedgun = (function() {
             } catch(e) {}
           }
         }));
-      } catch(e) { sendLog('warn', '射速', 'WPN_Gun.AnimSpeedSetting Hook失败: ' + e.message); }
+      } catch(e) { sendDevLog('warn', '射速', 'WPN_Gun.AnimSpeedSetting Hook失败: ' + e.message); }
 
       // 1.5) WPN_RPG.AnimSpeedSetting — RPG/AT4 动画加速（改进：onEnter立即设置）
       try {
@@ -235,7 +235,7 @@ modules.speedgun = (function() {
             } catch(e) {}
           }
         }));
-      } catch(e) { sendLog('warn', '射速', 'WPN_RPG.AnimSpeedSetting Hook失败: ' + e.message); }
+      } catch(e) { sendDevLog('warn', '射速', 'WPN_RPG.AnimSpeedSetting Hook失败: ' + e.message); }
 
       // 1.6) WPN_GrenadeGun.AnimSpeedSetting — 榴弹枪动画加速
       try {
@@ -263,7 +263,7 @@ modules.speedgun = (function() {
             } catch(e) {}
           }
         }));
-      } catch(e) { sendLog('warn', '射速', 'WPN_GrenadeGun.AnimSpeedSetting Hook失败: ' + e.message); }
+      } catch(e) { sendDevLog('warn', '射速', 'WPN_GrenadeGun.AnimSpeedSetting Hook失败: ' + e.message); }
 
       // 1.7) 在原游戏 Deploy 调用 AnimSpeedSetting/AnimatorInit 前写入特殊武器倍率。
       // 不保存武器指针，不在 onLeave 访问对象，避免旧版长生命周期任务的失效指针风险。
@@ -281,13 +281,13 @@ modules.speedgun = (function() {
             if (!this.self) return;
             try {
               if (isMyWeaponFn(this.self, ptr(0))) {
-                sendLog('info', '射速', 'WPN_RPG.Deploy onLeave → notifyWeaponAcquired(3494)');
+                sendDevLog('info', '射速', 'WPN_RPG.Deploy onLeave → notifyWeaponAcquired(3494)');
                 notifyWeaponAcquired(this.self, 3494);
               }
             } catch(e) {}
           }
         }));
-      } catch(e) { sendLog('warn', '射速', 'WPN_RPG.Deploy Hook失败: ' + e.message); }
+      } catch(e) { sendDevLog('warn', '射速', 'WPN_RPG.Deploy Hook失败: ' + e.message); }
 
       try {
         hooks.push(Interceptor.attach(base.add(0xB61E60), {
@@ -303,13 +303,13 @@ modules.speedgun = (function() {
             if (!this.self) return;
             try {
               if (isMyWeaponFn(this.self, ptr(0))) {
-                sendLog('info', '射速', 'WPN_GrenadeGun.Deploy onLeave → notifyWeaponAcquired(2978)');
+                sendDevLog('info', '射速', 'WPN_GrenadeGun.Deploy onLeave → notifyWeaponAcquired(2978)');
                 notifyWeaponAcquired(this.self, 2978);
               }
             } catch(e) {}
           }
         }));
-      } catch(e) { sendLog('warn', '射速', 'WPN_GrenadeGun.Deploy Hook失败: ' + e.message); }
+      } catch(e) { sendDevLog('warn', '射速', 'WPN_GrenadeGun.Deploy Hook失败: ' + e.message); }
 
       // 2) GunShoot — 清除射击间隔 + 半自动 => 全自动（改进：onEnter立即修改）
       try {
@@ -344,14 +344,14 @@ modules.speedgun = (function() {
             isPlayerShooting = false;
           }
         }));
-      } catch(e) { sendLog('warn', '射速', 'GunShoot Hook失败: ' + e.message); }
+      } catch(e) { sendDevLog('warn', '射速', 'GunShoot Hook失败: ' + e.message); }
 
       // 2.5) WPN_Gun.get_isSemiGun — 半自动→全自动
       try {
         hooks.push(Interceptor.attach(base.add(0xB63AD0), {
           onLeave: function(retVal) { retVal.replace(0); }
         }));
-      } catch(e) { sendLog('warn', '射速', 'get_isSemiGun Hook失败: ' + e.message); }
+      } catch(e) { sendDevLog('warn', '射速', 'get_isSemiGun Hook失败: ' + e.message); }
 
       // 2.6) WPN_Gun.CloseZoom — 狙击镜不关闭（新增：连狙功能）
       try {
@@ -365,7 +365,7 @@ modules.speedgun = (function() {
             } catch(e) {}
           }
         }));
-      } catch(e) { sendLog('warn', '射速', 'CloseZoom Hook失败: ' + e.message); }
+      } catch(e) { sendDevLog('warn', '射速', 'CloseZoom Hook失败: ' + e.message); }
 
       // 2.7) Player.TryPickUpWeapon — 捡武器时立即设置动画速度（新增：补给箱处理）
       try {
@@ -402,7 +402,7 @@ modules.speedgun = (function() {
             } catch(e) {}
           }
         }));
-      } catch(e) { sendLog('warn', '射速', 'TryPickUpWeapon Hook失败: ' + e.message); }
+      } catch(e) { sendDevLog('warn', '射速', 'TryPickUpWeapon Hook失败: ' + e.message); }
 
       // 3) WPN_Gun.OnGenerateFromOwner — 补给箱枪械创建时加速
       try {
@@ -420,7 +420,7 @@ modules.speedgun = (function() {
             } catch(e) {}
           }
         }));
-      } catch(e) { sendLog('warn', '射速', 'OnGenerateFromOwner Hook失败: ' + e.message); }
+      } catch(e) { sendDevLog('warn', '射速', 'OnGenerateFromOwner Hook失败: ' + e.message); }
 
       // 4) WPN_RPG.OnGenerateFromOwner — 补给箱RPG/AT4创建时加速
       try {
@@ -443,7 +443,7 @@ modules.speedgun = (function() {
             } catch(e) {}
           }
         }));
-      } catch(e) { sendLog('warn', '射速', 'RPG OnGenerateFromOwner Hook失败: ' + e.message); }
+      } catch(e) { sendDevLog('warn', '射速', 'RPG OnGenerateFromOwner Hook失败: ' + e.message); }
 
       // 5) WPN_RPG.OnFireBtnPressed — RPG/AT4 半自动绕过
       try {
@@ -463,7 +463,7 @@ modules.speedgun = (function() {
             } catch(e) {}
           }
         }));
-      } catch(e) { sendLog('warn', '射速', 'RPG OnFireBtnPressed Hook失败: ' + e.message); }
+      } catch(e) { sendDevLog('warn', '射速', 'RPG OnFireBtnPressed Hook失败: ' + e.message); }
 
       // 6) Recoil.OnGunShot — 清零后坐力
       try {
@@ -478,17 +478,17 @@ modules.speedgun = (function() {
             this.self.add(0xA8).writeS32(0);
           }
         }));
-      } catch(e) { sendLog('warn', '射速', 'Recoil.OnGunShot Hook失败: ' + e.message); }
+      } catch(e) { sendDevLog('warn', '射速', 'Recoil.OnGunShot Hook失败: ' + e.message); }
 
       // 7) Recoil.GetCurrentPerturb — 强制 0 扩散
       try {
         hooks.push(Interceptor.attach(base.add(0xB19420), {
           onLeave: function(retVal) { retVal.replace(0.0); }
         }));
-      } catch(e) { sendLog('warn', '射速', 'Recoil.GetCurrentPerturb Hook失败: ' + e.message); }
+      } catch(e) { sendDevLog('warn', '射速', 'Recoil.GetCurrentPerturb Hook失败: ' + e.message); }
 
       enabled = true;
-      sendLog('success', '射速', '射速变快已启用');
+      sendDevLog('success', '射速', '射速变快已启用');
       sendStatus('speedgun', true);
     },
     disable: function() {
@@ -502,7 +502,7 @@ modules.speedgun = (function() {
       grenadeAnimSpeedFn = null;
       classGetNameFn = null;
       enabled = false;
-      sendLog('info', '射速', '射速变快已禁用');
+      sendDevLog('info', '射速', '射速变快已禁用');
       sendStatus('speedgun', false);
     },
     // 由武器赋予模块的 ModeBase.Update 在主线程下一帧处理。

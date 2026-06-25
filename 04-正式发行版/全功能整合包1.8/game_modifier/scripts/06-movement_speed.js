@@ -21,7 +21,10 @@ modules.movespeed = (function() {
     enable: function() {
       if (enabled) return;
       var mod = getGameAssembly();
-      if (!mod) { sendLog('error', '滑板鞋', '无 GameAssembly.dll'); return; }
+      if (!mod) {
+        sendBothLog('error', '滑板鞋', '滑板鞋暂未就绪，请重新连接游戏后重试', 'MoveSpeed GameAssembly.dll not found');
+        return;
+      }
 
       var base = mod.base;
       hookAddr = base.add(0xB17590);

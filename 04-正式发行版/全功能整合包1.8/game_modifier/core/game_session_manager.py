@@ -18,6 +18,7 @@ import psutil
 from enum import Enum
 from typing import Optional, Dict, Any, Callable
 from .event_bus import EventBus
+from .services import AppPersistenceService
 
 
 class SessionState(Enum):
@@ -51,6 +52,7 @@ class GameSessionManager:
         self._worker_thread = None
         self._frida_manager = None
         self._universal_manager = None
+        self._persistence_service = AppPersistenceService()
         
         # Desired feature states (persisted)
         self._desired_states = {}
@@ -462,38 +464,14 @@ class GameSessionManager:
     
     def _save_desired_states(self):
         """Persist desired states to file"""
-        import json
-        import os
-        
         try:
-            from .config import DATA_DIR
-            path = os.path.join(DATA_DIR, 'desired_states.json')
-            with open(path, 'w', encoding='utf-8') as f:
-                json.dump(self._desired_states, f, indent=2)
+            self._persistence_service.save_desired_states(self._desired_states)
         except Exception:
             pass
     
     def _load_desired_states(self):
         """Load persisted desired states"""
-        import json
-        import os
-        
         try:
-            from .config import DATA_DIR
-            path = os.path.join(DATA_DIR, 'desired_states.json')
-            if os.path.exists(path):
-                with open(path, 'r', encoding='utf-8') as f:
-                    self._desired_states = json.load(f)
-                return
-
-            legacy_path = os.path.join(DATA_DIR, 'feature_state.json')
-            if os.path.exists(legacy_path):
-                with open(legacy_path, 'r', encoding='utf-8') as f:
-                    legacy = json.load(f)
-                esp_state = legacy.get('esp_box', {})
-                self._desired_states['esp_box'] = bool(
-                    esp_state.get('enabled', False)
-                )
-                self._save_desired_states()
+            self._desired_states = self._persistence_service.load_desired_states()
         except Exception:
             pass

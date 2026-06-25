@@ -360,8 +360,14 @@ modules.aim = (function() {
     enable: function() {
       if (enabled) return;
       var mod = getGameAssembly();
-      if (!mod) { sendLog('error', '自瞄', '无 GameAssembly.dll'); return; }
-      if (!initNativeFunctions()) { sendLog('error', '自瞄', 'NativeFunction 初始化失败'); return; }
+      if (!mod) {
+        sendBothLog('error', '自瞄', '自瞄暂未就绪，请重新连接游戏后重试', 'AutoAim GameAssembly.dll not found');
+        return;
+      }
+      if (!initNativeFunctions()) {
+        sendBothLog('error', '自瞄', '自瞄初始化失败，请稍后重试', 'AutoAim NativeFunction init failed');
+        return;
+      }
       installRoomHooks(mod.base);
       aimTimer = setInterval(aimLoop, 16);
       scanTimer = setInterval(targetScanner, 30);

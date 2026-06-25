@@ -21,7 +21,7 @@ modules.knife = (function() {
     enable: function() {
       if (enabled) return;
       var mod = getGameAssembly();
-      if (!mod) { sendLog('error', '快刀', '无 GameAssembly.dll'); return; }
+      if (!mod) { sendBothLog('error', '快刀', '快刀暂未就绪，请重新连接游戏后重试', 'Knife GameAssembly.dll not found'); return; }
 
       var base = mod.base;
       var isMyPlayerAddr = base.add(0xB55FD0);
@@ -52,7 +52,7 @@ modules.knife = (function() {
 
           return originalGetKnifeSpeed(self);
         } catch(e) {
-          sendLog('error', '快刀', 'Error: ' + e.message);
+          sendDevLog('error', '快刀', '快刀 Hook 回调异常: ' + e.message, 'KnifeSpeed callback error');
           return originalGetKnifeSpeed(self);
         }
       }, 'float', ['pointer']));

@@ -159,17 +159,17 @@ modules.timescale = (function() {
   function extractTimeScaleInfo(engineFuncAddr, depth) {
     depth = depth || 0;
     if (depth > 4) {
-      sendLog('error', '时间加速', '跳转桩层级过深，停止解析');
+      sendDevLog('error', '时间加速', '跳转桩层级过深，停止解析');
       return null;
     }
     try {
       if (!isExecutablePtr(engineFuncAddr)) {
-        sendLog('error', '时间加速', '引擎函数地址不可执行: ' + engineFuncAddr);
+        sendDevLog('error', '时间加速', '引擎函数地址不可执行: ' + engineFuncAddr);
         return null;
       }
       var bytes = engineFuncAddr.readByteArray(256);
       if (!bytes) {
-        sendLog('error', '时间加速', '无法读取引擎函数字节');
+        sendDevLog('error', '时间加速', '无法读取引擎函数字节');
         return null;
       }
 
@@ -180,12 +180,12 @@ modules.timescale = (function() {
       for (var i = 0; i < 64 && i < view.byteLength; i++) {
         hex += ('0' + view.getUint8(i).toString(16)).slice(-2) + ' ';
       }
-      sendLog('info', '时间加速', '引擎函数前64字节: ' + hex);
+      sendDevLog('info', '时间加速', '引擎函数前64字节: ' + hex);
 
       // 确认所在模块
       var funcModule = Process.findModuleByAddress(engineFuncAddr);
       if (funcModule) {
-        sendLog('info', '时间加速', '引擎函数所在模块: ' + funcModule.name + ' 基址: ' + funcModule.base);
+        sendDevLog('info', '时间加速', '引擎函数所在模块: ' + funcModule.name + ' 基址: ' + funcModule.base);
       }
 
       // 模式1: call helper; fld dword ptr [eax+disp32]; ret
@@ -197,8 +197,8 @@ modules.timescale = (function() {
         var helperAddr = engineFuncAddr.add(5 + rel32);
         var offset = view.getInt32(7, true);
         if (offset < 0 || offset > 0x4000 || !isExecutablePtr(helperAddr)) return null;
-        sendLog('info', '时间加速', '匹配 call+fld[eax+disp32] 模式');
-        sendLog('info', '时间加速', 'helper函数地址: ' + helperAddr + ', 偏移: 0x' + offset.toString(16));
+        sendDevLog('info', '时间加速', '匹配 call+fld[eax+disp32] 模式');
+        sendDevLog('info', '时间加速', 'helper函数地址: ' + helperAddr + ', 偏移: 0x' + offset.toString(16));
         return { helperAddr: helperAddr, offset: offset };
       }
 
@@ -212,8 +212,8 @@ modules.timescale = (function() {
         var helperAddr = engineFuncAddr.add(5 + rel32);
         var offset = view.getInt32(9, true);
         if (offset < 0 || offset > 0x4000 || !isExecutablePtr(helperAddr)) return null;
-        sendLog('info', '时间加速', '匹配 call+movss[eax+disp32] 模式');
-        sendLog('info', '时间加速', 'helper函数地址: ' + helperAddr + ', 偏移: 0x' + offset.toString(16));
+        sendDevLog('info', '时间加速', '匹配 call+movss[eax+disp32] 模式');
+        sendDevLog('info', '时间加速', 'helper函数地址: ' + helperAddr + ', 偏移: 0x' + offset.toString(16));
         return { helperAddr: helperAddr, offset: offset };
       }
 
@@ -221,7 +221,7 @@ modules.timescale = (function() {
       for (var i = 0; i < 200; i++) {
         if (view.getUint8(i) === 0xD9 && view.getUint8(i + 1) === 0x05) {
           var addr = view.getUint32(i + 2, true);
-          sendLog('info', '时间加速', '匹配 fld dword ptr [imm32] 偏移+' + i + ', 地址: 0x' + addr.toString(16));
+          sendDevLog('info', '时间加速', '匹配 fld dword ptr [imm32] 偏移+' + i + ', 地址: 0x' + addr.toString(16));
           return { globalAddr: ptr(addr) };
         }
       }
@@ -231,7 +231,7 @@ modules.timescale = (function() {
         if (view.getUint8(i) === 0xF3 && view.getUint8(i + 1) === 0x0F &&
             view.getUint8(i + 2) === 0x10 && view.getUint8(i + 3) === 0x05) {
           var addr = view.getUint32(i + 4, true);
-          sendLog('info', '时间加速', '匹配 movss xmm0, [imm32] 偏移+' + i + ', 地址: 0x' + addr.toString(16));
+          sendDevLog('info', '时间加速', '匹配 movss xmm0, [imm32] 偏移+' + i + ', 地址: 0x' + addr.toString(16));
           return { globalAddr: ptr(addr) };
         }
       }
@@ -240,7 +240,7 @@ modules.timescale = (function() {
       if (view.getUint8(0) === 0xE9) {
         var rel = view.getInt32(1, true);
         var jumpTarget = engineFuncAddr.add(5 + rel);
-        sendLog('info', '时间加速', '检测到E9跳转桩，目标: ' + jumpTarget);
+        sendDevLog('info', '时间加速', '检测到E9跳转桩，目标: ' + jumpTarget);
         return extractTimeScaleInfo(jumpTarget, depth + 1);
       }
 
@@ -248,7 +248,7 @@ modules.timescale = (function() {
       if (view.getUint8(0) === 0xFF && view.getUint8(1) === 0x25) {
         var ptrAddr = view.getUint32(2, true);
         var indirectTarget = ptr(ptrAddr).readPointer();
-        sendLog('info', '时间加速', '检测到间接跳转FF25，目标: ' + indirectTarget);
+        sendDevLog('info', '时间加速', '检测到间接跳转FF25，目标: ' + indirectTarget);
         if (indirectTarget && !indirectTarget.isNull()) {
           return extractTimeScaleInfo(indirectTarget, depth + 1);
         }
@@ -259,11 +259,11 @@ modules.timescale = (function() {
       for (var i = 0; i < 128 && i < view.byteLength; i++) {
         hexFull += ('0' + view.getUint8(i).toString(16)).slice(-2) + ' ';
       }
-      sendLog('error', '时间加速', '未匹配已知模式，引擎函数前128字节: ' + hexFull);
+      sendDevLog('error', '时间加速', '未匹配已知模式，引擎函数前128字节: ' + hexFull);
       return null;
 
     } catch(e) {
-      sendLog('error', '时间加速', '分析引擎函数字节失败: ' + e.message);
+      sendDevLog('error', '时间加速', '分析引擎函数字节失败: ' + e.message);
       return null;
     }
   }
@@ -281,10 +281,10 @@ modules.timescale = (function() {
       var resolveIcall = mod.findExportByName('il2cpp_resolve_icall');
       if (!resolveIcall) {
         _initError = '未找到 il2cpp_resolve_icall 导出';
-        sendLog('error', '时间加速', _initError);
+        sendDevLog('error', '时间加速', _initError);
         return false;
       }
-      sendLog('info', '时间加速', 'il2cpp_resolve_icall 地址: ' + resolveIcall);
+      sendDevLog('info', '时间加速', 'il2cpp_resolve_icall 地址: ' + resolveIcall);
 
       // 32位Windows: il2cpp_resolve_icall是mscdecl导出（实测验证）
       var resolveFunc = new NativeFunction(resolveIcall, 'pointer', ['pointer'], 'mscdecl');
@@ -295,16 +295,16 @@ modules.timescale = (function() {
 
       if (!engineFuncAddr || engineFuncAddr.isNull()) {
         _initError = 'il2cpp_resolve_icall 返回NULL，get_timeScale icall不存在';
-        sendLog('error', '时间加速', _initError);
+        sendDevLog('error', '时间加速', _initError);
         return false;
       }
 
-      sendLog('success', '时间加速', 'get_timeScale 引擎函数地址: ' + engineFuncAddr);
+      sendDevLog('success', '时间加速', 'get_timeScale 引擎函数地址: ' + engineFuncAddr);
 
       // 确认引擎函数所在模块
       var engineModule = Process.findModuleByAddress(engineFuncAddr);
       if (engineModule) {
-        sendLog('info', '时间加速', '引擎函数所在模块: ' + engineModule.name);
+        sendDevLog('info', '时间加速', '引擎函数所在模块: ' + engineModule.name);
       }
 
       // 不直接调用 get_timeScale() 验证。场景切换/房间切换瞬间调用游戏原生函数
@@ -315,7 +315,7 @@ modules.timescale = (function() {
       var info = extractTimeScaleInfo(engineFuncAddr);
       if (!info) {
         _initError = '无法从引擎函数机器码定位timeScale变量地址';
-        sendLog('error', '时间加速', _initError);
+        sendDevLog('error', '时间加速', _initError);
         return false;
       }
 
@@ -323,7 +323,7 @@ modules.timescale = (function() {
         // 全局变量模式：地址固定，不会失效
         _mode = 'global';
         _globalAddr = info.globalAddr;
-        sendLog('success', '时间加速', 'timeScale全局变量地址: ' + _globalAddr);
+        sendDevLog('success', '时间加速', 'timeScale全局变量地址: ' + _globalAddr);
       } else if (info.helperAddr && info.offset !== undefined) {
         // 结构体成员模式：缓存helperAddr+offset，每次写操作时重新获取实例指针
         // 参照gravity.js的tryGetGM模式，不信任缓存的实例指针
@@ -332,14 +332,14 @@ modules.timescale = (function() {
         _offset = info.offset;
         if (!isExecutablePtr(info.helperAddr)) {
           _initError = 'helper函数地址不可执行: ' + info.helperAddr;
-          sendLog('error', '时间加速', _initError);
+          sendDevLog('error', '时间加速', _initError);
           return false;
         }
         _helperFunc = new NativeFunction(info.helperAddr, 'pointer', [], 'mscdecl');
-        sendLog('success', '时间加速', '结构体模式: helper=' + _helperAddr + ', 偏移=0x' + _offset.toString(16));
+        sendDevLog('success', '时间加速', '结构体模式: helper=' + _helperAddr + ', 偏移=0x' + _offset.toString(16));
       } else {
         _initError = 'extractTimeScaleInfo返回无效数据';
-        sendLog('error', '时间加速', _initError);
+        sendDevLog('error', '时间加速', _initError);
         return false;
       }
 
@@ -347,29 +347,29 @@ modules.timescale = (function() {
       var varAddr = resolveVarAddr();
       if (!varAddr) {
         _initError = '初始化时无法解析变量地址';
-        sendLog('error', '时间加速', _initError);
+        sendDevLog('error', '时间加速', _initError);
         return false;
       }
       var memVal = readF32(varAddr);
       if (memVal === null || !isValidTimeScaleAddress(varAddr)) {
         _initError = '变量地址不可安全读写: ' + varAddr;
-        sendLog('error', '时间加速', _initError);
+        sendDevLog('error', '时间加速', _initError);
         return false;
       }
 
-      sendLog('success', '时间加速', '内存值: ' + memVal + ', 函数返回值: ' + currentVal);
+      sendDevLog('success', '时间加速', '内存值: ' + memVal + ', 函数返回值: ' + currentVal);
 
       // 如果内存值和函数返回值差异大，可能定位错误
       if (currentVal !== null && Math.abs(memVal - currentVal) > 0.01) {
-        sendLog('warn', '时间加速', '内存值(' + memVal + ')与函数返回值(' + currentVal + ')不一致，可能定位错误');
+        sendDevLog('warn', '时间加速', '内存值(' + memVal + ')与函数返回值(' + currentVal + ')不一致，可能定位错误');
       }
       _initialized = true;
-      sendLog('success', '时间加速', '初始化成功！');
+      sendDevLog('success', '时间加速', '初始化成功！');
       return true;
 
     } catch(e) {
       _initError = '初始化异常: ' + e.message;
-      sendLog('error', '时间加速', _initError);
+      sendDevLog('error', '时间加速', _initError);
       return false;
     }
   }
@@ -381,7 +381,7 @@ modules.timescale = (function() {
     if (!addr) {
       resetInitCache();
       if (!initTimeScale()) {
-        sendLog('warn', '时间加速', '无法解析变量地址，跳过写入');
+        sendDevLog('warn', '时间加速', '无法解析变量地址，跳过写入');
         return false;
       }
       addr = resolveVarAddr();
@@ -389,7 +389,7 @@ modules.timescale = (function() {
     if (!isValidTimeScaleAddress(addr)) {
       resetInitCache();
       if (!initTimeScale()) {
-        sendLog('warn', '时间加速', '变量地址失效，等待下次重试');
+        sendDevLog('warn', '时间加速', '变量地址失效，等待下次重试');
         return false;
       }
       addr = resolveVarAddr();
@@ -480,11 +480,11 @@ modules.timescale = (function() {
 
       _hooks = installed;
       _hookInstalled = true;
-      sendLog('success', '时间加速', '主线程与退出保护Hook安装成功');
+      sendDevLog('success', '时间加速', '主线程与退出保护Hook安装成功');
       return true;
     } catch(e) {
       detachHooks(installed);
-      sendLog('error', '时间加速', 'Hook安装失败: ' + e.message);
+      sendBothLog('error', '时间加速', '时间加速启用失败，请稍后重试', 'TimeScale hook install failed: ' + e.message);
       return false;
     }
   }
@@ -495,9 +495,9 @@ modules.timescale = (function() {
       if (enabled) {
         _pendingSpeed = currentSpeed;
         _nextRetryAt = 0;
-        sendLog('info', '时间加速', '倍速已切换: ' + currentSpeed + 'x');
+        sendDevLog('info', '时间加速', '倍速已切换: ' + currentSpeed + 'x');
       } else {
-        sendLog('info', '时间加速', '倍速已预选: ' + speed + 'x（开启后生效）');
+        sendDevLog('info', '时间加速', '倍速已预选: ' + speed + 'x（开启后生效）');
       }
     },
     enable: function() {
@@ -510,7 +510,7 @@ modules.timescale = (function() {
       _restorePending = false;
       _pendingSpeed = currentSpeed;
       _nextRetryAt = 0;
-      sendLog('success', '时间加速', '已启用 (' + currentSpeed + 'x)，等待主线程应用');
+      sendDevLog('success', '时间加速', '已启用 (' + currentSpeed + 'x)，等待主线程应用');
       sendStatus('timescale', true);
     },
     disable: function() {
@@ -519,7 +519,7 @@ modules.timescale = (function() {
       _restorePending = true;
       _pendingSpeed = 1.0;
       _nextRetryAt = 0;
-      sendLog('info', '时间加速', '已禁用，等待主线程恢复1.0x');
+      sendDevLog('info', '时间加速', '已禁用，等待主线程恢复1.0x');
       sendStatus('timescale', false);
     }
   };

@@ -11,7 +11,7 @@ modules.recoil = (function() {
     enable: function() {
       if (enabled) return;
       var mod = getGameAssembly();
-      if (!mod) { sendLog('error', '无后座力', '无 GameAssembly.dll'); return; }
+      if (!mod) { sendBothLog('error', '无后座力', '无后座力暂未就绪，请重新连接游戏后重试', 'NoRecoil GameAssembly.dll not found'); return; }
 
       var base = mod.base;
       replacedAddr = base.add(0xB19980);
@@ -39,7 +39,7 @@ modules.recoil = (function() {
         Interceptor.replace(replacedAddr, callbackFunc);
         sendLog('success', '无后座力', '已替换 Recoil.OnGunShot');
       } catch(e) {
-        sendLog('error', '无后座力', '替换失败: ' + e.message);
+        sendBothLog('error', '无后座力', '无后座力启用失败，请稍后重试', 'NoRecoil replace failed: ' + e.message);
         return;
       }
 

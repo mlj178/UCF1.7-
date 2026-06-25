@@ -11,7 +11,7 @@ modules.ammoplus = (function() {
     enable: function() {
       if (enabled) return;
       var mod = getGameAssembly();
-      if (!mod) { sendLog('error', '快速换弹', '无 GameAssembly.dll'); return; }
+      if (!mod) { sendBothLog('error', '快速换弹', '快速换弹暂未就绪，请重新连接游戏后重试', 'FastReload GameAssembly.dll not found'); return; }
 
       var base = mod.base;
       getReloadSpeedAddr = base.add(0xB170E0);

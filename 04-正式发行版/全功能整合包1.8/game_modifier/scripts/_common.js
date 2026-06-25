@@ -4,21 +4,37 @@
 var MAX_LOGS_PER_MODULE = 10;
 var moduleLogCounts = {};
 
-function sendLog(level, module, message) {
+function sendRoutedLog(level, module, message, audience, devDetail) {
   if (!moduleLogCounts[module]) moduleLogCounts[module] = 0;
   if (moduleLogCounts[module] >= MAX_LOGS_PER_MODULE) return;
   if (module !== '系统' && moduleLogCounts[module] === MAX_LOGS_PER_MODULE - 1) {
     moduleLogCounts[module]++;
-    send({ type: 'log', level: 'info', module: module, message: message + ' (后续日志已静默)' });
+    send({ type: 'log', level: 'info', module: module, message: message + ' (后续日志已静默)', audience: audience || 'dev', dev_detail: devDetail || '' });
     return;
   }
   moduleLogCounts[module]++;
-  send({ type: 'log', level: level, module: module, message: message });
+  send({ type: 'log', level: level, module: module, message: message, audience: audience || 'dev', dev_detail: devDetail || '' });
 }
 
-// 发送日志到文件（同时显示在控制台）
+function sendUserLog(level, module, message) {
+  sendRoutedLog(level, module, message, 'user', '');
+}
+
+function sendDevLog(level, module, message, devDetail) {
+  sendRoutedLog(level, module, message, 'dev', devDetail || '');
+}
+
+function sendBothLog(level, module, message, devDetail) {
+  sendRoutedLog(level, module, message, 'both', devDetail || '');
+}
+
+function sendLog(level, module, message) {
+  sendDevLog(level, module, message);
+}
+
+// 发送开发日志到文件，不进入用户日志窗口
 function sendLogFile(level, module, message) {
-  send({ type: 'log_file', level: level, module: module, message: message });
+  send({ type: 'log_file', level: level, module: module, message: message, audience: 'dev' });
 }
 
 function sendStatus(feature, enabled) {
@@ -33,16 +49,16 @@ function getGameAssembly() {
     if (_gameAssemblyCache) return _gameAssemblyCache;
     var mod = Process.findModuleByName('GameAssembly.dll');
     if (!mod) {
-      sendLog('error', '系统', '未找到 GameAssembly.dll');
+      sendDevLog('error', '系统', '未找到 GameAssembly.dll', 'GameAssembly.dll not found');
       return null;
     }
     _gameAssemblyCache = mod;
     if (!_gameAssemblyLogged) {
       _gameAssemblyLogged = true;
-      sendLog('info', '系统', 'GameAssembly.dll: base=' + mod.base + ' size=' + mod.size);
+      sendDevLog('info', '系统', 'GameAssembly.dll: base=' + mod.base + ' size=' + mod.size, 'GameAssembly module located');
     }
     return mod;
-  } catch(e) { sendLog('error', '系统', '获取模块失败: ' + e.message); return null; }
+  } catch(e) { sendDevLog('error', '系统', '获取模块失败: ' + e.message, 'getGameAssembly failed: ' + e.message); return null; }
 }
 
 function readPtr(addr) {

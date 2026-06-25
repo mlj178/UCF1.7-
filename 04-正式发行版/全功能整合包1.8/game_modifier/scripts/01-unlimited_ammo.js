@@ -9,7 +9,7 @@ modules.ammo = (function() {
     enable: function() {
       if (enabled) return;
       var mod = Process.findModuleByName('GameAssembly.dll');
-      if (!mod) { sendLog('error', '无限子弹', 'GameAssembly.dll 未找到'); return; }
+      if (!mod) { sendBothLog('error', '无限子弹', '无限子弹暂未就绪，请重新连接游戏后重试', 'Ammo GameAssembly.dll not found'); return; }
       var base = mod.base;
 
       try {
@@ -20,7 +20,7 @@ modules.ammo = (function() {
         hooks.push({ type: 'replace', addr: addrConsumeAmmo });
         sendLog('info', '无限子弹', 'WPN_Gun.ConsumeAmmo 已替换');
       } catch (e) {
-        sendLog('error', '无限子弹', '替换 WPN_Gun.ConsumeAmmo 失败: ' + e);
+        sendBothLog('error', '无限子弹', '无限子弹初始化失败，请稍后重试', 'Ammo replace WPN_Gun.ConsumeAmmo failed: ' + e);
       }
 
       try {
@@ -31,7 +31,7 @@ modules.ammo = (function() {
         hooks.push({ type: 'replace', addr: addrConsumeBase });
         sendLog('info', '无限子弹', 'Weapon.ConsumeAmmo 已替换');
       } catch (e) {
-        sendLog('info', '无限子弹', '替换 Weapon.ConsumeAmmo 失败: ' + e);
+        sendDevLog('warn', '无限子弹', '替换 Weapon.ConsumeAmmo 失败: ' + e, 'Ammo fallback replace failed');
       }
 
       try {
@@ -52,7 +52,7 @@ modules.ammo = (function() {
         hooks.push({ type: 'attach', addr: addrRpgFire });
         sendLog('info', '无限子弹', 'RPG/AT4 无限子弹已启用');
       } catch (e) {
-        sendLog('error', '无限子弹', 'RPG/AT4 初始化失败: ' + e);
+        sendDevLog('warn', '无限子弹', 'RPG/AT4 初始化失败: ' + e, 'Ammo RPG/AT4 hook init failed');
       }
 
       enabled = true;
