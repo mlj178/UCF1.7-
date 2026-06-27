@@ -28,6 +28,7 @@
 //   - 对实例指针做最低地址校验（参照time_freeze.js的safeModifyTime）
 
 modules.timescale = (function() {
+  // ===== 配置与运行状态 =====
   var enabled = false;
   var currentSpeed = 1.0;
   var _getTimeScaleFunc = null;
@@ -55,6 +56,7 @@ modules.timescale = (function() {
   var REAPPLY_INTERVAL_MS = 1000;
   var MODE_READY_DELAY_MS = 750;
 
+  // ===== 初始化缓存与数值校验 =====
   function resetInitCache() {
     _getTimeScaleFunc = null;
     _initialized = false;
@@ -82,6 +84,7 @@ modules.timescale = (function() {
     return isFiniteNumber(value) && value >= 0.0 && value <= 100.0;
   }
 
+  // ===== 内存与指针安全检查 =====
   function hasMemoryProtection(addr, needWrite) {
     try {
       if (!addr || addr.isNull()) return false;
@@ -130,6 +133,7 @@ modules.timescale = (function() {
     } catch(e) { return false; }
   }
 
+  // ===== timeScale 地址解析 =====
   // 解析当前timeScale变量地址
   // 结构体成员模式下每次重新调用helper获取最新实例指针（参照gravity.js的tryGetGM）
   function resolveVarAddr() {
@@ -268,6 +272,7 @@ modules.timescale = (function() {
     }
   }
 
+  // ===== 初始化与写入 =====
   // 初始化
   function initTimeScale() {
     if (_initialized) return _initError === null;
@@ -408,6 +413,30 @@ modules.timescale = (function() {
     resetInitCache();
   }
 
+  function markModeReady(modeBase, now) {
+    _activeModeBase = modeBase;
+    _modeReadyAt = now + MODE_READY_DELAY_MS;
+    _nextRetryAt = 0;
+    resetInitCache();
+    if (enabled) _pendingSpeed = currentSpeed;
+  }
+
+  function getTargetSpeed(now) {
+    var targetSpeed = _pendingSpeed;
+    if (targetSpeed === null && enabled && now - _lastApplyAt >= REAPPLY_INTERVAL_MS) {
+      targetSpeed = currentSpeed;
+    }
+    return targetSpeed;
+  }
+
+  function markApplySuccess(now, targetSpeed) {
+    _pendingSpeed = null;
+    _nextRetryAt = 0;
+    _lastApplyAt = now;
+    if (_restorePending && targetSpeed === 1.0) _restorePending = false;
+  }
+
+  // ===== 主线程应用状态 =====
   function processPendingTimeScaleWrite(modeBase) {
     if (!isValidPtr(modeBase)) return;
 
@@ -419,19 +448,12 @@ modules.timescale = (function() {
     }
 
     if (!_activeModeBase || !_activeModeBase.equals(modeBase)) {
-      _activeModeBase = modeBase;
-      _modeReadyAt = now + MODE_READY_DELAY_MS;
-      _nextRetryAt = 0;
-      resetInitCache();
-      if (enabled) _pendingSpeed = currentSpeed;
+      markModeReady(modeBase, now);
     }
 
     if (_roomShuttingDown || now < _modeReadyAt || now < _nextRetryAt) return;
 
-    var targetSpeed = _pendingSpeed;
-    if (targetSpeed === null && enabled && now - _lastApplyAt >= REAPPLY_INTERVAL_MS) {
-      targetSpeed = currentSpeed;
-    }
+    var targetSpeed = getTargetSpeed(now);
     if (targetSpeed === null) return;
 
     if (!initTimeScale() || !safeWriteTimeScale(targetSpeed)) {
@@ -439,12 +461,10 @@ modules.timescale = (function() {
       return;
     }
 
-    _pendingSpeed = null;
-    _nextRetryAt = 0;
-    _lastApplyAt = now;
-    if (_restorePending && targetSpeed === 1.0) _restorePending = false;
+    markApplySuccess(now, targetSpeed);
   }
 
+  // ===== Hook 安装与清理 =====
   function detachHooks(hooks) {
     for (var i = 0; i < hooks.length; i++) {
       try { hooks[i].detach(); } catch(e) {}
@@ -489,38 +509,45 @@ modules.timescale = (function() {
     }
   }
 
-  return {
-    setSpeed: function(speed) {
-      currentSpeed = normalizeSpeed(speed);
-      if (enabled) {
-        _pendingSpeed = currentSpeed;
-        _nextRetryAt = 0;
-        sendDevLog('info', '时间加速', '倍速已切换: ' + currentSpeed + 'x');
-      } else {
-        sendDevLog('info', '时间加速', '倍速已预选: ' + speed + 'x（开启后生效）');
-      }
-    },
-    enable: function() {
-      if (enabled) return;
-      if (!installMainThreadHook()) {
-        sendStatus('timescale', false);
-        return;
-      }
-      enabled = true;
-      _restorePending = false;
+  // ===== 功能开关与 RPC 边界 =====
+  function setSpeed(speed) {
+    currentSpeed = normalizeSpeed(speed);
+    if (enabled) {
       _pendingSpeed = currentSpeed;
       _nextRetryAt = 0;
-      sendDevLog('success', '时间加速', '已启用 (' + currentSpeed + 'x)，等待主线程应用');
-      sendStatus('timescale', true);
-    },
-    disable: function() {
-      if (!enabled) return;
-      enabled = false;
-      _restorePending = true;
-      _pendingSpeed = 1.0;
-      _nextRetryAt = 0;
-      sendDevLog('info', '时间加速', '已禁用，等待主线程恢复1.0x');
-      sendStatus('timescale', false);
+      sendDevLog('info', '时间加速', '倍速已切换: ' + currentSpeed + 'x');
+    } else {
+      sendDevLog('info', '时间加速', '倍速已预选: ' + speed + 'x（开启后生效）');
     }
+  }
+
+  function enableFeature() {
+    if (enabled) return;
+    if (!installMainThreadHook()) {
+      sendStatus('timescale', false);
+      return;
+    }
+    enabled = true;
+    _restorePending = false;
+    _pendingSpeed = currentSpeed;
+    _nextRetryAt = 0;
+    sendDevLog('success', '时间加速', '已启用 (' + currentSpeed + 'x)，等待主线程应用');
+    sendStatus('timescale', true);
+  }
+
+  function disableFeature() {
+    if (!enabled) return;
+    enabled = false;
+    _restorePending = true;
+    _pendingSpeed = 1.0;
+    _nextRetryAt = 0;
+    sendDevLog('info', '时间加速', '已禁用，等待主线程恢复1.0x');
+    sendStatus('timescale', false);
+  }
+
+  return {
+    setSpeed: setSpeed,
+    enable: enableFeature,
+    disable: disableFeature
   };
 })();

@@ -1,0 +1,93 @@
+[23:19:09] [INFO] UI 已启动。日志文件：D:\trae_project\ucf1.7-modifier\05-正式功能\21-第三人称视角\logs\third_person_mv_tps_20260626_231908.txt
+[23:19:10] [INFO] Hook 已安装: CameraManager.Awake | {"rva": "0xb35550", "runtime": "0x6c9a5550"}
+[23:19:10] [INFO] Hook 已安装: CameraManager.Update | {"rva": "0xb36fa0", "runtime": "0x6c9a6fa0"}
+[23:19:10] [INFO] Hook 已安装: CinemachineBrain.PushStateToUnityCamera | {"rva": "0x82b750", "runtime": "0x6c69b750"}
+[23:19:10] [INFO] Hook 已安装: Player.GetWalkVelocity | {"rva": "0xb54220", "runtime": "0x6c9c4220"}
+[23:19:10] [INFO] Hook 已安装: Player.UpdateCameraRotaion | {"rva": "0xb54870", "runtime": "0x6c9c4870"}
+[23:19:10] [INFO] Hook 已安装: Recoil.GetShootRay | {"rva": "0xb195c0", "runtime": "0x6c9895c0"}
+[23:19:10] [INFO] Hook 已安装: Player.SetWeapon | {"rva": "0xb53650", "runtime": "0x6c9c3650"}
+[23:19:10] [INFO] Hook 已安装: Player.OnEntityDeath | {"rva": "0xb51210", "runtime": "0x6c9c1210"}
+[23:19:10] [INFO] Hook 已安装: Player.Respawn | {"rva": "0xb527a0", "runtime": "0x6c9c27a0"}
+[23:19:10] [INFO] Hook 已安装: Player.Spawn | {"rva": "0xb53760", "runtime": "0x6c9c3760"}
+[23:19:10] [INFO] Hook 已安装: CameraManager.ChangePVandCV | {"rva": "0xb35920", "runtime": "0x6c9a5920"}
+[23:19:10] [INFO] Hook 已安装: CameraManager.OnDestroy | {"rva": "0xb360e0", "runtime": "0x6c9a60e0"}
+[23:19:10] [INFO] Hook 已安装: GameManager.Awake | {"rva": "0xafa250", "runtime": "0x6c96a250"}
+[23:19:10] [INFO] Hook 已安装: GameManager.OnDestroy | {"rva": "0xafb6f0", "runtime": "0x6c96b6f0"}
+[23:19:10] [INFO] Hook 已安装: MapManager.NewGameRoundStart | {"rva": "0xaebcb0", "runtime": "0x6c95bcb0"}
+[23:19:10] [INFO] 最小可用第三人称射击 v3.14 Hook 安装完成
+[23:19:10] [INFO] 最小可用第三人称射击 v3.14 脚本已加载 | {"base": "0x6be70000", "arch": "ia32", "pointerSize": 4, "installResult": {"ok": true, "installed": true}}
+[23:19:10] [INFO] 已连接游戏进程 PID=9932
+[23:19:14] [INFO] [Lifecycle] CameraManager 已捕获 | {"pointer": "0x353ccc00", "source": "CameraManager.Awake"}
+[23:19:14] [INFO] 状态: NO_GAME -> READY
+[23:19:14] [INFO] 脚本状态：NO_GAME -> READY
+[23:19:15] [INFO] [Lifecycle] 本地玩家已捕获 | {"pointer": "0x353b02e0", "source": "CameraManager.focusPlayer"}
+[23:19:16] [INFO] 开启命令已排队
+[23:19:16] [INFO] [Camera] 第三人称相机已配置 | {"shoulder": "center", "distance": 3, "pivotHeight": 1.35, "pitchMode": "independent_final_camera_pivot", "freeLookMode": "follow_lookat_yaw_only"}
+[23:19:16] [INFO] [Shooting] 枪口已解析 | {"weapon": "0x23e434d8", "transform": "0x2403e9b0", "source": "weapon.transform_fallback"}
+[23:19:16] [INFO] 状态: READY -> ENABLED
+[23:19:16] [INFO] 脚本状态：READY -> ENABLED
+[23:19:16] [INFO] 最小可用第三人称射击已启用 | {"camera": true, "model": true, "movement": "camera_relative", "shooting": "muzzle_to_crosshair"}
+[23:19:16] [INFO] 游戏主线程已完成第三人称开启。
+[23:19:16] [INFO] [TPSStatus] | {"cameraFrames": 0, "cameraFailures": 0, "inputPitch": 0, "renderedPitch": 0, "yawSource": "transform_forward_stable", "movementVectorsModified": 0, "physicsRaycastCalls": 0, "shootRayModified": 0, "aimFramesComputed": 0, "sameFrameAimReuses": 0, "lifecycleEvents": 0, "lifecycleBatches": 0, "lifecycleEventsMerged": 0, "playerDead": false}
+[23:19:19] [INFO] [Shooting] 双射线已写回 | {"shot": 1, "source": "camera_center", "targetReusedSameFrame": false, "physicsCalls": 1, "aimFrames": 1, "sameFrameReuses": 0}
+[23:19:31] [INFO] [TPSStatus] | {"cameraFrames": 666, "cameraFailures": 0, "inputPitch": -22.00188446044922, "renderedPitch": -21.728556220874594, "yawSource": "transform_forward_stable", "movementVectorsModified": 357, "physicsRaycastCalls": 29, "shootRayModified": 29, "aimFramesComputed": 29, "sameFrameAimReuses": 0, "lifecycleEvents": 0, "lifecycleBatches": 0, "lifecycleEventsMerged": 0, "playerDead": false}
+[23:19:32] [INFO] [Camera] 第三人称相机已配置 | {"shoulder": "center", "distance": 3, "pivotHeight": 1.35, "pitchMode": "independent_final_camera_pivot", "freeLookMode": "follow_lookat_yaw_only"}
+[23:19:34] [INFO] [Camera] 第三人称相机已配置 | {"shoulder": "center", "distance": 3, "pivotHeight": 1.35, "pitchMode": "independent_final_camera_pivot", "freeLookMode": "follow_lookat_yaw_only"}
+[23:19:34] [INFO] [Shooting] 枪口已解析 | {"weapon": "0x23e54700", "transform": "0x2403e8f0", "source": "weapon.transform_fallback"}
+[23:19:34] [INFO] [Lifecycle] 合并刷新完成 | {"events": 5, "merged": 4, "reason": "spawn", "model": true, "camera": true, "muzzle": true}
+[23:19:44] [INFO] [Camera] 第三人称相机已配置 | {"shoulder": "center", "distance": 3, "pivotHeight": 1.35, "pitchMode": "independent_final_camera_pivot", "freeLookMode": "follow_lookat_yaw_only"}
+[23:19:46] [INFO] [Camera] 第三人称相机已配置 | {"shoulder": "center", "distance": 3, "pivotHeight": 1.35, "pitchMode": "independent_final_camera_pivot", "freeLookMode": "follow_lookat_yaw_only"}
+[23:19:46] [INFO] [Shooting] 枪口已解析 | {"weapon": "0x353b0000", "transform": "0x47023020", "source": "WPN_Gun.gunFire"}
+[23:19:46] [INFO] [Lifecycle] 合并刷新完成 | {"events": 5, "merged": 4, "reason": "spawn", "model": true, "camera": true, "muzzle": true}
+[23:19:46] [INFO] [TPSStatus] | {"cameraFrames": 1360, "cameraFailures": 0, "inputPitch": -1.9528298377990723, "renderedPitch": -1.3156939843561657, "yawSource": "transform_forward_stable", "movementVectorsModified": 673, "physicsRaycastCalls": 38, "shootRayModified": 38, "aimFramesComputed": 38, "sameFrameAimReuses": 0, "lifecycleEvents": 12, "lifecycleBatches": 4, "lifecycleEventsMerged": 8, "playerDead": false}
+[23:20:01] [INFO] [TPSStatus] | {"cameraFrames": 2056, "cameraFailures": 0, "inputPitch": -21.155681610107422, "renderedPitch": -21.133195486808916, "yawSource": "transform_forward_stable", "movementVectorsModified": 1029, "physicsRaycastCalls": 98, "shootRayModified": 98, "aimFramesComputed": 98, "sameFrameAimReuses": 0, "lifecycleEvents": 12, "lifecycleBatches": 4, "lifecycleEventsMerged": 8, "playerDead": false}
+[23:20:11] [INFO] 相机参数将在主线程重新应用
+[23:20:11] [INFO] [Camera] 第三人称相机已配置 | {"shoulder": "center", "distance": 2.5, "pivotHeight": 1.35, "pitchMode": "independent_final_camera_pivot", "freeLookMode": "follow_lookat_yaw_only"}
+[23:20:12] [INFO] 相机参数将在主线程重新应用
+[23:20:12] [INFO] [Camera] 第三人称相机已配置 | {"shoulder": "center", "distance": 2.3, "pivotHeight": 1.35, "pitchMode": "independent_final_camera_pivot", "freeLookMode": "follow_lookat_yaw_only"}
+[23:20:12] [INFO] 相机参数将在主线程重新应用
+[23:20:12] [INFO] [Camera] 第三人称相机已配置 | {"shoulder": "center", "distance": 2.1, "pivotHeight": 1.35, "pitchMode": "independent_final_camera_pivot", "freeLookMode": "follow_lookat_yaw_only"}
+[23:20:16] [INFO] [TPSStatus] | {"cameraFrames": 2751, "cameraFailures": 0, "inputPitch": -4.4264445304870605, "renderedPitch": -4.428086451977662, "yawSource": "transform_forward_stable", "movementVectorsModified": 1217, "physicsRaycastCalls": 145, "shootRayModified": 145, "aimFramesComputed": 145, "sameFrameAimReuses": 0, "lifecycleEvents": 15, "lifecycleBatches": 7, "lifecycleEventsMerged": 8, "playerDead": false}
+[23:20:23] [INFO] 相机参数将在主线程重新应用
+[23:20:23] [INFO] [Camera] 第三人称相机已配置 | {"shoulder": "center", "distance": 1.8, "pivotHeight": 1.35, "pitchMode": "independent_final_camera_pivot", "freeLookMode": "follow_lookat_yaw_only"}
+[23:20:24] [INFO] 相机参数将在主线程重新应用
+[23:20:24] [INFO] [Camera] 第三人称相机已配置 | {"shoulder": "center", "distance": 1.6, "pivotHeight": 1.35, "pitchMode": "independent_final_camera_pivot", "freeLookMode": "follow_lookat_yaw_only"}
+[23:20:25] [INFO] 相机参数将在主线程重新应用
+[23:20:25] [INFO] [Camera] 第三人称相机已配置 | {"shoulder": "center", "distance": 1.5, "pivotHeight": 1.35, "pitchMode": "independent_final_camera_pivot", "freeLookMode": "follow_lookat_yaw_only"}
+[23:20:28] [INFO] [Camera] 第三人称相机已配置 | {"shoulder": "center", "distance": 1.5, "pivotHeight": 1.35, "pitchMode": "independent_final_camera_pivot", "freeLookMode": "follow_lookat_yaw_only"}
+[23:20:30] [INFO] [Camera] 第三人称相机已配置 | {"shoulder": "center", "distance": 1.5, "pivotHeight": 1.35, "pitchMode": "independent_final_camera_pivot", "freeLookMode": "follow_lookat_yaw_only"}
+[23:20:30] [INFO] [Shooting] 枪口已解析 | {"weapon": "0x46f53450", "transform": "0x2277cc30", "source": "WPN_Gun.gunFire"}
+[23:20:30] [INFO] [Lifecycle] 合并刷新完成 | {"events": 5, "merged": 4, "reason": "spawn", "model": true, "camera": true, "muzzle": true}
+[23:20:31] [INFO] [TPSStatus] | {"cameraFrames": 3440, "cameraFailures": 0, "inputPitch": -5.077357769012451, "renderedPitch": -5.136216118908252, "yawSource": "transform_forward_stable", "movementVectorsModified": 1354, "physicsRaycastCalls": 149, "shootRayModified": 149, "aimFramesComputed": 149, "sameFrameAimReuses": 0, "lifecycleEvents": 24, "lifecycleBatches": 12, "lifecycleEventsMerged": 12, "playerDead": false}
+[23:20:34] [INFO] 相机参数将在主线程重新应用
+[23:20:34] [INFO] [Camera] 第三人称相机已配置 | {"shoulder": "center", "distance": 1.5, "pivotHeight": 0.8, "pitchMode": "independent_final_camera_pivot", "freeLookMode": "follow_lookat_yaw_only"}
+[23:20:35] [INFO] 相机参数将在主线程重新应用
+[23:20:35] [INFO] [Camera] 第三人称相机已配置 | {"shoulder": "center", "distance": 1.5, "pivotHeight": 0.7, "pitchMode": "independent_final_camera_pivot", "freeLookMode": "follow_lookat_yaw_only"}
+[23:20:35] [INFO] 相机参数将在主线程重新应用
+[23:20:35] [INFO] [Camera] 第三人称相机已配置 | {"shoulder": "center", "distance": 1.5, "pivotHeight": 0.65, "pitchMode": "independent_final_camera_pivot", "freeLookMode": "follow_lookat_yaw_only"}
+[23:20:36] [INFO] 相机参数将在主线程重新应用
+[23:20:36] [INFO] [Camera] 第三人称相机已配置 | {"shoulder": "center", "distance": 1.5, "pivotHeight": 2, "pitchMode": "independent_final_camera_pivot", "freeLookMode": "follow_lookat_yaw_only"}
+[23:20:36] [INFO] 相机参数将在主线程重新应用
+[23:20:36] [INFO] [Camera] 第三人称相机已配置 | {"shoulder": "center", "distance": 1.5, "pivotHeight": 2.15, "pitchMode": "independent_final_camera_pivot", "freeLookMode": "follow_lookat_yaw_only"}
+[23:20:38] [INFO] 相机参数将在主线程重新应用
+[23:20:38] [INFO] [Camera] 第三人称相机已配置 | {"shoulder": "center", "distance": 1.5, "pivotHeight": 1.75, "pitchMode": "independent_final_camera_pivot", "freeLookMode": "follow_lookat_yaw_only"}
+[23:20:39] [INFO] 相机参数将在主线程重新应用
+[23:20:39] [INFO] [Camera] 第三人称相机已配置 | {"shoulder": "center", "distance": 1.5, "pivotHeight": 1.6, "pitchMode": "independent_final_camera_pivot", "freeLookMode": "follow_lookat_yaw_only"}
+[23:20:39] [INFO] 相机参数将在主线程重新应用
+[23:20:39] [INFO] [Camera] 第三人称相机已配置 | {"shoulder": "center", "distance": 1.5, "pivotHeight": 1.45, "pitchMode": "independent_final_camera_pivot", "freeLookMode": "follow_lookat_yaw_only"}
+[23:20:40] [INFO] 相机参数将在主线程重新应用
+[23:20:40] [INFO] [Camera] 第三人称相机已配置 | {"shoulder": "center", "distance": 1.5, "pivotHeight": 1.35, "pitchMode": "independent_final_camera_pivot", "freeLookMode": "follow_lookat_yaw_only"}
+[23:20:40] [INFO] 相机参数将在主线程重新应用
+[23:20:40] [INFO] [Camera] 第三人称相机已配置 | {"shoulder": "center", "distance": 1.5, "pivotHeight": 1.3, "pitchMode": "independent_final_camera_pivot", "freeLookMode": "follow_lookat_yaw_only"}
+[23:20:47] [INFO] [TPSStatus] | {"cameraFrames": 4129, "cameraFailures": 0, "inputPitch": -3.384906053543091, "renderedPitch": -3.4201222022174567, "yawSource": "transform_forward_stable", "movementVectorsModified": 1545, "physicsRaycastCalls": 149, "shootRayModified": 149, "aimFramesComputed": 149, "sameFrameAimReuses": 0, "lifecycleEvents": 34, "lifecycleBatches": 22, "lifecycleEventsMerged": 12, "playerDead": false}
+[23:20:59] [INFO] [Camera] 第三人称相机已配置 | {"shoulder": "center", "distance": 1.5, "pivotHeight": 1.3, "pitchMode": "independent_final_camera_pivot", "freeLookMode": "follow_lookat_yaw_only"}
+[23:21:01] [INFO] [Camera] 第三人称相机已配置 | {"shoulder": "center", "distance": 1.5, "pivotHeight": 1.3, "pitchMode": "independent_final_camera_pivot", "freeLookMode": "follow_lookat_yaw_only"}
+[23:21:01] [INFO] [Shooting] 枪口已解析 | {"weapon": "0x353b0000", "transform": "0x47023020", "source": "WPN_Gun.gunFire"}
+[23:21:01] [INFO] [Lifecycle] 合并刷新完成 | {"events": 5, "merged": 4, "reason": "spawn", "model": true, "camera": true, "muzzle": true}
+[23:21:02] [INFO] [TPSStatus] | {"cameraFrames": 4825, "cameraFailures": 0, "inputPitch": -5.077357769012451, "renderedPitch": -5.061582306197053, "yawSource": "transform_forward_stable", "movementVectorsModified": 1913, "physicsRaycastCalls": 211, "shootRayModified": 211, "aimFramesComputed": 211, "sameFrameAimReuses": 0, "lifecycleEvents": 40, "lifecycleBatches": 24, "lifecycleEventsMerged": 16, "playerDead": false}
+[23:21:17] [INFO] [TPSStatus] | {"cameraFrames": 5527, "cameraFailures": 0, "inputPitch": -12.433015823364258, "renderedPitch": -12.433015823348786, "yawSource": "transform_forward_stable", "movementVectorsModified": 2342, "physicsRaycastCalls": 247, "shootRayModified": 247, "aimFramesComputed": 247, "sameFrameAimReuses": 0, "lifecycleEvents": 40, "lifecycleBatches": 24, "lifecycleEventsMerged": 16, "playerDead": false}
+[23:21:18] [INFO] 状态: ENABLED -> NO_GAME
+[23:21:18] [INFO] 脚本状态：ENABLED -> NO_GAME
+[23:21:18] [WARNING] 游戏场景已销毁：CameraManager.OnDestroy
+[23:21:20] [WARNING] 游戏进程已退出
+[23:21:27] [WARNING] UI 已关闭

@@ -3,6 +3,7 @@
 // 关键技术：Hook ModeBase.Update实现主线程调度（GiveWeapon必须在主线程执行）
 
 modules.weapon_giver = (function() {
+  // ===== 配置与运行状态 =====
   var enabled = false;
   var hooks = [];
 
@@ -58,12 +59,20 @@ modules.weapon_giver = (function() {
   };
   var _firstRoomSpecialGiveDoneByWeaponId = {};
 
+  // ===== 通用工具与状态重置 =====
   function isSpecialDoubleGiveWeapon(wpnId) {
     return _specialDoubleGiveWeaponIds[wpnId] === true;
   }
 
   function resetFirstRoomSpecialGiveState() {
     _firstRoomSpecialGiveDoneByWeaponId = {};
+  }
+
+  function resetNativeFunctions() {
+    _giveWeaponFunc = null;
+    _isDeadFunc = null;
+    _isMyPlayerFunc = null;
+    _initialized = false;
   }
 
   function resetRoomState(reason, shuttingDown, exitingInstance) {
@@ -124,6 +133,7 @@ modules.weapon_giver = (function() {
     }
   }
 
+  // ===== 地址解析与 NativeFunction 初始化 =====
   function initNativeFunctions() {
     if (_initialized) return true;
 
@@ -156,9 +166,7 @@ modules.weapon_giver = (function() {
       sendDevLog('success', '武器赋予', 'GiveWeapon NativeFunction 初始化成功 (mscdecl)');
     } catch(e) {
       sendDevLog('error', '武器赋予', 'GiveWeapon 直接调用初始化失败: ' + e.message);
-      _giveWeaponFunc = null;
-      _isDeadFunc = null;
-      _isMyPlayerFunc = null;
+      resetNativeFunctions();
       return false;
     }
 
@@ -281,6 +289,27 @@ modules.weapon_giver = (function() {
     }
   }
 
+  // ===== 主线程任务队列 =====
+  function enqueueGiveWeaponTask(wpnId, giveUpInt, selectInt) {
+    var taskId = ++_taskIdCounter;
+    _pendingTasks.push({
+      id: taskId,
+      wpnId: wpnId,
+      giveUp: giveUpInt,
+      select: selectInt,
+      expiresAt: Date.now() + _taskTtlMs
+    });
+    return taskId;
+  }
+
+  function sendGiveWeaponResult(taskId, success) {
+    send({
+      type: 'giveWeaponResult',
+      taskId: taskId,
+      success: success
+    });
+  }
+
   function executeGiveWeaponOnMainThread(wpnId, giveUpInt, selectInt) {
     if (!isRoomActive()) {
       sendDevLog('warn', '武器赋予', '当前不在稳定房间内，已忽略赋予任务');
@@ -319,15 +348,32 @@ modules.weapon_giver = (function() {
       sendDevLog('success', '武器赋予', '赋予武器成功! weaponId=' + wpnId + ' select=' + selectInt + specialTag);
       return true;
     } catch(e) {
-      _giveWeaponFunc = null;
-      _isDeadFunc = null;
-      _isMyPlayerFunc = null;
-      _initialized = false;
+      resetNativeFunctions();
       sendDevLog('error', '武器赋予', 'GiveWeapon直接调用异常: ' + e.message);
       return false;
     }
   }
 
+  function processPendingGiveWeaponTask() {
+    if (_pendingTasks.length <= 0) return;
+
+    var task = _pendingTasks.shift();
+    try {
+      if (task.expiresAt && Date.now() > task.expiresAt) {
+        sendGiveWeaponResult(task.id, false);
+        sendDevLog('warn', '武器赋予', '赋予任务已过期，已丢弃: taskId=' + task.id);
+        return;
+      }
+
+      var result = executeGiveWeaponOnMainThread(task.wpnId, task.giveUp, task.select);
+      sendGiveWeaponResult(task.id, result);
+    } catch(e) {
+      sendDevLog('error', '武器赋予', '执行赋予任务异常: ' + e.message);
+      sendGiveWeaponResult(task.id, false);
+    }
+  }
+
+  // ===== 房间状态与 Hook 回调 =====
   function handleModeBaseUpdate(instance) {
     if (!instance || instance.isNull()) return false;
 
@@ -361,6 +407,7 @@ modules.weapon_giver = (function() {
     return now >= _modeSwitchGraceUntil;
   }
 
+  // ===== Hook 安装 =====
   function installMainThreadHook() {
     if (_hookInstalled) return true;
 
@@ -386,32 +433,7 @@ modules.weapon_giver = (function() {
 
             // 限制每帧最多处理1个任务，避免阻塞游戏主线程
             if (roomStable && _pendingTasks.length > 0) {
-              var task = _pendingTasks.shift();
-              try {
-                if (task.expiresAt && Date.now() > task.expiresAt) {
-                  send({
-                    type: 'giveWeaponResult',
-                    taskId: task.id,
-                    success: false
-                  });
-                  sendDevLog('warn', '武器赋予', '赋予任务已过期，已丢弃: taskId=' + task.id);
-                } else {
-                  var result = executeGiveWeaponOnMainThread(task.wpnId, task.giveUp, task.select);
-
-                  send({
-                    type: 'giveWeaponResult',
-                    taskId: task.id,
-                    success: result
-                  });
-                }
-              } catch(e) {
-                sendDevLog('error', '武器赋予', '执行赋予任务异常: ' + e.message);
-                send({
-                  type: 'giveWeaponResult',
-                  taskId: task.id,
-                  success: false
-                });
-              }
+              processPendingGiveWeaponTask();
             }
 
             // GiveWeapon 返回的新武器延迟到下一帧处理，确保仍在游戏主线程。
@@ -592,14 +614,7 @@ modules.weapon_giver = (function() {
 
                 try {
                   if (initNativeFunctions() && installMainThreadHook()) {
-                    var taskId = ++_taskIdCounter;
-                    _pendingTasks.push({
-                      id: taskId,
-                      wpnId: parseInt(_waitingForRespawnWeaponId) || 0,
-                      giveUp: 1,
-                      select: 1,
-                      expiresAt: Date.now() + _taskTtlMs
-                    });
+                    var taskId = enqueueGiveWeaponTask(parseInt(_waitingForRespawnWeaponId) || 0, 1, 1);
                     sendDevLog('success', '武器赋予', '复活自动赋予任务已入队: taskId=' + taskId + ', weaponId=' + _waitingForRespawnWeaponId);
                   } else {
                     sendDevLog('error', '武器赋予', '复活自动赋予失败: 初始化未完成');
@@ -677,17 +692,10 @@ modules.weapon_giver = (function() {
 
       var firstTaskId = null;
       for (var i = 0; i < repeatCount; i++) {
-        var taskId = ++_taskIdCounter;
-        if (firstTaskId === null) firstTaskId = taskId;
         var taskSelect = (repeatCount > 1 && i === repeatCount - 1) ? 1 : selectInt;
-        _pendingTasks.push({
-          id: taskId,
-          wpnId: wpnId,
-          giveUp: giveUpInt,
-          // AT4/FN FAL榴弹版的第二次赋予必须进入Select/Deploy，才能立即应用射速。
-          select: taskSelect,
-          expiresAt: Date.now() + _taskTtlMs
-        });
+        // AT4/FN FAL榴弹版的第二次赋予必须进入Select/Deploy，才能立即应用射速。
+        var taskId = enqueueGiveWeaponTask(wpnId, giveUpInt, taskSelect);
+        if (firstTaskId === null) firstTaskId = taskId;
         if (repeatCount > 1) {
           sendDevLog('info', '武器赋予', '入队第' + (i + 1) + '/' + repeatCount + '次赋予: weaponId=' + wpnId + ' select=' + taskSelect);
         }
@@ -707,55 +715,65 @@ modules.weapon_giver = (function() {
     }
   }
 
+  // ===== 功能开关与 RPC 边界 =====
+  function enableFeature() {
+    if (enabled) return;
+    resetRoomState(null, false, null);
+    enabled = true;
+    sendDevLog('success', '武器赋予', '武器赋予功能已启用');
+    sendStatus('weapon_giver', true);
+  }
+
+  function detachAllHooks() {
+    for (var i = 0; i < hooks.length; i++) {
+      try { hooks[i].detach(); } catch(e) {}
+    }
+    hooks = [];
+    _hookInstalled = false;
+    _respawnHookInstalled = false;
+    _spawnHookInstalled = false;
+  }
+
+  function disableFeature() {
+    detachAllHooks();
+    resetRoomState(null, true, _modeBaseInstance);
+    resetNativeFunctions();
+    enabled = false;
+    sendDevLog('info', '武器赋予', '武器赋予功能已禁用');
+    sendStatus('weapon_giver', false);
+  }
+
+  function setRespawnWeapon(weaponId, weaponName) {
+    try {
+      _waitingForRespawnWeaponId = weaponId;
+      _waitingForRespawnWeaponName = weaponName;
+      sendDevLog('success', '武器赋予', '设置复活自动武器: ' + weaponId + ' - ' + weaponName, 'WeaponGiver respawn weapon configured');
+      return true;
+    } catch (e) {
+      sendBothLog('error', '武器赋予', '设置复活武器失败，请稍后重试', 'WeaponGiver setrespawnweapon failed: ' + e.message);
+      return false;
+    }
+  }
+
+  function clearRespawnWeapon() {
+    try {
+      _waitingForRespawnWeaponId = null;
+      _waitingForRespawnWeaponName = null;
+      sendDevLog('info', '武器赋予', '清除复活自动武器', 'WeaponGiver respawn weapon cleared');
+      return true;
+    } catch (e) {
+      sendBothLog('error', '武器赋予', '清除复活武器失败，请稍后重试', 'WeaponGiver clearrespawnweapon failed: ' + e.message);
+      return false;
+    }
+  }
+
   return {
-    enable: function() {
-      if (enabled) return;
-      resetRoomState(null, false, null);
-      enabled = true;
-      sendDevLog('success', '武器赋予', '武器赋予功能已启用');
-      sendStatus('weapon_giver', true);
-    },
-    disable: function() {
-      for (var i = 0; i < hooks.length; i++) {
-        try { hooks[i].detach(); } catch(e) {}
-      }
-      hooks = [];
-      _hookInstalled = false;
-      _respawnHookInstalled = false;
-      _spawnHookInstalled = false;
-      resetRoomState(null, true, _modeBaseInstance);
-      _giveWeaponFunc = null;
-      _isDeadFunc = null;
-      _isMyPlayerFunc = null;
-      _initialized = false;
-      enabled = false;
-      sendDevLog('info', '武器赋予', '武器赋予功能已禁用');
-      sendStatus('weapon_giver', false);
-    },
+    enable: enableFeature,
+    disable: disableFeature,
     giveweapon: giveWeapon,
     getmyplayer: getMyPlayer,
-    setrespawnweapon: function(weaponId, weaponName) {
-      try {
-        _waitingForRespawnWeaponId = weaponId;
-        _waitingForRespawnWeaponName = weaponName;
-        sendDevLog('success', '武器赋予', '设置复活自动武器: ' + weaponId + ' - ' + weaponName, 'WeaponGiver respawn weapon configured');
-        return true;
-      } catch (e) {
-        sendBothLog('error', '武器赋予', '设置复活武器失败，请稍后重试', 'WeaponGiver setrespawnweapon failed: ' + e.message);
-        return false;
-      }
-    },
-    clearrespawnweapon: function() {
-      try {
-        _waitingForRespawnWeaponId = null;
-        _waitingForRespawnWeaponName = null;
-        sendDevLog('info', '武器赋予', '清除复活自动武器', 'WeaponGiver respawn weapon cleared');
-        return true;
-      } catch (e) {
-        sendBothLog('error', '武器赋予', '清除复活武器失败，请稍后重试', 'WeaponGiver clearrespawnweapon failed: ' + e.message);
-        return false;
-      }
-    },
+    setrespawnweapon: setRespawnWeapon,
+    clearrespawnweapon: clearRespawnWeapon,
     isEnabled: function() { return enabled; }
   };
 })();

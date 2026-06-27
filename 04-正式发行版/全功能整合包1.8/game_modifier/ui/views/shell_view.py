@@ -34,6 +34,16 @@ def resolve_status_hint(color):
     return StatusHint("#2a2a00", "#ffcc00", "1. 启动游戏  2. 进入任意模式  3. 打开本工具  4. 开启功能")
 
 
+def apply_status_dot_style(status_dot, color):
+    dot_color_map = {
+        "green": "#2ecc71",
+        "yellow": "#ffcc00",
+        "red": "#ff4444",
+        "gray": "#888888",
+    }
+    status_dot.configure(text="●", text_color=dot_color_map.get(color, "#888888"))
+
+
 class AppShellView:
     def __init__(self, parent, *, on_settings, on_toggle_collapse, on_connect):
         self._parent = parent
@@ -113,8 +123,7 @@ class AppShellView:
         return log_box
 
     def apply_status(self, *, status_dot, status_label, hint_frame, hint_label, color, text):
-        dot_map = {"green": "●", "yellow": "●", "red": "●", "gray": "●"}
-        status_dot.configure(text=dot_map.get(color, "●"))
+        apply_status_dot_style(status_dot, color)
         status_label.configure(text=text)
 
         hint = resolve_status_hint(color)

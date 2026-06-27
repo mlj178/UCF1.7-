@@ -2,6 +2,7 @@
 // 10个Hook点：动画加速10x + 清除射击间隔 + 半自动→全自动 + 狙击镜不关闭 + RPG特殊处理 + 后坐力清零 + 扩散归零
 
 modules.speedgun = (function() {
+  // ===== 配置与运行状态 =====
   var enabled = false;
   var hooks = [];
   var isMyWeaponFn = null;
@@ -14,6 +15,7 @@ modules.speedgun = (function() {
   var pendingAcquiredWeapons = [];
   var acquiredWeaponRetryFrames = 3;
 
+  // ===== 指针与类型工具 =====
   function safeReadPointer(basePtr, offset) {
     try {
       if (!basePtr || basePtr.isNull()) return null;
@@ -36,6 +38,7 @@ modules.speedgun = (function() {
     }
   }
 
+  // ===== 武器数据写入 =====
   function applyGunDataSpeed(weapon, requireGrenadeGun) {
     try {
       var data = safeReadPointer(weapon, 0x68);
@@ -113,6 +116,7 @@ modules.speedgun = (function() {
     pendingAcquiredWeapons = [];
   }
 
+  // ===== 赋予武器后的延迟应用队列 =====
   function notifyWeaponAcquired(weapon, weaponId) {
     if (!enabled || !weapon || weapon.isNull()) return;
 
@@ -154,32 +158,63 @@ modules.speedgun = (function() {
     pendingAcquiredWeapons = remaining;
   }
 
-  return {
-    enable: function() {
+  // ===== NativeFunction 初始化与状态清理 =====
+  function resetNativeFunctions() {
+    isMyWeaponFn = null;
+    getCharAnim = null;
+    setAnimSpeed = null;
+    rpgAnimSpeedFn = null;
+    grenadeAnimSpeedFn = null;
+    classGetNameFn = null;
+  }
+
+  function initNativeFunctions(base) {
+    isMyWeaponFn = new NativeFunction(base.add(0xB6E1D0), "bool", ["pointer", "pointer"]);
+    getCharAnim = new NativeFunction(base.add(0xB35310), "pointer", ["pointer", "pointer"]);
+    setAnimSpeed = new NativeFunction(base.add(0xAA8C30), "void", ["pointer", "float", "pointer"]);
+    rpgAnimSpeedFn = new NativeFunction(base.add(0xB66CA0), "void", ["pointer", "pointer"]);
+    grenadeAnimSpeedFn = new NativeFunction(base.add(0xB5F7A0), "void", ["pointer", "pointer"]);
+  }
+
+  function initClassNameFunction(mod) {
+    try {
+      var classGetNameAddr = mod.findExportByName('il2cpp_class_get_name');
+      classGetNameFn = classGetNameAddr
+        ? new NativeFunction(classGetNameAddr, "pointer", ["pointer"])
+        : null;
+    } catch(e) {
+      classGetNameFn = null;
+    }
+  }
+
+  function detachHooks() {
+    for (var i = 0; i < hooks.length; i++) {
+      try { hooks[i].detach(); } catch(e) {}
+    }
+    hooks = [];
+  }
+
+  function resetRuntimeState() {
+    isPlayerShooting = false;
+    clearAcquiredWeaponTasks();
+  }
+
+  // ===== Hook 安装 =====
+  function enableFeature() {
       if (enabled) return;
       var mod = getGameAssembly();
       if (!mod) { sendBothLog('error', '射速', '射速连狙暂未就绪，请重新连接游戏后重试', 'SpeedGun GameAssembly.dll not found'); return; }
       var base = mod.base;
 
       try {
-        isMyWeaponFn = new NativeFunction(base.add(0xB6E1D0), "bool", ["pointer", "pointer"]);
-        getCharAnim = new NativeFunction(base.add(0xB35310), "pointer", ["pointer", "pointer"]);
-        setAnimSpeed = new NativeFunction(base.add(0xAA8C30), "void", ["pointer", "float", "pointer"]);
-        rpgAnimSpeedFn = new NativeFunction(base.add(0xB66CA0), "void", ["pointer", "pointer"]);
-        grenadeAnimSpeedFn = new NativeFunction(base.add(0xB5F7A0), "void", ["pointer", "pointer"]);
+        initNativeFunctions(base);
       } catch(e) {
+        resetNativeFunctions();
         sendBothLog('error', '射速', '射速连狙初始化失败，请稍后重试', 'SpeedGun NativeFunction init failed: ' + e.message);
         return;
       }
 
-      try {
-        var classGetNameAddr = mod.findExportByName('il2cpp_class_get_name');
-        if (classGetNameAddr) {
-          classGetNameFn = new NativeFunction(classGetNameAddr, "pointer", ["pointer"]);
-        }
-      } catch(e) {
-        classGetNameFn = null;
-      }
+      initClassNameFunction(mod);
 
       // 1) WPN_Gun.AnimSpeedSetting — 枪械(背包)动画加速（改进：onEnter立即设置）
       try {
@@ -490,28 +525,34 @@ modules.speedgun = (function() {
       enabled = true;
       sendDevLog('success', '射速', '射速变快已启用');
       sendStatus('speedgun', true);
-    },
-    disable: function() {
+  }
+
+  // ===== 功能开关与 RPC 边界 =====
+  function disableFeature() {
       if (!enabled) return;
-      for (var i = 0; i < hooks.length; i++) {
-        try { hooks[i].detach(); } catch(e) {}
-      }
-      hooks = [];
-      clearAcquiredWeaponTasks();
-      rpgAnimSpeedFn = null;
-      grenadeAnimSpeedFn = null;
-      classGetNameFn = null;
+      detachHooks();
+      resetRuntimeState();
+      resetNativeFunctions();
       enabled = false;
       sendDevLog('info', '射速', '射速变快已禁用');
       sendStatus('speedgun', false);
-    },
-    // 由武器赋予模块的 ModeBase.Update 在主线程下一帧处理。
-    clearRoomState: function() {
-      isPlayerShooting = false;
-      clearAcquiredWeaponTasks();
-    },
+  }
+
+  // 由武器赋予模块的 ModeBase.Update 在主线程下一帧处理。
+  function clearRoomState() {
+    resetRuntimeState();
+  }
+
+  function isEnabled() {
+    return enabled;
+  }
+
+  return {
+    enable: enableFeature,
+    disable: disableFeature,
+    clearRoomState: clearRoomState,
     notifyWeaponAcquired: notifyWeaponAcquired,
     processPendingWeaponSpeed: processPendingWeaponSpeed,
-    isEnabled: function() { return enabled; }
+    isEnabled: isEnabled
   };
 })();

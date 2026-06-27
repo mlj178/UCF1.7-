@@ -18,6 +18,7 @@ import psutil
 from enum import Enum
 from typing import Optional, Dict, Any, Callable
 from .event_bus import EventBus
+from .log_manager import log_to_file
 from .services import AppPersistenceService
 
 
@@ -92,16 +93,34 @@ class GameSessionManager:
     
     def stop(self):
         """Stop the session manager"""
+        log_to_file("info", "系统", "GameSessionManager stopping")
         self._stop_event.set()
         self._wake_event.set()
-        if self._worker_thread:
-            self._worker_thread.join(timeout=5)
-        if self._universal_manager:
-            self._universal_manager.unload()
-        if self._frida_manager:
-            self._frida_manager.disconnect()
-        self._universal_manager = None
-        self._frida_manager = None
+        try:
+            if self._worker_thread:
+                self._worker_thread.join(timeout=5)
+                if self._worker_thread.is_alive():
+                    log_to_file("warning", "系统", "GameSessionManager worker did not stop within timeout")
+                else:
+                    log_to_file("info", "系统", "GameSessionManager worker stopped")
+
+            if self._universal_manager:
+                try:
+                    self._universal_manager.unload()
+                    log_to_file("info", "系统", "Universal hook manager unloaded")
+                except Exception as e:
+                    log_to_file("warning", "系统", f"Universal hook manager unload failed: {e}")
+
+            if self._frida_manager:
+                try:
+                    self._frida_manager.disconnect()
+                    log_to_file("info", "系统", "Frida manager disconnected")
+                except Exception as e:
+                    log_to_file("warning", "系统", f"Frida manager disconnect failed: {e}")
+        finally:
+            self._universal_manager = None
+            self._frida_manager = None
+            log_to_file("info", "系统", "GameSessionManager stopped")
     
     def set_desired_state(self, feature_id: str, enabled: bool):
         """Set desired feature state (user intent)"""

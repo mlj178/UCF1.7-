@@ -142,7 +142,6 @@ class FeatureTabsView:
             fg_color=bg_color,
             border_width=1,
             border_color="#555555",
-            cursor="hand2",
         )
         frame.grid(row=row, column=col, columnspan=colspan, sticky="ew", padx=3, pady=3)
 
@@ -155,8 +154,6 @@ class FeatureTabsView:
             font=("Microsoft YaHei", 15, "bold"),
             text_color=title_text_color,
         ).pack(side="left", padx=4)
-
-        frame.bind("<Button-1>", lambda e: self._on_toggle_feature(feature_id))
 
         slider_label_ref = None
         if has_slider and slider_var and slider_range:

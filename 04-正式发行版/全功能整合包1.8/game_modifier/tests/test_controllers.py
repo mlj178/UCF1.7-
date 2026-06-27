@@ -7,6 +7,7 @@ from core.services.feature_command_service import FeatureCommandService
 from core.repositories.nano4t_config_repository import Nano4tConfigRepository
 from ui.controllers.app_event_controller import AppEventController
 from ui.controllers.feature_action_controller import FeatureActionController
+from ui.controllers.nano4t_runtime_controller import Nano4tRuntimeController
 from ui.controllers.nano4t_selection_controller import Nano4tSelectionController
 from ui.controllers.weapon_interaction_controller import WeaponInteractionController
 
@@ -23,6 +24,7 @@ class FakeApp:
     def __init__(self):
         self._ui_ready = True
         self._early_log_messages = []
+        self._stop = False
         self._features = {"isbot": True}
         self.isbot_states = []
         self.updated_switches = []
@@ -62,9 +64,12 @@ class FakeFeatureApp:
         self._ready = True
         self._features = {"knife": False, "gravity": False}
         self._knife_speed = 5.0
+        self._movespeed = 3.0
+        self._range_mult = 50.0
         self._gravity = 1.0
         self._jump = 1.0
         self._gravity_mode = "player_only"
+        self._timescale = 1.0
         self._frida = FakeFrida()
         self._feature_service = FeatureCommandService(self._frida)
         self._sound = FakeSound()
@@ -209,6 +214,17 @@ class ControllerTests(unittest.TestCase):
         self.assertEqual(app.isbot_states, ["off"])
         self.assertEqual(app.updated_switches, ["isbot"])
 
+    def test_event_controller_ignores_feature_status_while_app_is_stopping(self):
+        app = FakeApp()
+        app._stop = True
+        controller = AppEventController(app)
+
+        controller.on_feature_status(feature="isbot", enabled=False)
+
+        self.assertTrue(app._features["isbot"])
+        self.assertEqual(app.isbot_states, [])
+        self.assertEqual(app.updated_switches, [])
+
     def test_event_controller_hides_dev_log_from_ui(self):
         app = FakeApp()
         controller = AppEventController(app, log_writer=lambda *_args: None)
@@ -288,6 +304,18 @@ class ControllerTests(unittest.TestCase):
 
             self.assertFalse(result.ok)
             self.assertIn("幽灵方", result.error)
+
+    def test_nano4t_runtime_status_dot_uses_visible_text_color(self):
+        app = type("FakeNano4tApp", (), {})()
+        app.nano4t_status_dot = FakeLabel()
+        app.nano4t_status_label = FakeLabel()
+
+        controller = Nano4tRuntimeController(app)
+        controller.set_status("green", "已就绪")
+
+        self.assertEqual(app.nano4t_status_dot.configures[-1]["text"], "●")
+        self.assertEqual(app.nano4t_status_dot.configures[-1]["text_color"], "#2ecc71")
+        self.assertEqual(app.nano4t_status_label.configures[-1]["text"], "已就绪")
 
     def test_weapon_interaction_controller_uses_catalog_fallback_copy(self):
         controller = WeaponInteractionController(app=None)
