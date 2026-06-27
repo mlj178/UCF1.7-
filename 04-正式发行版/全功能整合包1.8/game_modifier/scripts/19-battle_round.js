@@ -3,6 +3,7 @@
 
 modules.battle_round_always = (function() {
     // RVA 地址常量
+    // ===== 配置与运行状态 =====
     var RVA = {
         Mode_Nano4_Terminator_TypeInfo: 0xE2CCB4,
         ModeBase_Nano_OnStartNewGameRound: 0xAF15D0,
@@ -26,6 +27,7 @@ modules.battle_round_always = (function() {
     var _hookCallCount = 0;
 
     // 安全读取指针
+    // ===== 指针读写工具 =====
     function safeReadPointer(addr) {
         try {
             if (!addr || addr.isNull()) return null;
@@ -57,6 +59,7 @@ modules.battle_round_always = (function() {
     }
 
     // 读取当前 isBattleRound 值
+    // ===== 状态读取与回合事件 =====
     function readBattleRoundFlag() {
         try {
             var mod = getGameAssembly();
@@ -79,7 +82,104 @@ modules.battle_round_always = (function() {
         }
     }
 
+    function sendRoundEvent(enabled, applied, currentIsBattleRound) {
+        send(JSON.stringify({
+            type: 'battle_round_round',
+            enabled: enabled,
+            applied: applied,
+            currentIsBattleRound: currentIsBattleRound
+        }));
+    }
+
+    function markModeEnter() {
+        if (_modeActive) return;
+        _modeActive = true;
+        send(JSON.stringify({ type: 'battle_round_mode_enter' }));
+    }
+
+    function markModeExit() {
+        if (!_modeActive) return;
+        _modeActive = false;
+        send(JSON.stringify({ type: 'battle_round_mode_exit' }));
+    }
+
+    function syncNano4TOnRound() {
+        // 进入正确模式时再初始化Buff模块；不需要Python定时轮询。
+        try {
+            if (modules.nano4t) {
+                modules.nano4t.onModeRound();
+            }
+        } catch(e) {}
+    }
+
+    function resolveTerminatorTypeInfo(currentBase, callId) {
+        var typeInfoAddr = currentBase.add(RVA.Mode_Nano4_Terminator_TypeInfo);
+        var typeInfo = safeReadPointer(typeInfoAddr);
+
+        sendLogFile('info', 'BattleRound', '[HOOK#' + callId + '] typeInfoAddr=' + typeInfoAddr + ', typeInfo=' + typeInfo);
+
+        if (!typeInfo || typeInfo.isNull()) {
+            if (!_loggedInvalidType) {
+                sendLogFile('warn', 'BattleRound', '[HOOK#' + callId + '] TypeInfo 指针无效');
+                _loggedInvalidType = true;
+            }
+            return null;
+        }
+        return typeInfo;
+    }
+
+    function isTerminatorModeInstance(modeInstance, typeInfo, callId) {
+        // ModeBase_Nano 被多个生化模式共用，只允许精确的多人生化 Terminator 实例通过
+        var instanceClass = safeReadPointer(modeInstance);
+        if (!instanceClass || !instanceClass.equals(typeInfo)) {
+            sendLogFile('info', 'BattleRound', '[HOOK#' + callId + '] 非 Mode_Nano4_Terminator 实例，跳过');
+            return false;
+        }
+        sendLogFile('info', 'BattleRound', '[HOOK#' + callId + '] Mode_Nano4_Terminator 类指针校验通过');
+        return true;
+    }
+
+    function resolveStaticFields(typeInfo, callId) {
+        var staticFields = safeReadPointer(typeInfo.add(0x5C));
+        sendLogFile('info', 'BattleRound', '[HOOK#' + callId + '] staticFields=' + staticFields);
+
+        if (!staticFields || staticFields.isNull()) {
+            if (!_loggedInvalidFields) {
+                sendLogFile('warn', 'BattleRound', '[HOOK#' + callId + '] static_fields 指针无效');
+                _loggedInvalidFields = true;
+            }
+            return null;
+        }
+        return staticFields;
+    }
+
+    function applyBattleRoundFlag(staticFields, callId) {
+        var oldVal = safeReadU8(staticFields.add(1));
+        sendLogFile('info', 'BattleRound', '[HOOK#' + callId + '] isBattleRound 当前值=' + oldVal);
+
+        if (oldVal === null) {
+            if (!_loggedReadFail) {
+                sendLogFile('warn', 'BattleRound', '[HOOK#' + callId + '] 无法读取 isBattleRound 字段');
+                _loggedReadFail = true;
+            }
+            return false;
+        }
+
+        if (oldVal !== 1) {
+            if (safeWriteU8(staticFields.add(1), 1)) {
+                sendLogFile('success', 'BattleRound', '[HOOK#' + callId + '] 强制写入 isBattleRound=1 (原值=' + oldVal + ')');
+            } else {
+                sendLogFile('error', 'BattleRound', '[HOOK#' + callId + '] 写入失败');
+                return false;
+            }
+        } else {
+            sendLogFile('info', 'BattleRound', '[HOOK#' + callId + '] isBattleRound 已是 1，无需写入');
+        }
+        return true;
+    }
+
     // 安装 Hook
+    // ===== Hook 安装与回调 =====
     function installHook() {
         if (_hookInstalled) return true;
 
@@ -111,88 +211,25 @@ modules.battle_round_always = (function() {
 
                         sendLogFile('info', 'BattleRound', '[HOOK#' + callId + '] currentBase=' + currentBase + ', cachedBase=' + _cachedBase + ', 相同=' + (currentBase.equals(_cachedBase)));
 
-                        var typeInfoAddr = currentBase.add(RVA.Mode_Nano4_Terminator_TypeInfo);
-                        var typeInfo = safeReadPointer(typeInfoAddr);
+                        var typeInfo = resolveTerminatorTypeInfo(currentBase, callId);
+                        if (!typeInfo) return;
 
-                        sendLogFile('info', 'BattleRound', '[HOOK#' + callId + '] typeInfoAddr=' + typeInfoAddr + ', typeInfo=' + typeInfo);
+                        if (!isTerminatorModeInstance(args[0], typeInfo, callId)) return;
 
-                        if (!typeInfo || typeInfo.isNull()) {
-                            if (!_loggedInvalidType) {
-                                sendLogFile('warn', 'BattleRound', '[HOOK#' + callId + '] TypeInfo 指针无效');
-                                _loggedInvalidType = true;
-                            }
-                            return;
-                        }
-
-                        // ModeBase_Nano 被多个生化模式共用，只允许精确的多人生化 Terminator 实例通过
-                        var modeInstance = args[0];
-                        var instanceClass = safeReadPointer(modeInstance);
-                        if (!instanceClass || !instanceClass.equals(typeInfo)) {
-                            sendLogFile('info', 'BattleRound', '[HOOK#' + callId + '] 非 Mode_Nano4_Terminator 实例，跳过');
-                            return;
-                        }
-                        sendLogFile('info', 'BattleRound', '[HOOK#' + callId + '] Mode_Nano4_Terminator 类指针校验通过');
-
-                        if (!_modeActive) {
-                            _modeActive = true;
-                            send(JSON.stringify({ type: 'battle_round_mode_enter' }));
-                        }
-
-                        // 进入正确模式时再初始化Buff模块；不需要Python定时轮询。
-                        try {
-                            if (modules.nano4t) {
-                                modules.nano4t.onModeRound();
-                            }
-                        } catch(e) {}
+                        markModeEnter();
+                        syncNano4TOnRound();
 
                         if (!_enabled) {
-                            send(JSON.stringify({
-                                type: 'battle_round_round',
-                                enabled: false,
-                                applied: false,
-                                currentIsBattleRound: -1
-                            }));
+                            sendRoundEvent(false, false, -1);
                             return;
                         }
 
-                        var staticFields = safeReadPointer(typeInfo.add(0x5C));
-                        sendLogFile('info', 'BattleRound', '[HOOK#' + callId + '] staticFields=' + staticFields);
+                        var staticFields = resolveStaticFields(typeInfo, callId);
+                        if (!staticFields) return;
 
-                        if (!staticFields || staticFields.isNull()) {
-                            if (!_loggedInvalidFields) {
-                                sendLogFile('warn', 'BattleRound', '[HOOK#' + callId + '] static_fields 指针无效');
-                                _loggedInvalidFields = true;
-                            }
-                            return;
-                        }
+                        if (!applyBattleRoundFlag(staticFields, callId)) return;
 
-                        var oldVal = safeReadU8(staticFields.add(1));
-                        sendLogFile('info', 'BattleRound', '[HOOK#' + callId + '] isBattleRound 当前值=' + oldVal);
-
-                        if (oldVal === null) {
-                            if (!_loggedReadFail) {
-                                sendLogFile('warn', 'BattleRound', '[HOOK#' + callId + '] 无法读取 isBattleRound 字段');
-                                _loggedReadFail = true;
-                            }
-                            return;
-                        }
-
-                        if (oldVal !== 1) {
-                            if (safeWriteU8(staticFields.add(1), 1)) {
-                                sendLogFile('success', 'BattleRound', '[HOOK#' + callId + '] 强制写入 isBattleRound=1 (原值=' + oldVal + ')');
-                            } else {
-                                sendLogFile('error', 'BattleRound', '[HOOK#' + callId + '] 写入失败');
-                            }
-                        } else {
-                            sendLogFile('info', 'BattleRound', '[HOOK#' + callId + '] isBattleRound 已是 1，无需写入');
-                        }
-
-                        send(JSON.stringify({
-                            type: 'battle_round_round',
-                            enabled: true,
-                            applied: true,
-                            currentIsBattleRound: 1
-                        }));
+                        sendRoundEvent(true, true, 1);
                     } catch(e) {
                         sendLogFile('error', 'BattleRound', '[HOOK#' + callId + '] 异常: ' + e.message);
                     }
@@ -201,10 +238,7 @@ modules.battle_round_always = (function() {
 
             _exitHookListener = Interceptor.attach(base.add(RVA.Mode_Nano4_Terminator_OnDestroy), {
                 onEnter: function() {
-                    if (_modeActive) {
-                        _modeActive = false;
-                        send(JSON.stringify({ type: 'battle_round_mode_exit' }));
-                    }
+                    markModeExit();
                 }
             });
 
@@ -227,6 +261,7 @@ modules.battle_round_always = (function() {
     }
 
     // 清理函数：在 Frida 会话断开时调用
+    // ===== 清理与状态重置 =====
     function cleanup() {
         sendLogFile('info', 'BattleRound', '[CLEANUP] 开始清理');
 
@@ -261,8 +296,8 @@ modules.battle_round_always = (function() {
         sendLogFile('info', 'BattleRound', '[CLEANUP] 清理完成');
     }
 
-    return {
-        enable: function() {
+    // ===== 功能开关与 RPC 边界 =====
+    function enableFeature() {
             try {
                 sendLogFile('info', 'BattleRound', '[ENABLE] 开始启用, _hookInstalled=' + _hookInstalled);
 
@@ -280,9 +315,9 @@ modules.battle_round_always = (function() {
             } catch(e) {
                 sendBothLog('error', 'BattleRound', '决战回合启用失败，请重新连接游戏后重试', 'BattleRound enable failed: ' + e.message);
             }
-        },
+    }
 
-        disable: function() {
+    function disableFeature() {
             try {
                 sendLogFile('info', 'BattleRound', '[DISABLE] 开始禁用');
 
@@ -291,31 +326,34 @@ modules.battle_round_always = (function() {
             } catch(e) {
                 sendBothLog('error', 'BattleRound', '决战回合关闭失败，请稍后重试', 'BattleRound disable failed: ' + e.message);
             }
-        },
+    }
 
-        cleanup: cleanup,
-
-        startMonitor: installHook,
-
-        getStatus: function() {
-            try {
-                var flag = readBattleRoundFlag();
-                return JSON.stringify({
-                    enabled: _enabled,
-                    hookInstalled: _hookInstalled,
-                    modeActive: _modeActive,
-                    currentIsBattleRound: flag,
-                    cachedBase: _cachedBase ? _cachedBase.toString() : null,
-                    hookCallCount: _hookCallCount
-                });
-            } catch(e) {
-                return JSON.stringify({
-                    enabled: _enabled,
-                    hookInstalled: _hookInstalled,
-                    currentIsBattleRound: -1
-                });
-            }
+    function getStatus() {
+        try {
+            var flag = readBattleRoundFlag();
+            return JSON.stringify({
+                enabled: _enabled,
+                hookInstalled: _hookInstalled,
+                modeActive: _modeActive,
+                currentIsBattleRound: flag,
+                cachedBase: _cachedBase ? _cachedBase.toString() : null,
+                hookCallCount: _hookCallCount
+            });
+        } catch(e) {
+            return JSON.stringify({
+                enabled: _enabled,
+                hookInstalled: _hookInstalled,
+                currentIsBattleRound: -1
+            });
         }
+    }
+
+    return {
+        enable: enableFeature,
+        disable: disableFeature,
+        cleanup: cleanup,
+        startMonitor: installHook,
+        getStatus: getStatus
     };
 })();
 

@@ -1,6 +1,6 @@
 import unittest
 
-from ui.views.shell_view import resolve_status_hint
+from ui.views.shell_view import apply_status_dot_style, resolve_status_hint
 from ui.views.weapon_giver_view import (
     CURRENT_WEAPON_TEXT,
     GIVE_BUTTON_TEXT,
@@ -30,12 +30,36 @@ class ShellViewTests(unittest.TestCase):
             "1. 启动游戏  2. 进入任意模式  3. 打开本工具  4. 开启功能",
         )
 
+    def test_apply_status_dot_style_sets_visible_text_color(self):
+        label = FakeLabel()
+
+        apply_status_dot_style(label, "green")
+        self.assertEqual(label.options["text"], "●")
+        self.assertEqual(label.options["text_color"], "#2ecc71")
+
+        apply_status_dot_style(label, "red")
+        self.assertEqual(label.options["text_color"], "#ff4444")
+
+        apply_status_dot_style(label, "yellow")
+        self.assertEqual(label.options["text_color"], "#ffcc00")
+
+        apply_status_dot_style(label, "gray")
+        self.assertEqual(label.options["text_color"], "#888888")
+
     def test_weapon_giver_copy_is_readable(self):
         self.assertEqual(WEAPON_GIVER_TITLE, "🔨 赋予武器")
         self.assertEqual(RESPAWN_WEAPON_TEXT, "复活自动装备武器")
         self.assertEqual(CURRENT_WEAPON_TEXT, "当前武器: 无")
         self.assertEqual(GIVE_BUTTON_TEXT, "赋予")
         self.assertEqual(HERO_TYPE_NAME, "英雄")
+
+
+class FakeLabel:
+    def __init__(self):
+        self.options = {}
+
+    def configure(self, **kwargs):
+        self.options.update(kwargs)
 
 
 if __name__ == "__main__":

@@ -31,6 +31,14 @@ from ui.controllers import (
 )
 from ui.views import AppShellView, FeatureTabsView, Nano4tView, WeaponGiverView
 from ui.views.common import bind_view_handles
+from ui.window_contract import (
+    APP_TITLE,
+    COLLAPSED_WINDOW_SIZE,
+    MAIN_WINDOW_GEOMETRY,
+    MAIN_WINDOW_MIN_SIZE,
+    STARTUP_LOG_TITLE,
+    collapsed_geometry_for,
+)
 
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
@@ -40,10 +48,10 @@ class App(ctk.CTk):
         super().__init__()
         # Initialize file logging first
         setup_logging()
-        self.title("游戏修改器控制台 - 全功能整合包 v1.8")
-        self.geometry("610x700+10+10")
+        self.title(APP_TITLE)
+        self.geometry(MAIN_WINDOW_GEOMETRY)
         self.resizable(True, True)
-        self.minsize(610, 400)
+        self.minsize(*MAIN_WINDOW_MIN_SIZE)
         self.attributes('-topmost', True)
         self.attributes('-alpha', 0.92)
 
@@ -75,7 +83,7 @@ class App(ctk.CTk):
         self._lock = threading.Lock()
         self._stop = False
         self._collapsed = False
-        self._saved_geometry = "700x750+10+10"
+        self._saved_geometry = MAIN_WINDOW_GEOMETRY
         self._pid = None
         self._gravity_debounce_timer = None
         self._monitoring = True
@@ -136,7 +144,7 @@ class App(ctk.CTk):
         self._load_feature_state()
         self._battle_round_controller.update_button_state()
         self._hotkey.set_app(self)
-        self._log("游戏修改器控制台 v1.8 — 全功能整合包")
+        self._log(STARTUP_LOG_TITLE)
         self._log("正在检测游戏进程...")
 
         # 配置文件保持同步读取；全局快捷键在窗口显示后再注册。
@@ -292,22 +300,14 @@ class App(ctk.CTk):
         self.log_box.configure(state="disabled")
 
     def _set_status(self, color, text):
-        dot_map = {"green": "🟢", "yellow": "🟡", "red": "🔴", "gray": "⚫"}
-        self.status_dot.configure(text=dot_map.get(color, "⚫"))
-        self.status_label.configure(text=text)
-        if color == "green":
-            self.hint_frame.configure(fg_color="#1a3a1a")
-            self.hint_label.configure(text_color="#88ff88")
-            self.hint_label.configure(text="✅ 已连接！点击功能按钮开启修改")
-        elif color == "red":
-            self.hint_frame.configure(fg_color="#3a1a1a")
-            self.hint_label.configure(text_color="#ff8888")
-            self.hint_label.configure(text="连接断开，正在重连...")
-        else:
-            self.hint_frame.configure(fg_color="#2a2a00")
-            self.hint_label.configure(text_color="#ffcc00")
-            self.hint_label.configure(
-                text="① 启动游戏 → ② 进入任意模式 → ③ 打开本工具 → ④ 开启功能开关")
+        self._shell_view.apply_status(
+            status_dot=self.status_dot,
+            status_label=self.status_label,
+            hint_frame=self.hint_frame,
+            hint_label=self.hint_label,
+            color=color,
+            text=text,
+        )
 
     def _update_switch(self, feature_id):
         switch_map = {
@@ -468,15 +468,15 @@ class App(ctk.CTk):
             self.btn_frame.pack_forget()
             self.log_box.pack_forget()
             self.collapse_btn.configure(text="▲ 展开界面")
-            self.minsize(400, 62)
-            self.geometry("400x62+10+10")
+            self.minsize(*COLLAPSED_WINDOW_SIZE)
+            self.geometry(collapsed_geometry_for(self._saved_geometry))
         else:
             self.hint_frame.pack(fill="x", padx=12, pady=(2, 8))
             self.tab_view.pack(fill="both", padx=12, pady=4, expand=True)
             self.btn_frame.pack(fill="x", padx=12, pady=(2, 6))
             self.log_box.pack(fill="x", padx=12, pady=(2, 12))
             self.collapse_btn.configure(text="▼ 折叠界面")
-            self.minsize(610, 400)
+            self.minsize(*MAIN_WINDOW_MIN_SIZE)
             self.geometry(self._saved_geometry)
 
     def _setup_tk_hotkeys(self):

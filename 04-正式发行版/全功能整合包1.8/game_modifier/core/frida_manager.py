@@ -157,6 +157,12 @@ recv('toggle', onToggle);
     def _build_rpc_exports(self):
         return r"""
 rpc.exports = {
+  cleanup: function(reason) {
+    if (typeof cleanupAll === 'function') {
+      return cleanupAll(reason || 'rpc_cleanup');
+    }
+    return JSON.stringify({ ok: false, reason: 'cleanupAll_missing' });
+  },
   gather: function() {
     if (!modules.gather) return JSON.stringify({ ok: false, msg: '聚怪模块未加载' });
     var result = modules.gather.gather();
@@ -239,7 +245,7 @@ rpc.exports = {
 
     def _build_init_message(self):
         return r"""
-sendLog('info', '系统', '游戏修改器 Agent v1.8 已加载');
+sendLog('info', '系统', '全功能整合包 Agent v1.8 已加载');
 sendLog('info', '系统', '请先附加到游戏进程，然后开启对应功能');
 sendLog('info', '系统', '架构: ' + Process.arch + ', 平台: ' + Process.platform);
 setTimeout(function() { getGameAssembly(); }, 100);
@@ -331,18 +337,34 @@ setTimeout(function() { getGameAssembly(); }, 100);
 
     def disconnect(self):
         """Disconnect from game process"""
+        script = self._script
+        session = self._session
+
         try:
-            if self._script:
-                self._script.unload()
-                self._script = None
-            if self._session:
-                self._session.detach()
-                self._session = None
-        except Exception:
-            pass
-        
-        self._ready = False
-        self._pid = None  # Clear PID on disconnect
+            if script:
+                try:
+                    script.exports_sync.cleanup("python_disconnect")
+                    log_to_file("info", "系统", "Frida JS cleanup completed before unload")
+                except Exception as e:
+                    log_to_file("warning", "系统", f"Frida JS cleanup failed before unload: {e}")
+
+                try:
+                    script.unload()
+                    log_to_file("info", "系统", "Frida script unloaded")
+                except Exception as e:
+                    log_to_file("warning", "系统", f"Frida script unload failed: {e}")
+
+            if session:
+                try:
+                    session.detach()
+                    log_to_file("info", "系统", "Frida session detached")
+                except Exception as e:
+                    log_to_file("warning", "系统", f"Frida session detach failed: {e}")
+        finally:
+            self._script = None
+            self._session = None
+            self._ready = False
+            self._pid = None  # Clear PID on disconnect
 
     def send_toggle(self, feature, enable, extra_params=None):
         if not self._script:

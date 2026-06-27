@@ -77,6 +77,9 @@ class AppEventController:
 
     def on_feature_status(self, **kwargs):
         app = self._app
+        if getattr(app, "_stop", False):
+            return
+
         feature_id = kwargs.get("feature", "")
         enabled = kwargs.get("enabled", False)
         app._features[feature_id] = enabled

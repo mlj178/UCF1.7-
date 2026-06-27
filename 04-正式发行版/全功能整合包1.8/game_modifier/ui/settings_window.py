@@ -6,6 +6,7 @@ from core.config import FEATURES_INFO, DATA_DIR, RESOURCE_DIR, HOTKEY_POSITIONS,
 from core.hotkey_manager import HotkeyManager
 from core.sound_manager import SoundManager
 from core.weapon_catalog import get_weapon_name
+from ui.window_contract import APP_TITLE, APP_VERSION
 
 
 class SettingsWindow(ctk.CTkToplevel):
@@ -113,11 +114,6 @@ class SettingsWindow(ctk.CTkToplevel):
                      font=("Microsoft YaHei", 14, "bold")).pack(pady=(20, 6))
         
         self._setup_weapon_hotkey_section(hotkey_frame)
-
-        save_btn = ctk.CTkButton(self, text="保存并应用", width=100,
-                                  command=self._on_save,
-                                  fg_color="#007acc", hover_color="#005a99")
-        save_btn.pack(pady=(0, 12))
     
     def _setup_weapon_hotkey_section(self, parent):
         """设置武器快捷键显示部分"""
@@ -155,9 +151,9 @@ class SettingsWindow(ctk.CTkToplevel):
         about_frame = ctk.CTkScrollableFrame(tab, corner_radius=0)
         about_frame.pack(fill="both", expand=True, padx=4, pady=4)
 
-        ctk.CTkLabel(about_frame, text="游戏修改器控制台 - 全功能整合包 v1.8",
+        ctk.CTkLabel(about_frame, text=APP_TITLE,
                      font=("Microsoft YaHei", 18, "bold")).pack(pady=(12, 4))
-        ctk.CTkLabel(about_frame, text="版本: v1.8",
+        ctk.CTkLabel(about_frame, text=f"版本: {APP_VERSION}",
                      font=("Microsoft YaHei", 12)).pack(pady=2)
         ctk.CTkLabel(about_frame, text="作者: 挂呱呱呱",
                      font=("Microsoft YaHei", 12)).pack(pady=2)

@@ -71,3 +71,66 @@ function readU8(addr) { try { return addr ? addr.readU8() : null; } catch (e) { 
 
 // 模块注册表 - 所有模块通过 modules 对象注册
 var modules = {};
+var cleanupCallbacks = [];
+var cleanupRunning = false;
+
+function registerCleanup(callback) {
+  if (typeof callback !== 'function') return false;
+  cleanupCallbacks.push(callback);
+  return true;
+}
+
+function cleanupAll(reason) {
+  if (cleanupRunning) {
+    return JSON.stringify({ ok: true, skipped: true, reason: 'cleanup_already_running' });
+  }
+
+  cleanupRunning = true;
+  var result = { ok: true, reason: reason || 'cleanup', modules: [], callbacks: 0, errors: [] };
+
+  try {
+    sendLogFile('info', '系统', '[CLEANUP] 开始清理: ' + result.reason);
+  } catch (_) {}
+
+  try {
+    for (var name in modules) {
+      if (!Object.prototype.hasOwnProperty.call(modules, name)) continue;
+      var module = modules[name];
+      if (!module) continue;
+
+      try {
+        if (typeof module.disable === 'function') {
+          module.disable();
+          result.modules.push(name + '.disable');
+        } else if (typeof module.cleanup === 'function') {
+          module.cleanup();
+          result.modules.push(name + '.cleanup');
+        } else if (typeof module.stop === 'function') {
+          module.stop();
+          result.modules.push(name + '.stop');
+        }
+      } catch (e) {
+        result.ok = false;
+        result.errors.push(name + ': ' + (e.message || e));
+      }
+    }
+
+    for (var i = cleanupCallbacks.length - 1; i >= 0; i--) {
+      try {
+        cleanupCallbacks[i](result.reason);
+        result.callbacks++;
+      } catch (e2) {
+        result.ok = false;
+        result.errors.push('callback#' + i + ': ' + (e2.message || e2));
+      }
+    }
+  } finally {
+    cleanupCallbacks = [];
+    cleanupRunning = false;
+    try {
+      sendLogFile('info', '系统', '[CLEANUP] 清理完成: modules=' + result.modules.length + ', callbacks=' + result.callbacks + ', errors=' + result.errors.length);
+    } catch (_) {}
+  }
+
+  return JSON.stringify(result);
+}

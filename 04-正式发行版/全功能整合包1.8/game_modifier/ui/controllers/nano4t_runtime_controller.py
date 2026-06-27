@@ -2,6 +2,7 @@ import threading
 import time
 
 from core.config import NANO4T_ATTRS
+from ui.views.shell_view import apply_status_dot_style
 
 
 class Nano4tRuntimeController:
@@ -54,8 +55,7 @@ class Nano4tRuntimeController:
 
     def set_status(self, color, text):
         app = self._app
-        dot_map = {"green": "🟢", "yellow": "🟡", "red": "🔴", "gray": "⚫"}
-        app.nano4t_status_dot.configure(text=dot_map.get(color, "⚫"))
+        apply_status_dot_style(app.nano4t_status_dot, color)
         app.nano4t_status_label.configure(text=text)
 
     def on_ready(self, count):
