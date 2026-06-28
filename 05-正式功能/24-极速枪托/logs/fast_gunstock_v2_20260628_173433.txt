@@ -1,0 +1,1011 @@
+17:34:34  日志文件: D:\trae_project\ucf1.7-modifier\05-正式功能\24-极速枪托\logs\fast_gunstock_v2_20260628_173433.txt
+17:34:37  检测到游戏 PID: 28272，正在连接...
+17:34:37  [success][极速枪托v2/INIT] 极速枪托 v2.0 研究脚本已加载
+17:34:37  [info][极速枪托v2/INIT] 本版不改 Animator.speed；建议先 trace_only，再 unlock_after_damage，最后才测 early_damage_unlock
+17:34:37  脚本已加载。先用 trace_only 观察，再切换模式测试。
+17:34:37  [success][极速枪托v2/CONFIG] {"mode":"unlock_after_damage","unlockMethod":"call_exit","unlockDelayMs":25,"earlyDamageDelayMs":90,"earlyUnlockDelayMs":15,"earlyAttackIndex":0,"cleanupAfterMs":2500,"maxLogsPerModule":300,"verboseTrace":true}
+17:34:37  配置已应用: {'mode': 'unlock_after_damage', 'unlockMethod': 'call_exit', 'unlockDelayMs': 25, 'earlyDamageDelayMs': 90, 'earlyUnlockDelayMs': 15, 'earlyAttackIndex': 0, 'verboseTrace': True}
+17:41:14  [success][极速枪托v2/CONFIG] {"mode":"unlock_after_damage","unlockMethod":"call_exit","unlockDelayMs":25,"earlyDamageDelayMs":90,"earlyUnlockDelayMs":15,"earlyAttackIndex":0,"cleanupAfterMs":2500,"maxLogsPerModule":300,"verboseTrace":true}
+17:41:14  [success][极速枪托v2/INIT] GameAssembly base=0x654b0000
+17:41:14  [success][极速枪托v2/INIT] NativeFunction 初始化成功；本版不使用 Animator.set_speed
+17:41:14  [success][极速枪托v2/HOOK] v2 hooks installed; Animator speed is NOT touched
+17:41:14  [success][极速枪托v2/STATE] 已开启 mode=unlock_after_damage unlockMethod=call_exit unlockDelayMs=25
+17:41:14  enable() 返回: True
+17:41:19  [success][极速枪托v2/SPECIAL] OnSpecialBtnDown seq=1 weapon=0x40cf4170 mode=unlock_after_damage lock=0
+17:41:19  [success][极速枪托v2/SPECIAL] OnSpecialBtnDown seq=2 weapon=0x40cf4170 mode=unlock_after_damage lock=0
+17:41:19  [info][极速枪托v2/SPECIAL] right click skipped by original lock weapon=0x40cf4170 lock=1
+17:41:19  [success][极速枪托v2/DAMAGE] natural KnifeAttackEvent seq=2 attackIndex=0 elapsed=169ms
+17:41:19  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=2 elapsed=197ms lockBefore=1
+17:41:19  [success][极速枪托v2/UNLOCK] call OnKnifeAttackExit reason=after_natural_damage/seq=2/delay=25 lock 1 -> 0
+17:41:19  [success][极速枪托v2/SPECIAL] OnSpecialBtnDown seq=3 weapon=0x40cf4170 mode=unlock_after_damage lock=0
+17:41:19  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=3 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:41:19  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=3 elapsed=0ms lockBefore=1
+17:41:19  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:41:19  [success][极速枪托v2/SPECIAL] OnSpecialBtnDown seq=4 weapon=0x40cf4170 mode=unlock_after_damage lock=0
+17:41:19  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=4 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:41:19  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=4 elapsed=0ms lockBefore=1
+17:41:19  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:41:19  [success][极速枪托v2/SPECIAL] OnSpecialBtnDown seq=5 weapon=0x40cf4170 mode=unlock_after_damage lock=0
+17:41:20  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=5 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:41:20  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=5 elapsed=0ms lockBefore=1
+17:41:20  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:41:20  [success][极速枪托v2/SPECIAL] OnSpecialBtnDown seq=6 weapon=0x40cf4170 mode=unlock_after_damage lock=0
+17:41:20  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=6 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:41:20  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=6 elapsed=0ms lockBefore=1
+17:41:20  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:41:20  [success][极速枪托v2/SPECIAL] OnSpecialBtnDown seq=7 weapon=0x40cf4170 mode=unlock_after_damage lock=0
+17:41:20  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=7 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:41:20  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=7 elapsed=0ms lockBefore=1
+17:41:20  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:41:20  [success][极速枪托v2/SPECIAL] OnSpecialBtnDown seq=8 weapon=0x40cf4170 mode=unlock_after_damage lock=0
+17:41:20  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=8 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:41:20  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=8 elapsed=0ms lockBefore=1
+17:41:20  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:41:20  [success][极速枪托v2/SPECIAL] OnSpecialBtnDown seq=9 weapon=0x40cf4170 mode=unlock_after_damage lock=0
+17:41:20  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=9 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:41:20  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=9 elapsed=0ms lockBefore=1
+17:41:20  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:41:20  [success][极速枪托v2/SPECIAL] OnSpecialBtnDown seq=10 weapon=0x40cf4170 mode=unlock_after_damage lock=0
+17:41:20  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=10 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:41:21  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=10 elapsed=1ms lockBefore=1
+17:41:21  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:41:21  [success][极速枪托v2/SPECIAL] OnSpecialBtnDown seq=11 weapon=0x40cf4170 mode=unlock_after_damage lock=0
+17:41:21  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=11 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:41:21  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=11 elapsed=0ms lockBefore=1
+17:41:21  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:41:21  [success][极速枪托v2/SPECIAL] OnSpecialBtnDown seq=12 weapon=0x40cf4170 mode=unlock_after_damage lock=0
+17:41:21  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=12 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:41:21  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=12 elapsed=0ms lockBefore=1
+17:41:21  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:41:22  [success][极速枪托v2/SPECIAL] OnSpecialBtnDown seq=13 weapon=0x40cf4170 mode=unlock_after_damage lock=0
+17:41:22  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=13 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:41:22  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=13 elapsed=0ms lockBefore=1
+17:41:22  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:41:22  [success][极速枪托v2/SPECIAL] OnSpecialBtnDown seq=14 weapon=0x40cf4170 mode=unlock_after_damage lock=0
+17:41:22  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=14 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:41:22  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=14 elapsed=0ms lockBefore=1
+17:41:22  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:41:22  [success][极速枪托v2/SPECIAL] OnSpecialBtnDown seq=15 weapon=0x40cf4170 mode=unlock_after_damage lock=0
+17:41:22  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=15 name=knife-attack tag=knifeAttack elapsed=1ms lock=1
+17:41:22  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=15 elapsed=1ms lockBefore=1
+17:41:22  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:41:22  [success][极速枪托v2/SPECIAL] OnSpecialBtnDown seq=16 weapon=0x40cf4170 mode=unlock_after_damage lock=0
+17:41:22  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=16 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:41:22  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=16 elapsed=0ms lockBefore=1
+17:41:22  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:41:22  [success][极速枪托v2/SPECIAL] OnSpecialBtnDown seq=17 weapon=0x40cf4170 mode=unlock_after_damage lock=0
+17:41:22  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=17 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:41:22  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=17 elapsed=0ms lockBefore=1
+17:41:22  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:41:23  [success][极速枪托v2/SPECIAL] OnSpecialBtnDown seq=18 weapon=0x40cf4170 mode=unlock_after_damage lock=0
+17:41:23  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=18 name=knife-attack tag=knifeAttack elapsed=1ms lock=1
+17:41:23  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=18 elapsed=1ms lockBefore=1
+17:41:23  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:41:23  [success][极速枪托v2/SPECIAL] OnSpecialBtnDown seq=19 weapon=0x40cf4170 mode=unlock_after_damage lock=0
+17:41:23  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=19 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:41:23  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=19 elapsed=0ms lockBefore=1
+17:41:23  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:41:23  [success][极速枪托v2/SPECIAL] OnSpecialBtnDown seq=20 weapon=0x40cf4170 mode=unlock_after_damage lock=0
+17:41:23  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=20 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:41:23  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=20 elapsed=0ms lockBefore=1
+17:41:23  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:41:23  [success][极速枪托v2/SPECIAL] OnSpecialBtnDown seq=21 weapon=0x40cf4170 mode=unlock_after_damage lock=0
+17:41:23  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=21 name=knife-attack tag=knifeAttack elapsed=1ms lock=1
+17:41:23  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=21 elapsed=1ms lockBefore=1
+17:41:23  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:41:23  [success][极速枪托v2/SPECIAL] OnSpecialBtnDown seq=22 weapon=0x40cf4170 mode=unlock_after_damage lock=0
+17:41:23  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=22 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:41:23  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=22 elapsed=0ms lockBefore=1
+17:41:23  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:41:23  [success][极速枪托v2/SPECIAL] OnSpecialBtnDown seq=23 weapon=0x40cf4170 mode=unlock_after_damage lock=0
+17:41:23  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=23 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:41:23  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=23 elapsed=0ms lockBefore=1
+17:41:23  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:41:23  [success][极速枪托v2/SPECIAL] OnSpecialBtnDown seq=24 weapon=0x40cf4170 mode=unlock_after_damage lock=0
+17:41:23  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=24 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:41:23  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=24 elapsed=0ms lockBefore=1
+17:41:23  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:41:24  [success][极速枪托v2/SPECIAL] OnSpecialBtnDown seq=25 weapon=0x40cf4170 mode=unlock_after_damage lock=0
+17:41:24  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=25 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:41:24  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=25 elapsed=0ms lockBefore=1
+17:41:24  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:41:24  [success][极速枪托v2/SPECIAL] OnSpecialBtnDown seq=26 weapon=0x40cf4170 mode=unlock_after_damage lock=0
+17:41:24  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=26 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:41:24  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=26 elapsed=0ms lockBefore=1
+17:41:24  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:41:24  [success][极速枪托v2/SPECIAL] OnSpecialBtnDown seq=27 weapon=0x40cf4170 mode=unlock_after_damage lock=0
+17:41:24  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=27 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:41:24  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=27 elapsed=0ms lockBefore=1
+17:41:24  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:41:24  [success][极速枪托v2/SPECIAL] OnSpecialBtnDown seq=28 weapon=0x40cf4170 mode=unlock_after_damage lock=0
+17:41:24  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=28 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:41:24  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=28 elapsed=0ms lockBefore=1
+17:41:24  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:41:24  [success][极速枪托v2/SPECIAL] OnSpecialBtnDown seq=29 weapon=0x40cf4170 mode=unlock_after_damage lock=0
+17:41:24  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=29 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:41:24  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=29 elapsed=0ms lockBefore=1
+17:41:24  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:41:24  [success][极速枪托v2/SPECIAL] OnSpecialBtnDown seq=30 weapon=0x40cf4170 mode=unlock_after_damage lock=0
+17:41:24  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=30 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:41:24  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=30 elapsed=0ms lockBefore=1
+17:41:24  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:41:25  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=31 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:41:25  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=31 elapsed=0ms lockBefore=1
+17:41:25  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:41:25  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=32 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:41:25  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=32 elapsed=0ms lockBefore=1
+17:41:25  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:42:12  [success][极速枪托v2/DAMAGE] natural KnifeAttackEvent seq=33 attackIndex=0 elapsed=170ms
+17:42:12  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=33 elapsed=195ms lockBefore=1
+17:42:12  [success][极速枪托v2/UNLOCK] call OnKnifeAttackExit reason=after_natural_damage/seq=33/delay=25 lock 1 -> 0
+17:42:12  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=33 name=knife-attack tag=knifeAttack elapsed=669ms lock=0
+17:42:12  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=33 elapsed=669ms lockBefore=0
+17:42:12  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:42:12  [info][极速枪托v2/SPECIAL] right click skipped by original lock weapon=0x40cf4170 lock=1
+17:42:12  [success][极速枪托v2/DAMAGE] natural KnifeAttackEvent seq=34 attackIndex=0 elapsed=169ms
+17:42:12  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=34 elapsed=196ms lockBefore=1
+17:42:12  [success][极速枪托v2/UNLOCK] call OnKnifeAttackExit reason=after_natural_damage/seq=34/delay=25 lock 1 -> 0
+17:42:13  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=35 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:42:13  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=35 elapsed=0ms lockBefore=1
+17:42:13  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:42:13  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=36 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:42:13  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=36 elapsed=0ms lockBefore=1
+17:42:13  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:42:13  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=37 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:42:13  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=37 elapsed=0ms lockBefore=1
+17:42:13  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:42:13  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=38 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:42:13  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=38 elapsed=0ms lockBefore=1
+17:42:13  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:42:13  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=39 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:42:13  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=39 elapsed=1ms lockBefore=1
+17:42:13  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:42:13  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=40 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:42:13  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=40 elapsed=0ms lockBefore=1
+17:42:13  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:42:14  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=41 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:42:14  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=41 elapsed=0ms lockBefore=1
+17:42:14  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:42:14  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=42 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:42:14  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=42 elapsed=0ms lockBefore=1
+17:42:14  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:42:14  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=43 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:42:14  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=43 elapsed=0ms lockBefore=1
+17:42:14  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:42:14  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=44 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:42:14  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=44 elapsed=1ms lockBefore=1
+17:42:14  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:42:14  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=45 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:42:14  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=45 elapsed=0ms lockBefore=1
+17:42:14  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:42:14  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=46 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:42:14  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=46 elapsed=0ms lockBefore=1
+17:42:14  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:42:15  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=47 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:42:15  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=47 elapsed=1ms lockBefore=1
+17:42:15  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:42:15  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=48 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:42:15  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=48 elapsed=0ms lockBefore=1
+17:42:15  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:42:15  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=49 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:42:15  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=49 elapsed=0ms lockBefore=1
+17:42:15  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:42:15  [success][极速枪托v2/SPECIAL] OnSpecialBtnDown seq=50 weapon=0x40cf4170 mode=unlock_after_damage lock=0
+17:42:15  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=50 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:42:15  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=50 elapsed=0ms lockBefore=1
+17:42:15  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:42:15  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=51 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:42:15  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=51 elapsed=0ms lockBefore=1
+17:42:15  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:42:15  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=52 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:42:15  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=52 elapsed=0ms lockBefore=1
+17:42:15  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:42:16  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=53 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:42:16  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=53 elapsed=0ms lockBefore=1
+17:42:16  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:42:16  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=54 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:42:16  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=54 elapsed=0ms lockBefore=1
+17:42:16  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:42:16  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=55 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:42:16  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=55 elapsed=0ms lockBefore=1
+17:42:16  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:42:42  [info][极速枪托v2/SPECIAL] right click skipped by original lock weapon=0x40cf4170 lock=1
+17:42:42  [success][极速枪托v2/DAMAGE] natural KnifeAttackEvent seq=56 attackIndex=0 elapsed=168ms
+17:42:42  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=56 elapsed=195ms lockBefore=1
+17:42:42  [success][极速枪托v2/UNLOCK] call OnKnifeAttackExit reason=after_natural_damage/seq=56/delay=25 lock 1 -> 0
+17:42:42  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=57 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:42:42  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=57 elapsed=0ms lockBefore=1
+17:42:42  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:42:42  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=58 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:42:42  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=58 elapsed=0ms lockBefore=1
+17:42:42  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:42:42  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=59 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:42:42  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=59 elapsed=0ms lockBefore=1
+17:42:42  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:42:44  [info][极速枪托v2/SPECIAL] right click skipped by original lock weapon=0x40cf4170 lock=1
+17:42:44  [success][极速枪托v2/DAMAGE] natural KnifeAttackEvent seq=60 attackIndex=0 elapsed=169ms
+17:42:44  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=60 elapsed=196ms lockBefore=1
+17:42:44  [success][极速枪托v2/UNLOCK] call OnKnifeAttackExit reason=after_natural_damage/seq=60/delay=25 lock 1 -> 0
+17:42:44  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=61 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:42:44  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=61 elapsed=0ms lockBefore=1
+17:42:44  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:42:44  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=62 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:42:44  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=62 elapsed=0ms lockBefore=1
+17:42:44  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:42:44  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=63 name=knife-attack tag=knifeAttack elapsed=1ms lock=1
+17:42:44  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=63 elapsed=1ms lockBefore=1
+17:42:44  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:42:44  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=64 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:42:44  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=64 elapsed=0ms lockBefore=1
+17:42:44  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:42:44  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=65 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:42:44  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=65 elapsed=0ms lockBefore=1
+17:42:44  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:42:45  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=66 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:42:45  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=66 elapsed=0ms lockBefore=1
+17:42:45  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:42:45  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=67 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:42:45  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=67 elapsed=0ms lockBefore=1
+17:42:45  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:42:45  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=68 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:42:45  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=68 elapsed=0ms lockBefore=1
+17:42:45  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:42:45  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=69 name=knife-attack tag=knifeAttack elapsed=1ms lock=1
+17:42:45  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=69 elapsed=1ms lockBefore=1
+17:42:45  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:42:45  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=70 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:42:45  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=70 elapsed=1ms lockBefore=1
+17:42:45  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:42:45  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=71 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:42:45  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=71 elapsed=0ms lockBefore=1
+17:42:45  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:42:46  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=72 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:42:46  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=72 elapsed=0ms lockBefore=1
+17:42:46  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:42:46  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=73 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:42:46  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=73 elapsed=0ms lockBefore=1
+17:42:46  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:42:46  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=74 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:42:46  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=74 elapsed=0ms lockBefore=1
+17:42:46  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:42:46  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=75 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:42:46  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=75 elapsed=1ms lockBefore=1
+17:42:46  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:42:46  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=76 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:42:46  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=76 elapsed=0ms lockBefore=1
+17:42:46  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:42:46  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=77 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:42:46  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=77 elapsed=0ms lockBefore=1
+17:42:46  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:42:47  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=78 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:42:47  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=78 elapsed=0ms lockBefore=1
+17:42:47  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:42:47  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=79 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:42:47  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=79 elapsed=0ms lockBefore=1
+17:42:47  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:42:47  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=80 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:42:47  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=80 elapsed=0ms lockBefore=1
+17:42:47  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:42:47  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=81 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:42:47  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=81 elapsed=0ms lockBefore=1
+17:42:47  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:42:47  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=82 name=knife-attack tag=knifeAttack elapsed=1ms lock=1
+17:42:47  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=82 elapsed=1ms lockBefore=1
+17:42:47  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:42:47  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=83 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:42:47  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=83 elapsed=0ms lockBefore=1
+17:42:47  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:42:47  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=84 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:42:47  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=84 elapsed=2ms lockBefore=1
+17:42:47  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:42:48  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=85 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:42:48  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=85 elapsed=0ms lockBefore=1
+17:42:48  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:42:48  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=86 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:42:48  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=86 elapsed=0ms lockBefore=1
+17:42:48  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:42:48  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=87 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:42:48  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=87 elapsed=0ms lockBefore=1
+17:42:48  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:42:48  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=88 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:42:48  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=88 elapsed=0ms lockBefore=1
+17:42:48  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:42:48  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=89 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:42:48  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=89 elapsed=1ms lockBefore=1
+17:42:48  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:42:48  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=90 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:42:48  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=90 elapsed=0ms lockBefore=1
+17:42:48  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:42:49  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=91 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:42:49  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=91 elapsed=0ms lockBefore=1
+17:42:49  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:42:49  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=92 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:42:49  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=92 elapsed=0ms lockBefore=1
+17:42:49  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:42:49  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=93 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:42:49  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=93 elapsed=0ms lockBefore=1
+17:42:49  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:42:49  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=94 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:42:49  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=94 elapsed=0ms lockBefore=1
+17:42:49  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:42:51  [info][极速枪托v2/SPECIAL] right click skipped by original lock weapon=0x40cf4170 lock=1
+17:42:51  [success][极速枪托v2/DAMAGE] natural KnifeAttackEvent seq=95 attackIndex=0 elapsed=167ms
+17:42:51  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=95 elapsed=195ms lockBefore=1
+17:42:51  [success][极速枪托v2/UNLOCK] call OnKnifeAttackExit reason=after_natural_damage/seq=95/delay=25 lock 1 -> 0
+17:42:51  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=96 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:42:51  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=96 elapsed=0ms lockBefore=1
+17:42:51  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:42:51  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=97 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:42:51  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=97 elapsed=0ms lockBefore=1
+17:42:51  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:42:51  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=98 name=knife-attack tag=knifeAttack elapsed=1ms lock=1
+17:42:51  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=98 elapsed=1ms lockBefore=1
+17:42:51  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:42:51  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=99 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:42:51  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=99 elapsed=0ms lockBefore=1
+17:42:51  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:42:51  [success][极速枪托v2/SPECIAL] OnSpecialBtnDown seq=100 weapon=0x40cf4170 mode=unlock_after_damage lock=0
+17:42:51  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=100 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:42:51  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=100 elapsed=0ms lockBefore=1
+17:42:52  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:42:53  [info][极速枪托v2/SPECIAL] right click skipped by original lock weapon=0x40cf4170 lock=1
+17:42:53  [success][极速枪托v2/DAMAGE] natural KnifeAttackEvent seq=101 attackIndex=0 elapsed=168ms
+17:42:53  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=101 elapsed=196ms lockBefore=1
+17:42:53  [success][极速枪托v2/UNLOCK] call OnKnifeAttackExit reason=after_natural_damage/seq=101/delay=25 lock 1 -> 0
+17:42:53  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=102 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:42:53  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=102 elapsed=0ms lockBefore=1
+17:42:53  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:42:54  [info][极速枪托v2/SPECIAL] right click skipped by original lock weapon=0x40cf4170 lock=1
+17:42:54  [success][极速枪托v2/DAMAGE] natural KnifeAttackEvent seq=103 attackIndex=0 elapsed=168ms
+17:42:54  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=103 elapsed=196ms lockBefore=1
+17:42:54  [success][极速枪托v2/UNLOCK] call OnKnifeAttackExit reason=after_natural_damage/seq=103/delay=25 lock 1 -> 0
+17:42:54  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=104 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:42:54  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=104 elapsed=0ms lockBefore=1
+17:42:54  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:42:55  [success][极速枪托v2/DAMAGE] natural KnifeAttackEvent seq=105 attackIndex=0 elapsed=167ms
+17:42:55  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=105 elapsed=194ms lockBefore=1
+17:42:55  [success][极速枪托v2/UNLOCK] call OnKnifeAttackExit reason=after_natural_damage/seq=105/delay=25 lock 1 -> 0
+17:42:56  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=105 name=knife-attack tag=knifeAttack elapsed=833ms lock=0
+17:42:56  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=105 elapsed=833ms lockBefore=0
+17:42:56  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:42:56  [info][极速枪托v2/SPECIAL] right click skipped by original lock weapon=0x40cf4170 lock=1
+17:42:56  [success][极速枪托v2/DAMAGE] natural KnifeAttackEvent seq=106 attackIndex=0 elapsed=167ms
+17:42:56  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=106 elapsed=194ms lockBefore=1
+17:42:56  [success][极速枪托v2/UNLOCK] call OnKnifeAttackExit reason=after_natural_damage/seq=106/delay=25 lock 1 -> 0
+17:42:57  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=107 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:42:57  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=107 elapsed=0ms lockBefore=1
+17:42:57  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:42:57  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=108 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:42:57  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=108 elapsed=0ms lockBefore=1
+17:42:57  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:42:57  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=109 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:42:57  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=109 elapsed=0ms lockBefore=1
+17:42:57  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:42:58  [info][极速枪托v2/SPECIAL] right click skipped by original lock weapon=0x40cf4170 lock=1
+17:42:58  [success][极速枪托v2/DAMAGE] natural KnifeAttackEvent seq=110 attackIndex=0 elapsed=167ms
+17:42:58  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=110 elapsed=195ms lockBefore=1
+17:42:58  [success][极速枪托v2/UNLOCK] call OnKnifeAttackExit reason=after_natural_damage/seq=110/delay=25 lock 1 -> 0
+17:42:58  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=111 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:42:58  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=111 elapsed=0ms lockBefore=1
+17:42:58  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:42:58  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=112 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:42:58  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=112 elapsed=0ms lockBefore=1
+17:42:58  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:42:59  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=113 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:42:59  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=113 elapsed=0ms lockBefore=1
+17:42:59  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:43:02  [info][极速枪托v2/SPECIAL] right click skipped by original lock weapon=0x40cf4170 lock=1
+17:43:02  [success][极速枪托v2/DAMAGE] natural KnifeAttackEvent seq=114 attackIndex=0 elapsed=168ms
+17:43:02  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=114 elapsed=197ms lockBefore=1
+17:43:02  [success][极速枪托v2/UNLOCK] call OnKnifeAttackExit reason=after_natural_damage/seq=114/delay=25 lock 1 -> 0
+17:43:02  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=115 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:43:02  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=115 elapsed=0ms lockBefore=1
+17:43:02  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:43:04  [success][极速枪托v2/DAMAGE] natural KnifeAttackEvent seq=116 attackIndex=0 elapsed=166ms
+17:43:04  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=116 elapsed=193ms lockBefore=1
+17:43:04  [success][极速枪托v2/UNLOCK] call OnKnifeAttackExit reason=after_natural_damage/seq=116/delay=25 lock 1 -> 0
+17:43:04  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=116 name=knife-attack tag=knifeAttack elapsed=833ms lock=0
+17:43:04  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=116 elapsed=833ms lockBefore=0
+17:43:04  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:43:05  [success][极速枪托v2/DAMAGE] natural KnifeAttackEvent seq=117 attackIndex=0 elapsed=166ms
+17:43:05  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=117 elapsed=194ms lockBefore=1
+17:43:05  [success][极速枪托v2/UNLOCK] call OnKnifeAttackExit reason=after_natural_damage/seq=117/delay=25 lock 1 -> 0
+17:43:06  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=117 name=knife-attack tag=knifeAttack elapsed=833ms lock=0
+17:43:06  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=117 elapsed=833ms lockBefore=0
+17:43:06  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:43:06  [success][极速枪托v2/DAMAGE] natural KnifeAttackEvent seq=118 attackIndex=0 elapsed=167ms
+17:43:06  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=118 elapsed=194ms lockBefore=1
+17:43:06  [success][极速枪托v2/UNLOCK] call OnKnifeAttackExit reason=after_natural_damage/seq=118/delay=25 lock 1 -> 0
+17:43:06  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=118 name=knife-attack tag=knifeAttack elapsed=667ms lock=0
+17:43:06  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=118 elapsed=667ms lockBefore=0
+17:43:06  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:43:07  [success][极速枪托v2/DAMAGE] natural KnifeAttackEvent seq=119 attackIndex=0 elapsed=166ms
+17:43:07  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=119 elapsed=192ms lockBefore=1
+17:43:07  [success][极速枪托v2/UNLOCK] call OnKnifeAttackExit reason=after_natural_damage/seq=119/delay=25 lock 1 -> 0
+17:43:07  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=119 name=knife-attack tag=knifeAttack elapsed=666ms lock=0
+17:43:07  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=119 elapsed=666ms lockBefore=0
+17:43:07  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:43:08  [success][极速枪托v2/DAMAGE] natural KnifeAttackEvent seq=120 attackIndex=0 elapsed=166ms
+17:43:08  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=120 elapsed=192ms lockBefore=1
+17:43:08  [success][极速枪托v2/UNLOCK] call OnKnifeAttackExit reason=after_natural_damage/seq=120/delay=25 lock 1 -> 0
+17:43:08  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=121 name=knife-attack tag=knifeAttack elapsed=1ms lock=1
+17:43:08  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=121 elapsed=1ms lockBefore=1
+17:43:08  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:43:08  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=122 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:43:08  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=122 elapsed=0ms lockBefore=1
+17:43:08  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:43:09  [success][极速枪托v2/DAMAGE] natural KnifeAttackEvent seq=123 attackIndex=0 elapsed=168ms
+17:43:09  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=123 elapsed=194ms lockBefore=1
+17:43:09  [success][极速枪托v2/UNLOCK] call OnKnifeAttackExit reason=after_natural_damage/seq=123/delay=25 lock 1 -> 0
+17:43:10  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=124 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:43:10  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=124 elapsed=0ms lockBefore=1
+17:43:10  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:43:12  [info][极速枪托v2/STATE] 已关闭；不会修改 Animator，不会保留活动 session
+17:43:12  disable() 返回: True
+17:43:25  [success][极速枪托v2/CONFIG] {"mode":"unlock_after_damage","unlockMethod":"call_exit","unlockDelayMs":25,"earlyDamageDelayMs":90,"earlyUnlockDelayMs":15,"earlyAttackIndex":0,"cleanupAfterMs":2500,"maxLogsPerModule":300,"verboseTrace":true}
+17:43:25  [success][极速枪托v2/STATE] 已开启 mode=unlock_after_damage unlockMethod=call_exit unlockDelayMs=25
+17:43:25  enable() 返回: True
+17:43:29  [success][极速枪托v2/DAMAGE] natural KnifeAttackEvent seq=125 attackIndex=0 elapsed=167ms
+17:43:29  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=125 elapsed=193ms lockBefore=1
+17:43:29  [success][极速枪托v2/UNLOCK] call OnKnifeAttackExit reason=after_natural_damage/seq=125/delay=25 lock 1 -> 0
+17:43:29  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=125 name=knife-attack tag=knifeAttack elapsed=833ms lock=0
+17:43:29  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=125 elapsed=833ms lockBefore=0
+17:43:29  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:43:31  [success][极速枪托v2/DAMAGE] natural KnifeAttackEvent seq=126 attackIndex=0 elapsed=168ms
+17:43:31  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=126 elapsed=197ms lockBefore=1
+17:43:31  [success][极速枪托v2/UNLOCK] call OnKnifeAttackExit reason=after_natural_damage/seq=126/delay=25 lock 1 -> 0
+17:43:31  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=126 name=knife-attack tag=knifeAttack elapsed=835ms lock=0
+17:43:31  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=126 elapsed=835ms lockBefore=0
+17:43:31  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:43:34  [success][极速枪托v2/DAMAGE] natural KnifeAttackEvent seq=127 attackIndex=0 elapsed=166ms
+17:43:34  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=127 elapsed=194ms lockBefore=1
+17:43:34  [success][极速枪托v2/UNLOCK] call OnKnifeAttackExit reason=after_natural_damage/seq=127/delay=25 lock 1 -> 0
+17:43:34  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=127 name=knife-attack tag=knifeAttack elapsed=833ms lock=0
+17:43:34  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=127 elapsed=833ms lockBefore=0
+17:43:34  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:43:36  [success][极速枪托v2/DAMAGE] natural KnifeAttackEvent seq=128 attackIndex=0 elapsed=167ms
+17:43:36  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=128 elapsed=194ms lockBefore=1
+17:43:36  [success][极速枪托v2/UNLOCK] call OnKnifeAttackExit reason=after_natural_damage/seq=128/delay=25 lock 1 -> 0
+17:43:37  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=128 name=knife-attack tag=knifeAttack elapsed=854ms lock=0
+17:43:37  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=128 elapsed=854ms lockBefore=0
+17:43:37  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:43:37  [success][极速枪托v2/DAMAGE] natural KnifeAttackEvent seq=129 attackIndex=0 elapsed=165ms
+17:43:38  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=129 elapsed=193ms lockBefore=1
+17:43:38  [success][极速枪托v2/UNLOCK] call OnKnifeAttackExit reason=after_natural_damage/seq=129/delay=25 lock 1 -> 0
+17:43:38  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=129 name=knife-attack tag=knifeAttack elapsed=831ms lock=0
+17:43:38  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=129 elapsed=831ms lockBefore=0
+17:43:38  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:43:39  [success][极速枪托v2/DAMAGE] natural KnifeAttackEvent seq=130 attackIndex=0 elapsed=167ms
+17:43:39  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=130 elapsed=196ms lockBefore=1
+17:43:39  [success][极速枪托v2/UNLOCK] call OnKnifeAttackExit reason=after_natural_damage/seq=130/delay=25 lock 1 -> 0
+17:43:39  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=130 name=knife-attack tag=knifeAttack elapsed=834ms lock=0
+17:43:39  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=130 elapsed=834ms lockBefore=0
+17:43:39  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:43:39  [success][极速枪托v2/DAMAGE] natural KnifeAttackEvent seq=131 attackIndex=0 elapsed=168ms
+17:43:40  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=131 elapsed=196ms lockBefore=1
+17:43:40  [success][极速枪托v2/UNLOCK] call OnKnifeAttackExit reason=after_natural_damage/seq=131/delay=25 lock 1 -> 0
+17:43:40  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=131 name=knife-attack tag=knifeAttack elapsed=855ms lock=0
+17:43:40  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=131 elapsed=855ms lockBefore=0
+17:43:40  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:43:42  [info][极速枪托v2/SPECIAL] right click skipped by original lock weapon=0x40cf4170 lock=1
+17:43:42  [success][极速枪托v2/DAMAGE] natural KnifeAttackEvent seq=132 attackIndex=0 elapsed=165ms
+17:43:42  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=132 elapsed=194ms lockBefore=1
+17:43:42  [success][极速枪托v2/UNLOCK] call OnKnifeAttackExit reason=after_natural_damage/seq=132/delay=25 lock 1 -> 0
+17:43:42  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=133 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:43:42  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=133 elapsed=0ms lockBefore=1
+17:43:42  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:43:42  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=134 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:43:42  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=134 elapsed=0ms lockBefore=1
+17:43:42  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:43:42  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=135 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:43:42  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=135 elapsed=0ms lockBefore=1
+17:43:42  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:43:44  [info][极速枪托v2/SPECIAL] right click skipped by original lock weapon=0x40cf4170 lock=1
+17:43:44  [success][极速枪托v2/DAMAGE] natural KnifeAttackEvent seq=136 attackIndex=0 elapsed=167ms
+17:43:44  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=136 elapsed=195ms lockBefore=1
+17:43:44  [success][极速枪托v2/UNLOCK] call OnKnifeAttackExit reason=after_natural_damage/seq=136/delay=25 lock 1 -> 0
+17:43:44  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=137 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:43:44  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=137 elapsed=1ms lockBefore=1
+17:43:44  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:43:44  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=138 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:43:44  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=138 elapsed=0ms lockBefore=1
+17:43:44  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:43:44  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=139 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:43:44  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=139 elapsed=0ms lockBefore=1
+17:43:44  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:43:44  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=140 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:43:44  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=140 elapsed=0ms lockBefore=1
+17:43:44  [info][极速枪托v2/CLEAN] session removed key=0x40cf4170 reason=animation_exit
+17:44:27  [info][极速枪托v2/SPECIAL] right click skipped by original lock weapon=0x40f94730 lock=1
+17:44:27  [success][极速枪托v2/DAMAGE] natural KnifeAttackEvent seq=141 attackIndex=0 elapsed=167ms
+17:44:27  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=141 elapsed=194ms lockBefore=1
+17:44:27  [success][极速枪托v2/UNLOCK] call OnKnifeAttackExit reason=after_natural_damage/seq=141/delay=25 lock 1 -> 0
+17:44:27  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=142 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:44:27  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=142 elapsed=0ms lockBefore=1
+17:44:27  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:44:27  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=143 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:44:27  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=143 elapsed=0ms lockBefore=1
+17:44:27  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:44:27  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=144 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:44:27  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=144 elapsed=0ms lockBefore=1
+17:44:27  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:44:27  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=145 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:44:27  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=145 elapsed=1ms lockBefore=1
+17:44:27  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:44:28  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=146 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:44:28  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=146 elapsed=0ms lockBefore=1
+17:44:28  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:44:28  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=147 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:44:28  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=147 elapsed=0ms lockBefore=1
+17:44:28  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:44:28  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=148 name=knife-attack tag=knifeAttack elapsed=1ms lock=1
+17:44:28  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=148 elapsed=1ms lockBefore=1
+17:44:28  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:44:28  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=149 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:44:28  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=149 elapsed=0ms lockBefore=1
+17:44:28  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:44:28  [success][极速枪托v2/SPECIAL] OnSpecialBtnDown seq=150 weapon=0x40f94730 mode=unlock_after_damage lock=0
+17:44:28  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=150 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:44:28  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=150 elapsed=0ms lockBefore=1
+17:44:28  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:44:28  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=151 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:44:28  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=151 elapsed=0ms lockBefore=1
+17:44:28  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:44:29  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=152 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:44:29  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=152 elapsed=0ms lockBefore=1
+17:44:29  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:44:29  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=153 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:44:29  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=153 elapsed=0ms lockBefore=1
+17:44:29  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:44:29  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=154 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:44:29  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=154 elapsed=0ms lockBefore=1
+17:44:29  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:44:29  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=155 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:44:29  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=155 elapsed=0ms lockBefore=1
+17:44:29  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:44:29  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=156 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:44:29  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=156 elapsed=0ms lockBefore=1
+17:44:29  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:44:29  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=157 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:44:29  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=157 elapsed=0ms lockBefore=1
+17:44:29  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:44:30  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=158 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:44:30  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=158 elapsed=0ms lockBefore=1
+17:44:30  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:44:30  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=159 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:44:30  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=159 elapsed=0ms lockBefore=1
+17:44:30  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:44:30  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=160 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:44:30  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=160 elapsed=0ms lockBefore=1
+17:44:30  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:44:30  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=161 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:44:30  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=161 elapsed=0ms lockBefore=1
+17:44:30  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:44:30  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=162 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:44:30  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=162 elapsed=0ms lockBefore=1
+17:44:30  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:44:30  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=163 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:44:30  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=163 elapsed=0ms lockBefore=1
+17:44:30  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:44:31  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=164 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:44:31  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=164 elapsed=0ms lockBefore=1
+17:44:31  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:44:31  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=165 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:44:31  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=165 elapsed=0ms lockBefore=1
+17:44:31  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:44:31  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=166 name=knife-attack tag=knifeAttack elapsed=1ms lock=1
+17:44:31  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=166 elapsed=1ms lockBefore=1
+17:44:31  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:44:31  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=167 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:44:31  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=167 elapsed=0ms lockBefore=1
+17:44:31  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:44:31  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=168 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:44:31  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=168 elapsed=0ms lockBefore=1
+17:44:31  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:44:31  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=169 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:44:31  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=169 elapsed=0ms lockBefore=1
+17:44:31  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:44:32  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=170 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:44:32  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=170 elapsed=0ms lockBefore=1
+17:44:32  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:44:32  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=171 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:44:32  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=171 elapsed=0ms lockBefore=1
+17:44:32  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:44:32  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=172 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:44:32  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=172 elapsed=0ms lockBefore=1
+17:44:32  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:44:32  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=173 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:44:32  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=173 elapsed=0ms lockBefore=1
+17:44:32  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:44:32  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=174 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:44:32  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=174 elapsed=0ms lockBefore=1
+17:44:32  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:44:32  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=175 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:44:32  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=175 elapsed=0ms lockBefore=1
+17:44:32  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:44:33  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=176 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:44:33  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=176 elapsed=0ms lockBefore=1
+17:44:33  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:44:33  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=177 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:44:33  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=177 elapsed=0ms lockBefore=1
+17:44:33  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:44:33  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=178 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:44:33  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=178 elapsed=0ms lockBefore=1
+17:44:33  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:44:38  [info][极速枪托v2/SPECIAL] right click skipped by original lock weapon=0x40f94730 lock=1
+17:44:38  [success][极速枪托v2/DAMAGE] natural KnifeAttackEvent seq=179 attackIndex=0 elapsed=167ms
+17:44:38  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=179 elapsed=195ms lockBefore=1
+17:44:38  [success][极速枪托v2/UNLOCK] call OnKnifeAttackExit reason=after_natural_damage/seq=179/delay=25 lock 1 -> 0
+17:44:38  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=180 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:44:38  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=180 elapsed=0ms lockBefore=1
+17:44:38  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:44:38  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=181 name=knife-attack tag=knifeAttack elapsed=1ms lock=1
+17:44:38  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=181 elapsed=1ms lockBefore=1
+17:44:38  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:44:39  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=182 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:44:39  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=182 elapsed=0ms lockBefore=1
+17:44:39  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:44:39  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=183 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:44:39  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=183 elapsed=0ms lockBefore=1
+17:44:39  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:44:39  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=184 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:44:39  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=184 elapsed=0ms lockBefore=1
+17:44:39  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:44:39  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=185 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:44:39  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=185 elapsed=0ms lockBefore=1
+17:44:39  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:44:39  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=186 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:44:39  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=186 elapsed=0ms lockBefore=1
+17:44:39  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:44:39  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=187 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:44:39  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=187 elapsed=0ms lockBefore=1
+17:44:39  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:44:40  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=188 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:44:40  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=188 elapsed=0ms lockBefore=1
+17:44:40  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:44:40  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=189 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:44:40  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=189 elapsed=0ms lockBefore=1
+17:44:40  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:44:40  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=190 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:44:40  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=190 elapsed=0ms lockBefore=1
+17:44:40  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:44:40  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=191 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:44:40  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=191 elapsed=0ms lockBefore=1
+17:44:40  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:45:49  [info][极速枪托v2/SPECIAL] right click skipped by original lock weapon=0x40f94730 lock=1
+17:45:49  [success][极速枪托v2/DAMAGE] natural KnifeAttackEvent seq=192 attackIndex=0 elapsed=167ms
+17:45:49  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=192 elapsed=193ms lockBefore=1
+17:45:49  [success][极速枪托v2/UNLOCK] call OnKnifeAttackExit reason=after_natural_damage/seq=192/delay=25 lock 1 -> 0
+17:45:49  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=193 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:45:49  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=193 elapsed=0ms lockBefore=1
+17:45:49  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:45:49  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=194 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:45:49  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=194 elapsed=0ms lockBefore=1
+17:45:49  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:45:50  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=195 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:45:50  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=195 elapsed=0ms lockBefore=1
+17:45:50  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:45:50  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=196 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:45:50  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=196 elapsed=0ms lockBefore=1
+17:45:50  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:45:50  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=197 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:45:50  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=197 elapsed=2ms lockBefore=1
+17:45:50  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:45:50  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=198 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:45:50  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=198 elapsed=0ms lockBefore=1
+17:45:50  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:45:50  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=199 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:45:50  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=199 elapsed=0ms lockBefore=1
+17:45:50  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:45:50  [success][极速枪托v2/SPECIAL] OnSpecialBtnDown seq=200 weapon=0x40f94730 mode=unlock_after_damage lock=0
+17:45:50  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=200 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:45:50  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=200 elapsed=0ms lockBefore=1
+17:45:50  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:45:51  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=201 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:45:51  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=201 elapsed=0ms lockBefore=1
+17:45:51  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:45:51  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=202 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:45:51  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=202 elapsed=0ms lockBefore=1
+17:45:51  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:45:51  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=203 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:45:51  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=203 elapsed=0ms lockBefore=1
+17:45:51  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:45:51  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=204 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:45:51  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=204 elapsed=0ms lockBefore=1
+17:45:51  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:45:51  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=205 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:45:51  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=205 elapsed=0ms lockBefore=1
+17:45:51  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:45:51  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=206 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:45:51  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=206 elapsed=0ms lockBefore=1
+17:45:51  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:45:52  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=207 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:45:52  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=207 elapsed=0ms lockBefore=1
+17:45:52  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:45:52  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=208 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:45:52  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=208 elapsed=0ms lockBefore=1
+17:45:52  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:45:52  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=209 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:45:52  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=209 elapsed=0ms lockBefore=1
+17:45:52  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:45:53  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=210 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:45:53  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=210 elapsed=0ms lockBefore=1
+17:45:53  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:45:53  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=211 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:45:53  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=211 elapsed=0ms lockBefore=1
+17:45:53  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:45:54  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=212 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:45:54  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=212 elapsed=0ms lockBefore=1
+17:45:54  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:45:54  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=213 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:45:54  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=213 elapsed=1ms lockBefore=1
+17:45:54  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:45:55  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=214 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:45:55  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=214 elapsed=0ms lockBefore=1
+17:45:55  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:45:57  [success][极速枪托v2/DAMAGE] natural KnifeAttackEvent seq=215 attackIndex=0 elapsed=168ms
+17:45:57  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=215 elapsed=194ms lockBefore=1
+17:45:57  [success][极速枪托v2/UNLOCK] call OnKnifeAttackExit reason=after_natural_damage/seq=215/delay=25 lock 1 -> 0
+17:45:57  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=216 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:45:57  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=216 elapsed=0ms lockBefore=1
+17:45:57  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:45:58  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=217 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:45:58  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=217 elapsed=0ms lockBefore=1
+17:45:58  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:45:59  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=218 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:45:59  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=218 elapsed=0ms lockBefore=1
+17:45:59  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:45:59  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=219 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:45:59  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=219 elapsed=0ms lockBefore=1
+17:45:59  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:46:00  [success][极速枪托v2/DAMAGE] natural KnifeAttackEvent seq=220 attackIndex=0 elapsed=167ms
+17:46:00  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=220 elapsed=194ms lockBefore=1
+17:46:00  [success][极速枪托v2/UNLOCK] call OnKnifeAttackExit reason=after_natural_damage/seq=220/delay=25 lock 1 -> 0
+17:46:01  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=221 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:46:01  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=221 elapsed=0ms lockBefore=1
+17:46:01  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:46:01  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=222 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:46:01  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=222 elapsed=0ms lockBefore=1
+17:46:01  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:46:02  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=223 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:46:02  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=223 elapsed=0ms lockBefore=1
+17:46:02  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:46:57  [success][极速枪托v2/CONFIG] {"mode":"unlock_after_damage","unlockMethod":"call_exit","unlockDelayMs":22,"earlyDamageDelayMs":90,"earlyUnlockDelayMs":15,"earlyAttackIndex":0,"cleanupAfterMs":2500,"maxLogsPerModule":300,"verboseTrace":true}
+17:46:57  配置已应用: {'mode': 'unlock_after_damage', 'unlockMethod': 'call_exit', 'unlockDelayMs': 22, 'earlyDamageDelayMs': 90, 'earlyUnlockDelayMs': 15, 'earlyAttackIndex': 0, 'verboseTrace': True}
+17:46:57  [success][极速枪托v2/CONFIG] {"mode":"unlock_after_damage","unlockMethod":"call_exit","unlockDelayMs":20,"earlyDamageDelayMs":90,"earlyUnlockDelayMs":15,"earlyAttackIndex":0,"cleanupAfterMs":2500,"maxLogsPerModule":300,"verboseTrace":true}
+17:46:57  [success][极速枪托v2/CONFIG] {"mode":"unlock_after_damage","unlockMethod":"call_exit","unlockDelayMs":19,"earlyDamageDelayMs":90,"earlyUnlockDelayMs":15,"earlyAttackIndex":0,"cleanupAfterMs":2500,"maxLogsPerModule":300,"verboseTrace":true}
+17:46:57  配置已应用: {'mode': 'unlock_after_damage', 'unlockMethod': 'call_exit', 'unlockDelayMs': 19, 'earlyDamageDelayMs': 90, 'earlyUnlockDelayMs': 15, 'earlyAttackIndex': 0, 'verboseTrace': True}
+17:46:57  配置已应用: {'mode': 'unlock_after_damage', 'unlockMethod': 'call_exit', 'unlockDelayMs': 19, 'earlyDamageDelayMs': 90, 'earlyUnlockDelayMs': 15, 'earlyAttackIndex': 0, 'verboseTrace': True}
+17:46:57  [success][极速枪托v2/CONFIG] {"mode":"unlock_after_damage","unlockMethod":"call_exit","unlockDelayMs":15,"earlyDamageDelayMs":90,"earlyUnlockDelayMs":15,"earlyAttackIndex":0,"cleanupAfterMs":2500,"maxLogsPerModule":300,"verboseTrace":true}
+17:46:57  [success][极速枪托v2/CONFIG] {"mode":"unlock_after_damage","unlockMethod":"call_exit","unlockDelayMs":13,"earlyDamageDelayMs":90,"earlyUnlockDelayMs":15,"earlyAttackIndex":0,"cleanupAfterMs":2500,"maxLogsPerModule":300,"verboseTrace":true}
+17:46:57  配置已应用: {'mode': 'unlock_after_damage', 'unlockMethod': 'call_exit', 'unlockDelayMs': 13, 'earlyDamageDelayMs': 90, 'earlyUnlockDelayMs': 15, 'earlyAttackIndex': 0, 'verboseTrace': True}
+17:46:57  配置已应用: {'mode': 'unlock_after_damage', 'unlockMethod': 'call_exit', 'unlockDelayMs': 13, 'earlyDamageDelayMs': 90, 'earlyUnlockDelayMs': 15, 'earlyAttackIndex': 0, 'verboseTrace': True}
+17:46:57  [success][极速枪托v2/CONFIG] {"mode":"unlock_after_damage","unlockMethod":"call_exit","unlockDelayMs":4,"earlyDamageDelayMs":90,"earlyUnlockDelayMs":15,"earlyAttackIndex":0,"cleanupAfterMs":2500,"maxLogsPerModule":300,"verboseTrace":true}
+17:46:57  配置已应用: {'mode': 'unlock_after_damage', 'unlockMethod': 'call_exit', 'unlockDelayMs': 2, 'earlyDamageDelayMs': 90, 'earlyUnlockDelayMs': 15, 'earlyAttackIndex': 0, 'verboseTrace': True}
+17:46:57  [success][极速枪托v2/CONFIG] {"mode":"unlock_after_damage","unlockMethod":"call_exit","unlockDelayMs":2,"earlyDamageDelayMs":90,"earlyUnlockDelayMs":15,"earlyAttackIndex":0,"cleanupAfterMs":2500,"maxLogsPerModule":300,"verboseTrace":true}
+17:46:57  [success][极速枪托v2/CONFIG] {"mode":"unlock_after_damage","unlockMethod":"call_exit","unlockDelayMs":1,"earlyDamageDelayMs":90,"earlyUnlockDelayMs":15,"earlyAttackIndex":0,"cleanupAfterMs":2500,"maxLogsPerModule":300,"verboseTrace":true}
+17:46:57  配置已应用: {'mode': 'unlock_after_damage', 'unlockMethod': 'call_exit', 'unlockDelayMs': 0, 'earlyDamageDelayMs': 90, 'earlyUnlockDelayMs': 15, 'earlyAttackIndex': 0, 'verboseTrace': True}
+17:46:57  [success][极速枪托v2/CONFIG] {"mode":"unlock_after_damage","unlockMethod":"call_exit","unlockDelayMs":0,"earlyDamageDelayMs":90,"earlyUnlockDelayMs":15,"earlyAttackIndex":0,"cleanupAfterMs":2500,"maxLogsPerModule":300,"verboseTrace":true}
+17:46:57  配置已应用: {'mode': 'unlock_after_damage', 'unlockMethod': 'call_exit', 'unlockDelayMs': 0, 'earlyDamageDelayMs': 90, 'earlyUnlockDelayMs': 15, 'earlyAttackIndex': 0, 'verboseTrace': True}
+17:46:57  [success][极速枪托v2/CONFIG] {"mode":"unlock_after_damage","unlockMethod":"call_exit","unlockDelayMs":0,"earlyDamageDelayMs":90,"earlyUnlockDelayMs":15,"earlyAttackIndex":0,"cleanupAfterMs":2500,"maxLogsPerModule":300,"verboseTrace":true}
+17:46:57  [success][极速枪托v2/CONFIG] {"mode":"unlock_after_damage","unlockMethod":"call_exit","unlockDelayMs":0,"earlyDamageDelayMs":90,"earlyUnlockDelayMs":15,"earlyAttackIndex":0,"cleanupAfterMs":2500,"maxLogsPerModule":300,"verboseTrace":true}
+17:46:57  配置已应用: {'mode': 'unlock_after_damage', 'unlockMethod': 'call_exit', 'unlockDelayMs': 0, 'earlyDamageDelayMs': 90, 'earlyUnlockDelayMs': 15, 'earlyAttackIndex': 0, 'verboseTrace': True}
+17:46:57  配置已应用: {'mode': 'unlock_after_damage', 'unlockMethod': 'call_exit', 'unlockDelayMs': 0, 'earlyDamageDelayMs': 90, 'earlyUnlockDelayMs': 15, 'earlyAttackIndex': 0, 'verboseTrace': True}
+17:46:57  [success][极速枪托v2/CONFIG] {"mode":"unlock_after_damage","unlockMethod":"call_exit","unlockDelayMs":0,"earlyDamageDelayMs":90,"earlyUnlockDelayMs":15,"earlyAttackIndex":0,"cleanupAfterMs":2500,"maxLogsPerModule":300,"verboseTrace":true}
+17:46:57  配置已应用: {'mode': 'unlock_after_damage', 'unlockMethod': 'call_exit', 'unlockDelayMs': 0, 'earlyDamageDelayMs': 90, 'earlyUnlockDelayMs': 15, 'earlyAttackIndex': 0, 'verboseTrace': True}
+17:46:57  [success][极速枪托v2/CONFIG] {"mode":"unlock_after_damage","unlockMethod":"call_exit","unlockDelayMs":0,"earlyDamageDelayMs":90,"earlyUnlockDelayMs":15,"earlyAttackIndex":0,"cleanupAfterMs":2500,"maxLogsPerModule":300,"verboseTrace":true}
+17:46:57  [success][极速枪托v2/CONFIG] {"mode":"unlock_after_damage","unlockMethod":"call_exit","unlockDelayMs":0,"earlyDamageDelayMs":90,"earlyUnlockDelayMs":15,"earlyAttackIndex":0,"cleanupAfterMs":2500,"maxLogsPerModule":300,"verboseTrace":true}
+17:46:57  配置已应用: {'mode': 'unlock_after_damage', 'unlockMethod': 'call_exit', 'unlockDelayMs': 0, 'earlyDamageDelayMs': 90, 'earlyUnlockDelayMs': 15, 'earlyAttackIndex': 0, 'verboseTrace': True}
+17:46:57  [success][极速枪托v2/CONFIG] {"mode":"unlock_after_damage","unlockMethod":"call_exit","unlockDelayMs":0,"earlyDamageDelayMs":90,"earlyUnlockDelayMs":15,"earlyAttackIndex":0,"cleanupAfterMs":2500,"maxLogsPerModule":300,"verboseTrace":true}
+17:46:57  配置已应用: {'mode': 'unlock_after_damage', 'unlockMethod': 'call_exit', 'unlockDelayMs': 0, 'earlyDamageDelayMs': 90, 'earlyUnlockDelayMs': 15, 'earlyAttackIndex': 0, 'verboseTrace': True}
+17:46:57  配置已应用: {'mode': 'unlock_after_damage', 'unlockMethod': 'call_exit', 'unlockDelayMs': 0, 'earlyDamageDelayMs': 90, 'earlyUnlockDelayMs': 15, 'earlyAttackIndex': 0, 'verboseTrace': True}
+17:46:57  [success][极速枪托v2/CONFIG] {"mode":"unlock_after_damage","unlockMethod":"call_exit","unlockDelayMs":0,"earlyDamageDelayMs":90,"earlyUnlockDelayMs":15,"earlyAttackIndex":0,"cleanupAfterMs":2500,"maxLogsPerModule":300,"verboseTrace":true}
+17:46:57  配置已应用: {'mode': 'unlock_after_damage', 'unlockMethod': 'call_exit', 'unlockDelayMs': 0, 'earlyDamageDelayMs': 90, 'earlyUnlockDelayMs': 15, 'earlyAttackIndex': 0, 'verboseTrace': True}
+17:46:57  [success][极速枪托v2/CONFIG] {"mode":"unlock_after_damage","unlockMethod":"call_exit","unlockDelayMs":0,"earlyDamageDelayMs":90,"earlyUnlockDelayMs":15,"earlyAttackIndex":0,"cleanupAfterMs":2500,"maxLogsPerModule":300,"verboseTrace":true}
+17:46:57  配置已应用: {'mode': 'unlock_after_damage', 'unlockMethod': 'call_exit', 'unlockDelayMs': 0, 'earlyDamageDelayMs': 90, 'earlyUnlockDelayMs': 15, 'earlyAttackIndex': 0, 'verboseTrace': True}
+17:46:57  [success][极速枪托v2/CONFIG] {"mode":"unlock_after_damage","unlockMethod":"call_exit","unlockDelayMs":0,"earlyDamageDelayMs":90,"earlyUnlockDelayMs":15,"earlyAttackIndex":0,"cleanupAfterMs":2500,"maxLogsPerModule":300,"verboseTrace":true}
+17:46:57  配置已应用: {'mode': 'unlock_after_damage', 'unlockMethod': 'call_exit', 'unlockDelayMs': 0, 'earlyDamageDelayMs': 90, 'earlyUnlockDelayMs': 15, 'earlyAttackIndex': 0, 'verboseTrace': True}
+17:46:57  [success][极速枪托v2/CONFIG] {"mode":"unlock_after_damage","unlockMethod":"call_exit","unlockDelayMs":0,"earlyDamageDelayMs":90,"earlyUnlockDelayMs":15,"earlyAttackIndex":0,"cleanupAfterMs":2500,"maxLogsPerModule":300,"verboseTrace":true}
+17:46:57  配置已应用: {'mode': 'unlock_after_damage', 'unlockMethod': 'call_exit', 'unlockDelayMs': 0, 'earlyDamageDelayMs': 90, 'earlyUnlockDelayMs': 15, 'earlyAttackIndex': 0, 'verboseTrace': True}
+17:47:05  [info][极速枪托v2/SPECIAL] right click skipped by original lock weapon=0x40f94730 lock=1
+17:47:05  [success][极速枪托v2/DAMAGE] natural KnifeAttackEvent seq=224 attackIndex=0 elapsed=166ms
+17:47:05  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=224 elapsed=166ms lockBefore=1
+17:47:05  [success][极速枪托v2/UNLOCK] call OnKnifeAttackExit reason=after_natural_damage/seq=224/delay=0 lock 1 -> 0
+17:47:05  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=225 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:47:05  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=225 elapsed=0ms lockBefore=1
+17:47:05  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:47:06  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=226 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:47:06  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=226 elapsed=0ms lockBefore=1
+17:47:06  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:47:06  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=227 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:47:06  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=227 elapsed=0ms lockBefore=1
+17:47:06  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:47:06  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=228 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:47:06  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=228 elapsed=0ms lockBefore=1
+17:47:06  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:47:06  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=229 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:47:06  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=229 elapsed=0ms lockBefore=1
+17:47:06  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:47:06  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=230 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:47:06  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=230 elapsed=0ms lockBefore=1
+17:47:06  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:47:06  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=231 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:47:06  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=231 elapsed=0ms lockBefore=1
+17:47:06  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:47:06  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=232 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:47:06  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=232 elapsed=0ms lockBefore=1
+17:47:06  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:47:07  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=233 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:47:07  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=233 elapsed=0ms lockBefore=1
+17:47:07  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:47:07  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=234 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:47:07  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=234 elapsed=0ms lockBefore=1
+17:47:07  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:47:07  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=235 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:47:07  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=235 elapsed=0ms lockBefore=1
+17:47:07  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:47:07  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=236 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:47:07  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=236 elapsed=1ms lockBefore=1
+17:47:07  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:47:07  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=237 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:47:07  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=237 elapsed=0ms lockBefore=1
+17:47:07  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:47:07  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=238 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:47:07  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=238 elapsed=0ms lockBefore=1
+17:47:07  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:47:07  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=239 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:47:07  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=239 elapsed=0ms lockBefore=1
+17:47:07  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:47:08  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=240 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:47:08  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=240 elapsed=0ms lockBefore=1
+17:47:08  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:47:08  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=241 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:47:08  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=241 elapsed=0ms lockBefore=1
+17:47:08  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:47:08  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=242 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:47:08  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=242 elapsed=0ms lockBefore=1
+17:47:08  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:47:08  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=243 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:47:08  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=243 elapsed=0ms lockBefore=1
+17:47:08  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:47:08  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=244 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:47:08  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=244 elapsed=0ms lockBefore=1
+17:47:08  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:47:08  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=245 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:47:08  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=245 elapsed=0ms lockBefore=1
+17:47:08  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:47:09  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=246 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:47:09  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=246 elapsed=0ms lockBefore=1
+17:47:09  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:47:09  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=247 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:47:09  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=247 elapsed=0ms lockBefore=1
+17:47:09  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:47:09  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=248 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:47:09  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=248 elapsed=0ms lockBefore=1
+17:47:09  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:47:09  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=249 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:47:09  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=249 elapsed=0ms lockBefore=1
+17:47:09  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:47:09  [success][极速枪托v2/SPECIAL] OnSpecialBtnDown seq=250 weapon=0x40f94730 mode=unlock_after_damage lock=0
+17:47:09  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=250 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:47:09  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=250 elapsed=0ms lockBefore=1
+17:47:09  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:47:09  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=251 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:47:09  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=251 elapsed=1ms lockBefore=1
+17:47:09  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:47:10  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=252 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:47:10  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=252 elapsed=0ms lockBefore=1
+17:47:10  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:47:10  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=253 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:47:10  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=253 elapsed=0ms lockBefore=1
+17:47:10  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:47:10  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=254 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:47:10  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=254 elapsed=0ms lockBefore=1
+17:47:10  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:47:10  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=255 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:47:10  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=255 elapsed=0ms lockBefore=1
+17:47:10  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:47:10  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=256 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:47:10  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=256 elapsed=0ms lockBefore=1
+17:47:10  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:47:10  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=257 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:47:10  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=257 elapsed=0ms lockBefore=1
+17:47:10  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:47:10  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=258 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:47:10  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=258 elapsed=0ms lockBefore=1
+17:47:11  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:47:11  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=259 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:47:11  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=259 elapsed=0ms lockBefore=1
+17:47:11  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:47:11  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=260 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:47:11  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=260 elapsed=0ms lockBefore=1
+17:47:11  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:47:11  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=261 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:47:11  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=261 elapsed=0ms lockBefore=1
+17:47:11  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:47:11  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=262 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:47:11  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=262 elapsed=0ms lockBefore=1
+17:47:11  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:47:20  [info][极速枪托v2/SPECIAL] right click skipped by original lock weapon=0x40f94730 lock=1
+17:47:20  [success][极速枪托v2/DAMAGE] natural KnifeAttackEvent seq=263 attackIndex=0 elapsed=168ms
+17:47:20  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=263 elapsed=170ms lockBefore=1
+17:47:20  [success][极速枪托v2/UNLOCK] call OnKnifeAttackExit reason=after_natural_damage/seq=263/delay=0 lock 1 -> 0
+17:47:20  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=264 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:47:20  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=264 elapsed=0ms lockBefore=1
+17:47:20  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:47:21  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=265 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:47:21  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=265 elapsed=0ms lockBefore=1
+17:47:21  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:47:21  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=266 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:47:21  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=266 elapsed=0ms lockBefore=1
+17:47:21  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:47:21  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=267 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:47:21  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=267 elapsed=0ms lockBefore=1
+17:47:21  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:47:21  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=268 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:47:21  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=268 elapsed=0ms lockBefore=1
+17:47:21  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:47:21  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=269 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:47:21  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=269 elapsed=0ms lockBefore=1
+17:47:21  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:47:21  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=270 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:47:21  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=270 elapsed=0ms lockBefore=1
+17:47:21  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:47:22  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=271 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:47:22  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=271 elapsed=0ms lockBefore=1
+17:47:22  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:47:22  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=272 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:47:22  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=272 elapsed=2ms lockBefore=1
+17:47:22  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:47:22  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=273 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:47:22  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=273 elapsed=0ms lockBefore=1
+17:47:22  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:47:22  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=274 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:47:22  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=274 elapsed=0ms lockBefore=1
+17:47:22  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:47:22  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=275 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:47:22  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=275 elapsed=0ms lockBefore=1
+17:47:22  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:47:22  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=276 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:47:22  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=276 elapsed=0ms lockBefore=1
+17:47:22  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:47:22  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=277 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:47:22  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=277 elapsed=2ms lockBefore=1
+17:47:22  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:47:23  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=278 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:47:23  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=278 elapsed=0ms lockBefore=1
+17:47:23  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:47:23  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=279 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:47:23  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=279 elapsed=0ms lockBefore=1
+17:47:23  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:47:23  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=280 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:47:23  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=280 elapsed=0ms lockBefore=1
+17:47:23  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:47:23  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=281 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:47:23  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=281 elapsed=0ms lockBefore=1
+17:47:23  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:47:23  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=282 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:47:23  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=282 elapsed=0ms lockBefore=1
+17:47:23  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:47:23  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=283 name=knife-attack tag=knifeAttack elapsed=2ms lock=1
+17:47:23  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=283 elapsed=2ms lockBefore=1
+17:47:23  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:47:24  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=284 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:47:24  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=284 elapsed=0ms lockBefore=1
+17:47:24  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:47:24  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=285 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:47:24  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=285 elapsed=0ms lockBefore=1
+17:47:24  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:47:24  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=286 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:47:24  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=286 elapsed=0ms lockBefore=1
+17:47:24  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:47:24  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=287 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:47:24  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=287 elapsed=0ms lockBefore=1
+17:47:24  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:47:24  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=288 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:47:24  [info][极速枪托v2/ORIG_EXIT] OnKnifeAttackExit seq=288 elapsed=0ms lockBefore=1
+17:47:24  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:47:24  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=289 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:47:24  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:47:24  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=290 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:47:24  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
