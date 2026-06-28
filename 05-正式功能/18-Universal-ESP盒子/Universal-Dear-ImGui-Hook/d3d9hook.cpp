@@ -8,6 +8,11 @@ namespace d3d9hook {
     static bool gInitialized = false;
 
     HRESULT __stdcall hookEndScene(IDirect3DDevice9* device) {
+        if (globals::g_unloading.load(std::memory_order_acquire)) {
+            return oEndScene(device);
+        }
+        globals::PresentScope presentScope;
+
         if (!gInitialized) {
             D3DDEVICE_CREATION_PARAMETERS params{};
             if (SUCCEEDED(device->GetCreationParameters(&params))) {
@@ -49,6 +54,10 @@ namespace d3d9hook {
     }
 
     HRESULT __stdcall hookReset(IDirect3DDevice9* device, D3DPRESENT_PARAMETERS* params) {
+        if (globals::g_unloading.load(std::memory_order_acquire)) {
+            return oReset(device, params);
+        }
+        globals::PresentScope presentScope;
         if (gInitialized) {
             ImGui_ImplDX9_InvalidateDeviceObjects();
         }

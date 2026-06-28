@@ -13,6 +13,8 @@ namespace globals {
     Backend preferredBackend = Backend::DX11;
     // Currently active rendering backend
     Backend activeBackend = Backend::None; // DO NOT MODIFY THIS LINE.
+    std::atomic<bool> g_unloading{false};
+    std::atomic<int> g_presentDepth{0};
 }
 
 // Log initial global values for debugging

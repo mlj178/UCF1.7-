@@ -36,6 +36,9 @@ namespace hooks_dx10 {
 
     static void RenderFrame(IDXGISwapChain* pSwapChain)
     {
+        if (globals::g_unloading.load(std::memory_order_acquire))
+            return;
+
         if (!gInitialized)
         {
             gSwapChain = pSwapChain;
@@ -85,12 +88,18 @@ namespace hooks_dx10 {
 
     HRESULT __stdcall hookPresentD3D10(IDXGISwapChain* pSwapChain, UINT SyncInterval, UINT Flags)
     {
+        if (globals::g_unloading.load(std::memory_order_acquire))
+            return oPresentD3D10(pSwapChain, SyncInterval, Flags);
+        globals::PresentScope presentScope;
         RenderFrame(pSwapChain);
         return oPresentD3D10(pSwapChain, SyncInterval, Flags);
     }
 
     HRESULT __stdcall hookPresent1D3D10(IDXGISwapChain1* pSwapChain, UINT SyncInterval, UINT Flags, const DXGI_PRESENT_PARAMETERS* pPresentParameters)
     {
+        if (globals::g_unloading.load(std::memory_order_acquire))
+            return oPresent1D3D10(pSwapChain, SyncInterval, Flags, pPresentParameters);
+        globals::PresentScope presentScope;
         RenderFrame(pSwapChain);
         return oPresent1D3D10(pSwapChain, SyncInterval, Flags, pPresentParameters);
     }
@@ -103,6 +112,10 @@ namespace hooks_dx10 {
         DXGI_FORMAT NewFormat,
         UINT SwapChainFlags)
     {
+        if (globals::g_unloading.load(std::memory_order_acquire))
+            return oResizeBuffersD3D10(pSwapChain, BufferCount, Width, Height, NewFormat, SwapChainFlags);
+        globals::PresentScope presentScope;
+
         if (gInitialized)
         {
             ImGui_ImplDX10_InvalidateDeviceObjects();

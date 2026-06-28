@@ -23,6 +23,7 @@
 #include <map>
 #include <unordered_map>
 #include <unordered_set>
+#include <atomic>
 #include <Psapi.h>
 
 #include <dxgi.h>

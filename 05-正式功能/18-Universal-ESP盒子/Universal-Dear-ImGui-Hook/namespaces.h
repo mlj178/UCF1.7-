@@ -17,6 +17,15 @@ namespace globals {
         extern Backend activeBackend;
         // Preferred backend to hook. None means auto with fallback order
         extern Backend preferredBackend;
+        extern std::atomic<bool> g_unloading;
+        extern std::atomic<int> g_presentDepth;
+
+        struct PresentScope {
+                PresentScope() { g_presentDepth.fetch_add(1, std::memory_order_acq_rel); }
+                ~PresentScope() { g_presentDepth.fetch_sub(1, std::memory_order_acq_rel); }
+                PresentScope(const PresentScope&) = delete;
+                PresentScope& operator=(const PresentScope&) = delete;
+        };
 }
 
 namespace hooks {

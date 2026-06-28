@@ -36,6 +36,11 @@ namespace d3d12hook {
     }
 
     long __fastcall hookPresentD3D12(IDXGISwapChain3* pSwapChain, UINT SyncInterval, UINT Flags) {
+        if (globals::g_unloading.load(std::memory_order_acquire)) {
+            return oPresentD3D12(pSwapChain, SyncInterval, Flags);
+        }
+        globals::PresentScope presentScope;
+
         if (GetAsyncKeyState(globals::openMenuKey) & 1) {
             menu::isOpen = !menu::isOpen;
             DebugLog("[d3d12hook] Toggle menu: isOpen=%d\n", menu::isOpen);
@@ -253,6 +258,11 @@ namespace d3d12hook {
     }
 
     long __fastcall hookPresent1D3D12(IDXGISwapChain3* pSwapChain, UINT SyncInterval, UINT Flags, const DXGI_PRESENT_PARAMETERS* pParams) {
+        if (globals::g_unloading.load(std::memory_order_acquire)) {
+            return oPresent1D3D12(pSwapChain, SyncInterval, Flags, pParams);
+        }
+        globals::PresentScope presentScope;
+
         if (GetAsyncKeyState(globals::openMenuKey) & 1) {
             menu::isOpen = !menu::isOpen;
             DebugLog("[d3d12hook] Toggle menu: isOpen=%d\n", menu::isOpen);
@@ -473,6 +483,12 @@ namespace d3d12hook {
         ID3D12CommandQueue* _this,
         UINT                          NumCommandLists,
         ID3D12CommandList* const* ppCommandLists) {
+        if (globals::g_unloading.load(std::memory_order_acquire)) {
+            oExecuteCommandListsD3D12(_this, NumCommandLists, ppCommandLists);
+            return;
+        }
+        globals::PresentScope presentScope;
+
         if (!gCommandQueue && gAfterFirstPresent) {
             ID3D12Device* queueDevice = nullptr;
             if (SUCCEEDED(_this->GetDevice(__uuidof(ID3D12Device), (void**)&queueDevice))) {
@@ -512,6 +528,10 @@ namespace d3d12hook {
         DXGI_FORMAT NewFormat,
         UINT SwapChainFlags)
     {
+        if (globals::g_unloading.load(std::memory_order_acquire))
+            return oResizeBuffersD3D12(pSwapChain, BufferCount, Width, Height, NewFormat, SwapChainFlags);
+        globals::PresentScope presentScope;
+
         DebugLog("[d3d12hook] ResizeBuffers called: %ux%u Buffers=%u\n",
             Width, Height, BufferCount);
 
