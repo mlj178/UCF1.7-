@@ -5,7 +5,7 @@ from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent
 JS_FILE = BASE_DIR / "AAAAA-unlimited_bag_min.js"
-LAUNCHER_FILE = BASE_DIR / "launcher.py"
+UI_FILE = BASE_DIR / "AAAAA-unlimited_bag_ui.py"
 
 
 def read_text(path: Path) -> str:
@@ -46,12 +46,28 @@ class UnlimitedBagStaticTests(unittest.TestCase):
         for export_name in ["enable", "disable", "status", "cleanup"]:
             self.assertRegex(text, rf"\b{export_name}\s*:")
 
-    def test_launcher_loads_minimum_script_and_game_process(self):
-        text = read_text(LAUNCHER_FILE)
+    def test_customtkinter_ui_loads_minimum_script_and_rpc(self):
+        text = read_text(UI_FILE)
 
+        self.assertIn("import customtkinter as ctk", text)
+        self.assertIn("import frida", text)
+        self.assertIn("import psutil", text)
         self.assertIn('JS_FILE = os.path.join(BASE_DIR, "AAAAA-unlimited_bag_min.js")', text)
         self.assertIn('GAME_PROCESS_NAME = "UnityCrossFire.exe"', text)
-        self.assertIn("script.exports_sync.enable()", text)
+        self.assertIn("ctk.CTkSwitch", text)
+        self.assertIn("ctk.CTkTextbox", text)
+        self.assertIn("self.script.exports_sync.enable()", text)
+        self.assertIn("self.script.exports_sync.disable()", text)
+        self.assertIn("self.script.exports_sync.status()", text)
+        self.assertIn("self.script.exports_sync.cleanup()", text)
+
+    def test_ui_does_not_shadow_tk_state_method(self):
+        text = read_text(UI_FILE)
+
+        self.assertNotIn("self.state =", text)
+        self.assertNotIn("self.state.update", text)
+        self.assertIn("self.game_state =", text)
+        self.assertIn("self.game_state.update", text)
 
 
 if __name__ == "__main__":

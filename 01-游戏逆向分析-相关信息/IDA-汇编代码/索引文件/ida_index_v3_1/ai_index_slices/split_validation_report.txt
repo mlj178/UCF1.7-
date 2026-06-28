@@ -1,0 +1,45 @@
+============================================================
+切片验证报告
+============================================================
+
+时间: 2026-06-28T13:04:02.121391
+结果: PASSED
+警告数: 6
+
+------------------------------------------------------------
+验证项:
+------------------------------------------------------------
+  [PASS] no_subdirectories
+  [PASS] no_scattered_files
+  [PASS] all_parts_under_limit
+  [PASS] all_jsonl_valid
+  [PASS] line_counts_match
+  [PASS] quick_index_core_valid
+  [PASS] quick_index_route_counts
+
+------------------------------------------------------------
+切片统计:
+------------------------------------------------------------
+  ida_xrefs.jsonl: 19 parts
+  ida_functions.jsonl: 2 parts
+  ida_data_symbols.jsonl: 2 parts
+  ida_dumpcs_map.jsonl: 2 parts
+  dumpcs_methods.jsonl: 1 parts
+  dumpcs_fields.jsonl: 1 parts
+  quick_index/symbol_routes: 4 parts
+  quick_index/class_routes: 1 parts
+  quick_index/important_data_routes: 1 parts
+
+------------------------------------------------------------
+警告 (6 条):
+------------------------------------------------------------
+  - ida_xrefs: missing whitelist fields: ['source_rva', 'target_rva', 'type']
+  - ida_functions: missing whitelist fields: ['chunk', 'class_name', 'confidence', 'matched']
+  - ida_data_symbols: missing whitelist fields: ['line', 'name', 'source_line', 'symbol_name', 'type']
+  - ida_dumpcs_map: missing whitelist fields: ['chunk', 'class_name', 'dump_method', 'dump_name', 'full_type_name', 'ida_method', 'ida_name', 'method_name']
+  - dumpcs_methods: missing whitelist fields: ['full_type_name', 'method_index', 'name', 'offset', 'signature']
+  - dumpcs_fields: missing whitelist fields: ['full_type_name', 'is_static', 'name', 'offset', 'type']
+
+============================================================
+最终结果: PASSED
+============================================================

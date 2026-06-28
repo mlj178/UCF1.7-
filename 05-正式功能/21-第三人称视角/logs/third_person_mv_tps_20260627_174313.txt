@@ -1,0 +1,85 @@
+[17:43:13] [INFO] UI 已启动。日志文件：D:\trae_project\ucf1.7-modifier\05-正式功能\21-第三人称视角\logs\third_person_mv_tps_20260627_174313.txt
+[17:43:15] [INFO] Hook 已安装: CameraManager.Awake | {"rva": "0xb35550", "runtime": "0x6d805550"}
+[17:43:15] [INFO] Hook 已安装: CameraManager.Update | {"rva": "0xb36fa0", "runtime": "0x6d806fa0"}
+[17:43:15] [INFO] Hook 已安装: CinemachineBrain.PushStateToUnityCamera | {"rva": "0x82b750", "runtime": "0x6d4fb750"}
+[17:43:15] [INFO] Hook 已安装: Player.GetWalkVelocity | {"rva": "0xb54220", "runtime": "0x6d824220"}
+[17:43:15] [INFO] Hook 已安装: Player.UpdateCameraRotaion | {"rva": "0xb54870", "runtime": "0x6d824870"}
+[17:43:15] [INFO] Hook 已安装: Recoil.GetShootRay | {"rva": "0xb195c0", "runtime": "0x6d7e95c0"}
+[17:43:15] [INFO] Hook 已安装: Player.SetWeapon | {"rva": "0xb53650", "runtime": "0x6d823650"}
+[17:43:15] [INFO] Hook 已安装: Player.OnEntityDeath | {"rva": "0xb51210", "runtime": "0x6d821210"}
+[17:43:16] [INFO] Hook 已安装: Player.Respawn | {"rva": "0xb527a0", "runtime": "0x6d8227a0"}
+[17:43:16] [INFO] Hook 已安装: Player.Spawn | {"rva": "0xb53760", "runtime": "0x6d823760"}
+[17:43:16] [INFO] Hook 已安装: CameraManager.ChangePVandCV | {"rva": "0xb35920", "runtime": "0x6d805920"}
+[17:43:16] [INFO] Hook 已安装: CameraManager.OnDestroy | {"rva": "0xb360e0", "runtime": "0x6d8060e0"}
+[17:43:16] [INFO] Hook 已安装: GameManager.Awake | {"rva": "0xafa250", "runtime": "0x6d7ca250"}
+[17:43:16] [INFO] Hook 已安装: GameManager.OnDestroy | {"rva": "0xafb6f0", "runtime": "0x6d7cb6f0"}
+[17:43:16] [INFO] Hook 已安装: MapManager.NewGameRoundStart | {"rva": "0xaebcb0", "runtime": "0x6d7bbcb0"}
+[17:43:16] [INFO] 最小可用第三人称射击 v3.14-owner-perf-1.0 Hook 安装完成
+[17:43:16] [INFO] 最小可用第三人称射击 v3.14-owner-perf-1.0 脚本已加载 | {"base": "0x6ccd0000", "arch": "ia32", "pointerSize": 4, "installResult": {"ok": true, "installed": true}}
+[17:43:16] [INFO] 已连接游戏进程 PID=28644
+[17:43:27] [INFO] [Lifecycle] CameraManager 已捕获 | {"pointer": "0x23d72b70", "source": "CameraManager.Awake"}
+[17:43:27] [INFO] 状态: NO_GAME -> READY
+[17:43:27] [INFO] 脚本状态：NO_GAME -> READY
+[17:43:28] [INFO] [Lifecycle] 本地玩家已捕获 | {"pointer": "0x3530b450", "source": "CameraManager.focusPlayer"}
+[17:43:33] [INFO] 开启命令已排队
+[17:43:33] [INFO] [Camera] 第三人称相机已配置 | {"shoulder": "center", "distance": 3, "pivotHeight": 1.35, "pitchMode": "independent_final_camera_pivot", "freeLookMode": "follow_lookat_yaw_only"}
+[17:43:33] [INFO] [Shooting] 枪口已解析 | {"weapon": "0x23d544d8", "transform": "0x23f557c0", "source": "weapon.transform_fallback"}
+[17:43:33] [INFO] 状态: READY -> ENABLED
+[17:43:33] [INFO] 脚本状态：READY -> ENABLED
+[17:43:33] [INFO] 最小可用第三人称射击已启用 | {"camera": true, "model": true, "movement": "camera_relative", "shooting": "muzzle_to_crosshair"}
+[17:43:33] [INFO] 游戏主线程已完成第三人称开启。
+[17:43:33] [INFO] [TPSStatus] | {"cameraFrames": 0, "cameraFailures": 0, "inputPitch": 0, "renderedPitch": 0, "yawSource": "transform_forward_stable", "movementVectorsModified": 0, "physicsRaycastCalls": 0, "shootRayModified": 0, "muzzleOwnerChecks": 0, "muzzleOwnerMismatches": 0, "safeRestoreSkips": 0, "stalePointerSkips": 0, "staleCameraResets": 0, "staleMuzzleInvalidations": 0, "cameraCacheHealthChecks": 0, "hotPathReadableChecksRemoved": true, "adsPassthrough": false, "adsPassthroughEntries": 0, "adsPassthroughExits": 0, "adsCameraFramesSkipped": 0, "adsShootRayPassThrough": 0, "adsCameraRefreshSuppressed": 0, "aimFramesComputed": 0, "sameFrameAimReuses": 0, "lifecycleEvents": 0, "lifecycleBatches": 0, "lifecycleEventsMerged": 0, "playerDead": false}
+[17:43:40] [INFO] [Shooting] 枪口已解析 | {"weapon": "0x36e9b2e0", "transform": "0x23f06b70", "source": "WPN_Gun.gunFire"}
+[17:43:40] [INFO] [Lifecycle] 合并刷新完成 | {"events": 4, "merged": 3, "reason": "set_weapon", "model": true, "camera": false, "muzzle": true}
+[17:43:49] [INFO] [Shooting] 双射线已写回 | {"shot": 1, "source": "camera_center", "targetReusedSameFrame": false, "physicsCalls": 1, "aimFrames": 1, "sameFrameReuses": 0}
+[17:43:53] [INFO] [TPSStatus] | {"cameraFrames": 839, "cameraFailures": 0, "inputPitch": -13.405545234680176, "renderedPitch": -13.405545233134857, "yawSource": "transform_forward_stable", "movementVectorsModified": 390, "physicsRaycastCalls": 1, "shootRayModified": 1, "muzzleOwnerChecks": 1, "muzzleOwnerMismatches": 0, "safeRestoreSkips": 0, "stalePointerSkips": 0, "staleCameraResets": 0, "staleMuzzleInvalidations": 0, "cameraCacheHealthChecks": 19, "hotPathReadableChecksRemoved": true, "adsPassthrough": false, "adsPassthroughEntries": 0, "adsPassthroughExits": 0, "adsCameraFramesSkipped": 0, "adsShootRayPassThrough": 0, "adsCameraRefreshSuppressed": 0, "aimFramesComputed": 1, "sameFrameAimReuses": 0, "lifecycleEvents": 4, "lifecycleBatches": 1, "lifecycleEventsMerged": 3, "playerDead": false}
+[17:43:55] [INFO] 关闭命令已排队
+[17:43:55] [INFO] 状态: ENABLED -> READY
+[17:43:55] [INFO] 脚本状态：ENABLED -> READY
+[17:43:55] [INFO] 最小可用第三人称射击已关闭
+[17:43:55] [INFO] 游戏主线程已完成第三人称关闭。
+[17:44:39] [INFO] 开启命令已排队
+[17:44:39] [INFO] [Camera] 第三人称相机已配置 | {"shoulder": "center", "distance": 3, "pivotHeight": 1.35, "pitchMode": "independent_final_camera_pivot", "freeLookMode": "follow_lookat_yaw_only"}
+[17:44:39] [INFO] [Shooting] 枪口已解析 | {"weapon": "0x36e9b2e0", "transform": "0x23f06b70", "source": "WPN_Gun.gunFire"}
+[17:44:39] [INFO] 状态: READY -> ENABLED
+[17:44:39] [INFO] 脚本状态：READY -> ENABLED
+[17:44:39] [INFO] 最小可用第三人称射击已启用 | {"camera": true, "model": true, "movement": "camera_relative", "shooting": "muzzle_to_crosshair"}
+[17:44:39] [INFO] 游戏主线程已完成第三人称开启。
+[17:44:39] [INFO] [TPSStatus] | {"cameraFrames": 923, "cameraFailures": 0, "inputPitch": 0, "renderedPitch": 0, "yawSource": "transform_forward_stable", "movementVectorsModified": 425, "physicsRaycastCalls": 1, "shootRayModified": 1, "muzzleOwnerChecks": 1, "muzzleOwnerMismatches": 0, "safeRestoreSkips": 0, "stalePointerSkips": 0, "staleCameraResets": 0, "staleMuzzleInvalidations": 0, "cameraCacheHealthChecks": 21, "hotPathReadableChecksRemoved": true, "adsPassthrough": false, "adsPassthroughEntries": 0, "adsPassthroughExits": 0, "adsCameraFramesSkipped": 0, "adsShootRayPassThrough": 0, "adsCameraRefreshSuppressed": 0, "aimFramesComputed": 1, "sameFrameAimReuses": 0, "lifecycleEvents": 4, "lifecycleBatches": 1, "lifecycleEventsMerged": 3, "playerDead": false}
+[17:44:49] [INFO] [Shooting] 枪口已解析 | {"weapon": "0x3530b000", "transform": "0x411176b0", "source": "WPN_Gun.gunFire"}
+[17:44:50] [INFO] [Camera] 第三人称相机已配置 | {"shoulder": "center", "distance": 3, "pivotHeight": 1.35, "pitchMode": "independent_final_camera_pivot", "freeLookMode": "follow_lookat_yaw_only"}
+[17:44:52] [INFO] [Camera] 第三人称相机已配置 | {"shoulder": "center", "distance": 3, "pivotHeight": 1.35, "pitchMode": "independent_final_camera_pivot", "freeLookMode": "follow_lookat_yaw_only"}
+[17:44:52] [INFO] [Shooting] 枪口已解析 | {"weapon": "0x411625c0", "transform": "0x4115bc00", "source": "WPN_Gun.gunFire"}
+[17:44:52] [INFO] [Lifecycle] 合并刷新完成 | {"events": 5, "merged": 4, "reason": "spawn", "model": true, "camera": true, "muzzle": true}
+[17:44:53] [INFO] [Shooting] 枪口已解析 | {"weapon": "0x41162170", "transform": "0x36ec6350", "source": "WPN_Gun.gunFire"}
+[17:44:53] [INFO] [Lifecycle] 合并刷新完成 | {"events": 4, "merged": 3, "reason": "set_weapon", "model": true, "camera": false, "muzzle": true}
+[17:44:59] [INFO] [TPSStatus] | {"cameraFrames": 1688, "cameraFailures": 0, "inputPitch": -1.366984486579895, "renderedPitch": -1.3674320681418977, "yawSource": "transform_forward_stable", "movementVectorsModified": 683, "physicsRaycastCalls": 25, "shootRayModified": 25, "muzzleOwnerChecks": 25, "muzzleOwnerMismatches": 1, "safeRestoreSkips": 0, "stalePointerSkips": 0, "staleCameraResets": 0, "staleMuzzleInvalidations": 0, "cameraCacheHealthChecks": 39, "hotPathReadableChecksRemoved": true, "adsPassthrough": false, "adsPassthroughEntries": 0, "adsPassthroughExits": 0, "adsCameraFramesSkipped": 0, "adsShootRayPassThrough": 0, "adsCameraRefreshSuppressed": 0, "aimFramesComputed": 25, "sameFrameAimReuses": 0, "lifecycleEvents": 14, "lifecycleBatches": 4, "lifecycleEventsMerged": 10, "playerDead": false}
+[17:45:16] [INFO] [Camera] 第三人称相机已配置 | {"shoulder": "center", "distance": 3, "pivotHeight": 1.35, "pitchMode": "independent_final_camera_pivot", "freeLookMode": "follow_lookat_yaw_only"}
+[17:45:18] [INFO] [Camera] 第三人称相机已配置 | {"shoulder": "center", "distance": 3, "pivotHeight": 1.35, "pitchMode": "independent_final_camera_pivot", "freeLookMode": "follow_lookat_yaw_only"}
+[17:45:18] [INFO] [Shooting] 枪口已解析 | {"weapon": "0x23ef8ba0", "transform": "0x36e50ef0", "source": "weapon.transform_fallback"}
+[17:45:18] [INFO] [Lifecycle] 合并刷新完成 | {"events": 5, "merged": 4, "reason": "spawn", "model": true, "camera": true, "muzzle": true}
+[17:45:19] [INFO] [TPSStatus] | {"cameraFrames": 2500, "cameraFailures": 0, "inputPitch": -6.118865966796875, "renderedPitch": -5.72370840685021, "yawSource": "transform_forward_stable", "movementVectorsModified": 916, "physicsRaycastCalls": 95, "shootRayModified": 95, "muzzleOwnerChecks": 95, "muzzleOwnerMismatches": 1, "safeRestoreSkips": 0, "stalePointerSkips": 0, "staleCameraResets": 0, "staleMuzzleInvalidations": 0, "cameraCacheHealthChecks": 57, "hotPathReadableChecksRemoved": true, "adsPassthrough": false, "adsPassthroughEntries": 0, "adsPassthroughExits": 0, "adsCameraFramesSkipped": 0, "adsShootRayPassThrough": 0, "adsCameraRefreshSuppressed": 0, "aimFramesComputed": 95, "sameFrameAimReuses": 0, "lifecycleEvents": 20, "lifecycleBatches": 6, "lifecycleEventsMerged": 14, "playerDead": false}
+[17:45:28] [INFO] [Shooting] 枪口已解析 | {"weapon": "0x22170b80", "transform": "0x410c2d50", "source": "WPN_Gun.gunFire"}
+[17:45:39] [INFO] [TPSStatus] | {"cameraFrames": 3410, "cameraFailures": 0, "inputPitch": -0.7811302542686462, "renderedPitch": -0.795614283249077, "yawSource": "transform_forward_stable", "movementVectorsModified": 1303, "physicsRaycastCalls": 127, "shootRayModified": 127, "muzzleOwnerChecks": 127, "muzzleOwnerMismatches": 2, "safeRestoreSkips": 0, "stalePointerSkips": 0, "staleCameraResets": 0, "staleMuzzleInvalidations": 0, "cameraCacheHealthChecks": 76, "hotPathReadableChecksRemoved": true, "adsPassthrough": false, "adsPassthroughEntries": 0, "adsPassthroughExits": 0, "adsCameraFramesSkipped": 0, "adsShootRayPassThrough": 0, "adsCameraRefreshSuppressed": 0, "aimFramesComputed": 127, "sameFrameAimReuses": 0, "lifecycleEvents": 20, "lifecycleBatches": 6, "lifecycleEventsMerged": 14, "playerDead": false}
+[17:45:58] [INFO] 状态: ENABLED -> NO_GAME
+[17:45:58] [INFO] 脚本状态：ENABLED -> NO_GAME
+[17:45:58] [WARNING] 游戏场景已销毁：CameraManager.OnDestroy
+[17:46:01] [INFO] [Lifecycle] CameraManager 已捕获 | {"pointer": "0x36e77240", "source": "CameraManager.Awake"}
+[17:46:01] [INFO] 状态: NO_GAME -> READY
+[17:46:01] [INFO] 脚本状态：NO_GAME -> READY
+[17:46:01] [INFO] [Lifecycle] 本地玩家已捕获 | {"pointer": "0x352c4a10", "source": "CameraManager.focusPlayer"}
+[17:46:04] [INFO] 开启命令已排队
+[17:46:04] [INFO] [Camera] 第三人称相机已配置 | {"shoulder": "center", "distance": 3, "pivotHeight": 1.35, "pitchMode": "independent_final_camera_pivot", "freeLookMode": "follow_lookat_yaw_only"}
+[17:46:04] [INFO] [Shooting] 枪口已解析 | {"weapon": "0x352c4730", "transform": "0x226697e0", "source": "WPN_Gun.gunFire"}
+[17:46:04] [INFO] 状态: READY -> ENABLED
+[17:46:04] [INFO] 脚本状态：READY -> ENABLED
+[17:46:04] [INFO] 最小可用第三人称射击已启用 | {"camera": true, "model": true, "movement": "camera_relative", "shooting": "muzzle_to_crosshair"}
+[17:46:04] [INFO] 游戏主线程已完成第三人称开启。
+[17:46:04] [INFO] [TPSStatus] | {"cameraFrames": 4251, "cameraFailures": 0, "inputPitch": 0, "renderedPitch": 0, "yawSource": "transform_forward_stable", "movementVectorsModified": 1637, "physicsRaycastCalls": 213, "shootRayModified": 213, "muzzleOwnerChecks": 213, "muzzleOwnerMismatches": 2, "safeRestoreSkips": 0, "stalePointerSkips": 0, "staleCameraResets": 0, "staleMuzzleInvalidations": 0, "cameraCacheHealthChecks": 94, "hotPathReadableChecksRemoved": true, "adsPassthrough": false, "adsPassthroughEntries": 0, "adsPassthroughExits": 0, "adsCameraFramesSkipped": 0, "adsShootRayPassThrough": 0, "adsCameraRefreshSuppressed": 0, "aimFramesComputed": 213, "sameFrameAimReuses": 0, "lifecycleEvents": 20, "lifecycleBatches": 6, "lifecycleEventsMerged": 14, "playerDead": false}
+[17:46:24] [INFO] [TPSStatus] | {"cameraFrames": 5150, "cameraFailures": 0, "inputPitch": -8.917938232421875, "renderedPitch": -9.017135191423282, "yawSource": "transform_forward_stable", "movementVectorsModified": 2148, "physicsRaycastCalls": 213, "shootRayModified": 213, "muzzleOwnerChecks": 213, "muzzleOwnerMismatches": 2, "safeRestoreSkips": 0, "stalePointerSkips": 0, "staleCameraResets": 0, "staleMuzzleInvalidations": 0, "cameraCacheHealthChecks": 113, "hotPathReadableChecksRemoved": true, "adsPassthrough": false, "adsPassthroughEntries": 0, "adsPassthroughExits": 0, "adsCameraFramesSkipped": 0, "adsShootRayPassThrough": 0, "adsCameraRefreshSuppressed": 0, "aimFramesComputed": 213, "sameFrameAimReuses": 0, "lifecycleEvents": 20, "lifecycleBatches": 6, "lifecycleEventsMerged": 14, "playerDead": false}
+[17:46:38] [INFO] [Shooting] 双射线已写回 | {"shot": 250, "source": "camera_center", "targetReusedSameFrame": false, "physicsCalls": 250, "aimFrames": 250, "sameFrameReuses": 0}
+[17:46:44] [INFO] [TPSStatus] | {"cameraFrames": 6077, "cameraFailures": 0, "inputPitch": -28.250953674316406, "renderedPitch": -28.14779002914303, "yawSource": "transform_forward_stable", "movementVectorsModified": 2298, "physicsRaycastCalls": 285, "shootRayModified": 285, "muzzleOwnerChecks": 285, "muzzleOwnerMismatches": 2, "safeRestoreSkips": 0, "stalePointerSkips": 0, "staleCameraResets": 0, "staleMuzzleInvalidations": 0, "cameraCacheHealthChecks": 133, "hotPathReadableChecksRemoved": true, "adsPassthrough": false, "adsPassthroughEntries": 0, "adsPassthroughExits": 0, "adsCameraFramesSkipped": 0, "adsShootRayPassThrough": 0, "adsCameraRefreshSuppressed": 0, "aimFramesComputed": 285, "sameFrameAimReuses": 0, "lifecycleEvents": 20, "lifecycleBatches": 6, "lifecycleEventsMerged": 14, "playerDead": false}
+[17:46:59] [INFO] 状态: ENABLED -> NO_GAME
+[17:46:59] [INFO] 脚本状态：ENABLED -> NO_GAME
+[17:46:59] [WARNING] 游戏场景已销毁：CameraManager.OnDestroy
+[17:47:01] [WARNING] UI 已关闭
