@@ -39,7 +39,7 @@ modules.ammo = (function() {
         var addrRpgFillAmmo = base.add(0xB67070);
         var rpgFillAmmoFn = new NativeFunction(addrRpgFillAmmo, 'void', ['pointer', 'pointer']);
         
-        Interceptor.attach(addrRpgFire, {
+        var rpgFireHook = Interceptor.attach(addrRpgFire, {
           onEnter: function(args) {
             try {
               var self = args[0];
@@ -49,7 +49,7 @@ modules.ammo = (function() {
             } catch (e) {}
           }
         });
-        hooks.push({ type: 'attach', addr: addrRpgFire });
+        hooks.push({ type: 'attach', handle: rpgFireHook });
         sendLog('info', '无限子弹', 'RPG/AT4 无限子弹已启用');
       } catch (e) {
         sendDevLog('warn', '无限子弹', 'RPG/AT4 初始化失败: ' + e, 'Ammo RPG/AT4 hook init failed');
@@ -66,7 +66,7 @@ modules.ammo = (function() {
           if (hooks[i].type === 'replace') {
             Interceptor.revert(hooks[i].addr);
           } else {
-            hooks[i].addr.detach();
+            hooks[i].handle.detach();
           }
         } catch(e) {}
       }

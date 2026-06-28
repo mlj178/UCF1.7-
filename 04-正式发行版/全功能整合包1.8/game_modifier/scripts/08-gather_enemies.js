@@ -22,6 +22,8 @@ modules.gather = (function() {
     setPosInj: 0x3F4810,
     Bot_Update: 0xB33370,
     SingGetInst: 0x4A8170,
+    ModeBase_ExitGame: 0xAEE850,
+    GameManager_OnDestroy: 0xAFB6F0,
   };
 
   var SING = { GM: 0xE1CE64, MM: 0xE1D9E8 };
@@ -35,6 +37,11 @@ modules.gather = (function() {
 
   var isMy = null, isDead = null, getCC = null, cSE = null, gt = null, spi = null;
   var posBuf = null, singletonGetter = null, hooks = [];
+
+  function clearRoomState(reason) {
+    gm = null; mm = null; recentBotPlayers = {}; ntp = false;
+    sendDevLog('info', 'Gather', 'Room cache cleared: ' + reason, 'GatherEnemies cleared cached room pointers');
+  }
 
   function rp(a, o) { try { return a.add(o).readPointer(); } catch(e) { return null; } }
 
@@ -164,6 +171,8 @@ modules.gather = (function() {
       try { var h2 = Interceptor.attach(base.add(R.GM_AddP), { onEnter: function(a) { if (!gm) { gm = a[0]; } } }); hooks.push(h2); } catch(e) {}
       try { var h3 = Interceptor.attach(base.add(R.MM_MapGun), { onEnter: function(a) { if (mm) return; mm = a[0]; } }); hooks.push(h3); } catch(e) {}
       try { var h4 = Interceptor.attach(base.add(R.P_Update), { onEnter: function(a) { if (!ntp) return; ntp = false; if (!gm || !mm) return; executeTeleport(); } }); hooks.push(h4); } catch(e) {}
+      try { var h5 = Interceptor.attach(base.add(R.ModeBase_ExitGame), { onEnter: function() { clearRoomState('ModeBase.ExitGame'); } }); hooks.push(h5); } catch(e) {}
+      try { var h6 = Interceptor.attach(base.add(R.GameManager_OnDestroy), { onEnter: function() { clearRoomState('GameManager.OnDestroy'); } }); hooks.push(h6); } catch(e) {}
 
       enabled = true;
       sendLog('success', '聚怪', '已启用 — 动态列表模式');
@@ -172,7 +181,7 @@ modules.gather = (function() {
     disable: function() {
       if (!enabled) return;
       for (var i = 0; i < hooks.length; i++) { try { hooks[i].detach(); } catch(e) {} }
-      hooks = []; gm = null; mm = null; recentBotPlayers = {};
+      hooks = []; gm = null; mm = null; recentBotPlayers = {}; ntp = false;
       enabled = false;
       sendLog('info', '聚怪', '已禁用');
       sendStatus('gather', false);
