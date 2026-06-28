@@ -1,5 +1,4 @@
 import customtkinter as ctk
-import frida
 import os
 import threading
 import time
@@ -340,60 +339,11 @@ class App(ctk.CTk):
             self.isbot_status_label.configure(text="状态: 已关闭", text_color="#888888")
 
     def _connect(self):
-        self._log("正在重新检测游戏进程...")
         GameSessionManager.get_instance().reconnect()
-
-    def _connect_bg(self):
-        pid = self._game_connection_service.find_pid()
-        if not pid:
-            self._log("⚠ 未检测到游戏进程，请先启动 UnityCrossFire.exe")
-            return
-        self._do_connect(pid)
-
-    def _do_connect(self, pid):
-        with self._lock:
-            if self._connecting:
-                return
-            self._connecting = True
-
-        self._log(f"检测到游戏 PID:{pid}，正在连接...")
-        try:
-            success = self._game_connection_service.connect(pid)
-            ok = success[0] if isinstance(success, tuple) else bool(success)
-            if not ok:
-                self._connecting = False
-        except Exception as e:
-            self._log(f"❌ 连接失败: {e}")
-        finally:
-            self._connecting = False
-
-    def _monitor_connection(self):
-        while not self._stop:
-            time.sleep(2)
-            if not self._ready:
-                continue
-            try:
-                self._game_action_service.health_check()
-            except (frida.InvalidOperationError, frida.TransportError):
-                self._on_disconnected()
-            except Exception:
-                pass
-
-    def _on_disconnected(self):
-        if not self._ready:
-            return
-        self._log("🔴 连接已断开，正在重连...")
-        self._ready = False
-        self._connecting = False
-        self._cleanup(keep_features=True)
-        pid_text = f"PID: {self._pid}" if self._pid else ""
-        self.after(0, lambda: self.pid_label.configure(text=pid_text))
-        self.after(0, lambda: self._set_status("red", "连接断开，正在重连..."))
 
     def _cleanup(self, keep_features=False):
         try:
             self._roundskip_monitor.stop()
-            self._game_connection_service.disconnect()
         except Exception:
             pass
         self._weapon_controller.pause_hotkeys()

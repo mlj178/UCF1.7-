@@ -45,6 +45,7 @@ class FridaManager:
         self._script = None
         self._ready = False
         self._connecting = False
+        self._disconnecting = False
         self._pid = None
         self._lock = threading.Lock()
         self._event_bus = EventBus.get_instance()
@@ -337,8 +338,16 @@ setTimeout(function() { getGameAssembly(); }, 100);
 
     def disconnect(self):
         """Disconnect from game process"""
-        script = self._script
-        session = self._session
+        with self._lock:
+            if self._disconnecting:
+                return
+            self._disconnecting = True
+            script = self._script
+            session = self._session
+            self._script = None
+            self._session = None
+            self._ready = False
+            self._pid = None
 
         try:
             if script:
@@ -361,39 +370,39 @@ setTimeout(function() { getGameAssembly(); }, 100);
                 except Exception as e:
                     log_to_file("warning", "系统", f"Frida session detach failed: {e}")
         finally:
-            self._script = None
-            self._session = None
-            self._ready = False
-            self._pid = None  # Clear PID on disconnect
+            with self._lock:
+                self._disconnecting = False
 
     def send_toggle(self, feature, enable, extra_params=None):
-        if not self._script:
-            return
-        try:
-            msg = {'type': 'toggle', 'feature': feature, 'enable': enable}
-            if extra_params:
-                msg.update(extra_params)
-            self._script.post(msg)
-        except Exception as e:
-            self._event_bus.emit('log_message', level='error', module='系统',
-                                 message='发送指令失败，请重新连接游戏后重试',
-                                 audience='both',
-                                 dev_detail=f'Frida send_toggle failed: {e}')
+        with self._lock:
+            if self._disconnecting or not self._script:
+                return
+            try:
+                msg = {'type': 'toggle', 'feature': feature, 'enable': enable}
+                if extra_params:
+                    msg.update(extra_params)
+                self._script.post(msg)
+            except Exception as e:
+                self._event_bus.emit('log_message', level='error', module='System',
+                                     message='Frida command failed, reconnect to the game and try again',
+                                     audience='both',
+                                     dev_detail=f'Frida send_toggle failed: {e}')
 
     def call_export(self, name, *args):
-        if not self._script:
-            return None
-        try:
-            fn = getattr(self._script.exports_sync, name)
-            result = fn(*args)
+        with self._lock:
+            if self._disconnecting or not self._script:
+                return None
             try:
-                return json.loads(result)
-            except (json.JSONDecodeError, TypeError):
-                return result
-        except (frida.InvalidOperationError, frida.TransportError):
-            raise
-        except Exception as e:
-            return None
+                fn = getattr(self._script.exports_sync, name)
+                result = fn(*args)
+                try:
+                    return json.loads(result)
+                except (json.JSONDecodeError, TypeError):
+                    return result
+            except (frida.InvalidOperationError, frida.TransportError):
+                raise
+            except Exception:
+                return None
 
     def _on_message(self, msg, data):
         if msg['type'] != 'send':
