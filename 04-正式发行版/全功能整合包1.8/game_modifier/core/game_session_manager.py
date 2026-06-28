@@ -109,29 +109,28 @@ class GameSessionManager:
                     log_to_file("info", "系统", "GameSessionManager worker stopped")
 
             if self._universal_manager:
+                # 正常关闭修改器时不要卸载 Universal ESP DLL。该 DLL Hook 了
+                # D3D 和 GameAssembly，运行中 FreeLibrary 容易导致游戏崩溃。
+                # 关闭修改器只关闭 ESP 显示并断开 pipe，DLL 等游戏退出自然释放。
                 try:
                     log_to_file("info", "System", "ESP shutdown: set_esp_box(false)")
                     self._universal_manager.set_esp_box(False)
                 except Exception as e:
                     log_to_file("warning", "System", f"ESP shutdown: set_esp_box(false) failed: {e}")
 
-                log_to_file("info", "System", "ESP shutdown: waiting render drain")
                 time.sleep(0.3)
+                log_to_file("info", "System", "ESP shutdown: disconnect pipe only, keep DLL loaded")
+                try:
+                    self._universal_manager.disconnect()
+                except Exception as e:
+                    log_to_file("warning", "System", f"Universal hook manager disconnect failed: {e}")
 
             if self._frida_manager:
                 try:
                     self._frida_manager.disconnect()
-                    log_to_file("info", "System", "ESP shutdown: frida cleanup done")
+                    log_to_file("info", "System", "Frida manager disconnected")
                 except Exception as e:
                     log_to_file("warning", "System", f"Frida manager disconnect failed: {e}")
-
-            if self._universal_manager:
-                try:
-                    log_to_file("info", "System", "ESP shutdown: dll unload requested")
-                    self._universal_manager.unload()
-                    log_to_file("info", "System", "Universal hook manager unloaded")
-                except Exception as e:
-                    log_to_file("warning", "System", f"Universal hook manager unload failed: {e}")
         finally:
             self._universal_manager = None
             self._frida_manager = None

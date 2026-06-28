@@ -129,3 +129,22 @@
 [18:38:29] 状态读取失败：script has been destroyed
 [18:38:29] 游戏连接已断开：Frida RPC 状态读取失败，可能游戏已退出
 [18:38:29] 游戏连接已断开：process-terminated
+[18:42:42] script loaded; no runtime metadata API; pointerSize=4
+[18:42:42] 脚本已加载
+[18:42:43] 状态警告：readU8 failed at Bot.stopAllBot 0xebea2de8: access violation accessing 0xebea2de8
+[18:42:44] 状态警告：readU8 failed at Bot.stopAllBot 0xebea2de8: access violation accessing 0xebea2de8
+[18:42:45] 状态警告：readU8 failed at Bot.stopAllBot 0xebea2de8: access violation accessing 0xebea2de8
+[18:42:46] 状态警告：readU8 failed at Bot.stopAllBot 0xebea2de8: access violation accessing 0xebea2de8
+[18:42:47] 状态警告：readU8 failed at Bot.stopAllBot 0xebea2de8: access violation accessing 0xebea2de8
+[18:42:48] 状态警告：readU8 failed at Bot.stopAllBot 0xebea2de8: access violation accessing 0xebea2de8
+[18:42:49] 状态警告：readU8 failed at Bot.stopAllBot 0xebea2de8: access violation accessing 0xebea2de8
+[18:43:28] 游戏连接已断开：process-terminated
+[18:49:43] script loaded; no runtime metadata API; pointerSize=4
+[18:49:43] 脚本已加载
+[18:49:44] 状态警告：readPointer failed at Bot.static_fields 0x2000309f: access violation accessing 0x2000309f
+[18:49:44] 警告：static_fields is null. This version does not call any runtime metadata API by user rule.
+[18:50:23] 游戏连接已断开：process-terminated
+[18:50:55] script loaded; no runtime metadata API; pointerSize=4
+[18:50:55] 脚本已加载
+[18:51:31] 游戏连接已断开：process-terminated
+[19:51:04] 正在清理并退出...
