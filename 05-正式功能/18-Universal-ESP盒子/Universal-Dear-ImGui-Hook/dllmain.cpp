@@ -1,6 +1,7 @@
 #include "stdafx.h"
 #include "esp/named_pipe_server.h"
 #include "esp/game_manager.h"
+#include "esp/esp_state.h"
 #include <atomic>
 
 namespace mousehooks { void Init(); void Remove(); }
@@ -205,16 +206,26 @@ static HMODULE WINAPI hookLoadLibraryW(LPCWSTR lpLibFileName)
 // Thread routine that performs cleanup and unloads the DLL
 static DWORD WINAPI UninjectThread(LPVOID)
 {
-    DebugLog("[DllMain] Uninject thread starting.\n");
+    DebugLog("[DllMain] DLL UninjectThread: unloading begin\n");
+    globals::g_unloading.store(true, std::memory_order_release);
+    ESPState::Instance().Reset();
 
     // Stop named pipe server first to prevent thread from accessing freed code
     NamedPipeServer::Stop();
 
-    MH_DisableHook(MH_ALL_HOOKS);
+    DWORD waitedMs = 0;
+    while (globals::g_presentDepth.load(std::memory_order_acquire) > 0 && waitedMs < 1000)
+    {
+        Sleep(10);
+        waitedMs += 10;
+    }
+    if (globals::g_presentDepth.load(std::memory_order_acquire) == 0)
+        DebugLog("[DllMain] DLL UninjectThread: presentDepth drained\n");
+    else
+        DebugLog("[DllMain] DLL UninjectThread: presentDepth timeout depth=%d\n",
+            globals::g_presentDepth.load(std::memory_order_acquire));
 
-    // Let callbacks that entered before MH_DisableHook return before shared
-    // state and critical sections are destroyed.
-    Sleep(100);
+    MH_DisableHook(MH_ALL_HOOKS);
 
     switch (globals::activeBackend)
     {
@@ -244,7 +255,7 @@ static DWORD WINAPI UninjectThread(LPVOID)
     // Cleanup ESP game manager resources after hooks can no longer enter.
     esp::GameManager::Cleanup();
 
-    DebugLog("[DllMain] Unloading module and exiting thread.\n");
+    DebugLog("[DllMain] DLL UninjectThread: FreeLibraryAndExitThread\n");
     FreeLibraryAndExitThread(globals::mainModule, 0);
     return 0; // not reached
 }
@@ -255,11 +266,6 @@ void Uninject()
     bool expected = false;
     if (!s_uninjecting.compare_exchange_strong(expected, true))
         return;
-
-    // Wait for current frame to complete before starting cleanup
-    // This ensures the Present hook (which called Uninject) has returned
-    // before we start disabling hooks and releasing resources
-    Sleep(50);  // ~3 frames at 60fps
 
     HANDLE hThread = CreateThread(nullptr, 0, UninjectThread, nullptr, 0, nullptr);
     if (hThread) {

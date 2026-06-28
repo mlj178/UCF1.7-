@@ -1009,3 +1009,249 @@
 17:47:24  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
 17:47:24  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=290 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
 17:47:24  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:51:20  [success][极速枪托v2/DAMAGE] natural KnifeAttackEvent seq=291 attackIndex=0 elapsed=165ms
+17:51:20  [success][极速枪托v2/UNLOCK] call OnKnifeAttackExit reason=after_natural_damage/seq=291/delay=0 lock 1 -> 0
+17:51:20  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=291 name=knife-attack tag=knifeAttack elapsed=667ms lock=0
+17:51:20  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:52:17  [success][极速枪托v2/CONFIG] {"mode":"early_damage_unlock","unlockMethod":"call_exit","unlockDelayMs":0,"earlyDamageDelayMs":90,"earlyUnlockDelayMs":15,"earlyAttackIndex":0,"cleanupAfterMs":2500,"maxLogsPerModule":300,"verboseTrace":true}
+17:52:17  配置已应用: {'mode': 'early_damage_unlock', 'unlockMethod': 'call_exit', 'unlockDelayMs': 0, 'earlyDamageDelayMs': 90, 'earlyUnlockDelayMs': 15, 'earlyAttackIndex': 0, 'verboseTrace': True}
+17:52:21  [success][极速枪托v2/CONFIG] {"mode":"early_damage_unlock","unlockMethod":"call_exit_then_write","unlockDelayMs":0,"earlyDamageDelayMs":90,"earlyUnlockDelayMs":15,"earlyAttackIndex":0,"cleanupAfterMs":2500,"maxLogsPerModule":300,"verboseTrace":true}
+17:52:21  配置已应用: {'mode': 'early_damage_unlock', 'unlockMethod': 'call_exit_then_write', 'unlockDelayMs': 0, 'earlyDamageDelayMs': 90, 'earlyUnlockDelayMs': 15, 'earlyAttackIndex': 0, 'verboseTrace': True}
+17:52:26  [success][极速枪托v2/CONFIG] {"mode":"early_damage_unlock","unlockMethod":"call_exit_then_write","unlockDelayMs":0,"earlyDamageDelayMs":104,"earlyUnlockDelayMs":15,"earlyAttackIndex":0,"cleanupAfterMs":2500,"maxLogsPerModule":300,"verboseTrace":true}
+17:52:26  配置已应用: {'mode': 'early_damage_unlock', 'unlockMethod': 'call_exit_then_write', 'unlockDelayMs': 0, 'earlyDamageDelayMs': 104, 'earlyUnlockDelayMs': 15, 'earlyAttackIndex': 0, 'verboseTrace': True}
+17:52:26  [success][极速枪托v2/CONFIG] {"mode":"early_damage_unlock","unlockMethod":"call_exit_then_write","unlockDelayMs":0,"earlyDamageDelayMs":105,"earlyUnlockDelayMs":15,"earlyAttackIndex":0,"cleanupAfterMs":2500,"maxLogsPerModule":300,"verboseTrace":true}
+17:52:26  配置已应用: {'mode': 'early_damage_unlock', 'unlockMethod': 'call_exit_then_write', 'unlockDelayMs': 0, 'earlyDamageDelayMs': 105, 'earlyUnlockDelayMs': 15, 'earlyAttackIndex': 0, 'verboseTrace': True}
+17:52:26  [success][极速枪托v2/CONFIG] {"mode":"early_damage_unlock","unlockMethod":"call_exit_then_write","unlockDelayMs":0,"earlyDamageDelayMs":106,"earlyUnlockDelayMs":15,"earlyAttackIndex":0,"cleanupAfterMs":2500,"maxLogsPerModule":300,"verboseTrace":true}
+17:52:26  配置已应用: {'mode': 'early_damage_unlock', 'unlockMethod': 'call_exit_then_write', 'unlockDelayMs': 0, 'earlyDamageDelayMs': 106, 'earlyUnlockDelayMs': 15, 'earlyAttackIndex': 0, 'verboseTrace': True}
+17:52:26  [success][极速枪托v2/CONFIG] {"mode":"early_damage_unlock","unlockMethod":"call_exit_then_write","unlockDelayMs":0,"earlyDamageDelayMs":109,"earlyUnlockDelayMs":15,"earlyAttackIndex":0,"cleanupAfterMs":2500,"maxLogsPerModule":300,"verboseTrace":true}
+17:52:26  配置已应用: {'mode': 'early_damage_unlock', 'unlockMethod': 'call_exit_then_write', 'unlockDelayMs': 0, 'earlyDamageDelayMs': 109, 'earlyUnlockDelayMs': 15, 'earlyAttackIndex': 0, 'verboseTrace': True}
+17:52:26  [success][极速枪托v2/CONFIG] {"mode":"early_damage_unlock","unlockMethod":"call_exit_then_write","unlockDelayMs":0,"earlyDamageDelayMs":110,"earlyUnlockDelayMs":15,"earlyAttackIndex":0,"cleanupAfterMs":2500,"maxLogsPerModule":300,"verboseTrace":true}
+17:52:26  [success][极速枪托v2/CONFIG] {"mode":"early_damage_unlock","unlockMethod":"call_exit_then_write","unlockDelayMs":0,"earlyDamageDelayMs":115,"earlyUnlockDelayMs":15,"earlyAttackIndex":0,"cleanupAfterMs":2500,"maxLogsPerModule":300,"verboseTrace":true}
+17:52:26  配置已应用: {'mode': 'early_damage_unlock', 'unlockMethod': 'call_exit_then_write', 'unlockDelayMs': 0, 'earlyDamageDelayMs': 115, 'earlyUnlockDelayMs': 15, 'earlyAttackIndex': 0, 'verboseTrace': True}
+17:52:26  配置已应用: {'mode': 'early_damage_unlock', 'unlockMethod': 'call_exit_then_write', 'unlockDelayMs': 0, 'earlyDamageDelayMs': 115, 'earlyUnlockDelayMs': 15, 'earlyAttackIndex': 0, 'verboseTrace': True}
+17:52:26  [success][极速枪托v2/CONFIG] {"mode":"early_damage_unlock","unlockMethod":"call_exit_then_write","unlockDelayMs":0,"earlyDamageDelayMs":119,"earlyUnlockDelayMs":15,"earlyAttackIndex":0,"cleanupAfterMs":2500,"maxLogsPerModule":300,"verboseTrace":true}
+17:52:26  配置已应用: {'mode': 'early_damage_unlock', 'unlockMethod': 'call_exit_then_write', 'unlockDelayMs': 0, 'earlyDamageDelayMs': 120, 'earlyUnlockDelayMs': 15, 'earlyAttackIndex': 0, 'verboseTrace': True}
+17:52:26  [success][极速枪托v2/CONFIG] {"mode":"early_damage_unlock","unlockMethod":"call_exit_then_write","unlockDelayMs":0,"earlyDamageDelayMs":120,"earlyUnlockDelayMs":15,"earlyAttackIndex":0,"cleanupAfterMs":2500,"maxLogsPerModule":300,"verboseTrace":true}
+17:52:26  配置已应用: {'mode': 'early_damage_unlock', 'unlockMethod': 'call_exit_then_write', 'unlockDelayMs': 0, 'earlyDamageDelayMs': 121, 'earlyUnlockDelayMs': 15, 'earlyAttackIndex': 0, 'verboseTrace': True}
+17:52:26  [success][极速枪托v2/CONFIG] {"mode":"early_damage_unlock","unlockMethod":"call_exit_then_write","unlockDelayMs":0,"earlyDamageDelayMs":121,"earlyUnlockDelayMs":15,"earlyAttackIndex":0,"cleanupAfterMs":2500,"maxLogsPerModule":300,"verboseTrace":true}
+17:52:26  [success][极速枪托v2/CONFIG] {"mode":"early_damage_unlock","unlockMethod":"call_exit_then_write","unlockDelayMs":0,"earlyDamageDelayMs":122,"earlyUnlockDelayMs":15,"earlyAttackIndex":0,"cleanupAfterMs":2500,"maxLogsPerModule":300,"verboseTrace":true}
+17:52:26  配置已应用: {'mode': 'early_damage_unlock', 'unlockMethod': 'call_exit_then_write', 'unlockDelayMs': 0, 'earlyDamageDelayMs': 122, 'earlyUnlockDelayMs': 15, 'earlyAttackIndex': 0, 'verboseTrace': True}
+17:52:26  配置已应用: {'mode': 'early_damage_unlock', 'unlockMethod': 'call_exit_then_write', 'unlockDelayMs': 0, 'earlyDamageDelayMs': 122, 'earlyUnlockDelayMs': 15, 'earlyAttackIndex': 0, 'verboseTrace': True}
+17:52:27  [success][极速枪托v2/CONFIG] {"mode":"early_damage_unlock","unlockMethod":"call_exit_then_write","unlockDelayMs":0,"earlyDamageDelayMs":124,"earlyUnlockDelayMs":15,"earlyAttackIndex":0,"cleanupAfterMs":2500,"maxLogsPerModule":300,"verboseTrace":true}
+17:52:27  配置已应用: {'mode': 'early_damage_unlock', 'unlockMethod': 'call_exit_then_write', 'unlockDelayMs': 0, 'earlyDamageDelayMs': 124, 'earlyUnlockDelayMs': 15, 'earlyAttackIndex': 0, 'verboseTrace': True}
+17:52:27  [success][极速枪托v2/CONFIG] {"mode":"early_damage_unlock","unlockMethod":"call_exit_then_write","unlockDelayMs":0,"earlyDamageDelayMs":122,"earlyUnlockDelayMs":15,"earlyAttackIndex":0,"cleanupAfterMs":2500,"maxLogsPerModule":300,"verboseTrace":true}
+17:52:27  配置已应用: {'mode': 'early_damage_unlock', 'unlockMethod': 'call_exit_then_write', 'unlockDelayMs': 0, 'earlyDamageDelayMs': 120, 'earlyUnlockDelayMs': 15, 'earlyAttackIndex': 0, 'verboseTrace': True}
+17:52:27  [success][极速枪托v2/CONFIG] {"mode":"early_damage_unlock","unlockMethod":"call_exit_then_write","unlockDelayMs":0,"earlyDamageDelayMs":120,"earlyUnlockDelayMs":15,"earlyAttackIndex":0,"cleanupAfterMs":2500,"maxLogsPerModule":300,"verboseTrace":true}
+17:52:27  配置已应用: {'mode': 'early_damage_unlock', 'unlockMethod': 'call_exit_then_write', 'unlockDelayMs': 0, 'earlyDamageDelayMs': 119, 'earlyUnlockDelayMs': 15, 'earlyAttackIndex': 0, 'verboseTrace': True}
+17:52:27  [success][极速枪托v2/CONFIG] {"mode":"early_damage_unlock","unlockMethod":"call_exit_then_write","unlockDelayMs":0,"earlyDamageDelayMs":119,"earlyUnlockDelayMs":15,"earlyAttackIndex":0,"cleanupAfterMs":2500,"maxLogsPerModule":300,"verboseTrace":true}
+17:52:27  [success][极速枪托v2/CONFIG] {"mode":"early_damage_unlock","unlockMethod":"call_exit_then_write","unlockDelayMs":0,"earlyDamageDelayMs":118,"earlyUnlockDelayMs":15,"earlyAttackIndex":0,"cleanupAfterMs":2500,"maxLogsPerModule":300,"verboseTrace":true}
+17:52:27  配置已应用: {'mode': 'early_damage_unlock', 'unlockMethod': 'call_exit_then_write', 'unlockDelayMs': 0, 'earlyDamageDelayMs': 118, 'earlyUnlockDelayMs': 15, 'earlyAttackIndex': 0, 'verboseTrace': True}
+17:52:27  配置已应用: {'mode': 'early_damage_unlock', 'unlockMethod': 'call_exit_then_write', 'unlockDelayMs': 0, 'earlyDamageDelayMs': 118, 'earlyUnlockDelayMs': 15, 'earlyAttackIndex': 0, 'verboseTrace': True}
+17:52:32  [success][极速枪托v2/CONFIG] {"mode":"early_damage_unlock","unlockMethod":"call_exit_then_write","unlockDelayMs":0,"earlyDamageDelayMs":118,"earlyUnlockDelayMs":18,"earlyAttackIndex":0,"cleanupAfterMs":2500,"maxLogsPerModule":300,"verboseTrace":true}
+17:52:32  配置已应用: {'mode': 'early_damage_unlock', 'unlockMethod': 'call_exit_then_write', 'unlockDelayMs': 0, 'earlyDamageDelayMs': 118, 'earlyUnlockDelayMs': 18, 'earlyAttackIndex': 0, 'verboseTrace': True}
+17:52:32  [success][极速枪托v2/CONFIG] {"mode":"early_damage_unlock","unlockMethod":"call_exit_then_write","unlockDelayMs":0,"earlyDamageDelayMs":118,"earlyUnlockDelayMs":18,"earlyAttackIndex":0,"cleanupAfterMs":2500,"maxLogsPerModule":300,"verboseTrace":true}
+17:52:32  配置已应用: {'mode': 'early_damage_unlock', 'unlockMethod': 'call_exit_then_write', 'unlockDelayMs': 0, 'earlyDamageDelayMs': 118, 'earlyUnlockDelayMs': 18, 'earlyAttackIndex': 0, 'verboseTrace': True}
+17:52:32  [success][极速枪托v2/CONFIG] {"mode":"early_damage_unlock","unlockMethod":"call_exit_then_write","unlockDelayMs":0,"earlyDamageDelayMs":118,"earlyUnlockDelayMs":18,"earlyAttackIndex":0,"cleanupAfterMs":2500,"maxLogsPerModule":300,"verboseTrace":true}
+17:52:32  配置已应用: {'mode': 'early_damage_unlock', 'unlockMethod': 'call_exit_then_write', 'unlockDelayMs': 0, 'earlyDamageDelayMs': 118, 'earlyUnlockDelayMs': 18, 'earlyAttackIndex': 0, 'verboseTrace': True}
+17:52:32  [success][极速枪托v2/CONFIG] {"mode":"early_damage_unlock","unlockMethod":"call_exit_then_write","unlockDelayMs":0,"earlyDamageDelayMs":118,"earlyUnlockDelayMs":18,"earlyAttackIndex":0,"cleanupAfterMs":2500,"maxLogsPerModule":300,"verboseTrace":true}
+17:52:32  [success][极速枪托v2/CONFIG] {"mode":"early_damage_unlock","unlockMethod":"call_exit_then_write","unlockDelayMs":0,"earlyDamageDelayMs":118,"earlyUnlockDelayMs":17,"earlyAttackIndex":0,"cleanupAfterMs":2500,"maxLogsPerModule":300,"verboseTrace":true}
+17:52:32  配置已应用: {'mode': 'early_damage_unlock', 'unlockMethod': 'call_exit_then_write', 'unlockDelayMs': 0, 'earlyDamageDelayMs': 118, 'earlyUnlockDelayMs': 17, 'earlyAttackIndex': 0, 'verboseTrace': True}
+17:52:32  配置已应用: {'mode': 'early_damage_unlock', 'unlockMethod': 'call_exit_then_write', 'unlockDelayMs': 0, 'earlyDamageDelayMs': 118, 'earlyUnlockDelayMs': 17, 'earlyAttackIndex': 0, 'verboseTrace': True}
+17:52:32  [success][极速枪托v2/CONFIG] {"mode":"early_damage_unlock","unlockMethod":"call_exit_then_write","unlockDelayMs":0,"earlyDamageDelayMs":118,"earlyUnlockDelayMs":17,"earlyAttackIndex":0,"cleanupAfterMs":2500,"maxLogsPerModule":300,"verboseTrace":true}
+17:52:32  配置已应用: {'mode': 'early_damage_unlock', 'unlockMethod': 'call_exit_then_write', 'unlockDelayMs': 0, 'earlyDamageDelayMs': 118, 'earlyUnlockDelayMs': 17, 'earlyAttackIndex': 0, 'verboseTrace': True}
+17:52:32  [success][极速枪托v2/CONFIG] {"mode":"early_damage_unlock","unlockMethod":"call_exit_then_write","unlockDelayMs":0,"earlyDamageDelayMs":118,"earlyUnlockDelayMs":16,"earlyAttackIndex":0,"cleanupAfterMs":2500,"maxLogsPerModule":300,"verboseTrace":true}
+17:52:32  配置已应用: {'mode': 'early_damage_unlock', 'unlockMethod': 'call_exit_then_write', 'unlockDelayMs': 0, 'earlyDamageDelayMs': 118, 'earlyUnlockDelayMs': 16, 'earlyAttackIndex': 0, 'verboseTrace': True}
+17:52:32  [success][极速枪托v2/CONFIG] {"mode":"early_damage_unlock","unlockMethod":"call_exit_then_write","unlockDelayMs":0,"earlyDamageDelayMs":118,"earlyUnlockDelayMs":16,"earlyAttackIndex":0,"cleanupAfterMs":2500,"maxLogsPerModule":300,"verboseTrace":true}
+17:52:32  [success][极速枪托v2/CONFIG] {"mode":"early_damage_unlock","unlockMethod":"call_exit_then_write","unlockDelayMs":0,"earlyDamageDelayMs":118,"earlyUnlockDelayMs":15,"earlyAttackIndex":0,"cleanupAfterMs":2500,"maxLogsPerModule":300,"verboseTrace":true}
+17:52:32  配置已应用: {'mode': 'early_damage_unlock', 'unlockMethod': 'call_exit_then_write', 'unlockDelayMs': 0, 'earlyDamageDelayMs': 118, 'earlyUnlockDelayMs': 15, 'earlyAttackIndex': 0, 'verboseTrace': True}
+17:52:32  配置已应用: {'mode': 'early_damage_unlock', 'unlockMethod': 'call_exit_then_write', 'unlockDelayMs': 0, 'earlyDamageDelayMs': 118, 'earlyUnlockDelayMs': 14, 'earlyAttackIndex': 0, 'verboseTrace': True}
+17:52:32  [success][极速枪托v2/CONFIG] {"mode":"early_damage_unlock","unlockMethod":"call_exit_then_write","unlockDelayMs":0,"earlyDamageDelayMs":118,"earlyUnlockDelayMs":14,"earlyAttackIndex":0,"cleanupAfterMs":2500,"maxLogsPerModule":300,"verboseTrace":true}
+17:52:32  配置已应用: {'mode': 'early_damage_unlock', 'unlockMethod': 'call_exit_then_write', 'unlockDelayMs': 0, 'earlyDamageDelayMs': 118, 'earlyUnlockDelayMs': 14, 'earlyAttackIndex': 0, 'verboseTrace': True}
+17:52:32  [success][极速枪托v2/CONFIG] {"mode":"early_damage_unlock","unlockMethod":"call_exit_then_write","unlockDelayMs":0,"earlyDamageDelayMs":118,"earlyUnlockDelayMs":8,"earlyAttackIndex":0,"cleanupAfterMs":2500,"maxLogsPerModule":300,"verboseTrace":true}
+17:52:32  [success][极速枪托v2/CONFIG] {"mode":"early_damage_unlock","unlockMethod":"call_exit_then_write","unlockDelayMs":0,"earlyDamageDelayMs":118,"earlyUnlockDelayMs":5,"earlyAttackIndex":0,"cleanupAfterMs":2500,"maxLogsPerModule":300,"verboseTrace":true}
+17:52:32  配置已应用: {'mode': 'early_damage_unlock', 'unlockMethod': 'call_exit_then_write', 'unlockDelayMs': 0, 'earlyDamageDelayMs': 118, 'earlyUnlockDelayMs': 5, 'earlyAttackIndex': 0, 'verboseTrace': True}
+17:52:32  配置已应用: {'mode': 'early_damage_unlock', 'unlockMethod': 'call_exit_then_write', 'unlockDelayMs': 0, 'earlyDamageDelayMs': 118, 'earlyUnlockDelayMs': 3, 'earlyAttackIndex': 0, 'verboseTrace': True}
+17:52:32  [success][极速枪托v2/CONFIG] {"mode":"early_damage_unlock","unlockMethod":"call_exit_then_write","unlockDelayMs":0,"earlyDamageDelayMs":118,"earlyUnlockDelayMs":3,"earlyAttackIndex":0,"cleanupAfterMs":2500,"maxLogsPerModule":300,"verboseTrace":true}
+17:52:32  配置已应用: {'mode': 'early_damage_unlock', 'unlockMethod': 'call_exit_then_write', 'unlockDelayMs': 0, 'earlyDamageDelayMs': 118, 'earlyUnlockDelayMs': 2, 'earlyAttackIndex': 0, 'verboseTrace': True}
+17:52:32  [success][极速枪托v2/CONFIG] {"mode":"early_damage_unlock","unlockMethod":"call_exit_then_write","unlockDelayMs":0,"earlyDamageDelayMs":118,"earlyUnlockDelayMs":2,"earlyAttackIndex":0,"cleanupAfterMs":2500,"maxLogsPerModule":300,"verboseTrace":true}
+17:52:32  配置已应用: {'mode': 'early_damage_unlock', 'unlockMethod': 'call_exit_then_write', 'unlockDelayMs': 0, 'earlyDamageDelayMs': 118, 'earlyUnlockDelayMs': 2, 'earlyAttackIndex': 0, 'verboseTrace': True}
+17:52:32  [success][极速枪托v2/CONFIG] {"mode":"early_damage_unlock","unlockMethod":"call_exit_then_write","unlockDelayMs":0,"earlyDamageDelayMs":118,"earlyUnlockDelayMs":2,"earlyAttackIndex":0,"cleanupAfterMs":2500,"maxLogsPerModule":300,"verboseTrace":true}
+17:52:32  [success][极速枪托v2/CONFIG] {"mode":"early_damage_unlock","unlockMethod":"call_exit_then_write","unlockDelayMs":0,"earlyDamageDelayMs":118,"earlyUnlockDelayMs":1,"earlyAttackIndex":0,"cleanupAfterMs":2500,"maxLogsPerModule":300,"verboseTrace":true}
+17:52:32  配置已应用: {'mode': 'early_damage_unlock', 'unlockMethod': 'call_exit_then_write', 'unlockDelayMs': 0, 'earlyDamageDelayMs': 118, 'earlyUnlockDelayMs': 1, 'earlyAttackIndex': 0, 'verboseTrace': True}
+17:52:32  配置已应用: {'mode': 'early_damage_unlock', 'unlockMethod': 'call_exit_then_write', 'unlockDelayMs': 0, 'earlyDamageDelayMs': 118, 'earlyUnlockDelayMs': 1, 'earlyAttackIndex': 0, 'verboseTrace': True}
+17:52:32  [success][极速枪托v2/CONFIG] {"mode":"early_damage_unlock","unlockMethod":"call_exit_then_write","unlockDelayMs":0,"earlyDamageDelayMs":118,"earlyUnlockDelayMs":0,"earlyAttackIndex":0,"cleanupAfterMs":2500,"maxLogsPerModule":300,"verboseTrace":true}
+17:52:32  配置已应用: {'mode': 'early_damage_unlock', 'unlockMethod': 'call_exit_then_write', 'unlockDelayMs': 0, 'earlyDamageDelayMs': 118, 'earlyUnlockDelayMs': 0, 'earlyAttackIndex': 0, 'verboseTrace': True}
+17:52:32  [success][极速枪托v2/CONFIG] {"mode":"early_damage_unlock","unlockMethod":"call_exit_then_write","unlockDelayMs":0,"earlyDamageDelayMs":118,"earlyUnlockDelayMs":0,"earlyAttackIndex":0,"cleanupAfterMs":2500,"maxLogsPerModule":300,"verboseTrace":true}
+17:52:32  配置已应用: {'mode': 'early_damage_unlock', 'unlockMethod': 'call_exit_then_write', 'unlockDelayMs': 0, 'earlyDamageDelayMs': 118, 'earlyUnlockDelayMs': 0, 'earlyAttackIndex': 0, 'verboseTrace': True}
+17:52:32  [success][极速枪托v2/CONFIG] {"mode":"early_damage_unlock","unlockMethod":"call_exit_then_write","unlockDelayMs":0,"earlyDamageDelayMs":118,"earlyUnlockDelayMs":0,"earlyAttackIndex":0,"cleanupAfterMs":2500,"maxLogsPerModule":300,"verboseTrace":true}
+17:52:32  配置已应用: {'mode': 'early_damage_unlock', 'unlockMethod': 'call_exit_then_write', 'unlockDelayMs': 0, 'earlyDamageDelayMs': 118, 'earlyUnlockDelayMs': 0, 'earlyAttackIndex': 0, 'verboseTrace': True}
+17:52:32  [success][极速枪托v2/CONFIG] {"mode":"early_damage_unlock","unlockMethod":"call_exit_then_write","unlockDelayMs":0,"earlyDamageDelayMs":118,"earlyUnlockDelayMs":0,"earlyAttackIndex":0,"cleanupAfterMs":2500,"maxLogsPerModule":300,"verboseTrace":true}
+17:52:32  配置已应用: {'mode': 'early_damage_unlock', 'unlockMethod': 'call_exit_then_write', 'unlockDelayMs': 0, 'earlyDamageDelayMs': 118, 'earlyUnlockDelayMs': 0, 'earlyAttackIndex': 0, 'verboseTrace': True}
+17:52:32  [success][极速枪托v2/CONFIG] {"mode":"early_damage_unlock","unlockMethod":"call_exit_then_write","unlockDelayMs":0,"earlyDamageDelayMs":118,"earlyUnlockDelayMs":0,"earlyAttackIndex":0,"cleanupAfterMs":2500,"maxLogsPerModule":300,"verboseTrace":true}
+17:52:32  配置已应用: {'mode': 'early_damage_unlock', 'unlockMethod': 'call_exit_then_write', 'unlockDelayMs': 0, 'earlyDamageDelayMs': 118, 'earlyUnlockDelayMs': 0, 'earlyAttackIndex': 0, 'verboseTrace': True}
+17:52:32  [success][极速枪托v2/CONFIG] {"mode":"early_damage_unlock","unlockMethod":"call_exit_then_write","unlockDelayMs":0,"earlyDamageDelayMs":118,"earlyUnlockDelayMs":0,"earlyAttackIndex":0,"cleanupAfterMs":2500,"maxLogsPerModule":300,"verboseTrace":true}
+17:52:32  配置已应用: {'mode': 'early_damage_unlock', 'unlockMethod': 'call_exit_then_write', 'unlockDelayMs': 0, 'earlyDamageDelayMs': 118, 'earlyUnlockDelayMs': 0, 'earlyAttackIndex': 0, 'verboseTrace': True}
+17:52:42  [warn][极速枪托v2/EARLY] call KnifeAttackEvent early seq=292 attackIndex=0 elapsed=119ms
+17:52:42  [success][极速枪托v2/DAMAGE] natural KnifeAttackEvent seq=292 attackIndex=0 elapsed=119ms
+17:52:42  [success][极速枪托v2/UNLOCK] call OnKnifeAttackExit reason=after_natural_damage/seq=292/delay=0/call_exit lock 1 -> 0
+17:52:42  [success][极速枪托v2/UNLOCK] write knifeAttackAnim=0 reason=after_natural_damage/seq=292/delay=0/write_zero lock 0 -> 0
+17:52:42  [success][极速枪托v2/DAMAGE] natural KnifeAttackEvent seq=292 attackIndex=0 elapsed=168ms
+17:52:42  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=293 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:52:42  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:52:43  [warn][极速枪托v2/EARLY] call KnifeAttackEvent early seq=294 attackIndex=0 elapsed=119ms
+17:52:43  [success][极速枪托v2/DAMAGE] natural KnifeAttackEvent seq=294 attackIndex=0 elapsed=119ms
+17:52:43  [success][极速枪托v2/UNLOCK] call OnKnifeAttackExit reason=after_natural_damage/seq=294/delay=0/call_exit lock 1 -> 0
+17:52:43  [success][极速枪托v2/UNLOCK] write knifeAttackAnim=0 reason=after_natural_damage/seq=294/delay=0/write_zero lock 0 -> 0
+17:52:43  [success][极速枪托v2/DAMAGE] natural KnifeAttackEvent seq=294 attackIndex=0 elapsed=166ms
+17:52:43  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=295 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:52:43  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:52:44  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=296 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:52:44  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:52:44  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=297 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:52:44  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:52:44  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=298 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:52:44  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:52:44  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=299 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:52:44  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:52:44  [success][极速枪托v2/SPECIAL] OnSpecialBtnDown seq=300 weapon=0x40f94730 mode=early_damage_unlock lock=0
+17:52:44  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=300 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:52:44  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:52:47  [warn][极速枪托v2/EARLY] call KnifeAttackEvent early seq=301 attackIndex=0 elapsed=120ms
+17:52:47  [success][极速枪托v2/DAMAGE] natural KnifeAttackEvent seq=301 attackIndex=0 elapsed=120ms
+17:52:47  [error][极速枪托v2/EARLY] early KnifeAttackEvent failed: access violation accessing 0x8
+17:52:47  [success][极速枪托v2/UNLOCK] call OnKnifeAttackExit reason=after_early_damage/seq=301/delay=0/call_exit lock 1 -> 0
+17:52:47  [success][极速枪托v2/UNLOCK] write knifeAttackAnim=0 reason=after_early_damage/seq=301/delay=0/write_zero lock 0 -> 0
+17:52:47  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=302 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:52:47  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:52:48  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=303 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:52:48  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:52:48  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=304 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:52:48  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:52:48  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=305 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:52:48  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:52:48  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=306 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:52:48  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:52:48  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=307 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:52:48  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:52:48  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=308 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:52:48  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:52:48  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=309 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:52:48  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:52:49  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=310 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:52:49  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:52:49  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=311 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:52:49  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:52:49  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=312 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:52:49  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:52:49  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=313 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:52:49  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:52:49  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=314 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:52:49  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:52:49  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=315 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:52:49  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:52:50  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=316 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:52:50  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:52:50  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=317 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:52:50  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:52:50  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=318 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:52:50  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:52:50  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=319 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:52:50  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:52:50  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=320 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:52:50  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:52:50  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=321 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:52:50  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:52:51  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=322 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:52:51  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:52:51  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=323 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:52:51  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:52:51  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=324 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:52:51  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:52:51  [info][极速枪托v2/ANIM_EXIT] OnAnimationExit seq=325 name=knife-attack tag=knifeAttack elapsed=0ms lock=1
+17:52:51  [info][极速枪托v2/CLEAN] session removed key=0x40f94730 reason=animation_exit
+17:52:52  [warn][极速枪托v2/EARLY] call KnifeAttackEvent early seq=327 attackIndex=0 elapsed=118ms
+17:52:52  [success][极速枪托v2/DAMAGE] natural KnifeAttackEvent seq=327 attackIndex=0 elapsed=118ms
+17:52:52  [error][极速枪托v2/EARLY] early KnifeAttackEvent failed: access violation accessing 0x8
+17:52:52  [success][极速枪托v2/UNLOCK] call OnKnifeAttackExit reason=after_early_damage/seq=327/delay=0/call_exit lock 1 -> 0
+17:52:52  [success][极速枪托v2/UNLOCK] write knifeAttackAnim=0 reason=after_early_damage/seq=327/delay=0/write_zero lock 0 -> 0
+17:52:56  [success][极速枪托v2/SPECIAL] OnSpecialBtnDown seq=350 weapon=0x40f94730 mode=early_damage_unlock lock=0
+17:53:01  [info][极速枪托v2/SPECIAL] right click skipped by original lock weapon=0x40f94730 lock=1
+17:53:01  [warn][极速枪托v2/EARLY] call KnifeAttackEvent early seq=373 attackIndex=0 elapsed=120ms
+17:53:01  [success][极速枪托v2/DAMAGE] natural KnifeAttackEvent seq=373 attackIndex=0 elapsed=120ms
+17:53:01  [error][极速枪托v2/EARLY] early KnifeAttackEvent failed: access violation accessing 0x8
+17:53:01  [success][极速枪托v2/UNLOCK] call OnKnifeAttackExit reason=after_early_damage/seq=373/delay=0/call_exit lock 1 -> 0
+17:53:01  [success][极速枪托v2/UNLOCK] write knifeAttackAnim=0 reason=after_early_damage/seq=373/delay=0/write_zero lock 0 -> 0
+17:53:06  [success][极速枪托v2/SPECIAL] OnSpecialBtnDown seq=400 weapon=0x40f94730 mode=early_damage_unlock lock=0
+17:53:09  [warn][极速枪托v2/EARLY] call KnifeAttackEvent early seq=413 attackIndex=0 elapsed=118ms
+17:53:09  [success][极速枪托v2/DAMAGE] natural KnifeAttackEvent seq=413 attackIndex=0 elapsed=118ms
+17:53:09  [success][极速枪托v2/UNLOCK] call OnKnifeAttackExit reason=after_natural_damage/seq=413/delay=0/call_exit lock 1 -> 0
+17:53:09  [success][极速枪托v2/UNLOCK] write knifeAttackAnim=0 reason=after_natural_damage/seq=413/delay=0/write_zero lock 0 -> 0
+17:53:09  [success][极速枪托v2/DAMAGE] natural KnifeAttackEvent seq=413 attackIndex=0 elapsed=167ms
+17:54:32  [success][极速枪托v2/CONFIG] {"mode":"early_damage_unlock","unlockMethod":"call_exit_then_write","unlockDelayMs":0,"earlyDamageDelayMs":68,"earlyUnlockDelayMs":0,"earlyAttackIndex":0,"cleanupAfterMs":2500,"maxLogsPerModule":300,"verboseTrace":true}
+17:54:32  配置已应用: {'mode': 'early_damage_unlock', 'unlockMethod': 'call_exit_then_write', 'unlockDelayMs': 0, 'earlyDamageDelayMs': 64, 'earlyUnlockDelayMs': 0, 'earlyAttackIndex': 0, 'verboseTrace': True}
+17:54:32  [success][极速枪托v2/CONFIG] {"mode":"early_damage_unlock","unlockMethod":"call_exit_then_write","unlockDelayMs":0,"earlyDamageDelayMs":64,"earlyUnlockDelayMs":0,"earlyAttackIndex":0,"cleanupAfterMs":2500,"maxLogsPerModule":300,"verboseTrace":true}
+17:54:32  配置已应用: {'mode': 'early_damage_unlock', 'unlockMethod': 'call_exit_then_write', 'unlockDelayMs': 0, 'earlyDamageDelayMs': 64, 'earlyUnlockDelayMs': 0, 'earlyAttackIndex': 0, 'verboseTrace': True}
+17:54:32  [success][极速枪托v2/CONFIG] {"mode":"early_damage_unlock","unlockMethod":"call_exit_then_write","unlockDelayMs":0,"earlyDamageDelayMs":56,"earlyUnlockDelayMs":0,"earlyAttackIndex":0,"cleanupAfterMs":2500,"maxLogsPerModule":300,"verboseTrace":true}
+17:54:32  配置已应用: {'mode': 'early_damage_unlock', 'unlockMethod': 'call_exit_then_write', 'unlockDelayMs': 0, 'earlyDamageDelayMs': 56, 'earlyUnlockDelayMs': 0, 'earlyAttackIndex': 0, 'verboseTrace': True}
+17:54:32  [success][极速枪托v2/CONFIG] {"mode":"early_damage_unlock","unlockMethod":"call_exit_then_write","unlockDelayMs":0,"earlyDamageDelayMs":56,"earlyUnlockDelayMs":0,"earlyAttackIndex":0,"cleanupAfterMs":2500,"maxLogsPerModule":300,"verboseTrace":true}
+17:54:32  配置已应用: {'mode': 'early_damage_unlock', 'unlockMethod': 'call_exit_then_write', 'unlockDelayMs': 0, 'earlyDamageDelayMs': 56, 'earlyUnlockDelayMs': 0, 'earlyAttackIndex': 0, 'verboseTrace': True}
+17:54:32  [success][极速枪托v2/CONFIG] {"mode":"early_damage_unlock","unlockMethod":"call_exit_then_write","unlockDelayMs":0,"earlyDamageDelayMs":48,"earlyUnlockDelayMs":0,"earlyAttackIndex":0,"cleanupAfterMs":2500,"maxLogsPerModule":300,"verboseTrace":true}
+17:54:32  [success][极速枪托v2/CONFIG] {"mode":"early_damage_unlock","unlockMethod":"call_exit_then_write","unlockDelayMs":0,"earlyDamageDelayMs":42,"earlyUnlockDelayMs":0,"earlyAttackIndex":0,"cleanupAfterMs":2500,"maxLogsPerModule":300,"verboseTrace":true}
+17:54:32  [success][极速枪托v2/CONFIG] {"mode":"early_damage_unlock","unlockMethod":"call_exit_then_write","unlockDelayMs":0,"earlyDamageDelayMs":41,"earlyUnlockDelayMs":0,"earlyAttackIndex":0,"cleanupAfterMs":2500,"maxLogsPerModule":300,"verboseTrace":true}
+17:54:32  配置已应用: {'mode': 'early_damage_unlock', 'unlockMethod': 'call_exit_then_write', 'unlockDelayMs': 0, 'earlyDamageDelayMs': 41, 'earlyUnlockDelayMs': 0, 'earlyAttackIndex': 0, 'verboseTrace': True}
+17:54:32  配置已应用: {'mode': 'early_damage_unlock', 'unlockMethod': 'call_exit_then_write', 'unlockDelayMs': 0, 'earlyDamageDelayMs': 38, 'earlyUnlockDelayMs': 0, 'earlyAttackIndex': 0, 'verboseTrace': True}
+17:54:32  [success][极速枪托v2/CONFIG] {"mode":"early_damage_unlock","unlockMethod":"call_exit_then_write","unlockDelayMs":0,"earlyDamageDelayMs":38,"earlyUnlockDelayMs":0,"earlyAttackIndex":0,"cleanupAfterMs":2500,"maxLogsPerModule":300,"verboseTrace":true}
+17:54:32  配置已应用: {'mode': 'early_damage_unlock', 'unlockMethod': 'call_exit_then_write', 'unlockDelayMs': 0, 'earlyDamageDelayMs': 32, 'earlyUnlockDelayMs': 0, 'earlyAttackIndex': 0, 'verboseTrace': True}
+17:54:32  [success][极速枪托v2/CONFIG] {"mode":"early_damage_unlock","unlockMethod":"call_exit_then_write","unlockDelayMs":0,"earlyDamageDelayMs":32,"earlyUnlockDelayMs":0,"earlyAttackIndex":0,"cleanupAfterMs":2500,"maxLogsPerModule":300,"verboseTrace":true}
+17:54:32  配置已应用: {'mode': 'early_damage_unlock', 'unlockMethod': 'call_exit_then_write', 'unlockDelayMs': 0, 'earlyDamageDelayMs': 29, 'earlyUnlockDelayMs': 0, 'earlyAttackIndex': 0, 'verboseTrace': True}
+17:54:32  [success][极速枪托v2/CONFIG] {"mode":"early_damage_unlock","unlockMethod":"call_exit_then_write","unlockDelayMs":0,"earlyDamageDelayMs":29,"earlyUnlockDelayMs":0,"earlyAttackIndex":0,"cleanupAfterMs":2500,"maxLogsPerModule":300,"verboseTrace":true}
+17:54:32  配置已应用: {'mode': 'early_damage_unlock', 'unlockMethod': 'call_exit_then_write', 'unlockDelayMs': 0, 'earlyDamageDelayMs': 29, 'earlyUnlockDelayMs': 0, 'earlyAttackIndex': 0, 'verboseTrace': True}
+17:54:32  [success][极速枪托v2/CONFIG] {"mode":"early_damage_unlock","unlockMethod":"call_exit_then_write","unlockDelayMs":0,"earlyDamageDelayMs":26,"earlyUnlockDelayMs":0,"earlyAttackIndex":0,"cleanupAfterMs":2500,"maxLogsPerModule":300,"verboseTrace":true}
+17:54:32  [success][极速枪托v2/CONFIG] {"mode":"early_damage_unlock","unlockMethod":"call_exit_then_write","unlockDelayMs":0,"earlyDamageDelayMs":25,"earlyUnlockDelayMs":0,"earlyAttackIndex":0,"cleanupAfterMs":2500,"maxLogsPerModule":300,"verboseTrace":true}
+17:54:32  配置已应用: {'mode': 'early_damage_unlock', 'unlockMethod': 'call_exit_then_write', 'unlockDelayMs': 0, 'earlyDamageDelayMs': 25, 'earlyUnlockDelayMs': 0, 'earlyAttackIndex': 0, 'verboseTrace': True}
+17:54:32  配置已应用: {'mode': 'early_damage_unlock', 'unlockMethod': 'call_exit_then_write', 'unlockDelayMs': 0, 'earlyDamageDelayMs': 25, 'earlyUnlockDelayMs': 0, 'earlyAttackIndex': 0, 'verboseTrace': True}
+17:54:32  [success][极速枪托v2/CONFIG] {"mode":"early_damage_unlock","unlockMethod":"call_exit_then_write","unlockDelayMs":0,"earlyDamageDelayMs":22,"earlyUnlockDelayMs":0,"earlyAttackIndex":0,"cleanupAfterMs":2500,"maxLogsPerModule":300,"verboseTrace":true}
+17:54:32  [success][极速枪托v2/CONFIG] {"mode":"early_damage_unlock","unlockMethod":"call_exit_then_write","unlockDelayMs":0,"earlyDamageDelayMs":21,"earlyUnlockDelayMs":0,"earlyAttackIndex":0,"cleanupAfterMs":2500,"maxLogsPerModule":300,"verboseTrace":true}
+17:54:32  配置已应用: {'mode': 'early_damage_unlock', 'unlockMethod': 'call_exit_then_write', 'unlockDelayMs': 0, 'earlyDamageDelayMs': 21, 'earlyUnlockDelayMs': 0, 'earlyAttackIndex': 0, 'verboseTrace': True}
+17:54:32  配置已应用: {'mode': 'early_damage_unlock', 'unlockMethod': 'call_exit_then_write', 'unlockDelayMs': 0, 'earlyDamageDelayMs': 21, 'earlyUnlockDelayMs': 0, 'earlyAttackIndex': 0, 'verboseTrace': True}
+17:54:32  [success][极速枪托v2/CONFIG] {"mode":"early_damage_unlock","unlockMethod":"call_exit_then_write","unlockDelayMs":0,"earlyDamageDelayMs":20,"earlyUnlockDelayMs":0,"earlyAttackIndex":0,"cleanupAfterMs":2500,"maxLogsPerModule":300,"verboseTrace":true}
+17:54:32  配置已应用: {'mode': 'early_damage_unlock', 'unlockMethod': 'call_exit_then_write', 'unlockDelayMs': 0, 'earlyDamageDelayMs': 20, 'earlyUnlockDelayMs': 0, 'earlyAttackIndex': 0, 'verboseTrace': True}
+17:54:32  [success][极速枪托v2/CONFIG] {"mode":"early_damage_unlock","unlockMethod":"call_exit_then_write","unlockDelayMs":0,"earlyDamageDelayMs":19,"earlyUnlockDelayMs":0,"earlyAttackIndex":0,"cleanupAfterMs":2500,"maxLogsPerModule":300,"verboseTrace":true}
+17:54:32  配置已应用: {'mode': 'early_damage_unlock', 'unlockMethod': 'call_exit_then_write', 'unlockDelayMs': 0, 'earlyDamageDelayMs': 19, 'earlyUnlockDelayMs': 0, 'earlyAttackIndex': 0, 'verboseTrace': True}
+17:54:32  [success][极速枪托v2/CONFIG] {"mode":"early_damage_unlock","unlockMethod":"call_exit_then_write","unlockDelayMs":0,"earlyDamageDelayMs":18,"earlyUnlockDelayMs":0,"earlyAttackIndex":0,"cleanupAfterMs":2500,"maxLogsPerModule":300,"verboseTrace":true}
+17:54:32  配置已应用: {'mode': 'early_damage_unlock', 'unlockMethod': 'call_exit_then_write', 'unlockDelayMs': 0, 'earlyDamageDelayMs': 15, 'earlyUnlockDelayMs': 0, 'earlyAttackIndex': 0, 'verboseTrace': True}
+17:54:32  [success][极速枪托v2/CONFIG] {"mode":"early_damage_unlock","unlockMethod":"call_exit_then_write","unlockDelayMs":0,"earlyDamageDelayMs":15,"earlyUnlockDelayMs":0,"earlyAttackIndex":0,"cleanupAfterMs":2500,"maxLogsPerModule":300,"verboseTrace":true}
+17:54:32  配置已应用: {'mode': 'early_damage_unlock', 'unlockMethod': 'call_exit_then_write', 'unlockDelayMs': 0, 'earlyDamageDelayMs': 15, 'earlyUnlockDelayMs': 0, 'earlyAttackIndex': 0, 'verboseTrace': True}
+17:54:32  [success][极速枪托v2/CONFIG] {"mode":"early_damage_unlock","unlockMethod":"call_exit_then_write","unlockDelayMs":0,"earlyDamageDelayMs":11,"earlyUnlockDelayMs":0,"earlyAttackIndex":0,"cleanupAfterMs":2500,"maxLogsPerModule":300,"verboseTrace":true}
+17:54:32  配置已应用: {'mode': 'early_damage_unlock', 'unlockMethod': 'call_exit_then_write', 'unlockDelayMs': 0, 'earlyDamageDelayMs': 10, 'earlyUnlockDelayMs': 0, 'earlyAttackIndex': 0, 'verboseTrace': True}
+17:54:32  [success][极速枪托v2/CONFIG] {"mode":"early_damage_unlock","unlockMethod":"call_exit_then_write","unlockDelayMs":0,"earlyDamageDelayMs":10,"earlyUnlockDelayMs":0,"earlyAttackIndex":0,"cleanupAfterMs":2500,"maxLogsPerModule":300,"verboseTrace":true}
+17:54:32  [success][极速枪托v2/CONFIG] {"mode":"early_damage_unlock","unlockMethod":"call_exit_then_write","unlockDelayMs":0,"earlyDamageDelayMs":10,"earlyUnlockDelayMs":0,"earlyAttackIndex":0,"cleanupAfterMs":2500,"maxLogsPerModule":300,"verboseTrace":true}
+17:54:32  配置已应用: {'mode': 'early_damage_unlock', 'unlockMethod': 'call_exit_then_write', 'unlockDelayMs': 0, 'earlyDamageDelayMs': 10, 'earlyUnlockDelayMs': 0, 'earlyAttackIndex': 0, 'verboseTrace': True}
+17:54:32  配置已应用: {'mode': 'early_damage_unlock', 'unlockMethod': 'call_exit_then_write', 'unlockDelayMs': 0, 'earlyDamageDelayMs': 10, 'earlyUnlockDelayMs': 0, 'earlyAttackIndex': 0, 'verboseTrace': True}
+17:54:32  [success][极速枪托v2/CONFIG] {"mode":"early_damage_unlock","unlockMethod":"call_exit_then_write","unlockDelayMs":0,"earlyDamageDelayMs":10,"earlyUnlockDelayMs":0,"earlyAttackIndex":0,"cleanupAfterMs":2500,"maxLogsPerModule":300,"verboseTrace":true}
+17:54:32  配置已应用: {'mode': 'early_damage_unlock', 'unlockMethod': 'call_exit_then_write', 'unlockDelayMs': 0, 'earlyDamageDelayMs': 10, 'earlyUnlockDelayMs': 0, 'earlyAttackIndex': 0, 'verboseTrace': True}
+17:54:32  [success][极速枪托v2/CONFIG] {"mode":"early_damage_unlock","unlockMethod":"call_exit_then_write","unlockDelayMs":0,"earlyDamageDelayMs":10,"earlyUnlockDelayMs":0,"earlyAttackIndex":0,"cleanupAfterMs":2500,"maxLogsPerModule":300,"verboseTrace":true}
+17:54:32  配置已应用: {'mode': 'early_damage_unlock', 'unlockMethod': 'call_exit_then_write', 'unlockDelayMs': 0, 'earlyDamageDelayMs': 10, 'earlyUnlockDelayMs': 0, 'earlyAttackIndex': 0, 'verboseTrace': True}
+17:54:32  [success][极速枪托v2/CONFIG] {"mode":"early_damage_unlock","unlockMethod":"call_exit_then_write","unlockDelayMs":0,"earlyDamageDelayMs":10,"earlyUnlockDelayMs":0,"earlyAttackIndex":0,"cleanupAfterMs":2500,"maxLogsPerModule":300,"verboseTrace":true}
+17:54:32  配置已应用: {'mode': 'early_damage_unlock', 'unlockMethod': 'call_exit_then_write', 'unlockDelayMs': 0, 'earlyDamageDelayMs': 10, 'earlyUnlockDelayMs': 0, 'earlyAttackIndex': 0, 'verboseTrace': True}
+17:54:32  [success][极速枪托v2/CONFIG] {"mode":"early_damage_unlock","unlockMethod":"call_exit_then_write","unlockDelayMs":0,"earlyDamageDelayMs":10,"earlyUnlockDelayMs":0,"earlyAttackIndex":0,"cleanupAfterMs":2500,"maxLogsPerModule":300,"verboseTrace":true}
+17:54:32  配置已应用: {'mode': 'early_damage_unlock', 'unlockMethod': 'call_exit_then_write', 'unlockDelayMs': 0, 'earlyDamageDelayMs': 10, 'earlyUnlockDelayMs': 0, 'earlyAttackIndex': 0, 'verboseTrace': True}
+17:54:37  [warn][极速枪托v2/EARLY] call KnifeAttackEvent early seq=438 attackIndex=0 elapsed=11ms
+17:54:37  [success][极速枪托v2/DAMAGE] natural KnifeAttackEvent seq=438 attackIndex=0 elapsed=11ms
+17:54:37  [error][极速枪托v2/EARLY] early KnifeAttackEvent failed: access violation accessing 0x8
+17:54:37  [success][极速枪托v2/UNLOCK] call OnKnifeAttackExit reason=after_early_damage/seq=438/delay=0/call_exit lock 1 -> 0
+17:54:37  [success][极速枪托v2/UNLOCK] write knifeAttackAnim=0 reason=after_early_damage/seq=438/delay=0/write_zero lock 0 -> 0
+17:54:39  [success][极速枪托v2/SPECIAL] OnSpecialBtnDown seq=450 weapon=0x40f94730 mode=early_damage_unlock lock=0
+17:54:47  [warn][极速枪托v2/EARLY] call KnifeAttackEvent early seq=469 attackIndex=0 elapsed=11ms
+17:54:47  [success][极速枪托v2/DAMAGE] natural KnifeAttackEvent seq=469 attackIndex=0 elapsed=11ms
+17:54:47  [error][极速枪托v2/EARLY] early KnifeAttackEvent failed: access violation accessing 0x8
+17:54:47  [success][极速枪托v2/UNLOCK] call OnKnifeAttackExit reason=after_early_damage/seq=469/delay=0/call_exit lock 1 -> 0
+17:54:47  [success][极速枪托v2/UNLOCK] write knifeAttackAnim=0 reason=after_early_damage/seq=469/delay=0/write_zero lock 0 -> 0
+17:54:53  [warn][极速枪托v2/EARLY] call KnifeAttackEvent early seq=486 attackIndex=0 elapsed=11ms
+17:54:53  [success][极速枪托v2/DAMAGE] natural KnifeAttackEvent seq=486 attackIndex=0 elapsed=11ms
+17:54:53  [error][极速枪托v2/EARLY] early KnifeAttackEvent failed: access violation accessing 0x8
+17:54:53  [success][极速枪托v2/UNLOCK] call OnKnifeAttackExit reason=after_early_damage/seq=486/delay=0/call_exit lock 1 -> 0
+17:54:53  [success][极速枪托v2/UNLOCK] write knifeAttackAnim=0 reason=after_early_damage/seq=486/delay=0/write_zero lock 0 -> 0
+17:54:54  [success][极速枪托v2/DAMAGE] natural KnifeAttackEvent seq=486 attackIndex=0 elapsed=334ms
+17:54:58  [success][极速枪托v2/SPECIAL] OnSpecialBtnDown seq=500 weapon=0x40f94730 mode=early_damage_unlock lock=0
+17:59:50  脚本失效，准备断开

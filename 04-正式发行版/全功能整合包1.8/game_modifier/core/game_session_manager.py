@@ -110,17 +110,28 @@ class GameSessionManager:
 
             if self._universal_manager:
                 try:
-                    self._universal_manager.unload()
-                    log_to_file("info", "系统", "Universal hook manager unloaded")
+                    log_to_file("info", "System", "ESP shutdown: set_esp_box(false)")
+                    self._universal_manager.set_esp_box(False)
                 except Exception as e:
-                    log_to_file("warning", "系统", f"Universal hook manager unload failed: {e}")
+                    log_to_file("warning", "System", f"ESP shutdown: set_esp_box(false) failed: {e}")
+
+                log_to_file("info", "System", "ESP shutdown: waiting render drain")
+                time.sleep(0.3)
 
             if self._frida_manager:
                 try:
                     self._frida_manager.disconnect()
-                    log_to_file("info", "系统", "Frida manager disconnected")
+                    log_to_file("info", "System", "ESP shutdown: frida cleanup done")
                 except Exception as e:
-                    log_to_file("warning", "系统", f"Frida manager disconnect failed: {e}")
+                    log_to_file("warning", "System", f"Frida manager disconnect failed: {e}")
+
+            if self._universal_manager:
+                try:
+                    log_to_file("info", "System", "ESP shutdown: dll unload requested")
+                    self._universal_manager.unload()
+                    log_to_file("info", "System", "Universal hook manager unloaded")
+                except Exception as e:
+                    log_to_file("warning", "System", f"Universal hook manager unload failed: {e}")
         finally:
             self._universal_manager = None
             self._frida_manager = None
