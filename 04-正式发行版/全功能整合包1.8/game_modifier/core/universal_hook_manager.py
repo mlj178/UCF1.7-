@@ -351,7 +351,12 @@ class UniversalHookManager:
             return False
 
     def unload(self):
-        """Disable ESP and safely unload the injected DLL."""
+        """Development/maintenance unload path.
+
+        Normal modifier shutdown must not call this while the game is running:
+        the DLL hooks D3D and GameAssembly, and FreeLibrary during gameplay can
+        crash the game. Normal shutdown only disables ESP and disconnects pipe.
+        """
         with self._lock:
             if not self._pipe:
                 return False
