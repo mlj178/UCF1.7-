@@ -4,7 +4,7 @@ import os
 import threading
 import time
 
-from core.config import FEATURES_INFO, NANO4T_ATTRS, WINDOW_ICON_PATH
+from core.config import FEATURES_INFO, NANO4T_ATTRS
 from core.event_bus import EventBus
 from core.frida_manager import FridaManager
 from core.feature_registry import FeatureRegistry
@@ -54,9 +54,6 @@ class App(ctk.CTk):
         self.minsize(*MAIN_WINDOW_MIN_SIZE)
         self.attributes('-topmost', True)
         self.attributes('-alpha', 0.92)
-
-        # 设置窗口图标（Windows 需要 .ico 格式）
-        self._setup_window_icon()
 
         self._event_bus = EventBus.get_instance()
         self._frida = FridaManager.get_instance()
@@ -407,58 +404,6 @@ class App(ctk.CTk):
         if not keep_features:
             self._features = {k: False for k in self._features}
 
-    def _setup_window_icon(self):
-        """设置窗口图标（Windows 需要 .ico 格式）"""
-        import logging
-        from core.icon_utils import create_temp_ico_for_window
-        
-        logger = logging.getLogger(__name__)
-        
-        if not os.path.exists(WINDOW_ICON_PATH):
-            logger.warning(f"[ICON] 窗口图标文件不存在: {WINDOW_ICON_PATH}")
-            return
-        
-        try:
-            # 使用统一图标处理工具创建临时 ICO
-            # 不再盲目生成种子点，改为使用配置
-            # 如果源 PNG 已有有效 Alpha，默认保留原始透明，不进行 flood fill
-            temp_ico_path = create_temp_ico_for_window(WINDOW_ICON_PATH)
-            
-            if temp_ico_path is None:
-                logger.error(f"[ICON] 窗口临时 ICO 创建失败")
-                return
-            
-            # 保存临时文件路径，用于退出时清理
-            self._icon_temp_path = temp_ico_path
-            
-            # 使用 iconbitmap 加载（Windows 最可靠的方式）
-            self.iconbitmap(temp_ico_path)
-            logger.info(f"[ICON] 窗口图标加载成功: {temp_ico_path}")
-            
-        except Exception as e:
-            logger.exception(f"[ICON] 窗口图标设置失败: {e}")
-    
-    def _cleanup_window_icon(self):
-        """清理窗口临时 ICO 文件（只在程序退出时调用）"""
-        import os
-        import logging
-        
-        logger = logging.getLogger(__name__)
-        
-        # 重复调用必须安全
-        if not hasattr(self, '_icon_temp_path') or not self._icon_temp_path:
-            return
-        
-        try:
-            if os.path.exists(self._icon_temp_path):
-                os.remove(self._icon_temp_path)
-                logger.info(f"[ICON] 清理临时 ICO: {self._icon_temp_path}")
-        except Exception as e:
-            logger.warning(f"[ICON] 清理临时 ICO 失败: {e}")
-        
-        # 清理后设置为 None
-        self._icon_temp_path = None
-
     def _toggle_collapse(self):
         self._collapsed = not self._collapsed
         if self._collapsed:
@@ -587,6 +532,4 @@ class App(ctk.CTk):
         if feature and hasattr(feature, 'cleanup'):
             feature.cleanup()
         self._cleanup()
-        # 清理窗口临时 ICO 文件（只在程序退出时调用）
-        self._cleanup_window_icon()
         self.destroy()

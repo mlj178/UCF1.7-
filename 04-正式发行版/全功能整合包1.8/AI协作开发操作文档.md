@@ -8,7 +8,6 @@
 - 约束 AI：不要把业务逻辑继续堆进 `ui/app.py`。
 - 约束 AI：不要为了减少行数盲目拆分，必须围绕当前功能边界逐步解耦。
 - 约束 AI：每次修改都要同步考虑日志规范、状态持久化、UI 线程安全和验收方法。
-- 提醒 AI：修改完成后继续更新 `新增内容.md`。
 
 ## 当前判断
 
@@ -52,7 +51,7 @@
 - JS Hook 逻辑：放到 `scripts/XX-feature.js`；如果脚本超过约 500 行，优先拆内部模块或拆公共 helper。
 - Python Feature 注册类：放到 `features/feature_xx_name.py`，只负责 feature 元数据和 JS 文件绑定，不写复杂业务流程。
 - 全局快捷键和武器快捷键底层注册：放到 `core/hotkey_manager.py`、`core/weapon_hotkey_manager.py`，UI 只传回调。
-- 图标、资源处理、构建辅助：放到独立 `core/*_utils.py` 或构建脚本，不和主窗口混写。
+- 资源处理、构建辅助：放到独立 `core/*_utils.py` 或构建脚本，不和主窗口混写。
 
 `ui/app.py` 只允许放这些内容：
 

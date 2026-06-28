@@ -14,9 +14,6 @@ else:
 
 DATA_DIR = os.path.join(APP_DIR, "data")
 
-APP_ICON_PATH = os.path.join(RESOURCE_DIR, "App Icon.png")
-WINDOW_ICON_PATH = os.path.join(RESOURCE_DIR, "Window Icon.png")
-
 if not os.path.exists(DATA_DIR):
     os.makedirs(DATA_DIR)
 

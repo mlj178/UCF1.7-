@@ -2,91 +2,12 @@
 
 ## 1.7 vs 1.6 区别分析（卡顿/闪退根因）
 
-### 核心结论
-**1.7 新增了一个无条件自动注入到游戏进程的 ESP DLL（`Universal-ImGui-Hook.dll`），这是卡顿的主因；新增的"强制决战回合"功能默认开启，这是闪退的主因。** 1.6 没有这两样东西。
-
----
-
-### 一、卡顿根因：ESP DLL 无条件注入 + 死循环轮询
-
-**证据链：**
-
-1. **1.7 新增 `core/game_session_manager.py`（19KB）+ `core/universal_hook_manager.py`（18KB）+ `plugins/universal_hook/Universal-ImGui-Hook.dll`（690KB）**，1.6 完全没有这些。
-
-2. **DLL 注入是无条件的**。`GameSessionManager` 的状态机流程是：
-   `NO_GAME → WAITING_GAME_READY → CONNECTING_EXISTING_DLL → INJECTING_DLL → SYNCING_FEATURES`
-   `_step_injecting_dll()`（game_session_manager.py:336）调用 `universal.inject_and_connect(pid)`，**不检查用户是否开启方框透视**。也就是说：**只要启动游戏，DLL 就会被注入**，即使用户从没碰过 ESP 开关。
-
-3. **DLL 在游戏进程里死循环轮询 IL2CPP 单例**。`esp_debug.log` 实测数据：
-   - GameManager 重试从 `retry 1`(11:03:00) 到 `retry 1201`(12:19:35)，76 分钟内 **1201 次**；
-   - 末尾 `retry 1081`@12:19:32 → `retry 1201`@12:19:35，**3 秒内重试 20 次（约 6-7 次/秒）**；
-   - 每次 retry 都在游戏进程内调用 `SingletonGet(MI=...)`（il2cpp 运行时函数）。
-
-4. **外加持续 ping**：`ping` 1938 次/76 分钟（session manager 每 0.5s 步进 + READY 态 ping，约 2 次/秒），每次走命名管道 I/O。
-
-这些高频的 **进程内 IL2CPP 调用 + 管道 I/O** 持续占用游戏主线程/渲染线程，就是"开启后游戏卡顿"的直接原因。
-
----
-
-### 二、闪退根因：强制决战回合（默认开启）
-
-**证据：**
-
-1. `feature_state.json` 中 `"battle_round_always": { "enabled": true }` —— **默认就是开的**。
-
-2. 最新 commit `0cb6b9d` 的提交说明本身就写着：*"决斗回合在倒计时时也会闪退"、"有的时候退出房间会闪退"*。这是已知的未修复 bug。
-
-3. 代码层面（`scripts/battle_round_always.js`）：它 Hook `StartGenerateSupplyBox`（RVA 0xB45AA0），并在 `onEnter` 里通过 `TypeInfo → static_fields(0x5C) → +1` 写入 `isBattleRound=1`。**当退出房间/场景销毁/倒计时切换时**，`Mode_Nano4_Terminator_TypeInfo` 指针或 static_fields 可能失效或被重建，此时读写非法内存 → 访问违例闪退。日志中 `OnGameDestroy: GameManager destroyed` 也印证了房间退出时对象被销毁。
-
-4. 另一个潜在闪退源：ESP DLL 注入本身。`inject.exe` 用远程线程 `LoadLibrary` 注入，与游戏自身的渲染/D3D11 上下文存在线程竞争，注入时机不对也会闪退。
-
----
-
-### 三、次要因素（加剧但非主因）
-
-- **新增多个常驻后台线程**（1.7 app.py 从 1313 行涨到 2001 行）：
-  - `_nano4t_auto_health_bg`：每 2s 调一次 frida export
-  - `_nano4t_auto_getcurrent_bg`：每 5s 一次
-  - `_monitor_connection`：每 2s 调 `getGravityStatus`
-  这些在已连接时会持续触发 frida RPC，叠加上面 DLL 的负担。
-
-- **time_scale（时间加速）**：通过扫描 UnityPlayer.dll 机器码定位变量地址（`time_scale.js`），定位失败或地址漂移时有风险，但默认 `enabled:false`，影响面小。
-
----
-
-### 四、一句话总结
-
-| 现象 | 根因 | 1.6 有无 |
-|---|---|---|
-| 开启就卡顿 | ESP DLL **无条件注入**游戏进程，并以 6-7 次/秒死循环调用 IL2CPP 单例查询 + 持续管道 ping | 1.6 无 DLL，无此问题 |
-| 倒计时/退出房间闪退 | "强制决战回合"**默认开启**，Hook 在场景销毁时读写失效指针 | 1.6 无此功能 |
-
 **最小复现验证建议**（不改代码，只验证）：把 `feature_state.json` 里 `battle_round_always.enabled` 改成 `false` 看闪退是否消失；把 `plugins/universal_hook` 目录暂时重命名（阻止 DLL 注入）看卡顿是否消失。若两者都消失，即证实上述归因。
 
-（说明：本次仅做静态分析，未修改任何代码。）
 
 
-
-
-
-不是，这个软件的顶层设计，需求分析就出现了问题，一直想要搞好用户的交互体验，比如说游戏和修改程序之间的关系，其中一个关闭，另一个还在，可以自动重连，自动dll的注入等等情况。满足良好的体验，结果导致程序性能下降太多了，一直在用AI编程，导致程序很多地方是黑盒。我考虑的场景非常多，比如说用户开了程序，重启游戏。开启游戏，重启程序。自动重连，自动检测多人生化模式，某些功能只有在多人生化模式才能开启。还做了一个功能开关的持久化，json文件，就是保存用户上一次使用程序开启功能的记录，即使下次打开软件也能够直接开启上次使用功能的记录。我需要你帮我解决问题，一个是黑盒问题，一个是随着功能越来越多，导致功能测试出现了问题我都不知道是哪里有问题，测试非常繁琐。你先制定方案，看一下软件是否需要重构，还是怎么样？
-
-
-
-
-两份勘察报告已经把现状摸透了。我先把判断讲清楚，再给方案。
 
 ## 先回答你的核心问题：要不要重构？
-
-**要重构，但绝对不能推倒重来，必须渐进式。**
-
-原因是你的现状已经陷入一个**死循环**：
-
-```
-AI写的黑盒代码 → 没人看得懂 → 不敢动 → 继续让AI加功能 → 黑盒越来越多
-     ↑                                                              |
-     └──────────────────────────────────────────────────────────────┘
-```
 
 推倒重来为什么不行？因为你现在**没有一张真正能兜住行为的安全网**。勘察发现你的 6 个测试文件里有 5 个是"假测试"——它们断言的是源码文本字符串（比如"assert gravity.js 里包含 0xAF6A00"），根本不验证运行时行为。在没有真测试网的情况下重写，等于让 AI 在黑盒上再造一个新黑盒，必然引入新 bug，而且你照样测不出来。
 
