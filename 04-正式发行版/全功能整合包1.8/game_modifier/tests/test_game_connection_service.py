@@ -25,29 +25,33 @@ class FakeFrida:
         self.pid = None
 
 
+class FakeSessionManager:
+    def __init__(self):
+        self.calls = []
+
+    def reconnect(self):
+        self.calls.append(("reconnect", ()))
+
+    def disconnect(self):
+        self.calls.append(("disconnect", ()))
+
+
 class GameConnectionServiceTests(unittest.TestCase):
-    def test_connection_service_wraps_frida_connection_lifecycle(self):
+    def test_connection_service_requests_session_lifecycle(self):
         frida = FakeFrida()
-        service = GameConnectionService(frida)
+        session = FakeSessionManager()
+        service = GameConnectionService(frida, session)
 
         self.assertFalse(service.is_connected)
         self.assertEqual(service.find_pid(), 42)
-        self.assertEqual(service.connect(42), (True, "success"))
-        self.assertTrue(service.is_connected)
-        self.assertEqual(service.pid, 42)
+        self.assertEqual(service.connect(42), (True, "requested"))
 
         service.disconnect()
 
         self.assertFalse(service.is_connected)
         self.assertIsNone(service.pid)
-        self.assertEqual(
-            frida.calls,
-            [
-                ("find_pid", ()),
-                ("connect", (42,)),
-                ("disconnect", ()),
-            ],
-        )
+        self.assertEqual(frida.calls, [("find_pid", ())])
+        self.assertEqual(session.calls, [("reconnect", ()), ("disconnect", ())])
 
 
 if __name__ == "__main__":

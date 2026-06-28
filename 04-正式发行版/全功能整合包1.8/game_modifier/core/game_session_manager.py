@@ -90,6 +90,10 @@ class GameSessionManager:
     def reconnect(self):
         """Request a reconnect without creating another attach worker."""
         self._reset_session()
+
+    def disconnect(self):
+        """Request a managed disconnect of the current game session."""
+        self._reset_session()
     
     def stop(self):
         """Stop the session manager"""

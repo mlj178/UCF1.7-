@@ -11,8 +11,16 @@ modules.isbot = (function() {
   var retryInterval = null;
   var addrIsMy = null;
   var roomCaptureCount = 0;
+  var lifecycleHooks = [];
+  var roomGeneration = 0;
+  var capturedGeneration = -1;
 
-  var RVA_IS_MY_PLAYER = 0xB55FD0;
+  var RVA = {
+    Player_get_isMyPlayer: 0xB55FD0,
+    ModeBase_ExitGame: 0xAEE850,
+    Player_OnDestroy: 0xB511C0,
+    GameManager_OnDestroy: 0xAFB6F0
+  };
   var OFF_CLIENT = 0x94;
   var OFF_ISBOT = 0x1C;
   var OFF_NICK = 0x10;
@@ -40,7 +48,7 @@ modules.isbot = (function() {
   }
 
   function dump() {
-    if (!clientData) return;
+    if (!clientData || capturedGeneration !== roomGeneration) return;
     var bot = clientData.add(OFF_ISBOT).readU8();
     var nick = readStr(clientData.add(OFF_NICK));
     log('info', localPlayer + '|' + clientData + '|0x1C:' + bot + '|nick:' + nick);
@@ -48,6 +56,7 @@ modules.isbot = (function() {
 
   function writeBot(val) {
     if (!clientData) return false;
+    if (capturedGeneration !== roomGeneration) return false;
     try {
       clientData.add(OFF_ISBOT).writeU8(val);
       var after = clientData.add(OFF_ISBOT).readU8();
@@ -58,10 +67,25 @@ modules.isbot = (function() {
     }
   }
 
+  function clearRoomState(reason) {
+    roomGeneration++;
+    if (retryInterval) {
+      clearInterval(retryInterval);
+      retryInterval = null;
+    }
+    localPlayer = null;
+    clientData = null;
+    capturedGeneration = -1;
+    roomCaptureCount = 0;
+    if (enabled) sendUiState('awaiting_room');
+    log('info', 'room state cleared: ' + reason);
+  }
+
   function tryWriteBotOnCapture() {
     if (!clientData) {
       return false;
     }
+    if (capturedGeneration !== roomGeneration) return false;
 
     var ok = writeBot(1);
     if (ok) {
@@ -87,6 +111,7 @@ modules.isbot = (function() {
     }
 
     clientData = cd;
+    capturedGeneration = roomGeneration;
     roomCaptureCount += 1;
     setTimeout(dump, 2000);
 
@@ -113,7 +138,7 @@ modules.isbot = (function() {
       }
 
       var base = mod.base;
-      addrIsMy = base.add(RVA_IS_MY_PLAYER);
+      addrIsMy = base.add(RVA.Player_get_isMyPlayer);
       var origIsMy = new NativeFunction(addrIsMy, 'bool', ['pointer', 'pointer']);
 
       Interceptor.replace(addrIsMy, new NativeCallback(function(playerPtr, methodInfo) {
@@ -123,6 +148,10 @@ modules.isbot = (function() {
         }
         return result;
       }, 'bool', ['pointer', 'pointer']));
+
+      try { lifecycleHooks.push(Interceptor.attach(base.add(RVA.ModeBase_ExitGame), { onEnter: function() { clearRoomState('ModeBase.ExitGame'); } })); } catch (e1) {}
+      try { lifecycleHooks.push(Interceptor.attach(base.add(RVA.Player_OnDestroy), { onEnter: function(args) { try { if (localPlayer && args[0] && args[0].equals(localPlayer)) clearRoomState('Player.OnDestroy'); } catch (_) {} } })); } catch (e2) {}
+      try { lifecycleHooks.push(Interceptor.attach(base.add(RVA.GameManager_OnDestroy), { onEnter: function() { clearRoomState('GameManager.OnDestroy'); } })); } catch (e3) {}
 
       hookInstalled = true;
     } catch (e) {
@@ -138,6 +167,10 @@ modules.isbot = (function() {
       hookInstalled = false;
       addrIsMy = null;
     }
+    for (var i = 0; i < lifecycleHooks.length; i++) {
+      try { lifecycleHooks[i].detach(); } catch (e) {}
+    }
+    lifecycleHooks = [];
   }
 
   return {
@@ -156,7 +189,13 @@ modules.isbot = (function() {
       }
 
       var retries = 0;
+      var retryGeneration = roomGeneration;
       retryInterval = setInterval(function() {
+        if (retryGeneration !== roomGeneration) {
+          clearInterval(retryInterval);
+          retryInterval = null;
+          return;
+        }
         if (clientData) {
           tryWriteBotOnCapture();
         }
@@ -182,6 +221,7 @@ modules.isbot = (function() {
       enabled = false;
       localPlayer = null;
       clientData = null;
+      capturedGeneration = -1;
       roomCaptureCount = 0;
       log('info', '已禁用');
       sendStatus('isbot', false);
