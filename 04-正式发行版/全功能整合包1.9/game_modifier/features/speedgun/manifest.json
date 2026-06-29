@@ -1,0 +1,36 @@
+{
+  "feature_id": "speedgun",
+  "canonical_id": "fire_rate_auto_sniper",
+  "display_name": "???? / ??",
+  "category": "weapon",
+  "tab": "weapon_tab",
+  "order": 70,
+  "icon": "?",
+  "desc": "??10? | ??????? | ????? | ?????",
+  "script": "script.js",
+  "layout": {
+    "card_type": "simple",
+    "columnspan": 1
+  },
+  "controls": [
+    {
+      "type": "switch",
+      "action": "enable"
+    }
+  ],
+  "config": {},
+  "rpc": [
+    "enable",
+    "disable",
+    "setConfig",
+    "status",
+    "cleanup"
+  ],
+  "lifecycle": {
+    "cleanup": true
+  },
+  "source": {
+    "feature_py": "features/feature_13_fire_rate_auto_sniper.py",
+    "script_js": "scripts/13-fire_rate_auto_sniper.js"
+  }
+}

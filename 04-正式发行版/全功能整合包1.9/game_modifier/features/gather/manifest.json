@@ -1,0 +1,41 @@
+{
+  "feature_id": "gather",
+  "canonical_id": "gather_enemies",
+  "display_name": "??",
+  "category": "other",
+  "tab": "other_tab",
+  "order": 10,
+  "icon": "??",
+  "desc": "?????????????",
+  "script": "script.js",
+  "layout": {
+    "card_type": "simple",
+    "columnspan": 1
+  },
+  "controls": [
+    {
+      "type": "switch",
+      "action": "enable"
+    },
+    {
+      "type": "button",
+      "action": "enable",
+      "label": "????"
+    }
+  ],
+  "config": {},
+  "rpc": [
+    "enable",
+    "disable",
+    "setConfig",
+    "status",
+    "cleanup"
+  ],
+  "lifecycle": {
+    "cleanup": true
+  },
+  "source": {
+    "feature_py": "features/feature_08_gather_enemies.py",
+    "script_js": "scripts/08-gather_enemies.js"
+  }
+}

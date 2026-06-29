@@ -1,0 +1,31 @@
+{
+  "feature_id": "template_feature",
+  "canonical_id": "template_feature",
+  "display_name": "模板功能",
+  "category": "other",
+  "tab": "other_tab",
+  "order": 999,
+  "icon": "*",
+  "desc": "复制此目录创建新功能插件。",
+  "script": "script.js",
+  "layout": {
+    "type": "simple"
+  },
+  "controls": [
+    {
+      "type": "switch",
+      "action": "enable"
+    }
+  ],
+  "config": {},
+  "rpc": [
+    "enable",
+    "disable",
+    "setConfig",
+    "status",
+    "cleanup"
+  ],
+  "lifecycle": {
+    "cleanup": true
+  }
+}

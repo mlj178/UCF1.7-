@@ -1,0 +1,37 @@
+{
+  "feature_id": "roundskip",
+  "canonical_id": "skip_round",
+  "display_name": "????",
+  "category": "other",
+  "tab": "other_tab",
+  "order": 30,
+  "icon": "??",
+  "desc": "??????",
+  "script": "script.js",
+  "layout": {
+    "card_type": "simple",
+    "columnspan": 1
+  },
+  "controls": [
+    {
+      "type": "button",
+      "action": "enable",
+      "label": "??????"
+    }
+  ],
+  "config": {},
+  "rpc": [
+    "enable",
+    "disable",
+    "setConfig",
+    "status",
+    "cleanup"
+  ],
+  "lifecycle": {
+    "cleanup": true
+  },
+  "source": {
+    "feature_py": "features/feature_10_skip_round.py",
+    "script_js": "scripts/10-skip_round.js"
+  }
+}
