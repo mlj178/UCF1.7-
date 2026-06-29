@@ -1,8 +1,6 @@
 from core.plugin.plugin_base import PluginFeatureBase
-from core.feature_registry import register_feature
 
 
-@register_feature
 class RoundSkipFeature(PluginFeatureBase):
     feature_id = 'roundskip'
     js_filename = '10-skip_round.js'

@@ -1,16 +1,17 @@
 {
   "feature_id": "gather",
   "canonical_id": "gather_enemies",
-  "display_name": "??",
+  "display_name": "聚怪",
   "category": "other",
   "tab": "other_tab",
   "order": 10,
-  "icon": "??",
-  "desc": "?????????????",
+  "icon": "👾",
+  "desc": "将所有人机聚集到佣兵出生点",
   "script": "script.js",
   "layout": {
     "card_type": "simple",
-    "columnspan": 1
+    "columnspan": 1,
+    "title_color": "#E76F51"
   },
   "controls": [
     {
@@ -37,5 +38,9 @@
   "source": {
     "feature_py": "features/feature_08_gather_enemies.py",
     "script_js": "scripts/08-gather_enemies.js"
+  },
+  "ui_handles": {
+    "switch": "gather_switch",
+    "button": "gather_btn"
   }
 }

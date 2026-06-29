@@ -1,8 +1,6 @@
 from core.plugin.plugin_base import PluginFeatureBase
-from core.feature_registry import register_feature
 
 
-@register_feature
 class GravityFeature(PluginFeatureBase):
     feature_id = 'gravity'
     js_filename = '09-high_jump_low_gravity.js'

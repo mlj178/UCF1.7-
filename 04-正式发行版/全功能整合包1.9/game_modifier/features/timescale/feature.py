@@ -1,8 +1,6 @@
 from core.plugin.plugin_base import PluginFeatureBase
-from core.feature_registry import register_feature
 
 
-@register_feature
 class TimeScaleFeature(PluginFeatureBase):
     feature_id = 'timescale'
     js_filename = '20-unity_time_acceleration.js'

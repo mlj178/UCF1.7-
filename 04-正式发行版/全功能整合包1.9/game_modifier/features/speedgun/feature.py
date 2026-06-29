@@ -1,8 +1,6 @@
 from core.plugin.plugin_base import PluginFeatureBase
-from core.feature_registry import register_feature
 
 
-@register_feature
 class SpeedGunFeature(PluginFeatureBase):
     feature_id = 'speedgun'
     js_filename = '13-fire_rate_auto_sniper.js'

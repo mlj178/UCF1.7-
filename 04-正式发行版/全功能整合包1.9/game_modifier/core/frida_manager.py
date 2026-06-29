@@ -1,6 +1,7 @@
 import threading
 import json
 import os
+import importlib
 from datetime import datetime
 
 import frida
@@ -41,6 +42,15 @@ class _FridaSessionAdapter:
     @property
     def session(self):
         return self._frida_manager.session
+
+
+def _ensure_special_features_registered():
+    for module_name in (
+        "features.feature_15_buff_selector",
+        "features.feature_16_weapon_giver",
+        "features.feature_19_battle_round",
+    ):
+        importlib.import_module(module_name)
 
 
 class LogManager:
@@ -116,6 +126,7 @@ class FridaManager:
                 parts.append(f.read())
 
         from core.feature_registry import FeatureRegistry
+        _ensure_special_features_registered()
         registry = FeatureRegistry.get_instance()
         for feature in registry.get_all():
             if feature.feature_id in ORDINARY_PLUGIN_FEATURE_IDS:

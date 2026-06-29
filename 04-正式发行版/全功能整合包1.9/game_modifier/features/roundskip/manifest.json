@@ -1,16 +1,17 @@
 {
   "feature_id": "roundskip",
   "canonical_id": "skip_round",
-  "display_name": "????",
+  "display_name": "回合跳过",
   "category": "other",
   "tab": "other_tab",
   "order": 30,
-  "icon": "??",
-  "desc": "??????",
+  "icon": "⏭️",
+  "desc": "结束当前回合",
   "script": "script.js",
   "layout": {
     "card_type": "simple",
-    "columnspan": 1
+    "columnspan": 1,
+    "title_color": "#e0e0e0"
   },
   "controls": [
     {
@@ -33,5 +34,8 @@
   "source": {
     "feature_py": "features/feature_10_skip_round.py",
     "script_js": "scripts/10-skip_round.js"
+  },
+  "ui_handles": {
+    "button": "skip_round_btn"
   }
 }

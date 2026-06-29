@@ -6,7 +6,6 @@ import time
 from core.config import FEATURES_INFO, NANO4T_ATTRS
 from core.event_bus import EventBus
 from core.frida_manager import FridaManager
-from core.feature_registry import FeatureRegistry
 from core.config_runtime.config_manager import ConfigManager
 from core.plugin.plugin_registry import PluginRegistry
 from core.sound_manager import SoundManager
@@ -58,7 +57,6 @@ class App(ctk.CTk):
 
         self._event_bus = EventBus.get_instance()
         self._frida = FridaManager.get_instance()
-        self._registry = FeatureRegistry.get_instance()
         self._config_manager = ConfigManager()
         self._plugin_registry = PluginRegistry(config_manager=self._config_manager)
         self._plugin_registry.load()
@@ -547,7 +545,7 @@ class App(ctk.CTk):
         self._weapon_controller.cleanup()
         self._save_feature_state()
         # Cleanup Universal ESP feature
-        feature = self._registry.get('esp_box')
+        feature = self._plugin_registry.get('esp_box')
         if feature and hasattr(feature, 'cleanup'):
             feature.cleanup()
         self._cleanup()

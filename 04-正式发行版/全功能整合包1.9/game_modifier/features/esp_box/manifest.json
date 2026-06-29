@@ -1,16 +1,17 @@
 {
   "feature_id": "esp_box",
   "canonical_id": "universal_esp_box",
-  "display_name": "????",
+  "display_name": "方框透视",
   "category": "other",
   "tab": "other_tab",
   "order": 40,
-  "icon": "??",
-  "desc": "?? Universal DLL ??????",
+  "icon": "📦",
+  "desc": "通过 Universal DLL 显示方框透视",
   "script": "script.js",
   "layout": {
     "card_type": "simple",
-    "columnspan": 1
+    "columnspan": 1,
+    "title_color": "#60A5FA"
   },
   "controls": [
     {
@@ -32,5 +33,8 @@
   "source": {
     "feature_py": "features/feature_18_universal_esp_box.py",
     "script_js": "plugins/universal_hook/Universal-ImGui-Hook.dll"
+  },
+  "ui_handles": {
+    "switch": "esp_box_switch"
   }
 }

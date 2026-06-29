@@ -1,8 +1,6 @@
 from core.plugin.plugin_base import PluginFeatureBase
-from core.feature_registry import register_feature
 
 
-@register_feature
 class KnifeRangeFeature(PluginFeatureBase):
     feature_id = 'range'
     js_filename = '07-knife_attack_range.js'

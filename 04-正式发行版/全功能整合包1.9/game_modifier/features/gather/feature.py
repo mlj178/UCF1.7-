@@ -1,9 +1,7 @@
 from core.plugin.plugin_base import PluginFeatureBase
-from core.feature_registry import register_feature
 from core.event_bus import EventBus
 
 
-@register_feature
 class GatherFeature(PluginFeatureBase):
     feature_id = 'gather'
     js_filename = '08-gather_enemies.js'
