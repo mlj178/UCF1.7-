@@ -59,50 +59,74 @@ class FeatureActionController:
         if switch:
             switch.configure(state="normal")
 
+    def set_feature_config(self, feature_id, key, value):
+        app = self._app
+        normalized = self._normalize_config_value(value)
+        result = app._feature_service.set_config(feature_id, {key: normalized})
+        if hasattr(app, "_on_plugin_config_changed"):
+            app._on_plugin_config_changed(feature_id, key, normalized)
+        app._schedule_save_state()
+        return result
+
+    def trigger_feature_action(self, feature_id, action):
+        if action == "gather":
+            return self.gather()
+        if action == "skip_round":
+            return self.skip_round()
+        if action == "enable":
+            return self._app._feature_service.enable(feature_id)
+        if action == "disable":
+            return self._app._feature_service.disable(feature_id)
+        if action == "cleanup":
+            return self._app._feature_service.cleanup(feature_id)
+        return self.set_feature_config(feature_id, action, True)
+
+    @staticmethod
+    def _normalize_config_value(value):
+        if isinstance(value, (int, float)):
+            return round(float(value), 1)
+        try:
+            return round(float(value), 1)
+        except (TypeError, ValueError):
+            return value
+
     def on_knife_speed_change(self, value):
         app = self._app
         app._knife_speed = round(float(value), 1)
-        app._feature_service.set_config("knife", {"speed": app._knife_speed})
-        app._schedule_save_state()
+        return self.set_feature_config("knife", "speed", app._knife_speed)
 
     def on_move_speed_change(self, value):
         app = self._app
         app._movespeed = round(float(value), 1)
-        app._feature_service.set_config("movespeed", {"speed": app._movespeed})
-        app._schedule_save_state()
+        return self.set_feature_config("movespeed", "speed", app._movespeed)
 
     def on_range_change(self, value):
         app = self._app
         app._range_mult = round(float(value), 1)
-        app._feature_service.set_config("range", {"range": app._range_mult})
-        app._schedule_save_state()
+        return self.set_feature_config("range", "range", app._range_mult)
 
     def on_timescale_change(self, value):
         app = self._app
         app._timescale = round(float(value), 1)
         app.timescale_label.configure(text=f"{app._timescale:.1f}x")
-        app._feature_service.set_config("timescale", {"speed": app._timescale})
-        app._schedule_save_state()
+        return self.set_feature_config("timescale", "speed", app._timescale)
 
     def on_gravity_change(self, value):
         app = self._app
         app._gravity = round(float(value), 1)
         app.gravity_label.configure(text=f"{app._gravity:.1f}")
-        self.debounce_gravity_config()
-        app._schedule_save_state()
+        return self.set_feature_config("gravity", "gravity", app._gravity)
 
     def on_jump_change(self, value):
         app = self._app
         app._jump = round(float(value), 1)
         app.jump_label.configure(text=f"{app._jump:.1f}")
-        self.debounce_gravity_config()
-        app._schedule_save_state()
+        return self.set_feature_config("gravity", "jump", app._jump)
 
     def on_gravity_mode_change(self, value):
         app = self._app
         app._gravity_mode = "player_only" if value == "仅自己" else "all"
-        self.debounce_gravity_config()
-        app._schedule_save_state()
+        return self.set_feature_config("gravity", "mode", app._gravity_mode)
 
     def debounce_gravity_config(self):
         app = self._app

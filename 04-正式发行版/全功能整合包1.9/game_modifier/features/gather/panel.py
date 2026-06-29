@@ -12,7 +12,15 @@ def build_card(parent, manifest, row, col, colspan, callbacks, card_builder):
     switch.pack(side="right", padx=12)
     btn_frame = ctk.CTkFrame(frame, fg_color="transparent")
     btn_frame.pack(fill="x", padx=8, pady=(2, 2))
-    button = ctk.CTkButton(btn_frame, text="\U0001f4cd \u4e00\u952e\u805a\u602a", font=("Microsoft YaHei", 14, "bold"), height=45, command=callbacks["gather"], fg_color="#b45309", hover_color="#92400e")
+    button = ctk.CTkButton(
+        btn_frame,
+        text="\U0001f4cd \u4e00\u952e\u805a\u602a",
+        font=("Microsoft YaHei", 14, "bold"),
+        height=45,
+        command=lambda: callbacks["action"](feature_id, "gather"),
+        fg_color="#b45309",
+        hover_color="#92400e",
+    )
     button.pack(fill="x", padx=4, pady=4)
     ctk.CTkLabel(frame, font=("Microsoft YaHei", 15), text=manifest["desc"], text_color="#a0a0a0", wraplength=280, justify="left", anchor="w").pack(fill="x", expand=False, padx=8, pady=(2, 6))
     handles = manifest.get("ui_handles", {})

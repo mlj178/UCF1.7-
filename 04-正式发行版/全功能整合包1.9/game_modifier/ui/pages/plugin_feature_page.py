@@ -75,16 +75,23 @@ class PluginFeaturePage:
         return builder
 
     def _build_default_card(self, scroll, manifest, row, col, colspan):
+        feature_id = manifest["feature_id"]
         slider_control = self._first_control(manifest, "slider")
+        button_control = self._first_control(manifest, "button")
         slider_var = None
         callback = None
         slider_range = None
         if slider_control:
             slider_var = ctk.DoubleVar(value=float(slider_control.get("default", 1.0)))
             slider_range = (float(slider_control["min"]), float(slider_control["max"]))
-            callback = self.callbacks["slider"].get(manifest["feature_id"])
+            key = slider_control.get("key", "value")
+            callback = lambda value, fid=feature_id, cfg_key=key: self.callbacks["set_config"](
+                fid,
+                cfg_key,
+                value,
+            )
 
-        _, switch, label = self.card_builder.make_feature_card(
+        frame, switch, label = self.card_builder.make_feature_card(
             scroll,
             row,
             col,
@@ -97,11 +104,24 @@ class PluginFeaturePage:
         )
 
         ui_handles = manifest.get("ui_handles", {})
-        handles = {ui_handles.get("switch", f"{manifest['feature_id']}_switch"): switch}
+        handles = {ui_handles.get("switch", f"{feature_id}_switch"): switch}
         if slider_var is not None:
-            handles[ui_handles.get("slider_var", f"{manifest['feature_id']}_var")] = slider_var
+            handles[ui_handles.get("slider_var", f"{feature_id}_var")] = slider_var
         if label is not None:
-            handles[ui_handles.get("slider_label", f"{manifest['feature_id']}_label")] = label
+            handles[ui_handles.get("slider_label", f"{feature_id}_label")] = label
+        if button_control:
+            action = button_control.get("action", "enable")
+            button = ctk.CTkButton(
+                frame,
+                text=button_control.get("label", manifest.get("display_name", "")),
+                font=("Microsoft YaHei", 14, "bold"),
+                height=40,
+                command=lambda fid=feature_id, act=action: self.callbacks["action"](fid, act),
+                fg_color="#b45309",
+                hover_color="#92400e",
+            )
+            button.pack(fill="x", padx=12, pady=(0, 8))
+            handles[ui_handles.get("button", f"{feature_id}_btn")] = button
         return handles
 
     @staticmethod

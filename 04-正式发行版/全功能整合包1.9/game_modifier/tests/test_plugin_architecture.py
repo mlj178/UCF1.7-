@@ -280,6 +280,51 @@ class MigratedOrdinaryFeatureTests(unittest.TestCase):
                 )
                 self.assertNotIn("?", manifest["display_name"] + manifest["icon"] + manifest["desc"])
 
+    def test_feature_tabs_use_generic_plugin_callbacks(self):
+        feature_tabs = (PROJECT_DIR / "ui" / "views" / "feature_tabs_view.py").read_text(encoding="utf-8")
+        plugin_page = (PROJECT_DIR / "ui" / "pages" / "plugin_feature_page.py").read_text(encoding="utf-8")
+        app_text = (PROJECT_DIR / "ui" / "app.py").read_text(encoding="utf-8")
+        handles_text = (PROJECT_DIR / "ui" / "views" / "common.py").read_text(encoding="utf-8")
+        controller = (PROJECT_DIR / "ui" / "controllers" / "feature_action_controller.py").read_text(encoding="utf-8")
+        frida_manager = (PROJECT_DIR / "core" / "frida_manager.py").read_text(encoding="utf-8")
+
+        self.assertNotIn("@dataclass", feature_tabs)
+        self.assertNotIn("class FeatureTabsHandles", feature_tabs)
+        self.assertNotIn("FeatureTabsHandles(", feature_tabs)
+        for legacy_callback in (
+            "on_knife_speed_change",
+            "on_move_speed_change",
+            "on_range_change",
+            "on_timescale_change",
+            "on_gravity_change",
+            "on_jump_change",
+            "on_gravity_mode_change",
+            "on_gather",
+            "on_skip_round",
+        ):
+            self.assertNotIn(legacy_callback, feature_tabs)
+            self.assertNotIn(legacy_callback, app_text)
+
+        self.assertIn('"set_config"', feature_tabs)
+        self.assertIn('"action"', feature_tabs)
+        self.assertIn('callbacks["set_config"]', plugin_page)
+        self.assertIn('callbacks["action"]', plugin_page)
+        self.assertNotIn('callbacks["slider"]', plugin_page)
+        self.assertIn("isinstance(handles, dict)", handles_text)
+        self.assertIn("def set_feature_config", controller)
+        self.assertIn("def trigger_feature_action", controller)
+        self.assertIn("Agent v1.9", frida_manager)
+        self.assertNotIn("Agent v1.8", frida_manager)
+
+        for panel_path in (PROJECT_DIR / "features").glob("*/panel.py"):
+            panel_text = panel_path.read_text(encoding="utf-8")
+            self.assertNotIn('callbacks["slider"]', panel_text, msg=str(panel_path))
+            self.assertNotIn('callbacks["gravity"]', panel_text, msg=str(panel_path))
+            self.assertNotIn('callbacks["jump"]', panel_text, msg=str(panel_path))
+            self.assertNotIn('callbacks["gravity_mode"]', panel_text, msg=str(panel_path))
+            self.assertNotIn('callbacks["gather"]', panel_text, msg=str(panel_path))
+            self.assertNotIn('callbacks["skip_round"]', panel_text, msg=str(panel_path))
+
 
 if __name__ == "__main__":
     unittest.main()

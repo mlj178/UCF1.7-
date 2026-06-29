@@ -1,3 +1,4 @@
 def bind_view_handles(target, handles):
-    for name, value in vars(handles).items():
+    items = handles.items() if isinstance(handles, dict) else vars(handles).items()
+    for name, value in items:
         setattr(target, name, value)
