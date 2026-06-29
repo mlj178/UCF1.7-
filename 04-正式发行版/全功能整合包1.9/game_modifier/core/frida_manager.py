@@ -227,7 +227,7 @@ rpc.exports = {
 
     def _build_init_message(self):
         return r"""
-sendLog('info', '系统', '全功能整合包 Agent v1.8 已加载');
+sendLog('info', '系统', '全功能整合包 Agent v1.9 已加载');
 sendLog('info', '系统', '请先附加到游戏进程，然后开启对应功能');
 sendLog('info', '系统', '架构: ' + Process.arch + ', 平台: ' + Process.platform);
 setTimeout(function() { getGameAssembly(); }, 100);

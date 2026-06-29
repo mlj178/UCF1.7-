@@ -13,7 +13,12 @@ def build_card(parent, manifest, row, col, colspan, callbacks, card_builder):
     slider_frame = ctk.CTkFrame(frame, fg_color="transparent")
     slider_frame.pack(fill="x", padx=8, pady=(4, 0))
     var = ctk.DoubleVar(value=1.0)
-    slider = ctk.CTkSlider(slider_frame, from_=0.1, to=10.0, variable=var, number_of_steps=99, command=callbacks["slider"][feature_id], width=150)
+    def on_speed(value):
+        numeric = round(float(value), 1)
+        label.configure(text=f"{numeric:.1f}x")
+        callbacks["set_config"](feature_id, "speed", numeric)
+
+    slider = ctk.CTkSlider(slider_frame, from_=0.1, to=10.0, variable=var, number_of_steps=99, command=on_speed, width=150)
     slider.pack(side="left", padx=4)
     label = ctk.CTkLabel(slider_frame, text="1.0x", font=("Microsoft YaHei", 12), text_color="#e0e0e0", width=50)
     label.pack(side="left")

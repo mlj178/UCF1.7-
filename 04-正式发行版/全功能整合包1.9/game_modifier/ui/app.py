@@ -219,15 +219,8 @@ class App(ctk.CTk):
         feature_tabs_view = FeatureTabsView(
             plugin_registry=self._plugin_registry,
             on_toggle_feature=self._feature_controller.toggle_feature,
-            on_knife_speed_change=self._feature_controller.on_knife_speed_change,
-            on_move_speed_change=self._feature_controller.on_move_speed_change,
-            on_range_change=self._feature_controller.on_range_change,
-            on_timescale_change=self._feature_controller.on_timescale_change,
-            on_gravity_change=self._feature_controller.on_gravity_change,
-            on_jump_change=self._feature_controller.on_jump_change,
-            on_gravity_mode_change=self._feature_controller.on_gravity_mode_change,
-            on_gather=self._feature_controller.gather,
-            on_skip_round=self._feature_controller.skip_round,
+            on_set_config=self._feature_controller.set_feature_config,
+            on_action=self._feature_controller.trigger_feature_action,
         )
         bind_view_handles(
             self,
@@ -312,17 +305,10 @@ class App(ctk.CTk):
         )
 
     def _update_switch(self, feature_id):
-        switch_map = {
-            'knife': self.knife_switch, 'time': self.time_switch,
-            'recoil': self.recoil_switch, 'ammo': self.ammo_switch,
-            'movespeed': self.move_switch, 'ammoplus': self.ammoplus_switch,
-            'range': self.range_switch, 'gather': self.gather_switch,
-            'gravity': self.gravity_switch, 'aim': self.aim_switch,
-            'godmode': self.godmode_switch, 'speedgun': self.speedgun_switch,
-            'isbot': self.isbot_switch, 'skillcd': self.skillcd_switch,
-            'esp_box': self.esp_box_switch, 'timescale': self.timescale_switch,
-        }
-        switch = switch_map.get(feature_id)
+        feature = self._plugin_registry.get(feature_id)
+        ui_handles = feature.manifest.get("ui_handles", {}) if feature else {}
+        switch_name = ui_handles.get("switch", f"{feature_id}_switch")
+        switch = getattr(self, switch_name, None)
         if not switch:
             return
         enabled = self._features.get(feature_id, False)
@@ -395,13 +381,21 @@ class App(ctk.CTk):
             self._on_hotkey_toggle(feature_id)
 
     def _on_hotkey_toggle(self, feature_id):
-        if feature_id == 'gather':
-            self._feature_controller.gather()
-        elif feature_id == 'roundskip':
-            self._feature_controller.skip_round()
+        action = self._plugin_hotkey_action(feature_id)
+        if action:
+            self._feature_controller.trigger_feature_action(feature_id, action)
         elif feature_id in self._features:
             self._feature_controller.toggle_feature(feature_id)
             self._sound.play_toggle_sound()
+
+    def _plugin_hotkey_action(self, feature_id):
+        feature = self._plugin_registry.get(feature_id)
+        if not feature:
+            return None
+        for control in feature.manifest.get("controls", []):
+            if control.get("type") == "button":
+                return control.get("action", "enable")
+        return None
 
     def _show_settings(self):
         from ui.settings_window import SettingsWindow
@@ -460,18 +454,7 @@ class App(ctk.CTk):
             config = self._config_manager.get(fid)
             if "enabled" in config:
                 self._features[fid] = bool(config.get("enabled"))
-            if fid == "knife" and "speed" in config:
-                self._knife_speed = float(config["speed"])
-            elif fid == "movespeed" and "speed" in config:
-                self._movespeed = float(config["speed"])
-            elif fid == "range" and "range" in config:
-                self._range_mult = float(config["range"])
-            elif fid == "timescale" and "speed" in config:
-                self._timescale = float(config["speed"])
-            elif fid == "gravity":
-                self._gravity = float(config.get("gravity", self._gravity))
-                self._jump = float(config.get("jump", self._jump))
-                self._gravity_mode = config.get("mode", self._gravity_mode)
+        self._refresh_legacy_config_cache()
 
     def _migrate_plugin_config_from_persistent_state(self):
         migration = {
@@ -495,19 +478,95 @@ class App(ctk.CTk):
             payload = migration.get(fid, {"enabled": self._features.get(fid, False)})
             self._config_manager.set(fid, payload)
 
-    def _sync_plugin_controls_from_config(self):
-        self.knife_speed_var.set(self._knife_speed)
-        self.move_speed_var.set(self._movespeed)
-        self.range_var.set(self._range_mult)
-        self.timescale_var.set(self._timescale)
-        self.timescale_label.configure(text=f"{self._timescale:.1f}x")
-        self.gravity_var.set(self._gravity)
-        self.gravity_label.configure(text=f"{self._gravity:.1f}")
-        self.jump_var.set(self._jump)
-        self.jump_label.configure(text=f"{self._jump:.1f}")
-        mode_text = "仅自己" if self._gravity_mode == "player_only" else "全部玩家"
-        self.gravity_mode_var.set(mode_text)
+    def _on_plugin_config_changed(self, feature_id, key, value):
+        if key == "enabled":
+            self._features[feature_id] = bool(value)
+        self._refresh_legacy_config_cache(feature_id)
+        self._sync_plugin_controls_from_config(feature_id)
 
+    def _sync_plugin_controls_from_config(self, feature_id=None):
+        features = [self._plugin_registry.get(feature_id)] if feature_id else self._plugin_registry.all()
+        for feature in features:
+            if not feature:
+                continue
+            manifest = feature.manifest
+            fid = manifest["feature_id"]
+            config = self._config_manager.get(fid)
+            controls = manifest.get("controls", [])
+            sliders = [control for control in controls if control.get("type") == "slider"]
+            single_slider = len(sliders) == 1
+            for control in sliders:
+                key = control.get("key", "value")
+                value = config.get(key, control.get("default", 1.0))
+                self._set_control_value(
+                    self._control_handle_name(manifest, key, "slider_var", single_slider),
+                    value,
+                )
+                self._set_control_label(
+                    self._control_handle_name(manifest, key, "slider_label", single_slider),
+                    self._format_slider_value(key, value),
+                )
+            for control in controls:
+                if control.get("type") != "combo":
+                    continue
+                key = control.get("key", "value")
+                value = config.get(key, control.get("default"))
+                self._set_control_value(
+                    self._control_handle_name(manifest, key, "combo_var", False),
+                    self._format_combo_value(key, value),
+                )
+
+    def _control_handle_name(self, manifest, key, handle_type, single_slider):
+        feature_id = manifest["feature_id"]
+        handles = manifest.get("ui_handles", {})
+        if handle_type == "slider_var":
+            return handles.get(f"{key}_var") or (
+                handles.get("slider_var") if single_slider else None
+            ) or f"{key}_var"
+        if handle_type == "slider_label":
+            return handles.get(f"{key}_label") or (
+                handles.get("slider_label") if single_slider else None
+            ) or f"{key}_label"
+        if handle_type == "combo_var":
+            return handles.get(f"{key}_var") or f"{feature_id}_{key}_var"
+        return handles.get(handle_type, f"{feature_id}_{handle_type}")
+
+    def _set_control_value(self, handle_name, value):
+        handle = getattr(self, handle_name, None)
+        if handle and hasattr(handle, "set"):
+            handle.set(value)
+
+    def _set_control_label(self, handle_name, text):
+        handle = getattr(self, handle_name, None)
+        if handle:
+            handle.configure(text=text)
+
+    def _format_slider_value(self, key, value):
+        numeric = float(value)
+        suffix = "" if key in {"gravity", "jump"} else "x"
+        return f"{numeric:.1f}{suffix}"
+
+    def _format_combo_value(self, key, value):
+        if key == "mode":
+            return "\u4ec5\u81ea\u5df1" if value == "player_only" else "\u5168\u90e8\u73a9\u5bb6"
+        return value
+
+    def _refresh_legacy_config_cache(self, feature_id=None):
+        legacy_fields = {
+            ("knife", "speed"): "_knife_speed",
+            ("movespeed", "speed"): "_movespeed",
+            ("range", "range"): "_range_mult",
+            ("timescale", "speed"): "_timescale",
+            ("gravity", "gravity"): "_gravity",
+            ("gravity", "jump"): "_jump",
+            ("gravity", "mode"): "_gravity_mode",
+        }
+        for (fid, key), attr in legacy_fields.items():
+            if feature_id and fid != feature_id:
+                continue
+            config = self._config_manager.get(fid)
+            if key in config:
+                setattr(self, attr, config[key])
     def _save_feature_state(self):
         try:
             self._persistence_service.save_app_state(self._collect_persistent_state())

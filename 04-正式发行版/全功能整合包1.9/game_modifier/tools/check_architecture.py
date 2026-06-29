@@ -103,10 +103,14 @@ def check_plugin_dirs():
 def check_ui_boundary():
     plugin_page = ROOT / "ui" / "pages" / "plugin_feature_page.py"
     feature_tabs = ROOT / "ui" / "views" / "feature_tabs_view.py"
+    common_view = ROOT / "ui" / "views" / "common.py"
+    controller = ROOT / "ui" / "controllers" / "feature_action_controller.py"
     if not plugin_page.exists():
         return fail("missing plugin_feature_page.py")
     page_text = plugin_page.read_text(encoding="utf-8")
     tabs_text = feature_tabs.read_text(encoding="utf-8")
+    common_text = common_view.read_text(encoding="utf-8")
+    controller_text = controller.read_text(encoding="utf-8")
     ok = True
     for needle in (".by_tab(", "manifest.get(\"layout\"", "order"):
         if needle not in page_text:
@@ -120,6 +124,35 @@ def check_ui_boundary():
     for needle in ("_build_weapon_tab", "_build_player_tab", "_build_other_tab", "_make_feature_card("):
         if needle in tabs_text:
             ok = fail(f"feature_tabs_view still contains {needle}") and ok
+    for needle in ("@dataclass", "class FeatureTabsHandles", "FeatureTabsHandles("):
+        if needle in tabs_text:
+            ok = fail(f"feature_tabs_view still has fixed handles: {needle}") and ok
+    for needle in (
+        "on_knife_speed_change",
+        "on_move_speed_change",
+        "on_range_change",
+        "on_timescale_change",
+        "on_gravity_change",
+        "on_jump_change",
+        "on_gravity_mode_change",
+        "on_gather",
+        "on_skip_round",
+    ):
+        if needle in tabs_text:
+            ok = fail(f"feature_tabs_view still has fixed callback {needle}") and ok
+    for needle in ('"set_config"', '"action"'):
+        if needle not in tabs_text:
+            ok = fail(f"feature_tabs_view missing generic callback {needle}") and ok
+    for needle in ('callbacks["set_config"]', 'callbacks["action"]'):
+        if needle not in page_text:
+            ok = fail(f"plugin page missing generic callback {needle}") and ok
+    if 'callbacks["slider"]' in page_text:
+        ok = fail("plugin page still uses fixed slider callback map") and ok
+    if "isinstance(handles, dict)" not in common_text:
+        ok = fail("bind_view_handles does not support dict handles") and ok
+    for needle in ("def set_feature_config", "def trigger_feature_action"):
+        if needle not in controller_text:
+            ok = fail(f"FeatureActionController missing {needle}") and ok
     return ok
 
 
@@ -127,6 +160,8 @@ def check_runtime_boundary():
     service_text = (ROOT / "core" / "services" / "feature_command_service.py").read_text(encoding="utf-8")
     frida_text = (ROOT / "core" / "frida_manager.py").read_text(encoding="utf-8")
     ok = True
+    if "Agent v1.8" in frida_text or "Agent v1.9" not in frida_text:
+        ok = fail("Frida Agent version log is not v1.9") and ok
     for feature_id in ORDINARY_FEATURES:
         if f'"{feature_id}"' in service_text or f"'{feature_id}'" in service_text:
             ok = fail(f"FeatureCommandService has feature branch for {feature_id}") and ok
