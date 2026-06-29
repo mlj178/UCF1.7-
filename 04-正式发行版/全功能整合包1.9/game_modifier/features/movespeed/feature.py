@@ -1,8 +1,6 @@
 from core.plugin.plugin_base import PluginFeatureBase
-from core.feature_registry import register_feature
 
 
-@register_feature
 class MoveSpeedFeature(PluginFeatureBase):
     feature_id = 'movespeed'
     js_filename = '06-movement_speed.js'

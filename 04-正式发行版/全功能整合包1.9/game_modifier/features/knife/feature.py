@@ -1,8 +1,6 @@
 from core.plugin.plugin_base import PluginFeatureBase
-from core.feature_registry import register_feature
 
 
-@register_feature
 class KnifeFeature(PluginFeatureBase):
     feature_id = 'knife'
     js_filename = '04-fast_knife.js'

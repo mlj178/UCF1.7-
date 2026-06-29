@@ -1,16 +1,17 @@
 {
   "feature_id": "timescale",
   "canonical_id": "unity_timescale",
-  "display_name": "????",
+  "display_name": "时间加速",
   "category": "other",
   "tab": "other_tab",
   "order": 50,
-  "icon": "?",
-  "desc": "????????",
+  "icon": "⏩",
+  "desc": "调整游戏时间倍率",
   "script": "script.js",
   "layout": {
     "card_type": "wide",
-    "columnspan": 2
+    "columnspan": 2,
+    "title_color": "#00CED1"
   },
   "controls": [
     {
@@ -43,5 +44,11 @@
   "source": {
     "feature_py": "features/feature_20_unity_time_acceleration.py",
     "script_js": "scripts/20-unity_time_acceleration.js"
+  },
+  "ui_handles": {
+    "switch": "timescale_switch",
+    "slider_var": "timescale_var",
+    "slider": "timescale_slider",
+    "slider_label": "timescale_label"
   }
 }

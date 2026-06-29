@@ -1,16 +1,17 @@
 {
   "feature_id": "knife",
   "canonical_id": "fast_knife",
-  "display_name": "??",
+  "display_name": "快刀",
   "category": "weapon",
   "tab": "weapon_tab",
   "order": 10,
-  "icon": "??",
-  "desc": "????????? / ???????",
+  "icon": "🔪",
+  "desc": "提升挥刀速度（人类 / 生化幽灵通用）",
   "script": "script.js",
   "layout": {
     "card_type": "simple",
-    "columnspan": 1
+    "columnspan": 1,
+    "title_color": "#FFB347"
   },
   "controls": [
     {
@@ -43,5 +44,10 @@
   "source": {
     "feature_py": "features/feature_04_fast_knife.py",
     "script_js": "scripts/04-fast_knife.js"
+  },
+  "ui_handles": {
+    "switch": "knife_switch",
+    "slider_var": "knife_speed_var",
+    "slider_label": "knife_speed_label"
   }
 }

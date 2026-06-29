@@ -1,9 +1,7 @@
 from core.plugin.plugin_base import PluginFeatureBase
-from core.feature_registry import register_feature
 from core.game_session_manager import GameSessionManager
 
 
-@register_feature
 class ESPBoxFeature(PluginFeatureBase):
     feature_id = 'esp_box'
     name = '方框透视'

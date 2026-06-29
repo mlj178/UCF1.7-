@@ -20,7 +20,7 @@ class FeatureActionController:
 
             def run_in_background():
                 try:
-                    feature = app._registry.get("esp_box")
+                    feature = app._plugin_registry.get("esp_box")
                     ok = feature.enable() if new_state else feature.disable()
                     app._features[feature_id] = bool(ok and new_state)
                     app.after(0, lambda: self.on_esp_box_complete(feature_id, ok))

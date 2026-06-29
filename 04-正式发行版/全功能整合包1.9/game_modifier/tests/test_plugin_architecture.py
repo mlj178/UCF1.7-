@@ -205,7 +205,9 @@ class MigratedOrdinaryFeatureTests(unittest.TestCase):
             if feature_id in {"nano4t", "weapon_giver"}:
                 continue
             self.assertNotIn(Path(feature_source).stem, init_text)
-            self.assertIn(f"features.{feature_id}.feature", init_text)
+            feature_text = (PROJECT_DIR / "features" / feature_id / "feature.py").read_text(encoding="utf-8")
+            self.assertNotIn("@register_feature", feature_text)
+            self.assertNotIn("register_feature", feature_text)
 
     def test_phase3_ui_and_services_use_plugin_runtime_boundaries(self):
         feature_tabs = (PROJECT_DIR / "ui" / "views" / "feature_tabs_view.py").read_text(encoding="utf-8")
@@ -232,6 +234,51 @@ class MigratedOrdinaryFeatureTests(unittest.TestCase):
 
     def test_check_architecture_script_exists(self):
         self.assertTrue((PROJECT_DIR / "tools" / "check_architecture.py").exists())
+
+    def test_no_manual_ordinary_imports_or_central_panel_branches(self):
+        main_text = (PROJECT_DIR / "main.py").read_text(encoding="utf-8")
+        init_text = (PROJECT_DIR / "features" / "__init__.py").read_text(encoding="utf-8")
+        window_contract = (PROJECT_DIR / "ui" / "window_contract.py").read_text(encoding="utf-8")
+        plugin_page = (PROJECT_DIR / "ui" / "pages" / "plugin_feature_page.py").read_text(encoding="utf-8")
+
+        self.assertNotIn("import features", main_text)
+        self.assertIn('APP_VERSION = "v1.9"', window_contract)
+        for feature_id, (feature_source, _script_source) in self.ORDINARY_FEATURES.items():
+            self.assertNotIn(Path(feature_source).stem, init_text)
+            self.assertNotIn(f'feature_id == "{feature_id}"', plugin_page)
+        self.assertIn("build_card", plugin_page)
+        self.assertIn("panel.py", plugin_page)
+
+    def test_manifest_text_is_utf8_chinese_not_mojibake(self):
+        expected = {
+            "knife": ("快刀", "🔪", "提升挥刀速度（人类 / 生化幽灵通用）"),
+            "recoil": ("无后座力", "🎯", "消除所有枪械后座力"),
+            "ammo": ("无限子弹", "🔫", "子弹永不消耗"),
+            "ammoplus": ("快速换弹", "⚡", "换弹速度加快"),
+            "range": ("剑气化丝", "⚔️", "扩大近战攻击距离（人类 / 生化幽灵通用）"),
+            "aim": ("自瞄", "🎯", "自动瞄准敌方玩家"),
+            "speedgun": ("射速变快 / 连狙", "⚡", "射速10倍 | 半自动→全自动 | 狙击镜常开 | 后坐力清零"),
+            "movespeed": ("滑板鞋", "👟", "提升移动速度"),
+            "time": ("无限时间", "⏰", "设定时间为 9:59"),
+            "gravity": ("轻重力 / 高跳", "🌌", "调整重力与跳跃倍率"),
+            "godmode": ("金刚不坏", "🛡️", "角色受到攻击时不会受伤"),
+            "skillcd": ("技能无冷却", "✨", "生化模式，所有技能无冷却"),
+            "gather": ("聚怪", "👾", "将所有人机聚集到佣兵出生点"),
+            "isbot": ("天机傀儡", "🧠", "玩家由人机控制"),
+            "roundskip": ("回合跳过", "⏭️", "结束当前回合"),
+            "esp_box": ("方框透视", "📦", "通过 Universal DLL 显示方框透视"),
+            "timescale": ("时间加速", "⏩", "调整游戏时间倍率"),
+        }
+        for feature_id, values in expected.items():
+            with self.subTest(feature_id=feature_id):
+                manifest = json.loads(
+                    (PROJECT_DIR / "features" / feature_id / "manifest.json").read_text(encoding="utf-8")
+                )
+                self.assertEqual(
+                    (manifest["display_name"], manifest["icon"], manifest["desc"]),
+                    values,
+                )
+                self.assertNotIn("?", manifest["display_name"] + manifest["icon"] + manifest["desc"])
 
 
 if __name__ == "__main__":

@@ -1,16 +1,17 @@
 {
   "feature_id": "movespeed",
   "canonical_id": "move_speed",
-  "display_name": "???",
+  "display_name": "滑板鞋",
   "category": "player",
   "tab": "player_tab",
   "order": 10,
-  "icon": "??",
-  "desc": "??????",
+  "icon": "👟",
+  "desc": "提升移动速度",
   "script": "script.js",
   "layout": {
     "card_type": "simple",
-    "columnspan": 1
+    "columnspan": 1,
+    "title_color": "#5FAD56"
   },
   "controls": [
     {
@@ -43,5 +44,10 @@
   "source": {
     "feature_py": "features/feature_06_movement_speed.py",
     "script_js": "scripts/06-movement_speed.js"
+  },
+  "ui_handles": {
+    "switch": "move_switch",
+    "slider_var": "move_speed_var",
+    "slider_label": "move_speed_label"
   }
 }

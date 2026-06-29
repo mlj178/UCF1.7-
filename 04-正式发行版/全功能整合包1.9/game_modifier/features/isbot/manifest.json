@@ -1,16 +1,17 @@
 {
   "feature_id": "isbot",
   "canonical_id": "become_bot",
-  "display_name": "????",
+  "display_name": "天机傀儡",
   "category": "other",
   "tab": "other_tab",
   "order": 20,
-  "icon": "??",
-  "desc": "???????",
+  "icon": "🧠",
+  "desc": "玩家由人机控制",
   "script": "script.js",
   "layout": {
     "card_type": "simple",
-    "columnspan": 1
+    "columnspan": 1,
+    "title_color": "#00D4FF"
   },
   "controls": [
     {
@@ -32,5 +33,9 @@
   "source": {
     "feature_py": "features/feature_14_become_bot.py",
     "script_js": "scripts/14-become_bot.js"
+  },
+  "ui_handles": {
+    "switch": "isbot_switch",
+    "status_label": "isbot_status_label"
   }
 }

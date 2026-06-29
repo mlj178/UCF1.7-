@@ -1,20 +1,7 @@
-from features.ammo.feature import AmmoFeature
-from features.recoil.feature import RecoilFeature
-from features.time.feature import TimeFreezeFeature
-from features.knife.feature import KnifeFeature
-from features.ammoplus.feature import ReloadSpeedFeature
-from features.movespeed.feature import MoveSpeedFeature
-from features.range.feature import KnifeRangeFeature
-from features.gather.feature import GatherFeature
-from features.gravity.feature import GravityFeature
-from features.roundskip.feature import RoundSkipFeature
-from features.aim.feature import AimFeature
-from features.godmode.feature import GodModeFeature
-from features.speedgun.feature import SpeedGunFeature
-from features.isbot.feature import IsBotFeature
-from features.feature_15_buff_selector import Nano4tFeature
-from features.feature_16_weapon_giver import WeaponGiverFeature
-from features.skillcd.feature import SkillCdFeature
-from features.esp_box.feature import ESPBoxFeature
-from features.feature_19_battle_round import BattleRoundAlwaysFeature
-from features.timescale.feature import TimeScaleFeature
+"""Feature package.
+
+Ordinary features are loaded by PluginRegistry from features/*/manifest.json.
+Only legacy special-page modules may be imported directly during Frida agent
+construction.
+"""
+

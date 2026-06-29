@@ -1,8 +1,6 @@
 from core.plugin.plugin_base import PluginFeatureBase
-from core.feature_registry import register_feature
 
 
-@register_feature
 class SkillCdFeature(PluginFeatureBase):
     feature_id = 'skillcd'
     js_filename = '17-skill_no_cooldown.js'
