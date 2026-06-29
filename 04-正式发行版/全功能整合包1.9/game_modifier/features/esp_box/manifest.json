@@ -1,0 +1,36 @@
+{
+  "feature_id": "esp_box",
+  "canonical_id": "universal_esp_box",
+  "display_name": "????",
+  "category": "other",
+  "tab": "other_tab",
+  "order": 40,
+  "icon": "??",
+  "desc": "?? Universal DLL ??????",
+  "script": "script.js",
+  "layout": {
+    "card_type": "simple",
+    "columnspan": 1
+  },
+  "controls": [
+    {
+      "type": "switch",
+      "action": "enable"
+    }
+  ],
+  "config": {},
+  "rpc": [
+    "enable",
+    "disable",
+    "setConfig",
+    "status",
+    "cleanup"
+  ],
+  "lifecycle": {
+    "cleanup": true
+  },
+  "source": {
+    "feature_py": "features/feature_18_universal_esp_box.py",
+    "script_js": "plugins/universal_hook/Universal-ImGui-Hook.dll"
+  }
+}

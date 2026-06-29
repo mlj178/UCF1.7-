@@ -1,0 +1,47 @@
+{
+  "feature_id": "range",
+  "canonical_id": "knife_attack_range",
+  "display_name": "????",
+  "category": "weapon",
+  "tab": "weapon_tab",
+  "order": 50,
+  "icon": "??",
+  "desc": "??????????? / ???????",
+  "script": "script.js",
+  "layout": {
+    "card_type": "wide",
+    "columnspan": 2
+  },
+  "controls": [
+    {
+      "type": "switch",
+      "action": "enable"
+    },
+    {
+      "type": "slider",
+      "action": "setConfig",
+      "key": "range",
+      "min": 1.0,
+      "max": 50.0,
+      "step": 0.1,
+      "default": 50.0
+    }
+  ],
+  "config": {
+    "range": 50.0
+  },
+  "rpc": [
+    "enable",
+    "disable",
+    "setConfig",
+    "status",
+    "cleanup"
+  ],
+  "lifecycle": {
+    "cleanup": true
+  },
+  "source": {
+    "feature_py": "features/feature_07_knife_attack_range.py",
+    "script_js": "scripts/07-knife_attack_range.js"
+  }
+}

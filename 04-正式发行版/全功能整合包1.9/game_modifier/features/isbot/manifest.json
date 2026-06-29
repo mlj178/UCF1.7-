@@ -1,0 +1,36 @@
+{
+  "feature_id": "isbot",
+  "canonical_id": "become_bot",
+  "display_name": "????",
+  "category": "other",
+  "tab": "other_tab",
+  "order": 20,
+  "icon": "??",
+  "desc": "???????",
+  "script": "script.js",
+  "layout": {
+    "card_type": "simple",
+    "columnspan": 1
+  },
+  "controls": [
+    {
+      "type": "switch",
+      "action": "enable"
+    }
+  ],
+  "config": {},
+  "rpc": [
+    "enable",
+    "disable",
+    "setConfig",
+    "status",
+    "cleanup"
+  ],
+  "lifecycle": {
+    "cleanup": true
+  },
+  "source": {
+    "feature_py": "features/feature_14_become_bot.py",
+    "script_js": "scripts/14-become_bot.js"
+  }
+}

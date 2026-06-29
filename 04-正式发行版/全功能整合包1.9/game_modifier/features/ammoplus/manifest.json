@@ -1,0 +1,36 @@
+{
+  "feature_id": "ammoplus",
+  "canonical_id": "fast_reload",
+  "display_name": "????",
+  "category": "weapon",
+  "tab": "weapon_tab",
+  "order": 40,
+  "icon": "?",
+  "desc": "??????",
+  "script": "script.js",
+  "layout": {
+    "card_type": "simple",
+    "columnspan": 1
+  },
+  "controls": [
+    {
+      "type": "switch",
+      "action": "enable"
+    }
+  ],
+  "config": {},
+  "rpc": [
+    "enable",
+    "disable",
+    "setConfig",
+    "status",
+    "cleanup"
+  ],
+  "lifecycle": {
+    "cleanup": true
+  },
+  "source": {
+    "feature_py": "features/feature_05_fast_reload_buff.py",
+    "script_js": "scripts/05-fast_reload_buff.js"
+  }
+}

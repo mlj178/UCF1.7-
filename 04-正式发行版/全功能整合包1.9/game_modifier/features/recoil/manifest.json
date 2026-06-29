@@ -1,0 +1,36 @@
+{
+  "feature_id": "recoil",
+  "canonical_id": "no_recoil",
+  "display_name": "????",
+  "category": "weapon",
+  "tab": "weapon_tab",
+  "order": 20,
+  "icon": "??",
+  "desc": "?????????",
+  "script": "script.js",
+  "layout": {
+    "card_type": "simple",
+    "columnspan": 1
+  },
+  "controls": [
+    {
+      "type": "switch",
+      "action": "enable"
+    }
+  ],
+  "config": {},
+  "rpc": [
+    "enable",
+    "disable",
+    "setConfig",
+    "status",
+    "cleanup"
+  ],
+  "lifecycle": {
+    "cleanup": true
+  },
+  "source": {
+    "feature_py": "features/feature_02_no_recoil.py",
+    "script_js": "scripts/02-no_recoil.js"
+  }
+}

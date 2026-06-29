@@ -1,0 +1,36 @@
+{
+  "feature_id": "time",
+  "canonical_id": "infinite_time",
+  "display_name": "????",
+  "category": "player",
+  "tab": "player_tab",
+  "order": 20,
+  "icon": "?",
+  "desc": "????? 9:59",
+  "script": "script.js",
+  "layout": {
+    "card_type": "simple",
+    "columnspan": 1
+  },
+  "controls": [
+    {
+      "type": "switch",
+      "action": "enable"
+    }
+  ],
+  "config": {},
+  "rpc": [
+    "enable",
+    "disable",
+    "setConfig",
+    "status",
+    "cleanup"
+  ],
+  "lifecycle": {
+    "cleanup": true
+  },
+  "source": {
+    "feature_py": "features/feature_03_unlimited_time.py",
+    "script_js": "scripts/03-unlimited_time.js"
+  }
+}

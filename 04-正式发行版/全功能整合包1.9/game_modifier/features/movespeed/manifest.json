@@ -1,0 +1,47 @@
+{
+  "feature_id": "movespeed",
+  "canonical_id": "move_speed",
+  "display_name": "???",
+  "category": "player",
+  "tab": "player_tab",
+  "order": 10,
+  "icon": "??",
+  "desc": "??????",
+  "script": "script.js",
+  "layout": {
+    "card_type": "simple",
+    "columnspan": 1
+  },
+  "controls": [
+    {
+      "type": "switch",
+      "action": "enable"
+    },
+    {
+      "type": "slider",
+      "action": "setConfig",
+      "key": "speed",
+      "min": 1.0,
+      "max": 6.0,
+      "step": 0.1,
+      "default": 3.0
+    }
+  ],
+  "config": {
+    "speed": 3.0
+  },
+  "rpc": [
+    "enable",
+    "disable",
+    "setConfig",
+    "status",
+    "cleanup"
+  ],
+  "lifecycle": {
+    "cleanup": true
+  },
+  "source": {
+    "feature_py": "features/feature_06_movement_speed.py",
+    "script_js": "scripts/06-movement_speed.js"
+  }
+}
