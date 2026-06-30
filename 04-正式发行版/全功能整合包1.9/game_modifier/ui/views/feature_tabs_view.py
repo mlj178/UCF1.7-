@@ -23,9 +23,9 @@ class FeatureTabsView:
         }
         self._page = PluginFeaturePage(plugin_registry, callbacks)
 
-    def build(self, *, weapon_scroll, player_scroll, other_scroll):
+    def build(self, tab_scrolls=None, **legacy_scrolls):
+        tab_scrolls = tab_scrolls or legacy_scrolls
         handles = {}
-        handles.update(self._page.build_tab(weapon_scroll, "weapon_tab"))
-        handles.update(self._page.build_tab(player_scroll, "player_tab"))
-        handles.update(self._page.build_tab(other_scroll, "other_tab"))
+        for tab_id, scroll in tab_scrolls.items():
+            handles.update(self._page.build_tab(scroll, tab_id))
         return handles

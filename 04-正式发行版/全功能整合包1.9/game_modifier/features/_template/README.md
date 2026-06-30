@@ -19,6 +19,8 @@
 - 必须提供 `rpc.exports`。
 - RPC action 必须写入 `manifest.rpc`。
 - JS 事件统一发送 `{ type: "plugin_event", feature, event, payload }`。
+- 普通 tab 由 `tab`、`tab_title`、`tab_order` 自动生成。
+- 功能是否从 `config.enabled` 同步到 App 状态由 `state.sync_enabled_from_config` 控制。
 
 ## Python 标准
 
@@ -40,12 +42,15 @@
 `panel.py` 不允许使用 `context._app`、`context.legacy`、`get_state`、`set_state`、`get_handle`、`set_handle`、`controller`、`service`。
 如果需要特殊事件处理，可在功能目录新增 `events.py`，只处理本功能事件。
 如果需要完整页面，在 `manifest.json` 中声明 `ui.mode = "special_page"` 和 `ui.tab_title`，不要改 `ui/app.py`。
+如果需要新增普通 tab，只在本功能 manifest 中写新的 `tab`、`tab_title`、`tab_order`。
 
 ## 禁止改中心文件
 
 新增功能不要修改：
 
 - `ui/app.py`
+- `ui/views/plugin_tab_builder.py`
+- `ui/controllers/app_event_controller.py`
 - `core/frida_manager.py`
 - `core/services/feature_command_service.py`
 - `ui/controllers/feature_action_controller.py`

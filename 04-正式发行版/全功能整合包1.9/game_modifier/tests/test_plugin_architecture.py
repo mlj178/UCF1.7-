@@ -44,6 +44,9 @@ class PluginArchitectureTests(unittest.TestCase):
             "config": {"enabled": False},
             "rpc": ["enable", "disable", "setConfig", "status", "cleanup"],
             "lifecycle": {"cleanup": True},
+            "tab_title": "Weapon",
+            "tab_order": 10,
+            "state": {"sync_enabled_from_config": True},
         }
         (plugin_dir / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
         (plugin_dir / "script.js").write_text(
@@ -425,6 +428,7 @@ class MigratedOrdinaryFeatureTests(unittest.TestCase):
     def test_app_and_app_event_controller_have_no_special_feature_state(self):
         app_text = (PROJECT_DIR / "ui" / "app.py").read_text(encoding="utf-8")
         app_events = (PROJECT_DIR / "ui" / "controllers" / "app_event_controller.py").read_text(encoding="utf-8")
+        all_feature_ids = self.ORDINARY_FEATURES | {"nano4t", "weapon_giver", "battle_round"}
         for needle in (
             "_nano4t_",
             "_battle_round",
@@ -438,10 +442,47 @@ class MigratedOrdinaryFeatureTests(unittest.TestCase):
             "_build_special_plugin_panel",
         ):
             self.assertNotIn(needle, app_text)
+        self.assertNotIn("if fid ==", app_text)
+        self.assertNotIn("if feature_id ==", app_text)
+        for needle in all_feature_ids | {"third_person_camera"}:
+            self.assertNotIn(f'"{needle}"', app_text)
+            self.assertNotIn(f"'{needle}'", app_text)
         for needle in ("nano4t", "weapon_giver", "battle_round", "roundskip"):
             self.assertNotIn(needle, app_events)
         for event_name in ("game_connected", "game_disconnected", "game_not_found"):
             self.assertIn(event_name, app_events)
+
+    def test_plugin_tab_builder_uses_manifest_tab_metadata(self):
+        builder_text = (PROJECT_DIR / "ui" / "views" / "plugin_tab_builder.py").read_text(encoding="utf-8")
+        for needle in ("weapon_tab", "player_tab", "other_tab", "武器", "人物属性", "其他", "ORDINARY_TABS"):
+            self.assertNotIn(needle, builder_text)
+        self.assertIn("tab_title", builder_text)
+        self.assertIn("tab_order", builder_text)
+
+    def test_all_manifests_have_tab_metadata_and_state_sync_rule(self):
+        for manifest_path in (PROJECT_DIR / "features").glob("*/manifest.json"):
+            if manifest_path.parent.name.startswith("_"):
+                continue
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            self.assertIn("tab", manifest, msg=str(manifest_path))
+            self.assertIn("tab_title", manifest, msg=str(manifest_path))
+            self.assertIn("tab_order", manifest, msg=str(manifest_path))
+            self.assertIn("state", manifest, msg=str(manifest_path))
+            self.assertIn("sync_enabled_from_config", manifest["state"], msg=str(manifest_path))
+            if manifest.get("ui", {}).get("mode") == "special_page":
+                self.assertIn("tab_title", manifest["ui"], msg=str(manifest_path))
+                self.assertIn("tab_order", manifest["ui"], msg=str(manifest_path))
+                self.assertIn("lazy_build", manifest["ui"], msg=str(manifest_path))
+
+    def test_plugin_routers_isolate_handler_and_import_failures(self):
+        event_router = (PROJECT_DIR / "ui" / "controllers" / "plugin_event_router.py").read_text(encoding="utf-8")
+        lifecycle_router = (PROJECT_DIR / "ui" / "controllers" / "plugin_lifecycle_router.py").read_text(encoding="utf-8")
+        for text in (event_router, lifecycle_router):
+            self.assertIn("try:", text)
+            self.assertIn("except Exception as exc", text)
+            self.assertIn("dev_detail=str(exc)", text)
+            self.assertIn("log_message", text)
+            self.assertRegex(text, r"self\._handlers\[feature_id\]\s*=\s*None")
 
     def test_feature_specific_controllers_moved_to_feature_dirs(self):
         for path in (

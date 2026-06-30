@@ -34,7 +34,17 @@ class PluginLifecycleRouter:
             handler = self._load_handler(feature_id)
             if not handler:
                 continue
-            handler(self._context.for_feature(feature_id), event_name, payload or {})
+            try:
+                handler(self._context.for_feature(feature_id), event_name, payload or {})
+            except Exception as exc:
+                self._context.emit(
+                    "log_message",
+                    level="error",
+                    module="PluginLifecycleRouter",
+                    message=f"插件生命周期处理失败: {feature_id}.{event_name}",
+                    audience="dev",
+                    dev_detail=str(exc),
+                )
 
     def _load_handler(self, feature_id):
         if feature_id in self._handlers:
@@ -48,9 +58,20 @@ class PluginLifecycleRouter:
         if not events_path.exists():
             self._handlers[feature_id] = None
             return None
-        spec = importlib.util.spec_from_file_location(f"_plugin_lifecycle_{feature_id}", events_path)
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
-        handler = getattr(module, "handle_lifecycle", None)
-        self._handlers[feature_id] = handler if callable(handler) else None
+        try:
+            spec = importlib.util.spec_from_file_location(f"_plugin_lifecycle_{feature_id}", events_path)
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            handler = getattr(module, "handle_lifecycle", None)
+            self._handlers[feature_id] = handler if callable(handler) else None
+        except Exception as exc:
+            self._handlers[feature_id] = None
+            self._context.emit(
+                "log_message",
+                level="error",
+                module="PluginLifecycleRouter",
+                message=f"插件生命周期模块加载失败: {feature_id}",
+                audience="dev",
+                dev_detail=str(exc),
+            )
         return self._handlers[feature_id]

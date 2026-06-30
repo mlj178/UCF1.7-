@@ -19,8 +19,19 @@ class PluginEventRouter:
                 audience="dev",
             )
             return False
-        handler(self._context.for_feature(feature_id), event, payload or {})
-        return True
+        try:
+            handler(self._context.for_feature(feature_id), event, payload or {})
+            return True
+        except Exception as exc:
+            self._context.emit(
+                "log_message",
+                level="error",
+                module="PluginEventRouter",
+                message=f"插件事件处理失败: {feature_id}.{event}",
+                audience="dev",
+                dev_detail=str(exc),
+            )
+            return False
 
     def _load_handler(self, feature_id):
         if feature_id in self._handlers:
@@ -34,9 +45,20 @@ class PluginEventRouter:
         if not events_path.exists():
             self._handlers[feature_id] = None
             return None
-        spec = importlib.util.spec_from_file_location(f"_plugin_events_{feature_id}", events_path)
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
-        handler = getattr(module, "handle_event", None)
-        self._handlers[feature_id] = handler if callable(handler) else None
+        try:
+            spec = importlib.util.spec_from_file_location(f"_plugin_events_{feature_id}", events_path)
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            handler = getattr(module, "handle_event", None)
+            self._handlers[feature_id] = handler if callable(handler) else None
+        except Exception as exc:
+            self._handlers[feature_id] = None
+            self._context.emit(
+                "log_message",
+                level="error",
+                module="PluginEventRouter",
+                message=f"插件事件模块加载失败: {feature_id}",
+                audience="dev",
+                dev_detail=str(exc),
+            )
         return self._handlers[feature_id]

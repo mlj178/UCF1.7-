@@ -200,14 +200,25 @@ def check_plugin_files_and_manifests():
         for required in (
             "feature_id",
             "display_name",
+            "tab",
+            "tab_title",
+            "tab_order",
             "script",
             "controls",
             "config",
             "rpc",
             "lifecycle",
+            "state",
         ):
             if required not in manifest:
                 ok = fail(f"manifest missing {required}: {manifest_path}") and ok
+        if "sync_enabled_from_config" not in manifest.get("state", {}):
+            ok = fail(f"manifest missing state.sync_enabled_from_config: {manifest_path}. Add state.sync_enabled_from_config true/false.") and ok
+        if manifest.get("ui", {}).get("mode") == "special_page":
+            ui = manifest.get("ui", {})
+            for required in ("tab_title", "tab_order", "lazy_build"):
+                if required not in ui:
+                    ok = fail(f"special_page manifest missing ui.{required}: {manifest_path}") and ok
         if manifest.get("runtime", {}).get("type") != "plugin_script":
             ok = fail(f"manifest runtime.type must be plugin_script: {manifest_path}") and ok
 
@@ -293,10 +304,12 @@ def check_app_state_has_only_global_fields():
     return ok
 
 
-def check_app_has_no_special_feature_state():
+def check_app_has_no_feature_id_or_special_state():
     ok = True
     app_text = read(ROOT / "ui" / "app.py")
     forbidden = (
+        "if fid ==",
+        "if feature_id ==",
         "_nano4t_",
         "_battle_round",
         "_battle_mode",
@@ -313,6 +326,40 @@ def check_app_has_no_special_feature_state():
     for needle in forbidden:
         if needle in app_text:
             ok = fail(f"App still contains special feature state or hardcoded tab detail: {needle}") and ok
+    for feature_id in KNOWN_FEATURE_IDS | FORBIDDEN_FUTURE_FEATURE_IDS:
+        for needle in (f'"{feature_id}"', f"'{feature_id}'"):
+            if needle in app_text:
+                ok = fail(f"App contains concrete feature id {feature_id}. Move behavior to manifest/state or feature directory.") and ok
+    return ok
+
+
+def check_plugin_tab_builder_manifest_driven():
+    ok = True
+    path = ROOT / "ui" / "views" / "plugin_tab_builder.py"
+    text = read(path)
+    forbidden = ("ORDINARY_TABS", "weapon_tab", "player_tab", "other_tab", "武器", "人物属性", "其他")
+    for needle in forbidden:
+        if needle in text:
+            ok = fail(f"PluginTabBuilder hardcodes ordinary tab metadata: {needle}. Use manifest tab_title/tab_order.") and ok
+    for needle in ("tab_title", "tab_order"):
+        if needle not in text:
+            ok = fail(f"PluginTabBuilder does not read manifest {needle}") and ok
+    return ok
+
+
+def check_plugin_routers_have_exception_isolation():
+    ok = True
+    for rel_path, class_name in (
+        ("ui/controllers/plugin_event_router.py", "PluginEventRouter"),
+        ("ui/controllers/plugin_lifecycle_router.py", "PluginLifecycleRouter"),
+    ):
+        path = ROOT / rel_path
+        text = read(path)
+        for needle in ("try:", "except Exception as exc", "dev_detail=str(exc)", "log_message"):
+            if needle not in text:
+                ok = fail(f"{class_name} missing exception isolation marker {needle}: {path}") and ok
+        if "self._handlers[feature_id] = None" not in text:
+            ok = fail(f"{class_name} must cache failed imports as None: {path}") and ok
     return ok
 
 
@@ -549,7 +596,9 @@ def main():
         check_panel_context_boundary(),
         check_legacy_message_adapter_removed(),
         check_app_state_has_only_global_fields(),
-        check_app_has_no_special_feature_state(),
+        check_app_has_no_feature_id_or_special_state(),
+        check_plugin_tab_builder_manifest_driven(),
+        check_plugin_routers_have_exception_isolation(),
         check_app_event_controller_lifecycle_is_generic(),
         check_feature_specific_controllers_moved(),
         check_scripts_send_plugin_events(),
