@@ -4,6 +4,8 @@
   "display_name": "模板功能",
   "category": "other",
   "tab": "other_tab",
+  "tab_title": "其他",
+  "tab_order": 30,
   "order": 999,
   "icon": "*",
   "desc": "复制此目录创建新功能插件。",
@@ -31,6 +33,9 @@
   ],
   "lifecycle": {
     "cleanup": true
+  },
+  "state": {
+    "sync_enabled_from_config": true
   },
   "ui_handles": {
     "switch": "template_feature_switch"

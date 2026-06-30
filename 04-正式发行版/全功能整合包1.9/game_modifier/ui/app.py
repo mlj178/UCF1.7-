@@ -293,11 +293,14 @@ class App(ctk.CTk):
     def _apply_plugin_config_values(self):
         for feature in self._plugin_registry.all():
             fid = feature.manifest["feature_id"]
-            if fid == "esp_box":
+            if not self._should_sync_enabled_from_config(feature.manifest):
                 continue
             config = self._config_manager.get(fid)
             if "enabled" in config:
                 self._features[fid] = bool(config.get("enabled"))
+
+    def _should_sync_enabled_from_config(self, manifest):
+        return bool(manifest.get("state", {}).get("sync_enabled_from_config", True))
 
     def _migrate_plugin_config_from_persistent_state(self):
         # One-time legacy feature_state.json migration only. New features must
@@ -324,7 +327,11 @@ class App(ctk.CTk):
             fid = manifest["feature_id"]
             config = self._config_manager.get(fid)
             controls = manifest.get("controls", [])
-            if any(control.get("type") == "switch" for control in controls) and "enabled" in config:
+            if (
+                self._should_sync_enabled_from_config(manifest)
+                and any(control.get("type") == "switch" for control in controls)
+                and "enabled" in config
+            ):
                 self._features[fid] = bool(config.get("enabled"))
                 self._update_switch(fid)
             sliders = [control for control in controls if control.get("type") == "slider"]
@@ -338,7 +345,7 @@ class App(ctk.CTk):
                 )
                 self._set_control_label(
                     self._control_handle_name(manifest, key, "slider_label", single_slider),
-                    self._format_slider_value(key, value),
+                    self._format_slider_value(control, value),
                 )
             for control in controls:
                 if control.get("type") != "combo":
@@ -347,7 +354,7 @@ class App(ctk.CTk):
                 value = config.get(key, control.get("default"))
                 self._set_control_value(
                     self._control_handle_name(manifest, key, "combo_var", False),
-                    self._format_combo_value(key, value),
+                    self._format_combo_value(control, value),
                 )
 
     def _control_handle_name(self, manifest, key, handle_type, single_slider):
@@ -375,15 +382,13 @@ class App(ctk.CTk):
         if handle:
             handle.configure(text=text)
 
-    def _format_slider_value(self, key, value):
+    def _format_slider_value(self, control, value):
         numeric = float(value)
-        suffix = "" if key in {"gravity", "jump"} else "x"
+        suffix = control.get("suffix", "x")
         return f"{numeric:.1f}{suffix}"
 
-    def _format_combo_value(self, key, value):
-        if key == "mode":
-            return "\u4ec5\u81ea\u5df1" if value == "player_only" else "\u5168\u90e8\u73a9\u5bb6"
-        return value
+    def _format_combo_value(self, control, value):
+        return control.get("display_values", {}).get(value, value)
 
     def _save_feature_state(self):
         try:

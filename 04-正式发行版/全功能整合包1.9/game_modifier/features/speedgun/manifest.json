@@ -1,49 +1,56 @@
 {
-  "feature_id": "speedgun",
-  "canonical_id": "fire_rate_auto_sniper",
-  "display_name": "射速变快 / 连狙",
-  "category": "weapon",
-  "tab": "weapon_tab",
-  "order": 70,
-  "icon": "⚡",
-  "desc": "射速10倍 | 半自动→全自动 | 狙击镜常开 | 后坐力清零",
-  "script": "script.js",
-  "layout": {
-    "card_type": "simple",
-    "columnspan": 1,
-    "title_color": "#FFD93D"
-  },
-  "controls": [
-    {
-      "type": "switch",
-      "action": "enable"
-    }
-  ],
-  "config": {},
-  "rpc": [
-    "enable",
-    "disable",
-    "setConfig",
-    "status",
-    "cleanup"
-  ],
-  "lifecycle": {
-    "cleanup": true
-  },
-  "source": {
-    "runtime_script_js": "features/speedgun/script.js"
-  },
-  "ui_handles": {
-    "switch": "speedgun_switch"
-  },
-  "ui_text": {
-    "lines": [
-      "• 射速 10 倍加速",
-      "• 连狙：半自动 → 全自动，狙击镜常开",
-      "• 后坐力清零 + 扩散归零"
-    ]
-  },
-  "runtime": {
-    "type": "plugin_script"
-  }
+    "feature_id":  "speedgun",
+    "canonical_id":  "fire_rate_auto_sniper",
+    "display_name":  "射速变快 / 连狙",
+    "category":  "weapon",
+    "tab":  "weapon_tab",
+    "order":  70,
+    "icon":  "⚡",
+    "desc":  "射速10倍 | 半自动→全自动 | 狙击镜常开 | 后坐力清零",
+    "script":  "script.js",
+    "layout":  {
+                   "card_type":  "simple",
+                   "columnspan":  1,
+                   "title_color":  "#FFD93D"
+               },
+    "controls":  [
+                     {
+                         "type":  "switch",
+                         "action":  "enable"
+                     }
+                 ],
+    "config":  {
+
+               },
+    "rpc":  [
+                "enable",
+                "disable",
+                "setConfig",
+                "status",
+                "cleanup"
+            ],
+    "lifecycle":  {
+                      "cleanup":  true
+                  },
+    "source":  {
+                   "runtime_script_js":  "features/speedgun/script.js"
+               },
+    "ui_handles":  {
+                       "switch":  "speedgun_switch"
+                   },
+    "ui_text":  {
+                    "lines":  [
+                                  "• 射速 10 倍加速",
+                                  "• 连狙：半自动 → 全自动，狙击镜常开",
+                                  "• 后坐力清零 + 扩散归零"
+                              ]
+                },
+    "runtime":  {
+                    "type":  "plugin_script"
+                },
+    "tab_title":  "武器",
+    "tab_order":  10,
+    "state":  {
+                  "sync_enabled_from_config":  true
+              }
 }

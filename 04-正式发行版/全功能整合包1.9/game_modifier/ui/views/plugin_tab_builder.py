@@ -7,13 +7,6 @@ from ui.views.feature_tabs_view import FeatureTabsView
 from ui.views.common import bind_view_handles
 
 
-ORDINARY_TABS = (
-    ("weapon_tab", "武器"),
-    ("player_tab", "人物属性"),
-    ("other_tab", "其他"),
-)
-
-
 class PluginTabBuilder:
     """Build ordinary and special plugin tabs from manifests."""
 
@@ -43,8 +36,8 @@ class PluginTabBuilder:
         tab_view.pack(fill="both", padx=12, pady=4, expand=True)
 
         ordinary_scrolls = {}
-        for tab_id, title in ORDINARY_TABS:
-            ordinary_scrolls[tab_id] = self._add_scroll_tab(tab_view, title)
+        for tab in self._ordinary_tabs():
+            ordinary_scrolls[tab["id"]] = self._add_scroll_tab(tab_view, tab["title"])
 
         feature_tabs_view = FeatureTabsView(
             plugin_registry=self._registry,
@@ -57,11 +50,7 @@ class PluginTabBuilder:
         )
         bind_view_handles(
             self._host,
-            feature_tabs_view.build(
-                weapon_scroll=ordinary_scrolls["weapon_tab"],
-                player_scroll=ordinary_scrolls["player_tab"],
-                other_scroll=ordinary_scrolls["other_tab"],
-            ),
+            feature_tabs_view.build(tab_scrolls=ordinary_scrolls),
         )
 
         for feature in self._special_page_features():
@@ -96,6 +85,27 @@ class PluginTabBuilder:
             if feature.manifest.get("ui", {}).get("mode") == "special_page"
         ]
         return sorted(features, key=lambda feature: feature.manifest.get("ui", {}).get("tab_order", feature.manifest.get("order", 0)))
+
+    def _ordinary_tabs(self):
+        tabs = {}
+        for feature in self._registry.all():
+            manifest = feature.manifest
+            ui = manifest.get("ui", {})
+            if ui.get("mode") in {"special_page", "embedded_panel"}:
+                continue
+            tab_id = manifest.get("tab")
+            if not tab_id:
+                continue
+            item = tabs.setdefault(
+                tab_id,
+                {
+                    "id": tab_id,
+                    "title": manifest.get("tab_title") or ui.get("tab_title") or tab_id,
+                    "order": manifest.get("tab_order", ui.get("tab_order", manifest.get("order", 0))),
+                },
+            )
+            item["order"] = min(item["order"], manifest.get("tab_order", item["order"]))
+        return sorted(tabs.values(), key=lambda item: (item["order"], item["title"], item["id"]))
 
     def _build_special_tab(self, title):
         if title in self._built_special_tabs or title not in self._special_tabs:

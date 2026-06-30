@@ -29,6 +29,8 @@ features/<feature_id>/
 - `panel.py` 较简单。
 - `script.js` 只处理本功能 Hook。
 - UI 控件由 manifest 的 `controls` 和 `layout` 描述。
+- 普通 tab 由 manifest 的 `tab`、`tab_title`、`tab_order` 自动生成。
+- `state.sync_enabled_from_config` 控制 App 是否从 `config.enabled` 同步功能状态。
 - 开关、滑块、按钮通过通用 `ActionRouter` 分发，不在中心 Controller 写功能 ID。
 
 特殊功能可以拥有完整页面：
