@@ -90,13 +90,6 @@ class App(ctk.CTk):
         self._early_log_messages = []
 
         self._features = dict(self._persistent_state.features)
-        self._knife_speed = self._persistent_state.knife_speed
-        self._movespeed = self._persistent_state.move_speed
-        self._range_mult = self._persistent_state.range_mult
-        self._gravity = self._persistent_state.gravity
-        self._jump = self._persistent_state.jump
-        self._gravity_mode = self._persistent_state.gravity_mode
-        self._timescale = self._persistent_state.timescale
         self._migrate_plugin_config_from_persistent_state()
         self._apply_plugin_config_values()
 
@@ -415,29 +408,11 @@ class App(ctk.CTk):
     def _apply_persistent_state(self, state):
         self._persistent_state = state
         self._features = dict(state.features)
-        self._knife_speed = state.knife_speed
-        self._movespeed = state.move_speed
-        self._range_mult = state.range_mult
-        self._gravity = state.gravity
-        self._jump = state.jump
-        self._gravity_mode = state.gravity_mode
-        self._timescale = state.timescale
         self._battle_round_enabled = state.battle_round_enabled
         self._weapon_giver_respawn_enabled = state.weapon_giver_respawn_enabled
         self._nano4t_temp_ghost = state.nano4t_ghost
         self._nano4t_temp_human = state.nano4t_human
 
-        self.knife_speed_var.set(self._knife_speed)
-        self.move_speed_var.set(self._movespeed)
-        self.range_var.set(self._range_mult)
-        self.timescale_var.set(self._timescale)
-        self.timescale_label.configure(text=f"{self._timescale:.1f}x")
-        self.gravity_var.set(self._gravity)
-        self.gravity_label.configure(text=f"{self._gravity:.1f}")
-        self.jump_var.set(self._jump)
-        self.jump_label.configure(text=f"{self._jump:.1f}")
-        mode_text = "仅自己" if self._gravity_mode == "player_only" else "全部玩家"
-        self.gravity_mode_var.set(mode_text)
         if hasattr(self, "respawn_weapon_var"):
             self.respawn_weapon_var.set(self._weapon_giver_respawn_enabled)
         if self._battle_round_enabled:
@@ -454,19 +429,21 @@ class App(ctk.CTk):
             config = self._config_manager.get(fid)
             if "enabled" in config:
                 self._features[fid] = bool(config.get("enabled"))
-        self._refresh_legacy_config_cache()
 
     def _migrate_plugin_config_from_persistent_state(self):
+        # Legacy app-state migration only. New ordinary features must provide
+        # defaults in manifest/config files and should not be added here.
+        state = self._persistent_state
         migration = {
-            "knife": {"enabled": self._features.get("knife", False), "speed": self._knife_speed},
-            "movespeed": {"enabled": self._features.get("movespeed", False), "speed": self._movespeed},
-            "range": {"enabled": self._features.get("range", False), "range": self._range_mult},
-            "timescale": {"enabled": self._features.get("timescale", False), "speed": self._timescale},
+            "knife": {"enabled": self._features.get("knife", False), "speed": state.knife_speed},
+            "movespeed": {"enabled": self._features.get("movespeed", False), "speed": state.move_speed},
+            "range": {"enabled": self._features.get("range", False), "range": state.range_mult},
+            "timescale": {"enabled": self._features.get("timescale", False), "speed": state.timescale},
             "gravity": {
                 "enabled": self._features.get("gravity", False),
-                "gravity": self._gravity,
-                "jump": self._jump,
-                "mode": self._gravity_mode,
+                "gravity": state.gravity,
+                "jump": state.jump,
+                "mode": state.gravity_mode,
             },
         }
         for feature in self._plugin_registry.all():
@@ -481,7 +458,6 @@ class App(ctk.CTk):
     def _on_plugin_config_changed(self, feature_id, key, value):
         if key == "enabled":
             self._features[feature_id] = bool(value)
-        self._refresh_legacy_config_cache(feature_id)
         self._sync_plugin_controls_from_config(feature_id)
 
     def _sync_plugin_controls_from_config(self, feature_id=None):
@@ -493,6 +469,9 @@ class App(ctk.CTk):
             fid = manifest["feature_id"]
             config = self._config_manager.get(fid)
             controls = manifest.get("controls", [])
+            if any(control.get("type") == "switch" for control in controls) and "enabled" in config:
+                self._features[fid] = bool(config.get("enabled"))
+                self._update_switch(fid)
             sliders = [control for control in controls if control.get("type") == "slider"]
             single_slider = len(sliders) == 1
             for control in sliders:
@@ -551,22 +530,6 @@ class App(ctk.CTk):
             return "\u4ec5\u81ea\u5df1" if value == "player_only" else "\u5168\u90e8\u73a9\u5bb6"
         return value
 
-    def _refresh_legacy_config_cache(self, feature_id=None):
-        legacy_fields = {
-            ("knife", "speed"): "_knife_speed",
-            ("movespeed", "speed"): "_movespeed",
-            ("range", "range"): "_range_mult",
-            ("timescale", "speed"): "_timescale",
-            ("gravity", "gravity"): "_gravity",
-            ("gravity", "jump"): "_jump",
-            ("gravity", "mode"): "_gravity_mode",
-        }
-        for (fid, key), attr in legacy_fields.items():
-            if feature_id and fid != feature_id:
-                continue
-            config = self._config_manager.get(fid)
-            if key in config:
-                setattr(self, attr, config[key])
     def _save_feature_state(self):
         try:
             self._persistence_service.save_app_state(self._collect_persistent_state())
@@ -579,13 +542,6 @@ class App(ctk.CTk):
 
         state = AppState.with_default_features(self._features.keys())
         state.features = dict(self._features)
-        state.knife_speed = self._knife_speed
-        state.move_speed = self._movespeed
-        state.range_mult = self._range_mult
-        state.gravity = self._gravity
-        state.jump = self._jump
-        state.gravity_mode = self._gravity_mode
-        state.timescale = self._timescale
         state.battle_round_enabled = self._battle_round_enabled
         state.weapon_giver_respawn_enabled = self._weapon_giver_respawn_enabled
         state.nano4t_ghost = self._nano4t_temp_ghost

@@ -22,6 +22,7 @@
       "type": "slider",
       "action": "setConfig",
       "key": "gravity",
+      "label": "??:",
       "min": 0.0,
       "max": 1.0,
       "step": 0.1,
@@ -31,6 +32,7 @@
       "type": "slider",
       "action": "setConfig",
       "key": "jump",
+      "label": "??:",
       "min": 1.0,
       "max": 5.0,
       "step": 0.5,
@@ -40,10 +42,15 @@
       "type": "combo",
       "action": "setConfig",
       "key": "mode",
+      "label": "????:",
       "values": [
         "player_only",
         "all"
       ],
+      "display_values": {
+        "player_only": "???",
+        "all": "????"
+      },
       "default": "player_only"
     }
   ],
@@ -67,6 +74,14 @@
     "script_js": "scripts/09-high_jump_low_gravity.js"
   },
   "ui_handles": {
-    "switch": "gravity_switch"
+    "switch": "gravity_switch",
+    "gravity_var": "gravity_var",
+    "gravity_slider": "gravity_slider",
+    "gravity_label": "gravity_label",
+    "jump_var": "jump_var",
+    "jump_slider": "jump_slider",
+    "jump_label": "jump_label",
+    "mode_var": "gravity_mode_var",
+    "mode_combo": "gravity_mode_combo"
   }
 }
