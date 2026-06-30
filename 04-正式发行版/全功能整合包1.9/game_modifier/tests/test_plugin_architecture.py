@@ -1,5 +1,6 @@
 ﻿import importlib
 import json
+import re
 import sys
 import tempfile
 import unittest
@@ -337,6 +338,63 @@ class MigratedOrdinaryFeatureTests(unittest.TestCase):
             self.assertNotIn('callbacks["gravity_mode"]', panel_text, msg=str(panel_path))
             self.assertNotIn('callbacks["gather"]', panel_text, msg=str(panel_path))
             self.assertNotIn('callbacks["skip_round"]', panel_text, msg=str(panel_path))
+
+    def test_core_config_uses_manifest_generated_feature_info(self):
+        config_text = (PROJECT_DIR / "core" / "config.py").read_text(encoding="utf-8")
+        self.assertNotRegex(config_text, r"FEATURES_INFO\s*=\s*\{")
+        self.assertIn("manifest.json", config_text)
+        self.assertIn("_build_features_info", config_text)
+
+    def test_center_runtime_files_do_not_branch_on_feature_ids(self):
+        targets = [
+            PROJECT_DIR / "core" / "frida_manager.py",
+            PROJECT_DIR / "ui" / "controllers" / "feature_action_controller.py",
+            PROJECT_DIR / "ui" / "controllers" / "action_router.py",
+        ]
+        all_features = set(self.ORDINARY_FEATURES) | {"nano4t", "weapon_giver", "battle_round"}
+        for path in targets:
+            text = path.read_text(encoding="utf-8")
+            for feature_id in all_features:
+                self.assertNotIn(f'"{feature_id}"', text, msg=str(path))
+                self.assertNotIn(f"'{feature_id}'", text, msg=str(path))
+
+    def test_plugin_events_are_routed_generically(self):
+        frida_manager = (PROJECT_DIR / "core" / "frida_manager.py").read_text(encoding="utf-8")
+        app_events = (PROJECT_DIR / "ui" / "controllers" / "app_event_controller.py").read_text(encoding="utf-8")
+
+        self.assertIn('"plugin_event"', frida_manager)
+        self.assertIn("LegacyMessageAdapter", frida_manager)
+        self.assertIn('"plugin_event"', app_events)
+        for old_event in ("gather_result", "round_skipped", "nano4t_event", "battle_round_event", "isbot_event"):
+            self.assertNotIn(f'"{old_event}"', frida_manager)
+            self.assertNotIn(f'"{old_event}"', app_events)
+
+    def test_panels_use_panel_context_not_full_app(self):
+        for panel_path in (PROJECT_DIR / "features").glob("*/panel.py"):
+            panel_text = panel_path.read_text(encoding="utf-8")
+            self.assertNotIn("build_panel(app", panel_text, msg=str(panel_path))
+            self.assertNotIn("app._", panel_text, msg=str(panel_path))
+            self.assertNotIn("FridaManager", panel_text, msg=str(panel_path))
+
+    def test_app_state_concrete_fields_are_legacy_only(self):
+        state_text = (PROJECT_DIR / "core" / "state" / "app_state.py").read_text(encoding="utf-8")
+        self.assertIn("Legacy migration fields only", state_text)
+        allowed_fields = {
+            "features",
+            "knife_speed",
+            "move_speed",
+            "range_mult",
+            "gravity",
+            "jump",
+            "gravity_mode",
+            "timescale",
+            "battle_round_enabled",
+            "weapon_giver_respawn_enabled",
+            "nano4t_ghost",
+            "nano4t_human",
+        }
+        fields = set(re.findall(r"^\s{4}([a-zA-Z_][a-zA-Z0-9_]*)\s*:", state_text, re.MULTILINE))
+        self.assertEqual(fields, allowed_fields)
 
 
 if __name__ == "__main__":

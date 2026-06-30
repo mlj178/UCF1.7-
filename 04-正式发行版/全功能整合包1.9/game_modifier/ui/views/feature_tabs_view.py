@@ -9,11 +9,17 @@ class FeatureTabsView:
         on_toggle_feature,
         on_set_config,
         on_action,
+        logger=None,
+        is_connected=None,
+        is_enabled=None,
     ):
         callbacks = {
             "toggle": on_toggle_feature,
             "set_config": on_set_config,
             "action": on_action,
+            "log": logger or (lambda _message: None),
+            "is_connected": is_connected or (lambda: False),
+            "is_enabled": is_enabled or (lambda _feature_id: False),
         }
         self._page = PluginFeaturePage(plugin_registry, callbacks)
 

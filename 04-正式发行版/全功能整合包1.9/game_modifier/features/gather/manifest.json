@@ -31,7 +31,8 @@
     "disable",
     "setConfig",
     "status",
-    "cleanup"
+    "cleanup",
+    "gather"
   ],
   "lifecycle": {
     "cleanup": true
@@ -46,5 +47,11 @@
   },
   "runtime": {
     "type": "plugin_script"
+  },
+  "actions": {
+    "gather": {
+      "type": "rpc",
+      "requires_connection": true
+    }
   }
 }

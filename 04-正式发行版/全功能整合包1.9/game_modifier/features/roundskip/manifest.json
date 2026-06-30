@@ -26,10 +26,12 @@
     "disable",
     "setConfig",
     "status",
-    "cleanup"
+    "cleanup",
+    "skip_round"
   ],
   "lifecycle": {
-    "cleanup": true
+    "cleanup": true,
+    "restore": false
   },
   "source": {
     "runtime_script_js": "features/roundskip/script.js",
@@ -40,5 +42,11 @@
   },
   "runtime": {
     "type": "plugin_script"
+  },
+  "actions": {
+    "skip_round": {
+      "type": "rpc",
+      "requires_connection": true
+    }
   }
 }

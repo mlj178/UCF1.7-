@@ -322,6 +322,9 @@ rpc.exports = {
   disable: __pluginDisable,
   setConfig: __pluginApplyConfig,
   status: __pluginStatus,
-  cleanup: __pluginCleanup
+  cleanup: __pluginCleanup,
+  skip_round: function(payload) {
+    return __pluginEnable(payload || {});
+  }
 };
 

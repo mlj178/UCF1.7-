@@ -30,6 +30,7 @@ from ui.controllers import (
     RoundSkipMonitor,
     WeaponInteractionController,
 )
+from ui.panel_context import PanelContext
 from ui.views import AppShellView, FeatureTabsView
 from ui.views.common import bind_view_handles
 from ui.window_contract import (
@@ -131,6 +132,7 @@ class App(ctk.CTk):
         self._weapon_top_frames = {}
         self._weapon_controller = WeaponInteractionController(self)
         self._roundskip_monitor = RoundSkipMonitor(self)
+        self._panel_context = PanelContext(self)
         self._event_controller = AppEventController(self)
 
         self.protocol("WM_DELETE_WINDOW", self._on_close)
@@ -215,6 +217,9 @@ class App(ctk.CTk):
             on_toggle_feature=self._feature_controller.toggle_feature,
             on_set_config=self._feature_controller.set_feature_config,
             on_action=self._feature_controller.trigger_feature_action,
+            logger=self._log,
+            is_connected=lambda: self._ready,
+            is_enabled=lambda feature_id: self._features.get(feature_id, False),
         )
         bind_view_handles(
             self,
@@ -265,7 +270,7 @@ class App(ctk.CTk):
         build_panel = getattr(module, "build_panel", None)
         if not callable(build_panel):
             return None
-        return build_panel(self, parent)
+        return build_panel(self._panel_context, parent)
 
     def _build_connect_button(self):
         self.btn_frame, self.connect_btn = self._shell_view.build_connect_button()

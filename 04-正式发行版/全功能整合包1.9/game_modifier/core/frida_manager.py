@@ -5,6 +5,7 @@ import frida
 import psutil
 
 from core.event_bus import EventBus
+from core.frida_runtime.legacy_message_adapter import LegacyMessageAdapter
 from core.frida_runtime.rpc_client import RpcClient
 from core.frida_runtime.script_manager import ScriptManager
 from core.log_manager import log_to_file
@@ -245,72 +246,19 @@ class FridaManager:
                 enabled=payload.get("enabled", False),
             )
 
-        elif msg_type == "gather_result":
-            self._event_bus.emit("gather_result", data=payload.get("data", {}))
-
-        elif msg_type == "round_skipped":
+        elif msg_type == "plugin_event":
             self._event_bus.emit(
-                "round_skipped",
-                count=payload.get("count", 0),
-                from_time=payload.get("from", ""),
+                "plugin_event",
+                feature=payload.get("feature", ""),
+                event=payload.get("event", ""),
+                payload=payload.get("payload", {}),
+                audience=payload.get("audience", "dev"),
             )
 
-        elif msg_type == "giveWeaponResult":
-            task_id = payload.get("taskId", 0)
-            success = payload.get("success", False)
-            if success:
-                self._event_bus.emit(
-                    "log_message",
-                    level="success",
-                    module="武器赋予",
-                    message="武器赋予执行成功",
-                    audience="both",
-                    dev_detail=f"WeaponGiver task #{task_id} succeeded",
-                )
-            else:
-                self._event_bus.emit(
-                    "log_message",
-                    level="error",
-                    module="武器赋予",
-                    message="武器赋予执行失败，请稍后重试",
-                    audience="both",
-                    dev_detail=f"WeaponGiver task #{task_id} failed",
-                )
-
-        elif msg_type == "playerRespawned":
-            self._event_bus.emit(
-                "log_message",
-                level="info",
-                module="武器赋予",
-                message="检测到玩家复活",
-                audience="dev",
-                dev_detail="WeaponGiver detected local player respawn",
-            )
-
-        elif msg_type == "playerRespawnedWithWeapon":
-            weapon_id = payload.get("weaponId", "")
-            weapon_name = payload.get("weaponName", "")
-            self._event_bus.emit(
-                "log_message",
-                level="success",
-                module="武器赋予",
-                message=f"复活后已自动装备: {weapon_name}",
-                audience="both",
-                dev_detail=f"WeaponGiver respawn equipped weaponId={weapon_id}, weaponName={weapon_name}",
-            )
-
-        elif msg_type.startswith("nano4t_"):
-            self._event_bus.emit("nano4t_event", msg_type=msg_type, payload=payload)
-
-        elif msg_type.startswith("battle_round_"):
-            self._event_bus.emit("battle_round_event", msg_type=msg_type, payload=payload)
-
-        elif msg_type == "isbot_state":
-            self._event_bus.emit(
-                "isbot_event",
-                state=payload.get("state", "off"),
-                payload=payload,
-            )
+        else:
+            plugin_event = LegacyMessageAdapter.adapt(payload)
+            if plugin_event:
+                self._event_bus.emit("plugin_event", **plugin_event)
 
     def restore_features(self, features_state):
         for feature_id, enabled in features_state.items():

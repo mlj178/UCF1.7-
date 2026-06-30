@@ -6,7 +6,7 @@
   "tab": "other_tab",
   "order": 40,
   "icon": "📦",
-  "desc": "开启敌人方框显示",
+  "desc": "通过 Universal DLL 显示方框透视",
   "script": "script.js",
   "layout": {
     "card_type": "simple",
@@ -38,5 +38,22 @@
   },
   "runtime": {
     "type": "plugin_script"
+  },
+  "hotkey": {
+    "enabled": false
+  },
+  "actions": {
+    "enable": {
+      "type": "plugin_feature",
+      "requires_connection": false
+    },
+    "disable": {
+      "type": "plugin_feature",
+      "requires_connection": false
+    },
+    "cleanup": {
+      "type": "plugin_feature",
+      "requires_connection": false
+    }
   }
 }

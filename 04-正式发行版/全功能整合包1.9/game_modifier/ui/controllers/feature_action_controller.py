@@ -1,177 +1,36 @@
-import threading
+from ui.controllers.action_router import ActionRouter
 
 
 class FeatureActionController:
     def __init__(self, app):
         self._app = app
+        self._router = None
+
+    def _get_router(self):
+        if self._router is None:
+            app = self._app
+            self._router = ActionRouter(
+                registry=app._plugin_registry,
+                feature_service=app._feature_service,
+                config_manager=app._config_manager,
+                state=app._features,
+                is_connected=lambda: app._ready,
+                logger=app._log,
+                update_switch=app._update_switch,
+                sync_config=app._on_plugin_config_changed,
+                schedule_save=app._schedule_save_state,
+                play_toggle_sound=app._sound.play_toggle_sound,
+            )
+        return self._router
 
     def toggle_feature(self, feature_id):
-        app = self._app
-        if feature_id != "esp_box" and not app._ready:
-            app._log("⚠ 尚未连接到游戏，请先点击「连接游戏」")
-            return
-
-        new_state = not app._features.get(feature_id, False)
-
-        if feature_id == "esp_box":
-            switch = getattr(app, "esp_box_switch", None)
-            if switch:
-                switch.configure(state="disabled")
-
-            def run_in_background():
-                try:
-                    feature = app._plugin_registry.get("esp_box")
-                    ok = feature.enable() if new_state else feature.disable()
-                    app._features[feature_id] = bool(ok and new_state)
-                    app.after(0, lambda: self.on_esp_box_complete(feature_id, ok))
-                except Exception as e:
-                    app.after(0, lambda: self.on_esp_box_error(feature_id, str(e)))
-
-            threading.Thread(target=run_in_background, daemon=True).start()
-            return
-
-        app._features[feature_id] = new_state
-        if feature_id == "isbot":
-            app._set_isbot_state("awaiting_room" if new_state else "off")
-
-        app._feature_service.toggle_feature(feature_id, new_state)
-
-        app._sound.play_toggle_sound()
-        app._update_switch(feature_id)
-        app._schedule_save_state()
-
-    def on_esp_box_complete(self, feature_id, ok):
-        app = self._app
-        app._update_switch(feature_id)
-        app._schedule_save_state()
-        switch = getattr(app, "esp_box_switch", None)
-        if switch:
-            switch.configure(state="normal")
-        if ok:
-            app._sound.play_toggle_sound()
-
-    def on_esp_box_error(self, feature_id, error_msg):
-        app = self._app
-        app._log(f"⚠ 方框透视操作失败: {error_msg}")
-        app._features[feature_id] = False
-        app._update_switch(feature_id)
-        switch = getattr(app, "esp_box_switch", None)
-        if switch:
-            switch.configure(state="normal")
+        return self._get_router().toggle(feature_id)
 
     def set_feature_config(self, feature_id, key, value):
-        app = self._app
-        normalized = self._normalize_config_value(value)
-        result = app._feature_service.set_config(feature_id, {key: normalized})
-        if hasattr(app, "_on_plugin_config_changed"):
-            app._on_plugin_config_changed(feature_id, key, normalized)
-        app._schedule_save_state()
-        return result
+        return self._get_router().set_config(feature_id, key, value)
 
-    def trigger_feature_action(self, feature_id, action):
-        app = self._app
-        if action == "gather":
-            return self.gather()
-        if action == "skip_round":
-            return self.skip_round()
-        if action == "enable":
-            result = app._feature_service.enable(feature_id)
-            app._features[feature_id] = True
-            app._update_switch(feature_id)
-            app._schedule_save_state()
-            return result
-        if action == "disable":
-            result = app._feature_service.disable(feature_id)
-            app._features[feature_id] = False
-            app._update_switch(feature_id)
-            app._schedule_save_state()
-            return result
-        if action == "cleanup":
-            result = app._feature_service.cleanup(feature_id)
-            app._schedule_save_state()
-            return result
-        return self.set_feature_config(feature_id, action, True)
-
-    @staticmethod
-    def _normalize_config_value(value):
-        if isinstance(value, (int, float)):
-            return round(float(value), 1)
-        try:
-            return round(float(value), 1)
-        except (TypeError, ValueError):
-            return value
-
-    def gather(self):
-        app = self._app
-        if not app._ready:
-            app._log("⚠ 尚未连接到游戏，请先点击「连接游戏」")
-            return
-        if not app._features.get("gather"):
-            app._log("⚠ 聚怪功能未启用，请先打开「启用追踪」开关")
-            return
-
-        app._log("📍 正在聚怪（传送所有 Bot 到佣兵出生点）...")
-        app.gather_btn.configure(state="disabled", text="⏳ 聚怪中...")
-
-        def do_gather():
-            try:
-                result = app._feature_service.set_config("gather", {"trigger": True})
-                if result:
-                    ok = result.get("ok", False)
-                    if ok:
-                        bots = result.get("bots", 0)
-                        fail = result.get("fail", 0)
-                        app._log(f"✅ 聚怪完成! 成功{bots} 失败{fail}")
-                    else:
-                        app._log(f"❌ 聚怪失败: {result.get('msg', '未知错误')}")
-            except Exception as e:
-                app._log(f"❌ 聚怪异常: {e}")
-            finally:
-                app.after(0, lambda: app.gather_btn.configure(state="normal", text="📍 一键聚怪"))
-
-        threading.Thread(target=do_gather, daemon=True).start()
-
-    def skip_round(self):
-        app = self._app
-        if not app._ready:
-            app._log("⚠ 尚未连接到游戏，请先点击「连接游戏」")
-            return
-
-        app._log("⏭️ 正在跳过当前回合...")
-        app.skip_round_btn.configure(state="disabled", text="⏳ 跳转中...")
-
-        def do_skip():
-            try:
-                result = app._feature_service.enable("roundskip")
-                if result:
-                    ok = result.get("ok", False)
-                    if ok:
-                        app._log("✅ 回合跳过成功！")
-                    else:
-                        reason = result.get("reason", "未知错误")
-                        if reason == "no_instance":
-                            app._log("⚠ 未能获取到游戏回合实例，请确保已进入游戏模式")
-                        elif reason == "already_zero":
-                            app._log("⚠ 回合时间已为 0:00，无需跳过")
-                        else:
-                            app._log(f"❌ 跳过失败: {reason}")
-            except Exception as e:
-                app._log(f"❌ 跳过异常: {e}")
-            finally:
-                app.after(0, lambda: app.skip_round_btn.configure(state="normal", text="▶ 跳过当前回合"))
-
-        threading.Thread(target=do_skip, daemon=True).start()
+    def trigger_feature_action(self, feature_id, action, payload=None):
+        return self._get_router().action(feature_id, action, payload)
 
     def restore_features(self):
-        app = self._app
-        for feature_id in list(app._features.keys()):
-            if app._features[feature_id]:
-                self.restore_single_feature(feature_id)
-        for feature_id in app._features:
-            app._update_switch(feature_id)
-
-    def restore_single_feature(self, feature_id):
-        app = self._app
-        if feature_id in ("nano4t", "roundskip", "esp_box"):
-            return
-        app._feature_service.restore_feature(feature_id)
+        return self._get_router().restore_enabled()

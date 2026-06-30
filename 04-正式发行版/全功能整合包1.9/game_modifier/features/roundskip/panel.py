@@ -1,3 +1,5 @@
+import threading
+
 import customtkinter as ctk
 
 
@@ -14,12 +16,42 @@ def build_card(parent, manifest, row, col, colspan, callbacks, card_builder):
     ctk.CTkLabel(top, text=f"{manifest['icon']} {manifest['display_name']}", font=("Microsoft YaHei", 15, "bold"), text_color=manifest.get("layout", {}).get("title_color", "#e0e0e0")).pack(side="left", padx=4)
     btn_frame = ctk.CTkFrame(frame, fg_color="transparent")
     btn_frame.pack(fill="x", padx=8, pady=(2, 2))
+    def run_skip_round():
+        log = callbacks["log"]
+        if not callbacks["is_connected"]():
+            log("⚠ 尚未连接到游戏，请先点击「连接游戏」")
+            return
+
+        log("⏭️ 正在跳过当前回合...")
+        button.configure(state="disabled", text="⏳ 跳转中...")
+
+        def worker():
+            try:
+                result = callbacks["action"](feature_id, button_control.get("action", "skip_round"))
+                if result:
+                    if result.get("ok", False):
+                        log("✅ 回合跳过成功！")
+                    else:
+                        reason = result.get("reason", "未知错误")
+                        if reason == "no_instance":
+                            log("⚠ 未能获取到游戏回合实例，请确保已进入游戏模式")
+                        elif reason == "already_zero":
+                            log("⚠ 回合时间已为 0:00，无需跳过")
+                        else:
+                            log(f"❌ 跳过失败: {reason}")
+            except Exception as exc:
+                log(f"❌ 跳过异常: {exc}")
+            finally:
+                button.after(0, lambda: button.configure(state="normal", text="▶ 跳过当前回合"))
+
+        threading.Thread(target=worker, daemon=True).start()
+
     button = ctk.CTkButton(
         btn_frame,
         text=button_control.get("label", "\u25b6 \u7b2c\u4e00\u6b21\u8df3\u8fc7\u9700\u8981\u70b9\u51fb\u4e24\u6b21"),
         font=("Microsoft YaHei", 14, "bold"),
         height=45,
-        command=lambda: callbacks["action"](feature_id, button_control.get("action", "skip_round")),
+        command=run_skip_round,
         fg_color="#b45309",
         hover_color="#92400e",
     )

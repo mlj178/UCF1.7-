@@ -29,6 +29,7 @@ features/<feature_id>/
 - `panel.py` 较简单。
 - `script.js` 只处理本功能 Hook。
 - UI 控件由 manifest 的 `controls` 和 `layout` 描述。
+- 开关、滑块、按钮通过通用 `ActionRouter` 分发，不在中心 Controller 写功能 ID。
 
 特殊功能可以拥有完整页面：
 
@@ -36,6 +37,15 @@ features/<feature_id>/
 - 也必须包含 `manifest.json / feature.py / script.js / panel.py`。
 - 也必须通过 `manifest.rpc` 声明可调用 RPC。
 - 也必须通过 `FridaManager.plugin_call(feature_id, action, payload)` 调用。
+- `panel.py` 接收 `PanelContext`，不要接收完整 `App` 对象。
+- JS 消息统一发送或兼容转换为 `plugin_event`，由 `features/<feature_id>/events.py` 处理本功能事件。
+
+## 配置和状态
+
+- `core/config.py` 的功能信息来自 `features/*/manifest.json`。
+- 普通功能配置写入 `data/user_config.json`，按 `feature_id` 分区。
+- `AppState` 中的具体功能字段只作为旧版本迁移字段保留，新功能不要继续添加字段。
+- 默认配置来自 manifest 或 `data/default_config.json`。
 
 ## 新增功能禁止事项
 
@@ -49,8 +59,10 @@ features/<feature_id>/
 - 不要使用 `register_feature`。
 - 不要使用 `FeatureBase`。
 - 不要让 `panel.py` 直接 import `FridaManager`。
+- 不要让 `panel.py` 访问 `app._xxx` 私有字段。
 - 不要把多个功能写进一个大 JS。
 - 不要在中心文件写功能 ID 列表。
+- 不要往 `AppState` 增加具体功能字段。
 
 ## 新增功能流程
 
@@ -62,4 +74,6 @@ features/<feature_id>/
 6. 编写 `panel.py`。
 7. 在 `manifest.rpc` 声明 RPC。
 8. 在 `manifest.runtime.type` 写 `plugin_script`。
-9. 不改中心文件。
+9. 需要按钮等动作时，在 `manifest.actions` 或 `manifest.controls` 中声明。
+10. 需要处理 JS 事件时，新增 `events.py` 并处理本功能 `plugin_event`。
+11. 不改中心文件。

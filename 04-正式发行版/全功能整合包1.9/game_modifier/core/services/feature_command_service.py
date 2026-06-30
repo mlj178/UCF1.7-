@@ -23,6 +23,9 @@ class FeatureCommandService:
     def status(self, feature_id):
         return self._frida.plugin_call(feature_id, "status")
 
+    def call_action(self, feature_id, action, payload=None):
+        return self._frida.plugin_call(feature_id, action, payload or {})
+
     def cleanup(self, feature_id):
         return self._frida.plugin_call(feature_id, "cleanup", {"reason": "feature_cleanup"})
 
