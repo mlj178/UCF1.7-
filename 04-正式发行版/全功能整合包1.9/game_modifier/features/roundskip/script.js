@@ -170,7 +170,13 @@ modules.roundskip = (function() {
       instance.add(0x38).writeS32(0);
       skipCount++;
       roundActive = false;
-      send({ type: 'round_skipped', from: minute + ':' + pad2(second), count: skipCount });
+      send({
+        type: 'plugin_event',
+        feature: 'roundskip',
+        event: 'skipped',
+        payload: { from: minute + ':' + pad2(second), count: skipCount },
+        audience: 'both'
+      });
       addDevLog('info', 'SKIP! ' + minute + ':' + pad2(second) + ' -> 0:00 (total:' + skipCount + ')', 'RoundSkip wrote restGameTime to 0:00');
       return { ok: true };
     } catch (e2) {

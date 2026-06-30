@@ -47,3 +47,20 @@ def handle_event(context, event, payload):
             "both",
             f"WeaponGiver respawn equipped weaponId={weapon_id}, weaponName={weapon_name}",
         )
+
+
+def handle_lifecycle(context, event, payload):
+    try:
+        from features.weapon_giver.state import state
+
+        controller = getattr(state, "controller", None)
+        if not controller:
+            return
+        if event == "game_connected":
+            controller.init_hotkey_manager()
+        elif event in {"game_disconnected", "app_closing"}:
+            controller.pause_hotkeys()
+            if event == "app_closing":
+                controller.cleanup()
+    except Exception:
+        pass

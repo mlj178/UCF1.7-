@@ -2,8 +2,8 @@ import threading
 
 
 class RoundSkipMonitor:
-    def __init__(self, app, interval_ms=1500, run_async=None):
-        self._app = app
+    def __init__(self, context, interval_ms=1500, run_async=None):
+        self._context = context
         self._interval_ms = interval_ms
         self._timer = None
         self._running = False
@@ -19,16 +19,12 @@ class RoundSkipMonitor:
     def stop(self):
         self._running = False
         if self._timer is not None:
-            try:
-                self._app.after_cancel(self._timer)
-            except Exception:
-                pass
             self._timer = None
 
     def _schedule_poll(self, delay_ms):
         if not self._running:
             return
-        self._timer = self._app.after(delay_ms, self._poll_once)
+        self._timer = self._context.after(delay_ms, self._poll_once)
 
     def _poll_once(self):
         self._timer = None
@@ -43,25 +39,18 @@ class RoundSkipMonitor:
 
     def _poll_status(self):
         try:
-            self._app._feature_service.status("roundskip")
+            self._context.feature_service.status("roundskip")
         except Exception:
-            # 预热轮询失败不打扰玩家；按钮点击时仍会给出明确失败原因。
             pass
         finally:
             self._polling = False
             try:
-                self._app.after(0, lambda: self._schedule_poll(self._interval_ms))
+                self._context.after(0, lambda: self._schedule_poll(self._interval_ms))
             except Exception:
                 self.stop()
 
     def _should_poll(self):
-        connection = getattr(self._app, "_game_connection_service", None)
-        return bool(
-            self._running
-            and getattr(self._app, "_ready", False)
-            and connection is not None
-            and getattr(connection, "is_connected", True)
-        )
+        return bool(self._running and self._context.is_connected())
 
     @staticmethod
     def _start_thread(callback):

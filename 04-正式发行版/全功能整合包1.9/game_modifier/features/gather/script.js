@@ -300,7 +300,13 @@ function __pluginApplyConfig(config) {
   if (__pluginConfig.trigger && typeof module.gather === 'function') {
     __pluginConfig.trigger = false;
     var result = module.gather();
-    send(JSON.stringify({ type: 'gather_result', data: result }));
+    send({
+      type: 'plugin_event',
+      feature: 'gather',
+      event: 'result',
+      payload: result,
+      audience: 'both'
+    });
     return result;
   }
   return { ok: true, config: __pluginConfig };

@@ -1,7 +1,6 @@
 from core.repositories import (
     DesiredStateRepository,
     FeatureStateRepository,
-    Nano4tConfigRepository,
 )
 from core.state import AppState
 
@@ -13,17 +12,14 @@ class AppPersistenceService:
         self,
         feature_state_repo=None,
         desired_state_repo=None,
-        nano4t_config_repo=None,
     ):
         self._feature_state_repo = feature_state_repo or FeatureStateRepository()
         self._desired_state_repo = desired_state_repo or DesiredStateRepository()
-        self._nano4t_config_repo = nano4t_config_repo or Nano4tConfigRepository()
 
     def load_app_state(self, feature_ids):
         state = AppState.with_default_features(feature_ids)
         state.apply_feature_state_payload(self._feature_state_repo.load())
         state.apply_desired_states(self.load_desired_states())
-        state.apply_nano4t_payload(self.load_nano4t_selection())
         return state
 
     def save_app_state(self, state):
@@ -35,7 +31,6 @@ class AppPersistenceService:
             if feature_id in state.features:
                 desired_states[feature_id] = bool(state.features[feature_id])
         self.save_desired_states(desired_states)
-        self.save_nano4t_selection(state.to_nano4t_payload())
 
     def load_desired_states(self):
         desired_states = self._desired_state_repo.load()
@@ -59,9 +54,3 @@ class AppPersistenceService:
         desired_states = self.load_desired_states()
         desired_states[feature_id] = bool(enabled)
         self.save_desired_states(desired_states)
-
-    def load_nano4t_selection(self):
-        return self._nano4t_config_repo.load()
-
-    def save_nano4t_selection(self, payload):
-        self._nano4t_config_repo.save(payload)

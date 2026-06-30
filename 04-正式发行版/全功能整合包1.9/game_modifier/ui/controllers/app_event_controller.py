@@ -1,6 +1,7 @@
 from core.log_router import build_log_route
 from core.log_manager import log_to_file
 from ui.controllers.plugin_event_router import PluginEventRouter
+from ui.controllers.plugin_lifecycle_router import PluginLifecycleRouter
 
 
 class AppEventController:
@@ -8,12 +9,14 @@ class AppEventController:
         self._app = app
         self._log_writer = log_writer
         self._plugin_events = PluginEventRouter(app._plugin_registry, app._panel_context)
+        self._plugin_lifecycle = PluginLifecycleRouter(app._plugin_registry, app._panel_context)
 
     def register(self, event_bus):
         event_bus.subscribe("log_message", self.on_log_message)
         event_bus.subscribe("connection_status", self.on_connection_status)
         event_bus.subscribe("feature_status_changed", self.on_feature_status)
         event_bus.subscribe("plugin_event", self.on_plugin_event)
+        self._plugin_lifecycle.register(event_bus)
 
     def on_log_message(self, **kwargs):
         app = self._app
@@ -48,20 +51,14 @@ class AppEventController:
                 app._ready = True
                 app._pid = pid
                 app._feature_controller.restore_features()
-                app._battle_round_controller.sync_to_game_on_connect()
-                app._nano4t_runtime_controller.auto_init_async()
-                app._weapon_controller.init_hotkey_manager()
-                app._roundskip_monitor.start()
+                app._event_bus.emit("game_connected", pid=pid)
             elif status == "not_found":
                 app._set_status("yellow", "未找到游戏")
+                app._event_bus.emit("game_not_found")
             else:
                 app._set_status("red", "连接断开，正在重连...")
                 app._ready = False
-                app._battle_round_active = False
-                app._battle_mode_active = False
-                app._battle_round_controller.on_disconnected()
-                app._weapon_controller.pause_hotkeys()
-                app._roundskip_monitor.stop()
+                app._event_bus.emit("game_disconnected")
 
         app.after(0, update)
 

@@ -39,6 +39,7 @@
 `panel.py` 不允许访问完整 App 或 `app._xxx` 私有字段。
 `panel.py` 不允许使用 `context._app`、`context.legacy`、`get_state`、`set_state`、`get_handle`、`set_handle`、`controller`、`service`。
 如果需要特殊事件处理，可在功能目录新增 `events.py`，只处理本功能事件。
+如果需要完整页面，在 `manifest.json` 中声明 `ui.mode = "special_page"` 和 `ui.tab_title`，不要改 `ui/app.py`。
 
 ## 禁止改中心文件
 
@@ -48,6 +49,5 @@
 - `core/frida_manager.py`
 - `core/services/feature_command_service.py`
 - `ui/controllers/feature_action_controller.py`
-- `core/frida_runtime/legacy_message_adapter.py`
 - `core/state/app_state.py`
 - `scripts/`
