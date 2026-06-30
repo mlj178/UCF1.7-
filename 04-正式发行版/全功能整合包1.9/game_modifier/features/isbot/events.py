@@ -1,8 +1,12 @@
+import features.isbot.state as isbot_state
+
+
 def _apply_state(context, state):
-    legacy = context.legacy
-    legacy.set_state("isbot_state", state)
-    label = legacy.get_handle("isbot_status_label")
-    if not label:
+    isbot_state.state = state
+    from features.isbot.panel import get_status_label
+
+    label = get_status_label()
+    if label is None:
         return
     if state == "awaiting_room":
         label.configure(text="状态: 已预约，等待进房", text_color="#f39c12")

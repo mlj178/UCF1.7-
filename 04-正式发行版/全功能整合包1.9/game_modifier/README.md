@@ -38,7 +38,8 @@ features/<feature_id>/
 - 也必须通过 `manifest.rpc` 声明可调用 RPC。
 - 也必须通过 `FridaManager.plugin_call(feature_id, action, payload)` 调用。
 - `panel.py` 接收 `PanelContext`，不要接收完整 `App` 对象。
-- JS 消息统一发送或兼容转换为 `plugin_event`，由 `features/<feature_id>/events.py` 处理本功能事件。
+- JS 消息统一直接发送 `plugin_event`，由 `features/<feature_id>/events.py` 处理本功能事件。
+- 独立特殊 tab 通过 manifest 的 `ui.mode = "special_page"`、`ui.tab_title`、`ui.lazy_build` 声明。
 
 ## PanelContext 边界
 
@@ -58,17 +59,29 @@ features/<feature_id>/
 - `emit(event_name, **payload)`
 - `feature_event(event_name, payload=None)`
 
-`context.legacy` 是 `LEGACY_COMPAT_ONLY`，只为现有特殊功能保留。新功能不要使用。
+不再存在 `LegacyPanelContext`。`panel.py` 不允许访问完整 `App` 对象或 `app._xxx` 私有字段。
 
-## LegacyMessageAdapter 边界
+## 事件协议
 
-`core/frida_runtime/legacy_message_adapter.py` 只用于旧 JS 消息兼容。新增功能必须直接发送 `plugin_event`，不要向 LegacyMessageAdapter 添加新功能分支。
+`LegacyMessageAdapter` 已删除。所有 JS 必须直接发送：
+
+```js
+send({
+  type: "plugin_event",
+  feature: "<feature_id>",
+  event: "<event_name>",
+  payload: {},
+  audience: "dev"
+});
+```
+
+`FridaManager` 只处理 `log`、`log_file`、`status`、`plugin_event`，未知消息只进入开发日志。
 
 ## 配置和状态
 
 - `core/config.py` 的功能信息来自 `features/*/manifest.json`。
 - 普通功能配置写入 `data/user_config.json`，按 `feature_id` 分区。
-- `AppState` 中的具体功能字段只作为旧版本迁移字段保留，新功能不要继续添加字段。
+- `AppState` 只保存全局功能启用状态，不保存具体功能参数。
 - 默认配置来自 manifest 或 `data/default_config.json`。
 
 ## 新增功能禁止事项
@@ -88,7 +101,7 @@ features/<feature_id>/
 - 不要把多个功能写进一个大 JS。
 - 不要在中心文件写功能 ID 列表。
 - 不要往 `AppState` 增加具体功能字段。
-- 不要改 `LegacyMessageAdapter` 接新功能。
+- 不要创建新的 legacy 消息适配层。
 
 ## 新增功能流程
 

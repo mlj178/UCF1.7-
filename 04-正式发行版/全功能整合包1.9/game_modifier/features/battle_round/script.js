@@ -165,24 +165,41 @@ modules.battle_round_always = (function() {
     }
 
     function sendRoundEvent(enabled, applied, currentIsBattleRound) {
-        send(JSON.stringify({
-            type: 'battle_round_round',
-            enabled: enabled,
-            applied: applied,
-            currentIsBattleRound: currentIsBattleRound
-        }));
+        send({
+            type: 'plugin_event',
+            feature: 'battle_round',
+            event: 'battle_round_round',
+            payload: {
+                enabled: enabled,
+                applied: applied,
+                currentIsBattleRound: currentIsBattleRound
+            },
+            audience: 'both'
+        });
     }
 
     function markModeEnter() {
         if (_modeActive) return;
         _modeActive = true;
-        send(JSON.stringify({ type: 'battle_round_mode_enter' }));
+        send({
+            type: 'plugin_event',
+            feature: 'battle_round',
+            event: 'battle_round_mode_enter',
+            payload: {},
+            audience: 'dev'
+        });
     }
 
     function markModeExit() {
         if (!_modeActive) return;
         _modeActive = false;
-        send(JSON.stringify({ type: 'battle_round_mode_exit' }));
+        send({
+            type: 'plugin_event',
+            feature: 'battle_round',
+            event: 'battle_round_mode_exit',
+            payload: {},
+            audience: 'dev'
+        });
     }
 
     function syncNano4TOnRound() {

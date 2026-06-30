@@ -28,15 +28,6 @@ ORDINARY_FEATURE_IDS = {
 }
 SPECIAL_FEATURE_IDS = {"nano4t", "weapon_giver", "battle_round"}
 KNOWN_FEATURE_IDS = ORDINARY_FEATURE_IDS | SPECIAL_FEATURE_IDS
-LEGACY_PANEL_FEATURE_IDS = {
-    "weapon_giver",
-    "nano4t",
-    "battle_round",
-    "gather",
-    "roundskip",
-    "esp_box",
-    "isbot",
-}
 FORBIDDEN_FUTURE_FEATURE_IDS = {"third_person_camera"}
 
 
@@ -258,7 +249,7 @@ def check_plugin_python_boundaries():
             if "build_panel(app" in text:
                 ok = fail(f"panel.py accepts full app object: {panel_py}. Use PanelContext.") and ok
             for label, pattern in forbidden_panel_patterns.items():
-                if re.search(pattern, text) and feature_id not in LEGACY_PANEL_FEATURE_IDS:
+                if re.search(pattern, text):
                     ok = fail(f"panel.py uses forbidden API ({label}): {panel_py}. Use safe PanelContext/callbacks.") and ok
     return ok
 
@@ -267,8 +258,9 @@ def check_panel_context_boundary():
     path = ROOT / "ui" / "panel_context.py"
     text = read(path)
     ok = True
-    if "LEGACY_COMPAT_ONLY" not in text:
-        ok = fail("PanelContext legacy bridge is not marked LEGACY_COMPAT_ONLY") and ok
+    for needle in ("LegacyPanelContext", "LEGACY_PANEL_FEATURE_IDS", "legacy_for", "context.legacy"):
+        if needle in text:
+            ok = fail(f"PanelContext still exposes legacy API: {needle}") and ok
     safe_match = re.search(r"class PanelContext\b(?P<body>.*?)(?=^class FeaturePanelContext\b)", text, re.S | re.M)
     if not safe_match:
         ok = fail("PanelContext class not found") and ok
@@ -280,54 +272,118 @@ def check_panel_context_boundary():
     return ok
 
 
-def check_legacy_message_adapter():
+def check_legacy_message_adapter_removed():
     path = ROOT / "core" / "frida_runtime" / "legacy_message_adapter.py"
-    text = read(path)
     ok = True
-    for marker in (
-        "LEGACY_COMPAT_ONLY",
-        "Do not add new feature branches here",
-        "LEGACY_FEATURE_IDS",
-        "LEGACY_MESSAGE_TYPES",
-    ):
-        if marker not in text:
-            ok = fail(f"LegacyMessageAdapter missing marker/whitelist: {marker}") and ok
-    if "third_person_camera" in text:
-        ok = fail("LegacyMessageAdapter must not mention third_person_camera") and ok
-    allowed = LEGACY_PANEL_FEATURE_IDS - {"esp_box"}
-    feature_literals = set(re.findall(r"['\"]([a-z0-9_]+)['\"]", text))
-    illegal_features = (feature_literals & KNOWN_FEATURE_IDS) - allowed
-    if illegal_features:
-        ok = fail(f"LegacyMessageAdapter contains non-legacy feature ids: {sorted(illegal_features)}") and ok
-    if '"plugin_event"' not in text and "'plugin_event'" not in text:
-        ok = fail("LegacyMessageAdapter documentation must point new plugins to plugin_event") and ok
+    if path.exists():
+        ok = fail("LegacyMessageAdapter still exists") and ok
+    frida_manager = read(ROOT / "core" / "frida_manager.py")
+    if "LegacyMessageAdapter" in frida_manager or "legacy_message_adapter" in frida_manager:
+        ok = fail("FridaManager still imports or references LegacyMessageAdapter") and ok
     return ok
 
 
-def check_app_state_legacy_boundary():
+def check_app_state_has_only_global_fields():
     path = ROOT / "core" / "state" / "app_state.py"
     text = read(path)
     ok = True
-    if "LEGACY_COMPAT_ONLY" not in text:
-        ok = fail("AppState concrete feature fields are not marked LEGACY_COMPAT_ONLY") and ok
-    allowed_fields = {
-        "features",
-        "knife_speed",
-        "move_speed",
-        "range_mult",
-        "gravity",
-        "jump",
-        "gravity_mode",
-        "timescale",
-        "battle_round_enabled",
-        "weapon_giver_respawn_enabled",
-        "nano4t_ghost",
-        "nano4t_human",
-    }
     fields = set(re.findall(r"^\s{4}([a-zA-Z_][a-zA-Z0-9_]*)\s*:", text, re.MULTILINE))
-    extra = fields - allowed_fields
-    if extra:
-        ok = fail(f"AppState has new concrete fields: {sorted(extra)}") and ok
+    if fields != {"features"}:
+        ok = fail(f"AppState must only contain global fields, found: {sorted(fields)}") and ok
+    return ok
+
+
+def check_app_has_no_special_feature_state():
+    ok = True
+    app_text = read(ROOT / "ui" / "app.py")
+    forbidden = (
+        "_nano4t_",
+        "_battle_round",
+        "_battle_mode",
+        "_weapon_giver",
+        "_isbot_state",
+        "_weapon_hotkey_badges",
+        "_weapon_top_frames",
+        "_roundskip_monitor",
+        "_weapon_controller",
+        "_build_special_plugin_panel",
+        "多人生化Buff选择",
+        "赋予武器",
+    )
+    for needle in forbidden:
+        if needle in app_text:
+            ok = fail(f"App still contains special feature state or hardcoded tab detail: {needle}") and ok
+    return ok
+
+
+def check_app_event_controller_lifecycle_is_generic():
+    ok = True
+    text = read(ROOT / "ui" / "controllers" / "app_event_controller.py")
+    forbidden = KNOWN_FEATURE_IDS | {
+        "battle_round_controller",
+        "nano4t_runtime_controller",
+        "weapon_controller",
+        "roundskip_monitor",
+    }
+    for needle in forbidden:
+        if needle in text:
+            ok = fail(f"AppEventController contains concrete feature dependency: {needle}") and ok
+    for event in ("game_connected", "game_disconnected", "game_not_found"):
+        if event not in text:
+            ok = fail(f"AppEventController missing lifecycle event: {event}") and ok
+    return ok
+
+
+def check_feature_specific_controllers_moved():
+    ok = True
+    forbidden_paths = [
+        ROOT / "ui" / "controllers" / "battle_round_controller.py",
+        ROOT / "ui" / "controllers" / "nano4t_runtime_controller.py",
+        ROOT / "ui" / "controllers" / "nano4t_selection_controller.py",
+        ROOT / "ui" / "controllers" / "weapon_interaction_controller.py",
+        ROOT / "ui" / "controllers" / "round_skip_monitor.py",
+        ROOT / "core" / "services" / "game_action_service.py",
+        ROOT / "core" / "services" / "weapon_giver_service.py",
+    ]
+    for path in forbidden_paths:
+        if path.exists():
+            ok = fail(f"feature-specific center file still exists: {path}") and ok
+    required_paths = [
+        FEATURES_DIR / "weapon_giver" / "controller.py",
+        FEATURES_DIR / "weapon_giver" / "service.py",
+        FEATURES_DIR / "weapon_giver" / "hotkeys.py",
+        FEATURES_DIR / "nano4t" / "runtime.py",
+        FEATURES_DIR / "nano4t" / "selection.py",
+        FEATURES_DIR / "battle_round" / "controller.py",
+        FEATURES_DIR / "roundskip" / "monitor.py",
+    ]
+    for path in required_paths:
+        if not path.exists():
+            ok = fail(f"feature-local controller/service missing: {path}") and ok
+    return ok
+
+
+def check_scripts_send_plugin_events():
+    ok = True
+    forbidden_send_markers = (
+        "type: 'gather_result'",
+        'type: "gather_result"',
+        "type: 'round_skipped'",
+        "type: 'isbot_state'",
+        "type: 'giveWeaponResult'",
+        "type: 'playerRespawned'",
+        "type: 'playerRespawnedWithWeapon'",
+        "type: 'nano4t_",
+        "type: 'battle_round_",
+    )
+    for plugin_dir in plugin_dirs():
+        script_path = plugin_dir / "script.js"
+        if not script_path.exists():
+            continue
+        text = read(script_path)
+        for marker in forbidden_send_markers:
+            if marker in text:
+                ok = fail(f"script.js still sends old message type: {script_path}: {marker}") and ok
     return ok
 
 
@@ -369,7 +425,6 @@ def check_future_feature_not_in_center_files():
         ROOT / "core" / "frida_manager.py",
         ROOT / "ui" / "controllers" / "feature_action_controller.py",
         ROOT / "ui" / "controllers" / "action_router.py",
-        ROOT / "core" / "frida_runtime" / "legacy_message_adapter.py",
         ROOT / "core" / "state" / "app_state.py",
         ROOT / "core" / "config.py",
     ]
@@ -492,8 +547,12 @@ def main():
         check_plugin_files_and_manifests(),
         check_plugin_python_boundaries(),
         check_panel_context_boundary(),
-        check_legacy_message_adapter(),
-        check_app_state_legacy_boundary(),
+        check_legacy_message_adapter_removed(),
+        check_app_state_has_only_global_fields(),
+        check_app_has_no_special_feature_state(),
+        check_app_event_controller_lifecycle_is_generic(),
+        check_feature_specific_controllers_moved(),
+        check_scripts_send_plugin_events(),
         check_template_is_plugin_self_contained(),
         check_future_feature_not_in_center_files(),
         check_runtime_old_script_references(),

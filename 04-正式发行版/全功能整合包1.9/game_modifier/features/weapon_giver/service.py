@@ -1,9 +1,9 @@
 class WeaponGiverService:
-    def __init__(self, frida_manager):
-        self._frida = frida_manager
+    def __init__(self, feature_service):
+        self._feature_service = feature_service
 
     def give_weapon(self, weapon_id, auto_give_up=True, auto_select=True):
-        return self._frida.plugin_call(
+        return self._feature_service.call_action(
             "weapon_giver",
             "giveWeapon",
             {
@@ -14,7 +14,7 @@ class WeaponGiverService:
         )
 
     def set_respawn_weapon(self, weapon_id, weapon_name):
-        return self._frida.plugin_call(
+        return self._feature_service.call_action(
             "weapon_giver",
             "setRespawnWeapon",
             {
@@ -24,4 +24,4 @@ class WeaponGiverService:
         )
 
     def clear_respawn_weapon(self):
-        return self._frida.plugin_call("weapon_giver", "clearRespawnWeapon", {})
+        return self._feature_service.call_action("weapon_giver", "clearRespawnWeapon", {})

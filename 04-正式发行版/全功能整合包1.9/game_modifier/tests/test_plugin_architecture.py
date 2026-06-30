@@ -361,22 +361,14 @@ class MigratedOrdinaryFeatureTests(unittest.TestCase):
         app_events = (PROJECT_DIR / "ui" / "controllers" / "app_event_controller.py").read_text(encoding="utf-8")
 
         self.assertIn('"plugin_event"', frida_manager)
-        self.assertIn("LegacyMessageAdapter", frida_manager)
+        self.assertNotIn("LegacyMessageAdapter", frida_manager)
+        self.assertNotIn("legacy_message_adapter", frida_manager)
         self.assertIn('"plugin_event"', app_events)
         for old_event in ("gather_result", "round_skipped", "nano4t_event", "battle_round_event", "isbot_event"):
             self.assertNotIn(f'"{old_event}"', frida_manager)
             self.assertNotIn(f'"{old_event}"', app_events)
 
     def test_panels_use_panel_context_not_full_app(self):
-        legacy_panel_features = {
-            "weapon_giver",
-            "nano4t",
-            "battle_round",
-            "gather",
-            "roundskip",
-            "esp_box",
-            "isbot",
-        }
         forbidden_patterns = {
             "context._app": r"context\._app",
             "app._": r"app\._",
@@ -393,33 +385,18 @@ class MigratedOrdinaryFeatureTests(unittest.TestCase):
             panel_text = panel_path.read_text(encoding="utf-8")
             self.assertNotIn("build_panel(app", panel_text, msg=str(panel_path))
             for label, pattern in forbidden_patterns.items():
-                if panel_path.parent.name in legacy_panel_features:
-                    continue
                 self.assertIsNone(re.search(pattern, panel_text), msg=f"{panel_path}: {label}")
 
-    def test_app_state_concrete_fields_are_legacy_only(self):
+    def test_app_state_has_only_global_fields(self):
         state_text = (PROJECT_DIR / "core" / "state" / "app_state.py").read_text(encoding="utf-8")
-        self.assertIn("LEGACY_COMPAT_ONLY", state_text)
-        allowed_fields = {
-            "features",
-            "knife_speed",
-            "move_speed",
-            "range_mult",
-            "gravity",
-            "jump",
-            "gravity_mode",
-            "timescale",
-            "battle_round_enabled",
-            "weapon_giver_respawn_enabled",
-            "nano4t_ghost",
-            "nano4t_human",
-        }
         fields = set(re.findall(r"^\s{4}([a-zA-Z_][a-zA-Z0-9_]*)\s*:", state_text, re.MULTILINE))
-        self.assertEqual(fields, allowed_fields)
+        self.assertEqual(fields, {"features"})
 
     def test_safe_panel_context_has_no_legacy_methods(self):
         panel_context = (PROJECT_DIR / "ui" / "panel_context.py").read_text(encoding="utf-8")
-        self.assertIn("LEGACY_COMPAT_ONLY", panel_context)
+        self.assertNotIn("LegacyPanelContext", panel_context)
+        self.assertNotIn("legacy_for", panel_context)
+        self.assertNotIn("context.legacy", panel_context)
         safe_match = re.search(
             r"class PanelContext\b(?P<body>.*?)(?=^class FeaturePanelContext\b)",
             panel_context,
@@ -430,32 +407,8 @@ class MigratedOrdinaryFeatureTests(unittest.TestCase):
         for method in ("get_state", "set_state", "get_handle", "set_handle", "controller", "service"):
             self.assertIsNone(re.search(rf"^\s+def\s+{method}\b", safe_body, re.M))
 
-    def test_legacy_message_adapter_is_whitelisted(self):
-        adapter_text = (PROJECT_DIR / "core" / "frida_runtime" / "legacy_message_adapter.py").read_text(encoding="utf-8")
-        self.assertIn("LEGACY_COMPAT_ONLY", adapter_text)
-        self.assertIn("Do not add new feature branches here", adapter_text)
-        self.assertIn("LEGACY_FEATURE_IDS", adapter_text)
-        self.assertIn("LEGACY_MESSAGE_TYPES", adapter_text)
-        self.assertNotIn("third_person_camera", adapter_text)
-
-        from core.frida_runtime.legacy_message_adapter import (
-            LEGACY_FEATURE_IDS,
-            LEGACY_MESSAGE_TYPES,
-            LEGACY_MESSAGE_PREFIXES,
-            LegacyMessageAdapter,
-        )
-
-        self.assertEqual(
-            LEGACY_FEATURE_IDS,
-            {"gather", "roundskip", "weapon_giver", "nano4t", "battle_round", "isbot"},
-        )
-        self.assertIn("gather_result", LEGACY_MESSAGE_TYPES)
-        self.assertIn("nano4t_", LEGACY_MESSAGE_PREFIXES)
-        self.assertIsNone(LegacyMessageAdapter.adapt({"type": "third_person_camera_event"}))
-        self.assertEqual(
-            LegacyMessageAdapter.adapt({"type": "gather_result", "data": {"ok": True}})["audience"],
-            "user",
-        )
+    def test_legacy_message_adapter_is_removed(self):
+        self.assertFalse((PROJECT_DIR / "core" / "frida_runtime" / "legacy_message_adapter.py").exists())
 
     def test_future_feature_id_does_not_leak_into_center_files(self):
         center_paths = [
@@ -463,12 +416,54 @@ class MigratedOrdinaryFeatureTests(unittest.TestCase):
             PROJECT_DIR / "core" / "frida_manager.py",
             PROJECT_DIR / "ui" / "controllers" / "feature_action_controller.py",
             PROJECT_DIR / "ui" / "controllers" / "action_router.py",
-            PROJECT_DIR / "core" / "frida_runtime" / "legacy_message_adapter.py",
             PROJECT_DIR / "core" / "state" / "app_state.py",
             PROJECT_DIR / "core" / "config.py",
         ]
         for path in center_paths:
             self.assertNotIn("third_person_camera", path.read_text(encoding="utf-8"), msg=str(path))
+
+    def test_app_and_app_event_controller_have_no_special_feature_state(self):
+        app_text = (PROJECT_DIR / "ui" / "app.py").read_text(encoding="utf-8")
+        app_events = (PROJECT_DIR / "ui" / "controllers" / "app_event_controller.py").read_text(encoding="utf-8")
+        for needle in (
+            "_nano4t_",
+            "_battle_round",
+            "_battle_mode",
+            "_weapon_giver",
+            "_isbot_state",
+            "_weapon_hotkey_badges",
+            "_weapon_top_frames",
+            "_roundskip_monitor",
+            "_weapon_controller",
+            "_build_special_plugin_panel",
+        ):
+            self.assertNotIn(needle, app_text)
+        for needle in ("nano4t", "weapon_giver", "battle_round", "roundskip"):
+            self.assertNotIn(needle, app_events)
+        for event_name in ("game_connected", "game_disconnected", "game_not_found"):
+            self.assertIn(event_name, app_events)
+
+    def test_feature_specific_controllers_moved_to_feature_dirs(self):
+        for path in (
+            PROJECT_DIR / "ui" / "controllers" / "battle_round_controller.py",
+            PROJECT_DIR / "ui" / "controllers" / "nano4t_runtime_controller.py",
+            PROJECT_DIR / "ui" / "controllers" / "nano4t_selection_controller.py",
+            PROJECT_DIR / "ui" / "controllers" / "weapon_interaction_controller.py",
+            PROJECT_DIR / "ui" / "controllers" / "round_skip_monitor.py",
+            PROJECT_DIR / "core" / "services" / "game_action_service.py",
+            PROJECT_DIR / "core" / "services" / "weapon_giver_service.py",
+        ):
+            self.assertFalse(path.exists(), msg=str(path))
+        for path in (
+            PROJECT_DIR / "features" / "weapon_giver" / "controller.py",
+            PROJECT_DIR / "features" / "weapon_giver" / "service.py",
+            PROJECT_DIR / "features" / "weapon_giver" / "hotkeys.py",
+            PROJECT_DIR / "features" / "nano4t" / "runtime.py",
+            PROJECT_DIR / "features" / "nano4t" / "selection.py",
+            PROJECT_DIR / "features" / "battle_round" / "controller.py",
+            PROJECT_DIR / "features" / "roundskip" / "monitor.py",
+        ):
+            self.assertTrue(path.exists(), msg=str(path))
 
     def test_template_includes_events_and_plugin_event_example(self):
         template_dir = PROJECT_DIR / "features" / "_template"

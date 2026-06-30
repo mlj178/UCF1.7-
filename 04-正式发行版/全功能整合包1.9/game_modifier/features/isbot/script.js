@@ -113,7 +113,13 @@ modules.isbot = (function() {
   }
 
   function sendUiState(state) {
-    send({ type: 'isbot_state', state: state });
+    send({
+      type: 'plugin_event',
+      feature: 'isbot',
+      event: 'state',
+      payload: { state: state },
+      audience: 'both'
+    });
   }
 
   function readStr(p) {

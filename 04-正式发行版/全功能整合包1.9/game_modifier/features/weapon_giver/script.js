@@ -386,9 +386,14 @@ modules.weapon_giver = (function() {
 
   function sendGiveWeaponResult(taskId, success) {
     send({
-      type: 'giveWeaponResult',
-      taskId: taskId,
-      success: success
+      type: 'plugin_event',
+      feature: 'weapon_giver',
+      event: 'giveWeaponResult',
+      payload: {
+        taskId: taskId,
+        success: success
+      },
+      audience: 'both'
     });
   }
 
@@ -583,7 +588,13 @@ modules.weapon_giver = (function() {
       _isPlayerDead = false;
 
       try {
-        send({ type: 'playerRespawned' });
+        send({
+          type: 'plugin_event',
+          feature: 'weapon_giver',
+          event: 'playerRespawned',
+          payload: {},
+          audience: 'dev'
+        });
       } catch(e) {
         sendDevLog('error', '武器赋予', '发送复活事件失败: ' + e.message);
       }
@@ -703,15 +714,26 @@ modules.weapon_giver = (function() {
                   }
 
                   send({
-                    type: 'playerRespawnedWithWeapon',
-                    weaponId: _waitingForRespawnWeaponId,
-                    weaponName: _waitingForRespawnWeaponName
+                    type: 'plugin_event',
+                    feature: 'weapon_giver',
+                    event: 'playerRespawnedWithWeapon',
+                    payload: {
+                      weaponId: _waitingForRespawnWeaponId,
+                      weaponName: _waitingForRespawnWeaponName
+                    },
+                    audience: 'both'
                   });
                 } catch(e) {
                   sendDevLog('error', '武器赋予', '复活自动赋予异常: ' + e.message);
                 }
               } else {
-                send({ type: 'playerRespawned' });
+                send({
+                  type: 'plugin_event',
+                  feature: 'weapon_giver',
+                  event: 'playerRespawned',
+                  payload: {},
+                  audience: 'dev'
+                });
               }
             }
           } catch(e) {

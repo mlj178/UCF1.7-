@@ -5,7 +5,6 @@ import frida
 import psutil
 
 from core.event_bus import EventBus
-from core.frida_runtime.legacy_message_adapter import LegacyMessageAdapter
 from core.frida_runtime.rpc_client import RpcClient
 from core.frida_runtime.script_manager import ScriptManager
 from core.log_manager import log_to_file
@@ -256,9 +255,14 @@ class FridaManager:
             )
 
         else:
-            plugin_event = LegacyMessageAdapter.adapt(payload)
-            if plugin_event:
-                self._event_bus.emit("plugin_event", **plugin_event)
+            self._event_bus.emit(
+                "log_message",
+                level="warning",
+                module="Frida",
+                message=f"未知插件消息类型: {msg_type}",
+                audience="dev",
+                dev_detail=f"Unknown Frida message payload: {payload}",
+            )
 
     def restore_features(self, features_state):
         for feature_id, enabled in features_state.items():

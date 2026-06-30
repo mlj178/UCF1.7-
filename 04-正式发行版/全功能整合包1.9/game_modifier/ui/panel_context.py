@@ -1,58 +1,6 @@
 from ui.views.common import bind_view_handles
 
 
-LEGACY_PANEL_FEATURE_IDS = {
-    "weapon_giver",
-    "nano4t",
-    "battle_round",
-    "gather",
-    "roundskip",
-    "esp_box",
-    "isbot",
-}
-
-
-class LegacyPanelContext:
-    """LEGACY_COMPAT_ONLY: bridge old special panels to existing App state.
-
-    New feature panels must not use this object. Add explicit safe capabilities
-    to PanelContext instead of extending this compatibility surface.
-    """
-
-    def __init__(self, app):
-        self._app = app
-
-    def get_state(self, key, default=None):
-        return getattr(self._app, f"_{key}", default)
-
-    def set_state(self, key, value):
-        setattr(self._app, f"_{key}", value)
-
-    def get_handle(self, name, default=None):
-        return getattr(self._app, name, default)
-
-    def set_handle(self, name, value):
-        setattr(self._app, name, value)
-
-    def controller(self, name):
-        return getattr(self._app, f"_{name}_controller")
-
-    def service(self, name):
-        return getattr(self._app, f"_{name}_service")
-
-    @property
-    def weapon_top_frames(self):
-        return self._app._weapon_top_frames
-
-    @property
-    def weapon_hotkey_badges(self):
-        return self._app._weapon_hotkey_badges
-
-    @property
-    def weapon_controller(self):
-        return self._app._weapon_controller
-
-
 class PanelContext:
     """Safe capability object passed to plugin panels and event handlers."""
 
@@ -70,7 +18,6 @@ class PanelContext:
         self._bind_target = app
         self._is_connected = lambda: bool(app._ready)
         self._is_enabled = lambda feature_id: bool(app._features.get(feature_id, False))
-        self._legacy = LegacyPanelContext(app)
 
     def for_feature(self, feature_id):
         return FeaturePanelContext(self, feature_id)
@@ -107,14 +54,9 @@ class PanelContext:
             payload=payload or {},
         )
 
-    def legacy_for(self, feature_id):
-        if feature_id not in LEGACY_PANEL_FEATURE_IDS:
-            raise RuntimeError(f"Legacy panel context is not allowed for feature: {feature_id}")
-        return self._legacy
-
 
 class FeaturePanelContext:
-    """Feature-scoped safe context. Legacy access is gated by feature_id."""
+    """Feature-scoped safe context passed to a plugin panel or event handler."""
 
     def __init__(self, safe_context, feature_id):
         self._safe_context = safe_context
@@ -123,10 +65,6 @@ class FeaturePanelContext:
         self.feature_service = safe_context.feature_service
         self.config_manager = safe_context.config_manager
         self.callbacks = safe_context.callbacks
-
-    @property
-    def legacy(self):
-        return self._safe_context.legacy_for(self.feature_id)
 
     def log(self, message):
         return self._safe_context.log(message)

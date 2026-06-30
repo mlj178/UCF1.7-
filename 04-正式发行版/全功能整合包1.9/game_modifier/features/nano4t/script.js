@@ -39,6 +39,18 @@ function sendStatus(feature, enabled) {
   try { send({ type: 'status', feature: feature, enabled: enabled }); } catch (_) {}
 }
 
+function sendNano4tEvent(event, payload, audience) {
+  try {
+    send({
+      type: 'plugin_event',
+      feature: 'nano4t',
+      event: event,
+      payload: payload || {},
+      audience: audience || 'both'
+    });
+  } catch (_) {}
+}
+
 function getGameAssembly() {
   try {
     if (__localGameAssemblyCache) return __localGameAssemblyCache;
@@ -169,7 +181,7 @@ modules.nano4t = (function() {
         NANO4T_READY = false;
         NANO4T_ACTIVE = false;  // 重置激活状态
         sendDevLog('info', 'Nano4T', '多人生化模式实例已销毁', 'Nano4T OnDestroy triggered');
-        send(JSON.stringify({ type: 'nano4t_destroyed' }));
+        sendNano4tEvent('nano4t_destroyed', {}, 'both');
       }
     }));
   }
@@ -185,55 +197,48 @@ modules.nano4t = (function() {
       var n4 = getNanoInstance();
       if (!n4) {
         sendDevLog('warn', 'Nano4T', '未进入多人生化模式', 'Nano4T getInstance returned null');
-        send(JSON.stringify({ type: 'nano4t_error', msg: '未进入多人生化模式' }));
+        sendNano4tEvent('nano4t_error', { msg: '未进入多人生化模式' }, 'both');
       } else if (!loadAttrs()) {
         sendDevLog('warn', 'Nano4T', '未进入多人生化模式房间', 'Nano4T loadAttrs failed');
-        send(JSON.stringify({ type: 'nano4t_error', msg: '未进入多人生化模式房间' }));
+        sendNano4tEvent('nano4t_error', { msg: '未进入多人生化模式房间' }, 'both');
       } else {
         installHooks();
         NANO4T_READY = true;
         sendDevLog('success', 'Nano4T', '多人生化特性系统已就绪', 'Nano4T ready, attrCount=' + Object.keys(NANO4T_ATTR_PTR).length);
-        send(JSON.stringify({ type: 'nano4t_ready', ids: Object.keys(NANO4T_ATTR_PTR).sort() }));
+        sendNano4tEvent('nano4t_ready', { ids: Object.keys(NANO4T_ATTR_PTR).sort() }, 'both');
       }
     } catch(e) {
       sendDevLog('error', 'Nano4T', '初始化异常: ' + (e.message || e), 'Nano4T performInit exception');
-      send(JSON.stringify({ type: 'nano4t_error', msg: '初始化异常: ' + (e.message || e) }));
+      sendNano4tEvent('nano4t_error', { msg: '初始化异常: ' + (e.message || e) }, 'both');
     }
   }
 
   function performGetCurrent() {
-    var result;
     if (!NANO4T_READY || NANO4T_MODE_DESTROYED) {
-      result = JSON.stringify({ type: 'nano4t_current', g: -1, h: -1, ok: false });
-      send(result);
+      sendNano4tEvent('nano4t_current', { g: -1, h: -1, ok: false }, 'both');
       return;
     }
     try {
       var inst = getNanoInstance();
       if (!inst) {
-        result = JSON.stringify({ type: 'nano4t_current', g: -1, h: -1, ok: true });
-        send(result);
+        sendNano4tEvent('nano4t_current', { g: -1, h: -1, ok: true }, 'both');
         return;
       }
       var an = rdPtr(inst.add(0xE0));
       var ah = rdPtr(inst.add(0xE4));
-      result = JSON.stringify({
-        type: 'nano4t_current',
+      sendNano4tEvent('nano4t_current', {
         g: an.isNull() ? -1 : rdS32(an.add(0x0C)),
         h: ah.isNull() ? -1 : rdS32(ah.add(0x0C)),
         ok: true
-      });
-      send(result);
+      }, 'both');
     } catch(e) {
-      result = JSON.stringify({ type: 'nano4t_current', g: -1, h: -1, ok: true });
-      send(result);
+      sendNano4tEvent('nano4t_current', { g: -1, h: -1, ok: true }, 'both');
     }
   }
 
   function performHealthCheck() {
-    var result;
     if (NANO4T_MODE_DESTROYED) {
-      send(JSON.stringify({ type: 'nano4t_dead' }));
+      sendNano4tEvent('nano4t_dead', {}, 'both');
       return;
     }
     try {
@@ -241,15 +246,14 @@ modules.nano4t = (function() {
       if (!inst || rdPtr(inst.add(0xD8)).isNull()) {
         NANO4T_MODE_DESTROYED = true;
         NANO4T_READY = false;
-        result = JSON.stringify({ type: 'nano4t_dead' });
+        sendNano4tEvent('nano4t_dead', {}, 'both');
       } else {
-        result = JSON.stringify({ type: 'nano4t_alive' });
+        sendNano4tEvent('nano4t_alive', {}, 'both');
       }
-      send(result);
     } catch(e) {
       NANO4T_MODE_DESTROYED = true;
       NANO4T_READY = false;
-      send(JSON.stringify({ type: 'nano4t_dead' }));
+      sendNano4tEvent('nano4t_dead', {}, 'both');
     }
   }
 
@@ -264,7 +268,7 @@ modules.nano4t = (function() {
       sendDevLog(failLogLevel || 'warn', 'Nano4T', failLogTitle, failLogDev);
     }
     if (failMessage) {
-      send(JSON.stringify({ type: 'nano4t_error', msg: failMessage }));
+      sendNano4tEvent('nano4t_error', { msg: failMessage }, 'both');
     }
     return JSON.stringify({ ok: false });
   }
@@ -334,7 +338,7 @@ modules.nano4t = (function() {
       NANO4T_WANTED_HUMAN = h;
       NANO4T_ACTIVE = true;  // 设置时激活
       sendDevLog('info', 'Nano4T', '已设置目标特性 g=' + g + ', h=' + h, 'Nano4T wanted traits updated');
-      send(JSON.stringify({ type: 'nano4t_set', g: g, h: h }));
+      sendNano4tEvent('nano4t_set', { g: g, h: h }, 'both');
   }
 
   function getCurrentTraits() {
@@ -434,12 +438,12 @@ rpc.exports = {
   },
   nano4tGetCurrent: function(payload) {
     var module = __nano4tModule();
-    if (!module || typeof module.getCurrent !== 'function') return { type: 'nano4t_current', g: -1, h: -1, ok: false };
+    if (!module || typeof module.getCurrent !== 'function') return { ok: false, g: -1, h: -1 };
     return parseJsonResult(module.getCurrent(), { ok: true });
   },
   nano4tHealthCheck: function(payload) {
     var module = __nano4tModule();
-    if (!module || typeof module.healthCheck !== 'function') return { type: 'nano4t_dead' };
+    if (!module || typeof module.healthCheck !== 'function') return { ok: false };
     return parseJsonResult(module.healthCheck(), { ok: true });
   }
 };
