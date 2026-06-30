@@ -1,6 +1,7 @@
 def handle_event(context, event, payload):
-    runtime = context.controller("nano4t_runtime")
-    battle_round = context.controller("battle_round")
+    legacy = context.legacy
+    runtime = legacy.controller("nano4t_runtime")
+    battle_round = legacy.controller("battle_round")
 
     if event == "nano4t_ready":
         ids = payload.get("ids", [])

@@ -370,15 +370,38 @@ class MigratedOrdinaryFeatureTests(unittest.TestCase):
             self.assertNotIn(f'"{old_event}"', app_events)
 
     def test_panels_use_panel_context_not_full_app(self):
+        legacy_panel_features = {
+            "weapon_giver",
+            "nano4t",
+            "battle_round",
+            "gather",
+            "roundskip",
+            "esp_box",
+            "isbot",
+        }
+        forbidden_patterns = {
+            "context._app": r"context\._app",
+            "app._": r"app\._",
+            "FridaManager": r"\bFridaManager\b|core\.frida_manager",
+            "get_state": r"\.get_state\s*\(",
+            "set_state": r"\.set_state\s*\(",
+            "get_handle": r"\.get_handle\s*\(",
+            "set_handle": r"\.set_handle\s*\(",
+            "controller": r"\.controller\s*\(",
+            "service": r"\.service\s*\(",
+            "legacy": r"context\.legacy\b",
+        }
         for panel_path in (PROJECT_DIR / "features").glob("*/panel.py"):
             panel_text = panel_path.read_text(encoding="utf-8")
             self.assertNotIn("build_panel(app", panel_text, msg=str(panel_path))
-            self.assertNotIn("app._", panel_text, msg=str(panel_path))
-            self.assertNotIn("FridaManager", panel_text, msg=str(panel_path))
+            for label, pattern in forbidden_patterns.items():
+                if panel_path.parent.name in legacy_panel_features:
+                    continue
+                self.assertIsNone(re.search(pattern, panel_text), msg=f"{panel_path}: {label}")
 
     def test_app_state_concrete_fields_are_legacy_only(self):
         state_text = (PROJECT_DIR / "core" / "state" / "app_state.py").read_text(encoding="utf-8")
-        self.assertIn("Legacy migration fields only", state_text)
+        self.assertIn("LEGACY_COMPAT_ONLY", state_text)
         allowed_fields = {
             "features",
             "knife_speed",
@@ -395,6 +418,66 @@ class MigratedOrdinaryFeatureTests(unittest.TestCase):
         }
         fields = set(re.findall(r"^\s{4}([a-zA-Z_][a-zA-Z0-9_]*)\s*:", state_text, re.MULTILINE))
         self.assertEqual(fields, allowed_fields)
+
+    def test_safe_panel_context_has_no_legacy_methods(self):
+        panel_context = (PROJECT_DIR / "ui" / "panel_context.py").read_text(encoding="utf-8")
+        self.assertIn("LEGACY_COMPAT_ONLY", panel_context)
+        safe_match = re.search(
+            r"class PanelContext\b(?P<body>.*?)(?=^class FeaturePanelContext\b)",
+            panel_context,
+            re.S | re.M,
+        )
+        self.assertIsNotNone(safe_match)
+        safe_body = safe_match.group("body")
+        for method in ("get_state", "set_state", "get_handle", "set_handle", "controller", "service"):
+            self.assertIsNone(re.search(rf"^\s+def\s+{method}\b", safe_body, re.M))
+
+    def test_legacy_message_adapter_is_whitelisted(self):
+        adapter_text = (PROJECT_DIR / "core" / "frida_runtime" / "legacy_message_adapter.py").read_text(encoding="utf-8")
+        self.assertIn("LEGACY_COMPAT_ONLY", adapter_text)
+        self.assertIn("Do not add new feature branches here", adapter_text)
+        self.assertIn("LEGACY_FEATURE_IDS", adapter_text)
+        self.assertIn("LEGACY_MESSAGE_TYPES", adapter_text)
+        self.assertNotIn("third_person_camera", adapter_text)
+
+        from core.frida_runtime.legacy_message_adapter import (
+            LEGACY_FEATURE_IDS,
+            LEGACY_MESSAGE_TYPES,
+            LEGACY_MESSAGE_PREFIXES,
+            LegacyMessageAdapter,
+        )
+
+        self.assertEqual(
+            LEGACY_FEATURE_IDS,
+            {"gather", "roundskip", "weapon_giver", "nano4t", "battle_round", "isbot"},
+        )
+        self.assertIn("gather_result", LEGACY_MESSAGE_TYPES)
+        self.assertIn("nano4t_", LEGACY_MESSAGE_PREFIXES)
+        self.assertIsNone(LegacyMessageAdapter.adapt({"type": "third_person_camera_event"}))
+        self.assertEqual(
+            LegacyMessageAdapter.adapt({"type": "gather_result", "data": {"ok": True}})["audience"],
+            "user",
+        )
+
+    def test_future_feature_id_does_not_leak_into_center_files(self):
+        center_paths = [
+            PROJECT_DIR / "ui" / "app.py",
+            PROJECT_DIR / "core" / "frida_manager.py",
+            PROJECT_DIR / "ui" / "controllers" / "feature_action_controller.py",
+            PROJECT_DIR / "ui" / "controllers" / "action_router.py",
+            PROJECT_DIR / "core" / "frida_runtime" / "legacy_message_adapter.py",
+            PROJECT_DIR / "core" / "state" / "app_state.py",
+            PROJECT_DIR / "core" / "config.py",
+        ]
+        for path in center_paths:
+            self.assertNotIn("third_person_camera", path.read_text(encoding="utf-8"), msg=str(path))
+
+    def test_template_includes_events_and_plugin_event_example(self):
+        template_dir = PROJECT_DIR / "features" / "_template"
+        self.assertTrue((template_dir / "events.py").exists())
+        self.assertIn("handle_event", (template_dir / "events.py").read_text(encoding="utf-8"))
+        self.assertIn("plugin_event", (template_dir / "script.js").read_text(encoding="utf-8"))
+        self.assertIn("events.py", (template_dir / "README.md").read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":

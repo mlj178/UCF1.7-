@@ -40,6 +40,30 @@ features/<feature_id>/
 - `panel.py` 接收 `PanelContext`，不要接收完整 `App` 对象。
 - JS 消息统一发送或兼容转换为 `plugin_event`，由 `features/<feature_id>/events.py` 处理本功能事件。
 
+## PanelContext 边界
+
+新插件只允许使用安全能力：
+
+- `event_bus`
+- `feature_service`
+- `config_manager`
+- `callbacks`
+- `log(message)`
+- `after(delay_ms, callback)`
+- `bind_handles(handles)`
+- `get_config(feature_id)`
+- `set_config(feature_id, config)`
+- `is_connected()`
+- `is_enabled(feature_id)`
+- `emit(event_name, **payload)`
+- `feature_event(event_name, payload=None)`
+
+`context.legacy` 是 `LEGACY_COMPAT_ONLY`，只为现有特殊功能保留。新功能不要使用。
+
+## LegacyMessageAdapter 边界
+
+`core/frida_runtime/legacy_message_adapter.py` 只用于旧 JS 消息兼容。新增功能必须直接发送 `plugin_event`，不要向 LegacyMessageAdapter 添加新功能分支。
+
 ## 配置和状态
 
 - `core/config.py` 的功能信息来自 `features/*/manifest.json`。
@@ -60,9 +84,11 @@ features/<feature_id>/
 - 不要使用 `FeatureBase`。
 - 不要让 `panel.py` 直接 import `FridaManager`。
 - 不要让 `panel.py` 访问 `app._xxx` 私有字段。
+- 不要让新 `panel.py` 使用 `context._app` 或 `context.legacy`。
 - 不要把多个功能写进一个大 JS。
 - 不要在中心文件写功能 ID 列表。
 - 不要往 `AppState` 增加具体功能字段。
+- 不要改 `LegacyMessageAdapter` 接新功能。
 
 ## 新增功能流程
 

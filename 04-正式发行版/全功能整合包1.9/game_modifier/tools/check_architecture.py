@@ -28,6 +28,16 @@ ORDINARY_FEATURE_IDS = {
 }
 SPECIAL_FEATURE_IDS = {"nano4t", "weapon_giver", "battle_round"}
 KNOWN_FEATURE_IDS = ORDINARY_FEATURE_IDS | SPECIAL_FEATURE_IDS
+LEGACY_PANEL_FEATURE_IDS = {
+    "weapon_giver",
+    "nano4t",
+    "battle_round",
+    "gather",
+    "roundskip",
+    "esp_box",
+    "isbot",
+}
+FORBIDDEN_FUTURE_FEATURE_IDS = {"third_person_camera"}
 
 
 def fail(message):
@@ -213,7 +223,19 @@ def check_plugin_files_and_manifests():
 
 def check_plugin_python_boundaries():
     ok = True
+    forbidden_panel_patterns = {
+        "import FridaManager": r"\bFridaManager\b|core\.frida_manager",
+        "app private access": r"app\._|context\._app",
+        "legacy get_state": r"\.get_state\s*\(",
+        "legacy set_state": r"\.set_state\s*\(",
+        "legacy get_handle": r"\.get_handle\s*\(",
+        "legacy set_handle": r"\.set_handle\s*\(",
+        "legacy controller": r"\.controller\s*\(",
+        "legacy service": r"\.service\s*\(",
+        "legacy context": r"context\.legacy\b",
+    }
     for plugin_dir in plugin_dirs():
+        feature_id = plugin_dir.name
         feature_py = plugin_dir / "feature.py"
         panel_py = plugin_dir / "panel.py"
         if feature_py.exists():
@@ -228,10 +250,52 @@ def check_plugin_python_boundaries():
                     ok = fail(f"feature.py uses legacy runtime {name}: {feature_py}") and ok
         if panel_py.exists():
             text = read(panel_py)
-            if "FridaManager" in text or "core.frida_manager" in text:
-                ok = fail(f"panel.py imports FridaManager: {panel_py}") and ok
-            if "app._" in text or "build_panel(app" in text:
-                ok = fail(f"panel.py depends on full app/private fields: {panel_py}") and ok
+            if "build_panel(app" in text:
+                ok = fail(f"panel.py accepts full app object: {panel_py}. Use PanelContext.") and ok
+            for label, pattern in forbidden_panel_patterns.items():
+                if re.search(pattern, text) and feature_id not in LEGACY_PANEL_FEATURE_IDS:
+                    ok = fail(f"panel.py uses forbidden API ({label}): {panel_py}. Use safe PanelContext/callbacks.") and ok
+    return ok
+
+
+def check_panel_context_boundary():
+    path = ROOT / "ui" / "panel_context.py"
+    text = read(path)
+    ok = True
+    if "LEGACY_COMPAT_ONLY" not in text:
+        ok = fail("PanelContext legacy bridge is not marked LEGACY_COMPAT_ONLY") and ok
+    safe_match = re.search(r"class PanelContext\b(?P<body>.*?)(?=^class FeaturePanelContext\b)", text, re.S | re.M)
+    if not safe_match:
+        ok = fail("PanelContext class not found") and ok
+        return ok
+    safe_body = safe_match.group("body")
+    for method in ("get_state", "set_state", "get_handle", "set_handle", "controller", "service"):
+        if re.search(rf"^\s+def\s+{method}\b", safe_body, re.M):
+            ok = fail(f"Safe PanelContext exposes legacy method: {method}") and ok
+    return ok
+
+
+def check_legacy_message_adapter():
+    path = ROOT / "core" / "frida_runtime" / "legacy_message_adapter.py"
+    text = read(path)
+    ok = True
+    for marker in (
+        "LEGACY_COMPAT_ONLY",
+        "Do not add new feature branches here",
+        "LEGACY_FEATURE_IDS",
+        "LEGACY_MESSAGE_TYPES",
+    ):
+        if marker not in text:
+            ok = fail(f"LegacyMessageAdapter missing marker/whitelist: {marker}") and ok
+    if "third_person_camera" in text:
+        ok = fail("LegacyMessageAdapter must not mention third_person_camera") and ok
+    allowed = LEGACY_PANEL_FEATURE_IDS - {"esp_box"}
+    feature_literals = set(re.findall(r"['\"]([a-z0-9_]+)['\"]", text))
+    illegal_features = (feature_literals & KNOWN_FEATURE_IDS) - allowed
+    if illegal_features:
+        ok = fail(f"LegacyMessageAdapter contains non-legacy feature ids: {sorted(illegal_features)}") and ok
+    if '"plugin_event"' not in text and "'plugin_event'" not in text:
+        ok = fail("LegacyMessageAdapter documentation must point new plugins to plugin_event") and ok
     return ok
 
 
@@ -239,8 +303,8 @@ def check_app_state_legacy_boundary():
     path = ROOT / "core" / "state" / "app_state.py"
     text = read(path)
     ok = True
-    if "Legacy migration fields only" not in text:
-        ok = fail("AppState concrete feature fields are not marked as legacy migration") and ok
+    if "LEGACY_COMPAT_ONLY" not in text:
+        ok = fail("AppState concrete feature fields are not marked LEGACY_COMPAT_ONLY") and ok
     allowed_fields = {
         "features",
         "knife_speed",
@@ -265,7 +329,7 @@ def check_app_state_legacy_boundary():
 def check_template_is_plugin_self_contained():
     ok = True
     template_dir = FEATURES_DIR / "_template"
-    for filename in ("manifest.json", "feature.py", "script.js", "panel.py", "README.md"):
+    for filename in ("manifest.json", "feature.py", "script.js", "panel.py", "events.py", "README.md"):
         if not (template_dir / filename).exists():
             ok = fail(f"template missing {filename}") and ok
     script_path = template_dir / "script.js"
@@ -273,6 +337,8 @@ def check_template_is_plugin_self_contained():
         script = read(script_path)
         if "rpc.exports" not in script:
             ok = fail("template script.js missing rpc.exports") and ok
+        if '"plugin_event"' not in script and "'plugin_event'" not in script:
+            ok = fail("template script.js must demonstrate plugin_event") and ok
         for needle in ("common.js", "scripts/_common.js", "require("):
             if needle in script:
                 ok = fail(f"template script.js references shared JS: {needle}") and ok
@@ -285,6 +351,28 @@ def check_template_is_plugin_self_contained():
         for callback_name in ('callbacks["toggle"]', 'callbacks["set_config"]', 'callbacks["action"]'):
             if callback_name not in panel:
                 ok = fail(f"template panel.py missing {callback_name}") and ok
+    events_path = template_dir / "events.py"
+    if events_path.exists() and "handle_event" not in read(events_path):
+        ok = fail("template events.py missing handle_event") and ok
+    return ok
+
+
+def check_future_feature_not_in_center_files():
+    ok = True
+    center_paths = [
+        ROOT / "ui" / "app.py",
+        ROOT / "core" / "frida_manager.py",
+        ROOT / "ui" / "controllers" / "feature_action_controller.py",
+        ROOT / "ui" / "controllers" / "action_router.py",
+        ROOT / "core" / "frida_runtime" / "legacy_message_adapter.py",
+        ROOT / "core" / "state" / "app_state.py",
+        ROOT / "core" / "config.py",
+    ]
+    for path in center_paths:
+        text = read(path)
+        for feature_id in FORBIDDEN_FUTURE_FEATURE_IDS:
+            if feature_id in text:
+                ok = fail(f"future feature id leaked into center file: {path}: {feature_id}") and ok
     return ok
 
 
@@ -392,8 +480,11 @@ def main():
         check_core_config_manifest_source(),
         check_plugin_files_and_manifests(),
         check_plugin_python_boundaries(),
+        check_panel_context_boundary(),
+        check_legacy_message_adapter(),
         check_app_state_legacy_boundary(),
         check_template_is_plugin_self_contained(),
+        check_future_feature_not_in_center_files(),
         check_runtime_old_script_references(),
         check_no_mainline_legacy_runtime_files(),
         check_assets(),
@@ -402,6 +493,7 @@ def main():
     if all(checks):
         print("ARCHITECTURE_CHECK_OK")
         return 0
+    print("ARCHITECTURE_CHECK_FAILED")
     return 1
 
 

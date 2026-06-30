@@ -11,8 +11,15 @@ class PluginEventRouter:
     def route(self, feature_id, event, payload):
         handler = self._load_handler(feature_id)
         if not handler:
+            self._context.emit(
+                "log_message",
+                level="info",
+                module="PluginEventRouter",
+                message=f"未找到插件事件处理器: {feature_id}.{event}",
+                audience="dev",
+            )
             return False
-        handler(self._context, event, payload or {})
+        handler(self._context.for_feature(feature_id), event, payload or {})
         return True
 
     def _load_handler(self, feature_id):

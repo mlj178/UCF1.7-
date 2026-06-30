@@ -1,6 +1,7 @@
 def _apply_state(context, state):
-    context.set_state("isbot_state", state)
-    label = context.get_handle("isbot_status_label")
+    legacy = context.legacy
+    legacy.set_state("isbot_state", state)
+    label = legacy.get_handle("isbot_status_label")
     if not label:
         return
     if state == "awaiting_room":

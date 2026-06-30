@@ -4,8 +4,8 @@ from dataclasses import dataclass, field
 @dataclass
 class AppState:
     features: dict = field(default_factory=dict)
-    # Legacy migration fields only. New plugin feature configuration belongs in
-    # data/user_config.json by feature_id, not in this dataclass.
+    # LEGACY_COMPAT_ONLY: legacy migration fields only. New plugin feature
+    # configuration belongs in data/user_config.json by feature_id, not here.
     knife_speed: float = 5.0
     move_speed: float = 3.0
     range_mult: float = 50.0

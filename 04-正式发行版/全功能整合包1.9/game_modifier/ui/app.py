@@ -95,6 +95,9 @@ class App(ctk.CTk):
         self._migrate_plugin_config_from_persistent_state()
         self._apply_plugin_config_values()
 
+        # LEGACY_COMPAT_ONLY: existing special-page runtime state.
+        # New features must keep state in features/<feature_id>/ config, panel,
+        # events, or a feature-local controller; do not add app._<feature> fields.
         self._nano4t_ready = False
         self._nano4t_temp_ghost = self._persistent_state.nano4t_ghost
         self._nano4t_temp_human = self._persistent_state.nano4t_human
@@ -119,6 +122,8 @@ class App(ctk.CTk):
         self._nano4t_runtime_controller = Nano4tRuntimeController(self)
         self._battle_round_controller = BattleRoundController(self)
 
+        # LEGACY_COMPAT_ONLY: special-page handles and state kept for the
+        # existing UI contract. New plugin panels must use PanelContext only.
         self._isbot_state = 'off'
         self.settings_window = None
         self._weapon_giver_tab_built = False
@@ -270,7 +275,7 @@ class App(ctk.CTk):
         build_panel = getattr(module, "build_panel", None)
         if not callable(build_panel):
             return None
-        return build_panel(self._panel_context, parent)
+        return build_panel(self._panel_context.for_feature(feature_id), parent)
 
     def _build_connect_button(self):
         self.btn_frame, self.connect_btn = self._shell_view.build_connect_button()
