@@ -1,4 +1,4 @@
-import importlib
+﻿import importlib
 import json
 import sys
 import tempfile
@@ -97,12 +97,21 @@ class PluginArchitectureTests(unittest.TestCase):
         self.assertEqual(registry.by_tab("other_tab"), [feature])
         self.assertEqual(registry.enabled_features(), [])
 
-    def test_rpc_client_allows_only_standard_actions(self):
+    def test_rpc_client_allows_manifest_rpc_actions(self):
         from core.frida_runtime.rpc_client import RpcClient
 
         calls = []
 
         class FakeScriptManager:
+            manifests = {
+                "sample": {
+                    "feature_id": "sample",
+                    "display_name": "Sample",
+                    "rpc": ["enable", "customAction"],
+                    "_manifest_path": "features/sample/manifest.json",
+                }
+            }
+
             def call(self, feature_id, action, payload=None):
                 calls.append((feature_id, action, payload))
                 return {"ok": True}
@@ -110,7 +119,8 @@ class PluginArchitectureTests(unittest.TestCase):
         client = RpcClient(FakeScriptManager())
 
         self.assertEqual(client.call("sample", "enable"), {"ok": True})
-        self.assertEqual(calls, [("sample", "enable", None)])
+        self.assertEqual(client.call("sample", "customAction"), {"ok": True})
+        self.assertEqual(calls, [("sample", "enable", None), ("sample", "customAction", None)])
         with self.assertRaises(ValueError):
             client.call("sample", "rawNativeCall")
 
@@ -135,23 +145,23 @@ class PluginArchitectureTests(unittest.TestCase):
 
 class MigratedOrdinaryFeatureTests(unittest.TestCase):
     ORDINARY_FEATURES = {
-        "knife": ("features/feature_04_fast_knife.py", "scripts/04-fast_knife.js"),
-        "recoil": ("features/feature_02_no_recoil.py", "scripts/02-no_recoil.js"),
-        "ammo": ("features/feature_01_unlimited_ammo.py", "scripts/01-unlimited_ammo.js"),
-        "ammoplus": ("features/feature_05_fast_reload_buff.py", "scripts/05-fast_reload_buff.js"),
-        "range": ("features/feature_07_knife_attack_range.py", "scripts/07-knife_attack_range.js"),
-        "aim": ("features/feature_11_auto_aim.py", "scripts/11-auto_aim.js"),
-        "speedgun": ("features/feature_13_fire_rate_auto_sniper.py", "scripts/13-fire_rate_auto_sniper.js"),
-        "movespeed": ("features/feature_06_movement_speed.py", "scripts/06-movement_speed.js"),
-        "time": ("features/feature_03_unlimited_time.py", "scripts/03-unlimited_time.js"),
-        "gravity": ("features/feature_09_high_jump_low_gravity.py", "scripts/09-high_jump_low_gravity.js"),
-        "godmode": ("features/feature_12_invincibility.py", "scripts/12-invincibility.js"),
-        "skillcd": ("features/feature_17_skill_no_cooldown.py", "scripts/17-skill_no_cooldown.js"),
-        "gather": ("features/feature_08_gather_enemies.py", "scripts/08-gather_enemies.js"),
-        "isbot": ("features/feature_14_become_bot.py", "scripts/14-become_bot.js"),
-        "roundskip": ("features/feature_10_skip_round.py", "scripts/10-skip_round.js"),
-        "esp_box": ("features/feature_18_universal_esp_box.py", None),
-        "timescale": ("features/feature_20_unity_time_acceleration.py", "scripts/20-unity_time_acceleration.js"),
+        "knife": ("features/_legacy_archive/python_runtime/feature_04_fast_knife.py", "features/_legacy_archive/scripts/04-fast_knife.js"),
+        "recoil": ("features/_legacy_archive/python_runtime/feature_02_no_recoil.py", "features/_legacy_archive/scripts/02-no_recoil.js"),
+        "ammo": ("features/_legacy_archive/python_runtime/feature_01_unlimited_ammo.py", "features/_legacy_archive/scripts/01-unlimited_ammo.js"),
+        "ammoplus": ("features/_legacy_archive/python_runtime/feature_05_fast_reload_buff.py", "features/_legacy_archive/scripts/05-fast_reload_buff.js"),
+        "range": ("features/_legacy_archive/python_runtime/feature_07_knife_attack_range.py", "features/_legacy_archive/scripts/07-knife_attack_range.js"),
+        "aim": ("features/_legacy_archive/python_runtime/feature_11_auto_aim.py", "features/_legacy_archive/scripts/11-auto_aim.js"),
+        "speedgun": ("features/_legacy_archive/python_runtime/feature_13_fire_rate_auto_sniper.py", "features/_legacy_archive/scripts/13-fire_rate_auto_sniper.js"),
+        "movespeed": ("features/_legacy_archive/python_runtime/feature_06_movement_speed.py", "features/_legacy_archive/scripts/06-movement_speed.js"),
+        "time": ("features/_legacy_archive/python_runtime/feature_03_unlimited_time.py", "features/_legacy_archive/scripts/03-unlimited_time.js"),
+        "gravity": ("features/_legacy_archive/python_runtime/feature_09_high_jump_low_gravity.py", "features/_legacy_archive/scripts/09-high_jump_low_gravity.js"),
+        "godmode": ("features/_legacy_archive/python_runtime/feature_12_invincibility.py", "features/_legacy_archive/scripts/12-invincibility.js"),
+        "skillcd": ("features/_legacy_archive/python_runtime/feature_17_skill_no_cooldown.py", "features/_legacy_archive/scripts/17-skill_no_cooldown.js"),
+        "gather": ("features/_legacy_archive/python_runtime/feature_08_gather_enemies.py", "features/_legacy_archive/scripts/08-gather_enemies.js"),
+        "isbot": ("features/_legacy_archive/python_runtime/feature_14_become_bot.py", "features/_legacy_archive/scripts/14-become_bot.js"),
+        "roundskip": ("features/_legacy_archive/python_runtime/feature_10_skip_round.py", "features/_legacy_archive/scripts/10-skip_round.js"),
+        "esp_box": ("features/_legacy_archive/python_runtime/feature_18_universal_esp_box.py", None),
+        "timescale": ("features/_legacy_archive/python_runtime/feature_20_unity_time_acceleration.py", "features/_legacy_archive/scripts/20-unity_time_acceleration.js"),
     }
 
     REQUIRED_MANIFEST_FIELDS = {
@@ -313,8 +323,11 @@ class MigratedOrdinaryFeatureTests(unittest.TestCase):
         self.assertIn("isinstance(handles, dict)", handles_text)
         self.assertIn("def set_feature_config", controller)
         self.assertIn("def trigger_feature_action", controller)
-        self.assertIn("Agent v1.9", frida_manager)
-        self.assertNotIn("Agent v1.8", frida_manager)
+        self.assertNotIn("_build_js_code", frida_manager)
+        self.assertNotIn("_build_dispatcher", frida_manager)
+        self.assertNotIn("_build_rpc_exports", frida_manager)
+        self.assertNotIn("send_toggle", frida_manager)
+        self.assertNotIn("call_export", frida_manager)
 
         for panel_path in (PROJECT_DIR / "features").glob("*/panel.py"):
             panel_text = panel_path.read_text(encoding="utf-8")
@@ -328,3 +341,4 @@ class MigratedOrdinaryFeatureTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+

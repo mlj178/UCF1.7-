@@ -31,8 +31,8 @@
     "cleanup": true
   },
   "source": {
-    "feature_py": "features/feature_13_fire_rate_auto_sniper.py",
-    "script_js": "scripts/13-fire_rate_auto_sniper.js"
+    "runtime_script_js": "features/speedgun/script.js",
+    "legacy_script_js": "features/_legacy_archive/scripts/13-fire_rate_auto_sniper.js"
   },
   "ui_handles": {
     "switch": "speedgun_switch"
@@ -43,5 +43,8 @@
       "• 连狙：半自动 → 全自动，狙击镜常开",
       "• 后坐力清零 + 扩散归零"
     ]
+  },
+  "runtime": {
+    "type": "plugin_script"
   }
 }

@@ -70,8 +70,8 @@
     "cleanup": true
   },
   "source": {
-    "feature_py": "features/feature_09_high_jump_low_gravity.py",
-    "script_js": "scripts/09-high_jump_low_gravity.js"
+    "runtime_script_js": "features/gravity/script.js",
+    "legacy_script_js": "features/_legacy_archive/scripts/09-high_jump_low_gravity.js"
   },
   "ui_handles": {
     "switch": "gravity_switch",
@@ -83,5 +83,8 @@
     "jump_label": "jump_label",
     "mode_var": "gravity_mode_var",
     "mode_combo": "gravity_mode_combo"
+  },
+  "runtime": {
+    "type": "plugin_script"
   }
 }

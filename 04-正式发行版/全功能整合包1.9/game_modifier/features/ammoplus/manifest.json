@@ -31,10 +31,13 @@
     "cleanup": true
   },
   "source": {
-    "feature_py": "features/feature_05_fast_reload_buff.py",
-    "script_js": "scripts/05-fast_reload_buff.js"
+    "runtime_script_js": "features/ammoplus/script.js",
+    "legacy_script_js": "features/_legacy_archive/scripts/05-fast_reload_buff.js"
   },
   "ui_handles": {
     "switch": "ammoplus_switch"
+  },
+  "runtime": {
+    "type": "plugin_script"
   }
 }

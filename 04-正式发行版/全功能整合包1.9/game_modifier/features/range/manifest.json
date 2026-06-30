@@ -42,12 +42,15 @@
     "cleanup": true
   },
   "source": {
-    "feature_py": "features/feature_07_knife_attack_range.py",
-    "script_js": "scripts/07-knife_attack_range.js"
+    "runtime_script_js": "features/range/script.js",
+    "legacy_script_js": "features/_legacy_archive/scripts/07-knife_attack_range.js"
   },
   "ui_handles": {
     "switch": "range_switch",
     "slider_var": "range_var",
     "slider_label": "range_label"
+  },
+  "runtime": {
+    "type": "plugin_script"
   }
 }

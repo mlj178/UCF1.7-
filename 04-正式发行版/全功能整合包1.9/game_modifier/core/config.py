@@ -4,12 +4,10 @@ import sys
 if getattr(sys, 'frozen', False):
     APP_DIR = os.path.dirname(sys.executable)
     RESOURCE_DIR = os.path.join(sys._MEIPASS, "资源")
-    SCRIPTS_DIR = os.path.join(sys._MEIPASS, "game_modifier", "scripts")
     PLUGINS_DIR = os.path.join(sys._MEIPASS, "game_modifier", "plugins")
 else:
     APP_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     RESOURCE_DIR = os.path.join(os.path.dirname(APP_DIR), "资源")
-    SCRIPTS_DIR = os.path.join(APP_DIR, "scripts")
     PLUGINS_DIR = os.path.join(APP_DIR, "plugins")
 
 DATA_DIR = os.path.join(APP_DIR, "data")

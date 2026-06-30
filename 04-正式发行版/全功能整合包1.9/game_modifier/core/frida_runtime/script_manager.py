@@ -1,6 +1,7 @@
+import json
 from pathlib import Path
 
-from core.config import APP_DIR, SCRIPTS_DIR
+from core.config import APP_DIR
 from core.log_manager import get_logger
 
 
@@ -38,14 +39,8 @@ class ScriptManager:
             raise RuntimeError("frida session is not attached")
 
         script_path = self._script_path(feature_id)
-        common_path = Path(SCRIPTS_DIR) / "_common.js"
-        parts = []
-        if common_path.exists():
-            with common_path.open("r", encoding="utf-8") as handle:
-                parts.append(handle.read())
         with script_path.open("r", encoding="utf-8") as handle:
-            parts.append(handle.read())
-        js_code = "\n\n".join(parts)
+            js_code = handle.read()
         script = self.session_manager.session.create_script(js_code)
         if self._message_handler:
             script.on("message", self._message_handler)
@@ -80,8 +75,15 @@ class ScriptManager:
         if fn is None:
             raise AttributeError(f"plugin script {feature_id} missing rpc action {action}")
         if payload is None:
-            return fn()
-        return fn(payload)
+            result = fn()
+        else:
+            result = fn(payload)
+        if isinstance(result, str):
+            try:
+                return json.loads(result)
+            except (json.JSONDecodeError, TypeError):
+                return result
+        return result
 
     def cleanup_all(self, reason):
         for feature_id in list(self._scripts.keys()):

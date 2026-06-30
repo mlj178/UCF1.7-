@@ -18,10 +18,15 @@ if os.path.exists(resource_dir):
         if os.path.isfile(file_path):
             datas.append((file_path, "资源"))
 
-# 2. 添加 scripts 目录下的所有 JS 文件
+# 2. 添加插件目录（manifest / script.js / panel.py）
+features_dir = os.path.join(current_dir, "features")
+if os.path.exists(features_dir):
+    datas.append((features_dir, "features"))
+
+# 2.1 scripts 目录只保留 legacy README
 scripts_dir = os.path.join(current_dir, "scripts")
 if os.path.exists(scripts_dir):
-    datas.append((scripts_dir, "game_modifier/scripts"))
+    datas.append((scripts_dir, "scripts"))
 
 # 3. 只添加 Universal Hook 运行所需文件，不打包运行日志
 plugins_dir = os.path.join(current_dir, "plugins")
@@ -55,30 +60,8 @@ a = Analysis(
         'keyboard',
         'pygame',
         'PIL',
-        'features',
-        'features.feature_01_unlimited_ammo',
-        'features.feature_02_no_recoil',
-        'features.feature_03_unlimited_time',
-        'features.feature_04_fast_knife',
-        'features.feature_05_fast_reload_buff',
-        'features.feature_06_movement_speed',
-        'features.feature_07_knife_attack_range',
-        'features.feature_08_gather_enemies',
-        'features.feature_09_high_jump_low_gravity',
-        'features.feature_10_skip_round',
-        'features.feature_11_auto_aim',
-        'features.feature_12_invincibility',
-        'features.feature_13_fire_rate_auto_sniper',
-        'features.feature_14_become_bot',
-        'features.feature_15_buff_selector',
-        'features.feature_16_weapon_giver',
-        'features.feature_17_skill_no_cooldown',
-        'features.feature_18_universal_esp_box',
-        'features.feature_19_battle_round',
-        'features.feature_20_unity_time_acceleration',
         'core.config',
         'core.event_bus',
-        'core.feature_registry',
         'core.frida_manager',
         'core.game_session_manager',
         'core.hotkey_manager',

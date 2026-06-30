@@ -32,10 +32,13 @@
     "cleanup": true
   },
   "source": {
-    "feature_py": "features/feature_10_skip_round.py",
-    "script_js": "scripts/10-skip_round.js"
+    "runtime_script_js": "features/roundskip/script.js",
+    "legacy_script_js": "features/_legacy_archive/scripts/10-skip_round.js"
   },
   "ui_handles": {
     "button": "skip_round_btn"
+  },
+  "runtime": {
+    "type": "plugin_script"
   }
 }

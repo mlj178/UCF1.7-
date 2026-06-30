@@ -42,13 +42,16 @@
     "cleanup": true
   },
   "source": {
-    "feature_py": "features/feature_20_unity_time_acceleration.py",
-    "script_js": "scripts/20-unity_time_acceleration.js"
+    "runtime_script_js": "features/timescale/script.js",
+    "legacy_script_js": "features/_legacy_archive/scripts/20-unity_time_acceleration.js"
   },
   "ui_handles": {
     "switch": "timescale_switch",
     "slider_var": "timescale_var",
     "slider": "timescale_slider",
     "slider_label": "timescale_label"
+  },
+  "runtime": {
+    "type": "plugin_script"
   }
 }

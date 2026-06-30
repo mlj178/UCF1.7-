@@ -42,12 +42,15 @@
     "cleanup": true
   },
   "source": {
-    "feature_py": "features/feature_06_movement_speed.py",
-    "script_js": "scripts/06-movement_speed.js"
+    "runtime_script_js": "features/movespeed/script.js",
+    "legacy_script_js": "features/_legacy_archive/scripts/06-movement_speed.js"
   },
   "ui_handles": {
     "switch": "move_switch",
     "slider_var": "move_speed_var",
     "slider_label": "move_speed_label"
+  },
+  "runtime": {
+    "type": "plugin_script"
   }
 }

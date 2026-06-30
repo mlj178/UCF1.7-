@@ -143,5 +143,6 @@ class AppEventController:
                 app._battle_round_controller.on_mode_exit()
             elif event_type == "battle_round_round":
                 app._battle_round_controller.on_round(payload)
+                app._nano4t_runtime_controller.get_current_async()
 
         app.after(0, update)

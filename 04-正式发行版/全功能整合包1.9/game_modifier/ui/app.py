@@ -1,4 +1,5 @@
 import customtkinter as ctk
+import importlib.util
 import os
 import threading
 import time
@@ -29,7 +30,7 @@ from ui.controllers import (
     RoundSkipMonitor,
     WeaponInteractionController,
 )
-from ui.views import AppShellView, FeatureTabsView, Nano4tView, WeaponGiverView
+from ui.views import AppShellView, FeatureTabsView
 from ui.views.common import bind_view_handles
 from ui.window_contract import (
     APP_TITLE,
@@ -224,16 +225,7 @@ class App(ctk.CTk):
             ),
         )
 
-        nano4t_view = Nano4tView(
-            attrs=NANO4T_ATTRS,
-            temp_ghost=self._nano4t_temp_ghost,
-            temp_human=self._nano4t_temp_human,
-            on_ghost_select=self._nano4t_runtime_controller.on_ghost_select,
-            on_human_select=self._nano4t_runtime_controller.on_human_select,
-            on_apply=self._nano4t_runtime_controller.apply,
-            on_toggle_battle_round=self._battle_round_controller.toggle,
-        )
-        bind_view_handles(self, nano4t_view.build(tab_nano4t_scroll))
+        self._build_special_plugin_panel("nano4t", tab_nano4t_scroll)
         self._ensure_weapon_giver_tab_built(initial=False)
 
     def _on_tab_changed(self):
@@ -254,19 +246,26 @@ class App(ctk.CTk):
         self._build_weapon_giver_tab(self._weapon_giver_tab_scroll)
 
     def _build_weapon_giver_tab(self, scroll):
-        view = WeaponGiverView(
-            respawn_enabled=self._weapon_giver_respawn_enabled,
-            on_respawn_toggle=self._weapon_controller.on_respawn_weapon_toggle,
-            on_give_weapon=self._weapon_controller.give_weapon_by_id,
-            on_bind_hotkey=self._weapon_controller.bind_weapon_hotkey_dialog,
-            create_hotkey_badge=self._weapon_controller.create_hotkey_badge,
-            weapon_top_frames=self._weapon_top_frames,
-            weapon_hotkey_badges=self._weapon_hotkey_badges,
-        )
-        handles = view.build(scroll)
-        self.respawn_weapon_var = handles.respawn_weapon_var
-        self.respawn_weapon_check = handles.respawn_weapon_check
-        self.current_weapon_label = handles.current_weapon_label
+        self._build_special_plugin_panel("weapon_giver", scroll)
+
+    def _build_special_plugin_panel(self, feature_id, parent):
+        feature = self._plugin_registry.get(feature_id)
+        if not feature:
+            return None
+        plugin_dir = feature.manifest.get("_plugin_dir")
+        if not plugin_dir:
+            return None
+        panel_path = os.path.join(plugin_dir, "panel.py")
+        if not os.path.exists(panel_path):
+            return None
+        module_name = f"_game_modifier_panel_{feature_id}"
+        spec = importlib.util.spec_from_file_location(module_name, panel_path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        build_panel = getattr(module, "build_panel", None)
+        if not callable(build_panel):
+            return None
+        return build_panel(self, parent)
 
     def _build_connect_button(self):
         self.btn_frame, self.connect_btn = self._shell_view.build_connect_button()

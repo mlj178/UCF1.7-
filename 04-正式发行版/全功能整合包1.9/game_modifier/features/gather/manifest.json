@@ -37,11 +37,14 @@
     "cleanup": true
   },
   "source": {
-    "feature_py": "features/feature_08_gather_enemies.py",
-    "script_js": "scripts/08-gather_enemies.js"
+    "runtime_script_js": "features/gather/script.js",
+    "legacy_script_js": "features/_legacy_archive/scripts/08-gather_enemies.js"
   },
   "ui_handles": {
     "switch": "gather_switch",
     "button": "gather_btn"
+  },
+  "runtime": {
+    "type": "plugin_script"
   }
 }

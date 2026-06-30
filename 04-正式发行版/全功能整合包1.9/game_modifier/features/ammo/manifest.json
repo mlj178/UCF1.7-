@@ -31,10 +31,13 @@
     "cleanup": true
   },
   "source": {
-    "feature_py": "features/feature_01_unlimited_ammo.py",
-    "script_js": "scripts/01-unlimited_ammo.js"
+    "runtime_script_js": "features/ammo/script.js",
+    "legacy_script_js": "features/_legacy_archive/scripts/01-unlimited_ammo.js"
   },
   "ui_handles": {
     "switch": "ammo_switch"
+  },
+  "runtime": {
+    "type": "plugin_script"
   }
 }
