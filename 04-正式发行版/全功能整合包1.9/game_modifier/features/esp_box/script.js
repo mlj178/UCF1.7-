@@ -1,4 +1,4 @@
-// ESP box is implemented by the existing Universal-ImGui-Hook.dll pipeline.
+﻿// ESP box is implemented by the existing Universal-ImGui-Hook.dll pipeline.
 // Source assets kept intact:
 // - plugins/universal_hook/Universal-ImGui-Hook.dll
 // - plugins/universal_hook/universal_hook.json
@@ -29,3 +29,4 @@ rpc.exports = {
     return { ok: true, reason: payload && payload.reason ? payload.reason : 'cleanup', backend: 'Universal-ImGui-Hook.dll' };
   }
 };
+

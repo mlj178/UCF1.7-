@@ -42,12 +42,15 @@
     "cleanup": true
   },
   "source": {
-    "feature_py": "features/feature_04_fast_knife.py",
-    "script_js": "scripts/04-fast_knife.js"
+    "runtime_script_js": "features/knife/script.js",
+    "legacy_script_js": "features/_legacy_archive/scripts/04-fast_knife.js"
   },
   "ui_handles": {
     "switch": "knife_switch",
     "slider_var": "knife_speed_var",
     "slider_label": "knife_speed_label"
+  },
+  "runtime": {
+    "type": "plugin_script"
   }
 }

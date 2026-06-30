@@ -31,10 +31,12 @@
     "cleanup": true
   },
   "source": {
-    "feature_py": "features/feature_18_universal_esp_box.py",
-    "script_js": "plugins/universal_hook/Universal-ImGui-Hook.dll"
+    "runtime_script_js": "features/esp_box/script.js"
   },
   "ui_handles": {
     "switch": "esp_box_switch"
+  },
+  "runtime": {
+    "type": "plugin_script"
   }
 }

@@ -8,8 +8,12 @@
   "icon": "*",
   "desc": "复制此目录创建新功能插件。",
   "script": "script.js",
+  "runtime": {
+    "type": "plugin_script"
+  },
   "layout": {
-    "type": "simple"
+    "card_type": "simple",
+    "columnspan": 1
   },
   "controls": [
     {
@@ -27,5 +31,8 @@
   ],
   "lifecycle": {
     "cleanup": true
+  },
+  "ui_handles": {
+    "switch": "template_feature_switch"
   }
 }

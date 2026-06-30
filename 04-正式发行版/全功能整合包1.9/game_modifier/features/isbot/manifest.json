@@ -35,11 +35,14 @@
     "cleanup": true
   },
   "source": {
-    "feature_py": "features/feature_14_become_bot.py",
-    "script_js": "scripts/14-become_bot.js"
+    "runtime_script_js": "features/isbot/script.js",
+    "legacy_script_js": "features/_legacy_archive/scripts/14-become_bot.js"
   },
   "ui_handles": {
     "switch": "isbot_switch",
     "status_label": "isbot_status_label"
+  },
+  "runtime": {
+    "type": "plugin_script"
   }
 }

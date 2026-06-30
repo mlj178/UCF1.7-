@@ -31,10 +31,13 @@
     "cleanup": true
   },
   "source": {
-    "feature_py": "features/feature_11_auto_aim.py",
-    "script_js": "scripts/11-auto_aim.js"
+    "runtime_script_js": "features/aim/script.js",
+    "legacy_script_js": "features/_legacy_archive/scripts/11-auto_aim.js"
   },
   "ui_handles": {
     "switch": "aim_switch"
+  },
+  "runtime": {
+    "type": "plugin_script"
   }
 }

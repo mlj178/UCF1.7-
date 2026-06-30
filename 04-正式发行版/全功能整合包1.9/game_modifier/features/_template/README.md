@@ -1,13 +1,45 @@
 # 功能插件模板
 
-新增功能时，只新增 `features/功能ID/` 目录，并复制本模板中的文件。
+新增功能时，只复制本目录到 `features/<feature_id>/`，然后修改该目录内文件。
 
-必须保持：
+必须包含：
 
-- 不改 `ui/app.py` 堆新功能逻辑。
-- 不改 `core/frida_manager.py` 堆新功能逻辑。
-- 不改 `FeatureCommandService` 堆新功能逻辑。
-- JS 入口使用 `rpc.exports.enable/disable/setConfig/status/cleanup`。
-- 功能配置写入 `data/default_config.json` 和 `data/user_config.json` 的对应 `feature_id` 分区。
+- `manifest.json`
+- `feature.py`
+- `script.js`
+- `panel.py`
 
-本模板只作为新功能起点，不会被 `ManifestLoader` 加载。
+## JS 标准
+
+- `script.js` 必须自包含。
+- 不使用 `common.js`。
+- 不引用 `scripts/_common.js`。
+- 不 import / require 共享 JS。
+- 必须提供 `rpc.exports`。
+- RPC action 必须写入 `manifest.rpc`。
+
+## Python 标准
+
+- `feature.py` 必须继承 `PluginFeatureBase`。
+- 不使用 `FeatureBase`。
+- 不使用 `register_feature`。
+- 不 import `core.feature_registry`。
+
+## UI 标准
+
+`panel.py` 只能通过通用 callbacks 调用运行逻辑：
+
+- `callbacks["toggle"](feature_id)`
+- `callbacks["set_config"](feature_id, key, value)`
+- `callbacks["action"](feature_id, action)`
+
+`panel.py` 不允许直接 import `FridaManager`。
+
+## 禁止改中心文件
+
+新增功能不要修改：
+
+- `ui/app.py`
+- `core/frida_manager.py`
+- `core/services/feature_command_service.py`
+- `scripts/`

@@ -31,10 +31,13 @@
     "cleanup": true
   },
   "source": {
-    "feature_py": "features/feature_17_skill_no_cooldown.py",
-    "script_js": "scripts/17-skill_no_cooldown.js"
+    "runtime_script_js": "features/skillcd/script.js",
+    "legacy_script_js": "features/_legacy_archive/scripts/17-skill_no_cooldown.js"
   },
   "ui_handles": {
     "switch": "skillcd_switch"
+  },
+  "runtime": {
+    "type": "plugin_script"
   }
 }

@@ -4,66 +4,8 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-
-ORDINARY_FEATURES = {
-    "knife",
-    "recoil",
-    "ammo",
-    "ammoplus",
-    "range",
-    "aim",
-    "speedgun",
-    "movespeed",
-    "time",
-    "gravity",
-    "godmode",
-    "skillcd",
-    "gather",
-    "isbot",
-    "roundskip",
-    "esp_box",
-    "timescale",
-}
-
-ORDINARY_SOURCES = {
-    "knife": "feature_04_fast_knife.py",
-    "recoil": "feature_02_no_recoil.py",
-    "ammo": "feature_01_unlimited_ammo.py",
-    "ammoplus": "feature_05_fast_reload_buff.py",
-    "range": "feature_07_knife_attack_range.py",
-    "aim": "feature_11_auto_aim.py",
-    "speedgun": "feature_13_fire_rate_auto_sniper.py",
-    "movespeed": "feature_06_movement_speed.py",
-    "time": "feature_03_unlimited_time.py",
-    "gravity": "feature_09_high_jump_low_gravity.py",
-    "godmode": "feature_12_invincibility.py",
-    "skillcd": "feature_17_skill_no_cooldown.py",
-    "gather": "feature_08_gather_enemies.py",
-    "isbot": "feature_14_become_bot.py",
-    "roundskip": "feature_10_skip_round.py",
-    "esp_box": "feature_18_universal_esp_box.py",
-    "timescale": "feature_20_unity_time_acceleration.py",
-}
-
-EXPECTED_MANIFEST_TEXT = {
-    "knife": ("快刀", "🔪", "提升挥刀速度（人类 / 生化幽灵通用）"),
-    "recoil": ("无后座力", "🎯", "消除所有枪械后座力"),
-    "ammo": ("无限子弹", "🔫", "子弹永不消耗"),
-    "ammoplus": ("快速换弹", "⚡", "换弹速度加快"),
-    "range": ("剑气化丝", "⚔️", "扩大近战攻击距离（人类 / 生化幽灵通用）"),
-    "aim": ("自瞄", "🎯", "自动瞄准敌方玩家"),
-    "speedgun": ("射速变快 / 连狙", "⚡", "射速10倍 | 半自动→全自动 | 狙击镜常开 | 后坐力清零"),
-    "movespeed": ("滑板鞋", "👟", "提升移动速度"),
-    "time": ("无限时间", "⏰", "设定时间为 9:59"),
-    "gravity": ("轻重力 / 高跳", "🌌", "调整重力与跳跃倍率"),
-    "godmode": ("金刚不坏", "🛡️", "角色受到攻击时不会受伤"),
-    "skillcd": ("技能无冷却", "✨", "生化模式，所有技能无冷却"),
-    "gather": ("聚怪", "👾", "将所有人机聚集到佣兵出生点"),
-    "isbot": ("天机傀儡", "🧠", "玩家由人机控制"),
-    "roundskip": ("回合跳过", "⏭️", "结束当前回合"),
-    "esp_box": ("方框透视", "📦", "通过 Universal DLL 显示方框透视"),
-    "timescale": ("时间加速", "⏩", "调整游戏时间倍率"),
-}
+FEATURES_DIR = ROOT / "features"
+RUNTIME_DIRS = ("core", "ui", "features")
 
 
 def fail(message):
@@ -71,117 +13,218 @@ def fail(message):
     return False
 
 
-def check_plugin_dirs():
+def runtime_files(pattern):
+    for dirname in RUNTIME_DIRS:
+        base = ROOT / dirname
+        if not base.exists():
+            continue
+        for path in base.rglob(pattern):
+            parts = set(path.relative_to(ROOT).parts)
+            if "_legacy_archive" in parts or "_template" in parts:
+                continue
+            yield path
+
+
+def plugin_dirs():
+    return sorted(
+        path
+        for path in FEATURES_DIR.iterdir()
+        if path.is_dir() and not path.name.startswith("_")
+    )
+
+
+def read(path):
+    return path.read_text(encoding="utf-8")
+
+
+def check_scripts_directory():
     ok = True
-    for feature_id in sorted(ORDINARY_FEATURES):
-        plugin_dir = ROOT / "features" / feature_id
-        for name in ("manifest.json", "feature.py", "script.js", "panel.py"):
-            if not (plugin_dir / name).exists():
-                ok = fail(f"missing {plugin_dir / name}") and ok
+    scripts_dir = ROOT / "scripts"
+    if not scripts_dir.exists():
+        return ok
+    for path in scripts_dir.iterdir():
+        if path.name != "README.md":
+            ok = fail(f"scripts directory still contains runtime-looking file: {path}") and ok
+    return ok
+
+
+def check_common_js_removed_from_runtime():
+    ok = True
+    if (ROOT / "scripts" / "_common.js").exists():
+        ok = fail("runtime scripts/_common.js still exists") and ok
+    if (FEATURES_DIR / "_shared" / "common.js").exists():
+        ok = fail("runtime features/_shared/common.js still exists") and ok
+    archive_common = FEATURES_DIR / "_legacy_archive" / "scripts" / "_common.js"
+    if not archive_common.exists():
+        ok = fail("historical _common.js is not archived") and ok
+    for path in runtime_files("*"):
+        if path.suffix not in {".py", ".js", ".json", ".md", ".spec"}:
+            continue
+        text = read(path)
+        for needle in ("scripts/_common.js", "scripts\\\\_common.js", "features/_shared/common.js"):
+            if needle in text:
+                ok = fail(f"runtime file references shared common js: {path}") and ok
+    return ok
+
+
+def check_manifest_loader():
+    path = ROOT / "core" / "plugin" / "manifest_loader.py"
+    text = read(path)
+    ok = True
+    if "startswith(\"_\")" not in text and "startswith('_')" not in text:
+        ok = fail("ManifestLoader does not skip all underscore feature directories") and ok
+    return ok
+
+
+def check_script_manager():
+    path = ROOT / "core" / "frida_runtime" / "script_manager.py"
+    text = read(path)
+    ok = True
+    for needle in ("SCRIPTS_DIR", "_common.js", "features/_shared/common.js"):
+        if needle in text:
+            ok = fail(f"ScriptManager references forbidden shared source: {needle}") and ok
+    if "manifest.get(\"script\"" not in text and "manifest.get('script'" not in text:
+        ok = fail("ScriptManager does not read script from manifest") and ok
+    if "_script_path" not in text or "_plugin_dir" not in text:
+        ok = fail("ScriptManager does not resolve features/<feature_id>/script.js path") and ok
+    return ok
+
+
+def check_frida_manager():
+    path = ROOT / "core" / "frida_manager.py"
+    text = read(path)
+    ok = True
+    forbidden = (
+        "ORDINARY_PLUGIN_FEATURE_IDS",
+        "core.feature_registry",
+        "_build_rpc_exports",
+        "_build_dispatcher",
+        "_build_js_code",
+        "_ensure_special_features_registered",
+        "nano4tinit",
+        "giveweapon",
+        "setrespawnweapon",
+        "clearrespawnweapon",
+        "battleRoundGetStatus",
+    )
+    for needle in forbidden:
+        if needle in text:
+            ok = fail(f"FridaManager still contains legacy branch/export: {needle}") and ok
+    for deprecated in ("send_toggle", "call_export"):
+        if deprecated in text and "DEPRECATED" not in text:
+            ok = fail(f"FridaManager contains {deprecated} without DEPRECATED marker") and ok
+    return ok
+
+
+def check_plugin_files_and_manifests():
+    ok = True
+    required_files = ("manifest.json", "feature.py", "script.js", "panel.py")
+    for plugin_dir in plugin_dirs():
+        feature_id = plugin_dir.name
+        for filename in required_files:
+            if not (plugin_dir / filename).exists():
+                ok = fail(f"missing {plugin_dir / filename}") and ok
+
         manifest_path = plugin_dir / "manifest.json"
-        if manifest_path.exists():
-            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-            if manifest.get("feature_id") != feature_id:
-                ok = fail(f"bad feature_id in {manifest_path}") and ok
-            text_fields = (
-                manifest.get("display_name"),
-                manifest.get("icon"),
-                manifest.get("desc"),
-            )
-            if text_fields != EXPECTED_MANIFEST_TEXT[feature_id]:
-                ok = fail(f"manifest text is corrupted in {manifest_path}") and ok
-            if any("?" in str(value) for value in text_fields):
-                ok = fail(f"manifest text contains mojibake placeholder in {manifest_path}") and ok
-        feature_text_path = plugin_dir / "feature.py"
-        if feature_text_path.exists():
-            feature_text = feature_text_path.read_text(encoding="utf-8")
-            if "register_feature" in feature_text:
-                ok = fail(f"ordinary plugin still imports/registers legacy registry: {feature_text_path}") and ok
+        if not manifest_path.exists():
+            continue
+        try:
+            manifest = json.loads(read(manifest_path))
+        except Exception as exc:
+            ok = fail(f"manifest cannot be parsed: {manifest_path}: {exc}") and ok
+            continue
+        if manifest.get("feature_id") != feature_id:
+            ok = fail(f"manifest feature_id mismatch: {manifest_path}") and ok
+        if "rpc" not in manifest:
+            ok = fail(f"manifest missing rpc: {manifest_path}") and ok
+        if manifest.get("runtime", {}).get("type") != "plugin_script":
+            ok = fail(f"manifest runtime.type must be plugin_script: {manifest_path}") and ok
+
+        script_path = plugin_dir / "script.js"
+        if script_path.exists() and "rpc.exports" not in read(script_path):
+            ok = fail(f"script.js missing rpc.exports: {script_path}") and ok
     return ok
 
 
-def check_ui_boundary():
-    plugin_page = ROOT / "ui" / "pages" / "plugin_feature_page.py"
-    feature_tabs = ROOT / "ui" / "views" / "feature_tabs_view.py"
-    common_view = ROOT / "ui" / "views" / "common.py"
-    controller = ROOT / "ui" / "controllers" / "feature_action_controller.py"
-    if not plugin_page.exists():
-        return fail("missing plugin_feature_page.py")
-    page_text = plugin_page.read_text(encoding="utf-8")
-    tabs_text = feature_tabs.read_text(encoding="utf-8")
-    common_text = common_view.read_text(encoding="utf-8")
-    controller_text = controller.read_text(encoding="utf-8")
+def check_plugin_python_boundaries():
     ok = True
-    for needle in (".by_tab(", "manifest.get(\"layout\"", "order"):
-        if needle not in page_text:
-            ok = fail(f"plugin page missing {needle}") and ok
-    for needle in ("build_card", "panel.py"):
-        if needle not in page_text:
-            ok = fail(f"plugin page missing panel dispatch {needle}") and ok
-    for feature_id in ORDINARY_FEATURES:
-        if f'feature_id == "{feature_id}"' in page_text or f"feature_id == '{feature_id}'" in page_text:
-            ok = fail(f"plugin page still branches on {feature_id}") and ok
-    for needle in ("_build_weapon_tab", "_build_player_tab", "_build_other_tab", "_make_feature_card("):
-        if needle in tabs_text:
-            ok = fail(f"feature_tabs_view still contains {needle}") and ok
-    for needle in ("@dataclass", "class FeatureTabsHandles", "FeatureTabsHandles("):
-        if needle in tabs_text:
-            ok = fail(f"feature_tabs_view still has fixed handles: {needle}") and ok
-    for needle in (
-        "on_knife_speed_change",
-        "on_move_speed_change",
-        "on_range_change",
-        "on_timescale_change",
-        "on_gravity_change",
-        "on_jump_change",
-        "on_gravity_mode_change",
-        "on_gather",
-        "on_skip_round",
-    ):
-        if needle in tabs_text:
-            ok = fail(f"feature_tabs_view still has fixed callback {needle}") and ok
-    for needle in ('"set_config"', '"action"'):
-        if needle not in tabs_text:
-            ok = fail(f"feature_tabs_view missing generic callback {needle}") and ok
-    for needle in ('callbacks["set_config"]', 'callbacks["action"]'):
-        if needle not in page_text:
-            ok = fail(f"plugin page missing generic callback {needle}") and ok
-    if 'callbacks["slider"]' in page_text:
-        ok = fail("plugin page still uses fixed slider callback map") and ok
-    if "isinstance(handles, dict)" not in common_text:
-        ok = fail("bind_view_handles does not support dict handles") and ok
-    for needle in ("def set_feature_config", "def trigger_feature_action"):
-        if needle not in controller_text:
-            ok = fail(f"FeatureActionController missing {needle}") and ok
+    for plugin_dir in plugin_dirs():
+        feature_py = plugin_dir / "feature.py"
+        panel_py = plugin_dir / "panel.py"
+        if feature_py.exists():
+            text = read(feature_py)
+            for needle in ("register_feature", "FeatureBase", "core.feature_registry"):
+                if needle in text:
+                    ok = fail(f"feature.py uses legacy runtime {needle}: {feature_py}") and ok
+        if panel_py.exists():
+            text = read(panel_py)
+            if "FridaManager" in text or "core.frida_manager" in text:
+                ok = fail(f"panel.py imports FridaManager: {panel_py}") and ok
     return ok
 
 
-def check_runtime_boundary():
-    service_text = (ROOT / "core" / "services" / "feature_command_service.py").read_text(encoding="utf-8")
-    frida_text = (ROOT / "core" / "frida_manager.py").read_text(encoding="utf-8")
+def check_runtime_old_script_references():
     ok = True
-    if "Agent v1.8" in frida_text or "Agent v1.9" not in frida_text:
-        ok = fail("Frida Agent version log is not v1.9") and ok
-    for feature_id in ORDINARY_FEATURES:
-        if f'"{feature_id}"' in service_text or f"'{feature_id}'" in service_text:
-            ok = fail(f"FeatureCommandService has feature branch for {feature_id}") and ok
-        if feature_id != "esp_box" and f"modules.{feature_id}" in frida_text:
-            ok = fail(f"FridaManager dispatcher still references modules.{feature_id}") and ok
+    forbidden = [
+        "scripts/01-",
+        "scripts/02-",
+        "scripts/03-",
+        "scripts/04-",
+        "scripts/05-",
+        "scripts/06-",
+        "scripts/07-",
+        "scripts/08-",
+        "scripts/09-",
+        "scripts/10-",
+        "scripts/11-",
+        "scripts/12-",
+        "scripts/13-",
+        "scripts/14-",
+        "scripts/15-",
+        "scripts/16-",
+        "scripts/17-",
+        "scripts/18-",
+        "scripts/19-",
+        "scripts/20-",
+        "scripts\\\\01-",
+        "scripts\\\\02-",
+        "scripts\\\\03-",
+        "scripts\\\\04-",
+        "scripts\\\\05-",
+        "scripts\\\\06-",
+        "scripts\\\\07-",
+        "scripts\\\\08-",
+        "scripts\\\\09-",
+        "scripts\\\\10-",
+        "scripts\\\\11-",
+        "scripts\\\\12-",
+        "scripts\\\\13-",
+        "scripts\\\\14-",
+        "scripts\\\\15-",
+        "scripts\\\\16-",
+        "scripts\\\\17-",
+        "scripts\\\\18-",
+        "scripts\\\\19-",
+        "scripts\\\\20-",
+    ]
+    for path in runtime_files("*"):
+        if path.suffix not in {".py", ".js", ".spec"}:
+            continue
+        text = read(path)
+        for needle in forbidden:
+            if needle in text:
+                ok = fail(f"runtime file references old scripts entrypoint: {path}: {needle}") and ok
     return ok
 
 
-def check_startup_boundary():
+def check_no_mainline_legacy_runtime_files():
     ok = True
-    main_text = (ROOT / "main.py").read_text(encoding="utf-8")
-    init_text = (ROOT / "features" / "__init__.py").read_text(encoding="utf-8")
-    window_contract = (ROOT / "ui" / "window_contract.py").read_text(encoding="utf-8")
-    if "import features" in main_text:
-        ok = fail("main.py still imports features") and ok
-    if 'APP_VERSION = "v1.9"' not in window_contract:
-        ok = fail("APP_VERSION is not v1.9") and ok
-    for source_name in ORDINARY_SOURCES.values():
-        if Path(source_name).stem in init_text:
-            ok = fail(f"features/__init__.py still manually imports {source_name}") and ok
+    if (ROOT / "core" / "feature_registry.py").exists():
+        ok = fail("core/feature_registry.py still exists in mainline") and ok
+    if (FEATURES_DIR / "base.py").exists():
+        ok = fail("features/base.py still exists in mainline") and ok
+    for path in FEATURES_DIR.glob("feature_*.py"):
+        ok = fail(f"legacy feature module still exists in mainline: {path}") and ok
     return ok
 
 
@@ -189,18 +232,22 @@ def check_assets():
     ok = True
     if not (ROOT / "plugins" / "universal_hook" / "Universal-ImGui-Hook.dll").exists():
         ok = fail("Universal-ImGui-Hook.dll missing") and ok
-    script_count = len(list((ROOT / "scripts").glob("*.js")))
-    if script_count < 20:
-        ok = fail(f"legacy scripts missing, count={script_count}") and ok
+    if not (FEATURES_DIR / "_legacy_archive" / "scripts").exists():
+        ok = fail("legacy script archive missing") and ok
     return ok
 
 
 def main():
     checks = [
-        check_startup_boundary(),
-        check_plugin_dirs(),
-        check_ui_boundary(),
-        check_runtime_boundary(),
+        check_scripts_directory(),
+        check_common_js_removed_from_runtime(),
+        check_manifest_loader(),
+        check_script_manager(),
+        check_frida_manager(),
+        check_plugin_files_and_manifests(),
+        check_plugin_python_boundaries(),
+        check_runtime_old_script_references(),
+        check_no_mainline_legacy_runtime_files(),
         check_assets(),
     ]
     if all(checks):

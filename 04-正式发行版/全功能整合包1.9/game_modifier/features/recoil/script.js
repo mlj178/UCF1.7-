@@ -1,17 +1,82 @@
-// Plugin script compatibility prelude. The real hook code copied from scripts/ follows below.
-if (typeof modules === 'undefined') { var modules = {}; }
-if (typeof send === 'undefined') { var send = function(_) {}; }
-if (typeof sendStatus === 'undefined') { var sendStatus = function(_, __) {}; }
-if (typeof sendLog === 'undefined') { var sendLog = function(_, __, ___) {}; }
-if (typeof sendDevLog === 'undefined') { var sendDevLog = function(_, __, ___, ____) {}; }
-if (typeof sendUserLog === 'undefined') { var sendUserLog = function(_, __, ___) {}; }
-if (typeof sendBothLog === 'undefined') { var sendBothLog = function(_, __, ___, ____) {}; }
-if (typeof sendLogFile === 'undefined') { var sendLogFile = function(_, __, ___) {}; }
-if (typeof registerCleanup === 'undefined') { var registerCleanup = function(_) { return false; }; }
-if (typeof getGameAssembly === 'undefined') {
-  var getGameAssembly = function() {
-    try { return Process.findModuleByName('GameAssembly.dll'); } catch (_) { return null; }
-  };
+﻿// Local helpers for this feature only.
+var modules = {};
+var __localMaxLogsPerModule = 10;
+var __localModuleLogCounts = {};
+
+function sendRoutedLog(level, module, message, audience, devDetail) {
+  try {
+    if (!__localModuleLogCounts[module]) __localModuleLogCounts[module] = 0;
+    if (__localModuleLogCounts[module] >= __localMaxLogsPerModule) return;
+    if (module !== '??' && __localModuleLogCounts[module] === __localMaxLogsPerModule - 1) {
+      __localModuleLogCounts[module]++;
+      send({ type: 'log', level: 'info', module: module, message: message + ' (???????)', audience: audience || 'dev', dev_detail: devDetail || '' });
+      return;
+    }
+    __localModuleLogCounts[module]++;
+    send({ type: 'log', level: level, module: module, message: message, audience: audience || 'dev', dev_detail: devDetail || '' });
+  } catch (_) {}
+}
+
+function sendUserLog(level, module, message) {
+  sendRoutedLog(level, module, message, 'user', '');
+}
+
+function sendDevLog(level, module, message, devDetail) {
+  sendRoutedLog(level, module, message, 'dev', devDetail || '');
+}
+
+function sendBothLog(level, module, message, devDetail) {
+  sendRoutedLog(level, module, message, 'both', devDetail || '');
+}
+
+function sendLog(level, module, message) {
+  sendDevLog(level, module, message);
+}
+
+function sendLogFile(level, module, message) {
+  try { send({ type: 'log_file', level: level, module: module, message: message, audience: 'dev' }); } catch (_) {}
+}
+
+function sendStatus(feature, enabled) {
+  try { send({ type: 'status', feature: feature, enabled: enabled }); } catch (_) {}
+}
+
+var __localGameAssemblyCache = null;
+var __localGameAssemblyLogged = false;
+
+function getGameAssembly() {
+  try {
+    if (__localGameAssemblyCache) return __localGameAssemblyCache;
+    var mod = Process.findModuleByName('GameAssembly.dll');
+    if (!mod) {
+      sendDevLog('error', '??', '??? GameAssembly.dll', 'GameAssembly.dll not found');
+      return null;
+    }
+    __localGameAssemblyCache = mod;
+    if (!__localGameAssemblyLogged) {
+      __localGameAssemblyLogged = true;
+      sendDevLog('info', '??', 'GameAssembly.dll: base=' + mod.base + ' size=' + mod.size, 'GameAssembly module located');
+    }
+    return mod;
+  } catch (e) {
+    sendDevLog('error', '??', '??????: ' + e.message, 'getGameAssembly failed: ' + e.message);
+    return null;
+  }
+}
+
+function readPtr(addr) {
+  try { if (!addr || addr.isNull()) return null; var v = addr.readPointer(); return (v && !v.isNull()) ? v : null; } catch (_) { return null; }
+}
+
+function readI32(addr) { try { return addr ? addr.readS32() : null; } catch (_) { return null; } }
+function readF32(addr) { try { return addr ? addr.readFloat() : null; } catch (_) { return null; } }
+function readU8(addr) { try { return addr ? addr.readU8() : null; } catch (_) { return null; } }
+
+var __localCleanupCallbacks = [];
+function registerCleanup(callback) {
+  if (typeof callback !== 'function') return false;
+  __localCleanupCallbacks.push(callback);
+  return true;
 }
 
 // recoil.js - 无后座力 v14
@@ -135,3 +200,4 @@ rpc.exports = {
   status: __pluginStatus,
   cleanup: __pluginCleanup
 };
+

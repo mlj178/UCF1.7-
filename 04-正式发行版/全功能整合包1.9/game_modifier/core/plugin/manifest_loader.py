@@ -25,14 +25,14 @@ class ManifestLoader:
             return manifests
 
         for manifest_path in sorted(self.features_dir.glob("*/manifest.json")):
-            if manifest_path.parent.name == "_template":
+            if manifest_path.parent.name.startswith("_"):
                 continue
             try:
                 with manifest_path.open("r", encoding="utf-8") as handle:
                     manifest = json.load(handle)
                 manifest.setdefault("_plugin_dir", str(manifest_path.parent))
+                manifest.setdefault("_manifest_path", str(manifest_path))
                 manifests.append(manifest)
             except Exception as exc:
                 self._warning(f"failed to read manifest {manifest_path}: {exc}")
         return manifests
-

@@ -31,10 +31,13 @@
     "cleanup": true
   },
   "source": {
-    "feature_py": "features/feature_02_no_recoil.py",
-    "script_js": "scripts/02-no_recoil.js"
+    "runtime_script_js": "features/recoil/script.js",
+    "legacy_script_js": "features/_legacy_archive/scripts/02-no_recoil.js"
   },
   "ui_handles": {
     "switch": "recoil_switch"
+  },
+  "runtime": {
+    "type": "plugin_script"
   }
 }

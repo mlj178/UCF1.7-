@@ -31,10 +31,13 @@
     "cleanup": true
   },
   "source": {
-    "feature_py": "features/feature_12_invincibility.py",
-    "script_js": "scripts/12-invincibility.js"
+    "runtime_script_js": "features/godmode/script.js",
+    "legacy_script_js": "features/_legacy_archive/scripts/12-invincibility.js"
   },
   "ui_handles": {
     "switch": "godmode_switch"
+  },
+  "runtime": {
+    "type": "plugin_script"
   }
 }

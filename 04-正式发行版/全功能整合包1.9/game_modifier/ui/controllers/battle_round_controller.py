@@ -4,6 +4,7 @@ class BattleRoundController:
 
     def sync_to_game_on_connect(self):
         app = self._app
+        app._game_action_service.battle_round_get_status()
         if app._battle_round_enabled:
             app._game_action_service.set_battle_round_enabled(True)
         self.update_button_state()
