@@ -36,7 +36,8 @@
     "battleRoundGetStatus"
   ],
   "lifecycle": {
-    "cleanup": true
+    "cleanup": true,
+    "restore": false
   },
   "source": {
     "runtime_script_js": "features/battle_round/script.js",
@@ -44,5 +45,8 @@
   },
   "ui_handles": {
     "switch": "battle_round_switch"
+  },
+  "hotkey": {
+    "enabled": false
   }
 }

@@ -1,3 +1,10 @@
+"""DEPRECATED / LEGACY ONLY.
+
+New plugin messages must use FridaManager -> plugin_event -> PluginEventRouter.
+Do not add feature branches or new runtime wiring here.
+"""
+
+
 class FridaEventAdapter:
     def __init__(self, event_bus, callbacks):
         self._event_bus = event_bus

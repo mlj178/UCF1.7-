@@ -1,3 +1,5 @@
+import threading
+
 import customtkinter as ctk
 
 
@@ -15,12 +17,39 @@ def build_card(parent, manifest, row, col, colspan, callbacks, card_builder):
     switch.pack(side="right", padx=12)
     btn_frame = ctk.CTkFrame(frame, fg_color="transparent")
     btn_frame.pack(fill="x", padx=8, pady=(2, 2))
+    def run_gather():
+        log = callbacks["log"]
+        if not callbacks["is_connected"]():
+            log("⚠ 尚未连接到游戏，请先点击「连接游戏」")
+            return
+        if not callbacks["is_enabled"](feature_id):
+            log("⚠ 聚怪功能未启用，请先打开「启用追踪」开关")
+            return
+
+        log("📍 正在聚怪（传送所有 Bot 到佣兵出生点）...")
+        button.configure(state="disabled", text="⏳ 聚怪中...")
+
+        def worker():
+            try:
+                result = callbacks["action"](feature_id, button_control.get("action", "gather"))
+                if result:
+                    if result.get("ok", False):
+                        log(f"✅ 聚怪完成! 成功{result.get('bots', 0)} 失败{result.get('fail', 0)}")
+                    else:
+                        log(f"❌ 聚怪失败: {result.get('msg', '未知错误')}")
+            except Exception as exc:
+                log(f"❌ 聚怪异常: {exc}")
+            finally:
+                button.after(0, lambda: button.configure(state="normal", text=button_control.get("label", "📍 一键聚怪")))
+
+        threading.Thread(target=worker, daemon=True).start()
+
     button = ctk.CTkButton(
         btn_frame,
         text=button_control.get("label", "\U0001f4cd \u4e00\u952e\u805a\u602a"),
         font=("Microsoft YaHei", 14, "bold"),
         height=45,
-        command=lambda: callbacks["action"](feature_id, button_control.get("action", "gather")),
+        command=run_gather,
         fg_color="#b45309",
         hover_color="#92400e",
     )

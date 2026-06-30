@@ -32,10 +32,14 @@
     "nano4tHealthCheck"
   ],
   "lifecycle": {
-    "cleanup": true
+    "cleanup": true,
+    "restore": false
   },
   "source": {
     "runtime_script_js": "features/nano4t/script.js",
     "legacy_script_js": "features/_legacy_archive/scripts/15-buff_selector.js"
+  },
+  "hotkey": {
+    "enabled": false
   }
 }

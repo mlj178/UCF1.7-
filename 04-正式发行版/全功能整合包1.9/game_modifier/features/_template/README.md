@@ -17,6 +17,7 @@
 - 不 import / require 共享 JS。
 - 必须提供 `rpc.exports`。
 - RPC action 必须写入 `manifest.rpc`。
+- JS 事件统一发送 `{ type: "plugin_event", feature, event, payload }`。
 
 ## Python 标准
 
@@ -34,6 +35,8 @@
 - `callbacks["action"](feature_id, action)`
 
 `panel.py` 不允许直接 import `FridaManager`。
+`panel.py` 不允许访问完整 App 或 `app._xxx` 私有字段。
+如果需要特殊事件处理，可在功能目录新增 `events.py`，只处理本功能事件。
 
 ## 禁止改中心文件
 

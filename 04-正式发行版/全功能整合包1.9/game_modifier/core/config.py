@@ -1,5 +1,7 @@
 import os
 import sys
+import json
+from pathlib import Path
 
 if getattr(sys, 'frozen', False):
     APP_DIR = os.path.dirname(sys.executable)
@@ -28,29 +30,49 @@ HOTKEY_DISPLAY_NAMES = {
     'alt+1': 'Alt+1', 'alt+2': 'Alt+2', 'alt+3': 'Alt+3',
 }
 
-HOTKEY_EXCLUDED = {'nano4t', 'weapon_giver', 'esp_box'}
+def _load_feature_manifests():
+    features_dir = Path(APP_DIR) / "features"
+    manifests = {}
+    if not features_dir.exists():
+        return manifests
+    for manifest_path in sorted(features_dir.glob("*/manifest.json")):
+        if manifest_path.parent.name.startswith("_"):
+            continue
+        try:
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        feature_id = manifest.get("feature_id")
+        if feature_id:
+            manifests[feature_id] = manifest
+    return manifests
 
-FEATURES_INFO = {
-    'knife': {'name': '快刀', 'icon': '🔪', 'category': 'weapon'},
-    'time': {'name': '无限时间', 'icon': '⏰', 'category': 'player'},
-    'recoil': {'name': '无后座力', 'icon': '🎯', 'category': 'weapon'},
-    'ammo': {'name': '无限子弹', 'icon': '🔫', 'category': 'weapon'},
-    'movespeed': {'name': '滑板鞋', 'icon': '👟', 'category': 'player'},
-    'ammoplus': {'name': '快速换弹', 'icon': '⚡', 'category': 'weapon'},
-    'range': {'name': '剑气化丝', 'icon': '⚔️', 'category': 'weapon'},
-    'gather': {'name': '聚怪', 'icon': '👾', 'category': 'other'},
-    'gravity': {'name': '轻重力', 'icon': '🌌', 'category': 'player'},
-    'aim': {'name': '自瞄', 'icon': '🎯', 'category': 'weapon'},
-    'godmode': {'name': '金刚不坏', 'icon': '🛡️', 'category': 'player'},
-    'speedgun': {'name': '射速变快', 'icon': '⚡', 'category': 'weapon'},
-    'isbot': {'name': '天机傀儡', 'icon': '🧠', 'category': 'other'},
-    'skillcd': {'name': '技能无冷却', 'icon': '✨', 'category': 'player'},
-    'roundskip': {'name': '回合跳过', 'icon': '⏭️', 'category': 'other'},
-    'nano4t': {'name': '多人生化特性', 'icon': '🧬', 'category': 'other'},
-    'weapon_giver': {'name': '武器赋予', 'icon': '🔫', 'category': 'weapon'},
-    'esp_box': {'name': '方框透视', 'icon': '📦', 'category': 'other'},
-    'timescale': {'name': '时间加速', 'icon': '⏩', 'category': 'other'},
-}
+
+def _build_features_info(manifests):
+    return {
+        feature_id: {
+            "name": manifest.get("display_name", feature_id),
+            "icon": manifest.get("icon", ""),
+            "category": manifest.get("category", "other"),
+        }
+        for feature_id, manifest in manifests.items()
+    }
+
+
+def _build_hotkey_excluded(manifests):
+    excluded = set()
+    for feature_id, manifest in manifests.items():
+        hotkey = manifest.get("hotkey", {})
+        ui_mode = manifest.get("ui", {}).get("mode")
+        has_switch = any(control.get("type") == "switch" for control in manifest.get("controls", []))
+        if hotkey.get("enabled") is False or ui_mode in {"special_page", "embedded_panel"} or not has_switch:
+            excluded.add(feature_id)
+    return excluded
+
+
+_FEATURE_MANIFESTS = _load_feature_manifests()
+FEATURES_INFO = _build_features_info(_FEATURE_MANIFESTS)
+HOTKEY_EXCLUDED = _build_hotkey_excluded(_FEATURE_MANIFESTS)
 
 GRAVITY_PRESETS = {
     '月球': {'gravity': 0.2, 'jump': 2.0},
