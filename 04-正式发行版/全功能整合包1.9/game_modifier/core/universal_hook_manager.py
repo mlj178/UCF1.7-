@@ -130,7 +130,7 @@ class UniversalHookManager:
         """Load revision from file to support program restart takeover"""
         try:
             if os.path.exists(self._revision_file):
-                with open(self._revision_file, 'r') as f:
+                with open(self._revision_file, 'r', encoding='utf-8') as f:
                     data = json.load(f)
                     return data.get('revision', 0)
         except Exception:
@@ -141,8 +141,8 @@ class UniversalHookManager:
         """Save revision to file"""
         try:
             os.makedirs(os.path.dirname(self._revision_file), exist_ok=True)
-            with open(self._revision_file, 'w') as f:
-                json.dump({'revision': self._revision}, f)
+            with open(self._revision_file, 'w', encoding='utf-8') as f:
+                json.dump({'revision': self._revision}, f, ensure_ascii=False)
         except Exception:
             pass
 
