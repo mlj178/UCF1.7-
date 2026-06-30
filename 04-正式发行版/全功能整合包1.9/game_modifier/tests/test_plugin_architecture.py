@@ -65,6 +65,12 @@ class PluginArchitectureTests(unittest.TestCase):
         template_dir = self.features_dir / "_template"
         template_dir.mkdir()
         (template_dir / "manifest.json").write_text("{}", encoding="utf-8")
+        legacy_dir = self.features_dir / "_legacy_archive"
+        legacy_dir.mkdir()
+        (legacy_dir / "manifest.json").write_text(
+            json.dumps({"feature_id": "legacy_should_not_load"}),
+            encoding="utf-8",
+        )
         bad_dir = self.features_dir / "bad"
         bad_dir.mkdir()
         (bad_dir / "manifest.json").write_text("{bad json", encoding="utf-8")
@@ -146,23 +152,23 @@ class PluginArchitectureTests(unittest.TestCase):
 
 class MigratedOrdinaryFeatureTests(unittest.TestCase):
     ORDINARY_FEATURES = {
-        "knife": ("features/_legacy_archive/python_runtime/feature_04_fast_knife.py", "features/_legacy_archive/scripts/04-fast_knife.js"),
-        "recoil": ("features/_legacy_archive/python_runtime/feature_02_no_recoil.py", "features/_legacy_archive/scripts/02-no_recoil.js"),
-        "ammo": ("features/_legacy_archive/python_runtime/feature_01_unlimited_ammo.py", "features/_legacy_archive/scripts/01-unlimited_ammo.js"),
-        "ammoplus": ("features/_legacy_archive/python_runtime/feature_05_fast_reload_buff.py", "features/_legacy_archive/scripts/05-fast_reload_buff.js"),
-        "range": ("features/_legacy_archive/python_runtime/feature_07_knife_attack_range.py", "features/_legacy_archive/scripts/07-knife_attack_range.js"),
-        "aim": ("features/_legacy_archive/python_runtime/feature_11_auto_aim.py", "features/_legacy_archive/scripts/11-auto_aim.js"),
-        "speedgun": ("features/_legacy_archive/python_runtime/feature_13_fire_rate_auto_sniper.py", "features/_legacy_archive/scripts/13-fire_rate_auto_sniper.js"),
-        "movespeed": ("features/_legacy_archive/python_runtime/feature_06_movement_speed.py", "features/_legacy_archive/scripts/06-movement_speed.js"),
-        "time": ("features/_legacy_archive/python_runtime/feature_03_unlimited_time.py", "features/_legacy_archive/scripts/03-unlimited_time.js"),
-        "gravity": ("features/_legacy_archive/python_runtime/feature_09_high_jump_low_gravity.py", "features/_legacy_archive/scripts/09-high_jump_low_gravity.js"),
-        "godmode": ("features/_legacy_archive/python_runtime/feature_12_invincibility.py", "features/_legacy_archive/scripts/12-invincibility.js"),
-        "skillcd": ("features/_legacy_archive/python_runtime/feature_17_skill_no_cooldown.py", "features/_legacy_archive/scripts/17-skill_no_cooldown.js"),
-        "gather": ("features/_legacy_archive/python_runtime/feature_08_gather_enemies.py", "features/_legacy_archive/scripts/08-gather_enemies.js"),
-        "isbot": ("features/_legacy_archive/python_runtime/feature_14_become_bot.py", "features/_legacy_archive/scripts/14-become_bot.js"),
-        "roundskip": ("features/_legacy_archive/python_runtime/feature_10_skip_round.py", "features/_legacy_archive/scripts/10-skip_round.js"),
-        "esp_box": ("features/_legacy_archive/python_runtime/feature_18_universal_esp_box.py", None),
-        "timescale": ("features/_legacy_archive/python_runtime/feature_20_unity_time_acceleration.py", "features/_legacy_archive/scripts/20-unity_time_acceleration.js"),
+        "knife",
+        "recoil",
+        "ammo",
+        "ammoplus",
+        "range",
+        "aim",
+        "speedgun",
+        "movespeed",
+        "time",
+        "gravity",
+        "godmode",
+        "skillcd",
+        "gather",
+        "isbot",
+        "roundskip",
+        "esp_box",
+        "timescale",
     }
 
     REQUIRED_MANIFEST_FIELDS = {
@@ -182,8 +188,8 @@ class MigratedOrdinaryFeatureTests(unittest.TestCase):
         "lifecycle",
     }
 
-    def test_all_ordinary_features_have_plugin_files_and_real_sources(self):
-        for feature_id, (feature_source, script_source) in self.ORDINARY_FEATURES.items():
+    def test_all_ordinary_features_have_self_contained_plugin_files(self):
+        for feature_id in self.ORDINARY_FEATURES:
             with self.subTest(feature_id=feature_id):
                 plugin_dir = PROJECT_DIR / "features" / feature_id
                 self.assertTrue((plugin_dir / "manifest.json").exists())
@@ -197,25 +203,18 @@ class MigratedOrdinaryFeatureTests(unittest.TestCase):
 
                 feature_text = (plugin_dir / "feature.py").read_text(encoding="utf-8")
                 self.assertIn("PluginFeatureBase", feature_text)
-                self.assertIn(
-                    (PROJECT_DIR / feature_source).read_text(encoding="utf-8").split("class ", 1)[1].split(":", 1)[0].split("(", 1)[0],
-                    feature_text,
-                )
+                self.assertNotIn("_legacy_archive", feature_text)
 
                 script_text = (plugin_dir / "script.js").read_text(encoding="utf-8")
                 self.assertIn("rpc.exports", script_text)
-                if script_source:
-                    original_script = (PROJECT_DIR / script_source).read_text(encoding="utf-8")
-                    self.assertIn(original_script, script_text)
-                else:
-                    self.assertIn("Universal-ImGui-Hook.dll", script_text)
+                self.assertNotIn("_legacy_archive", script_text)
+                self.assertNotIn("TODO", script_text)
 
     def test_old_ordinary_feature_modules_are_not_imported_for_registration(self):
         init_text = (PROJECT_DIR / "features" / "__init__.py").read_text(encoding="utf-8")
-        for feature_id, (feature_source, _script_source) in self.ORDINARY_FEATURES.items():
+        for feature_id in self.ORDINARY_FEATURES:
             if feature_id in {"nano4t", "weapon_giver"}:
                 continue
-            self.assertNotIn(Path(feature_source).stem, init_text)
             feature_text = (PROJECT_DIR / "features" / feature_id / "feature.py").read_text(encoding="utf-8")
             self.assertNotIn("@register_feature", feature_text)
             self.assertNotIn("register_feature", feature_text)
@@ -254,8 +253,7 @@ class MigratedOrdinaryFeatureTests(unittest.TestCase):
 
         self.assertNotIn("import features", main_text)
         self.assertIn('APP_VERSION = "v1.9"', window_contract)
-        for feature_id, (feature_source, _script_source) in self.ORDINARY_FEATURES.items():
-            self.assertNotIn(Path(feature_source).stem, init_text)
+        for feature_id in self.ORDINARY_FEATURES:
             self.assertNotIn(f'feature_id == "{feature_id}"', plugin_page)
         self.assertIn("build_card", plugin_page)
         self.assertIn("panel.py", plugin_page)
@@ -478,6 +476,13 @@ class MigratedOrdinaryFeatureTests(unittest.TestCase):
         self.assertIn("handle_event", (template_dir / "events.py").read_text(encoding="utf-8"))
         self.assertIn("plugin_event", (template_dir / "script.js").read_text(encoding="utf-8"))
         self.assertIn("events.py", (template_dir / "README.md").read_text(encoding="utf-8"))
+
+    def test_legacy_archive_is_not_required_or_referenced_by_runtime(self):
+        self.assertFalse((PROJECT_DIR / "features" / "_legacy_archive").exists())
+        for path in (PROJECT_DIR / "features").glob("*/manifest.json"):
+            if path.parent.name.startswith("_"):
+                continue
+            self.assertNotIn("_legacy_archive", path.read_text(encoding="utf-8"), msg=str(path))
 
 
 if __name__ == "__main__":

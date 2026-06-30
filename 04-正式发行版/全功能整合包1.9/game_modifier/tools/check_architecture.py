@@ -90,16 +90,21 @@ def check_common_js_removed_from_runtime():
         ok = fail("runtime scripts/_common.js still exists") and ok
     if (FEATURES_DIR / "_shared" / "common.js").exists():
         ok = fail("runtime features/_shared/common.js still exists") and ok
-    archive_common = FEATURES_DIR / "_legacy_archive" / "scripts" / "_common.js"
-    if not archive_common.exists():
-        ok = fail("historical _common.js is not archived") and ok
     for path in runtime_files("*"):
         if path.suffix not in {".py", ".js", ".json", ".md", ".spec"}:
             continue
         text = read(path)
-        for needle in ("scripts/_common.js", "scripts\\\\_common.js", "features/_shared/common.js"):
+        for needle in (
+            "scripts/_common.js",
+            "scripts\\\\_common.js",
+            "features/_shared/common.js",
+            "_legacy_archive",
+        ):
             if needle in text:
-                ok = fail(f"runtime file references shared common js: {path}") and ok
+                ok = fail(
+                    f"runtime file references removed legacy/shared path: {path}: {needle}. "
+                    "Use features/<feature_id>/script.js only."
+                ) and ok
     return ok
 
 
@@ -464,8 +469,14 @@ def check_assets():
     ok = True
     if not (ROOT / "plugins" / "universal_hook" / "Universal-ImGui-Hook.dll").exists():
         ok = fail("Universal-ImGui-Hook.dll missing") and ok
-    if not (FEATURES_DIR / "_legacy_archive" / "scripts").exists():
-        ok = fail("legacy script archive missing") and ok
+    return ok
+
+
+def check_legacy_archive_removed():
+    ok = True
+    legacy_dir = FEATURES_DIR / "_legacy_archive"
+    if legacy_dir.exists():
+        ok = fail("features/_legacy_archive still exists. Delete it after confirming runtime has no references.") and ok
     return ok
 
 
@@ -488,6 +499,7 @@ def main():
         check_runtime_old_script_references(),
         check_no_mainline_legacy_runtime_files(),
         check_assets(),
+        check_legacy_archive_removed(),
     ]
     check_script_helper_warnings()
     if all(checks):
