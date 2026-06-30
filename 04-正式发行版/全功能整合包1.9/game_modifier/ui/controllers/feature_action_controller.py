@@ -69,16 +69,27 @@ class FeatureActionController:
         return result
 
     def trigger_feature_action(self, feature_id, action):
+        app = self._app
         if action == "gather":
             return self.gather()
         if action == "skip_round":
             return self.skip_round()
         if action == "enable":
-            return self._app._feature_service.enable(feature_id)
+            result = app._feature_service.enable(feature_id)
+            app._features[feature_id] = True
+            app._update_switch(feature_id)
+            app._schedule_save_state()
+            return result
         if action == "disable":
-            return self._app._feature_service.disable(feature_id)
+            result = app._feature_service.disable(feature_id)
+            app._features[feature_id] = False
+            app._update_switch(feature_id)
+            app._schedule_save_state()
+            return result
         if action == "cleanup":
-            return self._app._feature_service.cleanup(feature_id)
+            result = app._feature_service.cleanup(feature_id)
+            app._schedule_save_state()
+            return result
         return self.set_feature_config(feature_id, action, True)
 
     @staticmethod
@@ -89,57 +100,6 @@ class FeatureActionController:
             return round(float(value), 1)
         except (TypeError, ValueError):
             return value
-
-    def on_knife_speed_change(self, value):
-        app = self._app
-        app._knife_speed = round(float(value), 1)
-        return self.set_feature_config("knife", "speed", app._knife_speed)
-
-    def on_move_speed_change(self, value):
-        app = self._app
-        app._movespeed = round(float(value), 1)
-        return self.set_feature_config("movespeed", "speed", app._movespeed)
-
-    def on_range_change(self, value):
-        app = self._app
-        app._range_mult = round(float(value), 1)
-        return self.set_feature_config("range", "range", app._range_mult)
-
-    def on_timescale_change(self, value):
-        app = self._app
-        app._timescale = round(float(value), 1)
-        app.timescale_label.configure(text=f"{app._timescale:.1f}x")
-        return self.set_feature_config("timescale", "speed", app._timescale)
-
-    def on_gravity_change(self, value):
-        app = self._app
-        app._gravity = round(float(value), 1)
-        app.gravity_label.configure(text=f"{app._gravity:.1f}")
-        return self.set_feature_config("gravity", "gravity", app._gravity)
-
-    def on_jump_change(self, value):
-        app = self._app
-        app._jump = round(float(value), 1)
-        app.jump_label.configure(text=f"{app._jump:.1f}")
-        return self.set_feature_config("gravity", "jump", app._jump)
-
-    def on_gravity_mode_change(self, value):
-        app = self._app
-        app._gravity_mode = "player_only" if value == "仅自己" else "all"
-        return self.set_feature_config("gravity", "mode", app._gravity_mode)
-
-    def debounce_gravity_config(self):
-        app = self._app
-        if app._gravity_debounce_timer:
-            app.after_cancel(app._gravity_debounce_timer)
-        app._gravity_debounce_timer = app.after(300, self.send_gravity_config)
-
-    def send_gravity_config(self):
-        app = self._app
-        app._feature_service.set_config(
-            "gravity",
-            {"gravity": app._gravity, "jump": app._jump, "mode": app._gravity_mode},
-        )
 
     def gather(self):
         app = self._app
