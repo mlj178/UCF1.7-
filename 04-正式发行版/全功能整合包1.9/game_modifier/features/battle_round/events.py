@@ -1,6 +1,7 @@
 def handle_event(context, event, payload):
-    battle_round = context.controller("battle_round")
-    nano4t_runtime = context.controller("nano4t_runtime")
+    legacy = context.legacy
+    battle_round = legacy.controller("battle_round")
+    nano4t_runtime = legacy.controller("nano4t_runtime")
 
     def update():
         if event == "battle_round_mode_enter":
