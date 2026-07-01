@@ -202,15 +202,6 @@ modules.battle_round_always = (function() {
         });
     }
 
-    function syncNano4TOnRound() {
-        // 进入正确模式时再初始化Buff模块；不需要Python定时轮询。
-        try {
-            if (modules.nano4t) {
-                modules.nano4t.onModeRound();
-            }
-        } catch(e) {}
-    }
-
     function resolveTerminatorTypeInfo(currentBase, callId) {
         var typeInfoAddr = currentBase.add(RVA.Mode_Nano4_Terminator_TypeInfo);
         var typeInfo = safeReadPointer(typeInfoAddr);
@@ -316,7 +307,6 @@ modules.battle_round_always = (function() {
                         if (!isTerminatorModeInstance(args[0], typeInfo, callId)) return;
 
                         markModeEnter();
-                        syncNano4TOnRound();
 
                         if (!_enabled) {
                             sendRoundEvent(false, false, -1);
@@ -499,4 +489,4 @@ rpc.exports = {
   }
 };
 
-
+rpc.exports.battleroundgetstatus = rpc.exports.battleRoundGetStatus;

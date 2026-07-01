@@ -76,6 +76,9 @@ class App(ctk.CTk):
         self._monitoring = True
         self._ui_ready = False
         self._early_log_messages = []
+        self._mainloop_ready = False
+        self._pending_ui_callbacks = []
+        self._pending_ui_lock = threading.Lock()
 
         self._features = dict(self._persistent_state.features)
         self._migrate_plugin_config_from_persistent_state()
@@ -101,6 +104,7 @@ class App(ctk.CTk):
         for feature_id in self._features:
             self._update_switch(feature_id)
         self.after(0, self._sync_initial_session_state)
+        self.after(0, self._mark_mainloop_ready)
 
     def _build_ui(self):
         self._build_status_bar()
@@ -177,7 +181,35 @@ class App(ctk.CTk):
 
     def _log(self, msg):
         ts = time.strftime("%H:%M:%S")
-        self.after(0, lambda: self._log_ui(ts, msg))
+        self._safe_after(0, lambda: self._log_ui(ts, msg))
+
+    def _safe_after(self, delay_ms, callback, *args):
+        if self._stop:
+            return None
+        if not self._mainloop_ready:
+            self._queue_ui_callback(delay_ms, callback, args)
+            return None
+        try:
+            return self.after(delay_ms, callback, *args)
+        except RuntimeError as exc:
+            if "main thread is not in main loop" not in str(exc):
+                raise
+            self._queue_ui_callback(delay_ms, callback, args)
+            return None
+
+    def _queue_ui_callback(self, delay_ms, callback, args):
+        with self._pending_ui_lock:
+            if not self._stop:
+                self._pending_ui_callbacks.append((delay_ms, callback, args))
+
+    def _mark_mainloop_ready(self):
+        self._mainloop_ready = True
+        with self._pending_ui_lock:
+            pending = self._pending_ui_callbacks
+            self._pending_ui_callbacks = []
+        for delay_ms, callback, args in pending:
+            if not self._stop:
+                self.after(delay_ms, callback, *args)
 
     def _log_ui(self, ts, msg):
         self.log_box.configure(state="normal")
@@ -410,6 +442,8 @@ class App(ctk.CTk):
 
     def _on_close(self):
         self._stop = True
+        with self._pending_ui_lock:
+            self._pending_ui_callbacks = []
         self._event_bus.emit("app_closing")
         GameSessionManager.get_instance().stop()
         self._hotkey.cleanup()

@@ -31,6 +31,8 @@ def handle_event(context, event, payload):
         runtime.on_dead()
     elif event == "nano4t_alive":
         runtime.on_alive()
+    elif event == "mode_detected":
+        runtime.auto_init_if_needed_async()
     elif event == "get_current":
         runtime.get_current_async()
 

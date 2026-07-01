@@ -5,6 +5,8 @@ import winsound
 from core.config import SETTINGS_FILE, RESOURCE_DIR
 from core.event_bus import EventBus
 
+os.environ.setdefault("PYGAME_HIDE_SUPPORT_PROMPT", "1")
+
 
 class SoundManager:
     _instance = None

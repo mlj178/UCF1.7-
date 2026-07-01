@@ -27,6 +27,8 @@ def build_card(parent, manifest, row, col, colspan, callbacks, card_builder):
 
         def worker():
             try:
+                if callbacks["is_enabled"]("time"):
+                    callbacks["action"]("time", "pauseFor", {"ms": 2000})
                 result = callbacks["action"](feature_id, button_control.get("action", "skip_round"))
                 if result:
                     if result.get("ok", False):
@@ -35,6 +37,8 @@ def build_card(parent, manifest, row, col, colspan, callbacks, card_builder):
                         reason = result.get("reason", "未知错误")
                         if reason == "no_instance":
                             log("⚠ 未能获取到游戏回合实例，请确保已进入游戏模式")
+                        elif reason == "stale_room_generation":
+                            log("⚠ 房间状态已刷新，请等待新回合计时出现后再跳过")
                         elif reason == "already_zero":
                             log("⚠ 回合时间已为 0:00，无需跳过")
                         else:

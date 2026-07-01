@@ -105,6 +105,15 @@ modules.roundskip = (function() {
   function pad2(n) { return n < 10 ? "0" + n : "" + n; }
   function addDevLog(level, message, detail) { sendDevLog(level, 'RoundSkip', message, detail || 'RoundSkip internal'); }
   function addUserLog(level, message) { sendUserLog(level, 'RoundSkip', message); }
+  function emitEvent(event, payload) {
+    send({
+      type: 'plugin_event',
+      feature: 'roundskip',
+      event: event,
+      payload: payload || {},
+      audience: 'both'
+    });
+  }
 
   function isValidInstance(instance) {
     try {
@@ -165,18 +174,11 @@ modules.roundskip = (function() {
 
     try {
       skipGuard = true;
-      try { if (modules.time) modules.time.pauseFor(1000); } catch (e1) {}
       instance.add(0x34).writeS32(0);
       instance.add(0x38).writeS32(0);
       skipCount++;
       roundActive = false;
-      send({
-        type: 'plugin_event',
-        feature: 'roundskip',
-        event: 'skipped',
-        payload: { from: minute + ':' + pad2(second), count: skipCount },
-        audience: 'both'
-      });
+      emitEvent('skipped', { from: minute + ':' + pad2(second), count: skipCount });
       addDevLog('info', 'SKIP! ' + minute + ':' + pad2(second) + ' -> 0:00 (total:' + skipCount + ')', 'RoundSkip wrote restGameTime to 0:00');
       return { ok: true };
     } catch (e2) {
@@ -294,11 +296,18 @@ function __pluginEnable(config) {
   var module = __pluginModule();
   if (!module || typeof module.enable !== 'function') return { ok: false, reason: 'enable_missing' };
   var result = module.enable();
-  if (typeof module.skipround === 'function') {
-    result = module.skipround();
-  }
   __pluginEnabled = true;
   return result || { ok: true, enabled: true };
+}
+
+function __pluginSkipRound(payload) {
+  var module = __pluginModule();
+  if (!module || typeof module.skipround !== 'function') return { ok: false, reason: 'skip_round_missing' };
+  if (!__pluginEnabled && typeof module.enable === 'function') {
+    module.enable();
+    __pluginEnabled = true;
+  }
+  return module.skipround(payload || {});
 }
 
 function __pluginDisable() {
@@ -330,7 +339,10 @@ rpc.exports = {
   status: __pluginStatus,
   cleanup: __pluginCleanup,
   skip_round: function(payload) {
-    return __pluginEnable(payload || {});
+    return __pluginSkipRound(payload || {});
   }
 };
+
+rpc.exports.skipRound = rpc.exports.skip_round;
+rpc.exports.skipround = rpc.exports.skip_round;
 

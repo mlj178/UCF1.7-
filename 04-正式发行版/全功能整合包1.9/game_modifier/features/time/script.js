@@ -236,6 +236,15 @@ function __pluginStatus() {
   return { enabled: __pluginEnabled, config: __pluginConfig, stats: stats };
 }
 
+function __pluginPauseFor(payload) {
+  var module = __pluginModule();
+  if (!module || typeof module.pauseFor !== 'function') return { ok: false, reason: 'pause_missing' };
+  var ms = payload && payload.ms ? Number(payload.ms) : 1000;
+  if (!isFinite(ms) || ms < 0) ms = 1000;
+  module.pauseFor(ms);
+  return { ok: true, ms: ms };
+}
+
 function __pluginCleanup(payload) {
   __pluginDisable();
   return { ok: true, reason: payload && payload.reason ? payload.reason : 'cleanup' };
@@ -246,6 +255,11 @@ rpc.exports = {
   disable: __pluginDisable,
   setConfig: __pluginApplyConfig,
   status: __pluginStatus,
-  cleanup: __pluginCleanup
+  cleanup: __pluginCleanup,
+  pauseFor: function(payload) {
+    return __pluginPauseFor(payload || {});
+  }
 };
+
+rpc.exports.pausefor = rpc.exports.pauseFor;
 

@@ -60,7 +60,7 @@ class AppEventController:
                 app._ready = False
                 app._event_bus.emit("game_disconnected")
 
-        app.after(0, update)
+        app._safe_after(0, update)
 
     def on_feature_status(self, **kwargs):
         app = self._app
@@ -70,7 +70,7 @@ class AppEventController:
         feature_id = kwargs.get("feature", "")
         enabled = kwargs.get("enabled", False)
         app._features[feature_id] = enabled
-        app.after(0, lambda: app._update_switch(feature_id))
+        app._safe_after(0, lambda: app._update_switch(feature_id))
 
     def on_plugin_event(self, **kwargs):
         self._plugin_events.route(

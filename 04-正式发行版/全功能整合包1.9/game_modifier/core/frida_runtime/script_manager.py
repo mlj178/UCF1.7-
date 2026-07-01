@@ -1,4 +1,5 @@
 import json
+import time
 from pathlib import Path
 
 from core.config import APP_DIR
@@ -22,6 +23,8 @@ class ScriptManager:
         self._logger = logger or get_logger("PluginScript")
         self._message_handler = message_handler
         self._scripts = {}
+        self._last_rpc_missing_log_at = {}
+        self._log_throttle_seconds = 3.0
 
     def set_manifests(self, manifests):
         self.manifests = {item["feature_id"]: item for item in manifests if item.get("feature_id")}
@@ -55,7 +58,10 @@ class ScriptManager:
         try:
             script.unload()
         except Exception as exc:
-            self._logger.warning(f"failed to unload plugin script {feature_id}: {exc}")
+            if self._is_script_destroyed_error(exc):
+                self._logger.debug(f"plugin script already destroyed during unload {feature_id}: {exc}")
+            else:
+                self._logger.warning(f"failed to unload plugin script {feature_id}: {exc}")
 
     def reload(self, feature_id):
         self.unload(feature_id)
@@ -66,29 +72,82 @@ class ScriptManager:
         exports = getattr(script, "exports_sync", None)
         if exports is None:
             raise RuntimeError(f"plugin script {feature_id} has no exports_sync")
-        snake_action = "".join(["_" + c.lower() if c.isupper() else c for c in action]).lstrip("_")
-        fn = (
-            getattr(exports, action, None)
-            or getattr(exports, action[0].lower() + action[1:], None)
-            or getattr(exports, snake_action, None)
-        )
-        if fn is None:
-            raise AttributeError(f"plugin script {feature_id} missing rpc action {action}")
-        if payload is None:
-            result = fn()
-        else:
-            result = fn(payload)
-        if isinstance(result, str):
+        candidates = self._rpc_candidates(action)
+        missing_errors = []
+        for candidate in candidates:
+            fn = getattr(exports, candidate, None)
+            if fn is None:
+                continue
             try:
-                return json.loads(result)
-            except (json.JSONDecodeError, TypeError):
-                return result
-        return result
+                result = fn() if payload is None else fn(payload)
+            except Exception as exc:
+                if self._is_missing_rpc_method_error(exc):
+                    missing_errors.append(f"{candidate}: {exc}")
+                    continue
+                raise
+            if isinstance(result, str):
+                try:
+                    return json.loads(result)
+                except (json.JSONDecodeError, TypeError):
+                    return result
+            return result
+
+        message = (
+            "plugin script missing rpc action: "
+            f"feature_id={feature_id}, action={action}, candidates={candidates}"
+        )
+        if missing_errors:
+            message = f"{message}, missing_errors={missing_errors}"
+        self._log_missing_rpc(feature_id, action, message)
+        raise AttributeError(message)
 
     def cleanup_all(self, reason):
         for feature_id in list(self._scripts.keys()):
             try:
                 self.call(feature_id, "cleanup", {"reason": reason})
             except Exception as exc:
-                self._logger.warning(f"plugin cleanup failed for {feature_id}: {exc}")
+                if self._is_script_destroyed_error(exc):
+                    self._logger.debug(f"plugin cleanup skipped for destroyed script {feature_id}: {exc}")
+                else:
+                    self._logger.warning(f"plugin cleanup failed for {feature_id}: {exc}")
             self.unload(feature_id)
+
+    @staticmethod
+    def _rpc_candidates(action):
+        snake_action = "".join(["_" + c.lower() if c.isupper() else c for c in action]).lstrip("_")
+        first_lower = action[0].lower() + action[1:] if action else action
+        snake_parts = [part for part in action.split("_") if part]
+        snake_camel = ""
+        if snake_parts:
+            snake_camel = snake_parts[0] + "".join(part[:1].upper() + part[1:] for part in snake_parts[1:])
+        ordered = [
+            action,
+            first_lower,
+            action.lower(),
+            snake_action,
+            snake_camel,
+            action.replace("_", "").lower(),
+        ]
+        candidates = []
+        for name in ordered:
+            if name and name not in candidates:
+                candidates.append(name)
+        return candidates
+
+    @staticmethod
+    def _is_missing_rpc_method_error(exc):
+        return "unable to find method" in str(exc).lower()
+
+    @staticmethod
+    def _is_script_destroyed_error(exc):
+        message = str(exc).lower()
+        return "script has been destroyed" in message or "script is destroyed" in message
+
+    def _log_missing_rpc(self, feature_id, action, message):
+        key = (feature_id, action, message)
+        now = time.monotonic()
+        last = self._last_rpc_missing_log_at.get(key)
+        if last is not None and now - last < self._log_throttle_seconds:
+            return
+        self._last_rpc_missing_log_at[key] = now
+        self._logger.error(message)

@@ -4,7 +4,7 @@
     "display_name":  "回合跳过",
     "category":  "other",
     "tab":  "other_tab",
-    "order":  30,
+    "order":  20,
     "icon":  "⏭️",
     "desc":  "结束当前回合",
     "script":  "script.js",
@@ -29,7 +29,9 @@
                 "setConfig",
                 "status",
                 "cleanup",
-                "skip_round"
+                "skip_round",
+                "skipRound",
+                "skipround"
             ],
     "lifecycle":  {
                       "cleanup":  true,
