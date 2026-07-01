@@ -448,4 +448,9 @@ rpc.exports = {
   }
 };
 
+rpc.exports.nano4tinit = rpc.exports.nano4tInit;
+rpc.exports.nano4tset = rpc.exports.nano4tSet;
+rpc.exports.nano4tgetcurrent = rpc.exports.nano4tGetCurrent;
+rpc.exports.nano4thealthcheck = rpc.exports.nano4tHealthCheck;
+rpc.exports.setconfig = rpc.exports.setConfig;
 

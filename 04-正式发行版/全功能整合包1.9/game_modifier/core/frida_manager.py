@@ -1,5 +1,6 @@
 import json
 import threading
+import time
 
 import frida
 import psutil
@@ -56,6 +57,8 @@ class FridaManager:
         self._pid = None
         self._script_manager = None
         self._rpc_client = None
+        self._last_rpc_error_log_at = {}
+        self._rpc_error_log_throttle_seconds = 3.0
         self._lock = threading.Lock()
         self._event_bus = EventBus.get_instance()
 
@@ -189,14 +192,15 @@ class FridaManager:
         try:
             return rpc_client.call(feature_id, action, payload)
         except Exception as e:
-            self._event_bus.emit(
-                "log_message",
-                level="error",
-                module="Plugin",
-                message=f"{feature_id} 调用失败",
-                audience="both",
-                dev_detail=f"Plugin RPC failed: {feature_id}.{action}: {e}",
-            )
+            if self._should_log_rpc_error(feature_id, action, e):
+                self._event_bus.emit(
+                    "log_message",
+                    level="error",
+                    module="Plugin",
+                    message=f"{feature_id} 调用失败",
+                    audience="both",
+                    dev_detail=f"Plugin RPC failed: {feature_id}.{action}: {e}",
+                )
             return None
 
     def plugin_cleanup_all(self, reason):
@@ -268,3 +272,12 @@ class FridaManager:
         for feature_id, enabled in features_state.items():
             if enabled:
                 self.plugin_call(feature_id, "enable", {})
+
+    def _should_log_rpc_error(self, feature_id, action, error):
+        key = (feature_id, action, str(error))
+        now = time.monotonic()
+        last = self._last_rpc_error_log_at.get(key)
+        if last is not None and now - last < self._rpc_error_log_throttle_seconds:
+            return False
+        self._last_rpc_error_log_at[key] = now
+        return True

@@ -1,4 +1,5 @@
 from features.weapon_giver.controller import WeaponInteractionController
+from features.weapon_giver.events import sync_hotkeys_for_current_connection
 from features.weapon_giver.state import load_from_config, state
 from ui.views import WeaponGiverView
 
@@ -20,4 +21,5 @@ def build_panel(context, parent):
     state.respawn_weapon_check = handles.respawn_weapon_check
     state.current_weapon_label = handles.current_weapon_label
     state.controller = controller
+    sync_hotkeys_for_current_connection(context, controller)
     return handles

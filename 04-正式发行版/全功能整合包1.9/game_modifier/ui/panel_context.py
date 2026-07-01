@@ -14,7 +14,7 @@ class PanelContext:
             "action": app._feature_controller.trigger_feature_action,
         }
         self._log = app._log
-        self._after = app.after
+        self._after = getattr(app, "_safe_after", app.after)
         self._bind_target = app
         self._is_connected = lambda: bool(app._ready)
         self._is_enabled = lambda feature_id: bool(app._features.get(feature_id, False))

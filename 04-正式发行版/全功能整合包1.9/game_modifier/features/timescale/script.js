@@ -616,13 +616,28 @@ modules.timescale = (function() {
     sendStatus('timescale', true);
   }
 
-  function disableFeature() {
+  function restoreNormalTimeScaleNow() {
+    _pendingSpeed = 1.0;
+    _nextRetryAt = 0;
+    if (!initTimeScale() || !safeWriteTimeScale(1.0)) {
+      sendDevLog('warn', '时间加速', '立即恢复1.0x失败，将继续等待主线程恢复');
+      return false;
+    }
+    markApplySuccess(Date.now(), 1.0);
+    sendDevLog('success', '时间加速', '已立即恢复1.0x');
+    return true;
+  }
+
+  function disableFeature(options) {
     if (!enabled) return;
     enabled = false;
     _restorePending = true;
     _pendingSpeed = 1.0;
     _nextRetryAt = 0;
-    sendDevLog('info', '时间加速', '已禁用，等待主线程恢复1.0x');
+    if (options && options.restoreNow) {
+      restoreNormalTimeScaleNow();
+    }
+    sendDevLog('info', '时间加速', '已禁用' + (options && options.restoreNow ? '' : '，等待主线程恢复1.0x'));
     sendStatus('timescale', false);
   }
 
@@ -667,9 +682,9 @@ function __pluginEnable(config) {
   return result || { ok: true, enabled: true };
 }
 
-function __pluginDisable() {
+function __pluginDisable(options) {
   var module = __pluginModule();
-  if (module && typeof module.disable === 'function') module.disable();
+  if (module && typeof module.disable === 'function') module.disable(options || {});
   __pluginEnabled = false;
   return { ok: true, enabled: false };
 }
@@ -685,7 +700,9 @@ function __pluginStatus() {
 }
 
 function __pluginCleanup(payload) {
-  __pluginDisable();
+  var module = __pluginModule();
+  if (module && typeof module.disable === 'function') module.disable({ restoreNow: true });
+  __pluginEnabled = false;
   return { ok: true, reason: payload && payload.reason ? payload.reason : 'cleanup' };
 }
 

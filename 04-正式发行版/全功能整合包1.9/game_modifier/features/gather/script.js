@@ -226,7 +226,13 @@ modules.gather = (function() {
     sendLog('info', '聚怪', '自己=' + self + ' 真人=' + real + ' Bot死=' + dead + ' Bot活=' + botOk);
     if (botFail > 0) sendLog('info', '聚怪', '失败=' + botFail);
     recentBotPlayers = {};
-    send(JSON.stringify({type:'done',n:tn,bots:botOk,fail:botFail}));
+    send({
+      type: 'plugin_event',
+      feature: 'gather',
+      event: 'done',
+      payload: { n: tn, bots: botOk, fail: botFail },
+      audience: 'both'
+    });
   }
 
   return {

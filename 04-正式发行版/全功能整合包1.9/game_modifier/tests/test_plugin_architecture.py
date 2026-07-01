@@ -134,6 +134,480 @@ class PluginArchitectureTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             client.call("sample", "rawNativeCall")
 
+    def test_script_manager_tries_lowercase_rpc_alias_after_camel_and_snake(self):
+        from core.frida_runtime.script_manager import ScriptManager
+
+        calls = []
+
+        class FakeScript:
+            def __init__(self, exports):
+                self.exports_sync = exports
+
+        cases = [
+            ("nano4t", "nano4tInit", "nano4tinit"),
+            ("battle_round", "battleRoundGetStatus", "battleroundgetstatus"),
+            ("weapon_giver", "giveWeapon", "giveweapon"),
+            ("third_person_camera", "setConfig", "setconfig"),
+        ]
+        manager = ScriptManager(session_manager=None, manifests=[], logger=None)
+        for feature_id, action, lowercase_action in cases:
+            with self.subTest(feature_id=feature_id, action=action):
+                exports = type("FakeExports", (), {})()
+
+                def _make_rpc(name):
+                    def _rpc(payload):
+                        calls.append((name, payload))
+                        return {"ok": True}
+
+                    return _rpc
+
+                setattr(exports, lowercase_action, _make_rpc(lowercase_action))
+                manager._scripts[feature_id] = FakeScript(exports)
+
+                payload = {"source": "test", "feature": feature_id}
+                self.assertEqual(manager.call(feature_id, action, payload), {"ok": True})
+                self.assertEqual(calls[-1], (lowercase_action, payload))
+
+    def test_script_manager_reports_rpc_candidates_when_all_methods_are_missing(self):
+        from core.frida_runtime.script_manager import ScriptManager
+
+        logs = []
+
+        class FakeLogger:
+            def error(self, message):
+                logs.append(("error", message))
+
+            def warning(self, message):
+                logs.append(("warning", message))
+
+            def debug(self, message):
+                logs.append(("debug", message))
+
+        class MissingFridaExports:
+            def __getattr__(self, name):
+                def _missing(*_args):
+                    raise Exception(f"unable to find method '{name.lower()}'")
+
+                return _missing
+
+        class FakeScript:
+            exports_sync = MissingFridaExports()
+
+        manager = ScriptManager(session_manager=None, manifests=[], logger=FakeLogger())
+        manager._scripts["battle_round"] = FakeScript()
+
+        with self.assertRaises(AttributeError) as ctx:
+            manager.call("battle_round", "battleRoundGetStatus", {})
+
+        message = str(ctx.exception)
+        self.assertIn("feature_id=battle_round", message)
+        self.assertIn("action=battleRoundGetStatus", message)
+        self.assertIn("battleRoundGetStatus", message)
+        self.assertIn("battle_round_get_status", message)
+        self.assertIn("battleroundgetstatus", message)
+        self.assertTrue(any(level == "error" and "candidates=" in text for level, text in logs))
+
+    def test_cleanup_all_does_not_warn_for_already_destroyed_scripts(self):
+        from core.frida_runtime.script_manager import ScriptManager
+
+        logs = []
+
+        class FakeLogger:
+            def warning(self, message):
+                logs.append(("warning", message))
+
+            def debug(self, message):
+                logs.append(("debug", message))
+
+            def error(self, message):
+                logs.append(("error", message))
+
+        class FakeExports:
+            def cleanup(self, payload):
+                raise Exception("script has been destroyed")
+
+        class FakeScript:
+            exports_sync = FakeExports()
+
+            def unload(self):
+                pass
+
+        manager = ScriptManager(session_manager=None, manifests=[], logger=FakeLogger())
+        manager._scripts["sample"] = FakeScript()
+
+        manager.cleanup_all("test_shutdown")
+
+        self.assertFalse([entry for entry in logs if entry[0] == "warning"])
+
+    def test_plugin_scripts_and_manifests_expose_lowercase_rpc_aliases(self):
+        expected = {
+            "nano4t": {
+                "manifest": ["nano4tinit", "nano4tset", "nano4tgetcurrent", "nano4thealthcheck", "setconfig"],
+                "script": [
+                    "rpc.exports.nano4tinit = rpc.exports.nano4tInit",
+                    "rpc.exports.nano4tset = rpc.exports.nano4tSet",
+                    "rpc.exports.nano4tgetcurrent = rpc.exports.nano4tGetCurrent",
+                    "rpc.exports.nano4thealthcheck = rpc.exports.nano4tHealthCheck",
+                    "rpc.exports.setconfig = rpc.exports.setConfig",
+                ],
+            },
+            "battle_round": {
+                "manifest": ["battleroundgetstatus"],
+                "script": ["rpc.exports.battleroundgetstatus = rpc.exports.battleRoundGetStatus"],
+            },
+            "weapon_giver": {
+                "manifest": ["giveweapon", "setrespawnweapon", "clearrespawnweapon", "setconfig"],
+                "script": [
+                    "rpc.exports.giveweapon = rpc.exports.giveWeapon",
+                    "rpc.exports.setrespawnweapon = rpc.exports.setRespawnWeapon",
+                    "rpc.exports.clearrespawnweapon = rpc.exports.clearRespawnWeapon",
+                    "rpc.exports.setconfig = rpc.exports.setConfig",
+                ],
+            },
+            "third_person_camera": {
+                "manifest": ["setconfig", "getstatus"],
+                "script": [
+                    "rpc.exports.setconfig = rpc.exports.setConfig",
+                    "rpc.exports.getstatus = rpc.exports.status",
+                ],
+            },
+        }
+        for feature_id, aliases in expected.items():
+            with self.subTest(feature_id=feature_id):
+                plugin_dir = PROJECT_DIR / "features" / feature_id
+                manifest = json.loads((plugin_dir / "manifest.json").read_text(encoding="utf-8"))
+                script = (plugin_dir / "script.js").read_text(encoding="utf-8")
+                for action in aliases["manifest"]:
+                    self.assertIn(action, manifest["rpc"])
+                for line in aliases["script"]:
+                    self.assertIn(line, script)
+
+    def test_third_person_defaults_and_cleanup_match_plugin_lifecycle(self):
+        plugin_dir = PROJECT_DIR / "features" / "third_person_camera"
+        manifest = json.loads((plugin_dir / "manifest.json").read_text(encoding="utf-8"))
+        script = (plugin_dir / "script.js").read_text(encoding="utf-8")
+
+        sliders = {
+            item["key"]: item
+            for item in manifest["controls"]
+            if item.get("type") == "slider"
+        }
+        self.assertEqual(manifest["config"], {"distance": 3.0, "pivotHeight": 1.35})
+        self.assertIs(manifest.get("lifecycle", {}).get("restore"), True)
+        self.assertEqual(sliders["distance"]["default"], 3.0)
+        self.assertEqual(sliders["pivotHeight"]["default"], 1.35)
+        default_config_path = PROJECT_DIR / "data" / "default_config.json"
+        if default_config_path.exists():
+            persisted = json.loads(default_config_path.read_text(encoding="utf-8")).get("third_person_camera", {})
+            if persisted:
+                self.assertEqual(persisted.get("distance"), 3.0, msg=str(default_config_path))
+                self.assertEqual(persisted.get("pivotHeight"), 1.35, msg=str(default_config_path))
+        self.assertIn("distance: 3.0", script)
+        self.assertIn("pivotHeight: 1.35", script)
+        self.assertIn("shoulder: 'center'", script)
+        self.assertIn("invertY: false", script)
+        self.assertIn("var desiredPitch = runtime.cameraInput.pitch;", script)
+        self.assertIn("if (!config.invertY) desiredPitch = -desiredPitch;", script)
+        self.assertIn("invertY: config.invertY", script)
+        self.assertIn("if (input.invertY !== undefined)", script)
+        request_enable_body = script.split("function requestEnable(input)", 1)[1].split("function requestDisable()", 1)[0]
+        self.assertIn("var validation = validateConfig(input || {})", request_enable_body)
+        self.assertIn("config = validation.config", request_enable_body)
+        self.assertIn("pendingEnable = true", request_enable_body)
+
+        cleanup_body = script.split("function cleanup(payload)", 1)[1].split("rpc.exports = {", 1)[0]
+        self.assertIn("performDisable()", cleanup_body)
+        self.assertNotIn("queuedDisable", cleanup_body)
+
+    def test_third_person_panel_suppresses_programmatic_slider_sync(self):
+        panel = (PROJECT_DIR / "features" / "third_person_camera" / "panel.py").read_text(encoding="utf-8")
+        script = (PROJECT_DIR / "features" / "third_person_camera" / "script.js").read_text(encoding="utf-8")
+
+        self.assertIn("class _SyncedSliderVar", panel)
+        self.assertIn("self._syncing = True", panel)
+        self.assertIn("if sync_guard[\"value\"]:", panel)
+        self.assertIn("callbacks[\"set_config\"]", panel)
+        self.assertIn("scheduleRefresh(", script)
+        self.assertIn("'config_changed'", script)
+
+    def test_timescale_cleanup_restores_normal_speed_before_script_unload(self):
+        script = (PROJECT_DIR / "features" / "timescale" / "script.js").read_text(encoding="utf-8")
+
+        self.assertIn("function restoreNormalTimeScaleNow()", script)
+        restore_body = script.split("function restoreNormalTimeScaleNow()", 1)[1].split("function disableFeature", 1)[0]
+        self.assertIn("safeWriteTimeScale(1.0)", restore_body)
+
+        cleanup_body = script.split("function __pluginCleanup(payload)", 1)[1].split("rpc.exports = {", 1)[0]
+        self.assertIn("disable({ restoreNow: true })", cleanup_body)
+
+    def test_speedgun_uses_rpg_fire_data_rates_without_direct_anim_speed(self):
+        script = (PROJECT_DIR / "features" / "speedgun" / "script.js").read_text(encoding="utf-8")
+
+        self.assertIn("'WPN_RPG.Fire'", script)
+        self.assertIn("base.add(0xB670A0)", script)
+        self.assertIn("applyRpgDataSpeed(this.self)", script)
+        self.assertIn("RPG Fire Hook失败", script)
+        self.assertIsNone(re.search(r"^\s*setAnimSpeed\(anim,\s*10\.0,\s*ptr\(0\)\);", script, re.M))
+
+    def test_weapon_giver_bridges_acquired_weapons_to_speedgun_plugin_rpc(self):
+        weapon_script = (PROJECT_DIR / "features" / "weapon_giver" / "script.js").read_text(encoding="utf-8")
+        weapon_events = (PROJECT_DIR / "features" / "weapon_giver" / "events.py").read_text(encoding="utf-8")
+        speedgun_script = (PROJECT_DIR / "features" / "speedgun" / "script.js").read_text(encoding="utf-8")
+
+        self.assertNotIn("modules.speedgun", weapon_script)
+        self.assertIn("event: 'weapon_acquired'", weapon_script)
+        self.assertIn("weaponPtr: weapon.toString()", weapon_script)
+        self.assertIn("context.feature_service.call_action(", weapon_events)
+        self.assertIn('"speedgun"', weapon_events)
+        self.assertIn('"notifyWeaponAcquired"', weapon_events)
+        self.assertIn("function __pluginNotifyWeaponAcquired(payload)", speedgun_script)
+        self.assertIn("var weapon = ptr(payload.weaponPtr)", speedgun_script)
+        self.assertIn("ModeBase_Update: 0xAF6A00", speedgun_script)
+        self.assertIn("processPendingWeaponSpeed()", speedgun_script)
+        self.assertIn("notifyWeaponAcquired: __pluginNotifyWeaponAcquired", speedgun_script)
+
+    def test_rpc_error_logging_is_throttled_by_feature_action_and_error(self):
+        from core.frida_manager import FridaManager
+
+        manager = FridaManager()
+        error = Exception("unable to find method 'setconfig'")
+
+        self.assertTrue(manager._should_log_rpc_error("sample", "setConfig", error))
+        self.assertFalse(manager._should_log_rpc_error("sample", "setConfig", error))
+        self.assertTrue(manager._should_log_rpc_error("sample", "status", error))
+
+    def test_script_manager_rpc_candidates_cover_snake_case_frida_names(self):
+        from core.frida_runtime.script_manager import ScriptManager
+
+        self.assertEqual(
+            ScriptManager._rpc_candidates("skip_round"),
+            ["skip_round", "skipRound", "skipround"],
+        )
+        self.assertIn("battle_round_get_status", ScriptManager._rpc_candidates("battleRoundGetStatus"))
+        self.assertIn("battleroundgetstatus", ScriptManager._rpc_candidates("battleRoundGetStatus"))
+
+    def test_unload_does_not_warn_for_script_is_destroyed_variant(self):
+        from core.frida_runtime.script_manager import ScriptManager
+
+        logs = []
+
+        class FakeLogger:
+            def warning(self, message):
+                logs.append(("warning", message))
+
+            def debug(self, message):
+                logs.append(("debug", message))
+
+        class FakeScript:
+            def unload(self):
+                raise Exception("script is destroyed")
+
+        manager = ScriptManager(session_manager=None, manifests=[], logger=FakeLogger())
+        manager._scripts["sample"] = FakeScript()
+
+        manager.unload("sample")
+
+        self.assertFalse([entry for entry in logs if entry[0] == "warning"])
+
+    def test_log_regressions_from_game_modifier_log_are_fixed_in_scripts(self):
+        gather_script = (PROJECT_DIR / "features" / "gather" / "script.js").read_text(encoding="utf-8")
+        roundskip_script = (PROJECT_DIR / "features" / "roundskip" / "script.js").read_text(encoding="utf-8")
+        roundskip_manifest = json.loads(
+            (PROJECT_DIR / "features" / "roundskip" / "manifest.json").read_text(encoding="utf-8")
+        )
+        weapon_script = (PROJECT_DIR / "features" / "weapon_giver" / "script.js").read_text(encoding="utf-8")
+        weapon_events = (PROJECT_DIR / "features" / "weapon_giver" / "events.py").read_text(encoding="utf-8")
+
+        self.assertNotIn("type:'done'", gather_script)
+        self.assertNotIn('type:"done"', gather_script)
+        self.assertIn("type: 'plugin_event'", gather_script)
+        self.assertIn("event: 'done'", gather_script)
+
+        self.assertNotIn("return __pluginEnable(payload || {});", roundskip_script)
+        self.assertIn("rpc.exports.skipRound = rpc.exports.skip_round", roundskip_script)
+        self.assertIn("rpc.exports.skipround = rpc.exports.skip_round", roundskip_script)
+        self.assertIn("skipRound", roundskip_manifest["rpc"])
+        self.assertIn("skipround", roundskip_manifest["rpc"])
+
+        is_valid_match = re.search(
+            r"function isPlayerValid\(player\) \{(?P<body>.*?)\n  \}",
+            weapon_script,
+            re.S,
+        )
+        self.assertIsNotNone(is_valid_match)
+        self.assertNotIn("!isMyPlayer(player)", is_valid_match.group("body"))
+        self.assertIn("reason", weapon_script)
+        self.assertIn('"warning"', weapon_events)
+
+    def test_roundskip_uses_legacy_immediate_write_semantics(self):
+        roundskip_script = (PROJECT_DIR / "features" / "roundskip" / "script.js").read_text(encoding="utf-8")
+        roundskip_panel = (PROJECT_DIR / "features" / "roundskip" / "panel.py").read_text(encoding="utf-8")
+        time_script = (PROJECT_DIR / "features" / "time" / "script.js").read_text(encoding="utf-8")
+        time_manifest = json.loads((PROJECT_DIR / "features" / "time" / "manifest.json").read_text(encoding="utf-8"))
+        skip_round = re.search(r"function skipRound\(\) \{(?P<body>.*?)\n  \}", roundskip_script, re.S)
+
+        self.assertIsNotNone(skip_round)
+        body = skip_round.group("body")
+        self.assertLess(
+            body.index("if (modeBaseGeneration !== roomGeneration)"),
+            body.index("if (!isValidInstance(instance))"),
+        )
+        self.assertIn('reason == "stale_room_generation"', roundskip_panel)
+        self.assertNotIn("pendingSkip", roundskip_script)
+        self.assertNotIn("skip_unconfirmed", roundskip_script)
+        self.assertNotIn("skip_requested", roundskip_script)
+        self.assertNotIn("modules.time", body)
+        self.assertIn("emitEvent('skipped'", roundskip_script)
+        self.assertIn('callbacks["is_enabled"]("time")', roundskip_panel)
+        self.assertIn('callbacks["action"]("time", "pauseFor", {"ms": 2000})', roundskip_panel)
+        self.assertIn('log("✅ 回合跳过成功！")', roundskip_panel)
+        self.assertIn("pauseFor: function(payload)", time_script)
+        self.assertIn("module.pauseFor(ms)", time_script)
+        self.assertIn("pauseFor", time_manifest["rpc"])
+        self.assertIn("pausefor", time_manifest["rpc"])
+        self.assertIn('event == "skipped"', (PROJECT_DIR / "features" / "roundskip" / "events.py").read_text(encoding="utf-8"))
+        self.assertNotIn('event == "skip_unconfirmed"', (PROJECT_DIR / "features" / "roundskip" / "events.py").read_text(encoding="utf-8"))
+
+    def test_migrated_plugin_feature_files_do_not_call_legacy_exports(self):
+        for feature_path in (PROJECT_DIR / "features").glob("*/feature.py"):
+            text = feature_path.read_text(encoding="utf-8")
+            self.assertNotIn("call_export", text, msg=str(feature_path))
+
+    def test_battle_round_syncs_nano4t_through_plugin_events(self):
+        battle_script = (PROJECT_DIR / "features" / "battle_round" / "script.js").read_text(encoding="utf-8")
+        battle_events = (PROJECT_DIR / "features" / "battle_round" / "events.py").read_text(encoding="utf-8")
+        nano_events = (PROJECT_DIR / "features" / "nano4t" / "events.py").read_text(encoding="utf-8")
+
+        self.assertNotIn("modules.nano4t", battle_script)
+        self.assertIn('context.feature_event("mode_detected", {}, feature_id="nano4t")', battle_events)
+        self.assertIn('event == "mode_detected"', nano_events)
+        self.assertIn("runtime.auto_init_if_needed_async()", nano_events)
+
+    def test_isbot_state_matches_legacy_room_lifecycle_without_panel_module_split(self):
+        isbot_script = (PROJECT_DIR / "features" / "isbot" / "script.js").read_text(encoding="utf-8")
+        isbot_panel = (PROJECT_DIR / "features" / "isbot" / "panel.py").read_text(encoding="utf-8")
+        isbot_events = (PROJECT_DIR / "features" / "isbot" / "events.py").read_text(encoding="utf-8")
+        isbot_state = (PROJECT_DIR / "features" / "isbot" / "state.py").read_text(encoding="utf-8")
+
+        self.assertIn("roomCaptureCount >= 2 ? 'active' : 'awaiting_reenter'", isbot_script)
+        self.assertIn("isbot_state.status_label = status", isbot_panel)
+        self.assertIn("status_label = None", isbot_state)
+        self.assertNotIn("from features.isbot.panel import", isbot_events)
+        self.assertIn("isbot_state.status_label", isbot_events)
+        self.assertIn("def handle_lifecycle(context, event, payload):", isbot_events)
+        self.assertIn('event in {"game_connected", "game_disconnected"}', isbot_events)
+        self.assertIn('context.is_enabled()', isbot_events)
+        self.assertIn("def toggle_isbot():", isbot_panel)
+        self.assertNotIn('command=lambda: callbacks["toggle"](feature_id)', isbot_panel)
+
+    def test_isbot_keeps_reenter_progress_across_room_exit_until_disabled(self):
+        isbot_script = (PROJECT_DIR / "features" / "isbot" / "script.js").read_text(encoding="utf-8")
+        clear_room = re.search(
+            r"function clearRoomState\(reason\) \{(?P<body>.*?)\n  \}",
+            isbot_script,
+            re.S,
+        )
+        disable = re.search(
+            r"disable: function\([^)]*\) \{(?P<body>.*?)\n    \},",
+            isbot_script,
+            re.S,
+        )
+
+        self.assertIsNotNone(clear_room)
+        self.assertIsNotNone(disable)
+        self.assertNotIn("roomCaptureCount = 0", clear_room.group("body"))
+        self.assertIn("roomCaptureCount = 0", disable.group("body"))
+        self.assertIn("roomCaptureCount >= 2 ? 'active' : 'awaiting_reenter'", isbot_script)
+        self.assertIn("lastCaptureAtMs = Date.now()", isbot_script)
+        self.assertIn("shouldIgnoreLateGameManagerDestroy()", isbot_script)
+
+    def test_isbot_disabled_state_restores_next_capture_before_uninstalling_hook(self):
+        isbot_script = (PROJECT_DIR / "features" / "isbot" / "script.js").read_text(encoding="utf-8")
+        capture = re.search(
+            r"function handlePlayerCapture\(playerPtr\) \{(?P<body>.*?)\n  \}",
+            isbot_script,
+            re.S,
+        )
+        disable = re.search(
+            r"disable: function\([^)]*\) \{(?P<body>.*?)\n    \},",
+            isbot_script,
+            re.S,
+        )
+
+        self.assertIsNotNone(capture)
+        self.assertIsNotNone(disable)
+        self.assertIn("pendingRestoreOnCapture", isbot_script)
+        self.assertIn("restoreBotOnNextCapture()", capture.group("body"))
+        self.assertIn("pendingRestoreOnCapture = true", disable.group("body"))
+        self.assertIn("if (options && options.cleanup)", disable.group("body"))
+        self.assertNotIn("if (restored) uninstallHook()", disable.group("body"))
+
+    def test_isbot_disable_force_restores_current_client_data_on_cleanup(self):
+        isbot_script = (PROJECT_DIR / "features" / "isbot" / "script.js").read_text(encoding="utf-8")
+        disable = re.search(
+            r"disable: function\([^)]*\) \{(?P<body>.*?)\n    \},",
+            isbot_script,
+            re.S,
+        )
+
+        self.assertIsNotNone(disable)
+        self.assertIn("function forceWriteBot(val)", isbot_script)
+        self.assertIn("Process.findRangeByAddress", isbot_script)
+        self.assertIn("writeBot(0) || forceWriteBot(0)", disable.group("body"))
+        cleanup_body = isbot_script.split("function __pluginCleanup(payload)", 1)[1].split("rpc.exports = {", 1)[0]
+        self.assertIn("module.disable({ cleanup: true })", cleanup_body)
+
+    def test_weapon_giver_normal_failures_are_throttled(self):
+        import features.weapon_giver.events as events
+
+        events = importlib.reload(events)
+        emitted = []
+
+        class FakeBus:
+            def emit(self, event_name, **payload):
+                emitted.append((event_name, payload))
+
+        class FakeContext:
+            event_bus = FakeBus()
+
+        payload = {"taskId": 1, "success": False, "reason": "invalid_player"}
+
+        events.handle_event(FakeContext(), "giveWeaponResult", payload)
+        events.handle_event(FakeContext(), "giveWeaponResult", payload)
+
+        self.assertEqual(len(emitted), 1)
+        self.assertEqual(emitted[0][1]["level"], "warning")
+
+    def test_weapon_giver_panel_resumes_hotkeys_when_built_after_connection(self):
+        import features.weapon_giver.events as events
+
+        events = importlib.reload(events)
+        sync_hotkeys = getattr(events, "sync_hotkeys_for_current_connection", None)
+        self.assertTrue(callable(sync_hotkeys))
+
+        calls = []
+
+        class FakeContext:
+            def __init__(self, connected):
+                self._connected = connected
+
+            def is_connected(self):
+                return self._connected
+
+        class FakeController:
+            def init_hotkey_manager(self):
+                calls.append("init")
+
+        sync_hotkeys(FakeContext(True), FakeController())
+        self.assertEqual(calls, ["init"])
+
+        calls.clear()
+        sync_hotkeys(FakeContext(False), FakeController())
+        self.assertEqual(calls, [])
+
+        panel_text = (PROJECT_DIR / "features" / "weapon_giver" / "panel.py").read_text(encoding="utf-8")
+        self.assertIn("sync_hotkeys_for_current_connection(context, controller)", panel_text)
+
     def test_config_manager_merges_default_and_user_by_feature(self):
         from core.config_runtime.config_manager import ConfigManager
 
@@ -409,6 +883,23 @@ class MigratedOrdinaryFeatureTests(unittest.TestCase):
         safe_body = safe_match.group("body")
         for method in ("get_state", "set_state", "get_handle", "set_handle", "controller", "service"):
             self.assertIsNone(re.search(rf"^\s+def\s+{method}\b", safe_body, re.M))
+
+    def test_startup_ui_events_are_queued_until_mainloop_is_ready(self):
+        app_text = (PROJECT_DIR / "ui" / "app.py").read_text(encoding="utf-8")
+        panel_context = (PROJECT_DIR / "ui" / "panel_context.py").read_text(encoding="utf-8")
+        app_events = (PROJECT_DIR / "ui" / "controllers" / "app_event_controller.py").read_text(encoding="utf-8")
+
+        self.assertIn("def _safe_after", app_text)
+        self.assertIn("_mainloop_ready", app_text)
+        self.assertIn("_pending_ui_callbacks", app_text)
+        self.assertIn("main thread is not in main loop", app_text)
+        self.assertIn('getattr(app, "_safe_after", app.after)', panel_context)
+        self.assertNotIn("app.after(0, update)", app_events)
+        self.assertNotIn("app.after(0, lambda: app._update_switch(feature_id))", app_events)
+
+    def test_sound_manager_suppresses_pygame_support_prompt(self):
+        sound_manager = (PROJECT_DIR / "core" / "sound_manager.py").read_text(encoding="utf-8")
+        self.assertIn("PYGAME_HIDE_SUPPORT_PROMPT", sound_manager)
 
     def test_legacy_message_adapter_is_removed(self):
         self.assertFalse((PROJECT_DIR / "core" / "frida_runtime" / "legacy_message_adapter.py").exists())

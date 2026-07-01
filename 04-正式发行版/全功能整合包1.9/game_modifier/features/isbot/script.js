@@ -95,6 +95,8 @@ modules.isbot = (function() {
   var lifecycleHooks = [];
   var roomGeneration = 0;
   var capturedGeneration = -1;
+  var lastCaptureAtMs = 0;
+  var pendingRestoreOnCapture = false;
 
   var RVA = {
     Player_get_isMyPlayer: 0xB55FD0,
@@ -120,6 +122,10 @@ modules.isbot = (function() {
       payload: { state: state },
       audience: 'both'
     });
+  }
+
+  function currentAppliedState() {
+    return roomCaptureCount >= 2 ? 'active' : 'awaiting_reenter';
   }
 
   function readStr(p) {
@@ -154,6 +160,23 @@ modules.isbot = (function() {
     }
   }
 
+  function forceWriteBot(val) {
+    if (!clientData) return false;
+    try {
+      var target = clientData.add(OFF_ISBOT);
+      if (!target || target.isNull()) return false;
+      if (target.compare(ptr(0x10000)) < 0) return false;
+      var range = Process.findRangeByAddress(target);
+      if (!range || range.protection.indexOf('w') === -1) return false;
+      target.writeU8(val);
+      var after = target.readU8();
+      log('info', 'force isBot=' + after + ' (写入 ' + val + ')');
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
   function clearRoomState(reason) {
     roomGeneration++;
     if (retryInterval) {
@@ -163,9 +186,15 @@ modules.isbot = (function() {
     localPlayer = null;
     clientData = null;
     capturedGeneration = -1;
-    roomCaptureCount = 0;
+    lastCaptureAtMs = 0;
     if (enabled) sendUiState('awaiting_room');
     log('info', 'room state cleared: ' + reason);
+  }
+
+  function shouldIgnoreLateGameManagerDestroy() {
+    if (!enabled || !clientData || capturedGeneration !== roomGeneration) return false;
+    if (!lastCaptureAtMs) return false;
+    return (Date.now() - lastCaptureAtMs) < 500;
   }
 
   function tryWriteBotOnCapture() {
@@ -185,6 +214,20 @@ modules.isbot = (function() {
     return ok;
   }
 
+  function restoreBotOnNextCapture() {
+    if (!pendingRestoreOnCapture) return false;
+    var restored = writeBot(0);
+    pendingRestoreOnCapture = !restored;
+    if (restored) {
+      uninstallHook();
+      localPlayer = null;
+      clientData = null;
+      capturedGeneration = -1;
+      sendUiState('off');
+    }
+    return restored;
+  }
+
   function handlePlayerCapture(playerPtr) {
     if (localPlayer && playerPtr.equals(localPlayer)) {
       return;
@@ -200,18 +243,16 @@ modules.isbot = (function() {
     clientData = cd;
     capturedGeneration = roomGeneration;
     roomCaptureCount += 1;
+    lastCaptureAtMs = Date.now();
     setTimeout(dump, 2000);
 
     if (!enabled) {
+      restoreBotOnNextCapture();
       return;
     }
 
     if (tryWriteBotOnCapture()) {
-      if (roomCaptureCount >= 2) {
-        sendUiState('active');
-      } else {
-        sendUiState('awaiting_reenter');
-      }
+      sendUiState(currentAppliedState());
     }
   }
 
@@ -238,7 +279,7 @@ modules.isbot = (function() {
 
       try { lifecycleHooks.push(Interceptor.attach(base.add(RVA.ModeBase_ExitGame), { onEnter: function() { clearRoomState('ModeBase.ExitGame'); } })); } catch (e1) {}
       try { lifecycleHooks.push(Interceptor.attach(base.add(RVA.Player_OnDestroy), { onEnter: function(args) { try { if (localPlayer && args[0] && args[0].equals(localPlayer)) clearRoomState('Player.OnDestroy'); } catch (_) {} } })); } catch (e2) {}
-      try { lifecycleHooks.push(Interceptor.attach(base.add(RVA.GameManager_OnDestroy), { onEnter: function() { clearRoomState('GameManager.OnDestroy'); } })); } catch (e3) {}
+      try { lifecycleHooks.push(Interceptor.attach(base.add(RVA.GameManager_OnDestroy), { onEnter: function() { if (!shouldIgnoreLateGameManagerDestroy()) clearRoomState('GameManager.OnDestroy'); } })); } catch (e3) {}
 
       hookInstalled = true;
     } catch (e) {
@@ -266,12 +307,13 @@ modules.isbot = (function() {
 
       installHook();
       enabled = true;
+      pendingRestoreOnCapture = false;
       sendUiState('awaiting_room');
 
       if (tryWriteBotOnCapture()) {
         sendLog('success', '天机傀儡', '已启用');
         sendStatus('isbot', true);
-        sendUiState(roomCaptureCount >= 2 ? 'active' : 'awaiting_reenter');
+        sendUiState(currentAppliedState());
         return;
       }
 
@@ -284,7 +326,9 @@ modules.isbot = (function() {
           return;
         }
         if (clientData) {
-          tryWriteBotOnCapture();
+          if (tryWriteBotOnCapture()) {
+            sendUiState(currentAppliedState());
+          }
         }
         retries++;
         if (retries > 20) {
@@ -297,19 +341,24 @@ modules.isbot = (function() {
       sendLog('success', '天机傀儡', '已启用（等待本地玩家）');
       sendStatus('isbot', true);
     },
-    disable: function() {
-      if (!enabled) return;
+    disable: function(options) {
+      if (!enabled && !hookInstalled) return;
       if (retryInterval) {
         clearInterval(retryInterval);
         retryInterval = null;
       }
-      writeBot(0);
-      uninstallHook();
       enabled = false;
+      var restored = writeBot(0) || forceWriteBot(0);
+      pendingRestoreOnCapture = true;
+      if (options && options.cleanup) {
+        pendingRestoreOnCapture = !restored;
+        uninstallHook();
+      }
       localPlayer = null;
       clientData = null;
       capturedGeneration = -1;
       roomCaptureCount = 0;
+      lastCaptureAtMs = 0;
       log('info', '已禁用');
       sendStatus('isbot', false);
       sendUiState('off');
@@ -372,9 +421,9 @@ function __pluginEnable(config) {
   return result || { ok: true, enabled: true };
 }
 
-function __pluginDisable() {
+function __pluginDisable(options) {
   var module = __pluginModule();
-  if (module && typeof module.disable === 'function') module.disable();
+  if (module && typeof module.disable === 'function') module.disable(options || {});
   __pluginEnabled = false;
   return { ok: true, enabled: false };
 }
@@ -390,7 +439,9 @@ function __pluginStatus() {
 }
 
 function __pluginCleanup(payload) {
-  __pluginDisable();
+  var module = __pluginModule();
+  if (module && typeof module.disable === 'function') module.disable({ cleanup: true });
+  __pluginEnabled = false;
   return { ok: true, reason: payload && payload.reason ? payload.reason : 'cleanup' };
 }
 

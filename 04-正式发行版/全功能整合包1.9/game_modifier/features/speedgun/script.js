@@ -95,6 +95,9 @@ modules.speedgun = (function() {
   var isPlayerShooting = false;
   var pendingAcquiredWeapons = [];
   var acquiredWeaponRetryFrames = 3;
+  var RVA = {
+    ModeBase_Update: 0xAF6A00
+  };
 
   // ===== 指针与类型工具 =====
   function safeReadPointer(basePtr, offset) {
@@ -143,8 +146,8 @@ modules.speedgun = (function() {
       var rpgData = safeReadPointer(weapon, 0xF0);
       if (!data || !rpgData || !rpgData.equals(data)) return false;
 
-      rpgData.add(0xEC).writeFloat(10.0);
-      rpgData.add(0xF0).writeFloat(10.0);
+      rpgData.add(0xEC).writeFloat(30.0);
+      rpgData.add(0xF0).writeFloat(30.0);
       weapon.add(0xF8).writeS32(1);
       return true;
     } catch(e) {
@@ -173,14 +176,14 @@ modules.speedgun = (function() {
       var anim = getCharAnim(weapon, ptr(0));
       var animValid = anim && !anim.isNull();
       if (animValid) {
-        setAnimSpeed(anim, 10.0, ptr(0));
+        // TEMP TPS jitter test: disable direct 10x visual animation speed.
+        // setAnimSpeed(anim, 10.0, ptr(0));
       }
       sendDevLog('info', '射速', 'applyAcquired: 数据写入成功 gun=' + gunApplied + ' rpg=' + rpgApplied + ' anim=' + animValid + ' weaponId=' + weaponId);
 
-      // 按实际武器结构选择动画倍率函数，避免特殊武器ID与运行时类型映射不一致。
-      if (rpgApplied && rpgAnimSpeedFn) {
-        rpgAnimSpeedFn(weapon, ptr(0));
-        sendDevLog('info', '射速', 'applyAcquired: 已调用rpgAnimSpeedFn weaponId=' + weaponId);
+      // RPG/AT4/Nano AT4 只写 WD_RPG 自身倍率字段，避免公共动画倍率影响第三人称模型。
+      if (rpgApplied) {
+        sendDevLog('info', '射速', 'applyAcquired: RPG/AT4已写入专属动画倍率 weaponId=' + weaponId);
       } else if (gunApplied && grenadeAnimSpeedFn &&
                  getObjectClassName(data) === 'WD_GrenadeGun') {
         grenadeAnimSpeedFn(weapon, ptr(0));
@@ -237,6 +240,23 @@ modules.speedgun = (function() {
       if (task.framesLeft > 0) remaining.push(task);
     }
     pendingAcquiredWeapons = remaining;
+  }
+
+  function installPendingWeaponUpdateHook(base) {
+    try {
+      hooks.push(Interceptor.attach(base.add(RVA.ModeBase_Update), {
+        onEnter: function(args) {
+          try {
+            processPendingWeaponSpeed();
+          } catch(e) {
+            sendDevLog('warn', '射速', '处理新武器射速队列失败: ' + e.message);
+          }
+        }
+      }));
+      sendDevLog('info', '射速', 'ModeBase.Update 新武器射速队列 Hook 已安装');
+    } catch(e) {
+      sendDevLog('warn', '射速', 'ModeBase.Update 新武器射速队列 Hook失败: ' + e.message);
+    }
   }
 
   // ===== NativeFunction 初始化与状态清理 =====
@@ -296,6 +316,7 @@ modules.speedgun = (function() {
       }
 
       initClassNameFunction(mod);
+      installPendingWeaponUpdateHook(base);
 
       // 1) WPN_Gun.AnimSpeedSetting — 枪械(背包)动画加速（改进：onEnter立即设置）
       try {
@@ -306,7 +327,8 @@ modules.speedgun = (function() {
               if (isMyWeaponFn(this.self, ptr(0))) {
                 var anim = getCharAnim(this.self, ptr(0));
                 if (!anim.isNull()) {
-                  setAnimSpeed(anim, 10.0, ptr(0));
+                  // TEMP TPS jitter test: disable direct 10x visual animation speed.
+                  // setAnimSpeed(anim, 10.0, ptr(0));
                 }
               }
             } catch(e) {}
@@ -317,7 +339,8 @@ modules.speedgun = (function() {
               if (isMyWeaponFn(this.self, ptr(0))) {
                 var anim = getCharAnim(this.self, ptr(0));
                 if (!anim.isNull()) {
-                  setAnimSpeed(anim, 10.0, ptr(0));
+                  // TEMP TPS jitter test: disable direct 10x visual animation speed.
+                  // setAnimSpeed(anim, 10.0, ptr(0));
                 }
               }
             } catch(e) {}
@@ -334,7 +357,8 @@ modules.speedgun = (function() {
               if (isMyWeaponFn(this.self, ptr(0))) {
                 var anim = getCharAnim(this.self, ptr(0));
                 if (!anim.isNull()) {
-                  setAnimSpeed(anim, 10.0, ptr(0));
+                  // TEMP TPS jitter test: disable direct 10x visual animation speed.
+                  // setAnimSpeed(anim, 10.0, ptr(0));
                 }
               }
             } catch(e) {}
@@ -345,7 +369,8 @@ modules.speedgun = (function() {
               if (isMyWeaponFn(this.self, ptr(0))) {
                 var anim = getCharAnim(this.self, ptr(0));
                 if (!anim.isNull()) {
-                  setAnimSpeed(anim, 10.0, ptr(0));
+                  // TEMP TPS jitter test: disable direct 10x visual animation speed.
+                  // setAnimSpeed(anim, 10.0, ptr(0));
                 }
               }
             } catch(e) {}
@@ -373,7 +398,8 @@ modules.speedgun = (function() {
               if (isMyWeaponFn(this.self, ptr(0))) {
                 var anim = getCharAnim(this.self, ptr(0));
                 if (!anim.isNull()) {
-                  setAnimSpeed(anim, 10.0, ptr(0));
+                  // TEMP TPS jitter test: disable direct 10x visual animation speed.
+                  // setAnimSpeed(anim, 10.0, ptr(0));
                 }
               }
             } catch(e) {}
@@ -404,6 +430,20 @@ modules.speedgun = (function() {
           }
         }));
       } catch(e) { sendDevLog('warn', '射速', 'WPN_RPG.Deploy Hook失败: ' + e.message); }
+
+      // 1.8) 'WPN_RPG.Fire' — RPG/AT4/Nano AT4 开火当帧补写专属动画倍率。
+      try {
+        hooks.push(Interceptor.attach(base.add(0xB670A0), {
+          onEnter: function(args) {
+            this.self = args[0];
+            try {
+              if (this.self && !this.self.isNull() && isMyWeaponFn(this.self, ptr(0))) {
+                applyRpgDataSpeed(this.self);
+              }
+            } catch(e) {}
+          }
+        }));
+      } catch(e) { sendDevLog('warn', '射速', 'RPG Fire Hook失败: ' + e.message); }
 
       try {
         hooks.push(Interceptor.attach(base.add(0xB61E60), {
@@ -440,7 +480,8 @@ modules.speedgun = (function() {
                 this.self.add(0x108).writeS32(0);
                 var anim = getCharAnim(this.self, ptr(0));
                 if (!anim.isNull()) {
-                  setAnimSpeed(anim, 10.0, ptr(0));
+                  // TEMP TPS jitter test: disable direct 10x visual animation speed.
+                  // setAnimSpeed(anim, 10.0, ptr(0));
                 }
                 var realData = this.self.add(0xEC).readPointer();
                 if (!realData.isNull()) {
@@ -496,7 +537,8 @@ modules.speedgun = (function() {
               if (isMyWeaponFn(this.wpn, ptr(0))) {
                 var anim = getCharAnim(this.wpn, ptr(0));
                 if (!anim.isNull()) {
-                  setAnimSpeed(anim, 10.0, ptr(0));
+                  // TEMP TPS jitter test: disable direct 10x visual animation speed.
+                  // setAnimSpeed(anim, 10.0, ptr(0));
                 }
                 var data = this.wpn.add(0x68).readPointer();
                 if (!data.isNull()) {
@@ -530,7 +572,8 @@ modules.speedgun = (function() {
               if (isMyWeaponFn(this.self, ptr(0))) {
                 var anim = getCharAnim(this.self, ptr(0));
                 if (!anim.isNull()) {
-                  setAnimSpeed(anim, 10.0, ptr(0));
+                  // TEMP TPS jitter test: disable direct 10x visual animation speed.
+                  // setAnimSpeed(anim, 10.0, ptr(0));
                 }
               }
             } catch(e) {}
@@ -548,12 +591,13 @@ modules.speedgun = (function() {
               if (isMyWeaponFn(this.self, ptr(0))) {
                 var anim = getCharAnim(this.self, ptr(0));
                 if (!anim.isNull()) {
-                  setAnimSpeed(anim, 10.0, ptr(0));
+                  // TEMP TPS jitter test: disable direct 10x visual animation speed.
+                  // setAnimSpeed(anim, 10.0, ptr(0));
                 }
                 var realData = this.self.add(0xF0).readPointer();
                 if (!realData.isNull()) {
-                  realData.add(0xF0).writeFloat(10.0);
-                  realData.add(0xEC).writeFloat(10.0);
+                  realData.add(0xF0).writeFloat(30.0);
+                  realData.add(0xEC).writeFloat(30.0);
                 }
               }
             } catch(e) {}
@@ -572,8 +616,8 @@ modules.speedgun = (function() {
                 this.self.add(0xF8).writeS32(1);
                 var realData = this.self.add(0xF0).readPointer();
                 if (!realData.isNull()) {
-                  realData.add(0xF0).writeFloat(10.0);
-                  realData.add(0xEC).writeFloat(10.0);
+                  realData.add(0xF0).writeFloat(30.0);
+                  realData.add(0xEC).writeFloat(30.0);
                 }
               }
             } catch(e) {}
@@ -687,6 +731,23 @@ function __pluginStatus() {
   return { enabled: __pluginEnabled, config: __pluginConfig, stats: stats };
 }
 
+function __pluginNotifyWeaponAcquired(payload) {
+  payload = payload || {};
+  var module = __pluginModule();
+  if (!module || typeof module.notifyWeaponAcquired !== 'function') {
+    return { ok: false, reason: 'notify_missing' };
+  }
+  if (!__pluginEnabled) {
+    return { ok: false, reason: 'disabled' };
+  }
+  if (!payload.weaponPtr) {
+    return { ok: false, reason: 'missing_weapon_ptr' };
+  }
+  var weapon = ptr(payload.weaponPtr);
+  module.notifyWeaponAcquired(weapon, payload.weaponId || 0);
+  return { ok: true, queued: true };
+}
+
 function __pluginCleanup(payload) {
   __pluginDisable();
   return { ok: true, reason: payload && payload.reason ? payload.reason : 'cleanup' };
@@ -697,6 +758,9 @@ rpc.exports = {
   disable: __pluginDisable,
   setConfig: __pluginApplyConfig,
   status: __pluginStatus,
+  notifyWeaponAcquired: __pluginNotifyWeaponAcquired,
   cleanup: __pluginCleanup
 };
+
+rpc.exports.notifyweaponacquired = rpc.exports.notifyWeaponAcquired;
 

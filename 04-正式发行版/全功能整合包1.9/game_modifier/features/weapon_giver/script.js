@@ -170,11 +170,6 @@ modules.weapon_giver = (function() {
     if (_roomShuttingDown) {
       resetFirstRoomSpecialGiveState();
     }
-    try {
-      if (modules.speedgun && modules.speedgun.clearRoomState) {
-        modules.speedgun.clearRoomState(_roomShuttingDown, _exitingModeBaseInstance);
-      }
-    } catch(e) {}
     if (reason) {
       sendDevLog('info', '武器赋予', reason);
     }
@@ -188,13 +183,21 @@ modules.weapon_giver = (function() {
     return _lastModeUpdateTime > 0 && (now - _lastModeUpdateTime) <= _roomActiveWindowMs;
   }
 
-  function notifySpeedgunWeaponAcquired(weapon, weaponId) {
+  function sendWeaponAcquiredEvent(weapon, weaponId) {
     try {
       if (!weapon || weapon.isNull()) return;
-      if (!modules.speedgun || !modules.speedgun.notifyWeaponAcquired) return;
-      modules.speedgun.notifyWeaponAcquired(weapon, weaponId);
+      send({
+        type: 'plugin_event',
+        feature: 'weapon_giver',
+        event: 'weapon_acquired',
+        payload: {
+          weaponId: weaponId,
+          weaponPtr: weapon.toString()
+        },
+        audience: 'dev'
+      });
     } catch(e) {
-      sendDevLog('warn', '武器赋予', '联动射速失败: ' + e.message);
+      sendDevLog('warn', '武器赋予', '发送武器获得事件失败: ' + e.message);
     }
   }
 
@@ -335,9 +338,8 @@ modules.weapon_giver = (function() {
         return false;
       }
 
-      if (!isMyPlayer(player)) {
-        return false;
-      }
+      // GameManager.myPlayer is authoritative here. Player_get_isMyPlayer can
+      // become unreliable when the isBot feature intentionally writes isBot=1.
       
       // 检查玩家是否已死亡
       if (isPlayerDead(player)) {
@@ -384,14 +386,15 @@ modules.weapon_giver = (function() {
     return taskId;
   }
 
-  function sendGiveWeaponResult(taskId, success) {
+  function sendGiveWeaponResult(taskId, success, reason) {
     send({
       type: 'plugin_event',
       feature: 'weapon_giver',
       event: 'giveWeaponResult',
       payload: {
         taskId: taskId,
-        success: success
+        success: success,
+        reason: reason || ''
       },
       audience: 'both'
     });
@@ -400,24 +403,24 @@ modules.weapon_giver = (function() {
   function executeGiveWeaponOnMainThread(wpnId, giveUpInt, selectInt) {
     if (!isRoomActive()) {
       sendDevLog('warn', '武器赋予', '当前不在稳定房间内，已忽略赋予任务');
-      return false;
+      return { ok: false, reason: 'awaiting_room' };
     }
 
     var myPlayer = getMyPlayer();
     if (!myPlayer) {
-      sendDevLog('error', '武器赋予', '主线程: 无法获取玩家实例');
-      return false;
+      sendDevLog('warn', '武器赋予', '主线程: 暂未获取玩家实例');
+      return { ok: false, reason: 'no_player' };
     }
     
     // 检查玩家实例有效性
     if (!isPlayerValid(myPlayer)) {
-      sendDevLog('error', '武器赋予', '主线程: 玩家实例无效（可能已死亡或地址无效）');
-      return false;
+      sendDevLog('warn', '武器赋予', '主线程: 玩家实例暂不可用（可能已死亡、切房或武器列表未就绪）');
+      return { ok: false, reason: 'invalid_player' };
     }
 
     if (!_giveWeaponFunc) {
       sendDevLog('error', '武器赋予', 'GiveWeapon函数未初始化');
-      return false;
+      return { ok: false, reason: 'not_initialized' };
     }
 
     try {
@@ -426,18 +429,18 @@ modules.weapon_giver = (function() {
       var weapon = _giveWeaponFunc(myPlayer, wpnId, 0, selectInt, ptr(0));
       if (!weapon || weapon.isNull()) {
         sendDevLog('error', '武器赋予', 'GiveWeapon返回null，weaponId=' + wpnId);
-        return false;
+        return { ok: false, reason: 'give_weapon_null' };
       }
 
       // 直接处理 GiveWeapon 返回的新武器，避免 inUse 仍指向旧武器时联动到错误对象。
-      notifySpeedgunWeaponAcquired(weapon, wpnId);
+      sendWeaponAcquiredEvent(weapon, wpnId);
       var specialTag = isSpecialDoubleGiveWeapon(wpnId) ? ' [特殊武器]' : '';
       sendDevLog('success', '武器赋予', '赋予武器成功! weaponId=' + wpnId + ' select=' + selectInt + specialTag);
-      return true;
+      return { ok: true };
     } catch(e) {
       resetNativeFunctions();
       sendDevLog('error', '武器赋予', 'GiveWeapon直接调用异常: ' + e.message);
-      return false;
+      return { ok: false, reason: 'native_exception' };
     }
   }
 
@@ -447,16 +450,16 @@ modules.weapon_giver = (function() {
     var task = _pendingTasks.shift();
     try {
       if (task.expiresAt && Date.now() > task.expiresAt) {
-        sendGiveWeaponResult(task.id, false);
+        sendGiveWeaponResult(task.id, false, 'expired');
         sendDevLog('warn', '武器赋予', '赋予任务已过期，已丢弃: taskId=' + task.id);
         return;
       }
 
       var result = executeGiveWeaponOnMainThread(task.wpnId, task.giveUp, task.select);
-      sendGiveWeaponResult(task.id, result);
+      sendGiveWeaponResult(task.id, !!(result && result.ok), result && result.reason ? result.reason : '');
     } catch(e) {
       sendDevLog('error', '武器赋予', '执行赋予任务异常: ' + e.message);
-      sendGiveWeaponResult(task.id, false);
+      sendGiveWeaponResult(task.id, false, 'exception');
     }
   }
 
@@ -521,15 +524,6 @@ modules.weapon_giver = (function() {
             // 限制每帧最多处理1个任务，避免阻塞游戏主线程
             if (roomStable && _pendingTasks.length > 0) {
               processPendingGiveWeaponTask();
-            }
-
-            // GiveWeapon 返回的新武器延迟到下一帧处理，确保仍在游戏主线程。
-            if (roomStable && modules.speedgun && modules.speedgun.processPendingWeaponSpeed) {
-              try {
-                modules.speedgun.processPendingWeaponSpeed();
-              } catch(e) {
-                sendDevLog('warn', '武器赋予', '处理新武器射速联动失败: ' + e.message);
-              }
             }
 
             if (roomStable && _cachedMyPlayer && currentFrame % _checkAliveInterval === 0) {
@@ -643,11 +637,6 @@ modules.weapon_giver = (function() {
               _pendingTasks = [];
               _cachedMyPlayer = null;
               _isPlayerDead = false;
-              try {
-                if (modules.speedgun && modules.speedgun.clearRoomState) {
-                  modules.speedgun.clearRoomState(_roomShuttingDown, _exitingModeBaseInstance);
-                }
-              } catch(e) {}
             }
           } catch(e) {
             _cachedMyPlayer = null;
@@ -931,4 +920,7 @@ rpc.exports = {
   }
 };
 
-
+rpc.exports.giveweapon = rpc.exports.giveWeapon;
+rpc.exports.setrespawnweapon = rpc.exports.setRespawnWeapon;
+rpc.exports.clearrespawnweapon = rpc.exports.clearRespawnWeapon;
+rpc.exports.setconfig = rpc.exports.setConfig;
