@@ -1,7 +1,7 @@
 """
 Unified logging module based on Python standard logging.
 
-- All log messages go to both UI (via EventBus) and disk (logs/game_modifier.log)
+- Development log messages go to disk (logs/game_modifier.log)
 - trace_id is auto-generated per session for correlation
 - Log files rotate to avoid unbounded growth
 """
@@ -50,9 +50,6 @@ def setup_logging():
         return
     _initialized = True
 
-    log_dir = _ensure_log_dir()
-    log_file = os.path.join(log_dir, 'game_modifier.log')
-
     # Root logger
     root = logging.getLogger('game_modifier')
     root.setLevel(logging.DEBUG)
@@ -66,6 +63,8 @@ def setup_logging():
 
     if not getattr(sys, 'frozen', False):
         # 开发环境：写入日志文件
+        log_dir = _ensure_log_dir()
+        log_file = os.path.join(log_dir, 'game_modifier.log')
         fh = RotatingFileHandler(log_file, maxBytes=5*1024*1024, backupCount=3, encoding='utf-8')
         fh.setLevel(logging.DEBUG)
         fh.setFormatter(fmt)

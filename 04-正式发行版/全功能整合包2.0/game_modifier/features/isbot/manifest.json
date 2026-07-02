@@ -1,0 +1,54 @@
+{
+    "feature_id":  "isbot",
+    "canonical_id":  "become_bot",
+    "display_name":  "天机傀儡",
+    "category":  "other",
+    "tab":  "other_tab",
+    "order":  30,
+    "icon":  "🧠",
+    "desc":  "玩家由人机控制",
+    "script":  "script.js",
+    "layout":  {
+                   "card_type":  "simple",
+                   "columnspan":  1,
+                   "title_color":  "#00D4FF"
+               },
+    "controls":  [
+                     {
+                         "type":  "switch",
+                         "action":  "enable"
+                     },
+                     {
+                         "type":  "status",
+                         "label":  "状态: 已关闭"
+                     }
+                 ],
+    "config":  {
+
+               },
+    "rpc":  [
+                "enable",
+                "disable",
+                "setConfig",
+                "status",
+                "cleanup"
+            ],
+    "lifecycle":  {
+                      "cleanup":  true
+                  },
+    "source":  {
+                   "runtime_script_js":  "features/isbot/script.js"
+               },
+    "ui_handles":  {
+                       "switch":  "isbot_switch",
+                       "status_label":  "isbot_status_label"
+                   },
+    "runtime":  {
+                    "type":  "plugin_script"
+                },
+    "tab_title":  "其他",
+    "tab_order":  30,
+    "state":  {
+                  "sync_enabled_from_config":  true
+              }
+}

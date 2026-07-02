@@ -93,6 +93,45 @@ class PluginArchitectureTests(unittest.TestCase):
         self.assertFalse(ok)
         self.assertTrue(any("display_name" in message for message in warnings))
 
+    def test_setup_logging_skips_log_dir_and_file_handler_when_frozen(self):
+        import logging
+        from core import log_manager
+
+        app_dir = self.root / "app"
+        app_dir.mkdir()
+        logger = logging.getLogger("game_modifier")
+        original_handlers = list(logger.handlers)
+        original_initialized = log_manager._initialized
+        original_app_dir = log_manager.APP_DIR
+        had_frozen = hasattr(sys, "frozen")
+        original_frozen = getattr(sys, "frozen", None)
+
+        try:
+            for handler in original_handlers:
+                logger.removeHandler(handler)
+            log_manager._initialized = False
+            log_manager.APP_DIR = str(app_dir)
+            sys.frozen = True
+
+            log_manager.setup_logging()
+
+            self.assertFalse((app_dir / "logs").exists())
+            self.assertFalse(
+                any(isinstance(handler, log_manager.RotatingFileHandler) for handler in logger.handlers)
+            )
+        finally:
+            for handler in list(logger.handlers):
+                logger.removeHandler(handler)
+                handler.close()
+            for handler in original_handlers:
+                logger.addHandler(handler)
+            log_manager._initialized = original_initialized
+            log_manager.APP_DIR = original_app_dir
+            if had_frozen:
+                sys.frozen = original_frozen
+            else:
+                delattr(sys, "frozen")
+
     def test_registry_loads_feature_instances_by_tab(self):
         from core.plugin.plugin_registry import PluginRegistry
 
@@ -287,6 +326,7 @@ class PluginArchitectureTests(unittest.TestCase):
         manifest = json.loads((plugin_dir / "manifest.json").read_text(encoding="utf-8"))
         script = (plugin_dir / "script.js").read_text(encoding="utf-8")
 
+        self.assertEqual(manifest["desc"], "切换成第三人称视角")
         sliders = {
             item["key"]: item
             for item in manifest["controls"]
@@ -438,6 +478,24 @@ class PluginArchitectureTests(unittest.TestCase):
         self.assertNotIn("!isMyPlayer(player)", is_valid_match.group("body"))
         self.assertIn("reason", weapon_script)
         self.assertIn('"warning"', weapon_events)
+
+    def test_gather_caps_game_thread_player_scan(self):
+        gather_script = (PROJECT_DIR / "features" / "gather" / "script.js").read_text(encoding="utf-8")
+
+        self.assertIn("MAX_PLAYERS_PER_GATHER", gather_script)
+        self.assertIn("GATHER_FRAME_BUDGET_MS", gather_script)
+        self.assertIn("Math.min(t, MAX_PLAYERS_PER_GATHER)", gather_script)
+        self.assertIn("聚怪玩家列表数量异常", gather_script)
+        self.assertIn("聚怪本帧预算已用尽", gather_script)
+
+    def test_weapon_giver_spreads_native_calls_and_logs_duration(self):
+        weapon_script = (PROJECT_DIR / "features" / "weapon_giver" / "script.js").read_text(encoding="utf-8")
+
+        self.assertIn("_nativeCallCooldownMs", weapon_script)
+        self.assertIn("_lastGiveWeaponCallAt", weapon_script)
+        self.assertIn("GiveWeapon即将执行", weapon_script)
+        self.assertIn("GiveWeapon耗时", weapon_script)
+        self.assertIn("now - _lastGiveWeaponCallAt < _nativeCallCooldownMs", weapon_script)
 
     def test_roundskip_uses_legacy_immediate_write_semantics(self):
         roundskip_script = (PROJECT_DIR / "features" / "roundskip" / "script.js").read_text(encoding="utf-8")
@@ -646,6 +704,8 @@ class MigratedOrdinaryFeatureTests(unittest.TestCase):
         "roundskip",
         "esp_box",
         "timescale",
+        "unlimited_bag",
+        "fast_gunstock",
     }
 
     REQUIRED_MANIFEST_FIELDS = {
@@ -754,6 +814,8 @@ class MigratedOrdinaryFeatureTests(unittest.TestCase):
             "roundskip": ("回合跳过", "⏭️", "结束当前回合"),
             "esp_box": ("方框透视", "📦", "通过 Universal DLL 显示方框透视"),
             "timescale": ("时间加速", "⏩", "调整游戏时间倍率"),
+            "unlimited_bag": ("无限背包", "🎒", "在远离出生点时也能切换背包武器"),
+            "fast_gunstock": ("极速枪托", "⚡", "枪托右键重击攻击速度更快"),
         }
         for feature_id, values in expected.items():
             with self.subTest(feature_id=feature_id):
@@ -765,6 +827,139 @@ class MigratedOrdinaryFeatureTests(unittest.TestCase):
                     values,
                 )
                 self.assertNotIn("?", manifest["display_name"] + manifest["icon"] + manifest["desc"])
+
+    def test_unlimited_bag_and_fast_gunstock_manifest_integration(self):
+        expected = {
+            "unlimited_bag": {
+                "category": "other",
+                "tab": "other_tab",
+                "tab_title": "其他",
+                "rpc": ["enable", "disable", "setConfig", "status", "cleanup"],
+                "handles": ["unlimited_bag_switch"],
+                "desc": "在远离出生点时也能切换背包武器",
+                "lines": [
+                    "在远离出生点时也能切换背包武器。",
+                ],
+                "script_needles": [
+                    "Player.SelectWeaponBag",
+                    "HUD_Bag.Update",
+                    "ObscuredBool.Encrypt",
+                    "GameManager_TypeInfo: 0x0E2933C",
+                    "GameManager_OnDestroy: 0xAFB6F0",
+                    "function refreshLocalPlayerCache()",
+                    "function clearLocalPlayerCache(reason)",
+                    "function isLocalPlayer(player)",
+                    "if (!isLocalPlayer(this._ubPlayer))",
+                    "isKnownLocalWeaponBag(weaponBag)",
+                    "var MAX_LOGS_PER_MODULE = 3",
+                    "sendStatus('unlimited_bag', true)",
+                    "setConfig: __pluginApplyConfig",
+                    "cleanup: __pluginCleanup",
+                ],
+                "panel_needles": [
+                    'fg_color="transparent"',
+                    "callbacks[\"toggle\"](feature_id)",
+                    "unlimited_bag_switch",
+                ],
+            },
+            "fast_gunstock": {
+                "category": "weapon",
+                "tab": "weapon_tab",
+                "tab_title": "武器",
+                "rpc": ["enable", "disable", "setConfig", "status", "cleanup", "forceclear", "forceClear"],
+                "handles": ["fast_gunstock_switch"],
+                "desc": "枪托右键重击攻击速度更快",
+                "lines": [
+                    "枪托右键重击攻击速度更快。",
+                ],
+                "script_needles": [
+                    "OnSpecialBtnDown",
+                    "KnifeAttackEvent",
+                    "OnKnifeAttackExit",
+                    "var MAX_LOGS_PER_MODULE = 3",
+                    "sendStatus('fast_gunstock', true)",
+                    "forceClear: __pluginForceClear",
+                    "rpc.exports.forceclear = rpc.exports.forceClear",
+                ],
+                "panel_needles": [
+                    'fg_color="transparent"',
+                    "callbacks[\"toggle\"](feature_id)",
+                ],
+            },
+        }
+
+        for feature_id, values in expected.items():
+            with self.subTest(feature_id=feature_id):
+                plugin_dir = PROJECT_DIR / "features" / feature_id
+                manifest = json.loads((plugin_dir / "manifest.json").read_text(encoding="utf-8"))
+                script = (plugin_dir / "script.js").read_text(encoding="utf-8")
+                panel = (plugin_dir / "panel.py").read_text(encoding="utf-8")
+
+                self.assertEqual(manifest["category"], values["category"])
+                self.assertEqual(manifest["tab"], values["tab"])
+                self.assertEqual(manifest["tab_title"], values["tab_title"])
+                self.assertEqual(manifest["desc"], values["desc"])
+                self.assertEqual(manifest.get("ui_text", {}).get("lines"), values["lines"])
+                self.assertEqual(manifest["controls"], [{"type": "switch", "action": "enable"}])
+                self.assertNotIn("actions", manifest)
+                self.assertNotIn("button", manifest.get("ui_handles", {}))
+                for action in values["rpc"]:
+                    self.assertIn(action, manifest["rpc"])
+                for handle in values["handles"]:
+                    self.assertIn(handle, manifest["ui_handles"].values())
+                for needle in values["script_needles"]:
+                    self.assertIn(needle, script)
+                for needle in values["panel_needles"]:
+                    self.assertIn(needle, panel)
+                self.assertNotIn("CTkButton", panel)
+                self.assertNotIn("threading", panel)
+                self.assertNotIn('callbacks["action"]', panel)
+
+    def test_unlimited_bag_uses_cached_gamemanager_myplayer_in_19_only(self):
+        script_path = PROJECT_DIR / "features" / "unlimited_bag" / "script.js"
+        script = script_path.read_text(encoding="utf-8")
+        self.assertIn("GameManager_TypeInfo: 0x0E2933C", script)
+        self.assertIn("GameManager_OnDestroy: 0xAFB6F0", script)
+        self.assertIn("Klass_staticFields: 0x5C", script)
+        self.assertIn("GM_myPlayer: 0x00", script)
+        self.assertIn("cachedMyPlayer: null", script)
+        self.assertIn("cachedWeaponBag: null", script)
+        self.assertIn("function getMyPlayer()", script)
+        self.assertIn("function refreshLocalPlayerCache()", script)
+        self.assertIn("function clearLocalPlayerCache(reason)", script)
+        self.assertIn("function isLocalPlayer(player)", script)
+        self.assertIn("player.equals(state.cachedMyPlayer)", script)
+        self.assertIn("if (!isLocalPlayer(this._ubPlayer))", script)
+        self.assertNotIn("Player_get_isMyPlayer", script)
+        self.assertNotIn("state.isMyPlayerFn", script)
+        self.assertIn("rememberLocalWeaponBag(this._ubBag)", script)
+        self.assertIn("if (!isKnownLocalWeaponBag(weaponBag)) return;", script)
+        self.assertIn("installGameManagerLifecycleHook(mod)", script)
+        self.assertIn("clearLocalPlayerCache('GameManager.OnDestroy')", script)
+        self.assertIn("clearLocalPlayerCache('cleanup')", script)
+        self.assertLess(
+            script.index("if (!isKnownLocalWeaponBag(weaponBag)) return;"),
+            script.index("clearWeaponBagLimits(weaponBag, 'HUD_Bag.Update', verbose)"),
+        )
+
+    def test_formal_unlimited_bag_source_matches_cached_gamemanager_filter(self):
+        workspace_root = PROJECT_DIR.parents[2]
+        script_path = workspace_root / "05-正式功能" / "22-无限背包" / "AAAAA-unlimited_bag_min.js"
+        script = script_path.read_text(encoding="utf-8")
+        self.assertIn("GameManager_TypeInfo: 0x0E2933C", script)
+        self.assertIn("GameManager_OnDestroy: 0xAFB6F0", script)
+        self.assertIn("Klass_staticFields: 0x5C", script)
+        self.assertIn("GM_myPlayer: 0x00", script)
+        self.assertIn("cachedMyPlayer: null", script)
+        self.assertIn("cachedWeaponBag: null", script)
+        self.assertIn("function getMyPlayer()", script)
+        self.assertIn("function refreshLocalPlayerCache()", script)
+        self.assertIn("function clearLocalPlayerCache(reason)", script)
+        self.assertIn("player.equals(state.cachedMyPlayer)", script)
+        self.assertNotIn("Player_get_isMyPlayer", script)
+        self.assertIn("installGameManagerLifecycleHook(mod)", script)
+        self.assertIn("clearLocalPlayerCache('GameManager.OnDestroy')", script)
+        self.assertIn("clearLocalPlayerCache('cleanup')", script)
 
     def test_feature_tabs_use_generic_plugin_callbacks(self):
         feature_tabs = (PROJECT_DIR / "ui" / "views" / "feature_tabs_view.py").read_text(encoding="utf-8")

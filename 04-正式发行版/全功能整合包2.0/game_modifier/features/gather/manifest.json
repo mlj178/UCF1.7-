@@ -1,0 +1,63 @@
+{
+    "feature_id":  "gather",
+    "canonical_id":  "gather_enemies",
+    "display_name":  "聚怪",
+    "category":  "other",
+    "tab":  "other_tab",
+    "order":  10,
+    "icon":  "👾",
+    "desc":  "将所有人机聚集到佣兵出生点",
+    "script":  "script.js",
+    "layout":  {
+                   "card_type":  "simple",
+                   "columnspan":  1,
+                   "title_color":  "#E76F51"
+               },
+    "controls":  [
+                     {
+                         "type":  "switch",
+                         "action":  "enable",
+                         "label":  "启用追踪"
+                     },
+                     {
+                         "type":  "button",
+                         "action":  "gather",
+                         "label":  "📍 一键聚怪"
+                     }
+                 ],
+    "config":  {
+
+               },
+    "rpc":  [
+                "enable",
+                "disable",
+                "setConfig",
+                "status",
+                "cleanup",
+                "gather"
+            ],
+    "lifecycle":  {
+                      "cleanup":  true
+                  },
+    "source":  {
+                   "runtime_script_js":  "features/gather/script.js"
+               },
+    "ui_handles":  {
+                       "switch":  "gather_switch",
+                       "button":  "gather_btn"
+                   },
+    "runtime":  {
+                    "type":  "plugin_script"
+                },
+    "actions":  {
+                    "gather":  {
+                                   "type":  "rpc",
+                                   "requires_connection":  true
+                               }
+                },
+    "tab_title":  "其他",
+    "tab_order":  30,
+    "state":  {
+                  "sync_enabled_from_config":  true
+              }
+}

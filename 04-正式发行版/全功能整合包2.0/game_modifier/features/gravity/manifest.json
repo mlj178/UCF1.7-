@@ -1,0 +1,96 @@
+{
+    "feature_id":  "gravity",
+    "canonical_id":  "gravity_jump",
+    "display_name":  "轻重力 / 高跳",
+    "category":  "player",
+    "tab":  "player_tab",
+    "order":  30,
+    "icon":  "🌌",
+    "desc":  "调整重力与跳跃倍率",
+    "script":  "script.js",
+    "layout":  {
+                   "card_type":  "wide",
+                   "columnspan":  2,
+                   "title_color":  "#F4A261"
+               },
+    "controls":  [
+                     {
+                         "type":  "switch",
+                         "action":  "enable"
+                     },
+                     {
+                         "type":  "slider",
+                         "action":  "setConfig",
+                         "key":  "gravity",
+                         "label":  "重力:",
+                         "min":  0.0,
+                         "max":  1.0,
+                         "step":  0.1,
+                         "default":  1.0,
+                         "suffix":  ""
+                     },
+                     {
+                         "type":  "slider",
+                         "action":  "setConfig",
+                         "key":  "jump",
+                         "label":  "跳跃:",
+                         "min":  1.0,
+                         "max":  5.0,
+                         "step":  0.5,
+                         "default":  1.0,
+                         "suffix":  ""
+                     },
+                     {
+                         "type":  "combo",
+                         "action":  "setConfig",
+                         "key":  "mode",
+                         "label":  "生效范围:",
+                         "values":  [
+                                        "player_only",
+                                        "all"
+                                    ],
+                         "display_values":  {
+                                                "player_only":  "仅自己",
+                                                "all":  "所有人"
+                                            },
+                         "default":  "player_only"
+                     }
+                 ],
+    "config":  {
+                   "gravity":  1.0,
+                   "jump":  1.0,
+                   "mode":  "player_only"
+               },
+    "rpc":  [
+                "enable",
+                "disable",
+                "setConfig",
+                "status",
+                "cleanup"
+            ],
+    "lifecycle":  {
+                      "cleanup":  true
+                  },
+    "source":  {
+                   "runtime_script_js":  "features/gravity/script.js"
+               },
+    "ui_handles":  {
+                       "switch":  "gravity_switch",
+                       "gravity_var":  "gravity_var",
+                       "gravity_slider":  "gravity_slider",
+                       "gravity_label":  "gravity_label",
+                       "jump_var":  "jump_var",
+                       "jump_slider":  "jump_slider",
+                       "jump_label":  "jump_label",
+                       "mode_var":  "gravity_mode_var",
+                       "mode_combo":  "gravity_mode_combo"
+                   },
+    "runtime":  {
+                    "type":  "plugin_script"
+                },
+    "tab_title":  "人物属性",
+    "tab_order":  20,
+    "state":  {
+                  "sync_enabled_from_config":  true
+              }
+}

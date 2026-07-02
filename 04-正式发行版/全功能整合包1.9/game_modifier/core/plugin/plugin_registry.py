@@ -1,7 +1,7 @@
 import importlib.util
 from pathlib import Path
 
-from core.config import APP_DIR
+from core.config import FEATURES_DIR
 from core.log_manager import get_logger
 from core.plugin.manifest_loader import ManifestLoader
 from core.plugin.plugin_base import PluginFeatureBase
@@ -20,7 +20,7 @@ class PluginRegistry:
         config_manager=None,
         logger=None,
     ):
-        self.features_dir = Path(features_dir or Path(APP_DIR) / "features")
+        self.features_dir = Path(features_dir or FEATURES_DIR)
         self.manifest_loader = manifest_loader or ManifestLoader(self.features_dir)
         self.contract = contract or PluginContract()
         self.rpc_client = rpc_client

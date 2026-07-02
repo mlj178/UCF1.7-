@@ -121,6 +121,8 @@ modules.weapon_giver = (function() {
   var _pendingTasks = [];
   var _taskIdCounter = 0;
   var _taskTtlMs = 5000;
+  var _nativeCallCooldownMs = 250;
+  var _lastGiveWeaponCallAt = 0;
 
   var _isPlayerDead = false;
   var _lastCheckFrame = 0;
@@ -426,7 +428,14 @@ modules.weapon_giver = (function() {
     try {
       // 与 HUD_Cheat / HUD_ChatBox 的游戏内部调用完全一致：
       // GiveWeapon(player, weaponId, false, autoSelect, NULL)
+      var nativeStart = Date.now();
+      sendDevLog('info', '武器赋予', 'GiveWeapon即将执行: weaponId=' + wpnId + ' select=' + selectInt);
       var weapon = _giveWeaponFunc(myPlayer, wpnId, 0, selectInt, ptr(0));
+      var nativeElapsed = Date.now() - nativeStart;
+      _lastGiveWeaponCallAt = Date.now();
+      if (nativeElapsed >= 30) {
+        sendDevLog('warn', '武器赋予', 'GiveWeapon耗时 ' + nativeElapsed + 'ms: weaponId=' + wpnId);
+      }
       if (!weapon || weapon.isNull()) {
         sendDevLog('error', '武器赋予', 'GiveWeapon返回null，weaponId=' + wpnId);
         return { ok: false, reason: 'give_weapon_null' };
@@ -438,6 +447,7 @@ modules.weapon_giver = (function() {
       sendDevLog('success', '武器赋予', '赋予武器成功! weaponId=' + wpnId + ' select=' + selectInt + specialTag);
       return { ok: true };
     } catch(e) {
+      _lastGiveWeaponCallAt = Date.now();
       resetNativeFunctions();
       sendDevLog('error', '武器赋予', 'GiveWeapon直接调用异常: ' + e.message);
       return { ok: false, reason: 'native_exception' };
@@ -446,6 +456,10 @@ modules.weapon_giver = (function() {
 
   function processPendingGiveWeaponTask() {
     if (_pendingTasks.length <= 0) return;
+    var now = Date.now();
+    if (_lastGiveWeaponCallAt > 0 && now - _lastGiveWeaponCallAt < _nativeCallCooldownMs) {
+      return;
+    }
 
     var task = _pendingTasks.shift();
     try {

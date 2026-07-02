@@ -5,12 +5,16 @@ from pathlib import Path
 
 if getattr(sys, 'frozen', False):
     APP_DIR = os.path.dirname(sys.executable)
-    RESOURCE_DIR = os.path.join(sys._MEIPASS, "资源")
-    PLUGINS_DIR = os.path.join(sys._MEIPASS, "game_modifier", "plugins")
+    BASE_DIR = sys._MEIPASS  # PyInstaller 解压目录
+    RESOURCE_DIR = os.path.join(BASE_DIR, "资源")
+    PLUGINS_DIR = os.path.join(BASE_DIR, "game_modifier", "plugins")
+    FEATURES_DIR = os.path.join(BASE_DIR, "features")  # features 在打包目录内
 else:
     APP_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    BASE_DIR = APP_DIR
     RESOURCE_DIR = os.path.join(os.path.dirname(APP_DIR), "资源")
     PLUGINS_DIR = os.path.join(APP_DIR, "plugins")
+    FEATURES_DIR = os.path.join(APP_DIR, "features")
 
 DATA_DIR = os.path.join(APP_DIR, "data")
 
@@ -31,7 +35,7 @@ HOTKEY_DISPLAY_NAMES = {
 }
 
 def _load_feature_manifests():
-    features_dir = Path(APP_DIR) / "features"
+    features_dir = Path(FEATURES_DIR)
     manifests = {}
     if not features_dir.exists():
         return manifests

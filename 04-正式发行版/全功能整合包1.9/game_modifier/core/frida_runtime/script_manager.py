@@ -2,7 +2,7 @@ import json
 import time
 from pathlib import Path
 
-from core.config import APP_DIR
+from core.config import FEATURES_DIR
 from core.log_manager import get_logger
 
 
@@ -18,7 +18,7 @@ class ScriptManager:
         message_handler=None,
     ):
         self.session_manager = session_manager
-        self.features_dir = Path(features_dir or Path(APP_DIR) / "features")
+        self.features_dir = Path(features_dir or FEATURES_DIR)
         self.manifests = {item["feature_id"]: item for item in (manifests or []) if item.get("feature_id")}
         self._logger = logger or get_logger("PluginScript")
         self._message_handler = message_handler

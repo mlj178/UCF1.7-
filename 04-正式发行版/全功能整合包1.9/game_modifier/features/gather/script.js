@@ -90,6 +90,9 @@ modules.gather = (function() {
   var ntp = false;
   var tn = 0;
   var recentBotPlayers = {};
+  var MAX_PLAYERS_PER_GATHER = 64;
+  var MAX_RECENT_BOT_PLAYERS = 64;
+  var GATHER_FRAME_BUDGET_MS = 12;
 
   var R = {
     GM_AddP:   0xAF9A90,
@@ -147,6 +150,10 @@ modules.gather = (function() {
     }
   }
 
+  function gatherBudgetUsed(startTime) {
+    return Date.now() - startTime >= GATHER_FRAME_BUDGET_MS;
+  }
+
   function teleportEntity(ppOrBot, isBot) {
     try {
       var tr = gt(ppOrBot, ptr(0));
@@ -193,17 +200,36 @@ modules.gather = (function() {
 
     var playersToMove = {};
     var now = Date.now();
+    var gatherStart = now;
     try {
       var ap = gm.add(O.GM_allPlayers).readPointer();
       if (ap && !ap.isNull()) {
         var t = ap.add(0xC).readU32();
-        for (var i = 0; i < t; i++) { try { var pp = ap.add(0x10 + i * 8).readPointer(); if (isValid(pp)) playersToMove[pp.toString()] = pp; } catch(e) {} }
+        if (t > MAX_PLAYERS_PER_GATHER) {
+          sendDevLog('warn', '聚怪', '聚怪玩家列表数量异常: ' + t + '，本次最多扫描 ' + MAX_PLAYERS_PER_GATHER, 'GatherEnemies capped oversized allPlayers count');
+        }
+        var scanLimit = Math.min(t, MAX_PLAYERS_PER_GATHER);
+        for (var i = 0; i < scanLimit; i++) {
+          if (gatherBudgetUsed(gatherStart)) {
+            sendDevLog('warn', '聚怪', '聚怪本帧预算已用尽，已停止继续扫描玩家列表', 'GatherEnemies scan budget exhausted');
+            break;
+          }
+          try { var pp = ap.add(0x10 + i * 8).readPointer(); if (isValid(pp)) playersToMove[pp.toString()] = pp; } catch(e) {}
+        }
       }
     } catch(e) {}
 
     var botKeys = Object.keys(recentBotPlayers);
     var botAdded = 0;
-    for (var bi = 0; bi < botKeys.length; bi++) {
+    if (botKeys.length > MAX_RECENT_BOT_PLAYERS) {
+      sendDevLog('warn', '聚怪', '聚怪Bot缓存数量异常: ' + botKeys.length + '，本次最多补充 ' + MAX_RECENT_BOT_PLAYERS, 'GatherEnemies capped oversized bot cache');
+    }
+    var botLimit = Math.min(botKeys.length, MAX_RECENT_BOT_PLAYERS);
+    for (var bi = 0; bi < botLimit; bi++) {
+      if (gatherBudgetUsed(gatherStart)) {
+        sendDevLog('warn', '聚怪', '聚怪本帧预算已用尽，已停止继续补充Bot缓存', 'GatherEnemies bot budget exhausted');
+        break;
+      }
       var entry = recentBotPlayers[botKeys[bi]];
       if (now - entry.time > 5000) continue;
       var pp = entry.player;
@@ -214,6 +240,10 @@ modules.gather = (function() {
     var self = 0, real = 0, dead = 0, botOk = 0, botFail = 0;
     var pKeys = Object.keys(playersToMove);
     for (var pi = 0; pi < pKeys.length; pi++) {
+      if (gatherBudgetUsed(gatherStart)) {
+        sendDevLog('warn', '聚怪', '聚怪本帧预算已用尽，已停止继续传送Bot', 'GatherEnemies teleport budget exhausted');
+        break;
+      }
       var pp = playersToMove[pKeys[pi]];
       try {
         if (isMy(pp, ptr(0))) { self++; continue; }
