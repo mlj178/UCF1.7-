@@ -23,16 +23,20 @@
   'use strict';
 
   var CALL_CONV = 'mscdecl';
-  var MAX_LOGS_PER_MODULE = 80;
+  var MAX_LOGS_PER_MODULE = 3;
   var moduleLogCounts = {};
 
   var RVA = {
+    GameManager_TypeInfo: 0x0E2933C,
+    GameManager_OnDestroy: 0xAFB6F0,
     SelectWeaponBag: 0xB52830,
     HudBagUpdate: 0xB00360,
     ObscuredBoolEncrypt: 0x7F93D0
   };
 
   var OFF = {
+    Klass_staticFields: 0x5C,
+    GM_myPlayer: 0x00,
     Player_weaponBag: 0xA4,
     WeaponBag_disabled: 0x8,
     WeaponBag_tooFarFromSpawnPos: 0x14,
@@ -50,7 +54,11 @@
     initialized: false,
     selectHook: null,
     hudUpdateHook: null,
+    gameManagerHook: null,
     encryptBool: null,
+    cachedMyPlayer: null,
+    cachedWeaponBag: null,
+    localWeaponBagKeys: {},
     selectHits: 0,
     hudHits: 0,
     patchedCount: 0,
@@ -154,6 +162,68 @@
     }
   }
 
+  function getMyPlayer() {
+    try {
+      var mod = getGameAssembly();
+      if (!mod) return null;
+      var klass = readPtr(mod.base.add(RVA.GameManager_TypeInfo));
+      if (!klass) return null;
+      var staticFields = readPtr(klass.add(OFF.Klass_staticFields));
+      if (!staticFields) return null;
+      return readPtr(staticFields.add(OFF.GM_myPlayer));
+    } catch(e) {
+      return null;
+    }
+  }
+
+  function isLocalPlayer(player) {
+    try {
+      if (!player || player.isNull()) return false;
+      if (!state.cachedMyPlayer || state.cachedMyPlayer.isNull()) {
+        refreshLocalPlayerCache();
+      }
+      return !!(state.cachedMyPlayer && !state.cachedMyPlayer.isNull() && player.equals(state.cachedMyPlayer));
+    } catch(e) {
+      return false;
+    }
+  }
+
+  function refreshLocalPlayerCache() {
+    var myPlayer = getMyPlayer();
+    if (!myPlayer || myPlayer.isNull()) {
+      clearLocalPlayerCache('myPlayer=null');
+      return false;
+    }
+
+    state.cachedMyPlayer = myPlayer;
+    state.cachedWeaponBag = readPtr(myPlayer.add(OFF.Player_weaponBag));
+    if (state.cachedWeaponBag) rememberLocalWeaponBag(state.cachedWeaponBag);
+    return true;
+  }
+
+  function clearLocalPlayerCache(reason) {
+    state.cachedMyPlayer = null;
+    state.cachedWeaponBag = null;
+    state.localWeaponBagKeys = {};
+  }
+
+  function rememberLocalWeaponBag(weaponBag) {
+    try {
+      if (!weaponBag || weaponBag.isNull()) return;
+      state.localWeaponBagKeys[weaponBag.toString()] = true;
+    } catch(e) {}
+  }
+
+  function isKnownLocalWeaponBag(weaponBag) {
+    try {
+      if (!weaponBag || weaponBag.isNull()) return false;
+      if (state.cachedWeaponBag && !state.cachedWeaponBag.isNull() && weaponBag.equals(state.cachedWeaponBag)) return true;
+      return !!state.localWeaponBagKeys[weaponBag.toString()];
+    } catch(e) {
+      return false;
+    }
+  }
+
   function writeObscuredBoolFalse(fieldAddr) {
     if (!fieldAddr || fieldAddr.isNull()) return false;
     if (!initNativeFunctions()) return false;
@@ -215,6 +285,12 @@
           state.selectHits++;
           this._ubPlayer = args[0];
           this._ubIndex = args[1].toInt32();
+          this._ubHandled = false;
+
+          if (!isLocalPlayer(this._ubPlayer)) {
+            return;
+          }
+
           this._ubBag = readPtr(this._ubPlayer.add(OFF.Player_weaponBag));
 
           if (!this._ubBag) {
@@ -222,11 +298,14 @@
             return;
           }
 
+          this._ubHandled = true;
+          rememberLocalWeaponBag(this._ubBag);
           var verbose = state.selectHits <= 20 || state.selectHits % 50 === 0;
           clearWeaponBagLimits(this._ubBag, 'SelectWeaponBag index=' + this._ubIndex, verbose);
         },
         onLeave: function(retval) {
           if (!state.enabled) return;
+          if (!this._ubHandled) return;
 
           var result = retval.toInt32() !== 0;
           if (!result) {
@@ -250,6 +329,27 @@
     }
   }
 
+  function installGameManagerLifecycleHook(mod) {
+    if (state.gameManagerHook) return true;
+
+    try {
+      var hookAddr = mod.base.add(RVA.GameManager_OnDestroy);
+      state.gameManagerHook = Interceptor.attach(hookAddr, {
+        onEnter: function(args) {
+          if (!state.enabled) return;
+          clearLocalPlayerCache('GameManager.OnDestroy');
+        }
+      });
+
+      log('success', 'HOOK', 'GameManager.OnDestroy installed at ' + hookAddr);
+      return true;
+    } catch(e) {
+      state.lastError = 'GameManager.OnDestroy Hook 安装失败: ' + e.message;
+      log('error', 'HOOK', state.lastError);
+      return false;
+    }
+  }
+
   function installHudBagUpdateHook(mod) {
     if (state.hudUpdateHook) return true;
 
@@ -263,6 +363,7 @@
           var hudBag = args[0];
           var weaponBag = readPtr(hudBag.add(OFF.HudBag_bag));
           if (!weaponBag) return;
+          if (!isKnownLocalWeaponBag(weaponBag)) return;
 
           var verbose = state.hudHits <= 5 || state.hudHits % 600 === 0;
           clearWeaponBagLimits(weaponBag, 'HUD_Bag.Update', verbose);
@@ -285,7 +386,9 @@
 
     var selectOk = installSelectWeaponBagHook(mod);
     var hudOk = installHudBagUpdateHook(mod);
-    return selectOk && hudOk;
+    var lifecycleOk = installGameManagerLifecycleHook(mod);
+    refreshLocalPlayerCache();
+    return selectOk && hudOk && lifecycleOk;
   }
 
   function enable() {
@@ -308,6 +411,7 @@
 
   function disable() {
     state.enabled = false;
+    clearLocalPlayerCache('disable');
     log('info', 'STATE', '无限背包已关闭（不主动恢复背包字段）');
     return true;
   }
@@ -324,6 +428,11 @@
         state.hudUpdateHook.detach();
         state.hudUpdateHook = null;
       }
+      if (state.gameManagerHook) {
+        state.gameManagerHook.detach();
+        state.gameManagerHook = null;
+      }
+      clearLocalPlayerCache('cleanup');
 
       log('success', 'STATE', 'Hook 已清理');
       return true;
@@ -340,9 +449,12 @@
       initialized: state.initialized,
       selectHookInstalled: !!state.selectHook,
       hudUpdateHookInstalled: !!state.hudUpdateHook,
+      gameManagerHookInstalled: !!state.gameManagerHook,
       selectHits: state.selectHits,
       hudHits: state.hudHits,
       patchedCount: state.patchedCount,
+      cachedMyPlayer: state.cachedMyPlayer ? state.cachedMyPlayer.toString() : null,
+      cachedWeaponBag: state.cachedWeaponBag ? state.cachedWeaponBag.toString() : null,
       lastError: state.lastError
     };
   }

@@ -1,0 +1,49 @@
+{
+    "feature_id":  "skillcd",
+    "canonical_id":  "skill_no_cooldown",
+    "display_name":  "技能无冷却",
+    "category":  "player",
+    "tab":  "player_tab",
+    "order":  50,
+    "icon":  "✨",
+    "desc":  "生化模式，所有技能无冷却",
+    "script":  "script.js",
+    "layout":  {
+                   "card_type":  "simple",
+                   "columnspan":  1,
+                   "title_color":  "#A855F7"
+               },
+    "controls":  [
+                     {
+                         "type":  "switch",
+                         "action":  "enable"
+                     }
+                 ],
+    "config":  {
+
+               },
+    "rpc":  [
+                "enable",
+                "disable",
+                "setConfig",
+                "status",
+                "cleanup"
+            ],
+    "lifecycle":  {
+                      "cleanup":  true
+                  },
+    "source":  {
+                   "runtime_script_js":  "features/skillcd/script.js"
+               },
+    "ui_handles":  {
+                       "switch":  "skillcd_switch"
+                   },
+    "runtime":  {
+                    "type":  "plugin_script"
+                },
+    "tab_title":  "人物属性",
+    "tab_order":  20,
+    "state":  {
+                  "sync_enabled_from_config":  true
+              }
+}

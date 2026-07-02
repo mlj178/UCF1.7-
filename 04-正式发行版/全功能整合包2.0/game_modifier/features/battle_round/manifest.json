@@ -1,0 +1,57 @@
+{
+    "feature_id":  "battle_round",
+    "canonical_id":  "battle_round_always",
+    "display_name":  "强制决战回合",
+    "category":  "special",
+    "tab":  "nano4t_tab",
+    "order":  20,
+    "icon":  "⚔️",
+    "desc":  "强制进入决战回合",
+    "script":  "script.js",
+    "runtime":  {
+                    "type":  "plugin_script"
+                },
+    "ui":  {
+               "mode":  "embedded_panel"
+           },
+    "layout":  {
+                   "card_type":  "embedded_panel",
+                   "columnspan":  2
+               },
+    "controls":  [
+                     {
+                         "type":  "switch",
+                         "action":  "enable"
+                     }
+                 ],
+    "config":  {
+                   "enabled":  false
+               },
+    "rpc":  [
+                "enable",
+                "disable",
+                "setConfig",
+                "status",
+                "cleanup",
+                "battleRoundGetStatus",
+                "battleroundgetstatus"
+            ],
+    "lifecycle":  {
+                      "cleanup":  true,
+                      "restore":  false
+                  },
+    "source":  {
+                   "runtime_script_js":  "features/battle_round/script.js"
+               },
+    "ui_handles":  {
+                       "switch":  "battle_round_switch"
+                   },
+    "hotkey":  {
+                   "enabled":  false
+               },
+    "tab_title":  "多人生化Buff选择",
+    "tab_order":  40,
+    "state":  {
+                  "sync_enabled_from_config":  false
+              }
+}
