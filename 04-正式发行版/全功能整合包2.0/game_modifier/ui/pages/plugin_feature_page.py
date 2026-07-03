@@ -1,8 +1,8 @@
-import importlib.util
 from pathlib import Path
 
 import customtkinter as ctk
 
+from core.plugin.module_loader import load_plugin_module
 from ui.components.feature_card import FeatureCardBuilder
 
 
@@ -67,9 +67,7 @@ class PluginFeaturePage:
         panel_path = plugin_dir / "panel.py"
         builder = None
         if panel_path.exists():
-            spec = importlib.util.spec_from_file_location(f"_plugin_panel_{feature_id}", panel_path)
-            module = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(module)
+            module = load_plugin_module(plugin_dir, "panel")
             builder = getattr(module, "build_card", None)
         self._panel_builders[feature_id] = builder
         return builder

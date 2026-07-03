@@ -1,4 +1,4 @@
-﻿import importlib
+import importlib
 import json
 import re
 import sys
@@ -10,6 +10,36 @@ from pathlib import Path
 PROJECT_DIR = Path(__file__).resolve().parents[1]
 if str(PROJECT_DIR) not in sys.path:
     sys.path.insert(0, str(PROJECT_DIR))
+
+FEATURE_DIR_NAMES = {
+    "ammo": "01_ammo",
+    "recoil": "02_recoil",
+    "time": "03_time",
+    "knife": "04_knife",
+    "ammoplus": "05_ammoplus",
+    "movespeed": "06_movespeed",
+    "range": "07_range",
+    "gather": "08_gather",
+    "gravity": "09_gravity",
+    "roundskip": "10_roundskip",
+    "aim": "11_aim",
+    "godmode": "12_godmode",
+    "speedgun": "13_speedgun",
+    "isbot": "14_isbot",
+    "nano4t": "15_nano4t",
+    "weapon_giver": "16_weapon_giver",
+    "skillcd": "17_skillcd",
+    "esp_box": "18_esp_box",
+    "battle_round": "19_battle_round",
+    "timescale": "20_timescale",
+    "third_person_camera": "21_third_person_camera",
+    "unlimited_bag": "22_unlimited_bag",
+    "fast_gunstock": "23_fast_gunstock",
+}
+
+
+def feature_dir(feature_id):
+    return PROJECT_DIR / "features" / FEATURE_DIR_NAMES.get(feature_id, feature_id)
 
 
 class PluginArchitectureTests(unittest.TestCase):
@@ -313,7 +343,7 @@ class PluginArchitectureTests(unittest.TestCase):
         }
         for feature_id, aliases in expected.items():
             with self.subTest(feature_id=feature_id):
-                plugin_dir = PROJECT_DIR / "features" / feature_id
+                plugin_dir = feature_dir(feature_id)
                 manifest = json.loads((plugin_dir / "manifest.json").read_text(encoding="utf-8"))
                 script = (plugin_dir / "script.js").read_text(encoding="utf-8")
                 for action in aliases["manifest"]:
@@ -322,7 +352,7 @@ class PluginArchitectureTests(unittest.TestCase):
                     self.assertIn(line, script)
 
     def test_third_person_defaults_and_cleanup_match_plugin_lifecycle(self):
-        plugin_dir = PROJECT_DIR / "features" / "third_person_camera"
+        plugin_dir = feature_dir("third_person_camera")
         manifest = json.loads((plugin_dir / "manifest.json").read_text(encoding="utf-8"))
         script = (plugin_dir / "script.js").read_text(encoding="utf-8")
 
@@ -360,8 +390,8 @@ class PluginArchitectureTests(unittest.TestCase):
         self.assertNotIn("queuedDisable", cleanup_body)
 
     def test_third_person_panel_suppresses_programmatic_slider_sync(self):
-        panel = (PROJECT_DIR / "features" / "third_person_camera" / "panel.py").read_text(encoding="utf-8")
-        script = (PROJECT_DIR / "features" / "third_person_camera" / "script.js").read_text(encoding="utf-8")
+        panel = (feature_dir("third_person_camera") / "panel.py").read_text(encoding="utf-8")
+        script = (feature_dir("third_person_camera") / "script.js").read_text(encoding="utf-8")
 
         self.assertIn("class _SyncedSliderVar", panel)
         self.assertIn("self._syncing = True", panel)
@@ -371,7 +401,7 @@ class PluginArchitectureTests(unittest.TestCase):
         self.assertIn("'config_changed'", script)
 
     def test_timescale_cleanup_restores_normal_speed_before_script_unload(self):
-        script = (PROJECT_DIR / "features" / "timescale" / "script.js").read_text(encoding="utf-8")
+        script = (feature_dir("timescale") / "script.js").read_text(encoding="utf-8")
 
         self.assertIn("function restoreNormalTimeScaleNow()", script)
         restore_body = script.split("function restoreNormalTimeScaleNow()", 1)[1].split("function disableFeature", 1)[0]
@@ -381,7 +411,7 @@ class PluginArchitectureTests(unittest.TestCase):
         self.assertIn("disable({ restoreNow: true })", cleanup_body)
 
     def test_speedgun_uses_rpg_fire_data_rates_without_direct_anim_speed(self):
-        script = (PROJECT_DIR / "features" / "speedgun" / "script.js").read_text(encoding="utf-8")
+        script = (feature_dir("speedgun") / "script.js").read_text(encoding="utf-8")
 
         self.assertIn("'WPN_RPG.Fire'", script)
         self.assertIn("base.add(0xB670A0)", script)
@@ -390,9 +420,9 @@ class PluginArchitectureTests(unittest.TestCase):
         self.assertIsNone(re.search(r"^\s*setAnimSpeed\(anim,\s*10\.0,\s*ptr\(0\)\);", script, re.M))
 
     def test_weapon_giver_bridges_acquired_weapons_to_speedgun_plugin_rpc(self):
-        weapon_script = (PROJECT_DIR / "features" / "weapon_giver" / "script.js").read_text(encoding="utf-8")
-        weapon_events = (PROJECT_DIR / "features" / "weapon_giver" / "events.py").read_text(encoding="utf-8")
-        speedgun_script = (PROJECT_DIR / "features" / "speedgun" / "script.js").read_text(encoding="utf-8")
+        weapon_script = (feature_dir("weapon_giver") / "script.js").read_text(encoding="utf-8")
+        weapon_events = (feature_dir("weapon_giver") / "events.py").read_text(encoding="utf-8")
+        speedgun_script = (feature_dir("speedgun") / "script.js").read_text(encoding="utf-8")
 
         self.assertNotIn("modules.speedgun", weapon_script)
         self.assertIn("event: 'weapon_acquired'", weapon_script)
@@ -450,13 +480,13 @@ class PluginArchitectureTests(unittest.TestCase):
         self.assertFalse([entry for entry in logs if entry[0] == "warning"])
 
     def test_log_regressions_from_game_modifier_log_are_fixed_in_scripts(self):
-        gather_script = (PROJECT_DIR / "features" / "gather" / "script.js").read_text(encoding="utf-8")
-        roundskip_script = (PROJECT_DIR / "features" / "roundskip" / "script.js").read_text(encoding="utf-8")
+        gather_script = (feature_dir("gather") / "script.js").read_text(encoding="utf-8")
+        roundskip_script = (feature_dir("roundskip") / "script.js").read_text(encoding="utf-8")
         roundskip_manifest = json.loads(
-            (PROJECT_DIR / "features" / "roundskip" / "manifest.json").read_text(encoding="utf-8")
+            (feature_dir("roundskip") / "manifest.json").read_text(encoding="utf-8")
         )
-        weapon_script = (PROJECT_DIR / "features" / "weapon_giver" / "script.js").read_text(encoding="utf-8")
-        weapon_events = (PROJECT_DIR / "features" / "weapon_giver" / "events.py").read_text(encoding="utf-8")
+        weapon_script = (feature_dir("weapon_giver") / "script.js").read_text(encoding="utf-8")
+        weapon_events = (feature_dir("weapon_giver") / "events.py").read_text(encoding="utf-8")
 
         self.assertNotIn("type:'done'", gather_script)
         self.assertNotIn('type:"done"', gather_script)
@@ -480,7 +510,7 @@ class PluginArchitectureTests(unittest.TestCase):
         self.assertIn('"warning"', weapon_events)
 
     def test_gather_caps_game_thread_player_scan(self):
-        gather_script = (PROJECT_DIR / "features" / "gather" / "script.js").read_text(encoding="utf-8")
+        gather_script = (feature_dir("gather") / "script.js").read_text(encoding="utf-8")
 
         self.assertIn("MAX_PLAYERS_PER_GATHER", gather_script)
         self.assertIn("GATHER_FRAME_BUDGET_MS", gather_script)
@@ -489,7 +519,7 @@ class PluginArchitectureTests(unittest.TestCase):
         self.assertIn("聚怪本帧预算已用尽", gather_script)
 
     def test_weapon_giver_spreads_native_calls_and_logs_duration(self):
-        weapon_script = (PROJECT_DIR / "features" / "weapon_giver" / "script.js").read_text(encoding="utf-8")
+        weapon_script = (feature_dir("weapon_giver") / "script.js").read_text(encoding="utf-8")
 
         self.assertIn("_nativeCallCooldownMs", weapon_script)
         self.assertIn("_lastGiveWeaponCallAt", weapon_script)
@@ -498,10 +528,10 @@ class PluginArchitectureTests(unittest.TestCase):
         self.assertIn("now - _lastGiveWeaponCallAt < _nativeCallCooldownMs", weapon_script)
 
     def test_roundskip_uses_legacy_immediate_write_semantics(self):
-        roundskip_script = (PROJECT_DIR / "features" / "roundskip" / "script.js").read_text(encoding="utf-8")
-        roundskip_panel = (PROJECT_DIR / "features" / "roundskip" / "panel.py").read_text(encoding="utf-8")
-        time_script = (PROJECT_DIR / "features" / "time" / "script.js").read_text(encoding="utf-8")
-        time_manifest = json.loads((PROJECT_DIR / "features" / "time" / "manifest.json").read_text(encoding="utf-8"))
+        roundskip_script = (feature_dir("roundskip") / "script.js").read_text(encoding="utf-8")
+        roundskip_panel = (feature_dir("roundskip") / "panel.py").read_text(encoding="utf-8")
+        time_script = (feature_dir("time") / "script.js").read_text(encoding="utf-8")
+        time_manifest = json.loads((feature_dir("time") / "manifest.json").read_text(encoding="utf-8"))
         skip_round = re.search(r"function skipRound\(\) \{(?P<body>.*?)\n  \}", roundskip_script, re.S)
 
         self.assertIsNotNone(skip_round)
@@ -523,8 +553,8 @@ class PluginArchitectureTests(unittest.TestCase):
         self.assertIn("module.pauseFor(ms)", time_script)
         self.assertIn("pauseFor", time_manifest["rpc"])
         self.assertIn("pausefor", time_manifest["rpc"])
-        self.assertIn('event == "skipped"', (PROJECT_DIR / "features" / "roundskip" / "events.py").read_text(encoding="utf-8"))
-        self.assertNotIn('event == "skip_unconfirmed"', (PROJECT_DIR / "features" / "roundskip" / "events.py").read_text(encoding="utf-8"))
+        self.assertIn('event == "skipped"', (feature_dir("roundskip") / "events.py").read_text(encoding="utf-8"))
+        self.assertNotIn('event == "skip_unconfirmed"', (feature_dir("roundskip") / "events.py").read_text(encoding="utf-8"))
 
     def test_migrated_plugin_feature_files_do_not_call_legacy_exports(self):
         for feature_path in (PROJECT_DIR / "features").glob("*/feature.py"):
@@ -532,9 +562,9 @@ class PluginArchitectureTests(unittest.TestCase):
             self.assertNotIn("call_export", text, msg=str(feature_path))
 
     def test_battle_round_syncs_nano4t_through_plugin_events(self):
-        battle_script = (PROJECT_DIR / "features" / "battle_round" / "script.js").read_text(encoding="utf-8")
-        battle_events = (PROJECT_DIR / "features" / "battle_round" / "events.py").read_text(encoding="utf-8")
-        nano_events = (PROJECT_DIR / "features" / "nano4t" / "events.py").read_text(encoding="utf-8")
+        battle_script = (feature_dir("battle_round") / "script.js").read_text(encoding="utf-8")
+        battle_events = (feature_dir("battle_round") / "events.py").read_text(encoding="utf-8")
+        nano_events = (feature_dir("nano4t") / "events.py").read_text(encoding="utf-8")
 
         self.assertNotIn("modules.nano4t", battle_script)
         self.assertIn('context.feature_event("mode_detected", {}, feature_id="nano4t")', battle_events)
@@ -542,10 +572,10 @@ class PluginArchitectureTests(unittest.TestCase):
         self.assertIn("runtime.auto_init_if_needed_async()", nano_events)
 
     def test_isbot_state_matches_legacy_room_lifecycle_without_panel_module_split(self):
-        isbot_script = (PROJECT_DIR / "features" / "isbot" / "script.js").read_text(encoding="utf-8")
-        isbot_panel = (PROJECT_DIR / "features" / "isbot" / "panel.py").read_text(encoding="utf-8")
-        isbot_events = (PROJECT_DIR / "features" / "isbot" / "events.py").read_text(encoding="utf-8")
-        isbot_state = (PROJECT_DIR / "features" / "isbot" / "state.py").read_text(encoding="utf-8")
+        isbot_script = (feature_dir("isbot") / "script.js").read_text(encoding="utf-8")
+        isbot_panel = (feature_dir("isbot") / "panel.py").read_text(encoding="utf-8")
+        isbot_events = (feature_dir("isbot") / "events.py").read_text(encoding="utf-8")
+        isbot_state = (feature_dir("isbot") / "state.py").read_text(encoding="utf-8")
 
         self.assertIn("roomCaptureCount >= 2 ? 'active' : 'awaiting_reenter'", isbot_script)
         self.assertIn("isbot_state.status_label = status", isbot_panel)
@@ -559,7 +589,7 @@ class PluginArchitectureTests(unittest.TestCase):
         self.assertNotIn('command=lambda: callbacks["toggle"](feature_id)', isbot_panel)
 
     def test_isbot_keeps_reenter_progress_across_room_exit_until_disabled(self):
-        isbot_script = (PROJECT_DIR / "features" / "isbot" / "script.js").read_text(encoding="utf-8")
+        isbot_script = (feature_dir("isbot") / "script.js").read_text(encoding="utf-8")
         clear_room = re.search(
             r"function clearRoomState\(reason\) \{(?P<body>.*?)\n  \}",
             isbot_script,
@@ -580,7 +610,7 @@ class PluginArchitectureTests(unittest.TestCase):
         self.assertIn("shouldIgnoreLateGameManagerDestroy()", isbot_script)
 
     def test_isbot_disabled_state_restores_next_capture_before_uninstalling_hook(self):
-        isbot_script = (PROJECT_DIR / "features" / "isbot" / "script.js").read_text(encoding="utf-8")
+        isbot_script = (feature_dir("isbot") / "script.js").read_text(encoding="utf-8")
         capture = re.search(
             r"function handlePlayerCapture\(playerPtr\) \{(?P<body>.*?)\n  \}",
             isbot_script,
@@ -601,7 +631,7 @@ class PluginArchitectureTests(unittest.TestCase):
         self.assertNotIn("if (restored) uninstallHook()", disable.group("body"))
 
     def test_isbot_disable_force_restores_current_client_data_on_cleanup(self):
-        isbot_script = (PROJECT_DIR / "features" / "isbot" / "script.js").read_text(encoding="utf-8")
+        isbot_script = (feature_dir("isbot") / "script.js").read_text(encoding="utf-8")
         disable = re.search(
             r"disable: function\([^)]*\) \{(?P<body>.*?)\n    \},",
             isbot_script,
@@ -616,8 +646,9 @@ class PluginArchitectureTests(unittest.TestCase):
         self.assertIn("module.disable({ cleanup: true })", cleanup_body)
 
     def test_weapon_giver_normal_failures_are_throttled(self):
-        import features.weapon_giver.events as events
+        from core.plugin.module_loader import load_plugin_module
 
+        events = load_plugin_module(feature_dir("weapon_giver"), "events")
         events = importlib.reload(events)
         emitted = []
 
@@ -637,8 +668,9 @@ class PluginArchitectureTests(unittest.TestCase):
         self.assertEqual(emitted[0][1]["level"], "warning")
 
     def test_weapon_giver_panel_resumes_hotkeys_when_built_after_connection(self):
-        import features.weapon_giver.events as events
+        from core.plugin.module_loader import load_plugin_module
 
+        events = load_plugin_module(feature_dir("weapon_giver"), "events")
         events = importlib.reload(events)
         sync_hotkeys = getattr(events, "sync_hotkeys_for_current_connection", None)
         self.assertTrue(callable(sync_hotkeys))
@@ -663,7 +695,7 @@ class PluginArchitectureTests(unittest.TestCase):
         sync_hotkeys(FakeContext(False), FakeController())
         self.assertEqual(calls, [])
 
-        panel_text = (PROJECT_DIR / "features" / "weapon_giver" / "panel.py").read_text(encoding="utf-8")
+        panel_text = (feature_dir("weapon_giver") / "panel.py").read_text(encoding="utf-8")
         self.assertIn("sync_hotkeys_for_current_connection(context, controller)", panel_text)
 
     def test_config_manager_merges_default_and_user_by_feature(self):
@@ -728,7 +760,7 @@ class MigratedOrdinaryFeatureTests(unittest.TestCase):
     def test_all_ordinary_features_have_self_contained_plugin_files(self):
         for feature_id in self.ORDINARY_FEATURES:
             with self.subTest(feature_id=feature_id):
-                plugin_dir = PROJECT_DIR / "features" / feature_id
+                plugin_dir = feature_dir(feature_id)
                 self.assertTrue((plugin_dir / "manifest.json").exists())
                 self.assertTrue((plugin_dir / "feature.py").exists())
                 self.assertTrue((plugin_dir / "script.js").exists())
@@ -752,7 +784,7 @@ class MigratedOrdinaryFeatureTests(unittest.TestCase):
         for feature_id in self.ORDINARY_FEATURES:
             if feature_id in {"nano4t", "weapon_giver"}:
                 continue
-            feature_text = (PROJECT_DIR / "features" / feature_id / "feature.py").read_text(encoding="utf-8")
+            feature_text = (feature_dir(feature_id) / "feature.py").read_text(encoding="utf-8")
             self.assertNotIn("@register_feature", feature_text)
             self.assertNotIn("register_feature", feature_text)
 
@@ -820,7 +852,7 @@ class MigratedOrdinaryFeatureTests(unittest.TestCase):
         for feature_id, values in expected.items():
             with self.subTest(feature_id=feature_id):
                 manifest = json.loads(
-                    (PROJECT_DIR / "features" / feature_id / "manifest.json").read_text(encoding="utf-8")
+                    (feature_dir(feature_id) / "manifest.json").read_text(encoding="utf-8")
                 )
                 self.assertEqual(
                     (manifest["display_name"], manifest["icon"], manifest["desc"]),
@@ -890,7 +922,7 @@ class MigratedOrdinaryFeatureTests(unittest.TestCase):
 
         for feature_id, values in expected.items():
             with self.subTest(feature_id=feature_id):
-                plugin_dir = PROJECT_DIR / "features" / feature_id
+                plugin_dir = feature_dir(feature_id)
                 manifest = json.loads((plugin_dir / "manifest.json").read_text(encoding="utf-8"))
                 script = (plugin_dir / "script.js").read_text(encoding="utf-8")
                 panel = (plugin_dir / "panel.py").read_text(encoding="utf-8")
@@ -916,7 +948,7 @@ class MigratedOrdinaryFeatureTests(unittest.TestCase):
                 self.assertNotIn('callbacks["action"]', panel)
 
     def test_unlimited_bag_uses_cached_gamemanager_myplayer_in_19_only(self):
-        script_path = PROJECT_DIR / "features" / "unlimited_bag" / "script.js"
+        script_path = feature_dir("unlimited_bag") / "script.js"
         script = script_path.read_text(encoding="utf-8")
         self.assertIn("GameManager_TypeInfo: 0x0E2933C", script)
         self.assertIn("GameManager_OnDestroy: 0xAFB6F0", script)
@@ -1182,13 +1214,13 @@ class MigratedOrdinaryFeatureTests(unittest.TestCase):
         ):
             self.assertFalse(path.exists(), msg=str(path))
         for path in (
-            PROJECT_DIR / "features" / "weapon_giver" / "controller.py",
-            PROJECT_DIR / "features" / "weapon_giver" / "service.py",
-            PROJECT_DIR / "features" / "weapon_giver" / "hotkeys.py",
-            PROJECT_DIR / "features" / "nano4t" / "runtime.py",
-            PROJECT_DIR / "features" / "nano4t" / "selection.py",
-            PROJECT_DIR / "features" / "battle_round" / "controller.py",
-            PROJECT_DIR / "features" / "roundskip" / "monitor.py",
+            feature_dir("weapon_giver") / "controller.py",
+            feature_dir("weapon_giver") / "service.py",
+            feature_dir("weapon_giver") / "hotkeys.py",
+            feature_dir("nano4t") / "runtime.py",
+            feature_dir("nano4t") / "selection.py",
+            feature_dir("battle_round") / "controller.py",
+            feature_dir("roundskip") / "monitor.py",
         ):
             self.assertTrue(path.exists(), msg=str(path))
 

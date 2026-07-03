@@ -1,0 +1,60 @@
+{
+    "feature_id":  "roundskip",
+    "canonical_id":  "skip_round",
+    "display_name":  "回合跳过",
+    "category":  "other",
+    "tab":  "other_tab",
+    "order":  20,
+    "icon":  "⏭️",
+    "desc":  "结束当前回合",
+    "script":  "script.js",
+    "layout":  {
+                   "card_type":  "simple",
+                   "columnspan":  1,
+                   "title_color":  "#e0e0e0"
+               },
+    "controls":  [
+                     {
+                         "type":  "button",
+                         "action":  "skip_round",
+                         "label":  "▶ 第一次跳过需要点击两次"
+                     }
+                 ],
+    "config":  {
+
+               },
+    "rpc":  [
+                "enable",
+                "disable",
+                "setConfig",
+                "status",
+                "cleanup",
+                "skip_round",
+                "skipRound",
+                "skipround"
+            ],
+    "lifecycle":  {
+                      "cleanup":  true,
+                      "restore":  false
+                  },
+    "source":  {
+                   "runtime_script_js":  "features/10_roundskip/script.js"
+               },
+    "ui_handles":  {
+                       "button":  "skip_round_btn"
+                   },
+    "runtime":  {
+                    "type":  "plugin_script"
+                },
+    "actions":  {
+                    "skip_round":  {
+                                       "type":  "rpc",
+                                       "requires_connection":  true
+                                   }
+                },
+    "tab_title":  "其他",
+    "tab_order":  30,
+    "state":  {
+                  "sync_enabled_from_config":  true
+              }
+}

@@ -1,5 +1,6 @@
-import importlib.util
 from pathlib import Path
+
+from core.plugin.module_loader import load_plugin_module
 
 
 class PluginEventRouter:
@@ -46,9 +47,7 @@ class PluginEventRouter:
             self._handlers[feature_id] = None
             return None
         try:
-            spec = importlib.util.spec_from_file_location(f"_plugin_events_{feature_id}", events_path)
-            module = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(module)
+            module = load_plugin_module(plugin_dir, "events")
             handler = getattr(module, "handle_event", None)
             self._handlers[feature_id] = handler if callable(handler) else None
         except Exception as exc:

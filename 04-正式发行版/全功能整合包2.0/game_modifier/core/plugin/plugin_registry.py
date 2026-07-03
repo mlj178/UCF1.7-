@@ -1,9 +1,9 @@
-import importlib.util
 from pathlib import Path
 
 from core.config import FEATURES_DIR
 from core.log_manager import get_logger
 from core.plugin.manifest_loader import ManifestLoader
+from core.plugin.module_loader import load_plugin_module
 from core.plugin.plugin_base import PluginFeatureBase
 from core.plugin.plugin_contract import PluginContract
 
@@ -55,10 +55,7 @@ class PluginRegistry:
         if not feature_path.exists():
             return PluginFeatureBase(manifest, self.rpc_client, self.config_manager)
 
-        module_name = f"_game_modifier_plugin_{feature_id}"
-        spec = importlib.util.spec_from_file_location(module_name, feature_path)
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
+        module = load_plugin_module(plugin_dir, "feature")
         feature_cls = getattr(module, "PluginFeature", None)
         if feature_cls is None:
             feature_cls = next(
