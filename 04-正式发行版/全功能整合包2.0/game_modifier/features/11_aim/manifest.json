@@ -1,0 +1,49 @@
+{
+    "feature_id":  "aim",
+    "canonical_id":  "auto_aim",
+    "display_name":  "自瞄",
+    "category":  "weapon",
+    "tab":  "weapon_tab",
+    "order":  60,
+    "icon":  "🎯",
+    "desc":  "自动瞄准敌方玩家",
+    "script":  "script.js",
+    "layout":  {
+                   "card_type":  "simple",
+                   "columnspan":  1,
+                   "title_color":  "#FF6B6B"
+               },
+    "controls":  [
+                     {
+                         "type":  "switch",
+                         "action":  "enable"
+                     }
+                 ],
+    "config":  {
+
+               },
+    "rpc":  [
+                "enable",
+                "disable",
+                "setConfig",
+                "status",
+                "cleanup"
+            ],
+    "lifecycle":  {
+                      "cleanup":  true
+                  },
+    "source":  {
+                   "runtime_script_js":  "features/11_aim/script.js"
+               },
+    "ui_handles":  {
+                       "switch":  "aim_switch"
+                   },
+    "runtime":  {
+                    "type":  "plugin_script"
+                },
+    "tab_title":  "武器",
+    "tab_order":  10,
+    "state":  {
+                  "sync_enabled_from_config":  true
+              }
+}

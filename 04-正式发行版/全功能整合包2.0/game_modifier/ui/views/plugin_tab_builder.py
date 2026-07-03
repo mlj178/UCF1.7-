@@ -1,8 +1,8 @@
-import importlib.util
 from pathlib import Path
 
 import customtkinter as ctk
 
+from core.plugin.module_loader import load_plugin_module
 from ui.views.feature_tabs_view import FeatureTabsView
 from ui.views.common import bind_view_handles
 
@@ -116,12 +116,7 @@ class PluginTabBuilder:
         panel_path = plugin_dir / "panel.py"
         if not panel_path.exists():
             return None
-        spec = importlib.util.spec_from_file_location(
-            f"_game_modifier_panel_{feature.manifest.get('feature_id')}",
-            panel_path,
-        )
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
+        module = load_plugin_module(plugin_dir, "panel")
         build_panel = getattr(module, "build_panel", None)
         if not callable(build_panel):
             return None

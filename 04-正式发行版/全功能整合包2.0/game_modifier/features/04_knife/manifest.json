@@ -1,0 +1,60 @@
+{
+    "feature_id":  "knife",
+    "canonical_id":  "fast_knife",
+    "display_name":  "快刀",
+    "category":  "weapon",
+    "tab":  "weapon_tab",
+    "order":  10,
+    "icon":  "🔪",
+    "desc":  "提升挥刀速度（人类 / 生化幽灵通用）",
+    "script":  "script.js",
+    "layout":  {
+                   "card_type":  "simple",
+                   "columnspan":  1,
+                   "title_color":  "#FFB347"
+               },
+    "controls":  [
+                     {
+                         "type":  "switch",
+                         "action":  "enable"
+                     },
+                     {
+                         "type":  "slider",
+                         "action":  "setConfig",
+                         "key":  "speed",
+                         "min":  1.0,
+                         "max":  10.0,
+                         "step":  0.1,
+                         "default":  5.0
+                     }
+                 ],
+    "config":  {
+                   "speed":  5.0
+               },
+    "rpc":  [
+                "enable",
+                "disable",
+                "setConfig",
+                "status",
+                "cleanup"
+            ],
+    "lifecycle":  {
+                      "cleanup":  true
+                  },
+    "source":  {
+                   "runtime_script_js":  "features/04_knife/script.js"
+               },
+    "ui_handles":  {
+                       "switch":  "knife_switch",
+                       "slider_var":  "knife_speed_var",
+                       "slider_label":  "knife_speed_label"
+                   },
+    "runtime":  {
+                    "type":  "plugin_script"
+                },
+    "tab_title":  "武器",
+    "tab_order":  10,
+    "state":  {
+                  "sync_enabled_from_config":  true
+              }
+}
