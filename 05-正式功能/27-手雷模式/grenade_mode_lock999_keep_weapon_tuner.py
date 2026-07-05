@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 feature_id: grenade_mode_lock999_keep_weapon_tuner
-version: 2.12.4
+version: 2.12.8
 
 基于 lock999_keep_weapon v1.1：
 - 锁定手雷数量 999
@@ -54,7 +54,7 @@ import time
 import traceback
 
 FEATURE_ID = "grenade_mode_lock999_keep_weapon_tuner"
-VERSION = "2.12.4"
+VERSION = "2.12.8"
 DISPLAY_NAME = "手雷模式v2观察版 + 锁999保护"
 SCRIPT_NAME = "grenade_mode_lock999_keep_weapon_tuner.js"
 PROCESS_NAME = "UnityCrossFire.exe"
@@ -110,10 +110,10 @@ DEFAULT_CONFIG: Dict[str, Any] = {
     "tune_on_life_timer_end": True,
     "tune_on_work": True,
     "tune_on_fixed_update": True,
-    "virtual_grenade_observer_enabled": True,
-    "virtual_grenade_observer_verbose": True,
-    "bot_grenade_behavior_observer_enabled": True,
-    "bot_attack_observer_enabled": True,
+    "virtual_grenade_observer_enabled": False,
+    "virtual_grenade_observer_verbose": False,
+    "bot_grenade_behavior_observer_enabled": False,
+    "bot_attack_observer_enabled": False,
     "bot_grenade_mode_enabled": True,
     "bot_grenade_throw_slot": 3,
     "bot_grenade_force_scope_all_players": True,
@@ -137,8 +137,8 @@ DEFAULT_CONFIG: Dict[str, Any] = {
     "bot_suppress_gun_fire_enabled": True,
     "bot_suppress_gun_fire_when_no_grenade": True,
     "virtual_botcontrol_log_interval_ms": 1000,
-    "bot_ai_probe_enabled": True,
-    "bot_ai_probe_verbose": True,
+    "bot_ai_probe_enabled": False,
+    "bot_ai_probe_verbose": False,
     "bot_ai_hook_drive_enabled": True,
     "bot_ai_checkattack_drive_enabled": True,
     "bot_ai_camerarotation_drive_enabled": True,
@@ -167,7 +167,7 @@ DEFAULT_CONFIG: Dict[str, Any] = {
     "bot_ai_probe_log_interval_ms": 1000,
     "bot_attack_summary_interval_ms": 5000,
     "bot_grenade_summary_interval_ms": 5000,
-    "observe_set_current_weapon": True,
+    "observe_set_current_weapon": False,
     "log_interval_ms": 1000,
     "max_error_before_disable": 14,
 }
@@ -342,6 +342,19 @@ class StandaloneFridaManager:
                 if isinstance(payload, dict):
                     msg = payload.get("message", "")
                     pdata = payload.get("data", {})
+                    # v2.12.8：最终版默认不再在UI显示观察/测试/汇总类消息。
+                    if msg in {
+                        "VirtualGrenadeMode观察",
+                        "Bot手雷行为观察",
+                        "Bot手雷行为汇总",
+                        "Bot攻击入口观察",
+                        "Bot攻击入口汇总",
+                        "BotAI观察",
+                        "BotAI触发投掷跳过",
+                        "SmartGrenadeAI跳过",
+                        "Bot投掷状态机",
+                    }:
+                        return
                     if msg == "手雷数量已锁定并保护武器对象":
                         before = pdata.get("before", {})
                         after = pdata.get("after", {})
@@ -507,7 +520,7 @@ class CombinedApp:
         ctk.set_default_color_theme("blue")
         self.root = ctk.CTk()
         self.root.title(f"{DISPLAY_NAME} v{VERSION}")
-        self.root.geometry("1180x880")
+        self.root.geometry("1120x760")
         self.status_var = ctk.StringVar(value="未连接：等待游戏启动")
         self.log_path_var = ctk.StringVar(value=str(self.logger.latest_file))
         self.auto_enable_var = ctk.BooleanVar(value=False)
@@ -516,9 +529,9 @@ class CombinedApp:
         self.infinite_scope_var = ctk.StringVar(value="all_players")
         self.protect_remove_var = ctk.BooleanVar(value=True)
         self.runtime_tuner_var = ctk.BooleanVar(value=True)
-        self.virtual_observer_var = ctk.BooleanVar(value=True)
-        self.bot_behavior_observer_var = ctk.BooleanVar(value=True)
-        self.bot_attack_observer_var = ctk.BooleanVar(value=True)
+        self.virtual_observer_var = ctk.BooleanVar(value=False)
+        self.bot_behavior_observer_var = ctk.BooleanVar(value=False)
+        self.bot_attack_observer_var = ctk.BooleanVar(value=False)
         self.bot_grenade_mode_var = ctk.BooleanVar(value=True)
         self.vg_giveweapon_var = ctk.BooleanVar(value=True)
         self.bot_throw_drive_var = ctk.BooleanVar(value=True)
@@ -532,7 +545,7 @@ class CombinedApp:
         self.vbc_skip_original_var = ctk.BooleanVar(value=True)
         self.bot_suppress_gun_fire_var = ctk.BooleanVar(value=True)
         self.bot_suppress_gun_no_grenade_var = ctk.BooleanVar(value=True)
-        self.bot_ai_probe_var = ctk.BooleanVar(value=True)
+        self.bot_ai_probe_var = ctk.BooleanVar(value=False)
         self.bot_ai_hook_drive_var = ctk.BooleanVar(value=True)
         self.bot_ai_checkattack_drive_var = ctk.BooleanVar(value=True)
         self.bot_ai_camera_drive_var = ctk.BooleanVar(value=True)
@@ -582,18 +595,16 @@ class CombinedApp:
         ctk.CTkButton(top, text="立即连接游戏", command=self.connect_now).pack(side="left", padx=6, pady=8)
         ctk.CTkButton(top, text="开启功能", command=self.enable_feature).pack(side="left", padx=6, pady=8)
         ctk.CTkButton(top, text="关闭功能", command=self.disable_feature).pack(side="left", padx=6, pady=8)
-        ctk.CTkButton(top, text="查看状态", command=self.show_status).pack(side="left", padx=6, pady=8)
         ctk.CTkButton(top, text="清理并卸载", command=self.cleanup_feature).pack(side="left", padx=6, pady=8)
         ctk.CTkCheckBox(top, text="连接后自动开启", variable=self.auto_enable_var).pack(side="left", padx=18, pady=8)
 
         cfg = ctk.CTkFrame(self.root); cfg.pack(fill="x", padx=14, pady=8)
-        ctk.CTkLabel(cfg, text="基于 lock999_keep_weapon v1.1：锁999 + 保护Remove；新增只改普通手雷 missile 的参数。").pack(anchor="w", padx=10, pady=(8, 4))
+        ctk.CTkLabel(cfg, text="v2.12.8 最终精简版：锁999 + Bot禁枪转手雷 + 自动补发Grenade；观察/测试选项已移除。").pack(anchor="w", padx=10, pady=(8, 4))
         row0 = ctk.CTkFrame(cfg); row0.pack(fill="x", padx=16, pady=4)
         ctk.CTkCheckBox(row0, text="锁定手雷数量", variable=self.lock999_var).pack(side="left", padx=6)
         ctk.CTkEntry(row0, textvariable=self.target_count_var, width=80).pack(side="left", padx=6)
         ctk.CTkCheckBox(row0, text="保护当前手雷对象 Remove", variable=self.protect_remove_var).pack(side="left", padx=12)
         ctk.CTkCheckBox(row0, text="运行时参数修改", variable=self.runtime_tuner_var).pack(side="left", padx=12)
-        ctk.CTkCheckBox(row0, text="VirtualGrenadeMode观察", variable=self.virtual_observer_var).pack(side="left", padx=12)
         ctk.CTkCheckBox(row0, text="同步 +0x10", variable=self.sync_plain_var).pack(side="left", padx=12)
         ctk.CTkLabel(row0, text="owner:").pack(side="left", padx=(18, 4))
         ctk.CTkOptionMenu(row0, values=["local_only", "all_throw"], variable=self.owner_filter_var, width=130).pack(side="left", padx=4)
@@ -602,17 +613,10 @@ class CombinedApp:
         ctk.CTkLabel(row_scope, text="无限手雷作用范围").pack(side="left", padx=(6, 4))
         ctk.CTkOptionMenu(row_scope, values=["local_only", "all_players"], variable=self.infinite_scope_var, width=150, command=lambda v: self._schedule_live_apply()).pack(side="left", padx=6)
         ctk.CTkLabel(row_scope, text="local_only=只给玩家自己；all_players=玩家+bot").pack(side="left", padx=(8, 16))
-        ctk.CTkCheckBox(row_scope, text="Bot手雷行为观察", variable=self.bot_behavior_observer_var).pack(side="left", padx=12)
-        ctk.CTkCheckBox(row_scope, text="Bot攻击入口观察", variable=self.bot_attack_observer_var).pack(side="left", padx=12)
         ctk.CTkCheckBox(row_scope, text="Bot手雷模式(Grenade)", variable=self.bot_grenade_mode_var).pack(side="left", padx=12)
-        ctk.CTkLabel(row_scope, text="旧入口重定向已硬禁用").pack(side="left", padx=8)
-
-        row_vg = ctk.CTkFrame(cfg); row_vg.pack(fill="x", padx=16, pady=4)
-        ctk.CTkLabel(row_vg, text="v2.5 BotGrenadeRecord:").pack(side="left", padx=(6, 8))
-        ctk.CTkCheckBox(row_vg, text="GiveWeapon过滤", variable=self.vg_giveweapon_var).pack(side="left", padx=8)
 
         row_drive = ctk.CTkFrame(cfg); row_drive.pack(fill="x", padx=16, pady=4)
-        ctk.CTkLabel(row_drive, text="v2.6 Bot投掷驱动:").pack(side="left", padx=(6, 8))
+        ctk.CTkLabel(row_drive, text="Bot投掷驱动:").pack(side="left", padx=(6, 8))
         ctk.CTkCheckBox(row_drive, text="开启", variable=self.bot_throw_drive_var).pack(side="left", padx=8)
         ctk.CTkCheckBox(row_drive, text="Bot.UseWeapon触发Throw", variable=self.bot_throw_drive_useweapon_var).pack(side="left", padx=8)
         ctk.CTkCheckBox(row_drive, text="成功后跳过原UseWeapon", variable=self.bot_throw_drive_skip_original_var).pack(side="left", padx=8)
@@ -620,7 +624,7 @@ class CombinedApp:
         ctk.CTkEntry(row_drive, textvariable=self.bot_throw_drive_cooldown_var, width=80).pack(side="left", padx=4)
 
         row_vbc = ctk.CTkFrame(cfg); row_vbc.pack(fill="x", padx=16, pady=4)
-        ctk.CTkLabel(row_vbc, text="v2.7 VirtualBotControl:").pack(side="left", padx=(6, 8))
+        ctk.CTkLabel(row_vbc, text="Bot禁枪转手雷:").pack(side="left", padx=(6, 8))
         ctk.CTkCheckBox(row_vbc, text="开启", variable=self.vbc_enabled_var).pack(side="left", padx=8)
         ctk.CTkCheckBox(row_vbc, text="接管Gun.BotControl", variable=self.vbc_gun_var).pack(side="left", padx=8)
         ctk.CTkCheckBox(row_vbc, text="接管SniperBotControl", variable=self.vbc_sniper_var).pack(side="left", padx=8)
@@ -629,19 +633,8 @@ class CombinedApp:
         ctk.CTkCheckBox(row_vbc, text="禁止Bot枪械开火", variable=self.bot_suppress_gun_fire_var).pack(side="left", padx=8)
         ctk.CTkCheckBox(row_vbc, text="无手雷也不许开枪", variable=self.bot_suppress_gun_no_grenade_var).pack(side="left", padx=8)
 
-        row_ai = ctk.CTkFrame(cfg); row_ai.pack(fill="x", padx=16, pady=4)
-        ctk.CTkLabel(row_ai, text="v2.9 AI触发投掷:").pack(side="left", padx=(6, 8))
-        ctk.CTkCheckBox(row_ai, text="观察AI链路", variable=self.bot_ai_probe_var).pack(side="left", padx=8)
-        ctk.CTkCheckBox(row_ai, text="AI触发投掷", variable=self.bot_ai_hook_drive_var).pack(side="left", padx=8)
-        ctk.CTkCheckBox(row_ai, text="CheckAttackTarget", variable=self.bot_ai_checkattack_drive_var).pack(side="left", padx=8)
-        ctk.CTkCheckBox(row_ai, text="CameraRotation", variable=self.bot_ai_camera_drive_var).pack(side="left", padx=8)
-        ctk.CTkCheckBox(row_ai, text="TrySetTarget(谨慎)", variable=self.bot_ai_tryset_drive_var).pack(side="left", padx=8)
-        ctk.CTkCheckBox(row_ai, text="要求有attackTarget", variable=self.bot_ai_require_target_var).pack(side="left", padx=8)
-        ctk.CTkLabel(row_ai, text="AI驱动冷却ms").pack(side="left", padx=(10, 4))
-        ctk.CTkEntry(row_ai, textvariable=self.bot_ai_cooldown_var, width=80).pack(side="left", padx=4)
-
         row_state = ctk.CTkFrame(cfg); row_state.pack(fill="x", padx=16, pady=4)
-        ctk.CTkLabel(row_state, text="v2.10.4 Bot投掷状态机:").pack(side="left", padx=(6, 8))
+        ctk.CTkLabel(row_state, text="投掷保护/复活重置:").pack(side="left", padx=(6, 8))
         ctk.CTkCheckBox(row_state, text="开启", variable=self.bot_throw_sm_var).pack(side="left", padx=8)
         ctk.CTkLabel(row_state, text="选择延迟ms").pack(side="left", padx=(10, 4))
         ctk.CTkEntry(row_state, textvariable=self.bot_throw_sm_select_delay_var, width=60).pack(side="left", padx=2)
@@ -673,32 +666,10 @@ class CombinedApp:
 
 
         self.log_box = ctk.CTkTextbox(self.root, height=520); self.log_box.pack(fill="both", expand=True, padx=14, pady=(8, 14))
-        self._append_ui("第一轮建议：锁999开，保护Remove开，owner=local_only；连投就绪和动作加速先默认关闭，需要时再开。")
-        self._append_ui("v1.5：伤害/范围/速度滑块为缩放显示，实际写入值 = UI显示值 × 10；拖动滑块会即时生效。")
-        self._append_ui("RPG/AT4/Nano 正常不应出现 [捕获手雷missile]，因为只从 WPN_Throw.<Throw>b__10_0 捕获。")
-        self._append_ui("v2.0观察版：记录 PlayerWeapons.Select / SetCurrentWeapon / SetWeapon / AutoSelect / GetValidSlot，不拦截切枪。")
-        self._append_ui("v2.1：新增无限手雷作用范围下拉框。local_only 只给玩家自己；all_players 包含 bot。")
-        self._append_ui("v2.1：新增 Bot 手雷行为观察，用于确认 bot 是没拿到手雷、没切到手雷，还是不会执行 WPN_Throw.Throw。")
-        self._append_ui("v2.2：新增 Bot 攻击入口观察，记录 WPN_Gun.BotControl / GunShoot / GenerateBullet / WPN_RPG.Fire。")
-        self._append_ui("v2.3：Bot只允许手雷手雷模式默认关闭；开启后会尝试把bot纠正回slot=3手雷。")
-        self._append_ui("v2.4：开启Bot手雷模式后会自动把无限手雷作用范围切到all_players，并在Select/SetCurrentWeapon入口直接重定向到手雷。")
-        self._append_ui("v2.5：BotGrenadeRecord只允许普通Grenade，不包含FlashBang/Smoke；主控Bot.SelectWeapon/GetValidSlot/GiveWeapon。")
-        self._append_ui("v2.5.1：旧入口重定向已硬禁用，修复RangeError导致自动关闭、玩家手雷999失效的问题。")
-        self._append_ui("v2.6：Bot.UseWeapon会按冷却直接调用WPN_Throw.Throw，目标是让bot真正投掷手雷。")
-        self._append_ui("v2.7：VirtualBotControl会在WPN_Gun/RPG BotControl层接管，模仿武器BotControl转为手雷Throw。")
-        self._append_ui("v2.10.3：已删除v2.10.2可见性强化逻辑；Bot手雷模式默认开启；AI驱动冷却默认1000ms。")
-        self._append_ui("v2.10.4：新增Bot投掷状态机，只做状态推进，不处理发枪过滤/攻击时切雷/Deploy补动作。")
-        self._append_ui("v2.11：默认不再阻止Bot获得非Grenade武器，保留官方武器/模型/动作状态，减少木桩、空枪、聚堆。")
-        self._append_ui("v2.11.1：伤害/范围/速度新增应用对象下拉框，my_player=玩家自己，all_players=所有人；下拉选择后即时生效。")
-        self._append_ui("v2.11.2：默认放行官方选武器；GetValidSlot强制和Bot.SelectWeapon强制默认关闭，只在状态机投掷阶段临时Select(3)。")
-        self._append_ui("v2.11.3：伤害/范围/速度作用对象改为my_player/all_players；默认禁止Bot枪械原BotControl开火。")
-        self._append_ui("v2.11.4：新增出生保护3000ms和目标稳定700ms，避免Bot刚出生/刚看到目标马上扔雷。")
-        self._append_ui("v2.11.5：修复v2.11.4只拦状态机的问题；现在AI状态机/Bot.UseWeapon/VirtualBotControl/底层Throw都走统一许可层。")
-        self._append_ui("v2.11.6：复活/RemoveAll/重新发枪/手雷对象变化会重置Bot生命周期，后续复活也重新触发出生保护。")
-        self._append_ui("v2.12终版：已删除旧重定向/手雷模式纠正/全局选雷/GetValidSlot强制/发枪拦截，只保留稳定主路径。")
-        self._append_ui("v2.12.2：界面已移除v2.10/v2.10.1 SmartAI实验说明，只保留固定官方可见判断。")
-        self._append_ui("v2.12.3：修复配置收集残留旧距离参数导致的开启失败。")
-        self._append_ui("v2.12.4：修复JS初始化残留Native导致的addrOf missing argument。")
+        self._append_ui("v2.12.8 最终精简版：观察/测试/验证类选项已从界面移除。")
+        self._append_ui("当前标准：Bot可以端枪，但禁止原枪械开火；攻击入口由VBC转成手雷投掷。")
+        self._append_ui("已保留：锁999、保护Remove、VBC、Bot.UseWeapon、统一许可层、复活重置、多key缓存、主动补发Grenade。")
+        self._append_ui("配置修改会即时同步；不需要重新开关功能。")
 
     def _add_slider_row(self, parent: Any, label: str, enabled_var: Any, value_var: Any, text_var: Any, lo: float, hi: float, scope_var: Any = None) -> None:
         ctk = self.ctk
@@ -788,13 +759,15 @@ class CombinedApp:
         cfg["infinite_grenade_scope"] = self.infinite_scope_var.get()
         cfg["protect_weapon_remove"] = bool(self.protect_remove_var.get())
         cfg["runtime_tuner_enabled"] = bool(self.runtime_tuner_var.get())
-        cfg["virtual_grenade_observer_enabled"] = bool(self.virtual_observer_var.get())
-        cfg["bot_grenade_behavior_observer_enabled"] = bool(self.bot_behavior_observer_var.get())
-        cfg["bot_attack_observer_enabled"] = bool(self.bot_attack_observer_var.get())
+        # v2.12.8：观察类选项从UI移除，最终版默认关闭观察日志。
+        cfg["virtual_grenade_observer_enabled"] = False
+        cfg["virtual_grenade_observer_verbose"] = False
+        cfg["bot_grenade_behavior_observer_enabled"] = False
+        cfg["bot_attack_observer_enabled"] = False
         cfg["bot_grenade_mode_enabled"] = bool(self.bot_grenade_mode_var.get())
         cfg["bot_grenade_force_scope_all_players"] = True
         cfg["bot_grenade_record_enabled"] = bool(self.bot_grenade_mode_var.get())
-        cfg["virtual_grenade_giveweapon_enabled"] = bool(self.vg_giveweapon_var.get())
+        cfg["virtual_grenade_giveweapon_enabled"] = True
         cfg["virtual_grenade_preserve_original_weapons"] = True
         cfg["bot_throw_drive_enabled"] = bool(self.bot_throw_drive_var.get())
         cfg["bot_throw_drive_useweapon_enabled"] = bool(self.bot_throw_drive_useweapon_var.get())
@@ -818,21 +791,16 @@ class CombinedApp:
         cfg["bot_suppress_gun_fire_enabled"] = bool(self.bot_suppress_gun_fire_var.get())
         cfg["bot_suppress_gun_fire_when_no_grenade"] = bool(self.bot_suppress_gun_no_grenade_var.get())
         cfg["virtual_botcontrol_log_interval_ms"] = 1000
-        cfg["bot_ai_probe_enabled"] = bool(self.bot_ai_probe_var.get())
-        cfg["bot_ai_probe_verbose"] = True
-        cfg["bot_ai_hook_drive_enabled"] = bool(self.bot_ai_hook_drive_var.get())
-        cfg["bot_ai_checkattack_drive_enabled"] = bool(self.bot_ai_checkattack_drive_var.get())
-        cfg["bot_ai_camerarotation_drive_enabled"] = bool(self.bot_ai_camera_drive_var.get())
-        cfg["bot_ai_trysettarget_drive_enabled"] = bool(self.bot_ai_tryset_drive_var.get())
-        cfg["bot_ai_hook_drive_require_target"] = bool(self.bot_ai_require_target_var.get())
-        try:
-            ai_cd = int(self.bot_ai_cooldown_var.get().strip())
-        except Exception:
-            ai_cd = 2500
-        if ai_cd < 500: ai_cd = 500
-        if ai_cd > 15000: ai_cd = 15000
-        cfg["bot_ai_hook_drive_cooldown_ms"] = ai_cd
-        cfg["bot_ai_probe_log_interval_ms"] = 1000
+        # v2.12.8：AI观察/测试选项从UI移除；保留内部稳定触发默认值，不输出观察日志。
+        cfg["bot_ai_probe_enabled"] = False
+        cfg["bot_ai_probe_verbose"] = False
+        cfg["bot_ai_hook_drive_enabled"] = True
+        cfg["bot_ai_checkattack_drive_enabled"] = True
+        cfg["bot_ai_camerarotation_drive_enabled"] = True
+        cfg["bot_ai_trysettarget_drive_enabled"] = False
+        cfg["bot_ai_hook_drive_require_target"] = True
+        cfg["bot_ai_hook_drive_cooldown_ms"] = 1000
+        cfg["bot_ai_probe_log_interval_ms"] = 60000
         cfg["bot_throw_state_machine_enabled"] = bool(self.bot_throw_sm_var.get())
         try:
             sm_select_delay = int(self.bot_throw_sm_select_delay_var.get().strip())
@@ -885,8 +853,8 @@ class CombinedApp:
         if respawn_reset_cd < 300: respawn_reset_cd = 300
         if respawn_reset_cd > 10000: respawn_reset_cd = 10000
         cfg["bot_throw_respawn_reset_cooldown_ms"] = respawn_reset_cd
-        cfg["smart_grenade_ai_enabled"] = bool(self.smart_ai_enabled_var.get())
-        cfg["smart_grenade_require_official_visible"] = bool(self.smart_ai_official_visible_var.get())
+        cfg["smart_grenade_ai_enabled"] = True
+        cfg["smart_grenade_require_official_visible"] = True
         cfg["smart_grenade_recent_visible_ms"] = 350
         if cfg["bot_grenade_mode_enabled"]:
             cfg["infinite_grenade_scope"] = "all_players"
@@ -965,11 +933,10 @@ class CombinedApp:
             status = self.feature.status()
             self.logger.json_line("[手动状态]", status)
             summary = (f"开启={status.get('enabled')} 锁写={status.get('lock_writes')} "
-                       f"就绪写={status.get('throw_ready_writes')} 动作速={status.get('anim_speed_writes')} "
                        f"阻止Remove={status.get('remove_blocked')} 捕获missile={status.get('capture_hits')} "
-                       f"应用={status.get('tune_applied')} 字段写={status.get('grenade_field_writes')} "
-                       f"Create参数={status.get('createExplosion_param_writes')} "
-                       f"飞行速度写={status.get('missile_speed_writes')} 观察={status.get('observer_hits')} 手雷类={status.get('observer_grenade_class_hits')} 非手雷类={status.get('observer_non_grenade_class_hits')} Bot投掷={status.get('bot_throw_method_hits')} GunShootBot={status.get('gun_shoot_botlike_hits')} 复活重置={status.get('bot_life_respawn_reset')} 出生拦={status.get('bot_throw_gate_block_spawn')} 手雷={status.get('bot_throw_drive_success')} 错误={status.get('error_count')}")
+                       f"字段写={status.get('grenade_field_writes')} 速度写={status.get('missile_speed_writes')} "
+                       f"Bot投掷={status.get('bot_throw_drive_success')} 主动补发={status.get('bot_grenade_active_give_success')} "
+                       f"复活重置={status.get('bot_life_respawn_reset')} 错误={status.get('error_count')}")
             self._append_ui("状态：" + summary, key="manual_status", interval=0.1)
         except Exception as exc:
             self.logger.exception(f"[UI] 状态读取失败：{exc}")

@@ -35,6 +35,7 @@ FEATURE_DIR_NAMES = {
     "third_person_camera": "21_third_person_camera",
     "unlimited_bag": "22_unlimited_bag",
     "fast_gunstock": "23_fast_gunstock",
+    "grenade_mode_lock999_keep_weapon_tuner": "27_grenade_mode",
 }
 
 
@@ -819,9 +820,16 @@ class MigratedOrdinaryFeatureTests(unittest.TestCase):
         init_text = (PROJECT_DIR / "features" / "__init__.py").read_text(encoding="utf-8")
         window_contract = (PROJECT_DIR / "ui" / "window_contract.py").read_text(encoding="utf-8")
         plugin_page = (PROJECT_DIR / "ui" / "pages" / "plugin_feature_page.py").read_text(encoding="utf-8")
+        spec_text = (PROJECT_DIR / "game_modifier.spec").read_text(encoding="utf-8")
 
         self.assertNotIn("import features", main_text)
-        self.assertIn('APP_VERSION = "v1.9"', window_contract)
+        self.assertIn('APP_VERSION = "v2.0"', window_contract)
+        self.assertIn('collect_data_files("customtkinter")', spec_text)
+        self.assertIn("tcl_staging_dir", spec_text)
+        self.assertIn("copy_data_tree(local_tcl_library, staged_tcl_library", spec_text)
+        self.assertIn('os.environ["TCL_LIBRARY"] = staged_tcl_library', spec_text)
+        self.assertIn("file not in {'user_config.json', 'feature_state.json'}", spec_text)
+        self.assertIn("name='UCF2.0修改器'", spec_text)
         for feature_id in self.ORDINARY_FEATURES:
             self.assertNotIn(f'feature_id == "{feature_id}"', plugin_page)
         self.assertIn("build_card", plugin_page)
@@ -946,6 +954,244 @@ class MigratedOrdinaryFeatureTests(unittest.TestCase):
                 self.assertNotIn("CTkButton", panel)
                 self.assertNotIn("threading", panel)
                 self.assertNotIn('callbacks["action"]', panel)
+
+    def test_grenade_mode_special_page_matches_formal_integration_contract(self):
+        feature_id = "grenade_mode_lock999_keep_weapon_tuner"
+        plugin_dir = feature_dir(feature_id)
+        self.assertTrue((plugin_dir / "manifest.json").exists())
+        self.assertTrue((plugin_dir / "panel.py").exists())
+        self.assertTrue((plugin_dir / "script.js").exists())
+        self.assertTrue((plugin_dir / "feature.py").exists())
+        manifest = json.loads((plugin_dir / "manifest.json").read_text(encoding="utf-8"))
+        panel = (plugin_dir / "panel.py").read_text(encoding="utf-8")
+        script = (plugin_dir / "script.js").read_text(encoding="utf-8")
+        feature = (plugin_dir / "feature.py").read_text(encoding="utf-8")
+
+        self.assertEqual(manifest["feature_id"], feature_id)
+        self.assertEqual(manifest["display_name"], "手雷模式")
+        self.assertEqual(manifest["category"], "special")
+        self.assertEqual(manifest["hotkey"]["enabled"], False)
+        self.assertEqual(manifest["tab"], "grenade_mode_tab")
+        self.assertEqual(manifest["tab_title"], "手雷模式")
+        self.assertEqual(manifest["ui"], {"mode": "special_page", "tab_title": "手雷模式", "tab_order": 60, "lazy_build": True})
+        self.assertEqual(manifest["layout"], {"card_type": "special_page", "columnspan": 2})
+        self.assertEqual(manifest["runtime"], {"type": "plugin_script"})
+        self.assertEqual(manifest["state"], {"sync_enabled_from_config": True})
+        self.assertIn("setConfig", manifest["rpc"])
+        self.assertIn("set_config", manifest["rpc"])
+        self.assertIn("cleanup", manifest["rpc"])
+
+        controls_by_key = {
+            item["key"]: item
+            for item in manifest["controls"]
+            if item.get("key")
+        }
+        self.assertNotIn("target_count", controls_by_key)
+        self.assertEqual(manifest["config"]["target_count"], 999)
+        self.assertNotIn("enabled", manifest["config"])
+        self.assertEqual(manifest["config"]["infinite_grenade_scope"], "all_players")
+        self.assertEqual(
+            controls_by_key["infinite_grenade_scope"]["display_values"],
+            {"local_only": "只对玩家生效", "all_players": "玩家 + 人机生效"},
+        )
+        hidden_default_on = (
+            "protect_weapon_remove",
+            "runtime_tuner_enabled",
+            "bot_grenade_mode_enabled",
+            "bot_throw_drive_enabled",
+            "bot_throw_drive_useweapon_enabled",
+            "bot_throw_drive_skip_original_useweapon_on_success",
+            "virtual_botcontrol_enabled",
+            "virtual_botcontrol_gun_enabled",
+            "virtual_botcontrol_sniper_enabled",
+            "virtual_botcontrol_rpg_enabled",
+            "virtual_botcontrol_skip_original_on_success",
+            "bot_suppress_gun_fire_enabled",
+            "bot_suppress_gun_fire_when_no_grenade",
+            "bot_throw_state_machine_enabled",
+            "bot_throw_spawn_grace_enabled",
+            "bot_throw_target_stable_enabled",
+            "bot_throw_respawn_reset_enabled",
+        )
+        hidden_default_values = {
+            "bot_throw_state_select_delay_ms": 80,
+            "bot_throw_state_timeout_ms": 1200,
+            "bot_throw_spawn_grace_ms": 3000,
+            "bot_throw_target_stable_ms": 700,
+            "bot_throw_first_throw_extra_delay_ms": 1000,
+            "bot_throw_respawn_reset_cooldown_ms": 1500,
+        }
+        for key in hidden_default_on:
+            self.assertNotIn(key, controls_by_key, msg=key)
+            self.assertIs(manifest["config"][key], True, msg=key)
+        for key, value in hidden_default_values.items():
+            self.assertNotIn(key, controls_by_key, msg=key)
+            self.assertEqual(manifest["config"][key], value, msg=key)
+        self.assertNotIn("sync_plain_value", controls_by_key)
+        self.assertIs(manifest["config"]["sync_plain_value"], False)
+        self.assertNotIn("throw_anim_speed_enabled", controls_by_key)
+        self.assertNotIn("throw_anim_speed_value", controls_by_key)
+        self.assertEqual(manifest["config"]["throw_anim_speed_enabled"], False)
+        self.assertEqual(manifest["config"]["throw_anim_speed_value"], 1.6)
+        self.assertEqual(manifest["config"]["force_throw_ready_scope"], "local_only")
+        self.assertEqual(controls_by_key["force_throw_ready_scope"]["type"], "select")
+        self.assertEqual(
+            controls_by_key["force_throw_ready_scope"]["display_values"],
+            {"local_only": "只对玩家生效", "all_players": "玩家 + 人机生效"},
+        )
+        self.assertIn("pendingThrowReadyTimers", script)
+        self.assertIn("scheduleForceThrowReadyRetry", script)
+        self.assertIn("scheduleForceThrowReadyRetry(wpnThrowPtr, reason, scopeInfo);", script)
+        self.assertIn("function throwReadyAllowedByScope(wpnThrowPtr, reason)", script)
+        self.assertIn("Runtime.config.force_throw_ready_scope", script)
+        read_throw_ready = "const before = wpnThrowPtr.add(Offsets.WPN_Throw_throwReady).readU8();"
+        limit_throw_ready = "if (!canForceThrowReadyNow(scopeInfo))"
+        self.assertLess(script.index(read_throw_ready), script.index(limit_throw_ready))
+        self.assertNotIn("lock999_enabled", controls_by_key)
+        self.assertIs(manifest["config"]["lock999_enabled"], True)
+        for key in (
+            "force_throw_ready_enabled",
+            "enable_damage",
+            "enable_range",
+            "enable_shoot_speed",
+        ):
+            self.assertEqual(controls_by_key[key]["type"], "switch", msg=key)
+        for key in (
+            "bot_throw_drive_cooldown_ms",
+            "damage_value",
+            "range_value",
+            "shoot_speed_value",
+        ):
+            self.assertEqual(controls_by_key[key]["type"], "slider", msg=key)
+        self.assertEqual(controls_by_key["bot_throw_drive_cooldown_ms"]["min"], 1600)
+        self.assertEqual(controls_by_key["bot_throw_drive_cooldown_ms"]["max"], 3000)
+        self.assertEqual(controls_by_key["damage_value"]["min"], 10)
+        self.assertEqual(controls_by_key["damage_value"]["max"], 50)
+        self.assertEqual(controls_by_key["damage_value"]["default"], 25)
+        self.assertNotIn("scale", controls_by_key["damage_value"])
+        self.assertEqual(manifest["config"]["damage_value"], 25.0)
+        self.assertEqual(controls_by_key["range_value"]["min"], 1)
+        self.assertEqual(controls_by_key["range_value"]["max"], 5)
+        self.assertEqual(controls_by_key["range_value"]["default"], 2.5)
+        self.assertNotIn("scale", controls_by_key["range_value"])
+        self.assertEqual(manifest["config"]["range_value"], 2.5)
+        self.assertEqual(controls_by_key["shoot_speed_value"]["min"], 1)
+        self.assertEqual(controls_by_key["shoot_speed_value"]["max"], 10)
+        self.assertEqual(controls_by_key["shoot_speed_value"]["default"], 3)
+        self.assertNotIn("scale", controls_by_key["shoot_speed_value"])
+        self.assertEqual(manifest["config"]["shoot_speed_value"], 3.0)
+        for key in ("enable_damage", "enable_range", "enable_shoot_speed", "force_throw_ready_enabled"):
+            self.assertIs(controls_by_key[key]["default"], True, msg=key)
+            self.assertIs(manifest["config"][key], True, msg=key)
+        self.assertEqual(controls_by_key["enable_damage"]["label"], "手雷伤害强化")
+        self.assertEqual(controls_by_key["enable_range"]["label"], "手雷爆炸范围强化")
+        self.assertEqual(controls_by_key["enable_shoot_speed"]["label"], "手雷飞行速度强化")
+        self.assertEqual(controls_by_key["force_throw_ready_enabled"]["label"], "手雷连投模式")
+        self.assertEqual(manifest["config"]["force_throw_ready_max_per_second"], 10)
+        self.assertEqual(manifest["config"]["force_throw_ready_window_ms"], 1000)
+        self.assertIs(manifest["config"]["verbose_log_enabled"], False)
+
+        for forbidden in ("锁写次数", "阻止 Remove 次数", "Bot 投掷成功", "主动补发成功", "错误数", "恢复默认", "CTkTextbox"):
+            self.assertNotIn(forbidden, panel)
+        for forbidden in (
+            "保护当前手雷对象 Remove",
+            "运行时参数修改",
+            "Bot.UseWeapon 触发投掷",
+            "Bot 禁枪转手雷",
+            "高级稳定性",
+            "兼容同步写入 +0x10",
+            "强制 throwReady=1",
+            "投掷动作加速",
+            "投掷动作速度",
+        ):
+            self.assertNotIn(forbidden, panel)
+        self.assertNotIn("Bot", panel)
+        self.assertNotIn("Bot", manifest["desc"])
+        self.assertNotIn("Bot", json.dumps(manifest["controls"], ensure_ascii=False))
+        for required in ("手雷数量：999", "手雷强化参数", "content_box"):
+            self.assertIn(required, panel)
+        for old_group in ("基础设置", "人机手雷模式", "运行时强化", "谨慎项", "基础参数", "人机投掷参数", "连投参数"):
+            self.assertNotIn(old_group, panel)
+        self.assertIn("_parameter_group", panel)
+        self.assertNotIn("def _section", panel)
+        self.assertIn("context.callbacks", panel)
+        self.assertIn("context.config_manager.set", panel)
+        self.assertIn("context.feature_service.set_config", panel)
+        self.assertNotIn("FridaManager", panel)
+        self.assertNotIn("context._app", panel)
+        self.assertIn("PluginFeatureBase", feature)
+        self.assertIn("rpc.exports", script)
+        self.assertIn('const FEATURE_ID = "grenade_mode_lock999_keep_weapon_tuner";', script)
+        self.assertIn("forceThrowReadyWindows", script)
+        self.assertIn("function forceThrowReadyBucket(scopeInfo)", script)
+        self.assertIn("function canForceThrowReadyNow(scopeInfo)", script)
+        self.assertIn("canForceThrowReadyNow(scopeInfo)", script)
+        self.assertNotIn("function canForceThrowReadyNow()", script)
+        self.assertIn("force_throw_ready_max_per_second", script)
+        self.assertIn("force_throw_ready_window_ms", script)
+        self.assertIn("function recoverRuntimeAfterErrorThreshold(reason)", script)
+        self.assertIn("recoverRuntimeAfterErrorThreshold", script)
+        self.assertIn('type: "log"', script)
+        self.assertIn("function shouldEmitLog(level, message)", script)
+        self.assertIn('"手雷数量已锁定并保护武器对象"', script)
+        self.assertIn('"Bot手雷补记录失败"', script)
+        self.assertIn("verbose_log_enabled: false", script)
+        self.assertIn("keepKnownGrenadeIndexes", script)
+        self.assertIn('resetVolatileRuntimeState("error_threshold:" + reason, { keepKnownGrenadeIndexes: true })', script)
+        remove_all_body = script.split('addHook("PlayerWeapons.RemoveAll"', 1)[1].split("function installRemoveGuard()", 1)[0]
+        self.assertNotIn("resetVolatileRuntimeState", remove_all_body)
+        self.assertIn("pwInfo.ownerIsLocal === false", remove_all_body)
+        self.assertIn('resetBotLifeState(args[0], ptr(0), "PlayerWeapons.RemoveAll.onEnter", true);', remove_all_body)
+        self.assertIn("function enableFeature(config)", script)
+        self.assertIn("enable(config){ return enableFeature(config); }", script)
+        enable_body = script.split("function enableFeature(config)", 1)[1].split("function disableFeature", 1)[0]
+        self.assertIn("setConfig(config)", enable_body)
+        self.assertLess(enable_body.index("setConfig(config)"), enable_body.index("installHooks()"))
+        record_error_body = script.split("function recordError(where, e)", 1)[1].split("function targetCount", 1)[0]
+        self.assertNotIn("Runtime.enabled = false", record_error_body)
+        self.assertNotIn("Thread.sleep", script)
+
+    def test_packaged_defaults_match_current_user_facing_ranges(self):
+        default_config = json.loads((PROJECT_DIR / "data" / "default_config.json").read_text(encoding="utf-8"))
+        user_config = json.loads((PROJECT_DIR / "data" / "user_config.json").read_text(encoding="utf-8"))
+
+        expectations = {
+            "knife": {"speed": 5.0},
+            "movespeed": {"speed": 3.0},
+            "gravity": {"gravity": 0.9, "jump": 5.0},
+            "grenade_mode_lock999_keep_weapon_tuner": {
+                "enabled": False,
+                "damage_value": 25.0,
+                "range_value": 2.5,
+                "shoot_speed_value": 3.0,
+            },
+        }
+        for feature_id, values in expectations.items():
+            with self.subTest(feature_id=feature_id):
+                for key, value in values.items():
+                    self.assertEqual(default_config[feature_id][key], value)
+                    if feature_id in user_config:
+                        self.assertEqual(user_config[feature_id][key], value)
+
+        knife_controls = {
+            item.get("key"): item
+            for item in json.loads((feature_dir("knife") / "manifest.json").read_text(encoding="utf-8"))["controls"]
+            if item.get("key")
+        }
+        move_controls = {
+            item.get("key"): item
+            for item in json.loads((feature_dir("movespeed") / "manifest.json").read_text(encoding="utf-8"))["controls"]
+            if item.get("key")
+        }
+        gravity_controls = {
+            item.get("key"): item
+            for item in json.loads((feature_dir("gravity") / "manifest.json").read_text(encoding="utf-8"))["controls"]
+            if item.get("key")
+        }
+        self.assertEqual(knife_controls["speed"]["max"], 7.0)
+        self.assertEqual(move_controls["speed"]["max"], 4.0)
+        self.assertEqual(gravity_controls["gravity"]["default"], 0.9)
+        self.assertEqual(gravity_controls["jump"]["default"], 5.0)
 
     def test_unlimited_bag_uses_cached_gamemanager_myplayer_in_19_only(self):
         script_path = feature_dir("unlimited_bag") / "script.js"
@@ -1237,6 +1483,59 @@ class MigratedOrdinaryFeatureTests(unittest.TestCase):
             if path.parent.name.startswith("_"):
                 continue
             self.assertNotIn("_legacy_archive", path.read_text(encoding="utf-8"), msg=str(path))
+
+    def test_function_hotkeys_are_limited_to_requested_features(self):
+        from core.config import HOTKEY_EXCLUDED, HOTKEY_POSITIONS
+
+        allowed = {"gather", "roundskip", "timescale", "third_person_camera"}
+        feature_ids = set()
+        for manifest_path in (PROJECT_DIR / "features").glob("*/manifest.json"):
+            if manifest_path.parent.name.startswith("_"):
+                continue
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            feature_ids.add(manifest["feature_id"])
+
+        self.assertEqual(feature_ids - set(HOTKEY_EXCLUDED), allowed)
+
+        hotkeys = json.loads((PROJECT_DIR / "data" / "hotkeys.json").read_text(encoding="utf-8"))
+        self.assertEqual(set(hotkeys.keys()), set(HOTKEY_POSITIONS))
+        self.assertEqual({feature for feature in hotkeys.values() if feature}, allowed)
+
+        weapon_hotkeys = json.loads((PROJECT_DIR / "data" / "weapon_hotkeys.json").read_text(encoding="utf-8"))
+        self.assertEqual(set(weapon_hotkeys.keys()), {"ctrl+z", "ctrl+x", "ctrl+c"})
+
+    def test_gather_keeps_legacy_single_spawn_target(self):
+        script_text = (feature_dir("gather") / "script.js").read_text(encoding="utf-8")
+        self.assertNotIn("GATHER_SPREAD_RADIUS", script_text)
+        self.assertNotIn("function getGatherTarget", script_text)
+        self.assertNotIn("botTargetIndex", script_text)
+        self.assertIn("teleportEntity(pp, false)", script_text)
+        self.assertNotIn("teleportEntity(pp, false, target)", script_text)
+
+    def test_gather_does_not_use_camera_manager_as_human_fallback(self):
+        script_text = (feature_dir("gather") / "script.js").read_text(encoding="utf-8")
+
+        self.assertNotIn("P_cameraManager", script_text)
+        self.assertNotIn("O.P_cameraManager", script_text)
+        self.assertIn("P_clientData", script_text)
+        self.assertIn("CD_isBot", script_text)
+        self.assertIn("GM_allPlayers", script_text)
+
+    def test_gather_has_temporary_file_diagnostics_for_bot_positions(self):
+        script_text = (feature_dir("gather") / "script.js").read_text(encoding="utf-8")
+        self.assertIn("[GATHER_DIAG_TEMP]", script_text)
+        self.assertIn("GATHER_DIAG_INTERVAL_MS = 1000", script_text)
+        self.assertIn("function collectGatherDiagnostics", script_text)
+        self.assertIn("function dumpGatherDiagnostics", script_text)
+        self.assertIn("diagnosticsTimer = setInterval(dumpGatherDiagnostics, GATHER_DIAG_INTERVAL_MS)", script_text)
+        self.assertIn("clearInterval(diagnosticsTimer)", script_text)
+        self.assertIn("sendLogFile(", script_text)
+        self.assertNotIn("collectGatherDiagnostics().samples.join", script_text)
+        self.assertNotIn("teleport ptr=", script_text)
+        self.assertNotIn("teleportResult ptr=", script_text)
+        self.assertIn("pos=(", script_text)
+        self.assertIn("grounded=", script_text)
+        self.assertIn("vy=", script_text)
 
 
 if __name__ == "__main__":

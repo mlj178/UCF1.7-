@@ -2,7 +2,7 @@
 
 /*
  * feature_id: grenade_mode_lock999_keep_weapon_tuner
- * version: 2.12.4
+ * version: 2.12.8
  *
  * 基于 lock999_keep_weapon v1.1：
  * - 保留锁定 WPN_Throw.ammoData 数量。
@@ -44,7 +44,7 @@
  */
 
 const FEATURE_ID = "grenade_mode_lock999_keep_weapon_tuner";
-const VERSION = "2.12.4";
+const VERSION = "2.12.8";
 const MODULE_NAME = "GameAssembly.dll";
 const CALL_CONV = "mscdecl";
 
@@ -191,14 +191,16 @@ const DefaultConfig = {
     tune_on_work: true,
     tune_on_fixed_update: true,
 
-    virtual_grenade_observer_enabled: true,
-    virtual_grenade_observer_verbose: true,
-    bot_grenade_behavior_observer_enabled: true,
-    bot_attack_observer_enabled: true,
+    virtual_grenade_observer_enabled: false,
+    virtual_grenade_observer_verbose: false,
+    bot_grenade_behavior_observer_enabled: false,
+    bot_attack_observer_enabled: false,
     bot_grenade_mode_enabled: true,
     bot_grenade_throw_slot: 3,
     bot_grenade_force_scope_all_players: true,
     bot_grenade_record_enabled: true,
+    bot_grenade_active_give_enabled: true,
+    bot_grenade_active_give_cooldown_ms: 1500,
     virtual_grenade_giveweapon_enabled: true,
     virtual_grenade_preserve_original_weapons: true,
     virtual_grenade_log_interval_ms: 1000,
@@ -218,8 +220,8 @@ const DefaultConfig = {
     bot_suppress_gun_fire_enabled: true,
     bot_suppress_gun_fire_when_no_grenade: true,
     virtual_botcontrol_log_interval_ms: 1000,
-    bot_ai_probe_enabled: true,
-    bot_ai_probe_verbose: true,
+    bot_ai_probe_enabled: false,
+    bot_ai_probe_verbose: false,
     bot_ai_hook_drive_enabled: true,
     bot_ai_checkattack_drive_enabled: true,
     bot_ai_camerarotation_drive_enabled: true,
@@ -250,7 +252,7 @@ const DefaultConfig = {
     bot_ai_probe_log_interval_ms: 1000,
     bot_attack_summary_interval_ms: 5000,
     bot_grenade_summary_interval_ms: 5000,
-    observe_set_current_weapon: true,
+    observe_set_current_weapon: false,
     log_interval_ms: 1000,
     max_error_before_disable: 14
 };
@@ -270,6 +272,11 @@ const Runtime = {
     throwAnimContexts: {},
     touchedAnimators: {},
     botGrenadeWeapons: {},
+    botGrenadeWeaponAliases: {},
+    botGrenadeWeaponIndex: {},
+    knownGrenadeWeaponIndexes: {},
+    lastBotGrenadeWeaponIndex: -1,
+    botGrenadeGiveLast: {},
     botThrowDriveLast: {},
     botAiLastDrive: {},
     botAiOfficialVisible: {},
@@ -336,6 +343,17 @@ const Runtime = {
         rpg_on_fire_pressed_hits: 0,
         bot_attack_entry_hits: 0,
         bot_grenade_records: 0,
+        bot_grenade_multikey_records: 0,
+        bot_grenade_alias_hits: 0,
+        bot_grenade_reacquire_attempts: 0,
+        bot_grenade_reacquire_success: 0,
+        bot_grenade_reacquire_failed: 0,
+        bot_grenade_reacquire_select_calls: 0,
+        bot_grenade_known_index_hits: 0,
+        bot_grenade_active_give_attempts: 0,
+        bot_grenade_active_give_success: 0,
+        bot_grenade_active_give_failed: 0,
+        bot_grenade_active_give_cooldown: 0,
         bot_grenade_temp_select_calls: 0,
         bot_grenade_temp_select_skipped_no_grenade: 0,
         vg_giveweapon_hits: 0,
@@ -1107,7 +1125,89 @@ function botSoftLockAllowedClass(cls) {
     return cls === 7;
 }
 
-function recordBotGrenadeWeapon(playerWeaponsPtr, pwInfo, weaponInfo, reason) {
+function makeBotGrenadeRecord(playerWeaponsPtr, pwInfo, weaponInfo, reason, botPtr) {
+    return {
+        playerWeapons: ptrStr(playerWeaponsPtr),
+        owner: pwInfo ? (pwInfo.owner || "0x0") : "0x0",
+        bot: ptrStr(botPtr || ptr(0)),
+        grenadeWeapon: weaponInfo.weapon,
+        className: weaponInfo.className,
+        wpnClass: weaponInfo.wpnClass,
+        lastSeen: Date.now(),
+        reason: reason
+    };
+}
+
+function isValidBotGrenadeRecord(rec, reason) {
+    try {
+        if (!rec || !rec.grenadeWeapon || rec.grenadeWeapon === "0x0") return false;
+        const p = ptr(rec.grenadeWeapon);
+        if (!p || p.isNull() || !isReadablePtr(p)) return false;
+        const wi = readWeaponInfo(p);
+        if (!botSoftLockAllowedClass(wi.wpnClass)) return false;
+        return true;
+    } catch (e) {
+        recordError("isValidBotGrenadeRecord:" + reason, e);
+        return false;
+    }
+}
+
+function botGrenadeAliasKeys(playerWeaponsPtr, pwInfo, botPtr, reason) {
+    const keys = [];
+    function add(prefix, val) {
+        try {
+            if (!val) return;
+            const s = (typeof val === "string") ? val : ptrStr(val);
+            if (!s || s === "0x0" || s === "null" || s === "undefined") return;
+            const k = prefix + ":" + s;
+            if (keys.indexOf(k) < 0) keys.push(k);
+        } catch (e) {}
+    }
+
+    add("pw", playerWeaponsPtr);
+    if (pwInfo) add("owner", pwInfo.owner);
+    add("bot", botPtr);
+
+    try {
+        if (botPtr && !botPtr.isNull() && isReadablePtr(botPtr)) {
+            const player = readPointer(botPtr, Offsets.Bot_thisPlayer);
+            add("playerFromBot", player);
+        }
+    } catch (e) {}
+
+    return keys;
+}
+
+function storeBotGrenadeRecordAliases(playerWeaponsPtr, pwInfo, weaponInfo, reason, botPtr) {
+    try {
+        const rec = makeBotGrenadeRecord(playerWeaponsPtr, pwInfo, weaponInfo, reason, botPtr);
+        const keys = botGrenadeAliasKeys(playerWeaponsPtr, pwInfo, botPtr, reason);
+        const baseKey = ptrStr(playerWeaponsPtr);
+
+        if (keys.indexOf("pw:" + baseKey) < 0) keys.unshift("pw:" + baseKey);
+        for (const k of keys) Runtime.botGrenadeWeapons[k] = rec;
+        Runtime.botGrenadeWeapons[baseKey] = rec; // 兼容旧代码，保留裸 playerWeapons key
+
+        if (rec.grenadeWeapon && rec.grenadeWeapon !== "0x0") {
+            Runtime.botGrenadeWeaponIndex[rec.grenadeWeapon] = {
+                keys: keys,
+                playerWeapons: baseKey,
+                owner: rec.owner,
+                bot: rec.bot,
+                lastSeen: rec.lastSeen,
+                reason: reason
+            };
+        }
+
+        Runtime.stats.bot_grenade_multikey_records += 1;
+        return { rec: rec, keys: keys };
+    } catch (e) {
+        recordError("storeBotGrenadeRecordAliases:" + reason, e);
+        return null;
+    }
+}
+
+function recordBotGrenadeWeapon(playerWeaponsPtr, pwInfo, weaponInfo, reason, botPtr) {
     try {
         if (!Runtime.enabled) return false;
         if (!pwInfo || pwInfo.ownerIsLocal !== false) return false;
@@ -1115,31 +1215,30 @@ function recordBotGrenadeWeapon(playerWeaponsPtr, pwInfo, weaponInfo, reason) {
         if (!weaponInfo.weapon || weaponInfo.weapon === "0x0") return false;
 
         const key = ptrStr(playerWeaponsPtr);
-        try { updateBotLifeState(ptr(0), playerWeaponsPtr, null, reason + ".grenadeRecord"); } catch (e) {}
-        const old = Runtime.botGrenadeWeapons[key];
+        try { updateBotLifeState(botPtr || ptr(0), playerWeaponsPtr, null, reason + ".grenadeRecord"); } catch (e) {}
+
+        const old = Runtime.botGrenadeWeapons[key] || Runtime.botGrenadeWeapons["pw:" + key];
         if (old && old.grenadeWeapon && old.grenadeWeapon !== weaponInfo.weapon && Runtime.config.bot_throw_respawn_reset_on_grenade_change) {
-            resetBotLifeState(playerWeaponsPtr, ptr(0), reason + ".grenade_change", false);
+            resetBotLifeState(playerWeaponsPtr, botPtr || ptr(0), reason + ".grenade_change", false);
         }
-        Runtime.botGrenadeWeapons[key] = {
-            playerWeapons: key,
-            owner: pwInfo.owner,
-            grenadeWeapon: weaponInfo.weapon,
-            className: weaponInfo.className,
-            wpnClass: weaponInfo.wpnClass,
-            lastSeen: Date.now(),
-            reason: reason
-        };
+
+        const stored = storeBotGrenadeRecordAliases(playerWeaponsPtr, pwInfo, weaponInfo, reason, botPtr);
+        if (!stored || !stored.rec) return false;
+
         if (!old || old.grenadeWeapon !== weaponInfo.weapon) Runtime.stats.bot_grenade_records += 1;
 
         logOnce("bot_grenade_record:" + key + ":" + weaponInfo.weapon, "Bot手雷记录", Runtime.config.log_interval_ms, {
             playerWeapons: key,
             owner: pwInfo.owner,
+            bot: ptrStr(botPtr || ptr(0)),
             grenadeWeapon: weaponInfo.weapon,
             className: weaponInfo.className,
+            aliasKeys: stored.keys,
             reason: reason,
             records: Runtime.stats.bot_grenade_records,
+            multikeyRecords: Runtime.stats.bot_grenade_multikey_records,
             enabled: Runtime.config.bot_grenade_mode_enabled,
-            note: "v2.4 起先缓存 bot 的手雷，之后打开手雷模式也能直接重定向"
+            note: "v2.12.5：同一个Bot Grenade同时按playerWeapons/owner/bot多key缓存，减少VBC投掷前查不到Grenade"
         });
         return true;
     } catch (e) {
@@ -1148,21 +1247,245 @@ function recordBotGrenadeWeapon(playerWeaponsPtr, pwInfo, weaponInfo, reason) {
     }
 }
 
-function getBotGrenadeRecord(playerWeaponsPtr) {
-    const key = ptrStr(playerWeaponsPtr);
-    const rec = Runtime.botGrenadeWeapons[key];
-    if (!rec) return null;
+function getBotGrenadeRecordEx(playerWeaponsPtr, botPtr, pwInfo, reason) {
+    const candidates = [];
+
+    function addRaw(k) {
+        if (!k || k === "0x0" || k === "null" || k === "undefined") return;
+        if (candidates.indexOf(k) < 0) candidates.push(k);
+    }
+    function addPtr(prefix, p) {
+        try {
+            const s = (typeof p === "string") ? p : ptrStr(p);
+            if (!s || s === "0x0" || s === "null" || s === "undefined") return;
+            addRaw(prefix + ":" + s);
+        } catch (e) {}
+    }
+
+    const pwKey = ptrStr(playerWeaponsPtr);
+    addRaw(pwKey);              // 旧裸key兼容
+    addPtr("pw", playerWeaponsPtr);
+
+    if (pwInfo) addPtr("owner", pwInfo.owner);
+    addPtr("bot", botPtr);
+
     try {
-        const p = ptr(rec.grenadeWeapon);
-        if (!p || p.isNull() || !isReadablePtr(p)) {
-            delete Runtime.botGrenadeWeapons[key];
+        if (botPtr && !botPtr.isNull() && isReadablePtr(botPtr)) {
+            const player = readPointer(botPtr, Offsets.Bot_thisPlayer);
+            addPtr("playerFromBot", player);
+        }
+    } catch (e) {}
+
+    for (const k of candidates) {
+        const rec = Runtime.botGrenadeWeapons[k];
+        if (!rec) continue;
+        if (isValidBotGrenadeRecord(rec, reason + ".key:" + k)) {
+            if (k !== pwKey && k !== ("pw:" + pwKey)) Runtime.stats.bot_grenade_alias_hits += 1;
+            return rec;
+        }
+        delete Runtime.botGrenadeWeapons[k];
+    }
+
+    return null;
+}
+
+function getBotGrenadeRecord(playerWeaponsPtr) {
+    return getBotGrenadeRecordEx(playerWeaponsPtr, ptr(0), null, "legacy");
+}
+
+
+function rememberGrenadeWeaponIndex(weaponIndex, weaponInfo, reason) {
+    try {
+        const idx = parseInt(weaponIndex);
+        if (!Number.isFinite(idx) || idx < 0) return false;
+        if (!weaponInfo || !botSoftLockAllowedClass(weaponInfo.wpnClass)) return false;
+        Runtime.knownGrenadeWeaponIndexes["" + idx] = {
+            weaponIndex: idx,
+            className: weaponInfo.className,
+            wpnClass: weaponInfo.wpnClass,
+            lastSeen: Date.now(),
+            reason: reason
+        };
+        Runtime.lastBotGrenadeWeaponIndex = idx;
+        Runtime.stats.bot_grenade_known_index_hits += 1;
+        logOnce("known_grenade_index:" + idx, "已记录普通Grenade weaponIndex", Runtime.config.virtual_grenade_log_interval_ms || 1000, {
+            weaponIndex: idx,
+            className: weaponInfo.className,
+            reason: reason,
+            knownCount: Object.keys(Runtime.knownGrenadeWeaponIndexes).length,
+            note: "v2.12.6：后续某个Bot没有Grenade指针时，可用该index主动补发真实Grenade"
+        });
+        return true;
+    } catch (e) {
+        recordError("rememberGrenadeWeaponIndex:" + reason, e);
+        return false;
+    }
+}
+
+function getKnownGrenadeWeaponIndex(reason) {
+    try {
+        if (Runtime.lastBotGrenadeWeaponIndex >= 0) return Runtime.lastBotGrenadeWeaponIndex;
+        const keys = Object.keys(Runtime.knownGrenadeWeaponIndexes || {});
+        if (keys.length <= 0) return -1;
+        let best = null;
+        for (const k of keys) {
+            const item = Runtime.knownGrenadeWeaponIndexes[k];
+            if (!best || (item.lastSeen || 0) > (best.lastSeen || 0)) best = item;
+        }
+        return best ? best.weaponIndex : -1;
+    } catch (e) {
+        recordError("getKnownGrenadeWeaponIndex:" + reason, e);
+        return -1;
+    }
+}
+
+function tryGiveBotGrenadeForThrow(botPtr, playerWeaponsPtr, pwInfo, reason) {
+    Runtime.stats.bot_grenade_active_give_attempts += 1;
+    try {
+        if (!Runtime.config.bot_grenade_active_give_enabled) {
+            Runtime.stats.bot_grenade_active_give_failed += 1;
             return null;
         }
+        if (!pwInfo || pwInfo.ownerIsLocal !== false || !pwInfo.owner || pwInfo.owner === "0x0") {
+            Runtime.stats.bot_grenade_active_give_failed += 1;
+            return null;
+        }
+
+        const idx = (getKnownGrenadeWeaponIndex(reason) | 0);
+        if (idx < 0) {
+            Runtime.stats.bot_grenade_active_give_failed += 1;
+            logOnce("bot_grenade_active_give_no_index:" + ptrStr(playerWeaponsPtr), "Bot主动补发Grenade失败", Runtime.config.bot_throw_drive_log_interval_ms || 1000, {
+                reason: reason,
+                bot: ptrStr(botPtr || ptr(0)),
+                playerWeapons: ptrStr(playerWeaponsPtr),
+                owner: pwInfo.owner,
+                note: "还没有记录到任何普通Grenade weaponIndex，不能主动补发"
+            });
+            return null;
+        }
+
+        const key = ptrStr(playerWeaponsPtr);
+        const now = Date.now();
+        const cd = Runtime.config.bot_grenade_active_give_cooldown_ms || 1500;
+        const last = Runtime.botGrenadeGiveLast[key] || 0;
+        if (now - last < cd) {
+            Runtime.stats.bot_grenade_active_give_cooldown += 1;
+            return null;
+        }
+        Runtime.botGrenadeGiveLast[key] = now;
+
+        setupNatives();
+        const playerPtr = ptr(pwInfo.owner);
+        if (!playerPtr || playerPtr.isNull() || !isReadablePtr(playerPtr)) {
+            Runtime.stats.bot_grenade_active_give_failed += 1;
+            return null;
+        }
+
+        const ret = Runtime.natives.GameManager_GiveWeapon_Original(playerPtr, (idx | 0), 0, 0, ptr(0));
+        const retInfo = readWeaponInfo(ret);
+        rememberGrenadeWeaponIndex(idx, retInfo, reason + ".activeGive.return");
+
+        if (!ret || ret.isNull() || !botSoftLockAllowedClass(retInfo.wpnClass)) {
+            Runtime.stats.bot_grenade_active_give_failed += 1;
+            logOnce("bot_grenade_active_give_bad_return:" + key + ":" + idx, "Bot主动补发Grenade失败", Runtime.config.bot_throw_drive_log_interval_ms || 1000, {
+                reason: reason,
+                bot: ptrStr(botPtr || ptr(0)),
+                playerWeapons: key,
+                owner: pwInfo.owner,
+                weaponIndex: idx,
+                returnWeapon: ptrStr(ret),
+                className: retInfo.className,
+                wpnClass: retInfo.wpnClass,
+                note: "GameManager.GiveWeapon返回的不是普通Grenade，不能Throw；v2.12.7已修复补发调用参数类型"
+            });
+            return null;
+        }
+
+        recordBotGrenadeWeapon(playerWeaponsPtr, pwInfo, retInfo, reason + ".activeGive", botPtr || ptr(0));
+        const rec = getBotGrenadeRecordEx(playerWeaponsPtr, botPtr || ptr(0), pwInfo, reason + ".afterActiveGive");
+        if (rec) {
+            Runtime.stats.bot_grenade_active_give_success += 1;
+            log("Bot主动补发Grenade成功", {
+                reason: reason,
+                bot: ptrStr(botPtr || ptr(0)),
+                playerWeapons: key,
+                owner: pwInfo.owner,
+                weaponIndex: idx,
+                grenadeWeapon: rec.grenadeWeapon,
+                success: Runtime.stats.bot_grenade_active_give_success,
+                note: "v2.12.6：该Bot原本无可用Grenade指针，已用已知普通Grenade index补发真实Grenade"
+            });
+            return rec;
+        }
+
+        Runtime.stats.bot_grenade_active_give_failed += 1;
+        return null;
     } catch (e) {
-        delete Runtime.botGrenadeWeapons[key];
+        Runtime.stats.bot_grenade_active_give_failed += 1;
+        recordError("tryGiveBotGrenadeForThrow:" + reason, e);
         return null;
     }
-    return rec;
+}
+
+function ensureBotGrenadeBeforeThrow(botPtr, playerWeaponsPtr, pwInfo, reason) {
+    Runtime.stats.bot_grenade_reacquire_attempts += 1;
+
+    let rec = getBotGrenadeRecordEx(playerWeaponsPtr, botPtr || ptr(0), pwInfo, reason + ".initial");
+    if (rec) {
+        Runtime.stats.bot_grenade_reacquire_success += 1;
+        return rec;
+    }
+
+    try {
+        const got = getPlayerWeaponsFromBot(botPtr || ptr(0), reason + ".reacquireFromBot");
+        if (got && got.pwPtr && !got.pwPtr.isNull() && got.pwInfo && got.pwInfo.ownerIsLocal === false) {
+            rec = getBotGrenadeRecordEx(got.pwPtr, botPtr || ptr(0), got.pwInfo, reason + ".fromBot");
+            if (rec) {
+                Runtime.stats.bot_grenade_reacquire_success += 1;
+                return rec;
+            }
+        }
+    } catch (e) {
+        recordError("ensureBotGrenadeBeforeThrow.fromBot:" + reason, e);
+    }
+
+    try {
+        // 仍然禁枪，但在投掷前主动尝试临时Select(3)，让SetCurrentWeapon/SetWeapon观察点有机会补记录。
+        Runtime.stats.bot_grenade_reacquire_select_calls += 1;
+        maybeSelectBotGrenadeSlot(playerWeaponsPtr, reason + ".reacquireSelect3", true);
+        rec = getBotGrenadeRecordEx(playerWeaponsPtr, botPtr || ptr(0), pwInfo, reason + ".afterSelect3");
+        if (rec) {
+            Runtime.stats.bot_grenade_reacquire_success += 1;
+            return rec;
+        }
+    } catch (e) {
+        recordError("ensureBotGrenadeBeforeThrow.select3:" + reason, e);
+    }
+
+    try {
+        rec = tryGiveBotGrenadeForThrow(botPtr || ptr(0), playerWeaponsPtr, pwInfo, reason + ".activeGive");
+        if (rec) {
+            Runtime.stats.bot_grenade_reacquire_success += 1;
+            return rec;
+        }
+    } catch (e) {
+        recordError("ensureBotGrenadeBeforeThrow.activeGive:" + reason, e);
+    }
+
+    Runtime.stats.bot_grenade_reacquire_failed += 1;
+    logOnce("bot_grenade_reacquire_failed:" + ptrStr(playerWeaponsPtr) + ":" + ptrStr(botPtr || ptr(0)), "Bot手雷补记录失败", Runtime.config.bot_throw_drive_log_interval_ms || 1000, {
+        reason: reason,
+        bot: ptrStr(botPtr || ptr(0)),
+        playerWeapons: ptrStr(playerWeaponsPtr),
+        owner: pwInfo ? pwInfo.owner : "0x0",
+        knownGrenadeWeaponIndex: Runtime.lastBotGrenadeWeaponIndex,
+        knownGrenadeIndexes: Object.keys(Runtime.knownGrenadeWeaponIndexes || {}),
+        attempts: Runtime.stats.bot_grenade_reacquire_attempts,
+        failed: Runtime.stats.bot_grenade_reacquire_failed,
+        activeGiveFailed: Runtime.stats.bot_grenade_active_give_failed,
+        note: "v2.12.6：保持禁枪，不放行原BotControl；缓存/Select(3)/主动补发都失败时才等待下一次机会"
+    });
+    return null;
 }
 function isBotGrenadeModeActive() {
     return Runtime.enabled && Runtime.config.bot_grenade_mode_enabled && Runtime.config.bot_grenade_record_enabled;
@@ -1205,21 +1528,21 @@ function maybeSelectBotGrenadeSlot(playerWeaponsPtr, reason, forceForStateMachin
     if (!isBotGrenadeModeActive()) return false;
     if (!forceForStateMachine /* v2.12: global Bot.SelectWeapon forcing removed */) return false;
     try {
-        const rec = getBotGrenadeRecord(playerWeaponsPtr);
+        const rec = getBotGrenadeRecordEx(playerWeaponsPtr, ptr(0), null, reason + ".select");
         if (!rec) {
             Runtime.stats.bot_grenade_temp_select_skipped_no_grenade += 1;
             logOnce("vg_select_no_grenade:" + ptrStr(playerWeaponsPtr), "BotGrenadeRecord跳过", Runtime.config.virtual_grenade_log_interval_ms || 1000, {
                 reason: reason,
                 playerWeapons: ptrStr(playerWeaponsPtr),
                 forceForStateMachine: !!forceForStateMachine,
-                note: "该bot还没有缓存到Grenade weapon ptr，先放行官方武器逻辑"
+                note: "该bot还没有缓存到Grenade weapon ptr；保持禁枪，等待补记录"
             });
             return false;
         }
         setupNatives();
         const ok = Runtime.natives.PlayerWeapons_Select_Original(playerWeaponsPtr, 3, ptr(0)) ? true : false;
         Runtime.stats.bot_grenade_temp_select_calls += 1;
-        log(forceForStateMachine ? "状态机临时选择Bot手雷" : "BotGrenadeRecord强制Bot选手雷", {
+        log(forceForStateMachine ? "投掷前临时选择Bot手雷" : "BotGrenadeRecord强制Bot选手雷", {
             reason: reason,
             playerWeapons: ptrStr(playerWeaponsPtr),
             grenadeWeapon: rec.grenadeWeapon,
@@ -1227,7 +1550,7 @@ function maybeSelectBotGrenadeSlot(playerWeaponsPtr, reason, forceForStateMachin
             selectReturn: ok,
             forced: Runtime.stats.bot_grenade_temp_select_calls,
             forceForStateMachine: !!forceForStateMachine,
-            note: forceForStateMachine ? "v2.11.2：仅状态机投掷阶段临时Select(3)，平时不干预官方选武器" : "全局Bot.SelectWeapon强制slot=3；默认关闭"
+            note: forceForStateMachine ? "v2.12.5：仅投掷前临时Select(3)，平时不干预官方选武器" : "全局Bot.SelectWeapon强制slot=3；默认关闭"
         });
         return true;
     } catch (e) {
@@ -1642,14 +1965,15 @@ function driveBotThrowFromPlayerWeapons(playerWeaponsPtr, reason, methodInfo, bo
             return false;
         }
 
-        const rec = getBotGrenadeRecord(playerWeaponsPtr);
+        const rec = ensureBotGrenadeBeforeThrow(botPtr || ptr(0), playerWeaponsPtr, pwInfo, reason);
         if (!rec) {
             Runtime.stats.bot_throw_drive_skipped_no_grenade += 1;
             Runtime.stats.bot_throw_gate_block_no_grenade += 1;
             logOnce("bot_throw_drive_no_grenade:" + ptrStr(playerWeaponsPtr), "Bot投掷驱动跳过", Runtime.config.bot_throw_drive_log_interval_ms || 1000, {
                 reason: reason,
+                bot: ptrStr(botPtr || ptr(0)),
                 playerWeapons: ptrStr(playerWeaponsPtr),
-                note: "还没有缓存到该bot的Grenade weapon ptr，不能安全调用WPN_Throw.Throw"
+                note: "v2.12.5：当前还没有可安全调用的Grenade weapon ptr；保持禁枪，不调用空指针Throw，等待补记录"
             });
             return false;
         }
@@ -1689,7 +2013,7 @@ function driveBotThrowFromPlayerWeapons(playerWeaponsPtr, reason, methodInfo, bo
         Runtime.botThrowDriveLast[key] = now;
         markBotThrowCommitted(playerWeaponsPtr, botPtr || ptr(0), reason);
 
-        try { maybeSelectBotGrenadeSlot(playerWeaponsPtr, reason + ".preSelect"); } catch (e) {}
+        try { maybeSelectBotGrenadeSlot(playerWeaponsPtr, reason + ".directPreSelect", true); } catch (e) {}
 
         if (Runtime.config.bot_throw_drive_lock_before_after) {
             try { lockAmmo(grenadePtr, reason + ".beforeThrow"); } catch (e) {}
@@ -2585,6 +2909,9 @@ function installBotGrenadeRecordControls() {
                         const previewWeapon = Runtime.natives.GameManager_GetWeapon_Original(weaponIndex, ptr(0));
                         const previewInfo = readWeaponInfo(previewWeapon);
                         const previewSlot = getWeaponDataSlot(previewInfo);
+                        if (botSoftLockAllowedClass(previewInfo.wpnClass)) {
+                            rememberGrenadeWeaponIndex(weaponIndex, previewInfo, "GameManager.GiveWeapon.preview");
+                        }
                         if (!botSoftLockAllowedClass(previewInfo.wpnClass)) {
                             Runtime.stats.vg_giveweapon_observed_nongrenade += 1;
                             Runtime.stats.vg_giveweapon_preserved_nongrenade += 1;
@@ -2603,6 +2930,7 @@ function installBotGrenadeRecordControls() {
 
                         const ret = Runtime.natives.GameManager_GiveWeapon_Original(playerPtr, weaponIndex, autoGiveUp, autoSelect, methodInfo);
                         const retInfo = readWeaponInfo(ret);
+                        rememberGrenadeWeaponIndex(weaponIndex, retInfo, "GameManager.GiveWeapon.return");
                         recordBotGrenadeWeapon(pw, pwInfo, retInfo, "GameManager.GiveWeapon.return");
                         return ret;
                     }
@@ -2706,8 +3034,8 @@ function cleanupHooks() {
     Runtime.initialized = false;
     try { Interceptor.flush(); } catch(e) {}
 }
-function resetRuntime(reason) { Runtime.generation += 1; Runtime.protectedWeapons = {}; Runtime.trackedMissiles = {}; Runtime.explosionContexts = {}; Runtime.throwAnimContexts = {}; Runtime.touchedAnimators = {}; Runtime.botGrenadeWeapons = {}; Runtime.classCounts = {}; Runtime.observerLast = {}; Runtime.stats.protected_count = 0; Runtime.stats.tracked_count = 0; Runtime.stats.last_hook = ""; log("运行状态已重置", { reason: reason, generation: Runtime.generation }); }
-function enableFeature() { installHooks(); Runtime.enabled = true; Runtime.stats.error_count = 0; Runtime.stats.last_error = ""; resetRuntime("enable"); log("手雷模式v2.12.4 native清理修复版已开启", { config: Runtime.config }); return true; }
+function resetRuntime(reason) { Runtime.generation += 1; Runtime.protectedWeapons = {}; Runtime.trackedMissiles = {}; Runtime.explosionContexts = {}; Runtime.throwAnimContexts = {}; Runtime.touchedAnimators = {}; Runtime.botGrenadeWeapons = {}; Runtime.botGrenadeWeaponAliases = {}; Runtime.botGrenadeWeaponIndex = {}; Runtime.knownGrenadeWeaponIndexes = {}; Runtime.lastBotGrenadeWeaponIndex = -1; Runtime.botGrenadeGiveLast = {}; Runtime.classCounts = {}; Runtime.observerLast = {}; Runtime.stats.protected_count = 0; Runtime.stats.tracked_count = 0; Runtime.stats.last_hook = ""; log("运行状态已重置", { reason: reason, generation: Runtime.generation }); }
+function enableFeature() { installHooks(); Runtime.enabled = true; Runtime.stats.error_count = 0; Runtime.stats.last_error = ""; resetRuntime("enable"); log("手雷模式v2.12.8 final-clean-ui版已开启", { config: Runtime.config }); return true; }
 function disableFeature() { Runtime.enabled = false; resetRuntime("disable"); log("功能已关闭"); return true; }
 function cleanupFeature() { Runtime.enabled = false; Runtime.stats.cleanup_count += 1; resetRuntime("cleanup"); cleanupHooks(); Runtime.moduleBase = ptr(0); log("cleanup 完成", { cleanup_count: Runtime.stats.cleanup_count }); return true; }
 function setConfig(config) { try { if (!config) return true; for (const k in config) { if (Object.prototype.hasOwnProperty.call(DefaultConfig, k)) Runtime.config[k] = config[k]; } log("配置已更新", { config: Runtime.config }); return true; } catch(e){ recordError("setConfig", e); return false; } }
@@ -2731,10 +3059,12 @@ function getStatus() {
         bot_throw_weapon_seen: Runtime.stats.bot_throw_weapon_seen, bot_throw_weapon_selected: Runtime.stats.bot_throw_weapon_selected, bot_throw_method_hits: Runtime.stats.bot_throw_method_hits, bot_missile_captured: Runtime.stats.bot_missile_captured, bot_remove_throw_hits: Runtime.stats.bot_remove_throw_hits, bot_summary_count: Runtime.stats.bot_summary_count,
         bot_attack_summary_count: Runtime.stats.bot_attack_summary_count, gun_bot_control_hits: Runtime.stats.gun_bot_control_hits, gun_sniper_bot_control_hits: Runtime.stats.gun_sniper_bot_control_hits, gun_shoot_hits: Runtime.stats.gun_shoot_hits, gun_shoot_botlike_hits: Runtime.stats.gun_shoot_botlike_hits, gun_generate_bullet_hits: Runtime.stats.gun_generate_bullet_hits, gun_generate_bullet_botlike_hits: Runtime.stats.gun_generate_bullet_botlike_hits, rpg_bot_control_hits: Runtime.stats.rpg_bot_control_hits, rpg_fire_hits: Runtime.stats.rpg_fire_hits, rpg_fire_botlike_hits: Runtime.stats.rpg_fire_botlike_hits, rpg_on_fire_pressed_hits: Runtime.stats.rpg_on_fire_pressed_hits, bot_attack_entry_hits: Runtime.stats.bot_attack_entry_hits,
         bot_useweapon_hits: Runtime.stats.bot_useweapon_hits, bot_throw_drive_attempts: Runtime.stats.bot_throw_drive_attempts, bot_throw_drive_success: Runtime.stats.bot_throw_drive_success, bot_throw_drive_original_useweapon: Runtime.stats.bot_throw_drive_original_useweapon, bot_throw_drive_skipped_disabled: Runtime.stats.bot_throw_drive_skipped_disabled, bot_throw_drive_skipped_no_pw: Runtime.stats.bot_throw_drive_skipped_no_pw, bot_throw_drive_skipped_no_grenade: Runtime.stats.bot_throw_drive_skipped_no_grenade, bot_throw_drive_skipped_cooldown: Runtime.stats.bot_throw_drive_skipped_cooldown, bot_throw_drive_skipped_not_bot: Runtime.stats.bot_throw_drive_skipped_not_bot, bot_throw_drive_force_ready_writes: Runtime.stats.bot_throw_drive_force_ready_writes, bot_throw_drive_errors: Runtime.stats.bot_throw_drive_errors,
+        bot_grenade_known_index_hits: Runtime.stats.bot_grenade_known_index_hits, bot_grenade_active_give_attempts: Runtime.stats.bot_grenade_active_give_attempts, bot_grenade_active_give_success: Runtime.stats.bot_grenade_active_give_success, bot_grenade_active_give_failed: Runtime.stats.bot_grenade_active_give_failed, bot_grenade_active_give_cooldown: Runtime.stats.bot_grenade_active_give_cooldown,
+        bot_grenade_reacquire_attempts: Runtime.stats.bot_grenade_reacquire_attempts, bot_grenade_reacquire_success: Runtime.stats.bot_grenade_reacquire_success, bot_grenade_reacquire_failed: Runtime.stats.bot_grenade_reacquire_failed,
         vbc_gun_botcontrol_hits: Runtime.stats.vbc_gun_botcontrol_hits, vbc_sniper_botcontrol_hits: Runtime.stats.vbc_sniper_botcontrol_hits, vbc_rpg_botcontrol_hits: Runtime.stats.vbc_rpg_botcontrol_hits, vbc_attempts: Runtime.stats.vbc_attempts, vbc_success: Runtime.stats.vbc_success, vbc_original_calls: Runtime.stats.vbc_original_calls, vbc_suppressed_original_calls: Runtime.stats.vbc_suppressed_original_calls, vbc_suppress_no_grenade: Runtime.stats.vbc_suppress_no_grenade, vbc_suppress_cooldown: Runtime.stats.vbc_suppress_cooldown, vbc_skipped_disabled: Runtime.stats.vbc_skipped_disabled, vbc_skipped_no_bot: Runtime.stats.vbc_skipped_no_bot, vbc_skipped_no_pw: Runtime.stats.vbc_skipped_no_pw, vbc_skipped_no_grenade: Runtime.stats.vbc_skipped_no_grenade, vbc_skipped_cooldown: Runtime.stats.vbc_skipped_cooldown, vbc_errors: Runtime.stats.vbc_errors,
         bot_ai_hook_drive_attempts: Runtime.stats.bot_ai_hook_drive_attempts, bot_ai_hook_drive_success: Runtime.stats.bot_ai_hook_drive_success, bot_ai_checkattack_drive_success: Runtime.stats.bot_ai_checkattack_drive_success, bot_ai_camerarotation_drive_success: Runtime.stats.bot_ai_camerarotation_drive_success, bot_ai_trysettarget_drive_success: Runtime.stats.bot_ai_trysettarget_drive_success, bot_ai_hook_drive_skipped_disabled: Runtime.stats.bot_ai_hook_drive_skipped_disabled, bot_ai_hook_drive_skipped_no_target: Runtime.stats.bot_ai_hook_drive_skipped_no_target, bot_ai_hook_drive_skipped_no_pw: Runtime.stats.bot_ai_hook_drive_skipped_no_pw, bot_ai_hook_drive_skipped_no_grenade: Runtime.stats.bot_ai_hook_drive_skipped_no_grenade, bot_ai_hook_drive_skipped_cooldown: Runtime.stats.bot_ai_hook_drive_skipped_cooldown,
         bot_throw_sm_eval: Runtime.stats.bot_throw_sm_eval, bot_throw_sm_started: Runtime.stats.bot_throw_sm_started, bot_throw_sm_ready: Runtime.stats.bot_throw_sm_ready, bot_throw_sm_success: Runtime.stats.bot_throw_sm_success, bot_throw_sm_cooldown: Runtime.stats.bot_throw_sm_cooldown, bot_throw_sm_timeout: Runtime.stats.bot_throw_sm_timeout, bot_throw_sm_select_fail: Runtime.stats.bot_throw_sm_select_fail, bot_throw_sm_throw_fail: Runtime.stats.bot_throw_sm_throw_fail, bot_throw_spawn_first_seen: Runtime.stats.bot_throw_spawn_first_seen, bot_throw_spawn_grace_skipped: Runtime.stats.bot_throw_spawn_grace_skipped, bot_throw_target_changed: Runtime.stats.bot_throw_target_changed, bot_throw_target_stable_skipped: Runtime.stats.bot_throw_target_stable_skipped, bot_life_first_seen: Runtime.stats.bot_life_first_seen, bot_throw_gate_eval: Runtime.stats.bot_throw_gate_eval, bot_throw_gate_allowed: Runtime.stats.bot_throw_gate_allowed, bot_throw_gate_block_spawn: Runtime.stats.bot_throw_gate_block_spawn, bot_throw_gate_block_first_extra: Runtime.stats.bot_throw_gate_block_first_extra, bot_throw_gate_block_target_unstable: Runtime.stats.bot_throw_gate_block_target_unstable, bot_throw_gate_block_cooldown: Runtime.stats.bot_throw_gate_block_cooldown, bot_throw_gate_block_no_grenade: Runtime.stats.bot_throw_gate_block_no_grenade, bot_throw_gate_block_unknown_bot: Runtime.stats.bot_throw_gate_block_unknown_bot, bot_life_respawn_reset: Runtime.stats.bot_life_respawn_reset, bot_life_reset_removeall: Runtime.stats.bot_life_reset_removeall, bot_life_reset_giveweapon: Runtime.stats.bot_life_reset_giveweapon, bot_life_reset_grenade_change: Runtime.stats.bot_life_reset_grenade_change, bot_life_reset_cooldown_skip: Runtime.stats.bot_life_reset_cooldown_skip, botThrowStates: Runtime.botThrowStates, botLifeStates: Runtime.botLifeStates,
-        botGrenadeWeapons: Runtime.botGrenadeWeapons,
+        botGrenadeWeapons: Runtime.botGrenadeWeapons, botGrenadeWeaponIndex: Runtime.botGrenadeWeaponIndex, knownGrenadeWeaponIndexes: Runtime.knownGrenadeWeaponIndexes, lastBotGrenadeWeaponIndex: Runtime.lastBotGrenadeWeaponIndex,
         skipped_invalid: Runtime.stats.skipped_invalid, error_count: Runtime.stats.error_count, last_error: Runtime.stats.last_error, last_hook: Runtime.stats.last_hook,
         trackedMissiles: Runtime.trackedMissiles, protectedWeapons: Runtime.protectedWeapons,
         cleanup_count: Runtime.stats.cleanup_count
