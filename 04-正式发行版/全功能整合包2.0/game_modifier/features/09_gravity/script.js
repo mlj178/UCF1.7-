@@ -85,7 +85,7 @@ function registerCleanup(callback) {
 modules.gravity = (function() {
   var enabled = false;
   var isMyPlayer = null;
-  var state = { enabled: false, mode: 'player_only', gravityScale: 1.0, jumpScale: 1.0, airJump: false, airMove: false };
+  var state = { enabled: false, mode: 'player_only', gravityScale: 0.9, jumpScale: 5.0, airJump: false, airMove: false };
   var gm = null, timer = null, gmHook = null, jumpHook = null, singletonGetter = null;
   var loopCount = 0, lastLogTime = 0, playerState = {};
   var roomShuttingDown = true;
@@ -205,7 +205,7 @@ modules.gravity = (function() {
 var __pluginFeatureId = "gravity";
 var __pluginModuleName = "gravity";
 var __pluginEnabled = false;
-var __pluginConfig = {"gravity": 1.0, "jump": 1.0, "mode": "player_only"};
+var __pluginConfig = {"gravity": 0.9, "jump": 5.0, "mode": "player_only"};
 
 function __pluginModule() {
   return modules[__pluginModuleName];
@@ -219,8 +219,8 @@ function __pluginApplyConfig(config) {
   }
   var module = __pluginModule();
   if (!module) return { ok: false, reason: 'module_not_loaded', config: __pluginConfig };
-  var g = (typeof __pluginConfig.gravity === 'number') ? __pluginConfig.gravity : 1.0;
-  var j = (typeof __pluginConfig.jump === 'number') ? __pluginConfig.jump : 1.0;
+  var g = (typeof __pluginConfig.gravity === 'number') ? __pluginConfig.gravity : 0.9;
+  var j = (typeof __pluginConfig.jump === 'number') ? __pluginConfig.jump : 5.0;
   var m = __pluginConfig.mode || 'player_only';
   if (typeof module.setconfig === 'function') module.setconfig(g, j, m);
   return { ok: true, config: __pluginConfig };

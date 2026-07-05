@@ -2,7 +2,8 @@
 import os
 import sys
 import fnmatch
-from PyInstaller.utils.hooks import collect_submodules
+import shutil
+from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
 block_cipher = None
 
@@ -12,6 +13,9 @@ current_dir = os.path.dirname(os.path.abspath(SPEC))
 # 定义要包含的数据文件
 datas = []
 binaries = []
+
+# customtkinter 已安装在本机 Python 环境中；显式收集主题、字体等资源，避免缺少 hook 时遗漏。
+datas += collect_data_files("customtkinter")
 
 def add_data_tree(source_dir, target_dir, excludes=()):
     """Collect a local data directory without copying it into the project."""
@@ -27,6 +31,13 @@ def add_data_tree(source_dir, target_dir, excludes=()):
             datas.append((os.path.join(root, filename), destination))
 
 
+def copy_data_tree(source_dir, target_dir, excludes=()):
+    if os.path.isdir(target_dir):
+        shutil.rmtree(target_dir)
+    ignore = shutil.ignore_patterns(*excludes) if excludes else None
+    shutil.copytree(source_dir, target_dir, ignore=ignore)
+
+
 # 使用本机 Python 安装里的 Tcl/Tk 资源，不再依赖项目内复制的 Tcl/Tk 目录。
 # 目标目录名保持 PyInstaller 标准值，便于内置 pyi_rth__tkinter.py 在 exe 启动时自动定位。
 python_tcl_dir = os.path.join(sys.base_prefix, "tcl")
@@ -39,11 +50,20 @@ if not os.path.isfile(os.path.join(local_tcl_library, "init.tcl")):
 if not os.path.isfile(os.path.join(local_tk_library, "tk.tcl")):
     raise FileNotFoundError("本机 Python 缺少 Tk tk.tcl，请修复 Python Tcl/Tk 安装后再打包")
 
-os.environ.setdefault("TCL_LIBRARY", local_tcl_library)
-os.environ.setdefault("TK_LIBRARY", local_tk_library)
-add_data_tree(local_tcl_library, "_tcl_data", excludes=("demos", "*.lib", "tclConfig.sh"))
-add_data_tree(local_tk_library, "_tk_data", excludes=("demos", "*.lib", "tkConfig.sh"))
-add_data_tree(local_tcl_modules, "tcl8")
+tcl_staging_dir = os.path.join(current_dir, "build", "_tcltk_staging")
+staged_tcl_library = os.path.join(tcl_staging_dir, "tcl8.6")
+staged_tk_library = os.path.join(tcl_staging_dir, "tk8.6")
+staged_tcl_modules = os.path.join(tcl_staging_dir, "tcl8")
+os.makedirs(tcl_staging_dir, exist_ok=True)
+copy_data_tree(local_tcl_library, staged_tcl_library, excludes=("demos", "*.lib", "tclConfig.sh"))
+copy_data_tree(local_tk_library, staged_tk_library, excludes=("demos", "*.lib", "tkConfig.sh"))
+copy_data_tree(local_tcl_modules, staged_tcl_modules)
+
+os.environ["TCL_LIBRARY"] = staged_tcl_library
+os.environ["TK_LIBRARY"] = staged_tk_library
+add_data_tree(staged_tcl_library, "_tcl_data")
+add_data_tree(staged_tk_library, "_tk_data")
+add_data_tree(staged_tcl_modules, "tcl8")
 
 # 显式带上 Tk 相关二进制，避免 tkinter 被环境探测误判后遗漏。
 python_dlls_dir = os.path.join(sys.base_prefix, "DLLs")
@@ -68,9 +88,9 @@ if os.path.exists(features_dir):
 # 2.1 添加 data 目录（配置文件）
 data_dir = os.path.join(current_dir, "data")
 if os.path.exists(data_dir):
-    # 排除运行时生成的日志类文件，只打包基础配置
+    # 排除运行时生成/本机用户记录文件，只打包基础配置
     for file in os.listdir(data_dir):
-        if file.endswith('.json') and not file.startswith('feature_state'):
+        if file.endswith('.json') and file not in {'user_config.json', 'feature_state.json'}:
             file_path = os.path.join(data_dir, file)
             datas.append((file_path, "data"))
 
@@ -168,7 +188,7 @@ exe = EXE(
     a.zipfiles,
     a.datas,
     [],
-    name='UCF1.9修改器',
+    name='UCF2.0修改器',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

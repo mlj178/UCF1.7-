@@ -93,6 +93,8 @@ modules.gather = (function() {
   var MAX_PLAYERS_PER_GATHER = 64;
   var MAX_RECENT_BOT_PLAYERS = 64;
   var GATHER_FRAME_BUDGET_MS = 12;
+  var GATHER_DIAG_TAG = '[GATHER_DIAG_TEMP]';
+  var GATHER_DIAG_INTERVAL_MS = 1000;
 
   var R = {
     GM_AddP:   0xAF9A90,
@@ -114,13 +116,14 @@ modules.gather = (function() {
 
   var O = {
     GM_allPlayers: 0x1C, MM_SP_GR: 0x14, MM_SP_BL: 0x10,
-    P_cameraManager: 0x48, P_charContainer: 0x58,
+    P_charContainer: 0x58,
     P_clientData: 0x94, CD_isBot: 0x1C, CD_team: 0x18,
     Bot_thisPlayer: 0x24,
   };
 
   var isMy = null, isDead = null, getCC = null, cSE = null, gt = null, spi = null;
   var posBuf = null, singletonGetter = null, hooks = [];
+  var diagnosticsTimer = null;
 
   function clearRoomState(reason) {
     gm = null; mm = null; recentBotPlayers = {}; ntp = false;
@@ -139,7 +142,6 @@ modules.gather = (function() {
     if (cd && !cd.isNull()) {
       try { var b = cd.add(O.CD_isBot).readU8(); if (b === 1) return false; if (b === 0) return true; } catch(e) {}
     }
-    if (rp(pp, O.P_cameraManager)) return true;
     return false;
   }
 
@@ -154,6 +156,153 @@ modules.gather = (function() {
     return Date.now() - startTime >= GATHER_FRAME_BUDGET_MS;
   }
 
+  function diagNum(value) {
+    try {
+      if (value === null || value === undefined || !isFinite(value)) return 'na';
+      return value.toFixed(2);
+    } catch (_) { return 'na'; }
+  }
+
+  function readPlayerPosition(pp) {
+    try {
+      var tr = gt(pp, ptr(0));
+      if (!tr || tr.isNull()) tr = rp(pp, O.P_charContainer);
+      if (!tr || tr.isNull()) return null;
+      var np = tr.add(0x10).readPointer();
+      if (!np || np.isNull()) return null;
+      return {
+        x: np.add(0x38).readFloat(),
+        y: np.add(0x3C).readFloat(),
+        z: np.add(0x40).readFloat()
+      };
+    } catch (_) { return null; }
+  }
+
+  function readVelocityY(pp) {
+    try {
+      var vd = pp.add(0x90).readPointer();
+      if (!vd || vd.isNull()) return null;
+      return vd.add(0x10).readFloat();
+    } catch (_) { return null; }
+  }
+
+  function readGrounded(pp) {
+    try { return pp.add(0x70).readU8() !== 0; } catch (_) { return null; }
+  }
+
+  function appendBotDiagnostic(result, seen, pp, source, now) {
+    if (!isValid(pp)) { result.invalid++; return; }
+    var key = pp.toString();
+    if (seen[key]) return;
+    seen[key] = true;
+    var self = false, human = false, dead = false;
+    try { self = !!isMy(pp, ptr(0)); } catch (_) {}
+    try { human = isHuman(pp); } catch (_) {}
+    try { dead = !!isDead(pp, ptr(0)); } catch (_) {}
+    if (self) { result.self++; return; }
+    if (human) { result.human++; return; }
+    if (dead) result.dead++;
+    result.bot++;
+    var pos = readPlayerPosition(pp);
+    var grounded = readGrounded(pp);
+    var vy = readVelocityY(pp);
+    var age = source === 'recent' && recentBotPlayers[key] ? (now - recentBotPlayers[key].time) : 0;
+    result.samples.push(
+      source + ':' + key +
+      ' pos=(' + (pos ? [diagNum(pos.x), diagNum(pos.y), diagNum(pos.z)].join(',') : 'null') + ')' +
+      ' grounded=' + grounded +
+      ' vy=' + diagNum(vy) +
+      ' dead=' + dead +
+      ' ageMs=' + age
+    );
+  }
+
+  function collectGatherDiagnostics() {
+    var now = Date.now();
+    var result = {
+      gmReady: !!gm,
+      mmReady: !!mm,
+      ntp: !!ntp,
+      teleportCount: tn,
+      allPlayers: -1,
+      recent: Object.keys(recentBotPlayers).length,
+      self: 0,
+      human: 0,
+      bot: 0,
+      dead: 0,
+      invalid: 0,
+      samples: []
+    };
+    var seen = {};
+    try {
+      if (gm) {
+        var ap = gm.add(O.GM_allPlayers).readPointer();
+        if (ap && !ap.isNull()) {
+          var total = ap.add(0xC).readU32();
+          result.allPlayers = total;
+          var limit = Math.min(total, MAX_PLAYERS_PER_GATHER);
+          for (var i = 0; i < limit; i++) {
+            try {
+              var pp = ap.add(0x10 + i * 8).readPointer();
+              appendBotDiagnostic(result, seen, pp, 'allPlayers', now);
+            } catch (_) { result.invalid++; }
+          }
+        }
+      }
+    } catch (_) {}
+
+    var keys = Object.keys(recentBotPlayers);
+    var limitRecent = Math.min(keys.length, MAX_RECENT_BOT_PLAYERS);
+    for (var ri = 0; ri < limitRecent; ri++) {
+      try {
+        var entry = recentBotPlayers[keys[ri]];
+        if (entry && entry.player) appendBotDiagnostic(result, seen, entry.player, 'recent', now);
+      } catch (_) { result.invalid++; }
+    }
+    return result;
+  }
+
+  function dumpGatherDiagnostics() {
+    if (!enabled) return;
+    var d = collectGatherDiagnostics();
+    sendLogFile(
+      'debug',
+      '聚怪诊断',
+      GATHER_DIAG_TAG +
+      ' enabled=' + enabled +
+      ' gm=' + d.gmReady +
+      ' mm=' + d.mmReady +
+      ' ntp=' + d.ntp +
+      ' teleport=' + d.teleportCount +
+      ' allPlayers=' + d.allPlayers +
+      ' recent=' + d.recent +
+      ' bot=' + d.bot +
+      ' dead=' + d.dead +
+      ' human=' + d.human +
+      ' self=' + d.self +
+      ' invalid=' + d.invalid +
+      ' samples=' + (d.samples.length ? d.samples.join(' | ') : 'none')
+    );
+  }
+
+  function startGatherDiagnostics() {
+    if (diagnosticsTimer) return;
+    dumpGatherDiagnostics();
+    diagnosticsTimer = setInterval(dumpGatherDiagnostics, GATHER_DIAG_INTERVAL_MS);
+  }
+
+  function stopGatherDiagnostics() {
+    if (!diagnosticsTimer) return;
+    clearInterval(diagnosticsTimer);
+    diagnosticsTimer = null;
+  }
+
+  function writePosition(target) {
+    posBuf.writeFloat(target.x);
+    posBuf.add(4).writeFloat(target.y);
+    posBuf.add(8).writeFloat(target.z);
+  }
+
   function teleportEntity(ppOrBot, isBot) {
     try {
       var tr = gt(ppOrBot, ptr(0));
@@ -161,6 +310,7 @@ modules.gather = (function() {
       if (!tr || tr.isNull()) return 'T=null';
       var cc = getCC(ppOrBot, ptr(0));
       if (cc && !cc.isNull()) cSE(cc, 0, ptr(0));
+      writePosition(spawn);
       spi(tr, posBuf, ptr(0));
       try {
         var np = tr.add(0x10).readPointer();
@@ -196,7 +346,7 @@ modules.gather = (function() {
       return;
     }
     sendLog('info', '聚怪', '出生点: (' + spawn.x.toFixed(1) + ',' + spawn.y.toFixed(1) + ',' + spawn.z.toFixed(1) + ')');
-    posBuf.writeFloat(spawn.x); posBuf.add(4).writeFloat(spawn.y); posBuf.add(8).writeFloat(spawn.z);
+    writePosition(spawn);
 
     var playersToMove = {};
     var now = Date.now();
@@ -249,7 +399,8 @@ modules.gather = (function() {
         if (isMy(pp, ptr(0))) { self++; continue; }
         if (isHuman(pp)) { real++; continue; }
         if (isDead(pp, ptr(0))) { dead++; continue; }
-        var r = teleportEntity(pp, false); if (r === 'OK') botOk++; else botFail++;
+        var r = teleportEntity(pp, false);
+        if (r === 'OK') botOk++; else botFail++;
       } catch(e) { botFail++; }
     }
 
@@ -282,7 +433,7 @@ modules.gather = (function() {
       spi = new NativeFunction(base.add(R.setPosInj), 'void', ['pointer','pointer','pointer']);
       posBuf = Memory.alloc(16);
       singletonGetter = new NativeFunction(base.add(R.SingGetInst), 'pointer', ['pointer']);
-      posBuf.writeFloat(spawn.x); posBuf.add(4).writeFloat(spawn.y); posBuf.add(8).writeFloat(spawn.z);
+      writePosition(spawn);
 
       try { var h = Interceptor.attach(base.add(R.Bot_Update), { onEnter: function(args) { trackFromBot(args[0]); } }); hooks.push(h); } catch(e) {}
       try { var h2 = Interceptor.attach(base.add(R.GM_AddP), { onEnter: function(a) { if (!gm) { gm = a[0]; } } }); hooks.push(h2); } catch(e) {}
@@ -292,11 +443,13 @@ modules.gather = (function() {
       try { var h6 = Interceptor.attach(base.add(R.GameManager_OnDestroy), { onEnter: function() { clearRoomState('GameManager.OnDestroy'); } }); hooks.push(h6); } catch(e) {}
 
       enabled = true;
+      startGatherDiagnostics();
       sendLog('success', '聚怪', '已启用 — 动态列表模式');
       sendStatus('gather', true);
     },
     disable: function() {
       if (!enabled) return;
+      stopGatherDiagnostics();
       for (var i = 0; i < hooks.length; i++) { try { hooks[i].detach(); } catch(e) {} }
       hooks = []; gm = null; mm = null; recentBotPlayers = {}; ntp = false;
       enabled = false;

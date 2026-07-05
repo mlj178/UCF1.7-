@@ -67,9 +67,8 @@ def _build_hotkey_excluded(manifests):
     excluded = set()
     for feature_id, manifest in manifests.items():
         hotkey = manifest.get("hotkey", {})
-        ui_mode = manifest.get("ui", {}).get("mode")
-        has_switch = any(control.get("type") == "switch" for control in manifest.get("controls", []))
-        if hotkey.get("enabled") is False or ui_mode in {"special_page", "embedded_panel"} or not has_switch:
+        has_trigger = any(control.get("type") in {"switch", "button"} for control in manifest.get("controls", []))
+        if hotkey.get("enabled") is not True or not has_trigger:
             excluded.add(feature_id)
     return excluded
 
