@@ -183,7 +183,7 @@ const DefaultConfig = {
     range_value: 2.5,
     range_apply_scope: "my_player",
     enable_shoot_speed: true,
-    shoot_speed_value: 3.0,
+    shoot_speed_value: 5.0,
     shoot_speed_apply_scope: "my_player",
 
     tune_on_capture: true,
@@ -952,13 +952,14 @@ function markGrenadeMissile(missile, throwPtr, reason) {
 function isTrackedMissile(missile) { if (!missile || missile.isNull()) return false; cleanupTrackedMissiles("check"); const item = Runtime.trackedMissiles[ptrStr(missile)]; if (!item) return false; item.lastSeen = Date.now(); return true; }
 function getTrackedMissileItem(missile) { if (!missile || missile.isNull()) return null; const item = Runtime.trackedMissiles[ptrStr(missile)]; if (item) item.lastSeen = Date.now(); return item || null; }
 
-function writeFloatIfNeeded(base, offset, value, label) {
+function writeFloatIfNeeded(base, offset, value, label, scaleValue) {
     try {
         if (!isReadablePtr(base)) { Runtime.stats.skipped_invalid += 1; return false; }
         const v = Number(value); if (!isFinite(v)) return false;
+        const actual = scaleValue ? (v * 10) : v;
         const old = base.add(offset).readFloat();
-        if (Math.abs(old - v) < 0.0001) return false;
-        base.add(offset).writeFloat(v);
+        if (Math.abs(old - actual) < 0.0001) return false;
+        base.add(offset).writeFloat(actual);
         Runtime.stats.grenade_field_writes += 1;
         return true;
     } catch (e) { recordError("writeFloat:" + label, e); return false; }
@@ -969,11 +970,12 @@ function writeShootSpeedIfNeeded(missile, reason) {
     try {
         if (!isReadablePtr(missile)) return false;
         const v = Number(Runtime.config.shoot_speed_value); if (!isFinite(v)) return false;
+        const actual = v * 10;
         const old = missile.add(Offsets.Missile_shootSpeed).readFloat();
-        if (Math.abs(old - v) < 0.0001) return false;
-        missile.add(Offsets.Missile_shootSpeed).writeFloat(v);
+        if (Math.abs(old - actual) < 0.0001) return false;
+        missile.add(Offsets.Missile_shootSpeed).writeFloat(actual);
         Runtime.stats.missile_speed_writes += 1;
-        logOnce("shootSpeed:" + ptrStr(missile), "已修改手雷 missile 飞行速度", Runtime.config.log_interval_ms, { missile: ptrStr(missile), reason: reason, before: old, after: v });
+        logOnce("shootSpeed:" + ptrStr(missile), "已修改手雷 missile 飞行速度", Runtime.config.log_interval_ms, { missile: ptrStr(missile), reason: reason, before: old, ui: v, after: actual });
         return true;
     } catch (e) { recordError("writeShootSpeed:" + reason, e); return false; }
 }
@@ -997,8 +999,8 @@ function tuneGrenadeRuntimeFields(grenade, reason, allowLog) {
     if (!allowDamage && !allowRange && !allowSpeed) { Runtime.stats.tune_skipped_owner += 1; return false; }
 
     let writes = 0;
-    if (allowDamage && writeFloatIfNeeded(grenade, Offsets.Grenade_expDamage, Runtime.config.damage_value, "expDamage")) writes++;
-    if (allowRange && writeFloatIfNeeded(grenade, Offsets.Grenade_expRange, Runtime.config.range_value, "expRange")) writes++;
+    if (allowDamage && writeFloatIfNeeded(grenade, Offsets.Grenade_expDamage, Runtime.config.damage_value, "expDamage", true)) writes++;
+    if (allowRange && writeFloatIfNeeded(grenade, Offsets.Grenade_expRange, Runtime.config.range_value, "expRange", true)) writes++;
     if (allowSpeed && writeShootSpeedIfNeeded(grenade, reason)) writes++;
     if (writes > 0) {
         Runtime.stats.tune_applied += 1;
@@ -1074,9 +1076,10 @@ function writeCreateExplosionArgs(ctx, reason) {
             const pDamage = ctx.esp.add(0x10);
             damageBefore = pDamage.readFloat();
             const v = Number(Runtime.config.damage_value);
-            if (isFinite(v) && Math.abs(damageBefore - v) > 0.0001) {
-                pDamage.writeFloat(v);
-                damageAfter = v;
+            const actual = v * 10;
+            if (isFinite(v) && Math.abs(damageBefore - actual) > 0.0001) {
+                pDamage.writeFloat(actual);
+                damageAfter = actual;
                 writes++;
             } else {
                 damageAfter = damageBefore;
@@ -1086,9 +1089,10 @@ function writeCreateExplosionArgs(ctx, reason) {
             const pRange = ctx.esp.add(0x14);
             rangeBefore = pRange.readFloat();
             const v = Number(Runtime.config.range_value);
-            if (isFinite(v) && Math.abs(rangeBefore - v) > 0.0001) {
-                pRange.writeFloat(v);
-                rangeAfter = v;
+            const actual = v * 10;
+            if (isFinite(v) && Math.abs(rangeBefore - actual) > 0.0001) {
+                pRange.writeFloat(actual);
+                rangeAfter = actual;
                 writes++;
             } else {
                 rangeAfter = rangeBefore;
@@ -1103,8 +1107,10 @@ function writeCreateExplosionArgs(ctx, reason) {
                 ctx_reason: item.reason,
                 writes: writes,
                 damage_before: damageBefore,
+                damage_ui: Runtime.config.damage_value,
                 damage_after: damageAfter,
                 range_before: rangeBefore,
+                range_ui: Runtime.config.range_value,
                 range_after: rangeAfter,
                 damage_scope: item.damage_scope,
                 range_scope: item.range_scope,
