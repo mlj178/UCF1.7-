@@ -1077,9 +1077,9 @@ class MigratedOrdinaryFeatureTests(unittest.TestCase):
         self.assertEqual(manifest["config"]["range_value"], 2.5)
         self.assertEqual(controls_by_key["shoot_speed_value"]["min"], 1)
         self.assertEqual(controls_by_key["shoot_speed_value"]["max"], 10)
-        self.assertEqual(controls_by_key["shoot_speed_value"]["default"], 3)
+        self.assertEqual(controls_by_key["shoot_speed_value"]["default"], 5)
         self.assertNotIn("scale", controls_by_key["shoot_speed_value"])
-        self.assertEqual(manifest["config"]["shoot_speed_value"], 3.0)
+        self.assertEqual(manifest["config"]["shoot_speed_value"], 5.0)
         for key in ("enable_damage", "enable_range", "enable_shoot_speed", "force_throw_ready_enabled"):
             self.assertIs(controls_by_key[key]["default"], True, msg=key)
             self.assertIs(manifest["config"][key], True, msg=key)
@@ -1163,7 +1163,7 @@ class MigratedOrdinaryFeatureTests(unittest.TestCase):
                 "enabled": False,
                 "damage_value": 25.0,
                 "range_value": 2.5,
-                "shoot_speed_value": 3.0,
+                "shoot_speed_value": 5.0,
             },
         }
         for feature_id, values in expectations.items():
@@ -1536,6 +1536,34 @@ class MigratedOrdinaryFeatureTests(unittest.TestCase):
         self.assertIn("pos=(", script_text)
         self.assertIn("grounded=", script_text)
         self.assertIn("vy=", script_text)
+
+    def test_grenade_shoot_speed_ui_value_is_scaled_before_write(self):
+        script_text = (feature_dir("grenade_mode_lock999_keep_weapon_tuner") / "script.js").read_text(encoding="utf-8")
+        body = script_text.split("function writeShootSpeedIfNeeded", 1)[1].split("function tuneGrenadeRuntimeFields", 1)[0]
+
+        self.assertIn("const actual = v * 10;", body)
+        self.assertIn("Math.abs(old - actual)", body)
+        self.assertIn("writeFloat(actual)", body)
+        self.assertIn("ui: v", body)
+        self.assertIn("after: actual", body)
+
+    def test_grenade_damage_and_range_ui_values_are_scaled_before_write(self):
+        script_text = (feature_dir("grenade_mode_lock999_keep_weapon_tuner") / "script.js").read_text(encoding="utf-8")
+        fields_body = script_text.split("function tuneGrenadeRuntimeFields", 1)[1].split("function tuneMissileOnlyFields", 1)[0]
+        explosion_body = script_text.split("function writeCreateExplosionArgs", 1)[1].split("function hookThrowLike", 1)[0]
+
+        self.assertIn('writeFloatIfNeeded(grenade, Offsets.Grenade_expDamage, Runtime.config.damage_value, "expDamage", true)', fields_body)
+        self.assertIn('writeFloatIfNeeded(grenade, Offsets.Grenade_expRange, Runtime.config.range_value, "expRange", true)', fields_body)
+        self.assertIn("const actual = scaleValue ? (v * 10) : v;", script_text)
+        self.assertIn("const actual = v * 10;", explosion_body)
+        self.assertIn("Math.abs(damageBefore - actual)", explosion_body)
+        self.assertIn("pDamage.writeFloat(actual)", explosion_body)
+        self.assertIn("damageAfter = actual", explosion_body)
+        self.assertIn("Math.abs(rangeBefore - actual)", explosion_body)
+        self.assertIn("pRange.writeFloat(actual)", explosion_body)
+        self.assertIn("rangeAfter = actual", explosion_body)
+        self.assertIn("damage_ui: Runtime.config.damage_value", explosion_body)
+        self.assertIn("range_ui: Runtime.config.range_value", explosion_body)
 
 
 if __name__ == "__main__":
