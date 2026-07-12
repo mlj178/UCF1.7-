@@ -1,0 +1,47 @@
+{
+  "feature_id": "template_feature",
+  "canonical_id": "template_feature",
+  "display_name": "模板功能",
+  "category": "other",
+  "tab": "other_tab",
+  "tab_title": "其他",
+  "tab_order": 30,
+  "order": 999,
+  "icon": "*",
+  "desc": "复制此目录创建新功能插件。",
+  "script": "script.js",
+  "runtime": {
+    "type": "plugin_script"
+  },
+  "layout": {
+    "card_type": "simple",
+    "columnspan": 1
+  },
+  "controls": [
+    {
+      "type": "switch",
+      "action": "enable"
+    }
+  ],
+  "config": {},
+  "rpc": [
+    "enable",
+    "disable",
+    "setConfig",
+    "status",
+    "cleanup"
+  ],
+  "lifecycle": {
+    "cleanup": true,
+    "restore": true,
+    "requires_room_ready_reapply": false,
+    "room_ready_retry": false,
+    "room_ready_reapply_exempt_reason": "模板默认不依赖房间内对象；若功能依赖玩家/Bot/GameManager/相机/武器等运行态对象，必须改为 true 并在 script.js 实现 pendingApply"
+  },
+  "state": {
+    "sync_enabled_from_config": true
+  },
+  "ui_handles": {
+    "switch": "template_feature_switch"
+  }
+}

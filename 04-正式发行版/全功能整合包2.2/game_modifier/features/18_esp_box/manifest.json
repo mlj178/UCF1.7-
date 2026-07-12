@@ -1,0 +1,66 @@
+{
+    "feature_id":  "esp_box",
+    "canonical_id":  "universal_esp_box",
+    "display_name":  "方框透视",
+    "category":  "other",
+    "tab":  "other_tab",
+    "order":  40,
+    "icon":  "📦",
+    "desc":  "通过 Universal DLL 显示方框透视",
+    "script":  "script.js",
+    "layout":  {
+                   "card_type":  "simple",
+                   "columnspan":  1,
+                   "title_color":  "#60A5FA"
+               },
+    "controls":  [
+                     {
+                         "type":  "switch",
+                         "action":  "enable"
+                     }
+                 ],
+    "config":  {
+
+               },
+    "rpc":  [
+                "enable",
+                "disable",
+                "setConfig",
+                "status",
+                "cleanup"
+            ],
+    "lifecycle":  {
+                      "cleanup":  true
+                  },
+    "source":  {
+                   "runtime_script_js":  "features/18_esp_box/script.js"
+               },
+    "ui_handles":  {
+                       "switch":  "esp_box_switch"
+                   },
+    "runtime":  {
+                    "type":  "plugin_script"
+                },
+    "hotkey":  {
+                   "enabled":  false
+               },
+    "actions":  {
+                    "enable":  {
+                                   "type":  "plugin_feature",
+                                   "requires_connection":  false
+                               },
+                    "disable":  {
+                                    "type":  "plugin_feature",
+                                    "requires_connection":  false
+                                },
+                    "cleanup":  {
+                                    "type":  "plugin_feature",
+                                    "requires_connection":  false
+                                }
+                },
+    "tab_title":  "其他",
+    "tab_order":  30,
+    "state":  {
+                  "sync_enabled_from_config":  false
+              }
+}
