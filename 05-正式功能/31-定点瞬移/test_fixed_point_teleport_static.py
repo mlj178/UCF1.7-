@@ -25,6 +25,10 @@ class FixedPointTeleportStaticTests(unittest.TestCase):
             "Player_SetPos: 0x00B534C0",
             "Component_get_transform: 0x0032CF40",
             "Transform_get_position_Injected: 0x003F4280",
+            "ModeBase_UpdateTimeUI: 0x00AF6930",
+            "GameManager_GameRoundEnd: 0x00AFAA40",
+            "GameManager_NewGameRoundStart: 0x00AEBCB0",
+            "GameManager_OnDestroy: 0x00AEBD40",
             "Player_characterController: 0x2C",
         ]
 
@@ -37,9 +41,53 @@ class FixedPointTeleportStaticTests(unittest.TestCase):
         self.assertIn("Interceptor.attach", text)
         self.assertNotIn("Interceptor.replace", text)
         self.assertIn("native.playerSetPos", text)
-        self.assertIn("function teleportToSavedPoint()", text)
+        self.assertIn("function requestTeleportToSavedPoint()", text)
+        self.assertIn("function performPendingActions(player)", text)
         self.assertIn("native.playerSetPos(player, point.x, point.y, point.z, ptr(0))", text)
         self.assertNotIn("Transform_set_position_Injected", text)
+
+    def test_js_defers_save_and_teleport_to_player_update(self):
+        text = read_text(JS_FILE)
+
+        save_rpc = text.split("savepoint: function ()", 1)[1].split("teleporttopoint:", 1)[0]
+        teleport_rpc = text.split("teleporttopoint: function ()", 1)[1].split("clearpoint:", 1)[0]
+        player_update_hook = text.split('attachHook("Player.Update"', 1)[1].split("});", 1)[0]
+
+        self.assertIn("Runtime.pending.save = true", save_rpc)
+        self.assertIn("Runtime.pending.teleport = true", teleport_rpc)
+        self.assertNotIn("readPlayerPosition", save_rpc)
+        self.assertNotIn("native.playerSetPos", teleport_rpc)
+        self.assertIn("performPendingActions(args[0])", player_update_hook)
+
+    def test_js_clears_saved_point_and_pending_actions_on_runtime_reset(self):
+        text = read_text(JS_FILE)
+
+        reset_fn = text.split("function resetRuntime(reason)", 1)[1].split("function captureLocalPlayer", 1)[0]
+        self.assertIn("Runtime.savedPoint = null", reset_fn)
+        self.assertIn("Runtime.pending.save = false", reset_fn)
+        self.assertIn("Runtime.pending.teleport = false", reset_fn)
+
+    def test_js_hooks_round_lifecycle_to_clear_per_round_saved_point(self):
+        text = read_text(JS_FILE)
+
+        self.assertIn('attachHook("ModeBase.UpdateTimeUI"', text)
+        self.assertIn('attachHook("GameManager.GameRoundEnd"', text)
+        self.assertIn('attachHook("GameManager.NewGameRoundStart"', text)
+        self.assertIn('attachHook("GameManager.OnDestroy"', text)
+        self.assertIn('handleModeBaseSeen(args[0])', text)
+        self.assertIn('handleRoundBoundary("game_round_end")', text)
+        self.assertIn('handleRoundBoundary("new_game_round_start")', text)
+        self.assertIn('handleRoundBoundary("game_manager_destroy")', text)
+
+    def test_js_saved_point_is_bound_to_current_room_generation(self):
+        text = read_text(JS_FILE)
+
+        self.assertIn("roomGeneration", text)
+        self.assertIn("Runtime.roomGeneration += 1", text)
+        self.assertIn("room_generation: Runtime.roomGeneration", text)
+        self.assertIn("function hasValidSavedPoint()", text)
+        self.assertIn("Runtime.savedPoint.room_generation !== Runtime.roomGeneration", text)
+        self.assertIn('"saved_point_expired"', text)
 
     def test_js_saves_position_from_local_player_only(self):
         text = read_text(JS_FILE)

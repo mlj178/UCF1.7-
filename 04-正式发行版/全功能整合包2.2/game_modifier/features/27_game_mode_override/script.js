@@ -116,7 +116,7 @@
   };
 
   var SNIPER_BOT_FALLBACK_WEAPON_INDEX = 2568;
-  var HANDGUN_BOT_FALLBACK_WEAPON_INDEX = 1168;
+  var HANDGUN_BOT_FALLBACK_WEAPON_INDEX = 20;
   var KNIFE_BOT_FALLBACK_WEAPON_INDEX = 244;
 
   var Runtime = {
@@ -1403,6 +1403,59 @@
     );
   }
 
+  function teamRulesAreActiveForCurrentStart() {
+    return !!(
+      Runtime.lastApplied &&
+      Runtime.lastApplied.key === Runtime.modeKey &&
+      Runtime.lastApplied.gameMode === MODES.team_death.gameMode
+    );
+  }
+
+  function normalizeRoomBotTeamsForTeamRules(reason) {
+    if (!Runtime.enabled || !teamRulesAreActiveForCurrentStart()) return { changed: 0 };
+
+    var listPtr = resolveRoomPlayersList();
+    if (!listPtr) return { changed: 0 };
+
+    var size = getListSize(listPtr);
+    var items = readPointer(listPtr.add(OFF.List_items));
+    if (size === null || size < 1 || !items) return { changed: 0 };
+
+    var arrayLength = readS32(items.add(OFF.Array_length));
+    if (arrayLength === null || arrayLength < 1 || arrayLength > 4096) return { changed: 0 };
+
+    var count = Math.min(size, arrayLength, 64);
+    var changed = 0;
+    var nextTeam = 0;
+    for (var i = 0; i < count; i++) {
+      var clientData = readPointer(items.add(OFF.Array_items + i * Process.pointerSize));
+      if (!clientData) continue;
+      var isBot = readU8(clientData.add(OFF.ClientData_isBot));
+      if (!isBot) continue;
+
+      var joinTeam = readS32(clientData.add(OFF.ClientData_joinTeam));
+      var desiredTeam = nextTeam;
+      nextTeam = nextTeam === 0 ? 1 : 0;
+
+      if (joinTeam !== desiredTeam) {
+        clientData.add(OFF.ClientData_joinTeam).writeS32(desiredTeam);
+        changed += 1;
+      }
+    }
+
+    if (changed > 0) {
+      sendLog('warn', '团队规则下已将 Neutral bot 分配到 BL/GR：' + changed + ' 个 via ' + (reason || 'manual'));
+    }
+    return { changed: changed };
+  }
+
+  function ensureTeamRuleSpawnFallbacks(reason) {
+    if (!Runtime.enabled || !teamRulesAreActiveForCurrentStart()) return false;
+    var bl = ensureTeamSpawnFallbackFromNeutral(0, reason);
+    var gr = ensureTeamSpawnFallbackFromNeutral(1, reason);
+    return !!(bl || gr);
+  }
+
   function applyTeamDeathWeaponOnlyMode(selected, beforeMode) {
     var targetAsset = findTargetMapAsset(Runtime.gameRoom, MODES.team_death.gameMode);
     if (!targetAsset) return fail('找不到团队竞技 MapAsset: ' + selected.label);
@@ -1720,18 +1773,6 @@
         ['pointer', 'pointer'],
         'mscdecl'
       );
-      Runtime.aliveCountBL = new NativeFunction(
-        base.add(RVA.GameManager_get_alivePlayerCount_BL),
-        'int',
-        ['pointer'],
-        'mscdecl'
-      );
-      Runtime.aliveCountGR = new NativeFunction(
-        base.add(RVA.GameManager_get_alivePlayerCount_GR),
-        'int',
-        ['pointer'],
-        'mscdecl'
-      );
       Runtime.getWpnData = new NativeFunction(
         base.add(RVA.GameManager_GetWpnData),
         'bool',
@@ -1747,15 +1788,13 @@
           Runtime.lastDropdowns = null;
           Runtime.lastMapID = null;
           Runtime.lastSourceMapMode = null;
+          resetWeaponGrantProbe();
           Runtime.startDepth += 1;
-          probeBotPipeline('OnStartGameBtnDown.enter', { note: '点击开始，开始追踪本局创建链路' });
         },
         onLeave: function () {
           if (Runtime.enabled && Runtime.startDepth > 0) {
             applySelectedModeRules('OnStartGameBtnDown.leave.rules');
-            probeLifecycle('OnStartGameBtnDown.leave.rules', Runtime.modeBase, currentModeLooksNano(), { note: '开始按钮流程末尾规则同步后快照' }, true);
           }
-          probeBotPipeline('OnStartGameBtnDown.leave', { note: '开始按钮流程返回' });
           Runtime.startDepth = Math.max(0, Runtime.startDepth - 1);
         }
       }));
@@ -1771,261 +1810,66 @@
         onLeave: function () {
           if (Runtime.enabled && Runtime.startDepth > 0) {
             applySelectedMode();
-            probeBotPipeline('ApplyGameSetting.leave', { note: 'GameManager 模式字段覆盖后快照' });
-            probeLifecycle('ApplyGameSetting.leave', Runtime.modeBase, currentModeLooksNano(), { note: '模式字段覆盖后规则参数快照' }, true);
+            normalizeRoomBotTeamsForTeamRules('ApplyGameSetting.leave');
           }
         }
       }));
 
-      Runtime.hooks.push(Interceptor.attach(base.add(RVA.ModeBase_UpdateTimeUI), {
-        onEnter: function (args) {
-          probeLifecycle('ModeBase.UpdateTimeUI', args[0], currentModeLooksNano(), null, false);
-        }
-      }));
-
-      Runtime.hooks.push(Interceptor.attach(base.add(RVA.ModeBase_OnStartNewGameRound), {
-        onEnter: function (args) {
-          Runtime.probe.roundBoundaryHits += 1;
-          probeLifecycle('ModeBase.OnStartNewGameRound.enter', args[0], false, { note: '通用新回合入口' }, true);
-        },
-        onLeave: function () {
-          probeLifecycle('ModeBase.OnStartNewGameRound.leave', Runtime.modeBase, false, { note: '通用新回合返回' }, true);
-        }
-      }));
-
-      Runtime.hooks.push(Interceptor.attach(base.add(RVA.ModeBase_Nano_OnStartNewGameRound), {
-        onEnter: function (args) {
-          Runtime.probe.roundBoundaryHits += 1;
-          probeLifecycle('ModeBase_Nano.OnStartNewGameRound.enter', args[0], true, { note: '生化新回合入口' }, true);
-        },
-        onLeave: function () {
-          probeLifecycle('ModeBase_Nano.OnStartNewGameRound.leave', Runtime.modeBase, true, { note: '生化新回合返回' }, true);
-        }
-      }));
-
-      Runtime.hooks.push(Interceptor.attach(base.add(RVA.ModeBase_Nano_CheckRoundOver), {
-        onEnter: function (args) {
-          probeLifecycle('ModeBase_Nano.CheckRoundOver.enter', args[0], true, null, false);
-        }
-      }));
-
-      Runtime.hooks.push(Interceptor.attach(base.add(RVA.GameManager_GameRoundEnd), {
-        onEnter: function () {
-          Runtime.probe.roundBoundaryHits += 1;
-          probeLifecycle('GameManager.GameRoundEnd.enter', Runtime.modeBase, currentModeLooksNano(), { note: '游戏回合结束入口' }, true);
-        },
-        onLeave: function () {
-          probeLifecycle('GameManager.GameRoundEnd.leave', Runtime.modeBase, currentModeLooksNano(), { note: '游戏回合结束返回' }, true);
-        }
-      }));
-
-      Runtime.hooks.push(Interceptor.attach(base.add(RVA.MapManager_NewGameRoundStart), {
-        onEnter: function (args) {
-          Runtime.probe.roundBoundaryHits += 1;
-          Runtime.mapManager = args[0];
-          probeLifecycle('MapManager.NewGameRoundStart.enter', Runtime.modeBase, currentModeLooksNano(), { note: '地图出生点回合重置入口' }, true);
-        }
-      }));
-
-      Runtime.hooks.push(Interceptor.attach(base.add(RVA.GameManager_DeathEventBroadcast), {
-        onEnter: function () {
-          Runtime.probe.deathEventHits += 1;
-          probeLifecycle('GameManager.DeathEventBroadcast.enter', Runtime.modeBase, currentModeLooksNano(), { note: '死亡事件广播' }, true);
-        }
-      }));
-
-      Runtime.hooks.push(Interceptor.attach(base.add(RVA.Mode_TeamDeath_DeathEvent), {
-        onEnter: function (args) {
-          Runtime.probe.deathEventHits += 1;
-          probeLifecycle('Mode_TeamDeath.DeathEvent.enter', args[0], false, { note: '团队/计人头死亡处理' }, true);
-        },
-        onLeave: function () {
-          probeLifecycle('Mode_TeamDeath.DeathEvent.leave', Runtime.modeBase, false, { note: '团队/计人头死亡处理返回' }, true);
-        }
-      }));
-
-      Runtime.hooks.push(Interceptor.attach(base.add(RVA.ModeBase_Nano_DeathEvent), {
-        onEnter: function (args) {
-          Runtime.probe.deathEventHits += 1;
-          probeLifecycle('ModeBase_Nano.DeathEvent.enter', args[0], true, { note: '生化基类死亡处理' }, true);
-        },
-        onLeave: function () {
-          probeLifecycle('ModeBase_Nano.DeathEvent.leave', Runtime.modeBase, true, { note: '生化基类死亡处理返回' }, true);
-        }
-      }));
-
-      Runtime.hooks.push(Interceptor.attach(base.add(RVA.Mode_Nano4_DeathEvent), {
-        onEnter: function (args) {
-          Runtime.probe.deathEventHits += 1;
-          probeLifecycle('Mode_Nano4.DeathEvent.enter', args[0], true, { note: '普通生化死亡处理' }, true);
-        }
-      }));
-
-      Runtime.hooks.push(Interceptor.attach(base.add(RVA.Mode_Nano4_Terminator_DeathEvent), {
-        onEnter: function (args) {
-          Runtime.probe.deathEventHits += 1;
-          probeLifecycle('Mode_Nano4_Terminator.DeathEvent.enter', args[0], true, { note: '多人生化死亡处理' }, true);
-        }
-      }));
-
-      Runtime.hooks.push(Interceptor.attach(base.add(RVA.Mode_Nano6_DeathEvent), {
-        onEnter: function (args) {
-          Runtime.probe.deathEventHits += 1;
-          probeLifecycle('Mode_Nano6.DeathEvent.enter', args[0], true, { note: '剑客模式死亡处理' }, true);
-        }
-      }));
-
-      Runtime.hooks.push(Interceptor.attach(base.add(RVA.Player_OnEntityDeath), {
-        onEnter: function (args) {
-          Runtime.probe.deathEventHits += 1;
-          var player = summarizePlayer(args[0]);
-          probeLifecycle('Player.OnEntityDeath.enter', Runtime.modeBase, currentModeLooksNano(), {
-            player: player,
-            note: '玩家实体死亡 isBot=' + player.clientIsBot + ', team=' + player.teamLabel
-          }, true);
-        }
-      }));
-
       Runtime.hooks.push(Interceptor.attach(base.add(RVA.UI_GameRoom_GenerateBotClient), {
-        onEnter: function () {
-          Runtime.probe.generateBotHits += 1;
-          this.beforePlayers = summarizeRoomPlayers();
-        },
         onLeave: function () {
-          var before = this.beforePlayers;
-          var after = summarizeRoomPlayers();
-          var beforeSize = before && before.size !== null ? before.size : 'unknown';
-          var afterSize = after && after.size !== null ? after.size : 'unknown';
-          probeBotPipeline('GenerateBotClient.leave', {
-            before: before,
-            after: after,
-            note: '人机生成后，玩家列表 ' + beforeSize + ' -> ' + afterSize
-          });
-          probeRoomBotWeaponBags('GenerateBotClient.leave');
+          if (Runtime.enabled) {
+            normalizeRoomBotTeamsForTeamRules('GenerateBotClient.leave');
+          }
         }
       }));
 
       Runtime.hooks.push(Interceptor.attach(base.add(RVA.GameManager_AddPlayers), {
         onEnter: function () {
-          Runtime.probe.addPlayersHits += 1;
-          resetWeaponGrantProbe();
-          probeBotPipeline('GameManager.AddPlayers.enter', { note: '开始把房间玩家列表转换成场内 Player' });
-          probeRoomBotWeaponBags('GameManager.AddPlayers.enter');
-        },
-        onLeave: function () {
-          probeWeaponGrantSummary('GameManager.AddPlayers.leave');
-          probeBotPipeline('GameManager.AddPlayers.leave', { note: 'AddPlayers 返回' });
+          if (Runtime.enabled) {
+            normalizeRoomBotTeamsForTeamRules('GameManager.AddPlayers.enter');
+            ensureTeamRuleSpawnFallbacks('GameManager.AddPlayers.enter');
+            resetWeaponGrantProbe();
+          }
+        }
+      }));
+
+      Runtime.hooks.push(Interceptor.attach(base.add(RVA.MapManager_Awake), {
+        onEnter: function (args) {
+          if (!Runtime.enabled) return;
+          Runtime.mapManager = args[0];
+          ensureTeamRuleSpawnFallbacks('MapManager.Awake');
+        }
+      }));
+
+      Runtime.hooks.push(Interceptor.attach(base.add(RVA.MapManager_GetSpawnPoint), {
+        onEnter: function (args) {
+          if (!Runtime.enabled) return;
+          Runtime.mapManager = args[0];
+          var team = args[1].toInt32();
+          if (team === 2) ensureNeutralSpawnFallbackFromTeam('GetSpawnPoint');
+          else ensureTeamSpawnFallbackFromNeutral(team, 'GetSpawnPoint');
         }
       }));
 
       Runtime.hooks.push(Interceptor.attach(base.add(RVA.GameManager_GiveWeaponByBag), {
         onEnter: function (args) {
           Runtime.weaponProbe.giveWeaponByBagDepth += 1;
-          this.override = maybeOverrideLimitedBotGrant(args);
-          this.player = args[0];
-          this.originalWeaponIndex = this.override ? this.override.originalWeaponIndex : args[1].toInt32();
-          this.effectiveWeaponIndex = args[1].toInt32();
+          maybeOverrideLimitedBotGrant(args);
         },
-        onLeave: function (retval) {
-          try {
-            probeWeaponGrant('GameManager.GiveWeaponByBag.leave', this.player, this.effectiveWeaponIndex, retval, false);
-          } finally {
-            Runtime.weaponProbe.giveWeaponByBagDepth = Math.max(0, Runtime.weaponProbe.giveWeaponByBagDepth - 1);
-          }
-        }
-      }));
-
-      Runtime.hooks.push(Interceptor.attach(base.add(RVA.GameManager_GiveWeapon), {
-        onEnter: function (args) {
-          this.player = args[0];
-          this.requestedWeaponIndex = args[1].toInt32();
-          this.directCall = Runtime.weaponProbe.giveWeaponByBagDepth <= 0;
-        },
-        onLeave: function (retval) {
-          if (!this.directCall) return;
-          probeWeaponGrant('GameManager.GiveWeapon.leave', this.player, this.requestedWeaponIndex, retval, true);
-        }
-      }));
-
-      Runtime.hooks.push(Interceptor.attach(base.add(RVA.GameManager_AddPlayer), {
-        onEnter: function (args) {
-          Runtime.probe.addPlayerHits += 1;
-          this.addPlayerProbe = {
-            requestedIsBot: !!args[1].toInt32(),
-            requestedTeam: args[2].toInt32(),
-            requestedTeamLabel: teamLabel(args[2].toInt32())
-          };
-        },
-        onLeave: function (retval) {
-          var player = summarizePlayer(retval);
-          var req = this.addPlayerProbe || {};
-          probeBotPipeline('GameManager.AddPlayer.leave', {
-            requested: req,
-            player: player,
-            note: 'AddPlayer isBot=' + req.requestedIsBot +
-              ', 请求队伍=' + req.requestedTeamLabel +
-              ', 最终队伍=' + player.teamLabel +
-              ', player=' + player.ptr
-          });
-        }
-      }));
-
-      Runtime.hooks.push(Interceptor.attach(base.add(RVA.MapManager_Awake), {
-        onEnter: function (args) {
-          Runtime.mapManager = args[0];
-          probeBotPipeline('MapManager.Awake.enter', { note: '地图出生点管理器已出现' });
-        }
-      }));
-
-      Runtime.hooks.push(Interceptor.attach(base.add(RVA.MapManager_GetSpawnPoint), {
-        onEnter: function (args) {
-          var team = args[1].toInt32();
-          if (team === 2) ensureNeutralSpawnFallbackFromTeam('GetSpawnPoint');
-          else ensureTeamSpawnFallbackFromNeutral(team, 'GetSpawnPoint');
-          var spawns = summarizeSpawnArrays();
-          var needLength = spawnLengthForTeam(spawns, team);
-          if (Runtime.enabled && needLength === 0) {
-            Runtime.probe.getSpawnPointMissingHits += 1;
-            probeBotPipeline('MapManager.GetSpawnPoint.missing', {
-              requestedTeam: team,
-              requestedTeamLabel: teamLabel(team),
-              note: '请求 ' + teamLabel(team) + ' 出生点，但该数组长度为 0'
-            });
-          }
+        onLeave: function () {
+          Runtime.weaponProbe.giveWeaponByBagDepth = Math.max(0, Runtime.weaponProbe.giveWeaponByBagDepth - 1);
         }
       }));
 
       Runtime.hooks.push(Interceptor.attach(base.add(RVA.Player_Spawn), {
         onEnter: function (args) {
-          Runtime.probe.spawnHits += 1;
-          resetWeaponGrantForPlayer(args[0]);
-          var player = summarizePlayer(args[0]);
-          probeBotPipeline('Player.Spawn.enter', {
-            player: player,
-            note: 'Player.Spawn isBot=' + player.clientIsBot +
-              ', finalTeam=' + player.teamLabel +
-              ', joinTeam=' + player.clientJoinTeamLabel
-          });
+          if (Runtime.enabled) resetWeaponGrantForPlayer(args[0]);
         }
       }));
 
       Runtime.hooks.push(Interceptor.attach(base.add(RVA.Player_Respawn), {
         onEnter: function (args) {
-          Runtime.probe.respawnHits += 1;
-          resetWeaponGrantForPlayer(args[0]);
-          var player = summarizePlayer(args[0]);
-          probeLifecycle('Player.Respawn.enter', Runtime.modeBase, currentModeLooksNano(), {
-            player: player,
-            note: '复活被安排 isBot=' + player.clientIsBot +
-              ', finalTeam=' + player.teamLabel +
-              ', joinTeam=' + player.clientJoinTeamLabel
-          }, true);
-          probeBotPipeline('Player.Respawn.enter', {
-            player: player,
-            note: 'Player.Respawn isBot=' + player.clientIsBot +
-              ', finalTeam=' + player.teamLabel +
-              ', joinTeam=' + player.clientJoinTeamLabel
-          });
+          if (Runtime.enabled) resetWeaponGrantForPlayer(args[0]);
         }
       }));
 
@@ -2137,6 +1981,7 @@
     Runtime.lastMapID = null;
     Runtime.lastSourceMapMode = null;
     Runtime.startDepth = 0;
+    Runtime.getWpnData = null;
     sendLog('info', 'cleanup 完成；不修改已经开始的当前对局');
     return statusObject();
   }
@@ -2149,17 +1994,23 @@
         Runtime.modeKey = config.mode_key;
       }
       if (config.enabled !== undefined) Runtime.enabled = !!config.enabled;
-      if (config.probe_enabled !== undefined) Runtime.probe.enabled = !!config.probe_enabled;
-      var requestedProbeLevel = config.probe_level !== undefined ? config.probe_level : config.probeLevel;
-      if (requestedProbeLevel !== undefined) {
-        if (requestedProbeLevel !== 'basic' && requestedProbeLevel !== 'verbose') return fail('不支持的 probe_level: ' + requestedProbeLevel);
-        Runtime.probe.level = requestedProbeLevel;
-      }
       Runtime.lastError = null;
       return statusObject();
     },
 
-    enable: function () {
+    setConfig: function (config) {
+      return rpc.exports.setconfig(config || {});
+    },
+
+    set_config: function (config) {
+      return rpc.exports.setconfig(config || {});
+    },
+
+    enable: function (config) {
+      if (config) {
+        var configResult = rpc.exports.setconfig(config);
+        if (configResult && configResult.ok === false) return configResult;
+      }
       Runtime.enabled = true;
       Runtime.lastError = null;
       return statusObject();
@@ -2176,10 +2027,6 @@
 
     cleanup: function () {
       return cleanupRuntime();
-    },
-
-    resetprobe: function () {
-      return resetProbe();
     },
 
     dispose: function () {

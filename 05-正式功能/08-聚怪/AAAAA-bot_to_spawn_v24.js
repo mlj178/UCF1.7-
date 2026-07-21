@@ -39,6 +39,12 @@
         setPosInj: 0x3F4810,
         Bot_Update: 0xB33370,
         SingGetInst: 0x4A8170,
+        P_SetPos: 0xB534C0,
+        ModeBase_ExitGame: 0xAEE850,
+        ModeBase_UpdateTimeUI: 0xAF6930,
+        GameManager_GameRoundEnd: 0xAFAA40,
+        GameManager_NewGameRoundStart: 0xAEBCB0,
+        GameManager_OnDestroy: 0xAFB6F0,
     };
 
     var SING = {
@@ -56,10 +62,21 @@
         CD_isBot: 0x1C,
         CD_team:  0x18,
         Bot_thisPlayer: 0x24,
+        Bot_path: 0x80,
+        Bot_pathLength: 0x84,
+        Bot_gNode_Nearset: 0x88,
+        Bot_gNode_Next: 0x8C,
+        Bot_nextPathVectorID: 0x90,
+        Bot_lastStartPoint: 0x94,
+        Bot_nextPathPos: 0xA0,
+        Bot_nextJumpTime: 0xE8,
+        Bot_blockedTime: 0xEC,
+        Bot_crouchEndTime: 0xF0,
     };
 
     var gm = null;
     var mm = null;
+    var modeBase = null;
     // 硬编码 SP_GR(潜伏者/佣兵)出生点坐标 — 不依赖 MM 读取
     var spawn = { x: 13.6, y: 14.1, z: 0.1 };
     var ntp = false;
@@ -68,6 +85,8 @@
     var trackedPlayers = {};
     var trackedBots = {};
     var botUpdateSeen = {};
+    var trackedPlayerBots = {};
+    var DIAG_TAG = '[GATHER_V24_DIAG]';
     var allPlayersLogged = false;
     var playerClientDataLogged = false;
 
@@ -77,6 +96,7 @@
     var cSE    = new NativeFunction(B.add(R.C_setEn), 'void',    ['pointer','int','pointer']);
     var gt     = new NativeFunction(B.add(R.getTrans), 'pointer', ['pointer','pointer']);
     var spi    = new NativeFunction(B.add(R.setPosInj),'void',   ['pointer','pointer','pointer']);
+    var playerSetPos = new NativeFunction(B.add(R.P_SetPos), 'void', ['pointer','float','float','float','pointer'], 'mscdecl');
     var posBuf = Memory.alloc(16);
 
     var singletonGetter = new NativeFunction(B.add(R.SingGetInst), 'pointer', ['pointer']);
@@ -108,7 +128,125 @@
         return mm;
     }
 
+    function clearRoomState(reason) {
+        gm = null;
+        mm = null;
+        trackedPlayers = {};
+        trackedBots = {};
+        botUpdateSeen = {};
+        trackedPlayerBots = {};
+        modeBase = null;
+        ntp = false;
+        allPlayersLogged = false;
+        playerClientDataLogged = false;
+        L('i', '房间缓存已清理: ' + reason);
+    }
+
+    function handleModeBaseSeen(modeBasePtr) {
+        try {
+            if (!modeBasePtr || modeBasePtr.isNull()) return;
+            if (!modeBase || modeBase.isNull()) {
+                modeBase = modeBasePtr;
+                L('i', 'ModeBase: ' + modeBase);
+                return;
+            }
+            if (!modeBasePtr.equals(modeBase)) {
+                clearRoomState('mode_base_changed');
+                modeBase = modeBasePtr;
+                L('i', 'ModeBase changed: ' + modeBase);
+            }
+        } catch(e) {
+            L('w', 'ModeBase lifecycle check failed: ' + e.message);
+        }
+    }
+
     function rp(a, o) { try { return a.add(o).readPointer(); } catch(e) { return null; } }
+
+    function rf(a, o) { try { return a.add(o).readFloat(); } catch(e) { return NaN; } }
+
+    function ri(a, o) { try { return a.add(o).readS32(); } catch(e) { return -999; } }
+
+    function ps(p) {
+        try { return p && !p.isNull() ? p.toString() : 'null'; } catch(e) { return 'badptr'; }
+    }
+
+    function fn(v) {
+        return isFinite(v) ? v.toFixed(2) : 'na';
+    }
+
+    function fv(v) {
+        if (!v) return '(null)';
+        return '(' + fn(v.x) + ',' + fn(v.y) + ',' + fn(v.z) + ')';
+    }
+
+    function readVec3Field(base, off) {
+        try {
+            if (!base || base.isNull()) return null;
+            return {
+                x: base.add(off).readFloat(),
+                y: base.add(off + 4).readFloat(),
+                z: base.add(off + 8).readFloat()
+            };
+        } catch(e) { return null; }
+    }
+
+    function readTransformPosition(entity, isBot) {
+        try {
+            if (!entity || entity.isNull()) return null;
+            var tr = gt(entity, ptr(0));
+            if ((!tr || tr.isNull()) && !isBot) tr = rp(entity, O.P_charContainer);
+            if (!tr || tr.isNull()) return null;
+            var np = tr.add(0x10).readPointer();
+            if (!np || np.isNull()) return null;
+            return {
+                x: np.add(0x38).readFloat(),
+                y: np.add(0x3C).readFloat(),
+                z: np.add(0x40).readFloat()
+            };
+        } catch(e) { return null; }
+    }
+
+    function readBotDiagnostics(botPtr) {
+        try {
+            if (!botPtr || botPtr.isNull()) return 'bot=null';
+            var path = rp(botPtr, O.Bot_path);
+            var gNear = rp(botPtr, O.Bot_gNode_Nearset);
+            var gNext = rp(botPtr, O.Bot_gNode_Next);
+            return [
+                'path=' + ps(path),
+                'pathLen=' + fn(rf(botPtr, O.Bot_pathLength)),
+                'gNear=' + ps(gNear),
+                'gNext=' + ps(gNext),
+                'nextId=' + ri(botPtr, O.Bot_nextPathVectorID),
+                'lastStart=' + fv(readVec3Field(botPtr, O.Bot_lastStartPoint)),
+                'nextPathPos=' + fv(readVec3Field(botPtr, O.Bot_nextPathPos)),
+                'jump=' + fn(rf(botPtr, O.Bot_nextJumpTime)),
+                'block=' + fn(rf(botPtr, O.Bot_blockedTime)),
+                'crouch=' + fn(rf(botPtr, O.Bot_crouchEndTime))
+            ].join(',');
+        } catch(e) {
+            return 'botdiag=ERR:' + e.message;
+        }
+    }
+
+    function logPostTeleportDiagnostic(index, player, botPtr, method, beforePlayer, beforeBot) {
+        try {
+            var afterPlayer = readTransformPosition(player, false);
+            var afterBot = botPtr && !botPtr.isNull() ? readTransformPosition(botPtr, true) : null;
+            L('i', DIAG_TAG +
+                ' post #' + index +
+                ' player=' + ps(player) +
+                ' bot=' + ps(botPtr) +
+                ' method=' + method +
+                ' before=' + fv(beforePlayer) +
+                ' after=' + fv(afterPlayer) +
+                ' botBefore=' + fv(beforeBot) +
+                ' botAfter=' + fv(afterBot) +
+                ' botdiag=' + readBotDiagnostics(botPtr));
+        } catch(e) {
+            L('w', DIAG_TAG + ' post #' + index + ' diag_error=' + e.message);
+        }
+    }
 
     function isValid(pp) {
         if (!pp || pp.isNull()) return false;
@@ -138,11 +276,30 @@
         if (pValid) {
             var pk = player.toString();
             if (!trackedPlayers[pk]) trackedPlayers[pk] = player;
+            trackedPlayerBots[pk] = botPtr;
+            L('i', DIAG_TAG + ' track bot=' + key + ' player=' + pk + ' botdiag=' + readBotDiagnostics(botPtr));
+        }
+    }
+
+    function teleportPlayerBySetPos(player) {
+        try {
+            if (!isValid(player)) return 'SetPos=invalid';
+            L('i', DIAG_TAG + ' call Player.SetPos player=' + ps(player) + ' target=' + fv(spawn));
+            playerSetPos(player, spawn.x, spawn.y, spawn.z, ptr(0));
+            return 'OK:SetPos';
+        } catch(e) {
+            return 'SetPos=ERR:' + e.message;
         }
     }
 
     function teleportEntity(ppOrBot, isBot) {
         try {
+            if (!isBot) {
+                var setPosResult = teleportPlayerBySetPos(ppOrBot);
+                if (setPosResult === 'OK:SetPos') return setPosResult;
+                L('w', DIAG_TAG + ' SetPos fallback result=' + setPosResult + ' player=' + ps(ppOrBot));
+            }
+
             var tr = gt(ppOrBot, ptr(0));
             if (!tr || tr.isNull()) {
                 if (!isBot) tr = rp(ppOrBot, O.P_charContainer);
@@ -153,6 +310,7 @@
             var cc = getCC(ppOrBot, ptr(0));
             if (cc && !cc.isNull()) cSE(cc, 0, ptr(0));
 
+            L('w', DIAG_TAG + ' Transform fallback target=' + fv(spawn) + ' entity=' + ps(ppOrBot) + ' isBot=' + isBot);
             spi(tr, posBuf, ptr(0));
             try {
                 var np = tr.add(0x10).readPointer();
@@ -165,7 +323,7 @@
 
             if (cc && !cc.isNull()) cSE(cc, 1, ptr(0));
 
-            return 'OK';
+            return 'OK:Transform';
         } catch(e) { return 'ERR:' + e.message; }
     }
 
@@ -271,8 +429,24 @@
                 if (isMy(pp, ptr(0))) { self++; continue; }
                 if (isHuman(pp)) { real++; continue; }
                 if (isDead(pp, ptr(0))) { dead++; continue; }
+                var botPtr = trackedPlayerBots[pKeys[pi]] || ptr(0);
+                var beforePlayer = readTransformPosition(pp, false);
+                var beforeBot = botPtr && !botPtr.isNull() ? readTransformPosition(botPtr, true) : null;
+                L('i', DIAG_TAG +
+                    ' pre #' + pi +
+                    ' player=' + ps(pp) +
+                    ' bot=' + ps(botPtr) +
+                    ' method=pending' +
+                    ' before=' + fv(beforePlayer) +
+                    ' botBefore=' + fv(beforeBot) +
+                    ' botdiag=' + readBotDiagnostics(botPtr));
                 var r = teleportEntity(pp, false);
-                if (r === 'OK') botOk++;
+                setTimeout((function(idx, playerPtr, botForPlayer, method, beforePlayerPos, beforeBotPos) {
+                    return function() {
+                        logPostTeleportDiagnostic(idx, playerPtr, botForPlayer, method, beforePlayerPos, beforeBotPos);
+                    };
+                })(pi, pp, botPtr, r, beforePlayer, beforeBot), 120);
+                if (r.indexOf('OK') === 0) botOk++;
                 else botFail++;
                 log.push('#' + pi + ': Bot→' + r);
             } catch(e) { botFail++; }
@@ -310,6 +484,28 @@
         L('i', 'OK');
     } catch(e) { L('e', 'MapGunInit failed'); }
 
+    L('i', '安装 房间生命周期清理...');
+    try {
+        Interceptor.attach(B.add(R.ModeBase_UpdateTimeUI), { onEnter: function(a) { handleModeBaseSeen(a[0]); } });
+        L('i', 'ModeBase.UpdateTimeUI OK');
+    } catch(e) { L('e', 'ModeBase.UpdateTimeUI failed'); }
+    try {
+        Interceptor.attach(B.add(R.ModeBase_ExitGame), { onEnter: function() { clearRoomState('ModeBase.ExitGame'); } });
+        L('i', 'ModeBase.ExitGame OK');
+    } catch(e) { L('e', 'ModeBase.ExitGame failed'); }
+    try {
+        Interceptor.attach(B.add(R.GameManager_GameRoundEnd), { onEnter: function() { clearRoomState('GameManager.GameRoundEnd'); } });
+        L('i', 'GameManager.GameRoundEnd OK');
+    } catch(e) { L('e', 'GameManager.GameRoundEnd failed'); }
+    try {
+        Interceptor.attach(B.add(R.GameManager_NewGameRoundStart), { onEnter: function() { clearRoomState('GameManager.NewGameRoundStart'); } });
+        L('i', 'GameManager.NewGameRoundStart OK');
+    } catch(e) { L('e', 'GameManager.NewGameRoundStart failed'); }
+    try {
+        Interceptor.attach(B.add(R.GameManager_OnDestroy), { onEnter: function() { clearRoomState('GameManager.OnDestroy'); } });
+        L('i', 'GameManager.OnDestroy OK');
+    } catch(e) { L('e', 'GameManager.OnDestroy failed'); }
+
     L('i', '安装 Player.Update...');
     try {
         Interceptor.attach(B.add(R.P_Update), { onEnter: function(a) {
@@ -327,6 +523,9 @@
             if (isDead(pp, ptr(0))) { L('i', label + ' → 已死, 跳过'); return; }
 
             posBuf.writeFloat(spawn.x); posBuf.add(4).writeFloat(spawn.y); posBuf.add(8).writeFloat(spawn.z);
+            var setPosResult = teleportPlayerBySetPos(pp);
+            if (setPosResult === 'OK:SetPos') { L('i', '✅ ' + label + ' → ' + setPosResult); return; }
+
             var tr = gt(pp, ptr(0));
             if (!tr || tr.isNull()) tr = rp(pp, O.P_charContainer);
             if (!tr || tr.isNull()) { L('i', label + ' → T=null'); return; }

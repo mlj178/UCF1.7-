@@ -15,6 +15,10 @@
 //   Player_SetPos:                    0x00B534C0  dump.cs + IDA 汇编确认会处理 Collider.enabled
 //   Component_get_transform:          0x0032CF40  已有自由视角/穿墙功能验证
 //   Transform_get_position_Injected:  0x003F4280  已有自由视角/穿墙功能验证
+//   ModeBase_UpdateTimeUI:            0x00AF6930  全模式通用模式实例触发点
+//   GameManager_GameRoundEnd:         0x00AFAA40  任意模式回合结束
+//   GameManager_NewGameRoundStart:    0x00AEBCB0  新回合开始
+//   GameManager_OnDestroy:            0x00AEBD40  房间对象销毁/离开房间
 //   Player_characterController:       0x2C        dump.cs 字段偏移，Player.SetPos 内部会读取
 // ============================================================
 
@@ -29,7 +33,11 @@
         Player_get_isMyPlayer: 0x00B55FD0,
         Player_SetPos: 0x00B534C0,
         Component_get_transform: 0x0032CF40,
-        Transform_get_position_Injected: 0x003F4280
+        Transform_get_position_Injected: 0x003F4280,
+        ModeBase_UpdateTimeUI: 0x00AF6930,
+        GameManager_GameRoundEnd: 0x00AFAA40,
+        GameManager_NewGameRoundStart: 0x00AEBCB0,
+        GameManager_OnDestroy: 0x00AEBD40
     };
 
     var OFF = {
@@ -43,6 +51,7 @@
         applied: false,
         pendingApply: false,
         generation: 0,
+        roomGeneration: 0,
         module: null,
         base: ptr(0),
         hooks: [],
@@ -52,12 +61,19 @@
         },
         cache: {
             localPlayer: ptr(0),
-            localPlayerSeenAt: 0
+            localPlayerSeenAt: 0,
+            modeBase: ptr(0)
         },
         savedPoint: null,
+        pending: {
+            save: false,
+            teleport: false
+        },
         stats: {
             hookHits: 0,
             localPlayerHits: 0,
+            modeBaseHits: 0,
+            roundBoundaryCount: 0,
             saveCount: 0,
             teleportCount: 0,
             clearCount: 0,
@@ -67,6 +83,7 @@
             cleanupCount: 0,
             lastError: "",
             lastResetReason: "",
+            lastRoomReason: "",
             lastSaveResult: "",
             lastTeleportResult: "",
             lastPointSource: ""
@@ -138,6 +155,7 @@
             y: Number(point.y),
             z: Number(point.z),
             generation: Runtime.generation,
+            room_generation: Runtime.roomGeneration,
             saved_at: Date.now()
         };
     }
@@ -211,10 +229,39 @@
         Runtime.generation += 1;
         Runtime.cache.localPlayer = ptr(0);
         Runtime.cache.localPlayerSeenAt = 0;
+        Runtime.cache.modeBase = ptr(0);
+        Runtime.savedPoint = null;
+        Runtime.pending.save = false;
+        Runtime.pending.teleport = false;
         Runtime.applied = false;
         Runtime.pendingApply = Runtime.enabled;
         Runtime.stats.lastResetReason = reason || "unknown";
         log("info", "resetRuntime: " + Runtime.stats.lastResetReason + ", gen=" + Runtime.generation);
+    }
+
+    function handleRoundBoundary(reason, nextModeBase) {
+        Runtime.roomGeneration += 1;
+        Runtime.stats.roundBoundaryCount += 1;
+        Runtime.stats.lastRoomReason = reason || "room_boundary";
+        resetRuntime(Runtime.stats.lastRoomReason);
+        if (!isNull(nextModeBase)) {
+            Runtime.cache.modeBase = nextModeBase;
+        }
+        log("info", "room boundary: " + Runtime.stats.lastRoomReason + ", room_gen=" + Runtime.roomGeneration);
+    }
+
+    function handleModeBaseSeen(modeBase) {
+        if (isNull(modeBase)) return;
+
+        Runtime.stats.modeBaseHits += 1;
+        if (isNull(Runtime.cache.modeBase)) {
+            Runtime.cache.modeBase = modeBase;
+            return;
+        }
+
+        if (!modeBase.equals(Runtime.cache.modeBase)) {
+            handleRoundBoundary("mode_base_changed", modeBase);
+        }
     }
 
     function captureLocalPlayer(player, reason) {
@@ -258,9 +305,47 @@
                     if (!Runtime.enabled) return;
 
                     try {
-                        captureLocalPlayer(args[0], "Player.Update");
+                        if (captureLocalPlayer(args[0], "Player.Update")) {
+                            performPendingActions(args[0]);
+                        }
                     } catch (error) {
                         setError("Player.Update hook failed", error);
+                    }
+                }
+            });
+            attachHook("ModeBase.UpdateTimeUI", RVA.ModeBase_UpdateTimeUI, {
+                onEnter: function (args) {
+                    try {
+                        handleModeBaseSeen(args[0]);
+                    } catch (error) {
+                        setError("ModeBase.UpdateTimeUI hook failed", error);
+                    }
+                }
+            });
+            attachHook("GameManager.GameRoundEnd", RVA.GameManager_GameRoundEnd, {
+                onEnter: function () {
+                    try {
+                        handleRoundBoundary("game_round_end");
+                    } catch (error) {
+                        setError("GameManager.GameRoundEnd hook failed", error);
+                    }
+                }
+            });
+            attachHook("GameManager.NewGameRoundStart", RVA.GameManager_NewGameRoundStart, {
+                onEnter: function () {
+                    try {
+                        handleRoundBoundary("new_game_round_start");
+                    } catch (error) {
+                        setError("GameManager.NewGameRoundStart hook failed", error);
+                    }
+                }
+            });
+            attachHook("GameManager.OnDestroy", RVA.GameManager_OnDestroy, {
+                onEnter: function () {
+                    try {
+                        handleRoundBoundary("game_manager_destroy");
+                    } catch (error) {
+                        setError("GameManager.OnDestroy hook failed", error);
                     }
                 }
             });
@@ -313,22 +398,32 @@
         }
     }
 
-    function saveCurrentPoint() {
+    function canQueueAction(kind) {
         if (!native.ready && !initNativeFunctions()) {
-            Runtime.stats.lastSaveResult = "native_not_ready";
+            if (kind === "save") Runtime.stats.lastSaveResult = "native_not_ready";
+            else Runtime.stats.lastTeleportResult = "native_not_ready";
             return false;
         }
         if (Runtime.config.require_enabled_for_actions && !Runtime.enabled) {
-            Runtime.stats.lastSaveResult = "feature_disabled";
+            if (kind === "save") Runtime.stats.lastSaveResult = "feature_disabled";
+            else Runtime.stats.lastTeleportResult = "feature_disabled";
+            return false;
+        }
+        return true;
+    }
+
+    function saveCurrentPoint() {
+        if (!canQueueAction("save")) {
             return false;
         }
 
-        var player = getRecentLocalPlayer();
-        if (isNull(player)) {
-            Runtime.stats.lastSaveResult = "local_player_not_ready";
-            return false;
-        }
+        Runtime.pending.save = true;
+        Runtime.stats.lastSaveResult = "save_pending";
+        log("info", "save point pending until next Player.Update");
+        return true;
+    }
 
+    function saveCurrentPointFromPlayer(player) {
         if (!captureLocalPlayer(player, "saveCurrentPoint")) {
             Runtime.stats.lastSaveResult = "not_local_player";
             return false;
@@ -347,26 +442,41 @@
         return true;
     }
 
-    function teleportToSavedPoint() {
-        if (!native.ready && !initNativeFunctions()) {
-            Runtime.stats.lastTeleportResult = "native_not_ready";
+    function hasValidSavedPoint() {
+        if (Runtime.savedPoint === null) return false;
+        if (Runtime.savedPoint.room_generation !== Runtime.roomGeneration) {
+            Runtime.stats.lastTeleportResult = "saved_point_expired";
+            Runtime.savedPoint = null;
+            Runtime.pending.teleport = false;
             return false;
         }
-        if (Runtime.config.require_enabled_for_actions && !Runtime.enabled) {
-            Runtime.stats.lastTeleportResult = "feature_disabled";
+        return true;
+    }
+
+    function requestTeleportToSavedPoint() {
+        if (!canQueueAction("teleport")) {
             return false;
         }
-        if (Runtime.savedPoint === null) {
-            Runtime.stats.lastTeleportResult = "no_saved_point";
+        if (!hasValidSavedPoint()) {
+            if (Runtime.stats.lastTeleportResult !== "saved_point_expired") {
+                Runtime.stats.lastTeleportResult = "no_saved_point";
+            }
             return false;
         }
 
-        var player = getRecentLocalPlayer();
-        if (isNull(player)) {
-            Runtime.stats.lastTeleportResult = "local_player_not_ready";
+        Runtime.pending.teleport = true;
+        Runtime.stats.lastTeleportResult = "teleport_pending";
+        log("info", "teleport pending until next Player.Update");
+        return true;
+    }
+
+    function teleportToSavedPointFromPlayer(player) {
+        if (!hasValidSavedPoint()) {
+            if (Runtime.stats.lastTeleportResult !== "saved_point_expired") {
+                Runtime.stats.lastTeleportResult = "no_saved_point";
+            }
             return false;
         }
-
         if (!captureLocalPlayer(player, "teleportToSavedPoint")) {
             Runtime.stats.lastTeleportResult = "not_local_player";
             return false;
@@ -386,8 +496,24 @@
         }
     }
 
+    function performPendingActions(player) {
+        if (!Runtime.enabled || isNull(player)) return;
+
+        if (Runtime.pending.save) {
+            Runtime.pending.save = false;
+            saveCurrentPointFromPlayer(player);
+        }
+
+        if (Runtime.pending.teleport) {
+            Runtime.pending.teleport = false;
+            teleportToSavedPointFromPlayer(player);
+        }
+    }
+
     function clearSavedPoint() {
         Runtime.savedPoint = null;
+        Runtime.pending.save = false;
+        Runtime.pending.teleport = false;
         Runtime.stats.clearCount += 1;
         Runtime.stats.lastSaveResult = "cleared";
         Runtime.stats.lastTeleportResult = "";
@@ -446,11 +572,15 @@
             applied: Runtime.applied,
             pendingApply: Runtime.pendingApply,
             generation: Runtime.generation,
+            room_generation: Runtime.roomGeneration,
             hook_hits: Runtime.stats.hookHits,
             local_player_hits: Runtime.stats.localPlayerHits,
+            mode_base_hits: Runtime.stats.modeBaseHits,
+            round_boundary_count: Runtime.stats.roundBoundaryCount,
             error_count: Runtime.stats.errorCount,
             last_error: Runtime.stats.lastError,
             last_reset_reason: Runtime.stats.lastResetReason,
+            last_room_reason: Runtime.stats.lastRoomReason,
             has_saved_point: Runtime.savedPoint !== null,
             saved_point: Runtime.savedPoint,
             save_count: Runtime.stats.saveCount,
@@ -459,6 +589,8 @@
             last_save_result: Runtime.stats.lastSaveResult,
             last_teleport_result: Runtime.stats.lastTeleportResult,
             player_cached: !isNull(Runtime.cache.localPlayer),
+            pending_save: Runtime.pending.save,
+            pending_teleport: Runtime.pending.teleport,
             require_enabled_for_actions: Runtime.config.require_enabled_for_actions
         };
     }
@@ -489,12 +621,12 @@
         },
 
         savepoint: function () {
-            saveCurrentPoint();
+            if (saveCurrentPoint()) Runtime.pending.save = true;
             return buildStatus();
         },
 
         teleporttopoint: function () {
-            teleportToSavedPoint();
+            if (requestTeleportToSavedPoint()) Runtime.pending.teleport = true;
             return buildStatus();
         },
 

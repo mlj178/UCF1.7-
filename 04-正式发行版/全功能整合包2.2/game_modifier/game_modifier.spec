@@ -31,6 +31,27 @@ def add_data_tree(source_dir, target_dir, excludes=()):
             datas.append((os.path.join(root, filename), destination))
 
 
+def add_feature_runtime_files(source_dir, target_dir):
+    allowed_extensions = {".py", ".js", ".json", ".png", ".jpg", ".jpeg", ".gif", ".ico", ".wav", ".mp3"}
+    excludes = ("__pycache__", "_template", "_legacy_archive")
+    if not os.path.isdir(source_dir):
+        return
+    for root, dirs, files in os.walk(source_dir):
+        dirs[:] = [
+            name for name in dirs
+            if name not in excludes and not name.startswith(".")
+        ]
+        relative_dir = os.path.relpath(root, source_dir)
+        destination = target_dir if relative_dir == "." else os.path.join(target_dir, relative_dir)
+        for filename in files:
+            stem, ext = os.path.splitext(filename)
+            if ext.lower() not in allowed_extensions:
+                continue
+            if filename.endswith(".pyc") or stem.startswith("test_") or stem.endswith("_test"):
+                continue
+            datas.append((os.path.join(root, filename), destination))
+
+
 def copy_data_tree(source_dir, target_dir, excludes=()):
     if os.path.isdir(target_dir):
         shutil.rmtree(target_dir)
@@ -83,7 +104,7 @@ if os.path.exists(resource_dir):
 # 2. 添加插件目录（manifest / script.js / panel.py）
 features_dir = os.path.join(current_dir, "features")
 if os.path.exists(features_dir):
-    datas.append((features_dir, "features"))
+    add_feature_runtime_files(features_dir, "features")
 
 # 2.1 添加 data 目录（配置文件）
 data_dir = os.path.join(current_dir, "data")
@@ -188,7 +209,7 @@ exe = EXE(
     a.zipfiles,
     a.datas,
     [],
-    name='UCF2.1修改器',
+    name='UCF2.2修改器',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

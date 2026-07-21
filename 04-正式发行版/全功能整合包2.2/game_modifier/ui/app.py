@@ -446,11 +446,8 @@ class App(ctk.CTk):
         with self._pending_ui_lock:
             self._pending_ui_callbacks = []
         self._event_bus.emit("app_closing")
-        GameSessionManager.get_instance().stop()
+        GameSessionManager.get_instance().stop_async()
         self._hotkey.cleanup()
         self._save_feature_state()
-        for feature in self._plugin_registry.all():
-            if hasattr(feature, "cleanup"):
-                feature.cleanup("app_close")
         self._cleanup()
         self.destroy()
