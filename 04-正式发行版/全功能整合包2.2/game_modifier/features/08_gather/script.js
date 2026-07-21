@@ -86,6 +86,7 @@ modules.gather = (function() {
   var enabled = false;
   var gm = null;
   var mm = null;
+  var modeBase = null;
   var spawn = { x: 13.6, y: 14.1, z: 0.1 };
   var ntp = false;
   var tn = 0;
@@ -108,7 +109,11 @@ modules.gather = (function() {
     setPosInj: 0x3F4810,
     Bot_Update: 0xB33370,
     SingGetInst: 0x4A8170,
+    P_SetPos: 0xB534C0,
     ModeBase_ExitGame: 0xAEE850,
+    ModeBase_UpdateTimeUI: 0xAF6930,
+    GameManager_GameRoundEnd: 0xAFAA40,
+    GameManager_NewGameRoundStart: 0xAEBCB0,
     GameManager_OnDestroy: 0xAFB6F0,
   };
 
@@ -121,13 +126,27 @@ modules.gather = (function() {
     Bot_thisPlayer: 0x24,
   };
 
-  var isMy = null, isDead = null, getCC = null, cSE = null, gt = null, spi = null;
+  var isMy = null, isDead = null, getCC = null, cSE = null, gt = null, spi = null, playerSetPos = null;
   var posBuf = null, singletonGetter = null, hooks = [];
   var diagnosticsTimer = null;
 
   function clearRoomState(reason) {
-    gm = null; mm = null; recentBotPlayers = {}; ntp = false;
+    gm = null; mm = null; modeBase = null; recentBotPlayers = {}; ntp = false;
     sendDevLog('info', 'Gather', 'Room cache cleared: ' + reason, 'GatherEnemies cleared cached room pointers');
+  }
+
+  function handleModeBaseSeen(modeBasePtr) {
+    try {
+      if (!modeBasePtr || modeBasePtr.isNull()) return;
+      if (!modeBase || modeBase.isNull()) {
+        modeBase = modeBasePtr;
+        return;
+      }
+      if (!modeBasePtr.equals(modeBase)) {
+        clearRoomState('mode_base_changed');
+        modeBase = modeBasePtr;
+      }
+    } catch(e) {}
   }
 
   function rp(a, o) { try { return a.add(o).readPointer(); } catch(e) { return null; } }
@@ -303,8 +322,22 @@ modules.gather = (function() {
     posBuf.add(8).writeFloat(target.z);
   }
 
+  function teleportPlayerBySetPos(player, target) {
+    try {
+      if (!isValid(player)) return 'SetPos=invalid';
+      playerSetPos(player, target.x, target.y, target.z, ptr(0));
+      return 'OK:SetPos';
+    } catch(e) {
+      return 'SetPos=ERR:' + e.message;
+    }
+  }
+
   function teleportEntity(ppOrBot, isBot) {
     try {
+      if (!isBot) {
+        var setPosResult = teleportPlayerBySetPos(ppOrBot, spawn);
+        if (setPosResult === 'OK:SetPos') return setPosResult;
+      }
       var tr = gt(ppOrBot, ptr(0));
       if (!tr || tr.isNull()) { if (!isBot) tr = rp(ppOrBot, O.P_charContainer); else tr = null; }
       if (!tr || tr.isNull()) return 'T=null';
@@ -317,7 +350,7 @@ modules.gather = (function() {
         if (np) { np.add(0x38).writeFloat(spawn.x); np.add(0x3C).writeFloat(spawn.y); np.add(0x40).writeFloat(spawn.z); }
       } catch(e) {}
       if (cc && !cc.isNull()) cSE(cc, 1, ptr(0));
-      return 'OK';
+      return 'OK:Transform';
     } catch(e) { return 'ERR:' + e.message; }
   }
 
@@ -400,7 +433,7 @@ modules.gather = (function() {
         if (isHuman(pp)) { real++; continue; }
         if (isDead(pp, ptr(0))) { dead++; continue; }
         var r = teleportEntity(pp, false);
-        if (r === 'OK') botOk++; else botFail++;
+        if (r.indexOf('OK') === 0) botOk++; else botFail++;
       } catch(e) { botFail++; }
     }
 
@@ -431,6 +464,7 @@ modules.gather = (function() {
       cSE = new NativeFunction(base.add(R.C_setEn), 'void', ['pointer','int','pointer']);
       gt = new NativeFunction(base.add(R.getTrans), 'pointer', ['pointer','pointer']);
       spi = new NativeFunction(base.add(R.setPosInj), 'void', ['pointer','pointer','pointer']);
+      playerSetPos = new NativeFunction(base.add(R.P_SetPos), 'void', ['pointer','float','float','float','pointer'], 'mscdecl');
       posBuf = Memory.alloc(16);
       singletonGetter = new NativeFunction(base.add(R.SingGetInst), 'pointer', ['pointer']);
       writePosition(spawn);
@@ -439,8 +473,11 @@ modules.gather = (function() {
       try { var h2 = Interceptor.attach(base.add(R.GM_AddP), { onEnter: function(a) { if (!gm) { gm = a[0]; } } }); hooks.push(h2); } catch(e) {}
       try { var h3 = Interceptor.attach(base.add(R.MM_MapGun), { onEnter: function(a) { if (mm) return; mm = a[0]; } }); hooks.push(h3); } catch(e) {}
       try { var h4 = Interceptor.attach(base.add(R.P_Update), { onEnter: function(a) { if (!ntp) return; ntp = false; if (!gm || !mm) return; executeTeleport(); } }); hooks.push(h4); } catch(e) {}
-      try { var h5 = Interceptor.attach(base.add(R.ModeBase_ExitGame), { onEnter: function() { clearRoomState('ModeBase.ExitGame'); } }); hooks.push(h5); } catch(e) {}
-      try { var h6 = Interceptor.attach(base.add(R.GameManager_OnDestroy), { onEnter: function() { clearRoomState('GameManager.OnDestroy'); } }); hooks.push(h6); } catch(e) {}
+      try { var h5 = Interceptor.attach(base.add(R.ModeBase_UpdateTimeUI), { onEnter: function(args) { handleModeBaseSeen(args[0]); } }); hooks.push(h5); } catch(e) {}
+      try { var h6 = Interceptor.attach(base.add(R.ModeBase_ExitGame), { onEnter: function() { clearRoomState('ModeBase.ExitGame'); } }); hooks.push(h6); } catch(e) {}
+      try { var h7 = Interceptor.attach(base.add(R.GameManager_GameRoundEnd), { onEnter: function() { clearRoomState('GameManager.GameRoundEnd'); } }); hooks.push(h7); } catch(e) {}
+      try { var h8 = Interceptor.attach(base.add(R.GameManager_NewGameRoundStart), { onEnter: function() { clearRoomState('GameManager.NewGameRoundStart'); } }); hooks.push(h8); } catch(e) {}
+      try { var h9 = Interceptor.attach(base.add(R.GameManager_OnDestroy), { onEnter: function() { clearRoomState('GameManager.OnDestroy'); } }); hooks.push(h9); } catch(e) {}
 
       enabled = true;
       startGatherDiagnostics();
@@ -451,7 +488,7 @@ modules.gather = (function() {
       if (!enabled) return;
       stopGatherDiagnostics();
       for (var i = 0; i < hooks.length; i++) { try { hooks[i].detach(); } catch(e) {} }
-      hooks = []; gm = null; mm = null; recentBotPlayers = {}; ntp = false;
+      hooks = []; gm = null; mm = null; modeBase = null; recentBotPlayers = {}; ntp = false;
       enabled = false;
       sendLog('info', '聚怪', '已禁用');
       sendStatus('gather', false);

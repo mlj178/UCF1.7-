@@ -168,11 +168,11 @@ class SettingsWindow(ctk.CTkToplevel):
                                    width=100, command=self._open_bilibili)
         bili_btn.pack(side="left")
 
-        # 历代版本更新说明链接
+        # 全功能整合包源代码链接
         version_frame = ctk.CTkFrame(about_frame, fg_color="transparent")
         version_frame.pack(pady=(8, 4))
-        version_btn = ctk.CTkButton(version_frame, text="🔗 历代版本更新说明", font=("Microsoft YaHei", 11),
-                                     width=160, command=self._open_version_history)
+        version_btn = ctk.CTkButton(version_frame, text="🔗 全功能整合包源代码", font=("Microsoft YaHei", 11),
+                                     width=170, command=self._open_source_code)
         version_btn.pack(side="left")
 
         ctk.CTkLabel(about_frame, text="\n微信赞赏码:",
@@ -197,8 +197,8 @@ class SettingsWindow(ctk.CTkToplevel):
     def _open_bilibili(self):
         webbrowser.open("https://space.bilibili.com/481324794")
 
-    def _open_version_history(self):
-        webbrowser.open("https://mlj178.github.io/UCF1.7.1--/")
+    def _open_source_code(self):
+        webbrowser.open("https://github.com/mlj178/UCF1.7-/tree/dev/04-%E6%AD%A3%E5%BC%8F%E5%8F%91%E8%A1%8C%E7%89%88")
 
     def _on_save(self):
         self._hotkey.save_and_apply(

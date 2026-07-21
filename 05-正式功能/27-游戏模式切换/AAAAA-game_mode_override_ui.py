@@ -19,12 +19,10 @@ GAME_PROCESS_NAME = "UnityCrossFire.exe"
 
 MODE_OPTIONS = {
     "团队竞技": "team_death",
-    "特殊战": "special",
-    "个人竞技": "death_match",
-    "生化3": "nano3",
-    "多人生化（生化4）": "nano4",
-    "生化6": "nano6",
-    "生化4终结者": "nano4_terminator",
+    "刀战": "special",
+    "生化4（普通生化）": "nano4",
+    "生化6（剑客模式）": "nano6",
+    "生化4终结者（多人生化）": "nano4_terminator",
     "狙击战": "sniper",
     "手枪战": "handgun",
 }
@@ -271,6 +269,7 @@ class GameModeOverrideApp(ctk.CTk):
         return {
             "enabled": self.enable_switch.get() == 1,
             "mode_key": MODE_OPTIONS[label],
+            "probe_enabled": False,
         }
 
     def _on_enable_changed(self):

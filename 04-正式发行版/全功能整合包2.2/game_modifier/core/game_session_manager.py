@@ -54,6 +54,8 @@ class GameSessionManager:
         self._frida_manager = None
         self._universal_manager = None
         self._persistence_service = AppPersistenceService()
+        self._shutdown_lock = threading.Lock()
+        self._shutdown_started = False
         
         # Desired feature states (persisted)
         self._desired_states = {}
@@ -94,9 +96,31 @@ class GameSessionManager:
     def disconnect(self):
         """Request a managed disconnect of the current game session."""
         self._reset_session()
+
+    def _begin_stop(self):
+        with self._shutdown_lock:
+            if self._shutdown_started:
+                return False
+            self._shutdown_started = True
+            return True
+
+    def stop_async(self):
+        """Request shutdown without blocking the UI thread."""
+        if not self._begin_stop():
+            return
+        threading.Thread(
+            target=self._stop_impl,
+            name="GameSessionManagerStop",
+            daemon=True,
+        ).start()
     
     def stop(self):
         """Stop the session manager"""
+        if not self._begin_stop():
+            return
+        self._stop_impl()
+
+    def _stop_impl(self):
         log_to_file("info", "系统", "GameSessionManager stopping")
         self._stop_event.set()
         self._wake_event.set()
