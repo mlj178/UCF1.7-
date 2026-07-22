@@ -1,0 +1,80 @@
+{
+  "feature_id": "fixed_point_teleport",
+  "canonical_id": "fixed_point_teleport",
+  "display_name": "定点瞬移",
+  "category": "other",
+  "tab": "other_tab",
+  "tab_title": "其他",
+  "tab_order": 30,
+  "order": 115,
+  "icon": "📍",
+  "desc": "保存当前位置后，将本地玩家瞬移回保存点。",
+  "script": "script.js",
+  "runtime": {
+    "type": "plugin_script"
+  },
+  "layout": {
+    "card_type": "wide",
+    "columnspan": 2,
+    "title_color": "#38bdf8"
+  },
+  "controls": [
+    {
+      "type": "switch",
+      "action": "enable"
+    },
+    {
+      "type": "button",
+      "action": "savepoint",
+      "label": "保存当前位置  Alt+1"
+    },
+    {
+      "type": "button",
+      "action": "teleporttopoint",
+      "label": "瞬移到保存点  Alt+2"
+    }
+  ],
+  "config": {
+    "require_enabled_for_actions": true,
+    "max_cached_player_age_ms": 3000
+  },
+  "rpc": [
+    "enable",
+    "disable",
+    "setConfig",
+    "set_config",
+    "setconfig",
+    "status",
+    "cleanup",
+    "savepoint",
+    "teleporttopoint"
+  ],
+  "actions": {
+    "savepoint": {
+      "type": "rpc",
+      "requires_connection": true
+    },
+    "teleporttopoint": {
+      "type": "rpc",
+      "requires_connection": true
+    }
+  },
+  "lifecycle": {
+    "cleanup": true,
+    "restore": true,
+    "requires_room_ready_reapply": true,
+    "room_ready_retry": true
+  },
+  "source": {
+    "single_feature_js": "05-正式功能/31-定点瞬移/AAAAA-fixed_point_teleport_min.js",
+    "runtime_script_js": "features/31_fixed_point_teleport/script.js"
+  },
+  "ui_handles": {
+    "switch": "fixed_point_teleport_switch",
+    "save_button": "fixed_point_teleport_save_btn",
+    "teleport_button": "fixed_point_teleport_teleport_btn"
+  },
+  "state": {
+    "sync_enabled_from_config": true
+  }
+}

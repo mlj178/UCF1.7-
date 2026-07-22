@@ -28,7 +28,7 @@ class DamageMultiplierApp(ctk.CTk):
     def __init__(self):
         super().__init__()
 
-        self.title("增加伤害倍率")
+        self.title("调整伤害倍率")
         self.geometry("660x620")
         self.minsize(600, 540)
 
@@ -60,13 +60,13 @@ class DamageMultiplierApp(ctk.CTk):
 
         ctk.CTkLabel(
             self,
-            text="增加伤害倍率",
+            text="调整伤害倍率",
             font=ctk.CTkFont(size=24, weight="bold"),
         ).grid(row=0, column=0, padx=18, pady=(18, 4), sticky="ew")
 
         ctk.CTkLabel(
             self,
-            text="本地玩家输出倍率：修改最终 DamageEventData.damage，跳过感染和本地受击",
+            text="放大玩家造成的输出伤害",
             text_color="#8f98a8",
             font=ctk.CTkFont(size=12),
         ).grid(row=1, column=0, padx=18, pady=(0, 8), sticky="ew")
@@ -114,9 +114,9 @@ class DamageMultiplierApp(ctk.CTk):
 
         self.multiplier_slider = ctk.CTkSlider(
             slider_row,
-            from_=0.0,
+            from_=1.0,
             to=20.0,
-            number_of_steps=200,
+            number_of_steps=190,
             command=self._on_multiplier_preview,
         )
         self.multiplier_slider.set(self.multiplier)

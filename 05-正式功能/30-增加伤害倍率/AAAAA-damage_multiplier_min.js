@@ -75,8 +75,8 @@
         ownerTtlMs: 15000,
         config: {
             multiplier: 2.0,
-            min_multiplier: 0.0,
-            max_multiplier: 100.0,
+            min_multiplier: 1.0,
+            max_multiplier: 20.0,
             max_damage: 999999.0,
             skip_local_victim: true,
             include_infect: false,
@@ -307,6 +307,37 @@
         Runtime.stats.lastDecision = decision || "";
     }
 
+    function formatFloat(value) {
+        if (!isFinite(value)) return String(value);
+        return value.toFixed(3);
+    }
+
+    function logDamageDiagnostic(data, source, multiplier, newDamage, effectiveAttacker, victim, victimIsLocal) {
+        if (!Runtime.config.diagnostic_log) return;
+
+        var truncDamage = newDamage < 0 ? Math.ceil(newDamage) : Math.floor(newDamage);
+        var message = 'damage_diag source=' + source +
+            ' raw_damage=' + formatFloat(data.damage) +
+            ' multiplier=' + formatFloat(multiplier) +
+            ' new_damage=' + formatFloat(newDamage) +
+            ' trunc=' + truncDamage +
+            ' floor=' + Math.floor(newDamage) +
+            ' round=' + Math.round(newDamage) +
+            ' ceil=' + Math.ceil(newDamage) +
+            ' below_one=' + (newDamage > 0 && newDamage < 1) +
+            ' type=' + data.type +
+            ' tag=' + data.damageTag +
+            ' wpn=' + data.wpnIndex +
+            ' spr=' + data.wpnSprIndex +
+            ' attacker=' + ptrKey(data.attacker) +
+            ' effective_attacker=' + ptrKey(effectiveAttacker) +
+            ' victim=' + ptrKey(victim) +
+            ' victim_is_local=' + victimIsLocal +
+            ' ignoreDmgRate=' + data.ignoreDmgRate;
+
+        logLimited('damage_diagnostic', 'info', message, 300);
+    }
+
     function multiplyDamageEvent(eventPtr, source) {
         Runtime.stats.totalHurtEvents += 1;
         if (!Runtime.enabled) {
@@ -347,7 +378,8 @@
         }
 
         var victim = data.victim;
-        if (Runtime.config.skip_local_victim && isLocalPlayer(victim)) {
+        var victimIsLocal = isLocalPlayer(victim);
+        if (Runtime.config.skip_local_victim && victimIsLocal) {
             Runtime.stats.skippedLocalVictim += 1;
             recordLast(data, source, 'skip_local_victim');
             return false;
@@ -361,6 +393,7 @@
         var newDamage = data.damage * multiplier;
         if (newDamage > Runtime.config.max_damage) newDamage = Runtime.config.max_damage;
         if (newDamage < 0) newDamage = 0;
+        logDamageDiagnostic(data, source, multiplier, newDamage, effectiveAttacker, victim, victimIsLocal);
 
         try {
             var damageAddr = eventPtr.add(OFF.Dmg_damage);

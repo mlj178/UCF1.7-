@@ -11,6 +11,7 @@
     UI_GameRoom_GenerateBotClient: 0x00B25B80,
     MapManager_Awake: 0x00AEB2B0,
     MapManager_GetSpawnPoint: 0x00AEB6E0,
+    MapManager_GetSupplyBoxPoint: 0x00AEB8A0,
     GameManager_AddPlayers: 0x00AF9DE0,
     GameManager_AddPlayer: 0x00AF9A90,
     Player_Spawn: 0x00B53760,
@@ -28,6 +29,12 @@
     Mode_Nano4_Terminator_DeathEvent: 0x00B437E0,
     Mode_Nano6_DeathEvent: 0x00B47A20,
     Mode_TeamDeath_DeathEvent: 0x00B4A400,
+    StartGenerateSupplyBox: 0x00B45AA0,
+    Mode_Nano4_Terminator_UpgrandeBoxGenerator: 0x00B45E00,
+    UnityEngine_MonoBehaviour_StartCoroutine_Auto: 0x004E8830,
+    ManagedObject_New: 0x00167D20,
+    List_int_ctor: 0x00430E90,
+    List_int_Add: 0x009EF780,
     GameManager_GiveWeapon: 0x00AFB390,
     GameManager_GiveWeaponByBag: 0x00AFB2A0,
     GameManager_GetWpnData: 0x00AFB130,
@@ -36,9 +43,11 @@
     GameManager_TypeInfo: 0x00E2933C,
     ModeBase_TypeInfo: 0x00E2CC54,
     ModeBase_Nano_TypeInfo: 0x00E2CC74,
+    Mode_Nano4_Terminator_TypeInfo: 0x00E2CCB4,
     MapAsset_Nano_TypeInfo: 0x00E2C4F4,
     MapAsset_TeamDeath_TypeInfo: 0x00E2C534,
     UI_GameRoom_TypeInfo: 0x00E32C80,
+    System_Collections_Generic_List_int_TypeInfo: 0x00E1F6D8,
     WriteBarrier: 0x001677F0
   };
 
@@ -73,9 +82,20 @@
     ModeBase_aliveCountGR: 0x54,
     ModeBase_Nano_thisRoundPlayer: 0xA4,
     ModeBase_Nano_respawningPlayer: 0xAC,
+    Mode_Nano4_Terminator_attributeAsset: 0xD8,
+    Mode_Nano4_Terminator_attribute_Nano: 0xE0,
+    Mode_Nano4_Terminator_attribute_Human: 0xE4,
+    Nano4TAttributeAsset_attributes: 0x14,
+    Nano4TAttribute_id: 0x0C,
     MapManager_SP_BL: 0x10,
     MapManager_SP_GR: 0x14,
     MapManager_SP_Netural: 0x18,
+    MapManager_SP_SupplyBox: 0x1C,
+    MapManager_SP_RedBox: 0x20,
+    MapManager_SP_BlueBox: 0x24,
+    MapManager_IDList_SupplyBox: 0x28,
+    MapManager_IDList_RedBox: 0x2C,
+    MapManager_IDList_BlueBox: 0x30,
     ClientData_defaultWpnBagID: 0x08,
     ClientData_wpnBags: 0x0C,
     ClientData_joinTeam: 0x18,
@@ -118,6 +138,15 @@
   var SNIPER_BOT_FALLBACK_WEAPON_INDEX = 2568;
   var HANDGUN_BOT_FALLBACK_WEAPON_INDEX = 20;
   var KNIFE_BOT_FALLBACK_WEAPON_INDEX = 244;
+  var TERMINATOR_SUPPLY_GHOST_ATTR_ID = 8;
+  var TERMINATOR_SUPPLY_HUMAN_ATTR_ID = 18;
+  var SUPPLY_BOX_TYPE_YELLOW = 0;
+  var SUPPLY_BOX_TYPE_RED = 1;
+  var SUPPLY_BOX_TYPE_BLUE = 2;
+  var TERMINATOR_UPGRADE_BOX_RED_DELAY = 62;
+  var TERMINATOR_UPGRADE_BOX_BLUE_DELAY = 91;
+  var TERMINATOR_UPGRADE_BOX_RED_TEAM = 0;
+  var TERMINATOR_UPGRADE_BOX_BLUE_TEAM = 1;
 
   var Runtime = {
     enabled: false,
@@ -128,6 +157,8 @@
     lastDropdowns: null,
     lastMapID: null,
     lastSourceMapMode: null,
+    deferModeApplyUntilBotGeneration: false,
+    deferredModeApplyReason: null,
     startDepth: 0,
     hooks: [],
     hookInstalled: false,
@@ -136,8 +167,24 @@
     neutralSpawnFallbackLast: null,
     teamSpawnFallbackCount: 0,
     teamSpawnFallbackLast: null,
+    supplyBoxSpawnFallbackCount: 0,
+    supplyBoxSpawnFallbackLast: null,
+    supplyBoxPipelineDiagnostics: 0,
+    supplyBoxPipelineLast: null,
+    supplyBoxPointRequests: 0,
+    supplyBoxPointLast: null,
     ruleSyncCount: 0,
     ruleSyncLast: null,
+    terminatorSupplyCompatHits: 0,
+    terminatorSupplyCompatLast: null,
+    terminatorSupplyAttrLoadCount: 0,
+    terminatorSupplyAttrPtrs: {},
+    upgradeBoxGeneratorNativeCount: 0,
+    upgradeBoxGeneratorNativeKeys: {},
+    upgradeBoxGeneratorNativeLast: null,
+    upgradeBoxGeneratorFallbackCount: 0,
+    upgradeBoxGeneratorFallbackKeys: {},
+    upgradeBoxGeneratorFallbackLast: null,
     botSniperOverrideHits: 0,
     botSniperOverrideLast: null,
     lastError: null,
@@ -168,6 +215,11 @@
     aliveCountBL: null,
     aliveCountGR: null,
     getWpnData: null,
+    createUpgradeBoxGenerator: null,
+    startCoroutineAuto: null,
+    objectNew: null,
+    listIntCtor: null,
+    listIntAdd: null,
     weaponDataCache: {},
     weaponProbe: {
       giveWeaponByBagDepth: 0,
@@ -1235,6 +1287,260 @@
     );
   }
 
+  function terminatorSupplyCompatIsActive() {
+    return !!(
+      Runtime.enabled &&
+      Runtime.modeKey === 'nano4_terminator' &&
+      Runtime.lastApplied &&
+      Runtime.lastApplied.key === Runtime.modeKey &&
+      Runtime.lastApplied.gameMode === MODES.nano4_terminator.gameMode
+    );
+  }
+
+  function resolveTerminatorTypeInfo() {
+    var base = getGameAssembly();
+    if (!base) return null;
+    return readPointer(base.add(RVA.Mode_Nano4_Terminator_TypeInfo));
+  }
+
+  function isTerminatorModeInstance(modeInstance) {
+    if (!modeInstance || modeInstance.isNull()) return false;
+    var typeInfo = resolveTerminatorTypeInfo();
+    if (!typeInfo) return false;
+    var instanceClass = readPointer(modeInstance);
+    return !!(instanceClass && instanceClass.equals(typeInfo));
+  }
+
+  function loadTerminatorAttributePointers(modeInstance) {
+    var result = {
+      ok: false,
+      count: 0,
+      hasGhostSupply: false,
+      hasHumanSupply: false
+    };
+    if (!modeInstance || modeInstance.isNull()) return result;
+
+    var attributeAsset = readPointer(modeInstance.add(OFF.Mode_Nano4_Terminator_attributeAsset));
+    if (!attributeAsset) return result;
+
+    var attrs = readPointer(attributeAsset.add(OFF.Nano4TAttributeAsset_attributes));
+    if (!attrs) return result;
+
+    var length = readS32(attrs.add(OFF.Array_length));
+    if (length === null || length < 1 || length > 128) return result;
+
+    var map = {};
+    var count = Math.min(length, 64);
+    for (var i = 0; i < count; i++) {
+      var attr = readPointer(attrs.add(OFF.Array_items + i * Process.pointerSize));
+      if (!attr) continue;
+      var id = readS32(attr.add(OFF.Nano4TAttribute_id));
+      if (id === null) continue;
+      map[id] = attr;
+      result.count += 1;
+    }
+
+    Runtime.terminatorSupplyAttrPtrs = map;
+    Runtime.terminatorSupplyAttrLoadCount += 1;
+    result.ok = result.count > 0;
+    result.hasGhostSupply = !!map[TERMINATOR_SUPPLY_GHOST_ATTR_ID];
+    result.hasHumanSupply = !!map[TERMINATOR_SUPPLY_HUMAN_ATTR_ID];
+    return result;
+  }
+
+  function writeTerminatorRoundAttribute(modeInstance, fieldOffset, attrId) {
+    var attr = Runtime.terminatorSupplyAttrPtrs[attrId];
+    if (!attr || attr.isNull()) return false;
+
+    var field = modeInstance.add(fieldOffset);
+    var current = readPointer(field);
+    if (current && current.equals(attr)) return false;
+
+    return writeManagedReference(field, attr);
+  }
+
+  function ensureTerminatorSupplyAttributeChain(modeInstance, reason) {
+    if (!terminatorSupplyCompatIsActive()) return { ok: true, changed: false, skipped: true };
+    if (!isTerminatorModeInstance(modeInstance)) return { ok: true, changed: false, skipped: true };
+
+    var attrs = loadTerminatorAttributePointers(modeInstance);
+    if (!attrs.ok) return { ok: false, changed: false, msg: '多人生化 attributeAsset 未就绪' };
+
+    var ghostChanged = writeTerminatorRoundAttribute(
+      modeInstance,
+      OFF.Mode_Nano4_Terminator_attribute_Nano,
+      TERMINATOR_SUPPLY_GHOST_ATTR_ID
+    );
+    var humanChanged = writeTerminatorRoundAttribute(
+      modeInstance,
+      OFF.Mode_Nano4_Terminator_attribute_Human,
+      TERMINATOR_SUPPLY_HUMAN_ATTR_ID
+    );
+
+    Runtime.terminatorSupplyCompatHits += 1;
+    Runtime.terminatorSupplyCompatLast = {
+      reason: reason || 'manual',
+      action: 'attributeChain',
+      attrCount: attrs.count,
+      ghostAttrId: TERMINATOR_SUPPLY_GHOST_ATTR_ID,
+      humanAttrId: TERMINATOR_SUPPLY_HUMAN_ATTR_ID,
+      ghostChanged: !!ghostChanged,
+      humanChanged: !!humanChanged,
+      count: Runtime.terminatorSupplyCompatHits
+    };
+
+    if (ghostChanged || humanChanged) {
+      sendLog('warn', '多人生化补给箱链路已补齐：attribute_Nano=终结者出现，attribute_Human=英雄出现 via ' + (reason || 'manual'));
+    }
+
+    return { ok: true, changed: !!(ghostChanged || humanChanged), attrs: attrs };
+  }
+
+  function upgradeBoxGeneratorKey(modeInstance) {
+    var currentRound = readS32(modeInstance.add(OFF.ModeBase_currentRound));
+    if (currentRound === null) currentRound = 'unknown';
+    return safePtrText(modeInstance) + ':' + currentRound;
+  }
+
+  function markNativeUpgradeBoxGeneratorStarted(modeInstance, reason) {
+    if (!terminatorSupplyCompatIsActive()) return { ok: true, changed: false, skipped: true };
+    if (!isTerminatorModeInstance(modeInstance)) return { ok: true, changed: false, skipped: true };
+
+    var key = upgradeBoxGeneratorKey(modeInstance);
+    Runtime.upgradeBoxGeneratorNativeKeys[key] = true;
+    Runtime.upgradeBoxGeneratorNativeCount += 1;
+    Runtime.upgradeBoxGeneratorNativeLast = {
+      reason: reason || 'manual',
+      key: key,
+      count: Runtime.upgradeBoxGeneratorNativeCount
+    };
+    return { ok: true, changed: true, key: key };
+  }
+
+  function ensureTerminatorUpgradeBoxGeneratorsStarted(modeInstance, reason) {
+    if (!terminatorSupplyCompatIsActive()) return { ok: true, changed: false, skipped: true };
+    if (!isTerminatorModeInstance(modeInstance)) return { ok: true, changed: false, skipped: true };
+    if (!Runtime.createUpgradeBoxGenerator || !Runtime.startCoroutineAuto) {
+      return { ok: false, changed: false, msg: 'UpgradeBox generator native functions are not initialized' };
+    }
+
+    var key = upgradeBoxGeneratorKey(modeInstance);
+    if (Runtime.upgradeBoxGeneratorNativeKeys[key]) return { ok: true, changed: false, skipped: true, source: 'native' };
+    if (Runtime.upgradeBoxGeneratorFallbackKeys[key]) return { ok: true, changed: false, skipped: true, source: 'fallback' };
+
+    try {
+      ensureTerminatorSupplyPointFallbacks(reason || 'ensureTerminatorUpgradeBoxGeneratorsStarted');
+      ensureTerminatorSupplyAttributeChain(modeInstance, reason || 'ensureTerminatorUpgradeBoxGeneratorsStarted');
+
+      var redGenerator = Runtime.createUpgradeBoxGenerator(modeInstance, TERMINATOR_UPGRADE_BOX_RED_DELAY, TERMINATOR_UPGRADE_BOX_RED_TEAM, ptr(0));
+      var blueGenerator = Runtime.createUpgradeBoxGenerator(modeInstance, TERMINATOR_UPGRADE_BOX_BLUE_DELAY, TERMINATOR_UPGRADE_BOX_BLUE_TEAM, ptr(0));
+      if (!redGenerator || redGenerator.isNull() || !blueGenerator || blueGenerator.isNull()) {
+        return { ok: false, changed: false, msg: 'UpgradeBox generator creation returned null' };
+      }
+
+      Runtime.startCoroutineAuto(modeInstance, redGenerator, ptr(0));
+      Runtime.startCoroutineAuto(modeInstance, blueGenerator, ptr(0));
+      Runtime.upgradeBoxGeneratorFallbackKeys[key] = true;
+      Runtime.upgradeBoxGeneratorFallbackCount += 1;
+      Runtime.upgradeBoxGeneratorFallbackLast = {
+        reason: reason || 'manual',
+        key: key,
+        redDelay: TERMINATOR_UPGRADE_BOX_RED_DELAY,
+        blueDelay: TERMINATOR_UPGRADE_BOX_BLUE_DELAY,
+        redTeam: TERMINATOR_UPGRADE_BOX_RED_TEAM,
+        blueTeam: TERMINATOR_UPGRADE_BOX_BLUE_TEAM,
+        count: Runtime.upgradeBoxGeneratorFallbackCount
+      };
+      sendLog('warn', 'Nano4T UpgradeBox generator fallback started via ' + (reason || 'manual'));
+      return { ok: true, changed: true, last: Runtime.upgradeBoxGeneratorFallbackLast };
+    } catch (e) {
+      return fail('Start Nano4T UpgradeBox generator fallback failed', e);
+    }
+  }
+
+  function shouldDeferNanoModeApplyUntilBotGeneration(selected) {
+    return !!(
+      selected &&
+      Runtime.lastSourceMapMode === 1 &&
+      selected.gameMode >= 4 && selected.gameMode <= 6
+    );
+  }
+
+  function markDeferredModeApply(reason) {
+    Runtime.deferModeApplyUntilBotGeneration = true;
+    Runtime.deferredModeApplyReason = reason || 'unknown';
+    Runtime.lastApplied = null;
+    sendLog('info', '个人竞技图切生化，延迟到 bot 生成后再套用目标模式 via ' + Runtime.deferredModeApplyReason);
+    return { ok: true, changed: false, deferred: true };
+  }
+
+  function applyDeferredModeAfterBotGeneration(reason) {
+    if (!Runtime.enabled || !Runtime.deferModeApplyUntilBotGeneration) return { ok: true, changed: false };
+    Runtime.deferModeApplyUntilBotGeneration = false;
+    var result = applySelectedMode();
+    if (result && result.ok === false) {
+      Runtime.deferModeApplyUntilBotGeneration = true;
+      return result;
+    }
+    Runtime.deferredModeApplyReason = null;
+    sendLog('info', '个人竞技图切生化：bot 生成后已套用目标模式 via ' + (reason || 'manual'));
+    return result || { ok: true, changed: true };
+  }
+
+  function nanoRulesAreActiveForCurrentStart() {
+    return !!(
+      Runtime.lastApplied &&
+      Runtime.lastApplied.key === Runtime.modeKey &&
+      Runtime.lastApplied.sourceMapMode === 1 &&
+      Runtime.lastApplied.gameMode >= 4 && Runtime.lastApplied.gameMode <= 6
+    );
+  }
+
+  function normalizeRoomBotTeamsForNanoRules(reason) {
+    if (!Runtime.enabled || !nanoRulesAreActiveForCurrentStart()) return { changed: 0 };
+
+    var listPtr = resolveRoomPlayersList();
+    if (!listPtr) return { changed: 0 };
+
+    var size = getListSize(listPtr);
+    var items = readPointer(listPtr.add(OFF.List_items));
+    if (size === null || size < 1 || !items) return { changed: 0 };
+
+    var arrayLength = readS32(items.add(OFF.Array_length));
+    if (arrayLength === null || arrayLength < 1 || arrayLength > 4096) return { changed: 0 };
+
+    var count = Math.min(size, arrayLength, 64);
+    var changed = 0;
+    var nextTeam = 0;
+    for (var i = 0; i < count; i++) {
+      var clientData = readPointer(items.add(OFF.Array_items + i * Process.pointerSize));
+      if (!clientData) continue;
+      var isBot = readU8(clientData.add(OFF.ClientData_isBot));
+      if (!isBot) continue;
+
+      var joinTeam = readS32(clientData.add(OFF.ClientData_joinTeam));
+      var desiredTeam = nextTeam;
+      nextTeam = nextTeam === 0 ? 1 : 0;
+
+      if (joinTeam !== desiredTeam) {
+        clientData.add(OFF.ClientData_joinTeam).writeS32(desiredTeam);
+        changed += 1;
+      }
+    }
+
+    if (changed > 0) {
+      sendLog('warn', '个人竞技图切生化时已将 bot 分配到 BL/GR：' + changed + ' 个 via ' + (reason || 'manual'));
+    }
+    return { changed: changed };
+  }
+
+  function ensureNanoRuleSpawnFallbacks(reason) {
+    if (!Runtime.enabled || !nanoRulesAreActiveForCurrentStart()) return false;
+    var bl = ensureTeamSpawnFallbackFromNeutral(0, reason);
+    var gr = ensureTeamSpawnFallbackFromNeutral(1, reason);
+    return !!(bl || gr);
+  }
+
   function findTargetMapAsset(gameRoom, targetGameMode) {
     if (!gameRoom || gameRoom.isNull()) return null;
     var mapDatas = readPointer(gameRoom.add(OFF.UI_GameRoom_mapDatas));
@@ -1305,6 +1611,51 @@
     return length;
   }
 
+  function supplyBoxTypeLabel(type) {
+    if (type === SUPPLY_BOX_TYPE_YELLOW) return 'Yellow(0)';
+    if (type === SUPPLY_BOX_TYPE_RED) return 'Red(1)';
+    if (type === SUPPLY_BOX_TYPE_BLUE) return 'Blue(2)';
+    return 'Type(' + type + ')';
+  }
+
+  function summarizeSupplyPointPair(pointOffset, listOffset) {
+    var pointPtr = Runtime.mapManager ? readPointer(Runtime.mapManager.add(pointOffset)) : null;
+    var listPtr = Runtime.mapManager ? readPointer(Runtime.mapManager.add(listOffset)) : null;
+    return {
+      pointPtr: safePtrText(pointPtr),
+      pointCount: pointPtr ? getArrayLength(pointPtr) : 0,
+      idListPtr: safePtrText(listPtr),
+      idCount: listPtr ? getListSize(listPtr) : null
+    };
+  }
+
+  function summarizeSupplyPointState(reason) {
+    return {
+      reason: reason || 'manual',
+      active: terminatorSupplyCompatIsActive(),
+      modeKey: Runtime.modeKey,
+      lastApplied: Runtime.lastApplied,
+      mapManager: safePtrText(Runtime.mapManager),
+      supply: summarizeSupplyPointPair(OFF.MapManager_SP_SupplyBox, OFF.MapManager_IDList_SupplyBox),
+      red: summarizeSupplyPointPair(OFF.MapManager_SP_RedBox, OFF.MapManager_IDList_RedBox),
+      blue: summarizeSupplyPointPair(OFF.MapManager_SP_BlueBox, OFF.MapManager_IDList_BlueBox),
+      generatorNativeCount: Runtime.upgradeBoxGeneratorNativeCount,
+      generatorFallbackCount: Runtime.upgradeBoxGeneratorFallbackCount,
+      pointRequests: Runtime.supplyBoxPointRequests
+    };
+  }
+
+  function logSupplyBoxPipeline(stage, extra) {
+    if (!Runtime.enabled || Runtime.modeKey !== 'nano4_terminator') return;
+    Runtime.supplyBoxPipelineDiagnostics += 1;
+    var snapshot = summarizeSupplyPointState(stage);
+    snapshot.stage = stage;
+    snapshot.extra = extra || null;
+    snapshot.count = Runtime.supplyBoxPipelineDiagnostics;
+    Runtime.supplyBoxPipelineLast = snapshot;
+    sendLog('warn', '[SupplyBoxDiag] ' + stage + ' ' + JSON.stringify(snapshot));
+  }
+
   function pickFallbackSpawnArray(mapManager) {
     var bl = readPointer(mapManager.add(OFF.MapManager_SP_BL));
     var gr = readPointer(mapManager.add(OFF.MapManager_SP_GR));
@@ -1318,6 +1669,176 @@
       return { ptr: gr, source: 'SP_GR', length: grLength };
     }
     return null;
+  }
+
+  function readSpawnArrayByKey(mapManager, key) {
+    var offset = null;
+    var source = null;
+    if (key === 'neutral') {
+      offset = OFF.MapManager_SP_Netural;
+      source = 'SP_Netural';
+    } else if (key === 'supply') {
+      offset = OFF.MapManager_SP_SupplyBox;
+      source = 'SP_SupplyBox';
+    } else if (key === 'bl') {
+      offset = OFF.MapManager_SP_BL;
+      source = 'SP_BL';
+    } else if (key === 'gr') {
+      offset = OFF.MapManager_SP_GR;
+      source = 'SP_GR';
+    }
+    if (offset === null) return null;
+
+    var ptrValue = readPointer(mapManager.add(offset));
+    var length = ptrValue ? getArrayLength(ptrValue) : 0;
+    if (length < 1) return null;
+    return { ptr: ptrValue, source: source, length: length };
+  }
+
+  function pickSupplyPointFallbackSpawnArray(mapManager, preferences) {
+    for (var i = 0; i < preferences.length; i++) {
+      var found = readSpawnArrayByKey(mapManager, preferences[i]);
+      if (found) return found;
+    }
+    return null;
+  }
+
+  function terminatorSupplyPointFallbackIsActive() {
+    return !!(
+      Runtime.enabled &&
+      Runtime.modeKey === 'nano4_terminator' &&
+      Runtime.lastApplied &&
+      Runtime.lastApplied.key === Runtime.modeKey &&
+      Runtime.lastApplied.gameMode === MODES.nano4_terminator.gameMode
+    );
+  }
+
+  function isUsablePointer(value) {
+    try {
+      return !!(value && !value.isNull() && value.compare(ptr('0x10000')) >= 0);
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function isNullOrLikelyArrayPointer(value) {
+    if (!value || value.isNull()) return true;
+    if (!isUsablePointer(value)) return false;
+    var length = readS32(value.add(OFF.Array_length));
+    return length !== null && length >= 0 && length <= 4096;
+  }
+
+  function isUsableMapManagerForSupplyFallback(mapManager, reason) {
+    if (!isUsablePointer(mapManager)) return false;
+
+    var sourceOffsets = [
+      OFF.MapManager_SP_BL,
+      OFF.MapManager_SP_GR,
+      OFF.MapManager_SP_Netural,
+      OFF.MapManager_SP_SupplyBox
+    ];
+    var hasFallbackSource = false;
+
+    for (var i = 0; i < sourceOffsets.length; i++) {
+      var fieldValue = readPointer(mapManager.add(sourceOffsets[i]));
+      if (!isNullOrLikelyArrayPointer(fieldValue)) {
+        Runtime.supplyBoxSpawnFallbackLast = 'SupplyBox fallback skipped: cached MapManager shape invalid at 0x' + sourceOffsets[i].toString(16) + ' via ' + (reason || 'manual');
+        sendLog('warn', Runtime.supplyBoxSpawnFallbackLast);
+        return false;
+      }
+      if (fieldValue && getArrayLength(fieldValue) > 0) hasFallbackSource = true;
+    }
+
+    if (!hasFallbackSource) {
+      Runtime.supplyBoxSpawnFallbackLast = 'SupplyBox fallback skipped: no usable BL/GR/Neutral/Supply source via ' + (reason || 'manual');
+      sendLog('warn', Runtime.supplyBoxSpawnFallbackLast);
+      return false;
+    }
+
+    return true;
+  }
+
+  function ensureSupplyPointArray(fieldOffset, fieldName, fallback, reason) {
+    if (!Runtime.mapManager || Runtime.mapManager.isNull()) return false;
+    var targetField = Runtime.mapManager.add(fieldOffset);
+    var current = readPointer(targetField);
+    if (current && getArrayLength(current) > 0) return false;
+
+    if (!fallback) {
+      Runtime.supplyBoxSpawnFallbackLast = fieldName + ' 为空，且没有可借用的出生点';
+      sendLog('warn', Runtime.supplyBoxSpawnFallbackLast);
+      return false;
+    }
+
+    if (!writeManagedReference(targetField, fallback.ptr)) {
+      Runtime.supplyBoxSpawnFallbackLast = fieldName + ' 兜底写入失败';
+      sendLog('warn', Runtime.supplyBoxSpawnFallbackLast);
+      return false;
+    }
+
+    Runtime.supplyBoxSpawnFallbackCount += 1;
+    Runtime.supplyBoxSpawnFallbackLast = fieldName + ' <- ' + fallback.source + '[' + fallback.length + '] via ' + reason;
+    sendLog('warn', fieldName + ' 补给点缺失，已临时借用 ' + fallback.source + '（' + fallback.length + ' 个）');
+    return true;
+  }
+
+  function resolveListIntTypeInfo() {
+    var base = getGameAssembly();
+    if (!base) return null;
+    return readPointer(base.add(RVA.System_Collections_Generic_List_int_TypeInfo));
+  }
+
+  function ensureSupplyPointIndexList(listFieldOffset, listFieldName, pointArrayOffset, pointArrayName, reason) {
+    if (!Runtime.mapManager || Runtime.mapManager.isNull()) return false;
+
+    var points = readPointer(Runtime.mapManager.add(pointArrayOffset));
+    var pointCount = points ? getArrayLength(points) : 0;
+    if (pointCount < 1) return false;
+
+    var listField = Runtime.mapManager.add(listFieldOffset);
+    var listPtr = readPointer(listField);
+    var currentSize = listPtr ? getListSize(listPtr) : null;
+    if (currentSize !== null && currentSize > 0) return false;
+
+    var shouldCreateList = !listPtr || currentSize === null;
+    if (shouldCreateList) {
+      if (!Runtime.objectNew || !Runtime.listIntCtor) return false;
+      var listTypeInfo = resolveListIntTypeInfo();
+      if (!listTypeInfo) return false;
+      listPtr = Runtime.objectNew(listTypeInfo);
+      if (!listPtr || listPtr.isNull()) return false;
+      Runtime.listIntCtor(listPtr, ptr(0));
+      if (!writeManagedReference(listField, listPtr)) return false;
+    }
+
+    if (!Runtime.listIntAdd) return false;
+    for (var i = 0; i < pointCount; i++) {
+      Runtime.listIntAdd(listPtr, i, ptr(0));
+    }
+
+    Runtime.supplyBoxSpawnFallbackCount += 1;
+    Runtime.supplyBoxSpawnFallbackLast = listFieldName + ' <- ' + pointArrayName + '[0..' + (pointCount - 1) + '] via ' + (reason || 'manual');
+    sendLog('warn', listFieldName + ' 已按 ' + pointArrayName + ' 补齐索引列表：' + pointCount + ' 个');
+    return true;
+  }
+
+  function ensureTerminatorSupplyPointFallbacks(reason) {
+    if (!terminatorSupplyPointFallbackIsActive()) return false;
+    if (!Runtime.mapManager || Runtime.mapManager.isNull()) return false;
+    if (!isUsableMapManagerForSupplyFallback(Runtime.mapManager, reason || 'manual')) return false;
+
+    var yellowFallback = pickSupplyPointFallbackSpawnArray(Runtime.mapManager, ['neutral', 'bl', 'gr']);
+    var redFallback = pickSupplyPointFallbackSpawnArray(Runtime.mapManager, ['bl', 'supply', 'neutral', 'gr']);
+    var blueFallback = pickSupplyPointFallbackSpawnArray(Runtime.mapManager, ['gr', 'supply', 'neutral', 'bl']);
+
+    var changed = 0;
+    if (ensureSupplyPointArray(OFF.MapManager_SP_SupplyBox, 'SP_SupplyBox', yellowFallback, reason || 'manual')) changed += 1;
+    if (ensureSupplyPointArray(OFF.MapManager_SP_RedBox, 'SP_RedBox', redFallback, reason || 'manual')) changed += 1;
+    if (ensureSupplyPointArray(OFF.MapManager_SP_BlueBox, 'SP_BlueBox', blueFallback, reason || 'manual')) changed += 1;
+    if (ensureSupplyPointIndexList(OFF.MapManager_IDList_SupplyBox, 'IDList_SupplyBox', OFF.MapManager_SP_SupplyBox, 'SP_SupplyBox', reason || 'manual')) changed += 1;
+    if (ensureSupplyPointIndexList(OFF.MapManager_IDList_RedBox, 'IDList_RedBox', OFF.MapManager_SP_RedBox, 'SP_RedBox', reason || 'manual')) changed += 1;
+    if (ensureSupplyPointIndexList(OFF.MapManager_IDList_BlueBox, 'IDList_BlueBox', OFF.MapManager_SP_BlueBox, 'SP_BlueBox', reason || 'manual')) changed += 1;
+    return changed > 0;
   }
 
   function ensureTeamSpawnFallbackFromNeutral(team, reason) {
@@ -1591,6 +2112,7 @@
         key: Runtime.modeKey,
         label: selected.label,
         gameMode: selected.gameMode,
+        sourceMapMode: Runtime.lastSourceMapMode,
         weaponLimited: weaponLimited,
         weaponLimitedSource: weaponLimitedSource,
         mapID: Runtime.lastMapID,
@@ -1650,7 +2172,33 @@
     };
   }
 
+  function shouldUseFixedTeamTimeLimit() {
+    var teamDeathModeSelected = Runtime.modeKey === 'team_death';
+    var weaponModeForcedToTeamRules = !!(Runtime.lastApplied && Runtime.lastApplied.forceTeamRules);
+    return !!(
+      Runtime.lastApplied &&
+      Runtime.lastApplied.key === Runtime.modeKey &&
+      (teamDeathModeSelected || weaponModeForcedToTeamRules) &&
+      isNanoGameModeValue(Runtime.lastApplied.sourceMapMode)
+    );
+  }
+
   function buildTeamRule(dropdownsPtr) {
+    if (shouldUseFixedTeamTimeLimit()) {
+      return {
+        kind: 'time',
+        targetRound: 0,
+        targetScore: 0,
+        gameTime: { minute: 12, second: 0 },
+        respawnTime: 3.0,
+        revengeEnable: 1,
+        winType: 1,
+        valueIndex: 3,
+        scoreSource: 'fixed.timeWin',
+        timeSource: 'fixed.teamDeathFromNanoTimeLimit'
+      };
+    }
+
     var teamFields = resolveMapAssetTeamDeathStaticFields();
     var winType = readDropdownValue(dropdownsPtr, 0, 0);
     var valueIndex = readDropdownValue(dropdownsPtr, 1, winType === 1 ? 0 : 3);
@@ -1779,6 +2327,36 @@
         ['int', 'pointer', 'pointer'],
         'mscdecl'
       );
+      Runtime.createUpgradeBoxGenerator = new NativeFunction(
+        base.add(RVA.Mode_Nano4_Terminator_UpgrandeBoxGenerator),
+        'pointer',
+        ['pointer', 'int', 'int', 'pointer'],
+        'mscdecl'
+      );
+      Runtime.startCoroutineAuto = new NativeFunction(
+        base.add(RVA.UnityEngine_MonoBehaviour_StartCoroutine_Auto),
+        'pointer',
+        ['pointer', 'pointer', 'pointer'],
+        'mscdecl'
+      );
+      Runtime.objectNew = new NativeFunction(
+        base.add(RVA.ManagedObject_New),
+        'pointer',
+        ['pointer'],
+        'mscdecl'
+      );
+      Runtime.listIntCtor = new NativeFunction(
+        base.add(RVA.List_int_ctor),
+        'void',
+        ['pointer', 'pointer'],
+        'mscdecl'
+      );
+      Runtime.listIntAdd = new NativeFunction(
+        base.add(RVA.List_int_Add),
+        'void',
+        ['pointer', 'int', 'pointer'],
+        'mscdecl'
+      );
 
       Runtime.hooks.push(Interceptor.attach(base.add(RVA.UI_GameRoom_OnStartGameBtnDown), {
         onEnter: function (args) {
@@ -1788,6 +2366,19 @@
           Runtime.lastDropdowns = null;
           Runtime.lastMapID = null;
           Runtime.lastSourceMapMode = null;
+          Runtime.deferModeApplyUntilBotGeneration = false;
+          Runtime.deferredModeApplyReason = null;
+          Runtime.terminatorSupplyCompatLast = null;
+          Runtime.terminatorSupplyAttrPtrs = {};
+          Runtime.supplyBoxSpawnFallbackLast = null;
+          Runtime.supplyBoxPipelineDiagnostics = 0;
+          Runtime.supplyBoxPipelineLast = null;
+          Runtime.supplyBoxPointRequests = 0;
+          Runtime.supplyBoxPointLast = null;
+          Runtime.upgradeBoxGeneratorNativeKeys = {};
+          Runtime.upgradeBoxGeneratorNativeLast = null;
+          Runtime.upgradeBoxGeneratorFallbackKeys = {};
+          Runtime.upgradeBoxGeneratorFallbackLast = null;
           resetWeaponGrantProbe();
           Runtime.startDepth += 1;
         },
@@ -1809,8 +2400,51 @@
         },
         onLeave: function () {
           if (Runtime.enabled && Runtime.startDepth > 0) {
-            applySelectedMode();
+            var selected = MODES[Runtime.modeKey];
+            if (shouldDeferNanoModeApplyUntilBotGeneration(selected)) markDeferredModeApply('ApplyGameSetting.leave');
+            else applySelectedMode();
             normalizeRoomBotTeamsForTeamRules('ApplyGameSetting.leave');
+            normalizeRoomBotTeamsForNanoRules('ApplyGameSetting.leave');
+          }
+        }
+      }));
+
+      Runtime.hooks.push(Interceptor.attach(base.add(RVA.ModeBase_Nano_OnStartNewGameRound), {
+        onEnter: function (args) {
+          if (Runtime.enabled) {
+            ensureTerminatorSupplyPointFallbacks('ModeBase_Nano.OnStartNewGameRound.enter');
+            ensureTerminatorSupplyAttributeChain(args[0], 'ModeBase_Nano.OnStartNewGameRound.enter');
+            logSupplyBoxPipeline('ModeBase_Nano.OnStartNewGameRound.afterSupplyFallback', { modeInstance: safePtrText(args[0]) });
+          }
+        }
+      }));
+
+      Runtime.hooks.push(Interceptor.attach(base.add(RVA.StartGenerateSupplyBox), {
+        onEnter: function (args) {
+          if (Runtime.enabled) {
+            ensureTerminatorSupplyPointFallbacks('StartGenerateSupplyBox.enter');
+            ensureTerminatorSupplyAttributeChain(args[0], 'StartGenerateSupplyBox.enter');
+            this.modeInstance = args[0];
+            logSupplyBoxPipeline('StartGenerateSupplyBox.enter.afterSupplyFallback', { modeInstance: safePtrText(args[0]) });
+          }
+        },
+        onLeave: function () {
+          if (Runtime.enabled && this.modeInstance) {
+            ensureTerminatorUpgradeBoxGeneratorsStarted(this.modeInstance, 'StartGenerateSupplyBox.leave');
+            logSupplyBoxPipeline('StartGenerateSupplyBox.leave.afterGeneratorCheck', { modeInstance: safePtrText(this.modeInstance) });
+          }
+        }
+      }));
+
+      Runtime.hooks.push(Interceptor.attach(base.add(RVA.Mode_Nano4_Terminator_UpgrandeBoxGenerator), {
+        onEnter: function (args) {
+          if (Runtime.enabled) {
+            markNativeUpgradeBoxGeneratorStarted(args[0], 'UpgrandeBoxGenerator.enter');
+            logSupplyBoxPipeline('UpgrandeBoxGenerator.enter', {
+              modeInstance: safePtrText(args[0]),
+              generateNeedTime: args[1].toInt32(),
+              team: args[2].toInt32()
+            });
           }
         }
       }));
@@ -1818,7 +2452,9 @@
       Runtime.hooks.push(Interceptor.attach(base.add(RVA.UI_GameRoom_GenerateBotClient), {
         onLeave: function () {
           if (Runtime.enabled) {
+            applyDeferredModeAfterBotGeneration('GenerateBotClient.leave');
             normalizeRoomBotTeamsForTeamRules('GenerateBotClient.leave');
+            normalizeRoomBotTeamsForNanoRules('GenerateBotClient.leave');
           }
         }
       }));
@@ -1826,8 +2462,11 @@
       Runtime.hooks.push(Interceptor.attach(base.add(RVA.GameManager_AddPlayers), {
         onEnter: function () {
           if (Runtime.enabled) {
+            applyDeferredModeAfterBotGeneration('GameManager.AddPlayers.enter');
             normalizeRoomBotTeamsForTeamRules('GameManager.AddPlayers.enter');
+            normalizeRoomBotTeamsForNanoRules('GameManager.AddPlayers.enter');
             ensureTeamRuleSpawnFallbacks('GameManager.AddPlayers.enter');
+            ensureNanoRuleSpawnFallbacks('GameManager.AddPlayers.enter');
             resetWeaponGrantProbe();
           }
         }
@@ -1838,6 +2477,41 @@
           if (!Runtime.enabled) return;
           Runtime.mapManager = args[0];
           ensureTeamRuleSpawnFallbacks('MapManager.Awake');
+          ensureNanoRuleSpawnFallbacks('MapManager.Awake');
+          ensureTerminatorSupplyPointFallbacks('MapManager.Awake');
+          logSupplyBoxPipeline('MapManager.Awake.afterSupplyFallback', { mapManager: safePtrText(args[0]) });
+        }
+      }));
+
+      Runtime.hooks.push(Interceptor.attach(base.add(RVA.MapManager_GetSupplyBoxPoint), {
+        onEnter: function (args) {
+          if (!Runtime.enabled) return;
+          this.supplyBoxType = args[1].toInt32();
+          Runtime.supplyBoxPointRequests += 1;
+          Runtime.supplyBoxPointLast = {
+            stage: 'enter',
+            type: this.supplyBoxType,
+            typeLabel: supplyBoxTypeLabel(this.supplyBoxType),
+            count: Runtime.supplyBoxPointRequests
+          };
+          logSupplyBoxPipeline('GetSupplyBoxPoint.enter', Runtime.supplyBoxPointLast);
+          try {
+            ensureTerminatorSupplyPointFallbacks('GetSupplyBoxPoint.enter');
+          } catch (e) {
+            fail('SupplyBox point fallback failed at GetSupplyBoxPoint.enter', e);
+          }
+        },
+        onLeave: function (retval) {
+          if (!Runtime.enabled || this.supplyBoxType === undefined) return;
+          var resultIndex = retval.toInt32();
+          Runtime.supplyBoxPointLast = {
+            stage: 'leave',
+            type: this.supplyBoxType,
+            typeLabel: supplyBoxTypeLabel(this.supplyBoxType),
+            resultIndex: resultIndex,
+            count: Runtime.supplyBoxPointRequests
+          };
+          logSupplyBoxPipeline('GetSupplyBoxPoint.leave', Runtime.supplyBoxPointLast);
         }
       }));
 
@@ -1905,8 +2579,21 @@
       neutralSpawnFallbackLast: Runtime.neutralSpawnFallbackLast,
       teamSpawnFallbackCount: Runtime.teamSpawnFallbackCount,
       teamSpawnFallbackLast: Runtime.teamSpawnFallbackLast,
+      supplyBoxSpawnFallbackCount: Runtime.supplyBoxSpawnFallbackCount,
+      supplyBoxSpawnFallbackLast: Runtime.supplyBoxSpawnFallbackLast,
+      supplyBoxPipelineDiagnostics: Runtime.supplyBoxPipelineDiagnostics,
+      supplyBoxPipelineLast: Runtime.supplyBoxPipelineLast,
+      supplyBoxPointRequests: Runtime.supplyBoxPointRequests,
+      supplyBoxPointLast: Runtime.supplyBoxPointLast,
       ruleSyncCount: Runtime.ruleSyncCount,
       ruleSyncLast: Runtime.ruleSyncLast,
+      terminatorSupplyCompatHits: Runtime.terminatorSupplyCompatHits,
+      terminatorSupplyCompatLast: Runtime.terminatorSupplyCompatLast,
+      terminatorSupplyAttrLoadCount: Runtime.terminatorSupplyAttrLoadCount,
+      upgradeBoxGeneratorNativeCount: Runtime.upgradeBoxGeneratorNativeCount,
+      upgradeBoxGeneratorNativeLast: Runtime.upgradeBoxGeneratorNativeLast,
+      upgradeBoxGeneratorFallbackCount: Runtime.upgradeBoxGeneratorFallbackCount,
+      upgradeBoxGeneratorFallbackLast: Runtime.upgradeBoxGeneratorFallbackLast,
       botSniperOverrideHits: Runtime.botSniperOverrideHits,
       botSniperOverrideLast: Runtime.botSniperOverrideLast,
       probe: {
@@ -1960,6 +2647,22 @@
     Runtime.probe.recent = [];
     Runtime.probe.last = null;
     Runtime.ruleSyncLast = null;
+    Runtime.supplyBoxSpawnFallbackCount = 0;
+    Runtime.supplyBoxSpawnFallbackLast = null;
+    Runtime.supplyBoxPipelineDiagnostics = 0;
+    Runtime.supplyBoxPipelineLast = null;
+    Runtime.supplyBoxPointRequests = 0;
+    Runtime.supplyBoxPointLast = null;
+    Runtime.terminatorSupplyCompatHits = 0;
+    Runtime.terminatorSupplyCompatLast = null;
+    Runtime.terminatorSupplyAttrLoadCount = 0;
+    Runtime.terminatorSupplyAttrPtrs = {};
+    Runtime.upgradeBoxGeneratorNativeCount = 0;
+    Runtime.upgradeBoxGeneratorNativeKeys = {};
+    Runtime.upgradeBoxGeneratorNativeLast = null;
+    Runtime.upgradeBoxGeneratorFallbackCount = 0;
+    Runtime.upgradeBoxGeneratorFallbackKeys = {};
+    Runtime.upgradeBoxGeneratorFallbackLast = null;
     Runtime.botSniperOverrideHits = 0;
     Runtime.botSniperOverrideLast = null;
     return statusObject();
@@ -1980,8 +2683,24 @@
     Runtime.lastDropdowns = null;
     Runtime.lastMapID = null;
     Runtime.lastSourceMapMode = null;
+    Runtime.deferModeApplyUntilBotGeneration = false;
+    Runtime.deferredModeApplyReason = null;
+    Runtime.terminatorSupplyCompatLast = null;
+    Runtime.terminatorSupplyAttrPtrs = {};
+    Runtime.supplyBoxSpawnFallbackLast = null;
+    Runtime.supplyBoxPipelineLast = null;
+    Runtime.supplyBoxPointLast = null;
+    Runtime.upgradeBoxGeneratorNativeKeys = {};
+    Runtime.upgradeBoxGeneratorNativeLast = null;
+    Runtime.upgradeBoxGeneratorFallbackKeys = {};
+    Runtime.upgradeBoxGeneratorFallbackLast = null;
     Runtime.startDepth = 0;
     Runtime.getWpnData = null;
+    Runtime.createUpgradeBoxGenerator = null;
+    Runtime.startCoroutineAuto = null;
+    Runtime.objectNew = null;
+    Runtime.listIntCtor = null;
+    Runtime.listIntAdd = null;
     sendLog('info', 'cleanup 完成；不修改已经开始的当前对局');
     return statusObject();
   }
