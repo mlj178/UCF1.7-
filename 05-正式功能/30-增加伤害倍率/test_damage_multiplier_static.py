@@ -67,6 +67,27 @@ class DamageMultiplierStaticTests(unittest.TestCase):
         self.assertIn("missile_owner_hits", text)
         self.assertIn("sentry_owner_hits", text)
 
+    def test_js_logs_damage_diagnostics_for_fractional_multiplier_analysis(self):
+        text = read_text(JS_FILE)
+
+        for token in [
+            "logDamageDiagnostic",
+            "raw_damage=",
+            "multiplier=",
+            "new_damage=",
+            "trunc=",
+            "floor=",
+            "round=",
+            "ceil=",
+            "below_one=",
+            "attacker=",
+            "effective_attacker=",
+            "victim=",
+            "victim_is_local=",
+            "ignoreDmgRate=",
+        ]:
+            self.assertIn(token, text)
+
     def test_js_exports_standard_rpc_status_and_config(self):
         text = read_text(JS_FILE)
 
@@ -108,7 +129,19 @@ class DamageMultiplierStaticTests(unittest.TestCase):
         text = read_text(UI_FILE)
 
         self.assertNotRegex(text, re.compile(r"全局伤害|敌人伤害|所有玩家", re.I))
-        self.assertIn("本地玩家输出", text)
+        self.assertIn("调整伤害倍率", text)
+        self.assertIn("放大玩家造成的输出伤害", text)
+        self.assertNotIn("缩小/放大", text)
+
+    def test_multiplier_range_is_boost_only_in_ui_and_script(self):
+        ui_text = read_text(UI_FILE)
+        js_text = read_text(JS_FILE)
+
+        self.assertIn("from_=1.0", ui_text)
+        self.assertIn("to=20.0", ui_text)
+        self.assertIn("number_of_steps=190", ui_text)
+        self.assertIn("min_multiplier: 1.0", js_text)
+        self.assertIn("max_multiplier: 20.0", js_text)
 
     def test_ui_enable_switch_does_not_queue_config_before_enable(self):
         text = read_text(UI_FILE)
