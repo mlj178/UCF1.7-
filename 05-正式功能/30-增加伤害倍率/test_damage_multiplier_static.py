@@ -67,6 +67,31 @@ class DamageMultiplierStaticTests(unittest.TestCase):
         self.assertIn("missile_owner_hits", text)
         self.assertIn("sentry_owner_hits", text)
 
+    def test_js_clears_owner_maps_on_round_boundaries_and_validates_owner_pointers(self):
+        text = read_text(JS_FILE)
+
+        for token in [
+            "GameManager_GameRoundEnd: 0x00AFAA40",
+            "GameManager_NewGameRoundStart: 0x00AEBCB0",
+            "GameManager_OnDestroy: 0x00AEBD40",
+            "function clearOwnerMaps(reason)",
+            'clearOwnerMaps("game_round_end")',
+            'clearOwnerMaps("new_game_round_start")',
+            'clearOwnerMaps("game_manager_destroy")',
+        ]:
+            self.assertIn(token, text)
+
+        is_local_fn = text.split("function isLocalPlayer(entityPtr)", 1)[1].split("function ptrKey", 1)[0]
+        self.assertIn("!isReadablePtr(entityPtr)", is_local_fn)
+        self.assertLess(
+            is_local_fn.index("!isReadablePtr(entityPtr)"),
+            is_local_fn.index("native.isMyPlayer(entityPtr, ptr(0))"),
+        )
+
+        remember_owner_fn = text.split("function rememberOwner", 1)[1].split("function getRememberedOwner", 1)[0]
+        self.assertIn("!isReadablePtr(objectPtr)", remember_owner_fn)
+        self.assertIn("!isReadablePtr(ownerPtr)", remember_owner_fn)
+
     def test_js_logs_damage_diagnostics_for_fractional_multiplier_analysis(self):
         text = read_text(JS_FILE)
 

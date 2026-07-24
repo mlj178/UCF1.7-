@@ -100,7 +100,7 @@ class FixedPointTeleportApp(ctk.CTk):
 
         actions = ctk.CTkFrame(self, corner_radius=8, fg_color=PANEL)
         actions.grid(row=4, column=0, padx=18, pady=5, sticky="ew")
-        actions.grid_columnconfigure((0, 1, 2), weight=1)
+        actions.grid_columnconfigure((0, 1), weight=1)
 
         self.save_button = ctk.CTkButton(
             actions,
@@ -119,16 +119,6 @@ class FixedPointTeleportApp(ctk.CTk):
             fg_color=GREEN,
         )
         self.teleport_button.grid(row=0, column=1, padx=8, pady=12, sticky="ew")
-
-        self.clear_button = ctk.CTkButton(
-            actions,
-            text="清除",
-            command=self._clear_point,
-            height=34,
-            fg_color="#555",
-            hover_color="#666",
-        )
-        self.clear_button.grid(row=0, column=2, padx=8, pady=12, sticky="ew")
 
         metrics = ctk.CTkFrame(self, corner_radius=8, fg_color=PANEL_DARK)
         metrics.grid(row=5, column=0, padx=18, pady=5, sticky="ew")
@@ -230,7 +220,6 @@ class FixedPointTeleportApp(ctk.CTk):
         self.enable_switch.configure(state=state)
         self.save_button.configure(state=state)
         self.teleport_button.configure(state=state)
-        self.clear_button.configure(state=state)
 
     @staticmethod
     def _find_game_pid():
@@ -354,8 +343,6 @@ class FixedPointTeleportApp(ctk.CTk):
     def _teleport_to_point(self):
         self._run_point_rpc("teleport")
 
-    def _clear_point(self):
-        self._run_point_rpc("clear")
 
     def _run_point_rpc(self, action):
         if not self.connected or not self.script or self.rpc_busy:
@@ -377,8 +364,6 @@ class FixedPointTeleportApp(ctk.CTk):
                     result = self.script.exports_sync.savepoint()
                 elif action == "teleport":
                     result = self.script.exports_sync.teleporttopoint()
-                elif action == "clear":
-                    result = self.script.exports_sync.clearpoint()
                 else:
                     result = self.script.exports_sync.status()
             self._post("rpc_done", result)

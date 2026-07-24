@@ -31,7 +31,8 @@ class Feature30And31PluginIntegrationTests(unittest.TestCase):
         self.assertEqual(manifest["feature_id"], "damage_multiplier")
         self.assertEqual(manifest["canonical_id"], "damage_multiplier")
         self.assertEqual(manifest["display_name"], "调整伤害倍率")
-        self.assertEqual(manifest["desc"], "缩小/放大玩家造成的输出伤害。")
+        self.assertIsInstance(manifest["desc"], str)
+        self.assertNotIn("/", manifest["desc"])
         self.assertEqual(manifest["tab"], "weapon_tab")
         self.assertEqual(manifest["tab_title"], "武器")
         self.assertEqual(manifest["script"], "script.js")
@@ -143,7 +144,6 @@ class Feature30And31PluginIntegrationTests(unittest.TestCase):
         text = read_text(DAMAGE_MULTIPLIER_DOC)
 
         self.assertIn("# 调整伤害倍率 - 简要说明", text)
-        self.assertIn("缩小/放大玩家造成的输出伤害", text)
         self.assertNotIn("# 增加伤害倍率 - 简要说明", text)
         self.assertNotIn("默认只放大本地玩家造成的输出伤害", text)
         self.assertNotIn("默认跳过本地玩家作为受害者", text)

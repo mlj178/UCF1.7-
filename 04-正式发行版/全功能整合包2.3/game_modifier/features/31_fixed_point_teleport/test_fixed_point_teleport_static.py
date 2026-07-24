@@ -50,7 +50,7 @@ class FixedPointTeleportStaticTests(unittest.TestCase):
         text = read_text(JS_FILE)
 
         save_rpc = text.split("savepoint: function ()", 1)[1].split("teleporttopoint:", 1)[0]
-        teleport_rpc = text.split("teleporttopoint: function ()", 1)[1].split("clearpoint:", 1)[0]
+        teleport_rpc = text.split("teleporttopoint: function ()", 1)[1].split("}", 1)[0]
         player_update_hook = text.split('attachHook("Player.Update"', 1)[1].split("});", 1)[0]
 
         self.assertIn("Runtime.pending.save = true", save_rpc)
@@ -98,6 +98,23 @@ class FixedPointTeleportStaticTests(unittest.TestCase):
         self.assertIn("Runtime.savedPoint", text)
         self.assertIn("saved_point", text)
 
+        capture_fn = text.split("function captureLocalPlayer(player, reason)", 1)[1].split("function attachHook", 1)[0]
+        self.assertIn("!isReadablePtr(player)", capture_fn)
+        self.assertLess(
+            capture_fn.index("!isReadablePtr(player)"),
+            capture_fn.index("native.isMyPlayer(player, ptr(0))"),
+        )
+
+    def test_js_validates_transform_pointer_before_reading_position(self):
+        text = read_text(JS_FILE)
+
+        read_position_fn = text.split("function readPlayerPosition(player)", 1)[1].split("function canQueueAction", 1)[0]
+        self.assertIn("!isReadablePtr(transform)", read_position_fn)
+        self.assertLess(
+            read_position_fn.index("!isReadablePtr(transform)"),
+            read_position_fn.index("native.transformGetPosition(transform, posBuffer, ptr(0))"),
+        )
+
     def test_js_exports_standard_rpc_and_point_commands(self):
         text = read_text(JS_FILE)
 
@@ -110,9 +127,13 @@ class FixedPointTeleportStaticTests(unittest.TestCase):
             "setconfig",
             "savepoint",
             "teleporttopoint",
-            "clearpoint",
         ]:
             self.assertRegex(text, rf"\b{export_name}\s*:")
+
+        self.assertNotRegex(text, r"\bclearpoint\s*:")
+        self.assertNotIn("clearSavedPoint", text)
+        self.assertNotIn("clearCount", text)
+        self.assertNotIn("clear_count", text)
 
         for status_key in [
             "has_saved_point",
@@ -141,7 +162,7 @@ class FixedPointTeleportStaticTests(unittest.TestCase):
         self.assertIn("self.script.exports_sync.setconfig", text)
         self.assertIn("self.script.exports_sync.savepoint()", text)
         self.assertIn("self.script.exports_sync.teleporttopoint()", text)
-        self.assertIn("self.script.exports_sync.clearpoint()", text)
+        self.assertNotIn("self.script.exports_sync.clearpoint()", text)
 
     def test_ui_stays_single_point_without_hotkeys_or_multislot(self):
         text = read_text(UI_FILE)
