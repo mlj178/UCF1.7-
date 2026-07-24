@@ -18,6 +18,9 @@
 //   Player_get_isMyPlayer:      0x00B55FD0
 //   SentryGun_SetData:          0x00B1E030
 //   WPN_Missile_SetOwner:       0x00B66390
+//   GameManager_GameRoundEnd:   0x00AFAA40
+//   GameManager_NewGameRoundStart: 0x00AEBCB0
+//   GameManager_OnDestroy:      0x00AEBD40
 //   DamageEventData.attacker:   0x00
 //   DamageEventData.victim:     0x04
 //   DamageEventData.damage:     0x08
@@ -48,7 +51,10 @@
         Player_OnEntityHurt: 0x00B516B0,
         Player_get_isMyPlayer: 0x00B55FD0,
         SentryGun_SetData: 0x00B1E030,
-        WPN_Missile_SetOwner: 0x00B66390
+        WPN_Missile_SetOwner: 0x00B66390,
+        GameManager_GameRoundEnd: 0x00AFAA40,
+        GameManager_NewGameRoundStart: 0x00AEBCB0,
+        GameManager_OnDestroy: 0x00AEBD40
     };
 
     var OFF = {
@@ -210,8 +216,8 @@
     }
 
     function isLocalPlayer(entityPtr) {
+        if (isNull(entityPtr) || !isReadablePtr(entityPtr)) return false;
         if (!native.ready && !initNativeFunctions()) return false;
-        if (isNull(entityPtr)) return false;
         try {
             return !!native.isMyPlayer(entityPtr, ptr(0));
         } catch (error) {
@@ -234,6 +240,7 @@
     function rememberOwner(map, objectPtr, ownerPtr, kind) {
         if (!Runtime.config.enable_owner_mapping) return;
         if (isNull(objectPtr) || isNull(ownerPtr)) return;
+        if (!isReadablePtr(objectPtr) || !isReadablePtr(ownerPtr)) return;
         pruneOwners(map);
         map[ptrKey(objectPtr)] = {
             owner: ownerPtr,
@@ -248,7 +255,18 @@
         pruneOwners(map);
         var item = map[ptrKey(objectPtr)];
         if (!item) return ptr(0);
+        if (isNull(item.owner) || !isReadablePtr(item.owner)) {
+            delete map[ptrKey(objectPtr)];
+            return ptr(0);
+        }
         return item.owner || ptr(0);
+    }
+
+    function clearOwnerMaps(reason) {
+        Runtime.missileOwners = {};
+        Runtime.sentryOwners = {};
+        Runtime.playerHurtDepth = 0;
+        logLimited('owner_clear:' + reason, 'info', 'owner maps cleared: ' + reason, 1000);
     }
 
     function resolveEffectiveAttacker(attacker) {
@@ -480,6 +498,36 @@
                 }
             }
         });
+
+        attachHook('GameManager.GameRoundEnd', RVA.GameManager_GameRoundEnd, {
+            onEnter: function () {
+                try {
+                    clearOwnerMaps("game_round_end");
+                } catch (error) {
+                    setError('GameManager.GameRoundEnd failed', error);
+                }
+            }
+        });
+
+        attachHook('GameManager.NewGameRoundStart', RVA.GameManager_NewGameRoundStart, {
+            onEnter: function () {
+                try {
+                    clearOwnerMaps("new_game_round_start");
+                } catch (error) {
+                    setError('GameManager.NewGameRoundStart failed', error);
+                }
+            }
+        });
+
+        attachHook('GameManager.OnDestroy', RVA.GameManager_OnDestroy, {
+            onEnter: function () {
+                try {
+                    clearOwnerMaps("game_manager_destroy");
+                } catch (error) {
+                    setError('GameManager.OnDestroy failed', error);
+                }
+            }
+        });
     }
 
     function cleanupHooks() {
@@ -531,9 +579,7 @@
         Runtime.enabled = false;
         cleanupHooks();
         Runtime.initialized = false;
-        Runtime.playerHurtDepth = 0;
-        Runtime.missileOwners = {};
-        Runtime.sentryOwners = {};
+        clearOwnerMaps("cleanup");
         Runtime.stats.cleanupCount += 1;
         log('info', 'cleanup complete');
         return getStatus();

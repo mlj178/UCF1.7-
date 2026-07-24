@@ -77,7 +77,6 @@
             roundBoundaryCount: 0,
             saveCount: 0,
             teleportCount: 0,
-            clearCount: 0,
             skippedNull: 0,
             skippedInvalid: 0,
             errorCount: 0,
@@ -269,14 +268,14 @@
     function captureLocalPlayer(player, reason) {
         if (isNull(player) || !native.ready) return false;
 
-        try {
-            if (!native.isMyPlayer(player, ptr(0))) return false;
-        } catch (error) {
+        if (!isReadablePtr(player)) {
             Runtime.stats.skippedInvalid += 1;
             return false;
         }
 
-        if (!isReadablePtr(player)) {
+        try {
+            if (!native.isMyPlayer(player, ptr(0))) return false;
+        } catch (error) {
             Runtime.stats.skippedInvalid += 1;
             return false;
         }
@@ -386,11 +385,19 @@
 
     function readPlayerPosition(player) {
         if (isNull(player) || !native.ready) return null;
+        if (!isReadablePtr(player)) {
+            Runtime.stats.skippedInvalid += 1;
+            return null;
+        }
 
         try {
             var transform = native.componentGetTransform(player, ptr(0));
             if (isNull(transform)) {
                 Runtime.stats.skippedNull += 1;
+                return null;
+            }
+            if (!isReadablePtr(transform)) {
+                Runtime.stats.skippedInvalid += 1;
                 return null;
             }
             native.transformGetPosition(transform, posBuffer, ptr(0));
@@ -513,17 +520,6 @@
         }
     }
 
-    function clearSavedPoint() {
-        Runtime.savedPoint = null;
-        Runtime.pending.save = false;
-        Runtime.pending.teleport = false;
-        Runtime.stats.clearCount += 1;
-        Runtime.stats.lastSaveResult = "cleared";
-        Runtime.stats.lastTeleportResult = "";
-        log("info", "saved point cleared");
-        return true;
-    }
-
     function enableFeature() {
         if (!installHooks()) return false;
         Runtime.enabled = true;
@@ -593,7 +589,6 @@
             saved_point: Runtime.savedPoint,
             save_count: Runtime.stats.saveCount,
             teleport_count: Runtime.stats.teleportCount,
-            clear_count: Runtime.stats.clearCount,
             last_save_result: Runtime.stats.lastSaveResult,
             last_teleport_result: Runtime.stats.lastTeleportResult,
             player_cached: !isNull(Runtime.cache.localPlayer),
@@ -646,11 +641,6 @@
 
         teleporttopoint: function () {
             if (requestTeleportToSavedPoint()) Runtime.pending.teleport = true;
-            return buildStatus();
-        },
-
-        clearpoint: function () {
-            clearSavedPoint();
             return buildStatus();
         }
     };
