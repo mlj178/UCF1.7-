@@ -20,12 +20,13 @@
                      }
                  ],
     "config":  {
-                   "aimBone":  "neck",
+                   "aimBone":  "head",
                    "smoothness":  1.0,
                    "maxAimDistance":  200.0,
                    "maxAngleFOV":  30.0,
                    "localEyeHeight":  1.55,
-                   "visibilityCheck":  false
+                   "visibilityCheck":  true,
+                   "nearestDistanceBand":  2.0
                },
     "rpc":  [
                 "enable",

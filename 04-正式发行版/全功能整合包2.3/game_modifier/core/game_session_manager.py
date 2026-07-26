@@ -18,6 +18,11 @@ import psutil
 from enum import Enum
 from typing import Optional, Dict, Any, Callable
 from .event_bus import EventBus
+from .frida_diagnostics import (
+    DiagnosticDeduper,
+    ENABLE_FRIDA_CONNECT_DIAGNOSTICS,
+    FridaConnectDiagnostic,
+)
 from .log_manager import log_to_file
 from .services import AppPersistenceService
 
@@ -77,6 +82,7 @@ class GameSessionManager:
         
         self._process_poll_interval = 0.8
         self._ready_check_interval = 3.0
+        self._diagnostic_deduper = DiagnosticDeduper()
         
     def start(self):
         """Start the session manager worker thread"""
@@ -323,7 +329,8 @@ class GameSessionManager:
                               message='Frida 连接成功')
             else:
                 # Handle specific error reasons
-                if reason == 'process_terminating':
+                reason_code = reason.code if isinstance(reason, FridaConnectDiagnostic) else reason
+                if reason_code == 'process_terminating':
                     self._bus.emit('log_message', level='warning', module='SessionManager',
                                   message='游戏进程正在终止，重新检测')
                     with self._lock:
@@ -332,7 +339,10 @@ class GameSessionManager:
                         self._pid_create_time = None
                     return
                 
-                self._handle_connection_failure(f"Frida 连接失败: {reason}")
+                if isinstance(reason, FridaConnectDiagnostic):
+                    self._handle_diagnostic_failure(reason)
+                else:
+                    self._handle_connection_failure(f"Frida 连接失败: {reason}")
         except Exception as e:
             error_msg = str(e)
             
@@ -406,6 +416,21 @@ class GameSessionManager:
         self._bus.emit('log_message', level='error', module='SessionManager',
                       message=reason)
         
+        delay = self._retry_delays[min(self._retry_index, len(self._retry_delays) - 1)]
+        self._retry_index = min(self._retry_index + 1, len(self._retry_delays) - 1)
+        self._next_retry_at = time.monotonic() + delay
+        with self._lock:
+            self._state = SessionState.DISCONNECTED
+
+    def _handle_diagnostic_failure(self, diagnostic: FridaConnectDiagnostic):
+        """Handle a Frida connection failure with a compact, deduplicated UI summary."""
+        # Frida 连接诊断日志：
+        # 这里是“用户程序日志区域”里那条多行连接失败诊断摘要的唯一输出点。
+        # 后期如果要临时注释掉诊断日志，优先关闭 core.frida_diagnostics.ENABLE_FRIDA_CONNECT_DIAGNOSTICS。
+        if ENABLE_FRIDA_CONNECT_DIAGNOSTICS and self._diagnostic_deduper.should_emit(diagnostic):
+            self._bus.emit('log_message', level='error', module='SessionManager',
+                          message="\n".join(diagnostic.to_ui_lines()))
+
         delay = self._retry_delays[min(self._retry_index, len(self._retry_delays) - 1)]
         self._retry_index = min(self._retry_index + 1, len(self._retry_delays) - 1)
         self._next_retry_at = time.monotonic() + delay
@@ -491,6 +516,7 @@ class GameSessionManager:
         self._universal_manager = None
         self._retry_index = 0
         self._next_retry_at = 0.0
+        self._diagnostic_deduper.reset()
         self._wake_event.set()
         self._bus.emit('connection_status', status='disconnected')
     

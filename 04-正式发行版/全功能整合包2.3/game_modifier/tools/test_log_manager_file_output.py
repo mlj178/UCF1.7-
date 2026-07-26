@@ -8,7 +8,7 @@ from pathlib import Path
 
 
 class LogManagerFileOutputTests(unittest.TestCase):
-    def test_setup_logging_writes_file_even_when_packaged(self):
+    def test_setup_logging_does_not_write_file_when_packaged(self):
         import core.log_manager as log_manager
 
         original_frozen = getattr(sys, "frozen", None)
@@ -26,8 +26,7 @@ class LogManagerFileOutputTests(unittest.TestCase):
                 handler.flush()
 
             log_file = temp_dir / "logs" / "game_modifier.log"
-            self.assertTrue(log_file.exists())
-            self.assertIn("damage_diag packaged file check", log_file.read_text(encoding="utf-8"))
+            self.assertFalse(log_file.exists())
         finally:
             root = logging.getLogger("game_modifier")
             for handler in list(root.handlers):

@@ -54,6 +54,10 @@ def setup_logging():
     root = logging.getLogger('game_modifier')
     root.setLevel(logging.DEBUG)
 
+    if getattr(sys, "frozen", False):
+        root.addHandler(logging.NullHandler())
+        return
+
     # File handler: rotating, 5MB per file, keep 3 backups
     fmt = logging.Formatter(
         f'[%(asctime)s.%(msecs)03d] [%(levelname)s] [{TRACE_ID}] [%(name)s] %(message)s',

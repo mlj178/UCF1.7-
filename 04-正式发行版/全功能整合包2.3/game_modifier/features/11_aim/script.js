@@ -119,13 +119,22 @@ modules.aim = (function() {
 
   var CONFIG = {
     aimKey:          0,
-    aimBone:         BONE.NECK,
+    aimBone:         BONE.HEAD,
     smoothness:      1.0,
     maxAimDistance:  200.0,
     maxAngleFOV:     30.0,
+    nearestDistanceBand: 2.0,
+    pitchMin:        -88.0,
+    pitchMax:         88.0,
     localEyeHeight:  1.55,
+    neckToHeadOffset: 0.20,
     cameraCacheMaxAgeMs: 250,
-    visibilityCheck: false,
+    maxCameraPlayerDistance: 4.0,
+    maxBoneRootDistance: 3.0,
+    visibilityTargetTolerance: 0.35,
+    visibilityRayExtraDistance: 0.20,
+    diagnosticLogIntervalMs: 1000,
+    visibilityCheck: true,
   };
 
   var singletonGetter = null;
@@ -133,6 +142,7 @@ modules.aim = (function() {
   var componentGetAnimator = null;
   var transformGetPos = null;
   var transformGetForward = null;
+  var colliderGetBounds = null;
   var animatorGetBoneTransform = null;
   var brainGetOutputCamera = null;
   var isMyPlayerFn = null;
@@ -140,14 +150,31 @@ modules.aim = (function() {
   var getTeamFn = null;
   var addCamRotFn = null;
   var getMouseBtnFn = null;
-  var linecastFn = null;
+  var physicsGetDefaultSceneInjected = null;
+  var physicsInternalRaycastInjected = null;
+  var colliderBoundsBuffer = null;
+  var physicsSceneBuffer = null;
+  var visibilityRayBuffer = null;
+  var visibilityHitBuffer = null;
 
   var aimTimer = null;
   var scanTimer = null;
   var cachedTarget = null;
   var scanYawDeg = 0;
   var scanPitchDeg = 0;
+  var lastAimDiagnosticAtMs = 0;
   var aimCamera = { valid: false, position: null, forward: null, transform: null, lastUpdateMs: 0 };
+
+  function resetAimState(reason) {
+    cachedTarget = null;
+    targetEnemy = null;
+    aimCamera.valid = false;
+    aimCamera.position = null;
+    aimCamera.forward = null;
+    aimCamera.transform = null;
+    aimCamera.lastUpdateMs = 0;
+    if (reason && reason.indexOf('local_') === 0) myPlayer = null;
+  }
 
   var RVA_AIM = {
     SingletonGet:                    0x4A8170,
@@ -155,9 +182,9 @@ modules.aim = (function() {
     Component_get_transform:         0x32CF40,
     Component_GetComponent_Animator: 0x252BD0,
     Component_GetComponent_Animator_MethodInfo: 0xE21AC4,
-    Transform_get_position:          0x3F42B0,
     Transform_get_position_Injected: 0x3F4280,
     Transform_get_forward_Injected:  0x3F3F20,
+    Collider_get_bounds_Injected:    0xAB85E0,
     Animator_GetBoneTransform:       0xAA82B0,
     Animator_GetBoneTransform_MethodInfo: 0xE225D4,
     Brain_PushStateToUnityCamera:    0x82B750,
@@ -167,7 +194,8 @@ modules.aim = (function() {
     Entity_get_team:                 0x1E0070,
     Player_AddCameraRotation:        0xB4F790,
     Input_GetMouseButton:            0xACFB20,
-    Physics_Linecast:                0xAB9B80,
+    Physics_get_defaultPhysicsScene_Injected: 0xABB6F0,
+    PhysicsScene_Internal_Raycast_Injected:   0xAB8C20,
   };
 
   var OFF_AIM = {
@@ -178,6 +206,10 @@ modules.aim = (function() {
     P_cameraRotation:   0x4C,
     P_recoil:           0x54,
     P_characterContainer: 0x58,
+    P_currentCharacter: 0x5C,
+    CM_neck:            0x64,
+    CM_helmet:          0x6C,
+    Helmet_collider:    0x10,
     Arr_len:            0x0C,
     Arr_data:           0x10,
     List_items:         0x08,
@@ -206,8 +238,9 @@ modules.aim = (function() {
     try { singletonGetter = new NativeFunction(base.add(RVA_AIM.SingletonGet), 'pointer', ['pointer']); } catch(e) { return false; }
     try { compGetTransform = new NativeFunction(base.add(RVA_AIM.Component_get_transform), 'pointer', ['pointer', 'pointer']); } catch(e) { return false; }
     try { componentGetAnimator = new NativeFunction(base.add(RVA_AIM.Component_GetComponent_Animator), 'pointer', ['pointer', 'pointer']); } catch(e) { componentGetAnimator = null; }
-    try { transformGetPos = new NativeFunction(base.add(RVA_AIM.Transform_get_position), 'void', ['pointer', 'pointer', 'pointer']); } catch(e) { return false; }
+    try { transformGetPos = new NativeFunction(base.add(RVA_AIM.Transform_get_position_Injected), 'void', ['pointer', 'pointer', 'pointer']); } catch(e) { return false; }
     try { transformGetForward = new NativeFunction(base.add(RVA_AIM.Transform_get_forward_Injected), 'void', ['pointer', 'pointer', 'pointer']); } catch(e) { transformGetForward = null; }
+    try { colliderGetBounds = new NativeFunction(base.add(RVA_AIM.Collider_get_bounds_Injected), 'void', ['pointer', 'pointer', 'pointer']); } catch(e) { colliderGetBounds = null; }
     try { animatorGetBoneTransform = new NativeFunction(base.add(RVA_AIM.Animator_GetBoneTransform), 'pointer', ['pointer', 'int32', 'pointer']); } catch(e) { animatorGetBoneTransform = null; }
     try { brainGetOutputCamera = new NativeFunction(base.add(RVA_AIM.Brain_get_OutputCamera), 'pointer', ['pointer', 'pointer']); } catch(e) { brainGetOutputCamera = null; }
     try { isMyPlayerFn = new NativeFunction(base.add(RVA_AIM.Player_get_isMyPlayer), 'bool', ['pointer', 'pointer']); } catch(e) { return false; }
@@ -215,7 +248,26 @@ modules.aim = (function() {
     try { getTeamFn = new NativeFunction(base.add(RVA_AIM.Entity_get_team), 'int32', ['pointer', 'pointer']); } catch(e) { getTeamFn = null; }
     try { addCamRotFn = new NativeFunction(base.add(RVA_AIM.Player_AddCameraRotation), 'void', ['pointer', 'float', 'float', 'pointer']); } catch(e) { return false; }
     try { getMouseBtnFn = new NativeFunction(base.add(RVA_AIM.Input_GetMouseButton), 'bool', ['int32', 'pointer']); } catch(e) { getMouseBtnFn = null; }
-    try { linecastFn = new NativeFunction(base.add(RVA_AIM.Physics_Linecast), 'bool', ['pointer', 'pointer', 'int32', 'pointer']); } catch(e) { linecastFn = null; }
+    try { physicsGetDefaultSceneInjected = new NativeFunction(base.add(RVA_AIM.Physics_get_defaultPhysicsScene_Injected), 'void', ['pointer', 'pointer']); } catch(e) { physicsGetDefaultSceneInjected = null; }
+    try {
+      physicsInternalRaycastInjected = new NativeFunction(
+        base.add(RVA_AIM.PhysicsScene_Internal_Raycast_Injected),
+        'bool',
+        ['pointer', 'pointer', 'float', 'pointer', 'int', 'int', 'pointer']
+      );
+    } catch(e) { physicsInternalRaycastInjected = null; }
+
+    try {
+      colliderBoundsBuffer = Memory.alloc(24);
+      physicsSceneBuffer = Memory.alloc(4);
+      visibilityRayBuffer = Memory.alloc(24);
+      visibilityHitBuffer = Memory.alloc(0x2C);
+    } catch(e) {
+      colliderBoundsBuffer = null;
+      physicsSceneBuffer = null;
+      visibilityRayBuffer = null;
+      visibilityHitBuffer = null;
+    }
 
     return true;
   }
@@ -280,11 +332,26 @@ modules.aim = (function() {
       Math.abs(pos.z) < 5000;
   }
 
+  function distance3d(a, b) {
+    if (!a || !b) return 999999.0;
+    var dx = a.x - b.x;
+    var dy = a.y - b.y;
+    var dz = a.z - b.z;
+    return Math.sqrt(dx*dx + dy*dy + dz*dz);
+  }
+
+  function clampPitchDeg(value) {
+    if (!isFinite(value)) return 0.0;
+    if (value < CONFIG.pitchMin) return CONFIG.pitchMin;
+    if (value > CONFIG.pitchMax) return CONFIG.pitchMax;
+    return value;
+  }
+
   function readTransformPosition(transform) {
     if (!transform || transform.isNull()) return null;
     try {
       var posBuf = Memory.alloc(12);
-      transformGetPos(posBuf, transform, ptr(0));
+      transformGetPos(transform, posBuf, ptr(0));
       var pos = {
         x: posBuf.readFloat(),
         y: posBuf.add(4).readFloat(),
@@ -317,11 +384,17 @@ modules.aim = (function() {
     try {
       var transform = compGetTransform(player, ptr(0));
       var transformPos = readTransformPosition(transform);
-      if (transformPos) return transformPos;
+      if (transformPos) {
+        transformPos.positionSource = 'player_transform';
+        return transformPos;
+      }
 
       var container = player.add(OFF_AIM.P_characterContainer).readPointer();
       var containerPos = readTransformPosition(container);
-      if (containerPos) return containerPos;
+      if (containerPos) {
+        containerPos.positionSource = 'container_transform';
+        return containerPos;
+      }
 
       if (container && !container.isNull()) {
         var rawPos = {
@@ -329,7 +402,66 @@ modules.aim = (function() {
           y: container.add(0x3C).readFloat(),
           z: container.add(0x40).readFloat(),
         };
-        if (isValidPos(rawPos)) return rawPos;
+        if (isValidPos(rawPos)) {
+          rawPos.positionSource = 'container_raw';
+          return rawPos;
+        }
+      }
+    } catch(e) {}
+    return null;
+  }
+
+  function readColliderBoundsCenter(collider) {
+    if (!collider || collider.isNull() || !colliderGetBounds || !colliderBoundsBuffer) return null;
+    try {
+      colliderGetBounds(collider, colliderBoundsBuffer, ptr(0));
+      var pos = {
+        x: colliderBoundsBuffer.readFloat(),
+        y: colliderBoundsBuffer.add(4).readFloat(),
+        z: colliderBoundsBuffer.add(8).readFloat(),
+      };
+      var ex = colliderBoundsBuffer.add(12).readFloat();
+      var ey = colliderBoundsBuffer.add(16).readFloat();
+      var ez = colliderBoundsBuffer.add(20).readFloat();
+      if (!isValidPos(pos)) return null;
+      if (!isFinite(ex) || !isFinite(ey) || !isFinite(ez)) return null;
+      if (ex < 0.01 || ey < 0.01 || ez < 0.01) return null;
+      if (ex > 2.0 || ey > 2.0 || ez > 2.0) return null;
+      return pos;
+    } catch(e) {
+      return null;
+    }
+  }
+
+  function getCharacterHeadPos(player) {
+    if (!player || player.isNull()) return null;
+    try {
+      var root = getPlayerPos(player);
+      if (!root) return null;
+
+      var character = player.add(OFF_AIM.P_currentCharacter).readPointer();
+      if (!character || character.isNull()) return null;
+
+      var helmet = character.add(OFF_AIM.CM_helmet).readPointer();
+      if (helmet && !helmet.isNull()) {
+        var helmetCollider = helmet.add(OFF_AIM.Helmet_collider).readPointer();
+        var pos = readColliderBoundsCenter(helmetCollider);
+        if (pos && distance3d(root, pos) <= CONFIG.maxBoneRootDistance) {
+          pos.rootSource = root.positionSource || 'unknown';
+          pos.source = 'helmet_bounds';
+          return pos;
+        }
+      }
+
+      var neck = character.add(OFF_AIM.CM_neck).readPointer();
+      var neckPos = readTransformPosition(neck);
+      if (neckPos) {
+        neckPos.y += CONFIG.neckToHeadOffset;
+        if (distance3d(root, neckPos) <= CONFIG.maxBoneRootDistance) {
+          neckPos.rootSource = root.positionSource || 'unknown';
+          neckPos.source = 'character_neck';
+          return neckPos;
+        }
       }
     } catch(e) {}
     return null;
@@ -367,10 +499,20 @@ modules.aim = (function() {
       var boneTransform = animatorGetBoneTransform(animator, toHumanBodyBone(boneIndex), getMethodInfo(RVA_AIM.Animator_GetBoneTransform_MethodInfo));
       if (!boneTransform || boneTransform.isNull()) return null;
 
-      return readTransformPosition(boneTransform);
+      var pos = readTransformPosition(boneTransform);
+      if (!pos || !isBoneNearPlayer(player, pos)) return null;
+      pos.source = 'real_bone';
+      return pos;
     } catch(e) {
       return null;
     }
+  }
+
+  function isBoneNearPlayer(player, bonePos) {
+    var root = getPlayerPos(player);
+    if (!root || !bonePos) return false;
+    bonePos.rootSource = root.positionSource || 'unknown';
+    return distance3d(root, bonePos) <= CONFIG.maxBoneRootDistance;
   }
 
   function getFallbackBonePos(player, boneIndex) {
@@ -378,17 +520,21 @@ modules.aim = (function() {
     if (!pos) return null;
     var yOff = BONE_Y_OFFSET[boneIndex];
     if (yOff === undefined) yOff = BONE_Y_OFFSET[BONE.CHEST];
+    pos.rootSource = pos.positionSource || 'unknown';
     pos.y += yOff;
+    pos.source = 'fallback';
     return pos;
   }
 
   function getAimPoint(player, boneIndex) {
-    return getRealBonePos(player, boneIndex) || getFallbackBonePos(player, boneIndex);
+    var characterHead = boneIndex === BONE.HEAD ? getCharacterHeadPos(player) : null;
+    return characterHead || getRealBonePos(player, boneIndex) || getFallbackBonePos(player, boneIndex);
   }
 
   function getLocalAimOrigin(player) {
     var basePos = getPlayerPos(player);
     if (!basePos) return null;
+    basePos.rootSource = basePos.positionSource || 'unknown';
     basePos.y += CONFIG.localEyeHeight;
     return basePos;
   }
@@ -418,13 +564,27 @@ modules.aim = (function() {
 
   function getAimOrigin(player) {
     var now = Date.now();
-    if (aimCamera.valid && aimCamera.position && (now - aimCamera.lastUpdateMs) <= CONFIG.cameraCacheMaxAgeMs) {
-      return { x: aimCamera.position.x, y: aimCamera.position.y, z: aimCamera.position.z, source: 'camera', forward: aimCamera.forward };
+    var localEye = getLocalAimOrigin(player);
+    if (!localEye) return null;
+
+    if (
+      aimCamera.valid &&
+      aimCamera.position &&
+      (now - aimCamera.lastUpdateMs) <= CONFIG.cameraCacheMaxAgeMs &&
+      distance3d(aimCamera.position, localEye) <= CONFIG.maxCameraPlayerDistance
+    ) {
+      return {
+        x: aimCamera.position.x,
+        y: aimCamera.position.y,
+        z: aimCamera.position.z,
+        source: 'camera',
+        rootSource: localEye.rootSource || 'unknown',
+        forward: aimCamera.forward
+      };
     }
 
-    var origin = getLocalAimOrigin(player);
-    if (origin) origin.source = 'player_eye';
-    return origin;
+    localEye.source = 'player_eye';
+    return localEye;
   }
 
   function normalizeAngleDeg(value) {
@@ -433,27 +593,19 @@ modules.aim = (function() {
     return value;
   }
 
-  function toStoredPitchDeg(visualPitchDeg) {
-    return -visualPitchDeg;
-  }
-
-  function fromStoredPitchDeg(storedPitchDeg) {
-    return -storedPitchDeg;
-  }
-
   function readCameraRotation(player) {
     var yawDeg = player.add(OFF_AIM.P_cameraRotation).readFloat();
     var storedPitchDeg = player.add(OFF_AIM.P_cameraRotation + 4).readFloat();
     return {
       yawDeg: yawDeg,
-      pitchDeg: fromStoredPitchDeg(storedPitchDeg),
+      pitchDeg: storedPitchDeg,
       storedPitchDeg: storedPitchDeg,
     };
   }
 
   function writeCameraRotation(player, yawDeg, pitchDeg) {
     player.add(OFF_AIM.P_cameraRotation).writeFloat(yawDeg);
-    player.add(OFF_AIM.P_cameraRotation + 4).writeFloat(toStoredPitchDeg(pitchDeg));
+    player.add(OFF_AIM.P_cameraRotation + 4).writeFloat(pitchDeg);
   }
 
   function calculateTargetAngles(from, to) {
@@ -466,7 +618,8 @@ modules.aim = (function() {
     var pitch = Math.atan2(dy, hDist) * 180.0 / Math.PI;
     return {
       targetYawDeg: yaw,
-      targetPitchDeg: pitch,
+      rawPitchDeg: pitch,
+      targetPitchDeg: clampPitchDeg(pitch),
       dist: Math.sqrt(dx*dx + dy*dy + dz*dz),
       dx: dx,
       dy: dy,
@@ -483,6 +636,66 @@ modules.aim = (function() {
       pitchDiff: pitchDiff,
       angleDeg: Math.sqrt(yawDiff*yawDiff + pitchDiff*pitchDiff),
     };
+  }
+
+  function chooseTargetCandidate(candidates, distanceBand) {
+    if (!candidates || candidates.length === 0) return null;
+
+    var minDistance = Infinity;
+    for (var i = 0; i < candidates.length; i++) {
+      var distance = candidates[i].selectionDistance;
+      if (isFinite(distance) && distance < minDistance) minDistance = distance;
+    }
+    if (!isFinite(minDistance)) return null;
+
+    var bandLimit = minDistance + Math.max(0.0, distanceBand || 0.0);
+    var best = null;
+    for (var j = 0; j < candidates.length; j++) {
+      var candidate = candidates[j];
+      if (!isFinite(candidate.selectionDistance) || candidate.selectionDistance > bandLimit) continue;
+      if (!isFinite(candidate.angleDeg)) continue;
+      if (
+        !best ||
+        candidate.angleDeg < best.angleDeg ||
+        (candidate.angleDeg === best.angleDeg && candidate.selectionDistance < best.selectionDistance)
+      ) {
+        best = candidate;
+      }
+    }
+    return best;
+  }
+
+  function emitAimDiagnostic(refreshed, currentRotation, finalYawDeg, finalPitchDeg) {
+    var now = Date.now();
+    if ((now - lastAimDiagnosticAtMs) < CONFIG.diagnosticLogIntervalMs) return;
+    lastAimDiagnosticAtMs = now;
+
+    try {
+      send({
+        type: 'plugin_event',
+        feature: 'aim',
+        event: 'aim_debug_sample',
+        payload: {
+          originSource: refreshed.from.source || 'unknown',
+          originRootSource: refreshed.from.rootSource || 'unknown',
+          targetSource: refreshed.pos.source || 'unknown',
+          targetRootSource: refreshed.pos.rootSource || 'unknown',
+          from: { x: refreshed.from.x, y: refreshed.from.y, z: refreshed.from.z },
+          to: { x: refreshed.pos.x, y: refreshed.pos.y, z: refreshed.pos.z },
+          dy: refreshed.dy,
+          horizontalDistance: refreshed.hDist,
+          targetYawDeg: refreshed.targetYawDeg,
+          rawPitchDeg: refreshed.rawPitchDeg,
+          targetPitchDeg: refreshed.targetPitchDeg,
+          currentYawDeg: currentRotation.yawDeg,
+          currentPitchDeg: currentRotation.pitchDeg,
+          finalYawDeg: finalYawDeg,
+          finalPitchDeg: finalPitchDeg,
+          writtenYawDeg: finalYawDeg,
+          writtenPitchDeg: finalPitchDeg
+        }
+      });
+    } catch (_) {}
   }
 
   function refreshCachedTargetAim() {
@@ -513,13 +726,46 @@ modules.aim = (function() {
   }
 
   function checkVisibility(from, to) {
-    if (!linecastFn) return true;
+    if (
+      !physicsGetDefaultSceneInjected ||
+      !physicsInternalRaycastInjected ||
+      !physicsSceneBuffer ||
+      !visibilityRayBuffer ||
+      !visibilityHitBuffer
+    ) return true;
     try {
-      var buf1 = Memory.alloc(12);
-      buf1.writeFloat(from.x); buf1.add(4).writeFloat(from.y); buf1.add(8).writeFloat(from.z);
-      var buf2 = Memory.alloc(12);
-      buf2.writeFloat(to.x); buf2.add(4).writeFloat(to.y); buf2.add(8).writeFloat(to.z);
-      return !linecastFn(buf1, buf2, -1, ptr(0));
+      var dx = to.x - from.x;
+      var dy = to.y - from.y;
+      var dz = to.z - from.z;
+      var targetDistance = Math.sqrt(dx*dx + dy*dy + dz*dz);
+      if (!isFinite(targetDistance) || targetDistance < 0.05) return true;
+
+      physicsGetDefaultSceneInjected(physicsSceneBuffer, ptr(0));
+      visibilityRayBuffer.writeFloat(from.x);
+      visibilityRayBuffer.add(4).writeFloat(from.y);
+      visibilityRayBuffer.add(8).writeFloat(from.z);
+      visibilityRayBuffer.add(12).writeFloat(dx / targetDistance);
+      visibilityRayBuffer.add(16).writeFloat(dy / targetDistance);
+      visibilityRayBuffer.add(20).writeFloat(dz / targetDistance);
+
+      var haveHit = physicsInternalRaycastInjected(
+        physicsSceneBuffer,
+        visibilityRayBuffer,
+        targetDistance + CONFIG.visibilityRayExtraDistance,
+        visibilityHitBuffer,
+        -1,
+        1,
+        ptr(0)
+      );
+      if (!haveHit) return true;
+
+      var hitPoint = {
+        x: visibilityHitBuffer.readFloat(),
+        y: visibilityHitBuffer.add(4).readFloat(),
+        z: visibilityHitBuffer.add(8).readFloat(),
+      };
+      if (!isValidPos(hitPoint)) return false;
+      return distance3d(hitPoint, to) <= CONFIG.visibilityTargetTolerance;
     } catch(e) { return true; }
   }
 
@@ -536,11 +782,13 @@ modules.aim = (function() {
       if (!myPlayer) { cachedTarget = null; return; }
     }
 
-    try { if (!isMyPlayerFn(myPlayer, ptr(0))) { myPlayer = null; cachedTarget = null; return; } } catch(e) { myPlayer = null; cachedTarget = null; return; }
-    try { if (isDeadFn(myPlayer, ptr(0))) return; } catch(e) { return; }
+    try { if (!isMyPlayerFn(myPlayer, ptr(0))) { resetAimState('local_invalid_scan'); return; } } catch(e) { resetAimState('local_invalid_scan'); return; }
+    try { if (isDeadFn(myPlayer, ptr(0))) { resetAimState('local_dead_scan'); return; } } catch(e) { resetAimState('local_dead_scan'); return; }
 
     var myPos = getAimOrigin(myPlayer);
     if (!myPos) return;
+    var myRoot = getPlayerPos(myPlayer);
+    if (!myRoot) return;
 
     var scanRotation = readCameraRotation(myPlayer);
     scanYawDeg = scanRotation.yawDeg;
@@ -554,7 +802,7 @@ modules.aim = (function() {
     } catch(e) {}
 
     var best = null;
-    var bestAngleDeg = 999999;
+    var candidates = [];
 
     for (var i = 0; i < allPlayers.length; i++) {
       var p = allPlayers[i];
@@ -568,10 +816,6 @@ modules.aim = (function() {
         var targetPos = getAimPoint(p, CONFIG.aimBone);
         if (!targetPos) continue;
 
-        if (CONFIG.visibilityCheck) {
-          if (!checkVisibility(myPos, targetPos)) continue;
-        }
-
         var angles = calculateTargetAngles(myPos, targetPos);
         if (!angles || angles.dist > CONFIG.maxAimDistance) continue;
 
@@ -579,24 +823,26 @@ modules.aim = (function() {
         var angleDeg = fov.angleDeg;
 
         if (angleDeg > CONFIG.maxAngleFOV) continue;
+        if (CONFIG.visibilityCheck && !checkVisibility(myPos, targetPos)) continue;
 
-        if (angleDeg < bestAngleDeg) {
-          bestAngleDeg = angleDeg;
-          best = {
-            player: p,
-            pos: targetPos,
-            from: myPos,
-            targetYawDeg: angles.targetYawDeg,
-            targetPitchDeg: angles.targetPitchDeg,
-            yawDiff: fov.yawDiff,
-            pitchDiff: fov.pitchDiff,
-            angleDeg: angleDeg,
-            dist: angles.dist,
-          };
-        }
+        var targetRoot = getPlayerPos(p);
+        var selectionDistance = targetRoot ? distance3d(myRoot, targetRoot) : angles.dist;
+        candidates.push({
+          player: p,
+          pos: targetPos,
+          from: myPos,
+          targetYawDeg: angles.targetYawDeg,
+          targetPitchDeg: angles.targetPitchDeg,
+          yawDiff: fov.yawDiff,
+          pitchDiff: fov.pitchDiff,
+          angleDeg: angleDeg,
+          dist: angles.dist,
+          selectionDistance: selectionDistance,
+        });
       } catch(e) {}
     }
 
+    best = chooseTargetCandidate(candidates, CONFIG.nearestDistanceBand);
     cachedTarget = best;
   }
 
@@ -604,6 +850,9 @@ modules.aim = (function() {
     if (!enabled || !myPlayer || !cachedTarget) return;
 
     try {
+      if (!isMyPlayerFn(myPlayer, ptr(0))) { resetAimState('local_invalid_write'); return; }
+      if (isDeadFn(myPlayer, ptr(0))) { resetAimState('local_dead_write'); return; }
+
       var currentRotation = readCameraRotation(myPlayer);
       var curYawDeg = currentRotation.yawDeg;
       var curPitchDeg = currentRotation.pitchDeg;
@@ -645,6 +894,7 @@ modules.aim = (function() {
       }
 
       writeCameraRotation(myPlayer, finalYawDeg, finalPitchDeg);
+      emitAimDiagnostic(refreshed, currentRotation, finalYawDeg, finalPitchDeg);
 
       var recoil = myPlayer.add(OFF_AIM.P_recoil).readPointer();
       if (recoil && !recoil.isNull()) {
@@ -680,8 +930,7 @@ modules.aim = (function() {
         var h = Interceptor.attach(base.add(addrs[i]), {
           onEnter: function() {
             myPlayer = null;
-            targetEnemy = null;
-            aimCamera.valid = false;
+            resetAimState('room_change');
             frameCount = 0;
           }
         });
@@ -728,8 +977,7 @@ modules.aim = (function() {
       for (var i = 0; i < roomHooks.length; i++) { try { roomHooks[i].detach(); } catch(e) {} }
       roomHooks = [];
       myPlayer = null;
-      targetEnemy = null;
-      aimCamera.valid = false;
+      resetAimState('disable');
       enabled = false;
       sendLog('info', '自瞄', '已禁用');
       sendStatus('aim', false);
