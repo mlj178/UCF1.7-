@@ -6,6 +6,7 @@ import frida
 import psutil
 
 from core.event_bus import EventBus
+from core.frida_diagnostics import FridaConnectDiagnostic
 from core.frida_runtime.rpc_client import RpcClient
 from core.frida_runtime.script_manager import ScriptManager
 from core.log_manager import log_to_file
@@ -104,17 +105,17 @@ class FridaManager:
         try:
             try:
                 session = frida.attach(pid)
-            except frida.ProcessNotFoundError:
-                return False, "process_not_found"
-            except frida.PermissionDeniedError:
-                return False, "permission_denied"
+            except frida.ProcessNotFoundError as e:
+                return False, FridaConnectDiagnostic.collect("process_not_found", pid, e)
+            except frida.PermissionDeniedError as e:
+                return False, FridaConnectDiagnostic.collect("permission_denied", pid, e)
             except frida.TransportError as e:
                 error_msg = str(e)
                 if "0xc000010a" in error_msg or "STATUS_PROCESS_IS_TERMINATING" in error_msg:
                     return False, "process_terminating"
                 if "architecture" in error_msg.lower():
-                    return False, "architecture_mismatch"
-                return False, "connection_failed"
+                    return False, FridaConnectDiagnostic.collect("architecture_mismatch", pid, e)
+                return False, FridaConnectDiagnostic.collect("connection_failed", pid, e)
 
             manifests = ManifestLoader().load()
             script_manager = ScriptManager(
@@ -148,7 +149,7 @@ class FridaManager:
             error_msg = str(e)
             if "0xc000010a" in error_msg or "STATUS_PROCESS_IS_TERMINATING" in error_msg:
                 return False, "process_terminating"
-            return False, "connection_failed"
+            return False, FridaConnectDiagnostic.collect("connection_failed", pid, e)
 
         finally:
             self._connecting = False
