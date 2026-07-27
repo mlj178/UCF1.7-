@@ -1,12 +1,14 @@
 import json
 import logging
 import threading
+from datetime import datetime
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 from core.config import APP_DIR
 
 
+AIM_DEBUG_LOG_ENABLED = False
 _LOGGER_NAME = "game_modifier.aim_debug_file"
 _HANDLER_MARKER = "_aim_debug_handler"
 _debug_logger = None
@@ -73,11 +75,15 @@ def close_debug_log():
 
 
 def handle_event(context, event, payload):
+    if not AIM_DEBUG_LOG_ENABLED:
+        return
     if event != "aim_debug_sample" or not isinstance(payload, dict) or not payload:
         return
 
+    record = dict(payload)
+    record["timestamp"] = datetime.now().astimezone().isoformat(timespec="milliseconds")
     line = json.dumps(
-        payload,
+        record,
         ensure_ascii=False,
         sort_keys=True,
         separators=(",", ":"),

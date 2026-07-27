@@ -16,13 +16,14 @@ def read_text(path: Path) -> str:
 
 
 class AimStaticTests(unittest.TestCase):
-    def test_defaults_to_head_target_and_has_explicit_bone_map(self):
+    def test_defaults_to_chest_target_with_sixty_degree_fov(self):
         text = read_text(SCRIPT_FILE)
 
         self.assertRegex(text, r"HEAD:\s*0")
         self.assertRegex(text, r"NECK:\s*3")
         self.assertRegex(text, r"CHEST:\s*7")
-        self.assertRegex(text, r"aimBone:\s*BONE\.HEAD")
+        self.assertRegex(text, r"aimBone:\s*BONE\.CHEST")
+        self.assertRegex(text, r"maxAngleFOV:\s*60\.0")
         self.assertIn("BONE_Y_OFFSET[BONE.HEAD] = 1.65", text)
         self.assertIn("BONE_Y_OFFSET[BONE.NECK] = 1.45", text)
         self.assertIn("BONE_Y_OFFSET[BONE.CHEST] = 1.05", text)
@@ -76,15 +77,182 @@ class AimStaticTests(unittest.TestCase):
             "Physics_get_defaultPhysicsScene_Injected",
             "PhysicsScene_Internal_Raycast_Injected",
             "function chooseTargetCandidate(candidates, distanceBand)",
+            "function chooseTargetCandidateWithHysteresis(candidates, distanceBand, currentPlayer, angleAdvantage)",
             "var candidates = []",
             "selectionDistance:",
-            "best = chooseTargetCandidate(candidates, CONFIG.nearestDistanceBand)",
+            "best = chooseTargetCandidateWithHysteresis(",
         ]:
             self.assertIn(token, text)
 
         scanner_fn = text.split("function targetScanner()", 1)[1].split("function writeAimbot()", 1)[0]
-        self.assertLess(scanner_fn.index("checkVisibility"), scanner_fn.index("candidates.push"))
+        self.assertLess(scanner_fn.index("checkSelectionLineOfSight"), scanner_fn.index("candidates.push"))
+        self.assertIn("var selectionDistance = angles.dist", scanner_fn)
+        self.assertNotIn("var targetRoot = getPlayerPos(p)", scanner_fn)
         self.assertNotIn("angleDeg < bestAngleDeg", scanner_fn)
+
+    def test_actual_shot_validation_must_hit_target_entity_with_game_gun_mask(self):
+        text = read_text(SCRIPT_FILE)
+
+        for token in [
+            "visibilityOriginClearance: 0.20",
+            "visibilityTargetExtraDistance: 0.50",
+            "visibilityLayerMask: 25",
+            "visibilityHitBoxLayer: 3",
+            "shotVisibilityQueryTriggerInteraction: 2",
+            "Object_FindObjectFromInstanceID",
+            "Component_get_gameObject",
+            "GameObject_get_layer",
+            "Component_GetComponentInParent_Entity",
+            "Component_GetComponentInParent_Entity_MethodInfo",
+            "RaycastHit_ColliderInstanceId: 0x28",
+            "function calculateVisibilityRayDistance(targetDistance, originClearance, targetExtraDistance)",
+            "function resolveRaycastHit(physicsScratch)",
+            "function isTargetDamageHit(hitEntityMatchesTarget, colliderLayer, hitBoxLayer)",
+            "function checkShotRayHitsTarget(from, to, targetPlayer, physicsScratch)",
+            "isTargetDamageHit(",
+            "hitEntity.equals(myPlayer)",
+            "lastVisibilityReason = 'no_hit'",
+            "lastVisibilityReason = 'target_hit'",
+            "lastVisibilityReason = 'target_non_hitbox'",
+            "function emitAimScanDiagnostic(scanStats)",
+            "event: 'aim_debug_sample'",
+            "stage: 'target_scan'",
+            "candidates: scanStats.candidates || 0",
+            "firstAngleDeg:",
+            "firstSelectionDistance:",
+            "reason: scanStats.reason || 'no_ranked_candidate'",
+            "emitAimScanDiagnostic(scanStats)",
+        ]:
+            self.assertIn(token, text)
+
+        visibility_fn = text.split("function checkShotRayHitsTarget(from, to, targetPlayer, physicsScratch)", 1)[1].split("function findShootableChestPoint", 1)[0]
+        self.assertIn("var rayDistance = calculateVisibilityRayDistance", visibility_fn)
+        self.assertIn("CONFIG.visibilityLayerMask", visibility_fn)
+        self.assertIn("CONFIG.shotVisibilityQueryTriggerInteraction", visibility_fn)
+        self.assertIn("if (!haveHit) {", visibility_fn)
+        self.assertIn("isTargetDamageHit(", visibility_fn)
+        self.assertIn("hit.colliderLayer", visibility_fn)
+        self.assertIn("CONFIG.visibilityHitBoxLayer", visibility_fn)
+        self.assertNotIn("return !haveHit", visibility_fn)
+
+        shot_point_fn = text.split("function findShootableChestPoint", 1)[1].split("function redirectShootRay", 1)[0]
+        self.assertIn("checkShotRayHitsTarget(origin, points[i], targetPlayer, physicsScratch)", shot_point_fn)
+
+        write_fn = text.split("function writeAimbot()", 1)[1].split("function aimLoop()", 1)[0]
+        self.assertIn("emitAimScanDiagnostic({ reason: 'refresh_failed' })", write_fn)
+        self.assertIn("reason: 'write_exception'", write_fn)
+
+        aim_loop = text.split("function aimLoop()", 1)[1].split("function installRoomHooks", 1)[0]
+        self.assertIn("reason: 'mouse_read_failed'", aim_loop)
+
+    def test_selection_checks_walls_and_actual_shoot_ray_owns_hitbox_validation(self):
+        text = read_text(SCRIPT_FILE)
+
+        for token in [
+            "selectionVisibilityLayerMask: 17",
+            "selectionVisibilityTargetClearance: 0.10",
+            "selectionVisibilityQueryTriggerInteraction: 1",
+            "Recoil_GetShootRay:                     0xB195C0",
+            "function calculateSelectionRayDistance(targetDistance, originClearance, targetClearance)",
+            "function checkSelectionLineOfSight(from, to, physicsScratch)",
+            "function buildShotDirection(origin, target)",
+            "function buildChestAimPointCandidates(basePoint, horizontalOffset, verticalOffset)",
+            "function findShootableChestPoint(origin, targetPlayer, basePoint, physicsScratch)",
+            "function redirectShootRay(rayBuffer)",
+            "function writeRayDirection(rayBuffer, direction)",
+            "stage: 'shot_ray'",
+            "targets: scanStats.targets || []",
+            "detail.status = 'candidate'",
+            "detail.status = 'out_fov'",
+            "detail.status = 'blocked_environment'",
+        ]:
+            self.assertIn(token, text)
+
+        scanner_fn = text.split("function targetScanner()", 1)[1].split("function writeAimbot()", 1)[0]
+        self.assertIn("checkSelectionLineOfSight(myPos, targetPos, physicsScratch)", scanner_fn)
+        self.assertNotIn("checkVisibility(myPos, targetPos, p)", scanner_fn)
+        self.assertIn("emitAimScanDiagnostic(scanStats)", scanner_fn)
+        self.assertNotIn("if (!best) emitAimScanDiagnostic(scanStats)", scanner_fn)
+
+        refresh_fn = text.split("function refreshCachedTargetAim()", 1)[1].split("function getBonePos", 1)[0]
+        self.assertNotIn("checkVisibility(", refresh_fn)
+        self.assertNotIn("checkShotRayHitsTarget(", refresh_fn)
+
+        hooks_fn = text.split("function installRoomHooks(base)", 1)[1].split("return {", 1)[0]
+        self.assertIn("base.add(RVA_AIM.Recoil_GetShootRay)", hooks_fn)
+        self.assertIn("this.retBuffer = args[0]", hooks_fn)
+        self.assertIn("localRecoil.equals(args[1])", hooks_fn)
+        self.assertIn("redirectShootRay(this.retBuffer)", hooks_fn)
+
+        shot_fn = text.split("function redirectShootRay(rayBuffer)", 1)[1].split("function targetScanner()", 1)[0]
+        self.assertIn("var physicsScratch = createPhysicsScratch()", shot_fn)
+        self.assertIn("findShootableChestPoint", shot_fn)
+        self.assertIn("buildShotDirection", shot_fn)
+        self.assertIn("writeRayDirection", shot_fn)
+
+    def test_visibility_runs_on_camera_thread_with_operation_local_physics_buffers(self):
+        text = read_text(SCRIPT_FILE)
+
+        for token in [
+            "targetScanIntervalMs: 30",
+            "visibilityCheck: true",
+            "var PHYSICS_NATIVE_OPTIONS = { abi: 'mscdecl', scheduling: 'exclusive' }",
+            "function createPhysicsScratch()",
+            "scene: Memory.alloc(4)",
+            "ray: Memory.alloc(24)",
+            "hit: Memory.alloc(0x2C)",
+            "function runTargetScannerOnMainThread()",
+            "runTargetScannerOnMainThread()",
+        ]:
+            self.assertIn(token, text)
+
+        native_init = text.split("function initNativeFunctions()", 1)[1].split("function isValidPlayer", 1)[0]
+        self.assertIn("PHYSICS_NATIVE_OPTIONS", native_init)
+
+        module_state = text.split("var singletonGetter = null", 1)[1].split("function resetAimState", 1)[0]
+        for shared_buffer in [
+            "var physicsSceneBuffer = null",
+            "var visibilityRayBuffer = null",
+            "var visibilityHitBuffer = null",
+        ]:
+            self.assertNotIn(shared_buffer, module_state)
+
+        scanner_fn = text.split("function targetScanner()", 1)[1].split("function writeAimbot()", 1)[0]
+        self.assertIn("var physicsScratch = CONFIG.visibilityCheck ? createPhysicsScratch() : null", scanner_fn)
+
+        hooks_fn = text.split("function installRoomHooks(base)", 1)[1].split("return {", 1)[0]
+        camera_hook = hooks_fn.split("RVA_AIM.Brain_PushStateToUnityCamera", 1)[1].split("RVA_AIM.Recoil_GetShootRay", 1)[0]
+        self.assertIn("cacheAimCamera(this.brain)", camera_hook)
+        self.assertIn("runTargetScannerOnMainThread()", camera_hook)
+
+        enable_fn = text.split("enable: function()", 1)[1].split("disable: function()", 1)[0]
+        self.assertNotIn("setInterval(targetScanner", enable_fn)
+
+    def test_manual_crosshair_movement_yields_control_and_rescans_with_hysteresis(self):
+        text = read_text(SCRIPT_FILE)
+
+        for token in [
+            "manualOverrideThresholdDeg: 3.0",
+            "manualOverrideAccumWindowMs: 120",
+            "manualOverridePauseMs: 150",
+            "targetSwitchAngleAdvantageDeg: 2.0",
+            "function updateManualAimAccumulator(state, deltaDeg, nowMs)",
+            "function detectManualAimOverride(currentRotation, nowMs)",
+            "function chooseTargetCandidateWithHysteresis(candidates, distanceBand, currentPlayer, angleAdvantage)",
+            "manualOverrideUntilMs = nowMs + CONFIG.manualOverridePauseMs",
+            "lastWrittenAim.valid = false",
+            "chooseTargetCandidateWithHysteresis(",
+        ]:
+            self.assertIn(token, text)
+
+        write_fn = text.split("function writeAimbot()", 1)[1].split("function aimLoop()", 1)[0]
+        self.assertIn("if (nowMs < manualOverrideUntilMs) return", write_fn)
+        self.assertIn("if (detectManualAimOverride(currentRotation, nowMs)) return", write_fn)
+        self.assertIn("lastWrittenAim.yawDeg = finalYawDeg", write_fn)
+        self.assertIn("lastWrittenAim.pitchDeg = finalPitchDeg", write_fn)
+
+        aim_loop = text.split("function aimLoop()", 1)[1].split("function installRoomHooks", 1)[0]
+        self.assertIn("lastWrittenAim.valid = false", aim_loop)
 
     def test_local_death_and_write_path_clear_cached_target(self):
         text = read_text(SCRIPT_FILE)
@@ -120,6 +288,76 @@ class AimStaticTests(unittest.TestCase):
             "return distance3d(root, bonePos) <= CONFIG.maxBoneRootDistance",
         ]:
             self.assertIn(token, text)
+
+    def test_chest_prefers_character_spine_transforms_before_animator_and_height_fallback(self):
+        text = read_text(SCRIPT_FILE)
+
+        for token in [
+            "CM_spine:           0x5C",
+            "CM_spine1:          0x60",
+            "function getCharacterChestPos(player)",
+            "character.add(OFF_AIM.CM_spine1).readPointer()",
+            "character.add(OFF_AIM.CM_spine).readPointer()",
+            "spine1Pos.source = 'character_spine1'",
+            "spinePos.source = 'character_spine'",
+        ]:
+            self.assertIn(token, text)
+
+        chest_fn = text.split("function getCharacterChestPos(player)", 1)[1].split("function getMethodInfo", 1)[0]
+        self.assertLess(
+            chest_fn.index("character.add(OFF_AIM.CM_spine1)"),
+            chest_fn.index("character.add(OFF_AIM.CM_spine)"),
+        )
+        self.assertIn("distance3d(root, spine1Pos) <= CONFIG.maxBoneRootDistance", chest_fn)
+        self.assertIn("distance3d(root, spinePos) <= CONFIG.maxBoneRootDistance", chest_fn)
+
+        aim_point_fn = text.split("function getAimPoint(player, boneIndex)", 1)[1].split("function getLocalAimOrigin", 1)[0]
+        self.assertIn("boneIndex === BONE.CHEST ? getCharacterChestPos(player) : null", aim_point_fn)
+        self.assertLess(aim_point_fn.index("characterChest"), aim_point_fn.index("getRealBonePos"))
+        self.assertLess(aim_point_fn.index("getRealBonePos"), aim_point_fn.index("getFallbackBonePos"))
+
+    def test_bone_read_diagnostics_identify_failure_stage_and_are_rate_limited(self):
+        text = read_text(SCRIPT_FILE)
+
+        for token in [
+            "var lastBoneDiagnosticAtMs = 0",
+            "function emitBoneReadDiagnostic(reason, player, boneIndex, error, animatorSource)",
+            "(now - lastBoneDiagnosticAtMs) < CONFIG.diagnosticLogIntervalMs",
+            "stage: 'bone_read'",
+            "animatorSource: animatorSource || 'player'",
+            "requestedBoneIndex:",
+            "humanBoneIndex:",
+            "emitBoneReadDiagnostic('native_unavailable'",
+            "emitBoneReadDiagnostic('animator_missing'",
+            "emitBoneReadDiagnostic('bone_transform_missing'",
+            "emitBoneReadDiagnostic('bone_position_invalid'",
+            "emitBoneReadDiagnostic('bone_root_check_failed'",
+            "emitBoneReadDiagnostic('bone_read_exception'",
+        ]:
+            self.assertIn(token, text)
+
+        bone_fn = text.split("function getRealBonePos(player, boneIndex)", 1)[1].split("function isBoneNearPlayer", 1)[0]
+        self.assertIn("emitBoneReadDiagnostic", bone_fn)
+        self.assertIn("pos.source = 'real_bone'", bone_fn)
+
+    def test_real_bone_prefers_current_character_animator_then_player(self):
+        text = read_text(SCRIPT_FILE)
+        bone_fn = text.split("function getRealBonePos(player, boneIndex)", 1)[1].split("function isBoneNearPlayer", 1)[0]
+
+        for token in [
+            "player.add(OFF_AIM.P_currentCharacter).readPointer()",
+            "componentGetAnimator(currentCharacter, componentMethodInfo)",
+            "animatorSource = 'currentCharacter'",
+            "componentGetAnimator(player, componentMethodInfo)",
+            "animatorSource = 'player'",
+            "animatorAttempts = 'currentCharacter,player'",
+        ]:
+            self.assertIn(token, bone_fn)
+
+        self.assertLess(
+            bone_fn.index("componentGetAnimator(currentCharacter, componentMethodInfo)"),
+            bone_fn.index("componentGetAnimator(player, componentMethodInfo)"),
+        )
 
     def test_local_eye_origin_is_separate_from_target_bone(self):
         text = read_text(SCRIPT_FILE)
@@ -273,7 +511,8 @@ class AimStaticTests(unittest.TestCase):
 
         self.assertEqual(manifest["feature_id"], "aim")
         self.assertEqual(manifest["script"], "script.js")
-        self.assertEqual(manifest["config"]["aimBone"], "head")
+        self.assertEqual(manifest["config"]["aimBone"], "chest")
+        self.assertEqual(manifest["config"]["maxAngleFOV"], 60.0)
         self.assertEqual(manifest["config"]["smoothness"], 1.0)
         self.assertEqual(manifest["config"]["localEyeHeight"], 1.55)
         control_keys = {control.get("key") for control in manifest["controls"] if control.get("key")}
@@ -316,7 +555,7 @@ class AimStaticTests(unittest.TestCase):
 
         aim_loop = script_text.split("function aimLoop()", 1)[1].split("function installRoomHooks", 1)[0]
         self.assertIn("if (!getMouseBtnFn) return", aim_loop)
-        self.assertIn("if (!btnDown) return", aim_loop)
+        self.assertIn("if (!btnDown) {", aim_loop)
 
 
 if __name__ == "__main__":
