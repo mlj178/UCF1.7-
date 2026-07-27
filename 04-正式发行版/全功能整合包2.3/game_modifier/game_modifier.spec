@@ -2,13 +2,25 @@
 import os
 import sys
 import fnmatch
+import re
 import shutil
 from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
-block_cipher = None
-
 # 获取当前目录
 current_dir = os.path.dirname(os.path.abspath(SPEC))
+
+# 正式版版本号只允许来自上一级整合包目录，例如“全功能整合包2.3”。
+package_dir_name = os.path.basename(os.path.dirname(current_dir))
+version_match = re.fullmatch(
+    r"全功能整合包(?P<version>\d+(?:\.\d+)+)",
+    package_dir_name,
+)
+if version_match is None:
+    raise ValueError(
+        f"整合包目录名不符合规则：{package_dir_name}；应为：全功能整合包x.x"
+    )
+package_version = version_match.group("version")
+app_name = f"UCF{package_version}修改器"
 
 # 定义要包含的数据文件
 datas = []
@@ -52,6 +64,17 @@ def add_feature_runtime_files(source_dir, target_dir):
             datas.append((os.path.join(root, filename), destination))
 
 
+def is_runtime_module(module_name):
+    """Exclude tests, templates, caches and archived modules from hidden imports."""
+    parts = module_name.split(".")
+    leaf = parts[-1]
+    return not (
+        any(part in {"__pycache__", "_template", "_legacy_archive"} for part in parts)
+        or leaf.startswith("test_")
+        or leaf.endswith("_test")
+    )
+
+
 def copy_data_tree(source_dir, target_dir, excludes=()):
     if os.path.isdir(target_dir):
         shutil.rmtree(target_dir)
@@ -90,38 +113,31 @@ add_data_tree(staged_tcl_modules, "tcl8")
 python_dlls_dir = os.path.join(sys.base_prefix, "DLLs")
 for binary_name in ("_tkinter.pyd", "tcl86t.dll", "tk86t.dll"):
     binary_path = os.path.join(python_dlls_dir, binary_name)
-    if os.path.isfile(binary_path):
-        binaries.append((binary_path, "."))
+    if not os.path.isfile(binary_path):
+        raise FileNotFoundError(f"本机 Python 缺少 Tcl/Tk 二进制文件：{binary_path}")
+    binaries.append((binary_path, "."))
 
 # 1. 添加资源文件（音效和图片）
 resource_dir = os.path.join(os.path.dirname(current_dir), "资源")
-if os.path.exists(resource_dir):
-    for file in os.listdir(resource_dir):
-        file_path = os.path.join(resource_dir, file)
-        if os.path.isfile(file_path):
-            datas.append((file_path, "资源"))
+for resource_name in ("微信赞赏码.png", "音效1.MP3"):
+    resource_path = os.path.join(resource_dir, resource_name)
+    if not os.path.isfile(resource_path):
+        raise FileNotFoundError(f"缺少正式版必需资源：{resource_path}")
+    datas.append((resource_path, "资源"))
 
 # 2. 添加插件目录（manifest / script.js / panel.py）
 features_dir = os.path.join(current_dir, "features")
 if os.path.exists(features_dir):
     add_feature_runtime_files(features_dir, "features")
 
-# 2.1 添加 data 目录（配置文件）
-data_dir = os.path.join(current_dir, "data")
-if os.path.exists(data_dir):
-    # 排除运行时生成/本机用户记录文件，只打包基础配置
-    for file in os.listdir(data_dir):
-        if file.endswith('.json') and file not in {'user_config.json', 'feature_state.json'}:
-            file_path = os.path.join(data_dir, file)
-            datas.append((file_path, "data"))
-
 # 3. 只添加 Universal Hook 运行所需文件，不打包运行日志
 plugins_dir = os.path.join(current_dir, "plugins")
 universal_hook_dir = os.path.join(plugins_dir, "universal_hook")
 for plugin_file in ("inject.exe", "Universal-ImGui-Hook.dll", "universal_hook.json"):
     plugin_path = os.path.join(universal_hook_dir, plugin_file)
-    if os.path.isfile(plugin_path):
-        datas.append((plugin_path, "game_modifier/plugins/universal_hook"))
+    if not os.path.isfile(plugin_path):
+        raise FileNotFoundError(f"缺少正式版必需插件文件：{plugin_path}")
+    datas.append((plugin_path, "game_modifier/plugins/universal_hook"))
 
 # 4. 添加 ui 目录下的文件（如果有资源）
 ui_dir = os.path.join(current_dir, "ui")
@@ -141,9 +157,7 @@ a = Analysis(
     hiddenimports=[
         'customtkinter',
         'frida',
-        'frida_tools',
         'psutil',
-        'pynput',
         'keyboard',
         'pygame',
         'PIL',
@@ -189,18 +203,19 @@ a = Analysis(
         'ui.controllers.plugin_event_router',
         'ui.controllers.plugin_lifecycle_router',
         'ui.state.app_state',
-    ] + collect_submodules('features') + collect_submodules('core') + collect_submodules('ui') + collect_submodules('tkinter'),
+    ]
+    + collect_submodules('features', filter=is_runtime_module)
+    + collect_submodules('core', filter=is_runtime_module)
+    + collect_submodules('ui', filter=is_runtime_module)
+    + collect_submodules('tkinter'),
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
     excludes=[],
-    win_no_prefer_redirects=False,
-    win_private_assemblies=False,
-    cipher=block_cipher,
     noarchive=False,
 )
 
-pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
+pyz = PYZ(a.pure, a.zipped_data)
 
 exe = EXE(
     pyz,
@@ -209,7 +224,7 @@ exe = EXE(
     a.zipfiles,
     a.datas,
     [],
-    name='UCF2.2修改器',
+    name=app_name,
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -218,10 +233,6 @@ exe = EXE(
     runtime_tmpdir=None,
     console=False,  # 不显示控制台窗口
     disable_windowed_traceback=False,
-    argv_emulation=False,
-    target_arch=None,
-    codesign_identity=None,
-    entitlements_file=None,
     icon=None,
     uac_admin=True,
 )
