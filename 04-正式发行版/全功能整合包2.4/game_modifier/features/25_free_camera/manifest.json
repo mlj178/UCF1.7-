@@ -1,0 +1,74 @@
+{
+  "feature_id": "free_camera",
+  "canonical_id": "free_camera_v1_3",
+  "display_name": "自由视角",
+  "category": "other",
+  "tab": "other_tab",
+  "tab_title": "其他",
+  "tab_order": 30,
+  "order": 100,
+  "icon": "🛰️",
+  "desc": "脱离玩家跟随，可无限制拖动镜头查看全地图战局。",
+  "script": "script.js",
+  "runtime": {
+    "type": "plugin_script"
+  },
+  "layout": {
+    "card_type": "simple",
+    "columnspan": 1,
+    "title_color": "#a78bfa"
+  },
+  "controls": [
+    {
+      "type": "switch",
+      "action": "enable"
+    },
+    {
+      "type": "slider",
+      "action": "setConfig",
+      "key": "moveSpeed",
+      "label": "移动速度",
+      "min": 1.0,
+      "max": 80.0,
+      "step": 1.0,
+      "default": 30.0
+    }
+  ],
+  "config": {
+    "moveSpeed": 30.0,
+    "lockPlayerMove": true
+  },
+  "rpc": [
+    "enable",
+    "disable",
+    "setConfig",
+    "setconfig",
+    "configure",
+    "status",
+    "cleanup"
+  ],
+  "lifecycle": {
+    "cleanup": true,
+    "restore": false,
+    "requires_room_ready_reapply": true,
+    "room_ready_retry": true
+  },
+  "source": {
+    "single_feature_js": "05-正式功能/25-自由视角/free_camera_v1_3.js",
+    "runtime_script_js": "features/25_free_camera/script.js"
+  },
+  "ui_handles": {
+    "switch": "free_camera_switch",
+    "moveSpeed_var": "free_camera_move_speed_var",
+    "moveSpeed_slider": "free_camera_move_speed_slider",
+    "moveSpeed_label": "free_camera_move_speed_label"
+  },
+  "ui_text": {
+    "lines": [
+      "脱离玩家跟随，可无限制拖动镜头查看全地图战局。"
+    ]
+  },
+  "state": {
+    "sync_enabled_from_config": false
+  }
+}

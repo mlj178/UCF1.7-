@@ -1,0 +1,59 @@
+{
+  "feature_id": "29_bullet_wall_penetration",
+  "canonical_id": "bullet_wall_penetration",
+  "display_name": "子弹穿墙",
+  "category": "weapon",
+  "tab": "weapon_tab",
+  "tab_title": "武器",
+  "tab_order": 10,
+  "order": 86,
+  "icon": "🎯",
+  "desc": "玩家开火允许子弹穿墙。",
+  "script": "script.js",
+  "hotkey": {
+    "enabled": true
+  },
+  "runtime": {
+    "type": "plugin_script"
+  },
+  "layout": {
+    "card_type": "simple",
+    "columnspan": 1,
+    "title_color": "#fca5a5"
+  },
+  "controls": [
+    {
+      "type": "switch",
+      "action": "enable"
+    }
+  ],
+  "config": {
+    "forceHitboxOnlyDuringLocalDamage": true,
+    "logEveryDamageHits": 25
+  },
+  "rpc": [
+    "enable",
+    "disable",
+    "setConfig",
+    "set_config",
+    "setconfig",
+    "status",
+    "cleanup"
+  ],
+  "lifecycle": {
+    "cleanup": true,
+    "restore": true,
+    "requires_room_ready_reapply": false,
+    "room_ready_retry": false,
+    "room_ready_reapply_exempt_reason": "功能安装固定 RVA Hook，命中本地开火 Damage 时按 enabled/config 状态临时 patch 层掩码。"
+  },
+  "source": {
+    "runtime_script_js": "features/29_bullet_wall_penetration/script.js"
+  },
+  "ui_handles": {
+    "switch": "bullet_wall_penetration_switch"
+  },
+  "state": {
+    "sync_enabled_from_config": true
+  }
+}
