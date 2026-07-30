@@ -1,0 +1,60 @@
+{
+  "feature_id": "bot_pause",
+  "canonical_id": "bot_pause",
+  "display_name": "人机暂停",
+  "category": "other",
+  "tab": "other_tab",
+  "tab_title": "其他",
+  "tab_order": 30,
+  "order": 95,
+  "icon": "⏸️",
+  "desc": "所有人机停止行动。",
+  "script": "script.js",
+  "hotkey": {
+    "enabled": true
+  },
+  "runtime": {
+    "type": "plugin_script"
+  },
+  "layout": {
+    "card_type": "simple",
+    "columnspan": 1,
+    "title_color": "#93c5fd"
+  },
+  "controls": [
+    {
+      "type": "switch",
+      "action": "enable"
+    }
+  ],
+  "config": {},
+  "rpc": [
+    "enable",
+    "disable",
+    "setConfig",
+    "setconfig",
+    "status",
+    "cleanup"
+  ],
+  "lifecycle": {
+    "cleanup": true,
+    "restore": true,
+    "requires_room_ready_reapply": true,
+    "room_ready_retry": true
+  },
+  "source": {
+    "single_feature_js": "05-正式功能/24-人机暂停/AAAAA-bot_pause_min.js",
+    "runtime_script_js": "features/24_bot_pause/script.js"
+  },
+  "ui_handles": {
+    "switch": "bot_pause_switch"
+  },
+  "ui_text": {
+    "lines": [
+      "所有人机停止行动。"
+    ]
+  },
+  "state": {
+    "sync_enabled_from_config": true
+  }
+}

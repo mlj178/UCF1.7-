@@ -1,0 +1,53 @@
+{
+  "feature_id": "unlimited_bag",
+  "canonical_id": "unlimited_weapon_bag",
+  "display_name": "无限背包",
+  "category": "other",
+  "tab": "other_tab",
+  "tab_title": "其他",
+  "tab_order": 30,
+  "order": 80,
+  "icon": "🎒",
+  "desc": "在远离出生点时也能切换背包武器",
+  "script": "script.js",
+  "layout": {
+    "card_type": "simple",
+    "columnspan": 1,
+    "title_color": "#7dd3fc"
+  },
+  "controls": [
+    {
+      "type": "switch",
+      "action": "enable"
+    }
+  ],
+  "config": {},
+  "rpc": [
+    "enable",
+    "disable",
+    "setConfig",
+    "setconfig",
+    "status",
+    "cleanup"
+  ],
+  "lifecycle": {
+    "cleanup": true
+  },
+  "source": {
+    "runtime_script_js": "features/22_unlimited_bag/script.js"
+  },
+  "ui_handles": {
+    "switch": "unlimited_bag_switch"
+  },
+  "ui_text": {
+    "lines": [
+      "在远离出生点时也能切换背包武器。"
+    ]
+  },
+  "runtime": {
+    "type": "plugin_script"
+  },
+  "state": {
+    "sync_enabled_from_config": true
+  }
+}

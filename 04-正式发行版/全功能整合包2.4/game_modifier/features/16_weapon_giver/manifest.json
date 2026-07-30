@@ -1,0 +1,59 @@
+{
+    "feature_id":  "weapon_giver",
+    "canonical_id":  "weapon_giver",
+    "display_name":  "赋予武器",
+    "category":  "special",
+    "tab":  "weapon_giver_tab",
+    "order":  10,
+    "icon":  "🔫",
+    "desc":  "赋予武器",
+    "script":  "script.js",
+    "runtime":  {
+                    "type":  "plugin_script"
+                },
+    "ui":  {
+               "mode":  "special_page",
+               "tab_title":  "赋予武器",
+               "tab_order":  50,
+               "lazy_build":  true
+           },
+    "layout":  {
+                   "card_type":  "special_page",
+                   "columnspan":  2
+               },
+    "controls":  [
+
+                 ],
+    "config":  {
+
+               },
+    "rpc":  [
+                "enable",
+                "disable",
+                "setConfig",
+                "status",
+                "cleanup",
+                "giveWeapon",
+                "setRespawnWeapon",
+                "clearRespawnWeapon",
+                "giveweapon",
+                "setrespawnweapon",
+                "clearrespawnweapon",
+                "setconfig"
+            ],
+    "lifecycle":  {
+                      "cleanup":  true,
+                      "restore":  false
+                  },
+    "source":  {
+                   "runtime_script_js":  "features/16_weapon_giver/script.js"
+               },
+    "hotkey":  {
+                   "enabled":  false
+               },
+    "tab_title":  "赋予武器",
+    "tab_order":  50,
+    "state":  {
+                  "sync_enabled_from_config":  false
+              }
+}
