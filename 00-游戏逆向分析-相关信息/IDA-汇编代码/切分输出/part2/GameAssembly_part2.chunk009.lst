@@ -1,0 +1,37 @@
+il2cpp:10803C10                                         ; CODE XREF: CodeStage_AntiCheat_ObscuredTypes_ObscuredPrefs$$ForceLockToDeviceInit+113p
+il2cpp:10803C10                                         ; CodeStage_AntiCheat_ObscuredTypes_ObscuredPrefs$$get_DeviceIdHash+6Cp
+il2cpp:10803C10                                         ; DATA XREF: ...
+il2cpp:10803C10
+il2cpp:10803C10 input           = dword ptr  8
+il2cpp:10803C10 method          = dword ptr  0Ch
+il2cpp:10803C10
+il2cpp:10803C10                 push    ebp
+il2cpp:10803C11                 mov     ebp, esp
+il2cpp:10803C13                 cmp     byte_10E66ED1, 0
+il2cpp:10803C1A                 jnz     short loc_10803C30
+il2cpp:10803C1C                 push    offset CodeStage_AntiCheat_ObscuredTypes_ObscuredPrefs_TypeInfo ; CodeStage.AntiCheat.ObscuredTypes.ObscuredPrefs_TypeInfo
+il2cpp:10803C21                 call    sub_10167C10
+il2cpp:10803C26                 add     esp, 4
+il2cpp:10803C29                 mov     byte_10E66ED1, 1
+il2cpp:10803C30
+il2cpp:10803C30 loc_10803C30:                           ; CODE XREF: CodeStage_AntiCheat_ObscuredTypes_ObscuredPrefs$$CalculateChecksum+Aj
+il2cpp:10803C30                 push    esi
+il2cpp:10803C31                 push    0               ; method
+il2cpp:10803C33                 call    System_Text_Encoding$$get_UTF8
+il2cpp:10803C38                 mov     esi, eax
+il2cpp:10803C3A                 add     esp, 4
+il2cpp:10803C3D                 mov     eax, CodeStage_AntiCheat_ObscuredTypes_ObscuredPrefs_TypeInfo ; CodeStage.AntiCheat.ObscuredTypes.ObscuredPrefs_TypeInfo
+il2cpp:10803C42                 test    byte ptr [eax+0BBh], 4
+il2cpp:10803C49                 jz      short loc_10803C5F
+il2cpp:10803C4B                 cmp     dword ptr [eax+74h], 0
+il2cpp:10803C4F                 jnz     short loc_10803C5F
+il2cpp:10803C51                 push    eax
+il2cpp:10803C52                 call    il2cpp_runtime_class_init
+il2cpp:10803C57                 mov     eax, CodeStage_AntiCheat_ObscuredTypes_ObscuredPrefs_TypeInfo ; CodeStage.AntiCheat.ObscuredTypes.ObscuredPrefs_TypeInfo
+il2cpp:10803C5C                 add     esp, 4
+il2cpp:10803C5F
+il2cpp:10803C5F loc_10803C5F:                           ; CODE XREF: CodeStage_AntiCheat_ObscuredTypes_ObscuredPrefs$$CalculateChecksum+39j
+il2cpp:10803C5F                                         ; CodeStage_AntiCheat_ObscuredTypes_ObscuredPrefs$$CalculateChecksum+3Fj
+il2cpp:10803C5F                 mov     eax, [eax+5Ch]
+il2cpp:10803C62                 push    0               ; method
+il2cpp:10803C64                 push    dword ptr [eax+4] ; str1
