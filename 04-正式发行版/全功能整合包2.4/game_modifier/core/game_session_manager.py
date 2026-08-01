@@ -64,6 +64,7 @@ class GameSessionManager:
         
         # Desired feature states (persisted)
         self._desired_states = {}
+        self._esp_target_scope = "enemy_only"
         
         # Applied feature states (runtime, from DLL)
         self._applied_states = {}
@@ -168,6 +169,8 @@ class GameSessionManager:
     
     def set_desired_state(self, feature_id: str, enabled: bool):
         """Set desired feature state (user intent)"""
+        if feature_id == "esp_box":
+            self._refresh_esp_target_scope_from_config()
         with self._lock:
             self._desired_states[feature_id] = enabled
             self._save_desired_states()
@@ -177,6 +180,28 @@ class GameSessionManager:
                 with self._lock:
                     self._applied_states[feature_id] = enabled
         self._wake_event.set()
+
+    def _refresh_esp_target_scope_from_config(self):
+        try:
+            from .config_runtime.config_manager import ConfigManager
+            config = ConfigManager().get("esp_box") or {}
+            scope = config.get("esp_target_scope", "enemy_only")
+            with self._lock:
+                self._esp_target_scope = "all_players" if scope == "all_players" else "enemy_only"
+        except Exception:
+            pass
+
+    def set_esp_target_scope(self, scope: str):
+        """Apply the ESP target filter immediately when the DLL is connected."""
+        normalized = "all_players" if scope == "all_players" else "enemy_only"
+        with self._lock:
+            self._esp_target_scope = normalized
+        if self._universal_manager:
+            with self._lock:
+                esp_wanted = bool(self._desired_states.get("esp_box", False))
+            return self._universal_manager.set_esp_state(esp_wanted, normalized)
+        self._wake_event.set()
+        return False
     
     def get_desired_state(self, feature_id: str) -> bool:
         """Get desired feature state"""
@@ -446,7 +471,7 @@ class GameSessionManager:
             self._universal_manager = universal
             with self._lock:
                 esp_wanted = bool(self._desired_states.get('esp_box', False))
-            if universal.set_esp_box(esp_wanted):
+            if universal.set_esp_state(esp_wanted, self._esp_target_scope):
                 with self._lock:
                     self._applied_states['esp_box'] = esp_wanted
             self._bus.emit('log_message', level='success', module='SessionManager',
@@ -467,7 +492,7 @@ class GameSessionManager:
         self._universal_manager = universal
         with self._lock:
             esp_wanted = bool(self._desired_states.get('esp_box', False))
-        if universal.set_esp_box(esp_wanted):
+        if universal.set_esp_state(esp_wanted, self._esp_target_scope):
             with self._lock:
                 self._applied_states['esp_box'] = esp_wanted
         self._bus.emit('log_message', level='success', module='SessionManager',

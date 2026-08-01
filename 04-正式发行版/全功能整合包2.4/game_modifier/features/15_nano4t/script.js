@@ -99,9 +99,11 @@ modules.nano4t = (function() {
   // ===== 配置与运行状态 =====
   var RVA = {
     ModeBase_Update: 0xAF6A00,
+    ModeBase_UpdateTimeUI: 0xAF6930,
     GetInstance: 0xB467A0,
     ChooseTrait: 0xB4C420,
-    OnDestroy: 0xB44320
+    OnDestroy: 0xB44320,
+    Mode_Nano4_Terminator_TypeInfo: 0xE2CCB4
   };
   var nano4tBase = null;
   var getInstanceFn = null;
@@ -113,7 +115,11 @@ modules.nano4t = (function() {
   var NANO4T_MODE_DESTROYED = false;
   var hookHandles = [];
   var schedulerHook = null;
-  var _pendingRequests = { init: false, health: false, current: false };
+  var modeObserverHook = null;
+  var observedModeInstance = null;
+  var observedModeIsNano4t = false;
+  var lastAutoInitAt = 0;
+  var _pendingRequests = { init: false, current: false };
 
   // ===== 指针读取与实例获取 =====
   function rdPtr(a) { try { return a.readPointer(); } catch(e) { return ptr(0); } }
@@ -156,6 +162,74 @@ modules.nano4t = (function() {
     hookHandles = [];
   }
 
+  function samePointer(left, right) {
+    return left && right && !left.isNull() && !right.isNull() && left.equals(right);
+  }
+
+  function isNano4tModeInstance(modeInstance) {
+    try {
+      if (!modeInstance || modeInstance.isNull() || !nano4tBase) return false;
+      var typeInfo = rdPtr(nano4tBase.add(RVA.Mode_Nano4_Terminator_TypeInfo));
+      var instanceClass = rdPtr(modeInstance);
+      return !typeInfo.isNull() && !instanceClass.isNull() && instanceClass.equals(typeInfo);
+    } catch(e) {
+      return false;
+    }
+  }
+
+  function requestAutoInit() {
+    if (!observedModeIsNano4t || NANO4T_READY || schedulerHook) return;
+    var now = Date.now();
+    if (now - lastAutoInitAt < 500) return;
+    lastAutoInitAt = now;
+    initFeature();
+  }
+
+  function observeModeInstance(modeInstance) {
+    var isNano4t = isNano4tModeInstance(modeInstance);
+    var changed = !samePointer(observedModeInstance, modeInstance) || observedModeIsNano4t !== isNano4t;
+    if (!changed) {
+      if (isNano4t) requestAutoInit();
+      return;
+    }
+
+    var wasNano4t = observedModeIsNano4t;
+    observedModeInstance = modeInstance && !modeInstance.isNull() ? modeInstance : null;
+    observedModeIsNano4t = isNano4t;
+    if (isNano4t) {
+      NANO4T_MODE_DESTROYED = false;
+      sendDevLog('info', 'Nano4T', '检测到多人生化模式实例', 'ModeBase type matched Mode_Nano4_Terminator');
+      sendNano4tEvent('nano4t_mode_enter', {}, 'both');
+      requestAutoInit();
+    } else if (wasNano4t) {
+      clearHooks();
+      NANO4T_READY = false;
+      NANO4T_ACTIVE = false;
+      NANO4T_ATTR_PTR = {};
+      sendDevLog('info', 'Nano4T', '已离开多人生化模式实例', 'ModeBase instance changed to a different mode');
+      sendNano4tEvent('nano4t_mode_exit', {}, 'both');
+    }
+  }
+
+  function installModeObserver() {
+    if (modeObserverHook) return true;
+    var mod = getGameAssembly();
+    if (!mod) return false;
+    nano4tBase = mod.base;
+    try {
+      getInstanceFn = new NativeFunction(nano4tBase.add(RVA.GetInstance), 'pointer', []);
+      modeObserverHook = Interceptor.attach(nano4tBase.add(RVA.ModeBase_UpdateTimeUI), {
+        onEnter: function(args) {
+          observeModeInstance(args[0]);
+        }
+      });
+      return true;
+    } catch(e) {
+      modeObserverHook = null;
+      return false;
+    }
+  }
+
   function installHooks() {
     clearHooks();
     hookHandles.push(Interceptor.attach(nano4tBase.add(RVA.ChooseTrait), {
@@ -180,8 +254,10 @@ modules.nano4t = (function() {
         NANO4T_MODE_DESTROYED = true;
         NANO4T_READY = false;
         NANO4T_ACTIVE = false;  // 重置激活状态
+        observedModeInstance = null;
+        observedModeIsNano4t = false;
         sendDevLog('info', 'Nano4T', '多人生化模式实例已销毁', 'Nano4T OnDestroy triggered');
-        sendNano4tEvent('nano4t_destroyed', {}, 'both');
+        sendNano4tEvent('nano4t_mode_exit', {}, 'both');
       }
     }));
   }
@@ -236,27 +312,6 @@ modules.nano4t = (function() {
     }
   }
 
-  function performHealthCheck() {
-    if (NANO4T_MODE_DESTROYED) {
-      sendNano4tEvent('nano4t_dead', {}, 'both');
-      return;
-    }
-    try {
-      var inst = getNanoInstance();
-      if (!inst || rdPtr(inst.add(0xD8)).isNull()) {
-        NANO4T_MODE_DESTROYED = true;
-        NANO4T_READY = false;
-        sendNano4tEvent('nano4t_dead', {}, 'both');
-      } else {
-        sendNano4tEvent('nano4t_alive', {}, 'both');
-      }
-    } catch(e) {
-      NANO4T_MODE_DESTROYED = true;
-      NANO4T_READY = false;
-      sendNano4tEvent('nano4t_dead', {}, 'both');
-    }
-  }
-
   function queueMainThreadRequest(requestName, failLogLevel, failLogTitle, failLogDev, failMessage) {
     _pendingRequests[requestName] = true;
     if (ensureMainThreadHook()) {
@@ -277,10 +332,6 @@ modules.nano4t = (function() {
     if (_pendingRequests.init) {
       _pendingRequests.init = false;
       performInit();
-    }
-    if (_pendingRequests.health) {
-      _pendingRequests.health = false;
-      performHealthCheck();
     }
     if (_pendingRequests.current) {
       _pendingRequests.current = false;
@@ -317,6 +368,10 @@ modules.nano4t = (function() {
 
   // ===== 功能开关与 RPC 边界 =====
   function initFeature() {
+      if (!installModeObserver()) {
+        sendDevLog('error', 'Nano4T', '无法安装模式监听 Hook', 'ModeBase.UpdateTimeUI attach failed');
+        return JSON.stringify({ ok: false });
+      }
       var result = queueMainThreadRequest(
         'init',
         'error',
@@ -351,16 +406,6 @@ modules.nano4t = (function() {
       );
   }
 
-  function healthCheck() {
-      return queueMainThreadRequest(
-        'health',
-        'warn',
-        '健康检查失败：无法安装主线程调度 Hook',
-        'Nano4T healthCheck ensureMainThreadHook failed',
-        null
-      );
-  }
-
   function onModeRound() {
       if (!NANO4T_READY || NANO4T_MODE_DESTROYED) {
         return initFeature();
@@ -374,11 +419,17 @@ modules.nano4t = (function() {
       NANO4T_MODE_DESTROYED = false;
       NANO4T_ACTIVE = false;  // 重置激活状态
       NANO4T_ATTR_PTR = {};
-      _pendingRequests = { init: false, health: false, current: false };
+      _pendingRequests = { init: false, current: false };
       if (schedulerHook) {
         try { schedulerHook.detach(); } catch(e) {}
         schedulerHook = null;
       }
+      if (modeObserverHook) {
+        try { modeObserverHook.detach(); } catch(e) {}
+        modeObserverHook = null;
+      }
+      observedModeInstance = null;
+      observedModeIsNano4t = false;
   }
 
   function disableFeature() {
@@ -391,7 +442,6 @@ modules.nano4t = (function() {
     init: initFeature,
     set: setWantedTraits,
     getCurrent: getCurrentTraits,
-    healthCheck: healthCheck,
     onModeRound: onModeRound,
     destroy: destroyFeature
   };
@@ -440,17 +490,10 @@ rpc.exports = {
     var module = __nano4tModule();
     if (!module || typeof module.getCurrent !== 'function') return { ok: false, g: -1, h: -1 };
     return parseJsonResult(module.getCurrent(), { ok: true });
-  },
-  nano4tHealthCheck: function(payload) {
-    var module = __nano4tModule();
-    if (!module || typeof module.healthCheck !== 'function') return { ok: false };
-    return parseJsonResult(module.healthCheck(), { ok: true });
   }
 };
 
 rpc.exports.nano4tinit = rpc.exports.nano4tInit;
 rpc.exports.nano4tset = rpc.exports.nano4tSet;
 rpc.exports.nano4tgetcurrent = rpc.exports.nano4tGetCurrent;
-rpc.exports.nano4thealthcheck = rpc.exports.nano4tHealthCheck;
 rpc.exports.setconfig = rpc.exports.setConfig;
-

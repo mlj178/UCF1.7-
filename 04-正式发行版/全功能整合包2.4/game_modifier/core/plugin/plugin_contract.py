@@ -11,7 +11,6 @@ class PluginContract:
         "category",
         "tab",
         "order",
-        "icon",
         "desc",
         "script",
         "layout",

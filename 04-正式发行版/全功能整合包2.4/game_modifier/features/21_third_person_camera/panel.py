@@ -107,7 +107,7 @@ def build_card(scroll, manifest, row, col, colspan, callbacks, card_builder):
 
     ctk.CTkLabel(
         top,
-        text=f"{manifest['icon']} {manifest['display_name']}",
+        text=manifest["display_name"],
         font=("Microsoft YaHei", 15, "bold"),
         text_color=manifest.get("layout", {}).get("title_color", "#e0e0e0"),
     ).pack(side="left", padx=4)

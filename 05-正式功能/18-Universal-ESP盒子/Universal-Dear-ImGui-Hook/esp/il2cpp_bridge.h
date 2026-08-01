@@ -43,6 +43,10 @@ struct RVAConstants {
     // Entity.get_isDead (RVA: 0xB400E0)
     static constexpr uintptr_t Entity_get_isDead = 0xB400E0;
 
+    // Entity.get_healthData / HealthData.get_rate
+    static constexpr uintptr_t Entity_get_healthData = 0x1D7B00;
+    static constexpr uintptr_t HealthData_get_rate = 0xAE4950;
+
     // Collider.get_bounds_Injected (RVA: 0xAB85E0)
     // Signature: void(Collider* this, Bounds* ret, MethodInfo*)
     static constexpr uintptr_t Collider_get_bounds_Injected = 0xAB85E0;

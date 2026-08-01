@@ -6,6 +6,7 @@
 #include "../stdafx.h"
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <unordered_set>
 
 namespace esp {
@@ -16,6 +17,10 @@ int ESPRenderer::s_FrameCounter = 0;
 
 static bool SafeDrawPlayer(void* player, void* localPlayer) {
     if (!player || player == localPlayer) return false;
+    if (!ESPState::Instance().IsAllPlayersEnabled() &&
+        GameManager::GetPlayerTeam(player) == GameManager::GetPlayerTeam(localPlayer)) {
+        return false;
+    }
     if (GameManager::IsPlayerDead(player)) return false;
 
 #if defined(_MSC_VER)
@@ -149,6 +154,10 @@ void ESPRenderer::DrawPlayerESP(void* player, void* localPlayer) {
 
         ImVec4 color = GetPlayerColor(player, localPlayer);
         DrawBox(center, hitbox.width, hitbox.height, color, config::BOX_THICKNESS);
+        float healthRate = 0.0f;
+        if (GameManager::GetPlayerHealth(player, &healthRate)) {
+            DrawHealthBar(center, hitbox.width, hitbox.height, healthRate);
+        }
         return;
     }
 
@@ -190,6 +199,10 @@ void ESPRenderer::DrawPlayerESPFallback(void* player, void* localPlayer, bool sh
 
     ImVec4 color = GetPlayerColor(player, localPlayer);
     DrawBox(center, boxWidth, boxHeight, color, config::BOX_THICKNESS);
+    float healthRate = 0.0f;
+    if (GameManager::GetPlayerHealth(player, &healthRate)) {
+        DrawHealthBar(center, boxWidth, boxHeight, healthRate);
+    }
 }
 
 void ESPRenderer::DrawBox(const Vector2& center, float w, float h, 
@@ -201,6 +214,27 @@ void ESPRenderer::DrawBox(const Vector2& center, float w, float h,
     
     ImU32 col = ImGui::ColorConvertFloat4ToU32(color);
     drawList->AddRect(p1, p2, col, 0.0f, 0, thickness);
+}
+
+void ESPRenderer::DrawHealthBar(const Vector2& center, float w, float h, float rate) {
+    if (!std::isfinite(rate) || rate <= 0.0f || rate > 1.0f) return;
+
+    ImDrawList* drawList = ImGui::GetBackgroundDrawList();
+    const float barHeight = 3.0f;
+    const float gap = 3.0f;
+    const float left = center.x - w / 2.0f;
+    const float top = center.y - h / 2.0f - gap - barHeight;
+    const float right = left + w;
+    const float fillWidth = w * rate;
+    const int percent = (std::max)(0, (std::min)(100, static_cast<int>(rate * 100.0f + 0.5f)));
+    char hpText[16] = {};
+    sprintf_s(hpText, sizeof(hpText), "%d%%", percent);
+
+    drawList->AddText(ImGui::GetFont(), 17.0f,
+                      ImVec2(left, top - 17.0f),
+                      IM_COL32(255, 255, 255, 240), hpText);
+    drawList->AddRectFilled(ImVec2(left, top), ImVec2(right, top + barHeight), IM_COL32(20, 20, 20, 190));
+    drawList->AddRectFilled(ImVec2(left, top), ImVec2(left + fillWidth, top + barHeight), IM_COL32(70, 220, 90, 235));
 }
 
 ImVec4 ESPRenderer::GetPlayerColor(void* player, void* localPlayer) {

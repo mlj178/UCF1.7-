@@ -35,21 +35,13 @@ class FeatureCardBuilder:
         top_frame = ctk.CTkFrame(frame, fg_color="transparent")
         top_frame.pack(fill="x", padx=8, pady=(6, 0))
 
-        title_icon_label = ctk.CTkLabel(
-            top_frame,
-            text=manifest.get("icon", ""),
-            font=("Microsoft YaHei", 15, "bold"),
-            text_color=title_color or text_color,
-        )
-        title_icon_label.pack(side="left", padx=(4, 0))
-
         title_name_label = ctk.CTkLabel(
             top_frame,
             text=manifest.get("display_name", ""),
             font=("Microsoft YaHei", 15, "bold"),
             text_color=title_color or text_color,
         )
-        title_name_label.pack(side="left", padx=(0, 4))
+        title_name_label.pack(side="left", padx=(4, 4))
 
         slider_label_ref = None
         if slider_callback and slider_var and slider_range:

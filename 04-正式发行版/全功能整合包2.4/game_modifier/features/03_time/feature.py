@@ -5,6 +5,5 @@ class TimeFreezeFeature(PluginFeatureBase):
     feature_id = 'time'
     js_filename = '03-unlimited_time.js'
     name = '无限时间'
-    icon = '⏰'
     category = 'player'
     desc = '设定时间为99:59'

@@ -122,6 +122,8 @@ class UniversalHookManager:
         self._pending_dll_path = self._dll_path + ".pending"
         self._revision_file = os.path.join(APP_DIR, "data", "universal_revision.json")
         self._revision = self._load_revision()  # Load revision from file
+        self._esp_box_enabled = False
+        self._esp_target_scope = "enemy_only"
         self.last_injection_attempted = False
         self._last_ping_time = 0.0
         self._ping_interval = 15.0  # minimum seconds between pings
@@ -296,6 +298,20 @@ class UniversalHookManager:
 
     def set_esp_box(self, enabled):
         """Set ESP box state"""
+        return self.set_esp_state(enabled, self._esp_target_scope)
+
+    def set_esp_target_scope(self, scope):
+        """Set which non-local players the native ESP should draw."""
+        normalized = "all_players" if scope == "all_players" else "enemy_only"
+        self._esp_target_scope = normalized
+        return self.set_esp_state(self._esp_box_enabled, normalized)
+
+    def set_esp_state(self, enabled, scope):
+        """Set ESP enabled state and target scope in one atomic protocol update."""
+        normalized = "all_players" if scope == "all_players" else "enemy_only"
+        return self._set_esp_state(bool(enabled), normalized)
+
+    def _set_esp_state(self, enabled, scope):
         if not self._pipe:
             return False
         
@@ -307,15 +323,19 @@ class UniversalHookManager:
                 response = self._send({
                     "cmd": "set_state",
                     "revision": self._revision,
-                    "esp_box": bool(enabled)
+                    "esp_box": bool(enabled),
+                    "esp_all_players": scope == "all_players",
                 })
                 
                 ok = (
                     bool(response.get("ok"))
                     and response.get("esp_box") is bool(enabled)
+                    and response.get("esp_all_players") is (scope == "all_players")
                     and response.get("revision", -1) >= self._revision
                 )
                 if ok:
+                    self._esp_box_enabled = bool(enabled)
+                    self._esp_target_scope = scope
                     self._log("success", "方框透视已开启" if enabled else "方框透视已关闭")
                 else:
                     self._log("error", response.get("error", "方框透视设置失败"))
@@ -384,6 +404,8 @@ class UniversalHookManager:
         state = self._send({"cmd": "get_state"})
         if state.get("ok"):
             self._revision = max(self._revision, int(state.get("revision", 0)))
+            self._esp_box_enabled = bool(state.get("esp_box", False))
+            self._esp_target_scope = "all_players" if state.get("esp_all_players", False) else "enemy_only"
             self._save_revision()
 
     def _inject(self, pid):

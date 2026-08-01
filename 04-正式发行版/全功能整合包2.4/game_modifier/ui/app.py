@@ -68,7 +68,6 @@ class App(ctk.CTk):
             self,
             on_settings=self._show_settings,
             on_toggle_collapse=self._toggle_collapse,
-            on_connect=self._connect,
         )
 
         self._connecting = False
@@ -117,7 +116,6 @@ class App(ctk.CTk):
         self._setup_events()
         GameSessionManager.get_instance().start()
         self._build_tab_view()
-        self._build_connect_button()
         self._build_log_panel()
         self._ui_ready = True
         for message in self._early_log_messages:
@@ -173,9 +171,6 @@ class App(ctk.CTk):
         if self._stop or not self._tab_builder:
             return
         self._tab_builder.prebuild_lazy_tabs()
-
-    def _build_connect_button(self):
-        self.btn_frame, self.connect_btn = self._shell_view.build_connect_button()
 
     def _build_log_panel(self):
         self.log_box = self._shell_view.build_log_panel()
@@ -244,9 +239,6 @@ class App(ctk.CTk):
         else:
             switch.deselect()
 
-    def _connect(self):
-        GameSessionManager.get_instance().reconnect()
-
     def _cleanup(self, keep_features=False):
         self._ready = False
         self._event_bus.emit("game_disconnected")
@@ -259,7 +251,6 @@ class App(ctk.CTk):
             self._saved_geometry = self.geometry()
             self.hint_frame.pack_forget()
             self.tab_view.pack_forget()
-            self.btn_frame.pack_forget()
             self.log_box.pack_forget()
             self.collapse_btn.configure(text="▲ 展开界面")
             self.minsize(*COLLAPSED_WINDOW_SIZE)
@@ -267,7 +258,6 @@ class App(ctk.CTk):
         else:
             self.hint_frame.pack(fill="x", padx=12, pady=(2, 8))
             self.tab_view.pack(fill="both", padx=12, pady=4, expand=True)
-            self.btn_frame.pack(fill="x", padx=12, pady=(2, 6))
             self.log_box.pack(fill="x", padx=12, pady=(2, 12))
             self.collapse_btn.configure(text="▼ 折叠界面")
             self.minsize(*MAIN_WINDOW_MIN_SIZE)

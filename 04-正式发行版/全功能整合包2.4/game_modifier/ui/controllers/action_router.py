@@ -46,7 +46,9 @@ class ActionRouter:
         self._sync_config(feature_id, key, normalized)
         self._schedule_save()
         result = None
-        if self._state.get(feature_id, False) and self._is_connected():
+        if self._is_connected() and (
+            self._state.get(feature_id, False) or feature_id == "esp_box"
+        ):
             result = self._feature_service.set_config(feature_id, {key: normalized})
         return result
 

@@ -87,6 +87,9 @@ class FeaturePanelContext:
     def is_enabled(self, feature_id=None):
         return self._safe_context.is_enabled(feature_id or self.feature_id)
 
+    def after(self, delay_ms, callback):
+        return self._safe_context.after(delay_ms, callback)
+
     def emit(self, event_name, **payload):
         return self._safe_context.emit(event_name, **payload)
 

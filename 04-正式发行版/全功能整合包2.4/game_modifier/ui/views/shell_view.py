@@ -45,11 +45,10 @@ def apply_status_dot_style(status_dot, color):
 
 
 class AppShellView:
-    def __init__(self, parent, *, on_settings, on_toggle_collapse, on_connect):
+    def __init__(self, parent, *, on_settings, on_toggle_collapse):
         self._parent = parent
         self._on_settings = on_settings
         self._on_toggle_collapse = on_toggle_collapse
-        self._on_connect = on_connect
 
     def build_status_bar(self):
         frame = ctk.CTkFrame(self._parent, corner_radius=8, fg_color="#2b2b2b")
@@ -102,20 +101,6 @@ class AppShellView:
         )
         label.pack(padx=8, pady=4)
         return HintBarHandles(frame, label)
-
-    def build_connect_button(self):
-        frame = ctk.CTkFrame(self._parent, corner_radius=8)
-        frame.pack(fill="x", padx=12, pady=(2, 6))
-        button = ctk.CTkButton(
-            frame,
-            text="连接游戏",
-            font=("Microsoft YaHei", 13),
-            height=40,
-            command=self._on_connect,
-            fg_color="#2a6e2a",
-        )
-        button.pack(fill="x", padx=12, pady=10)
-        return frame, button
 
     def build_log_panel(self):
         log_box = ctk.CTkTextbox(self._parent, font=("Consolas", 11), wrap="word", height=80, state="disabled")
