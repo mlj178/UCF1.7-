@@ -61,7 +61,6 @@ class Nano4tRuntime:
 
     def on_ready(self, count):
         state.ready = True
-        self._context.feature_event("mode_enter", {}, feature_id="battle_round")
         self.set_status("green", "已就绪")
         self.handles.nano4t_apply_btn.configure(state="normal", fg_color="#2563eb")
         self._context.log(f"✅ [多人生化] 已就绪！共 {count} 种特性")
@@ -69,27 +68,18 @@ class Nano4tRuntime:
         self.handles.nano4t_next_label.configure(text="💡 请选择特性后点击「应用」按钮")
         self.get_current_async()
 
-    def on_destroyed_event(self):
+    def on_mode_detected(self):
         if state.ready:
-            self._context.log("⚠ 检测到退出多人生化房间，特性系统已销毁")
-        self.handle_mode_exit()
-
-    def on_dead(self):
-        if state.ready:
-            self._context.log("⚠ [多人生化] 模式实例已失效")
-        self.handle_mode_exit()
-
-    def on_alive(self):
-        if not state.ready and self._context.is_connected():
-            self._context.log("ℹ️ [多人生化] 检测到已进入多人生化模式，正在初始化...")
-            self.auto_init_if_needed_async()
+            return
+        self._context.log("ℹ️ [多人生化] 检测到进入多人生化模式，正在初始化...")
+        self.set_status("yellow", "正在初始化")
+        self.handles.nano4t_next_label.configure(text="正在读取多人生化特性...")
 
     def handle_mode_exit(self):
         state.ready = False
         state.activated = False
         state.current_ghost = -1
         state.current_human = -1
-        self._context.feature_event("mode_exit", {}, feature_id="battle_round")
         self._context.after(0, self.on_destroyed)
 
     def on_destroyed(self):
@@ -115,7 +105,6 @@ class Nano4tRuntime:
             else:
                 self._context.log(f"❌ [多人生化] {message}")
         self._context.after(0, lambda: self.set_status("yellow", "未就绪"))
-        self._context.feature_event("mode_exit", {}, feature_id="battle_round")
 
     def on_set(self, ghost_id, human_id):
         state.wanted_ghost = ghost_id
@@ -196,6 +185,3 @@ class Nano4tRuntime:
                 self._context.feature_service.call_action("nano4t", "nano4tGetCurrent", {})
         except Exception:
             pass
-
-    def auto_init_if_needed_async(self):
-        threading.Thread(target=self.auto_init_bg, daemon=True).start()

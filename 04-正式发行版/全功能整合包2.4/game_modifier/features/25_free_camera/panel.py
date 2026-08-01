@@ -92,21 +92,13 @@ def build_card(parent, manifest, row, col, colspan, callbacks, card_builder):
     top = ctk.CTkFrame(frame, fg_color="transparent")
     top.pack(fill="x", padx=8, pady=(6, 0))
 
-    title_icon_label = ctk.CTkLabel(
-        top,
-        text=manifest["icon"],
-        font=("Microsoft YaHei", 15, "bold"),
-        text_color=manifest.get("layout", {}).get("title_color", "#e0e0e0"),
-    )
-    title_icon_label.pack(side="left", padx=(4, 0))
-
     title_name_label = ctk.CTkLabel(
         top,
         text=manifest["display_name"],
         font=("Microsoft YaHei", 15, "bold"),
         text_color=manifest.get("layout", {}).get("title_color", "#e0e0e0"),
     )
-    title_name_label.pack(side="left", padx=(0, 4))
+    title_name_label.pack(side="left", padx=(4, 4))
 
     switch = ctk.CTkSwitch(
         top,

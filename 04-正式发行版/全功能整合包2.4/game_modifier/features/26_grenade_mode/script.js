@@ -198,7 +198,7 @@ const DefaultConfig = {
     virtual_grenade_observer_verbose: false,
     bot_grenade_behavior_observer_enabled: false,
     bot_attack_observer_enabled: false,
-    bot_grenade_mode_enabled: true,
+    bot_grenade_mode_enabled: false,
     bot_grenade_throw_slot: 3,
     bot_grenade_force_scope_all_players: true,
     bot_grenade_record_enabled: true,

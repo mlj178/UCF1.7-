@@ -7,11 +7,48 @@ def build_card(parent, manifest, row, col, colspan, callbacks, card_builder):
     frame.grid(row=row, column=col, columnspan=colspan, sticky="ew", padx=3, pady=3)
     top = ctk.CTkFrame(frame, fg_color="transparent")
     top.pack(fill="x", padx=8, pady=(6, 0))
-    ctk.CTkLabel(top, text=f"{manifest['icon']} {manifest['display_name']}", font=("Microsoft YaHei", 15, "bold"), text_color=manifest.get("layout", {}).get("title_color", "#e0e0e0")).pack(side="left", padx=4)
+    ctk.CTkLabel(top, text=manifest["display_name"], font=("Microsoft YaHei", 15, "bold"), text_color=manifest.get("layout", {}).get("title_color", "#e0e0e0")).pack(side="left", padx=4)
     switch = ctk.CTkSwitch(top, text="", font=("Microsoft YaHei", 12), width=50, command=lambda: callbacks["toggle"](feature_id))
     switch.pack(side="right", padx=6)
     placeholder = ctk.CTkFrame(frame, fg_color="transparent", height=20)
     placeholder.pack(fill="x", padx=8, pady=(0, 0))
     placeholder.pack_propagate(False)
     ctk.CTkLabel(frame, font=("Microsoft YaHei", 15), text=manifest["desc"], text_color="#a0a0a0", wraplength=280, justify="left", anchor="w").pack(fill="x", expand=False, padx=8, pady=(0, 4))
-    return {manifest.get("ui_handles", {}).get("switch", "esp_box_switch"): switch}
+    scope_values = ["仅显示敌人", "敌人和队友"]
+    scope_to_value = {
+        "仅显示敌人": "enemy_only",
+        "敌人和队友": "all_players",
+    }
+    config = callbacks.get("get_config", lambda _feature_id: {})(feature_id) or {}
+    current_scope = config.get("esp_target_scope", manifest.get("config", {}).get("esp_target_scope", "enemy_only"))
+    selected_label = next(
+        (label for label, value in scope_to_value.items() if value == current_scope),
+        scope_values[0],
+    )
+
+    ctk.CTkLabel(
+        frame,
+        text="显示对象",
+        font=("Microsoft YaHei", 13),
+        text_color="#c0c0c0",
+        anchor="w",
+    ).pack(fill="x", padx=8, pady=(2, 0))
+
+    def on_scope_changed(label):
+        callbacks["set_config"](feature_id, "esp_target_scope", scope_to_value[label])
+
+    scope_menu = ctk.CTkOptionMenu(
+        frame,
+        values=scope_values,
+        command=on_scope_changed,
+        font=("Microsoft YaHei", 13),
+        dropdown_font=("Microsoft YaHei", 13),
+        width=180,
+    )
+    scope_menu.set(selected_label)
+    scope_menu.pack(anchor="w", padx=8, pady=(2, 8))
+
+    return {
+        manifest.get("ui_handles", {}).get("switch", "esp_box_switch"): switch,
+        "esp_target_scope_menu": scope_menu,
+    }

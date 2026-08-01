@@ -23,6 +23,8 @@ DWORD GameManager::s_LastRoundChangeTime = 0;
 
 typedef void (__cdecl *BotUpdateFunc)(void* bot, void* methodInfo);
 typedef bool (__cdecl *GetIsDeadFn)(void* entity, void* methodInfo);
+typedef void* (__cdecl *GetHealthDataFn)(void* entity, void* methodInfo);
+typedef float (__cdecl *GetHealthRateFn)(void* healthData, void* methodInfo);
 
 static BotUpdateFunc s_OriginalBotUpdate = nullptr;
 
@@ -365,6 +367,39 @@ bool GameManager::IsPlayerDead(void* player) {
     }
 
     return isDead;
+}
+
+bool GameManager::GetPlayerHealth(void* player, float* outRate) {
+    if (!outRate || !HasActiveSession() || !player || !IsValidPlayer(player)) return false;
+
+    void* gameAssembly = IL2CPPBridge::GetBase();
+    if (!gameAssembly) return false;
+
+    auto getHealthData = (GetHealthDataFn)((char*)gameAssembly + RVAConstants::Entity_get_healthData);
+    auto getHealthRate = (GetHealthRateFn)((char*)gameAssembly + RVAConstants::HealthData_get_rate);
+    if (!IsExecutableAddress((void*)getHealthData) || !IsExecutableAddress((void*)getHealthRate)) {
+        return false;
+    }
+
+    void* healthData = nullptr;
+    float rate = -1.0f;
+#if defined(_MSC_VER)
+    __try {
+        healthData = getHealthData(player, nullptr);
+        if (healthData) rate = getHealthRate(healthData, nullptr);
+    } __except(EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+#else
+    SAFE_TRY {
+        healthData = getHealthData(player, nullptr);
+        if (healthData) rate = getHealthRate(healthData, nullptr);
+    } SAFE_EXCEPT_RET(false)
+#endif
+
+    if (!std::isfinite(rate) || rate <= 0.0f || rate > 1.0f) return false;
+    *outRate = rate;
+    return true;
 }
 
 int GameManager::GetPlayerTeam(void* player) {

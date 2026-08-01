@@ -5,7 +5,6 @@ class KnifeRangeFeature(PluginFeatureBase):
     feature_id = 'range'
     js_filename = '07-knife_attack_range.js'
     name = '剑气化丝'
-    icon = '⚔️'
     category = 'weapon'
     has_slider = True
     slider_range = (1.0, 50.0, 1.0)

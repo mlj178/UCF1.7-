@@ -4,10 +4,9 @@
   "display_name": "手雷模式",
   "category": "special",
   "tab": "grenade_mode_tab",
-  "tab_title": "手雷模式",
+  "tab_title": "手雷功能",
   "tab_order": 60,
-  "order": 10,
-  "icon": "💣",
+  "order": 0,
   "desc": "锁定手雷数量、保护手雷对象，并让 人机 尽量改为投掷手雷。",
   "script": "script.js",
   "runtime": {
@@ -15,7 +14,7 @@
   },
   "ui": {
     "mode": "special_page",
-    "tab_title": "手雷模式",
+    "tab_title": "手雷功能",
     "tab_order": 60,
     "lazy_build": true
   },
@@ -25,23 +24,29 @@
   },
   "controls": [
     {
+      "type": "switch",
+      "key": "lock999_enabled",
+      "label": "无限手雷",
+      "default": true
+    },
+    {
       "type": "select",
       "key": "infinite_grenade_scope",
-      "label": "无限手雷范围",
+      "label": "无限手雷生效对象",
       "default": "all_players",
       "values": [
         "local_only",
         "all_players"
       ],
       "display_values": {
-        "local_only": "只对玩家生效",
-        "all_players": "玩家 + 人机生效"
+        "local_only": "仅玩家",
+        "all_players": "玩家和人机"
       }
     },
     {
       "type": "slider",
       "key": "bot_throw_drive_cooldown_ms",
-      "label": "人机 投掷冷却",
+      "label": "人机投掷手雷频率",
       "min": 1600,
       "max": 3000,
       "step": 100,
@@ -50,14 +55,21 @@
     },
     {
       "type": "switch",
+      "key": "bot_grenade_mode_enabled",
+      "label": "手雷模式",
+      "default": false,
+      "persist": false
+    },
+    {
+      "type": "switch",
       "key": "enable_damage",
-      "label": "手雷伤害强化",
+      "label": "爆炸伤害强化",
       "default": true
     },
     {
       "type": "slider",
       "key": "damage_value",
-      "label": "伤害",
+      "label": "爆炸伤害值",
       "min": 10,
       "max": 50,
       "step": 0.1,
@@ -66,21 +78,21 @@
     {
       "type": "select",
       "key": "damage_apply_scope",
-      "label": "伤害应用范围",
+      "label": "生效对象",
       "default": "my_player",
       "values": [
         "my_player",
         "all_players"
       ],
       "display_values": {
-        "my_player": "只对玩家生效",
-        "all_players": "玩家 + 人机生效"
+        "my_player": "仅玩家",
+        "all_players": "玩家和人机"
       }
     },
     {
       "type": "switch",
       "key": "enable_range",
-      "label": "手雷爆炸范围强化",
+      "label": "爆炸范围强化",
       "default": true
     },
     {
@@ -95,27 +107,27 @@
     {
       "type": "select",
       "key": "range_apply_scope",
-      "label": "范围应用范围",
+      "label": "生效对象",
       "default": "my_player",
       "values": [
         "my_player",
         "all_players"
       ],
       "display_values": {
-        "my_player": "只对玩家生效",
-        "all_players": "玩家 + 人机生效"
+        "my_player": "仅玩家",
+        "all_players": "玩家和人机"
       }
     },
     {
       "type": "switch",
       "key": "enable_shoot_speed",
-      "label": "手雷飞行速度强化",
+      "label": "投掷速度强化",
       "default": true
     },
     {
       "type": "slider",
       "key": "shoot_speed_value",
-      "label": "飞行速度",
+      "label": "投掷速度",
       "min": 1,
       "max": 10,
       "step": 0.1,
@@ -124,15 +136,15 @@
     {
       "type": "select",
       "key": "shoot_speed_apply_scope",
-      "label": "速度应用范围",
+      "label": "生效对象",
       "default": "my_player",
       "values": [
         "my_player",
         "all_players"
       ],
       "display_values": {
-        "my_player": "只对玩家生效",
-        "all_players": "玩家 + 人机生效"
+        "my_player": "仅玩家",
+        "all_players": "玩家和人机"
       }
     },
     {
@@ -144,15 +156,15 @@
     {
       "type": "select",
       "key": "force_throw_ready_scope",
-      "label": "连投应用范围",
+      "label": "连投生效对象",
       "default": "local_only",
       "values": [
         "local_only",
         "all_players"
       ],
       "display_values": {
-        "local_only": "只对玩家生效",
-        "all_players": "玩家 + 人机生效"
+        "local_only": "仅玩家",
+        "all_players": "玩家和人机"
       }
     }
   ],
@@ -206,7 +218,7 @@
     "virtual_grenade_observer_verbose": false,
     "bot_grenade_behavior_observer_enabled": false,
     "bot_attack_observer_enabled": false,
-    "bot_grenade_mode_enabled": true,
+    "bot_grenade_mode_enabled": false,
     "bot_grenade_throw_slot": 3,
     "bot_grenade_force_scope_all_players": true,
     "bot_grenade_record_enabled": true,
@@ -289,8 +301,5 @@
   },
   "state": {
     "sync_enabled_from_config": false
-  },
-  "ui_handles": {
-    "switch": "grenade_mode_switch"
   }
 }

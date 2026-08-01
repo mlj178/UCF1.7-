@@ -2,10 +2,9 @@
     "feature_id":  "skillcd",
     "canonical_id":  "skill_no_cooldown",
     "display_name":  "技能无冷却",
-    "category":  "player",
-    "tab":  "player_tab",
+    "category":  "special",
+    "tab":  "nano4t_tab",
     "order":  50,
-    "icon":  "✨",
     "desc":  "生化模式，所有技能无冷却",
     "script":  "script.js",
     "layout":  {
@@ -41,8 +40,11 @@
     "runtime":  {
                     "type":  "plugin_script"
                 },
-    "tab_title":  "人物属性",
-    "tab_order":  20,
+    "ui":  {
+                "mode":  "special_inline_card"
+            },
+    "tab_title":  "多人生化",
+    "tab_order":  40,
     "state":  {
                   "sync_enabled_from_config":  true
               }

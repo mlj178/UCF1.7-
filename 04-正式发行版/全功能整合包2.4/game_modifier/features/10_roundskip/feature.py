@@ -5,7 +5,6 @@ class RoundSkipFeature(PluginFeatureBase):
     feature_id = 'roundskip'
     js_filename = '10-skip_round.js'
     name = '回合跳过'
-    icon = '⏭️'
     category = 'other'
     desc = '结束当前回合（需要等待几秒）'
 

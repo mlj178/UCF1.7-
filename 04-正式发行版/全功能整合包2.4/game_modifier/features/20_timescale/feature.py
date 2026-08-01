@@ -5,7 +5,6 @@ class TimeScaleFeature(PluginFeatureBase):
     feature_id = 'timescale'
     js_filename = '20-unity_time_acceleration.js'
     name = '时间加速'
-    icon = '⏩'
     category = 'other'
     has_slider = True
     slider_range = (0.1, 10.0, 0.1)

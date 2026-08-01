@@ -5,7 +5,6 @@ class KnifeFeature(PluginFeatureBase):
     feature_id = 'knife'
     js_filename = '04-fast_knife.js'
     name = '快刀'
-    icon = '🔪'
     category = 'weapon'
     has_slider = True
     slider_range = (1.0, 10.0, 0.1)

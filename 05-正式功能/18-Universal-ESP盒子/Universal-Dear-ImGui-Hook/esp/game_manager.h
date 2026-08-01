@@ -29,6 +29,7 @@ public:
     
     static bool IsValidPlayer(void* player);
     static bool IsPlayerDead(void* player);
+    static bool GetPlayerHealth(void* player, float* outRate);
     static int GetPlayerTeam(void* player);
     
     // Bot Hook相关

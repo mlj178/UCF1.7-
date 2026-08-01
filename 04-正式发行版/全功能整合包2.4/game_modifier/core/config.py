@@ -79,7 +79,6 @@ def _build_features_info(manifests):
     return {
         feature_id: {
             "name": manifest.get("display_name", feature_id),
-            "icon": manifest.get("icon", ""),
             "category": manifest.get("category", "other"),
         }
         for feature_id, manifest in manifests.items()

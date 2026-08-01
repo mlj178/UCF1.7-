@@ -16,6 +16,14 @@ class FeatureCommandService:
 
     def set_config(self, feature_id, config):
         current = self._config.set(feature_id, config)
+        if feature_id == "esp_box" and "esp_target_scope" in current:
+            from core.game_session_manager import GameSessionManager
+            GameSessionManager.get_instance().set_esp_target_scope(current["esp_target_scope"])
+        return self._frida.plugin_call(feature_id, "setConfig", current)
+
+    def set_config_runtime(self, feature_id, config):
+        current = self._config.get(feature_id)
+        current.update(config or {})
         return self._frida.plugin_call(feature_id, "setConfig", current)
 
     def status(self, feature_id):

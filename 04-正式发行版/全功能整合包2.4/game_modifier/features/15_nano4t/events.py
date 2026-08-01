@@ -16,8 +16,10 @@ def handle_event(context, event, payload):
     if event == "nano4t_ready":
         ids = payload.get("ids", [])
         context.after(0, lambda: runtime.on_ready(len(ids)))
-    elif event == "nano4t_destroyed":
-        runtime.on_destroyed_event()
+    elif event == "nano4t_mode_enter":
+        context.after(0, runtime.on_mode_detected)
+    elif event == "nano4t_mode_exit":
+        runtime.handle_mode_exit()
     elif event == "nano4t_error":
         runtime.on_error(payload)
     elif event == "nano4t_set":
@@ -28,12 +30,6 @@ def handle_event(context, event, payload):
         g = int(payload.get("g", -1))
         h = int(payload.get("h", -1))
         context.after(0, lambda gg=g, hh=h: runtime.update_round_label(gg, hh))
-    elif event == "nano4t_dead":
-        runtime.on_dead()
-    elif event == "nano4t_alive":
-        runtime.on_alive()
-    elif event == "mode_detected":
-        runtime.auto_init_if_needed_async()
     elif event == "get_current":
         runtime.get_current_async()
 

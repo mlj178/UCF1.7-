@@ -5,7 +5,6 @@ from core.game_session_manager import GameSessionManager
 class ESPBoxFeature(PluginFeatureBase):
     feature_id = 'esp_box'
     name = '方框透视'
-    icon = '📦'
     category = 'other'
     desc = '通过 Universal DLL 显示方框透视'
 

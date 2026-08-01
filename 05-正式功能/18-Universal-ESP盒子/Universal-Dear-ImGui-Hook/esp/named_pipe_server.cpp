@@ -98,6 +98,8 @@ static std::string BuildHelloResponse() {
         << ",\"protocol\":" << PROTOCOL_VERSION
         << ",\"dll_version\":\"" << DLL_VERSION << "\""
         << ",\"esp_box\":" << (ESPState::Instance().IsBoxEnabled() ? "true" : "false")
+        << ",\"esp_all_players\":" << (ESPState::Instance().IsAllPlayersEnabled() ? "true" : "false")
+        << ",\"esp_all_players\":" << (ESPState::Instance().IsAllPlayersEnabled() ? "true" : "false")
         << "}";
     return oss.str();
 }
@@ -138,11 +140,13 @@ static std::string ProcessCommand(const std::string& cmd) {
         }
 
         bool esp_box = GetJsonBool(cmd, "esp_box");
+        bool esp_all_players = GetJsonBool(cmd, "esp_all_players");
 
         // Only apply if revision is newer
         if (revision > ESPState::Instance().GetRevision()) {
-            ESPState::Instance().SetBoxEnabled(esp_box, revision);
-            PipeLog("State updated: esp_box=%s, revision=%d", esp_box ? "true" : "false", revision);
+            ESPState::Instance().SetState(esp_box, esp_all_players, revision);
+            PipeLog("State updated: esp_box=%s, esp_all_players=%s, revision=%d",
+                     esp_box ? "true" : "false", esp_all_players ? "true" : "false", revision);
         } else {
             PipeLog("State update ignored: old revision %d <= current %d", revision, ESPState::Instance().GetRevision());
         }

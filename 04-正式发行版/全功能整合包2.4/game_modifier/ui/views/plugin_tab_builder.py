@@ -10,6 +10,11 @@ from ui.views.common import bind_view_handles
 class PluginTabBuilder:
     """Build ordinary and special plugin tabs from manifests."""
 
+    BUILTIN_TABS = (
+        {"id": "game_test_tab", "title": "游戏测试", "order": 70},
+        {"id": "game_parameters_tab", "title": "游戏参数", "order": 80},
+    )
+
     def __init__(
         self,
         *,
@@ -36,29 +41,53 @@ class PluginTabBuilder:
         tab_view.pack(fill="both", padx=12, pady=4, expand=True)
 
         ordinary_scrolls = {}
-        for tab in self._ordinary_tabs():
-            ordinary_scrolls[tab["id"]] = self._add_scroll_tab(tab_view, tab["title"])
+        tab_entries = [{"kind": "ordinary", **tab} for tab in self._ordinary_tabs()]
+        tab_entries.extend(
+            {
+                "kind": "special",
+                "feature": feature,
+                "title": feature.manifest.get("ui", {}).get("tab_title")
+                or feature.manifest.get("display_name"),
+                "order": feature.manifest.get("ui", {}).get(
+                    "tab_order", feature.manifest.get("order", 0)
+                ),
+            }
+            for feature in self._special_page_features()
+        )
+        for tab in sorted(tab_entries, key=lambda item: (item["order"], item["title"])):
+            title = tab["title"]
+            scroll = self._add_scroll_tab(tab_view, title)
+            if tab["kind"] == "ordinary":
+                ordinary_scrolls[tab["id"]] = scroll
+                continue
+            feature = tab["feature"]
+            self._special_tabs[title] = {"feature": feature, "scroll": scroll}
+            if not feature.manifest.get("ui", {}).get("lazy_build", False):
+                self._build_special_tab(title)
 
         feature_tabs_view = FeatureTabsView(
             plugin_registry=self._registry,
             on_toggle_feature=self._callbacks["toggle"],
             on_set_config=self._callbacks["set_config"],
             on_action=self._callbacks["action"],
+            on_get_config=self._panel_context.get_config,
             logger=self._logger,
             is_connected=self._is_connected,
             is_enabled=self._is_enabled,
         )
-        bind_view_handles(
-            self._host,
-            feature_tabs_view.build(tab_scrolls=ordinary_scrolls),
-        )
-
-        for feature in self._special_page_features():
-            title = feature.manifest.get("ui", {}).get("tab_title") or feature.manifest.get("display_name")
-            scroll = self._add_scroll_tab(tab_view, title)
-            self._special_tabs[title] = {"feature": feature, "scroll": scroll}
-            if not feature.manifest.get("ui", {}).get("lazy_build", False):
-                self._build_special_tab(title)
+        bind_view_handles(self._host, feature_tabs_view.build(tab_scrolls=ordinary_scrolls))
+        for feature in self._inline_card_features():
+            title = feature.manifest.get("tab_title") or feature.manifest.get("ui", {}).get("tab_title")
+            special_tab = self._special_tabs.get(title)
+            if not special_tab:
+                continue
+            self._build_special_tab(title)
+            card_host = special_tab.get("inline_card_host")
+            if card_host is not None:
+                bind_view_handles(
+                    self._host,
+                    feature_tabs_view.build_inline_cards(card_host, [feature]),
+                )
 
         return tab_view
 
@@ -87,11 +116,11 @@ class PluginTabBuilder:
         return sorted(features, key=lambda feature: feature.manifest.get("ui", {}).get("tab_order", feature.manifest.get("order", 0)))
 
     def _ordinary_tabs(self):
-        tabs = {}
+        tabs = {tab["id"]: dict(tab) for tab in self.BUILTIN_TABS}
         for feature in self._registry.all():
             manifest = feature.manifest
             ui = manifest.get("ui", {})
-            if ui.get("mode") in {"special_page", "embedded_panel"}:
+            if ui.get("mode") in {"special_page", "embedded_panel", "special_inline_card"}:
                 continue
             tab_id = manifest.get("tab")
             if not tab_id:
@@ -107,6 +136,13 @@ class PluginTabBuilder:
             item["order"] = min(item["order"], manifest.get("tab_order", item["order"]))
         return sorted(tabs.values(), key=lambda item: (item["order"], item["title"], item["id"]))
 
+    def _inline_card_features(self):
+        return [
+            feature
+            for feature in self._registry.all()
+            if feature.manifest.get("ui", {}).get("mode") == "special_inline_card"
+        ]
+
     def _build_special_tab(self, title):
         if title in self._built_special_tabs or title not in self._special_tabs:
             return None
@@ -121,7 +157,9 @@ class PluginTabBuilder:
         if not callable(build_panel):
             return None
         self._built_special_tabs.add(title)
-        return build_panel(
+        handles = build_panel(
             self._panel_context.for_feature(feature.manifest["feature_id"]),
             item["scroll"],
         )
+        item["inline_card_host"] = getattr(handles, "inline_card_host", None)
+        return handles

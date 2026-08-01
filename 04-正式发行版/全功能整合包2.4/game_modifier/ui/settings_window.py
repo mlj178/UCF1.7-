@@ -50,7 +50,7 @@ class SettingsWindow(ctk.CTkToplevel):
         ctk.CTkLabel(hotkey_frame, text="功能快捷键绑定 - 功能互斥绑定",
                      font=("Microsoft YaHei", 14, "bold")).pack(pady=(12, 6))
 
-        feature_display_names = {v['icon'] + ' ' + v['name']: k for k, v in FEATURES_INFO.items()
+        feature_display_names = {v['name']: k for k, v in FEATURES_INFO.items()
                                  if k not in HOTKEY_EXCLUDED}
         self._feature_display_names = feature_display_names
 
@@ -108,7 +108,7 @@ class SettingsWindow(ctk.CTkToplevel):
 
             feature_id = hotkey_data.get(pos)
             feature_info = FEATURES_INFO.get(feature_id)
-            feature_name = feature_info['icon'] + ' ' + feature_info['name'] if feature_info else "未绑定"
+            feature_name = feature_info['name'] if feature_info else "未绑定"
 
             available_features = get_available_features(exclude_pos=pos)
             combo = ctk.CTkComboBox(row_frame, values=available_features,

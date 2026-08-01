@@ -10,6 +10,7 @@ public:
     static void DrawPlayerESPFallback(void* player, void* localPlayer, bool shouldLog);
     static void DrawBox(const Vector2& center, float width, float height,
                        const ImVec4& color, float thickness = 1.5f);
+    static void DrawHealthBar(const Vector2& center, float width, float height, float rate);
 
     static ImVec4 GetPlayerColor(void* player, void* localPlayer);
 

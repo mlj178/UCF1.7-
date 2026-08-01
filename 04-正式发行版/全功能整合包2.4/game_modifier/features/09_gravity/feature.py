@@ -5,7 +5,6 @@ class GravityFeature(PluginFeatureBase):
     feature_id = 'gravity'
     js_filename = '09-high_jump_low_gravity.js'
     name = '轻重力'
-    icon = '🌌'
     category = 'player'
     has_slider = False
     desc = '调整重力与跳跃倍率'

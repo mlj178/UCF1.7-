@@ -33,6 +33,7 @@ class Nano4tViewHandles:
     nano4t_apply_btn: ctk.CTkButton
     battle_round_status_label: ctk.CTkLabel
     battle_round_switch: ctk.CTkSwitch
+    inline_card_host: ctk.CTkFrame
 
 
 class Nano4tView:
@@ -67,12 +68,6 @@ class Nano4tView:
 
         nano4t_title_frame = ctk.CTkFrame(nano4t_card, fg_color="transparent")
         nano4t_title_frame.pack(fill="x", padx=12, pady=(8, 2))
-        ctk.CTkLabel(
-            nano4t_title_frame,
-            text="🧬",
-            font=("Microsoft YaHei", 15, "bold"),
-            text_color="#a7f3d0",
-        ).pack(side="left", padx=(0, 2))
         ctk.CTkLabel(
             nano4t_title_frame,
             text="多人生化Buff选择",
@@ -112,7 +107,7 @@ class Nano4tView:
         ghost_frame.grid_propagate(False)
         ghost_header = ctk.CTkFrame(ghost_frame, fg_color="transparent")
         ghost_header.pack(anchor="w", padx=12, pady=(6, 2))
-        ctk.CTkLabel(ghost_header, text="👻 幽灵方特性", font=("Microsoft YaHei", 14, "bold"), text_color="#ff6666").pack(side="left")
+        ctk.CTkLabel(ghost_header, text="幽灵方特性", font=("Microsoft YaHei", 14, "bold"), text_color="#ff6666").pack(side="left")
         nano4t_ghost_status_label = ctk.CTkLabel(ghost_header, text="[未激活]", font=("Microsoft YaHei", 11), text_color="#888888")
         nano4t_ghost_status_label.pack(side="left", padx=(8, 0))
 
@@ -137,7 +132,7 @@ class Nano4tView:
         human_frame.grid_propagate(False)
         human_header = ctk.CTkFrame(human_frame, fg_color="transparent")
         human_header.pack(anchor="w", padx=12, pady=(6, 2))
-        ctk.CTkLabel(human_header, text="🛡️ 人类方特性", font=("Microsoft YaHei", 14, "bold"), text_color="#6688ff").pack(side="left")
+        ctk.CTkLabel(human_header, text="人类方特性", font=("Microsoft YaHei", 14, "bold"), text_color="#6688ff").pack(side="left")
         nano4t_human_status_label = ctk.CTkLabel(human_header, text="[未激活]", font=("Microsoft YaHei", 11), text_color="#888888")
         nano4t_human_status_label.pack(side="left", padx=(8, 0))
 
@@ -166,7 +161,7 @@ class Nano4tView:
         battle_round_frame.pack(fill="x", padx=8, pady=(4, 8))
         battle_round_top = ctk.CTkFrame(battle_round_frame, fg_color="transparent")
         battle_round_top.pack(fill="x", padx=12, pady=(8, 4))
-        ctk.CTkLabel(battle_round_top, text="⚔️ 决战回合", font=("Microsoft YaHei", 14, "bold"), text_color="#FFB347").pack(side="left")
+        ctk.CTkLabel(battle_round_top, text="决战回合", font=("Microsoft YaHei", 14, "bold"), text_color="#FFB347").pack(side="left")
         battle_round_status_label = ctk.CTkLabel(
             battle_round_top,
             text="状态: 等待进入多人生化模式...",
@@ -179,6 +174,9 @@ class Nano4tView:
         battle_round_switch.pack(side="right")
         ctk.CTkLabel(battle_round_frame, text="每局强制触发决战回合（保底局）", font=("Microsoft YaHei", 11), text_color="#a0a0a0").pack(anchor="w", padx=12, pady=(0, 2))
         ctk.CTkLabel(battle_round_frame, text="决战回合：多人生化模式倒计时进入最后 30 秒，触发希望 buff", font=("Microsoft YaHei", 11), text_color="#a0a0a0").pack(anchor="w", padx=12, pady=(0, 8))
+
+        inline_card_host = ctk.CTkFrame(scroll, fg_color="transparent")
+        inline_card_host.pack(fill="x", padx=8, pady=(4, 8))
 
         return Nano4tViewHandles(
             nano4t_top_frame=nano4t_top_frame,
@@ -198,4 +196,5 @@ class Nano4tView:
             nano4t_apply_btn=nano4t_apply_btn,
             battle_round_status_label=battle_round_status_label,
             battle_round_switch=battle_round_switch,
+            inline_card_host=inline_card_host,
         )

@@ -5,7 +5,6 @@ class MoveSpeedFeature(PluginFeatureBase):
     feature_id = 'movespeed'
     js_filename = '06-movement_speed.js'
     name = '滑板鞋'
-    icon = '👟'
     category = 'player'
     has_slider = True
     slider_range = (1.0, 6.0, 0.1)

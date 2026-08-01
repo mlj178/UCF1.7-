@@ -2,10 +2,9 @@
     "feature_id":  "time",
     "canonical_id":  "infinite_time",
     "display_name":  "无限时间",
-    "category":  "player",
-    "tab":  "player_tab",
+    "category":  "other",
+    "tab":  "other_tab",
     "order":  20,
-    "icon":  "⏰",
     "desc":  "设定时间为 9:59",
     "script":  "script.js",
     "layout":  {
@@ -43,8 +42,8 @@
     "runtime":  {
                     "type":  "plugin_script"
                 },
-    "tab_title":  "人物属性",
-    "tab_order":  20,
+    "tab_title":  "其他",
+    "tab_order":  30,
     "state":  {
                   "sync_enabled_from_config":  true
               }

@@ -14,17 +14,16 @@ class PluginFeaturePage:
         self._panel_builders = {}
 
     def build_tab(self, scroll, tab_id):
+        return self.build_features(scroll, self.registry.by_tab(tab_id), tab_id)
+
+    def build_features(self, scroll, features, layout_id="inline"):
         for i in range(2):
-            scroll.grid_columnconfigure(i, weight=1, uniform=f"{tab_id}_col")
+            scroll.grid_columnconfigure(i, weight=1, uniform=f"{layout_id}_col")
 
         handles = {}
         row = 0
         col = 0
-        features = sorted(
-            self.registry.by_tab(tab_id),
-            key=lambda feature: int(feature.manifest.get("order", 0)),
-        )
-        for feature in features:
+        for feature in sorted(features, key=lambda feature: int(feature.manifest.get("order", 0))):
             manifest = feature.manifest
             layout = manifest.get("layout", {})
             colspan = int(layout.get("columnspan", 1))

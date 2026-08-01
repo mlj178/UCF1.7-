@@ -5,7 +5,7 @@ import customtkinter as ctk
 from core.weapon_catalog import TYPE_COLORS, WEAPON_LIST
 
 
-WEAPON_GIVER_TITLE = "🔨 赋予武器"
+WEAPON_GIVER_TITLE = "赋予武器"
 RESPAWN_WEAPON_TEXT = "复活自动装备武器"
 CURRENT_WEAPON_TEXT = "当前武器: 无"
 GIVE_BUTTON_TEXT = "赋予"

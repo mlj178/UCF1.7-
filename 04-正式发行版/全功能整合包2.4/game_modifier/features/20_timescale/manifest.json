@@ -2,10 +2,9 @@
     "feature_id":  "timescale",
     "canonical_id":  "unity_timescale",
     "display_name":  "时间加速",
-    "category":  "other",
-    "tab":  "other_tab",
+    "category":  "game_test",
+    "tab":  "game_test_tab",
     "order":  50,
-    "icon":  "⏩",
     "desc":  "调整游戏时间倍率",
     "hotkey":  {
                     "enabled":  true
@@ -56,8 +55,8 @@
     "runtime":  {
                     "type":  "plugin_script"
                 },
-    "tab_title":  "其他",
-    "tab_order":  30,
+    "tab_title":  "游戏测试",
+    "tab_order":  70,
     "state":  {
                   "sync_enabled_from_config":  true
               }
