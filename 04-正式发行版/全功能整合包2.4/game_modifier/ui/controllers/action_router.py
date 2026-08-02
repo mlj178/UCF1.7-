@@ -65,7 +65,7 @@ class ActionRouter:
             config_payload.update(payload or {})
             result = self._feature_service.set_config(feature_id, config_payload)
         elif route_type == "plugin_feature":
-            result = self._call_plugin_feature(feature_id, action)
+            result = self._call_plugin_feature(feature_id, action, payload)
         elif action == "enable":
             result = self._feature_service.enable(feature_id)
             self._state[feature_id] = True
@@ -113,7 +113,7 @@ class ActionRouter:
     def _requires_connection(action_meta):
         return bool(action_meta.get("requires_connection", True))
 
-    def _call_plugin_feature(self, feature_id, action):
+    def _call_plugin_feature(self, feature_id, action, payload=None):
         feature = self._registry.get(feature_id)
         if not feature:
             return False
@@ -121,7 +121,15 @@ class ActionRouter:
         if not callable(method):
             self._log(f"⚠ 插件未提供动作: {feature_id}.{action}")
             return False
-        return method()
+        try:
+            return method(payload or {})
+        except TypeError as exc:
+            # Preserve compatibility with existing zero-argument plugin actions.
+            try:
+                return method()
+            except TypeError:
+                self._log(f"⚠ 插件动作参数错误: {feature_id}.{action}: {exc}")
+                return False
 
     @staticmethod
     def _normalize_config_value(value):

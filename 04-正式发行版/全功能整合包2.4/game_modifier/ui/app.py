@@ -375,6 +375,13 @@ class App(ctk.CTk):
                 )
             for control in controls:
                 control_type = control.get("type")
+                if control_type == "switch" and control.get("key"):
+                    key = control.get("key")
+                    handle_name = self._control_handle_name(manifest, key, "switch_var", False)
+                    handle = getattr(self, handle_name, None)
+                    if handle and hasattr(handle, "set"):
+                        handle.set(bool(config.get(key, control.get("default", False))))
+                    continue
                 if control_type not in {"combo", "select"}:
                     continue
                 key = control.get("key", "value")
@@ -400,6 +407,8 @@ class App(ctk.CTk):
             return handles.get(f"{key}_var") or f"{feature_id}_{key}_var"
         if handle_type == "select":
             return handles.get(f"{key}_select") or handles.get(f"{key}_var") or f"{feature_id}_{key}_select"
+        if handle_type == "switch_var":
+            return handles.get(f"{key}_var") or f"{feature_id}_{key}_var"
         return handles.get(handle_type, f"{feature_id}_{handle_type}")
 
     def _set_control_value(self, handle_name, value):
