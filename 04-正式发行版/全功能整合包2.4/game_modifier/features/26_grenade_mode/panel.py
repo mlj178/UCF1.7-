@@ -159,12 +159,13 @@ def _select(parent, context, control, config, handles):
     def on_select(label):
         _set_config(context, key, value_by_label.get(label, current_value))
 
-    combo = ctk.CTkOptionMenu(
+    combo = ctk.CTkComboBox(
         row,
         values=list(value_by_label.keys()),
         variable=var,
         command=on_select,
         width=180,
+        state="readonly",
     )
     combo.pack(side="left")
     handles[f"{key}_select"] = combo
@@ -183,15 +184,15 @@ def _slider(parent, context, control, config, handles):
         text=control.get("label", key),
         width=150,
         font=("Microsoft YaHei", 12),
-        text_color="#d1d5db",
+        text_color="#e0e0e0",
         anchor="w",
     ).grid(row=0, column=0, sticky="w", padx=(0, 8))
     value_label = ctk.CTkLabel(
         row,
         text=_format_number(initial, suffix),
-        width=70,
-        font=("Microsoft YaHei", 12),
-        text_color="#e5e7eb",
+        width=28,
+        font=("Microsoft YaHei", 11),
+        text_color="#e0e0e0",
     )
     value_label.grid(row=0, column=2, sticky="e", padx=(8, 0))
     var = ctk.DoubleVar(value=initial)
@@ -276,9 +277,9 @@ def _inline_enhancement_row(parent, context, controls, config, handles, keys, on
     value_label = ctk.CTkLabel(
         row,
         text=_format_number(initial, slider_control.get("suffix", "")),
-        width=60,
-        font=("Microsoft YaHei", 12),
-        text_color="#e5e7eb",
+        width=28,
+        font=("Microsoft YaHei", 11),
+        text_color="#e0e0e0",
     )
     value_label.grid(row=0, column=2, sticky="e", padx=(8, 8))
     minimum = float(slider_control.get("min", 0.0))
@@ -318,7 +319,7 @@ def _inline_enhancement_row(parent, context, controls, config, handles, keys, on
     def handle_scope(label):
         _set_config(context, scope_key, value_by_label.get(label, current_value))
 
-    scope = ctk.CTkOptionMenu(row, values=list(value_by_label.keys()), variable=scope_var, command=handle_scope, width=145)
+    scope = ctk.CTkComboBox(row, values=list(value_by_label.keys()), variable=scope_var, command=handle_scope, width=145, state="readonly")
     scope.grid(row=0, column=3, sticky="e")
     handles[f"{scope_key}_select"] = scope
 
@@ -329,7 +330,7 @@ def _add_enhancement_rows(parent, context, controls, config, handles, on_change)
 
 
 def _card(parent, title):
-    card = ctk.CTkFrame(parent, corner_radius=6, fg_color="#262626", border_width=1, border_color="#525252")
+    card = ctk.CTkFrame(parent, corner_radius=6, fg_color="transparent", border_width=1, border_color="#4b5563")
     card.pack(fill="x", padx=8, pady=5)
     ctk.CTkLabel(
         card,
@@ -403,7 +404,7 @@ def build_panel(context, parent):
         root,
         text="三个卡片可单独使用；连投依赖无限手雷，关闭无限手雷会自动关闭连投。",
         font=("Microsoft YaHei", 12),
-        text_color="#cbd5e1",
+        text_color="#a0a0a0",
         anchor="w",
     ).pack(fill="x", padx=10, pady=(0, 5))
 

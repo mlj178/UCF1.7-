@@ -45,7 +45,7 @@ class WeaponGiverView:
         self._weapon_hotkey_badges = weapon_hotkey_badges
 
     def build(self, scroll):
-        weapon_giver_frame = ctk.CTkFrame(scroll, corner_radius=8, fg_color="#2b2b2b")
+        weapon_giver_frame = ctk.CTkFrame(scroll, corner_radius=8, fg_color="transparent")
         weapon_giver_frame.pack(fill="x", padx=8, pady=(8, 4))
 
         top_frame = ctk.CTkFrame(weapon_giver_frame, fg_color="transparent")
@@ -145,8 +145,10 @@ class BatchedWeaponGrid:
 
             type_section = ctk.CTkFrame(
                 parent,
-                fg_color=self._type_colors.get(weapon_type, "#2b2b2b"),
+                fg_color="transparent",
                 corner_radius=6,
+                border_width=1,
+                border_color="#4b5563",
             )
             type_section.pack(fill="x", padx=4, pady=(6, 3))
 
@@ -195,8 +197,10 @@ class BatchedWeaponGrid:
         is_hero = weapon_kind == HERO_TYPE_NAME
         card = ctk.CTkFrame(
             row_frame,
-            fg_color="#1a1a2e" if not is_hero else "#2c3e50",
+            fg_color="transparent",
             corner_radius=4,
+            border_width=1,
+            border_color="#4b5563",
         )
         card.grid(row=0, column=col, padx=3, pady=3, sticky="nsew")
 
@@ -226,8 +230,10 @@ class BatchedWeaponGrid:
             height=20,
             font=("Microsoft YaHei", 9),
             command=lambda wid=weapon_id, name=cn_name: self._on_give_weapon(wid, name),
-            fg_color="#3498db" if not is_hero else "#e74c3c",
-            hover_color="#2980b9" if not is_hero else "#c0392b",
+            fg_color="transparent",
+            hover_color="#2980b9",
+            border_width=1,
+            border_color="#4b5563",
         ).pack(side="left", padx=2)
 
         ctk.CTkButton(
@@ -237,6 +243,8 @@ class BatchedWeaponGrid:
             height=20,
             font=("Microsoft YaHei", 9),
             command=lambda wid=weapon_id, name=cn_name: self._on_bind_hotkey(wid, name),
-            fg_color="#9b59b6",
+            fg_color="transparent",
             hover_color="#8e44ad",
+            border_width=1,
+            border_color="#4b5563",
         ).pack(side="left", padx=2)

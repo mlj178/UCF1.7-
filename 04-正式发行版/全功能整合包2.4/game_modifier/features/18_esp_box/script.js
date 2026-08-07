@@ -1,4 +1,4 @@
-﻿// ESP box is implemented by the existing Universal-ImGui-Hook.dll pipeline.
+// ESP box is implemented by the existing Universal-ImGui-Hook.dll pipeline.
 // Source assets kept intact:
 // - plugins/universal_hook/Universal-ImGui-Hook.dll
 // - plugins/universal_hook/universal_hook.json
@@ -7,14 +7,20 @@
 var __espBoxState = false;
 var __espBoxConfig = {};
 
+function sendStatus(feature, enabled) {
+    try { send({ type: 'status', feature: feature, enabled: enabled }); } catch (_) {}
+}
+
 rpc.exports = {
   enable: function(config) {
     __espBoxConfig = config || __espBoxConfig;
     __espBoxState = true;
+    sendStatus('esp_box', true);
     return { ok: true, enabled: true, backend: 'Universal-ImGui-Hook.dll' };
   },
   disable: function() {
     __espBoxState = false;
+    sendStatus('esp_box', false);
     return { ok: true, enabled: false, backend: 'Universal-ImGui-Hook.dll' };
   },
   setConfig: function(config) {

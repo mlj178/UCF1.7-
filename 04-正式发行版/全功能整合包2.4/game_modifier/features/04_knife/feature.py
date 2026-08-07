@@ -9,7 +9,7 @@ class KnifeFeature(PluginFeatureBase):
     has_slider = True
     slider_range = (1.0, 10.0, 0.1)
     slider_value = 5.0
-    desc = '提升挥刀速度（人类+生化幽灵通用）'
+    desc = '提升挥刀速度（人类+幽灵通用）'
 
     def __init__(self):
         super().__init__()

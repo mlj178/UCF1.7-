@@ -21,27 +21,44 @@ class PluginFeaturePage:
             scroll.grid_columnconfigure(i, weight=1, uniform=f"{layout_id}_col")
 
         handles = {}
+        occupied = set()
         row = 0
         col = 0
         for feature in sorted(features, key=lambda feature: int(feature.manifest.get("order", 0))):
             manifest = feature.manifest
             layout = manifest.get("layout", {})
             colspan = int(layout.get("columnspan", 1))
+            rowspan = int(layout.get("rowspan", 1))
+
+            row, col = self._next_cell(occupied, row, col)
             if colspan >= 2 and col == 1:
                 row += 1
                 col = 0
+                row, col = self._next_cell(occupied, row, col)
 
-            new_handles = self._build_card(scroll, manifest, row, col, colspan)
+            for r in range(row, row + rowspan):
+                for c in range(col, col + colspan):
+                    occupied.add((r, c))
+
+            new_handles = self._build_card(scroll, manifest, row, col, colspan, rowspan)
             handles.update(new_handles)
 
-            if colspan >= 2 or col == 1:
+            col += colspan
+            if col >= 2:
                 row += 1
                 col = 0
-            else:
-                col = 1
         return handles
 
-    def _build_card(self, scroll, manifest, row, col, colspan):
+    @staticmethod
+    def _next_cell(occupied, row, col):
+        while (row, col) in occupied:
+            col += 1
+            if col >= 2:
+                row += 1
+                col = 0
+        return row, col
+
+    def _build_card(self, scroll, manifest, row, col, colspan, rowspan=1):
         panel_builder = self._load_panel_builder(manifest)
         if panel_builder:
             return panel_builder(
@@ -53,7 +70,7 @@ class PluginFeaturePage:
                 self.callbacks,
                 self.card_builder,
             )
-        return self._build_default_card(scroll, manifest, row, col, colspan)
+        return self._build_default_card(scroll, manifest, row, col, colspan, rowspan)
 
     def _load_panel_builder(self, manifest):
         feature_id = manifest["feature_id"]
@@ -71,7 +88,7 @@ class PluginFeaturePage:
         self._panel_builders[feature_id] = builder
         return builder
 
-    def _build_default_card(self, scroll, manifest, row, col, colspan):
+    def _build_default_card(self, scroll, manifest, row, col, colspan, rowspan=1):
         feature_id = manifest["feature_id"]
         slider_control = self._first_control(manifest, "slider")
         button_control = self._first_control(manifest, "button")
@@ -98,6 +115,7 @@ class PluginFeaturePage:
             slider_var=slider_var,
             slider_range=slider_range,
             title_color=manifest.get("layout", {}).get("title_color"),
+            rowspan=rowspan,
         )
 
         ui_handles = manifest.get("ui_handles", {})

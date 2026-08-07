@@ -42,6 +42,10 @@
         });
     }
 
+    function sendStatus(feature, enabled) {
+        try { send({ type: 'status', feature: feature, enabled: enabled }); } catch (_) {}
+    }
+
     if (module === null) {
         sendLog('error', MODULE_NAME + ' 未加载');
         sendPluginEvent('runtime_error', {
@@ -2626,6 +2630,7 @@
         }
 
         enabled = true;
+        sendStatus('third_person_camera', true);
         pendingEnable = false;
         resolveMuzzleTransform(true);
         setState(STATE.ENABLED);
@@ -2672,6 +2677,7 @@
         invalidateAimSolution();
 
         enabled = false;
+        sendStatus('third_person_camera', false);
 
         var manager =
             getCachedCameraManagerForRestore();
@@ -2739,6 +2745,7 @@
         config = validation.config;
         pendingDisable = false;
         pendingEnable = true;
+        sendStatus('third_person_camera', true);
 
         return {
             ok: true,
@@ -2754,6 +2761,7 @@
     function requestDisable() {
         pendingEnable = false;
         pendingDisable = true;
+        sendStatus('third_person_camera', false);
 
         return {
             ok: true,

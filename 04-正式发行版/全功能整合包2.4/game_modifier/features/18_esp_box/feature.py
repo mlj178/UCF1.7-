@@ -21,6 +21,9 @@ class ESPBoxFeature(PluginFeatureBase):
         # Update desired state
         self._session_manager.set_desired_state(self.feature_id, True)
         self._enabled = True
+        self._session_manager._bus.emit(
+            "feature_status_changed", feature=self.feature_id, enabled=True
+        )
         return True
 
     def disable(self):
@@ -31,6 +34,9 @@ class ESPBoxFeature(PluginFeatureBase):
         # Update desired state
         self._session_manager.set_desired_state(self.feature_id, False)
         self._enabled = False
+        self._session_manager._bus.emit(
+            "feature_status_changed", feature=self.feature_id, enabled=False
+        )
         return True
 
     def cleanup(self, reason=None):

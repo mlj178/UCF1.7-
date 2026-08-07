@@ -14,7 +14,7 @@ class EspTargetScopeStaticTests(unittest.TestCase):
 
     def test_panel_has_single_target_scope_dropdown(self):
         panel = (Path(__file__).parent / "panel.py").read_text(encoding="utf-8")
-        self.assertIn("CTkOptionMenu", panel)
+        self.assertIn("CTkComboBox", panel)
         self.assertIn("仅显示敌人", panel)
         self.assertIn("敌人和队友", panel)
         self.assertIn("esp_target_scope", panel)

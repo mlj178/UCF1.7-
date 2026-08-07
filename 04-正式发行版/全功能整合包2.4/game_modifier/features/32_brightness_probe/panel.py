@@ -28,7 +28,7 @@ class _SyncedVar:
 def build_card(parent, manifest, row, col, colspan, callbacks, card_builder):
     feature_id = manifest["feature_id"]
     handles = manifest.get("ui_handles", {})
-    frame = ctk.CTkFrame(parent, corner_radius=6, fg_color="#3a3a3a", border_width=1, border_color="#555555")
+    frame = ctk.CTkFrame(parent, corner_radius=6, fg_color="transparent", border_width=1, border_color="#4b5563")
     frame.grid(row=row, column=col, columnspan=colspan, sticky="ew", padx=3, pady=3)
     frame.grid_columnconfigure(1, weight=1)
 
@@ -41,8 +41,8 @@ def build_card(parent, manifest, row, col, colspan, callbacks, card_builder):
         row_frame = ctk.CTkFrame(frame, fg_color="transparent")
         row_frame.pack(fill="x", padx=12, pady=2)
         row_frame.grid_columnconfigure(1, weight=1)
-        ctk.CTkLabel(row_frame, text=control.get("label", key), width=110, anchor="w", font=("Microsoft YaHei", 12)).grid(row=0, column=0, sticky="w")
-        value_label = ctk.CTkLabel(row_frame, text="", width=52, anchor="e", font=("Microsoft YaHei", 12))
+        ctk.CTkLabel(row_frame, text=control.get("label", key), width=110, anchor="w", font=("Microsoft YaHei", 12), text_color="#e0e0e0").grid(row=0, column=0, sticky="w")
+        value_label = ctk.CTkLabel(row_frame, text="", width=28, anchor="e", font=("Microsoft YaHei", 11), text_color="#e0e0e0")
         value_label.grid(row=0, column=2, padx=(8, 0))
         formatter = (lambda value: f"{value:.0f}") if control.get("format") == "{:.0f}" else (lambda value: f"{value:.2f}")
         variable = ctk.DoubleVar(value=float(control.get("default", 0.0)))

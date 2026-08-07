@@ -116,6 +116,10 @@
         } catch (e) {}
     }
 
+    function sendStatus(feature, enabled) {
+        try { send({ type: 'status', feature: feature, enabled: enabled }); } catch (_) {}
+    }
+
     function logOnce(key, level, message, intervalMs) {
         var now = Date.now();
         var wait = intervalMs || 1000;
@@ -557,6 +561,7 @@
     function enableFeature() {
         if (!installHooks()) return false;
         Runtime.enabled = true;
+        sendStatus('fixed_point_teleport', true);
         Runtime.pendingApply = isNull(Runtime.cache.localPlayer);
         Runtime.lastApplyReason = Runtime.pendingApply ? "enable_waiting_for_local_player" : "enable_cached_local_player";
         Runtime.stats.errorCount = 0;
@@ -567,6 +572,7 @@
 
     function disableFeature() {
         Runtime.enabled = false;
+        sendStatus('fixed_point_teleport', false);
         resetRuntime("disable");
         Runtime.pendingApply = false;
         Runtime.lastApplyReason = "disable";

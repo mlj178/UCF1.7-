@@ -60,9 +60,9 @@ class Nano4tView:
         nano4t_card = ctk.CTkFrame(
             scroll,
             corner_radius=6,
-            fg_color="#3a3a3a",
+            fg_color="transparent",
             border_width=1,
-            border_color="#555555",
+            border_color="#4b5563",
         )
         nano4t_card.pack(fill="x", padx=8, pady=(8, 4))
 
@@ -157,7 +157,7 @@ class Nano4tView:
         nano4t_apply_btn = ctk.CTkButton(btn_frame, text="✅ 应用", font=("Microsoft YaHei", 14, "bold"), height=38, command=self._on_apply, fg_color="#333333", state="disabled")
         nano4t_apply_btn.pack(fill="x", padx=12, pady=8)
 
-        battle_round_frame = ctk.CTkFrame(scroll, corner_radius=6, fg_color="#3a2a1a", border_width=1, border_color="#555555")
+        battle_round_frame = ctk.CTkFrame(scroll, corner_radius=6, fg_color="transparent", border_width=1, border_color="#4b5563")
         battle_round_frame.pack(fill="x", padx=8, pady=(4, 8))
         battle_round_top = ctk.CTkFrame(battle_round_frame, fg_color="transparent")
         battle_round_top.pack(fill="x", padx=12, pady=(8, 4))
