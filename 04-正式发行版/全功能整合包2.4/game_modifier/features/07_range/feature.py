@@ -9,7 +9,7 @@ class KnifeRangeFeature(PluginFeatureBase):
     has_slider = True
     slider_range = (1.0, 50.0, 1.0)
     slider_value = 50.0
-    desc = '扩大近战攻击距离（人类+生化幽灵通用）'
+    desc = '扩大近战攻击距离（人类+幽灵通用）'
 
     def __init__(self):
         super().__init__()

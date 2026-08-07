@@ -36,23 +36,23 @@ def _steps(control):
 
 def _speed_slider(parent, feature_id, control, callbacks):
     frame = ctk.CTkFrame(parent, fg_color="transparent")
-    frame.pack(fill="x", padx=8, pady=(4, 0))
+    frame.pack(fill="x", padx=8, pady=(4, 8))
     frame.grid_columnconfigure(0, weight=1)
 
     ctk.CTkLabel(
         frame,
         text=control.get("label", "移动速度"),
         font=("Microsoft YaHei", 12),
-        text_color="#d4d4d4",
+        text_color="#e0e0e0",
         anchor="w",
     ).grid(row=0, column=0, sticky="w", padx=4)
 
     value_label = ctk.CTkLabel(
         frame,
         text=f"{float(control.get('default', 10.0)):.1f}",
-        font=("Microsoft YaHei", 12),
+        font=("Microsoft YaHei", 11),
         text_color="#e0e0e0",
-        width=48,
+        width=28,
     )
     value_label.grid(row=0, column=1, sticky="e", padx=4)
 
@@ -86,8 +86,8 @@ def build_card(parent, manifest, row, col, colspan, callbacks, card_builder):
     switch_control = next((item for item in manifest.get("controls", []) if item.get("type") == "switch"), {})
     speed_control = _control(manifest, "moveSpeed")
 
-    frame = ctk.CTkFrame(parent, corner_radius=6, fg_color="#3a3a3a", border_width=1, border_color="#555555")
-    frame.grid(row=row, column=col, columnspan=colspan, sticky="ew", padx=3, pady=3)
+    frame = ctk.CTkFrame(parent, corner_radius=6, fg_color="transparent", border_width=1, border_color="#4b5563")
+    frame.grid(row=row, column=col, columnspan=colspan, sticky="nsew", padx=3, pady=3)
 
     top = ctk.CTkFrame(frame, fg_color="transparent")
     top.pack(fill="x", padx=8, pady=(6, 0))
@@ -112,12 +112,12 @@ def build_card(parent, manifest, row, col, colspan, callbacks, card_builder):
     ctk.CTkLabel(
         frame,
         text="\n".join(lines),
-        text_color="#cbd5e1",
+        text_color="#a0a0a0",
         font=("Microsoft YaHei", 12),
-        wraplength=560,
+        wraplength=280 * colspan,
         justify="left",
         anchor="w",
-    ).pack(fill="x", padx=12, pady=(4, 4))
+    ).pack(fill="x", padx=10, pady=(4, 8))
 
     speed_var, speed_slider, speed_label = _speed_slider(frame, feature_id, speed_control, callbacks)
 

@@ -104,6 +104,10 @@
         }
     }
 
+    function sendStatus(feature, enabled) {
+        try { send({ type: 'status', feature: feature, enabled: enabled }); } catch (_) {}
+    }
+
     function logLimited(key, level, message, intervalMs) {
         var now = Date.now();
         var wait = intervalMs || 1000;
@@ -476,6 +480,7 @@
         }
 
         Runtime.enabled = true;
+        sendStatus('29_bullet_wall_penetration', true);
         Runtime.stats.errorCount = 0;
         Runtime.stats.lastError = '';
         log('info', 'enabled: original damage flow + wallShotDamageRatio preserved');
@@ -484,6 +489,7 @@
 
     function disableFeature() {
         Runtime.enabled = false;
+        sendStatus('29_bullet_wall_penetration', false);
         forceRestoreGunShootLayerMask('disable');
         Runtime.damageDepth = 0;
         Runtime.activeDamageWeapon = ptr(0);

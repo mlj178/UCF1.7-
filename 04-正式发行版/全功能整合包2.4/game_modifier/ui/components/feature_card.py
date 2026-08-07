@@ -18,9 +18,10 @@ class FeatureCardBuilder:
         slider_range=None,
         title_color=None,
         switch_text="",
+        rowspan=1,
     ):
         feature_id = manifest["feature_id"]
-        bg_color = "#3a3a3a"
+        bg_color = "transparent"
         text_color = "#e0e0e0"
 
         frame = ctk.CTkFrame(
@@ -28,9 +29,10 @@ class FeatureCardBuilder:
             corner_radius=6,
             fg_color=bg_color,
             border_width=1,
-            border_color="#555555",
+            border_color="#4b5563",
         )
-        frame.grid(row=row, column=col, columnspan=colspan, sticky="ew", padx=3, pady=3)
+        sticky = "nsew" if rowspan > 1 else "ew"
+        frame.grid(row=row, column=col, columnspan=colspan, rowspan=rowspan, sticky=sticky, padx=3, pady=3)
 
         top_frame = ctk.CTkFrame(frame, fg_color="transparent")
         top_frame.pack(fill="x", padx=8, pady=(6, 0))
@@ -60,7 +62,7 @@ class FeatureCardBuilder:
                 text=f"{slider_var.get()}x",
                 font=("Microsoft YaHei", 11),
                 text_color=text_color,
-                width=35,
+                width=28,
             )
             slider_label_ref.pack(side="left")
             slider_var.trace_add(
@@ -79,12 +81,12 @@ class FeatureCardBuilder:
 
         ctk.CTkLabel(
             frame,
-            font=("Microsoft YaHei", 15),
+            font=("Microsoft YaHei", 12),
             text=manifest.get("desc", ""),
             text_color="#a0a0a0",
             wraplength=280 * colspan,
             justify="left",
             anchor="w",
-        ).pack(fill="x", padx=8, pady=(2, 6), expand=False)
+        ).pack(fill="x", padx=10, pady=(4, 8), expand=False)
 
         return frame, switch, slider_label_ref

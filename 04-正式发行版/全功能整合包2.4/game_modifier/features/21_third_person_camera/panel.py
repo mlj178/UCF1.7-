@@ -40,23 +40,23 @@ def _steps(control):
 def _slider(parent, feature_id, control, callbacks):
     key = control["key"]
     frame = ctk.CTkFrame(parent, fg_color="transparent")
-    frame.pack(fill="x", padx=8, pady=(4, 0))
+    frame.pack(fill="x", padx=8, pady=(4, 8))
     frame.grid_columnconfigure(0, weight=1)
 
     ctk.CTkLabel(
         frame,
         text=control.get("label", key),
         font=("Microsoft YaHei", 12),
-        text_color="#d4d4d4",
+        text_color="#e0e0e0",
         anchor="w",
     ).grid(row=0, column=0, sticky="w", padx=4)
 
     value_label = ctk.CTkLabel(
         frame,
         text=f"{float(control.get('default', 0.0)):.2f}",
-        font=("Microsoft YaHei", 12),
+        font=("Microsoft YaHei", 11),
         text_color="#e0e0e0",
-        width=48,
+        width=28,
     )
     value_label.grid(row=0, column=1, sticky="e", padx=4)
 
@@ -92,15 +92,17 @@ def build_card(scroll, manifest, row, col, colspan, callbacks, card_builder):
     )
     distance_control = _control(manifest, "distance")
     pivot_control = _control(manifest, "pivotHeight")
+    rowspan = int(manifest.get("layout", {}).get("rowspan", 1))
 
     frame = ctk.CTkFrame(
         scroll,
         corner_radius=6,
-        fg_color="#3a3a3a",
+        fg_color="transparent",
         border_width=1,
-        border_color="#555555",
+        border_color="#4b5563",
     )
-    frame.grid(row=row, column=col, columnspan=colspan, sticky="ew", padx=3, pady=3)
+    sticky = "nsew" if rowspan > 1 else "ew"
+    frame.grid(row=row, column=col, columnspan=colspan, rowspan=rowspan, sticky=sticky, padx=3, pady=3)
 
     top = ctk.CTkFrame(frame, fg_color="transparent")
     top.pack(fill="x", padx=8, pady=(6, 0))
@@ -129,7 +131,7 @@ def build_card(scroll, manifest, row, col, colspan, callbacks, card_builder):
         wraplength=280,
         justify="left",
         anchor="w",
-    ).pack(fill="x", padx=12, pady=(4, 4))
+    ).pack(fill="x", padx=10, pady=(4, 8))
 
     distance_var, distance_slider, distance_label = _slider(
         frame,

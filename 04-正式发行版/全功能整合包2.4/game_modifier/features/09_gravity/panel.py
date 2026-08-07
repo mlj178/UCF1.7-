@@ -35,7 +35,7 @@ def build_card(parent, manifest, row, col, colspan, callbacks, card_builder):
         for value, label in zip(mode_control.get("values", []), mode_labels)
     }
 
-    frame = ctk.CTkFrame(parent, corner_radius=6, fg_color="#3a3a3a", border_width=1, border_color="#555555")
+    frame = ctk.CTkFrame(parent, corner_radius=6, fg_color="transparent", border_width=1, border_color="#4b5563")
     frame.grid(row=row, column=col, columnspan=colspan, sticky="ew", padx=3, pady=3)
 
     top = ctk.CTkFrame(frame, fg_color="transparent")
@@ -112,7 +112,7 @@ def build_card(parent, manifest, row, col, colspan, callbacks, card_builder):
         ),
     )
     mode_combo.pack(side="left", padx=4)
-    ctk.CTkLabel(frame, font=("Microsoft YaHei", 15), text=manifest["desc"], text_color="#a0a0a0", wraplength=280, justify="left", anchor="w").pack(fill="x", expand=False, padx=5, pady=5)
+    ctk.CTkLabel(frame, font=("Microsoft YaHei", 12), text=manifest["desc"], text_color="#a0a0a0", wraplength=280 * colspan, justify="left", anchor="w").pack(fill="x", expand=False, padx=10, pady=(4, 8))
     return {
         handles.get("switch", "gravity_switch"): switch,
         handles.get("gravity_var", "gravity_var"): gravity_var,

@@ -14,7 +14,7 @@ class Nano4tLayoutTests(unittest.TestCase):
 
         self.assertIn("nano4t_card = ctk.CTkFrame", text)
         self.assertIn('border_width=1', text)
-        self.assertIn('border_color="#555555"', text)
+        self.assertIn('border_color="#4b5563"', text)
         self.assertIn("nano4t_title_frame = ctk.CTkFrame(nano4t_card", text)
         self.assertIn('text="🧬"', text)
         self.assertIn('text="多人生化Buff选择"', text)

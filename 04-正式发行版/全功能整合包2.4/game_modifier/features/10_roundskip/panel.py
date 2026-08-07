@@ -9,7 +9,7 @@ def build_card(parent, manifest, row, col, colspan, callbacks, card_builder):
         (item for item in manifest.get("controls", []) if item.get("type") == "button"),
         {},
     )
-    frame = ctk.CTkFrame(parent, corner_radius=6, fg_color="#3a3a3a", border_width=1, border_color="#555555")
+    frame = ctk.CTkFrame(parent, corner_radius=6, fg_color="transparent", border_width=1, border_color="#4b5563")
     frame.grid(row=row, column=col, columnspan=colspan, sticky="ew", padx=3, pady=3)
     top = ctk.CTkFrame(frame, fg_color="transparent")
     top.pack(fill="x", padx=8, pady=(6, 0))
@@ -60,5 +60,5 @@ def build_card(parent, manifest, row, col, colspan, callbacks, card_builder):
         hover_color="#92400e",
     )
     button.pack(fill="x", padx=4, pady=4)
-    ctk.CTkLabel(frame, font=("Microsoft YaHei", 15), text=manifest["desc"], text_color="#a0a0a0", wraplength=280, justify="left", anchor="w").pack(fill="x", expand=False, padx=8, pady=(2, 6))
+    ctk.CTkLabel(frame, font=("Microsoft YaHei", 12), text=manifest["desc"], text_color="#a0a0a0", wraplength=280, justify="left", anchor="w").pack(fill="x", expand=False, padx=10, pady=(4, 8))
     return {manifest.get("ui_handles", {}).get("button", "skip_round_btn"): button}

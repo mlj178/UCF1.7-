@@ -20,6 +20,8 @@ class FeatureActionController:
                 sync_config=app._on_plugin_config_changed,
                 schedule_save=app._schedule_save_state,
                 play_toggle_sound=app._sound.play_toggle_sound,
+                run_in_background=app._run_in_background,
+                schedule_ui=app._safe_after,
             )
         return self._router
 

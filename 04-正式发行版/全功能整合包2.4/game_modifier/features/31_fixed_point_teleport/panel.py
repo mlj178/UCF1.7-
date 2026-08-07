@@ -31,7 +31,7 @@ def build_card(parent, manifest, row, col, colspan, callbacks, card_builder):
     handles = manifest.get("ui_handles", {})
     controls = _controls_by_action(manifest)
 
-    frame = ctk.CTkFrame(parent, corner_radius=6, fg_color="#3a3a3a", border_width=1, border_color="#555555")
+    frame = ctk.CTkFrame(parent, corner_radius=6, fg_color="transparent", border_width=1, border_color="#4b5563")
     frame.grid(row=row, column=col, columnspan=colspan, sticky="ew", padx=3, pady=3)
 
     top = ctk.CTkFrame(frame, fg_color="transparent")
@@ -56,12 +56,12 @@ def build_card(parent, manifest, row, col, colspan, callbacks, card_builder):
     ctk.CTkLabel(
         frame,
         text=manifest.get("desc", ""),
-        text_color="#cbd5e1",
+        text_color="#a0a0a0",
         font=("Microsoft YaHei", 12),
-        wraplength=560,
+        wraplength=280 * colspan,
         justify="left",
         anchor="w",
-    ).pack(fill="x", padx=12, pady=(4, 4))
+    ).pack(fill="x", padx=10, pady=(4, 8))
 
     button_row = ctk.CTkFrame(frame, fg_color="transparent")
     button_row.pack(fill="x", padx=12, pady=(2, 4))

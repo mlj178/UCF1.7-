@@ -6,7 +6,7 @@ def build_card(parent, manifest, row, col, colspan, callbacks, card_builder):
     lines = manifest.get("ui_text", {}).get("lines", [manifest.get("desc", "")])
 
     frame = ctk.CTkFrame(parent, corner_radius=6, fg_color="transparent", border_width=1, border_color="#4b5563")
-    frame.grid(row=row, column=col, columnspan=colspan, sticky="nsew", padx=3, pady=3)
+    frame.grid(row=row, column=col, columnspan=colspan, sticky="ew", padx=3, pady=3)
 
     top = ctk.CTkFrame(frame, fg_color="transparent")
     top.pack(fill="x", padx=8, pady=(6, 0))
@@ -31,7 +31,7 @@ def build_card(parent, manifest, row, col, colspan, callbacks, card_builder):
         frame,
         font=("Microsoft YaHei", 12),
         text="\n".join(lines),
-        text_color="#cbd5e1",
+        text_color="#a0a0a0",
         wraplength=280,
         justify="left",
         anchor="w",

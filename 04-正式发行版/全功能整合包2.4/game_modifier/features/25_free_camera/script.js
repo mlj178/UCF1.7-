@@ -48,6 +48,10 @@
         }
     }
 
+    function sendStatus(feature, enabled) {
+        try { send({ type: 'status', feature: feature, enabled: enabled }); } catch (_) {}
+    }
+
     var state = {
         moduleOk: false,
         archOk: false,
@@ -756,6 +760,7 @@
         if (state.enabled) return { ok: true, enabled: true, message: '已经开启' };
         resetFreeCam('enable');
         state.enabled = true;
+        sendStatus('free_camera', true);
         markApplyPending('enable');
         sendLog('info', '自由视角 v1.3 已开启：灵魂相机模式', {
             mode: 'independent_position',
@@ -770,6 +775,7 @@
     function disableFeature() {
         if (!state.enabled) return { ok: true, enabled: false, message: '已经关闭' };
         state.enabled = false;
+        sendStatus('free_camera', false);
         state.pendingApply = false;
         state.applied = false;
         state.lastApplyReason = 'disable';

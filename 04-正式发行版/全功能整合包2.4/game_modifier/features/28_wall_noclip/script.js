@@ -103,6 +103,10 @@
         }
     }
 
+    function sendStatus(feature, enabled) {
+        try { send({ type: 'status', feature: feature, enabled: enabled }); } catch (_) {}
+    }
+
     function logLimited(key, level, message, intervalMs) {
         var now = Date.now();
         var wait = intervalMs || 1000;
@@ -560,6 +564,7 @@
         }
 
         Runtime.enabled = true;
+        sendStatus('28_wall_noclip', true);
         Runtime.pendingApply = isNull(Runtime.cache.localController);
         Runtime.stats.errorCount = 0;
         Runtime.stats.lastError = '';
@@ -570,6 +575,7 @@
 
     function disableFeature() {
         Runtime.enabled = false;
+        sendStatus('28_wall_noclip', false);
         resetRuntime('disable');
         log('info', 'disabled');
         return getStatus();

@@ -138,6 +138,10 @@
         }
     }
 
+    function sendStatus(feature, enabled) {
+        try { send({ type: 'status', feature: feature, enabled: enabled }); } catch (_) {}
+    }
+
     function logLimited(key, level, message, intervalMs) {
         var now = Date.now();
         var wait = intervalMs || 1000;
@@ -565,12 +569,14 @@
     function enableFeature() {
         if (!initializeFeature()) return getStatus();
         Runtime.enabled = true;
+        sendStatus('damage_multiplier', true);
         log('success', 'damage multiplier enabled, multiplier=' + Runtime.config.multiplier);
         return getStatus();
     }
 
     function disableFeature() {
         Runtime.enabled = false;
+        sendStatus('damage_multiplier', false);
         log('info', 'damage multiplier disabled');
         return getStatus();
     }

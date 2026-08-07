@@ -201,6 +201,12 @@ class App(ctk.CTk):
             if not self._stop:
                 self._pending_ui_callbacks.append((delay_ms, callback, args))
 
+    def _run_in_background(self, fn):
+        """在后台线程执行 RPC 等阻塞调用，避免冻结 Tk 事件循环。"""
+        if self._stop:
+            return
+        threading.Thread(target=fn, daemon=True).start()
+
     def _mark_mainloop_ready(self):
         self._mainloop_ready = True
         with self._pending_ui_lock:

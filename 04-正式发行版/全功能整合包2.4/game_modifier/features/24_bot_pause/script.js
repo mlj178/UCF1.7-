@@ -80,6 +80,10 @@
     }
   }
 
+  function sendStatus(feature, enabled) {
+    try { send({ type: 'status', feature: feature, enabled: enabled }); } catch (_) {}
+  }
+
   function clearRoomReadyRetry() {
     if (state.retryTimer !== null) {
       try { clearInterval(state.retryTimer); } catch (_) {}
@@ -442,6 +446,7 @@
   rpc.exports = {
     enable: function () {
       state.enabled = true;
+      sendStatus('bot_pause', true);
       installRoomReadyHooks();
       var result = applyEnabledState('enable');
       if (!result.ok) startRoomReadyRetry('enable');
@@ -453,6 +458,7 @@
       clearRoomReadyRetry();
       detachRoomReadyHooks();
       state.enabled = false;
+      sendStatus('bot_pause', false);
       state.pendingApply = false;
       state.applied = false;
       var result = writeStopAllBot(false);

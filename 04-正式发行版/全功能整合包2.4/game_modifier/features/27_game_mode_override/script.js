@@ -236,6 +236,10 @@
     }
   }
 
+  function sendStatus(feature, enabled) {
+    try { send({ type: 'status', feature: feature, enabled: enabled }); } catch (_) {}
+  }
+
   function fail(message, error) {
     Runtime.lastError = message + (error && error.message ? ': ' + error.message : '');
     sendLog('error', Runtime.lastError);
@@ -2731,12 +2735,14 @@
         if (configResult && configResult.ok === false) return configResult;
       }
       Runtime.enabled = true;
+      sendStatus('27_game_mode_override', true);
       Runtime.lastError = null;
       return statusObject();
     },
 
     disable: function () {
       Runtime.enabled = false;
+      sendStatus('27_game_mode_override', false);
       return statusObject();
     },
 

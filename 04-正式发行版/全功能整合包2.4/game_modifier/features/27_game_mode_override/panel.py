@@ -52,12 +52,13 @@ def build_card(scroll, manifest, row, col, colspan, callbacks, card_builder):
     def on_mode_changed(label):
         callbacks["set_config"](feature_id, "mode_key", value_by_label.get(label, "team_death"))
 
-    mode_menu = ctk.CTkOptionMenu(
+    mode_menu = ctk.CTkComboBox(
         body,
         values=list(value_by_label.keys()),
         variable=mode_var,
         command=on_mode_changed,
         width=220,
+        state="readonly",
     )
     mode_menu.grid(row=0, column=1, padx=(0, 8), pady=3, sticky="w")
     handles[manifest.get("ui_handles", {}).get("mode_key_select", f"{feature_id}_mode_key_select")] = mode_menu

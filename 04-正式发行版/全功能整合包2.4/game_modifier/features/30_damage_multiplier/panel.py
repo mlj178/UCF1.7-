@@ -43,8 +43,8 @@ def build_card(parent, manifest, row, col, colspan, callbacks, card_builder):
     switch_control = _control(manifest, "switch")
     slider_control = _control(manifest, "slider", "multiplier")
 
-    frame = ctk.CTkFrame(parent, corner_radius=6, fg_color="#3a3a3a", border_width=1, border_color="#555555")
-    frame.grid(row=row, column=col, columnspan=colspan, sticky="ew", padx=3, pady=3)
+    frame = ctk.CTkFrame(parent, corner_radius=6, fg_color="transparent", border_width=1, border_color="#4b5563")
+    frame.grid(row=row, column=col, columnspan=colspan, sticky="nsew", padx=3, pady=3)
 
     top = ctk.CTkFrame(frame, fg_color="transparent")
     top.pack(fill="x", padx=8, pady=(6, 0))
@@ -68,12 +68,12 @@ def build_card(parent, manifest, row, col, colspan, callbacks, card_builder):
     ctk.CTkLabel(
         frame,
         text=manifest.get("desc", ""),
-        text_color="#cbd5e1",
+        text_color="#a0a0a0",
         font=("Microsoft YaHei", 12),
         wraplength=280 * colspan,
         justify="left",
         anchor="w",
-    ).pack(fill="x", padx=12, pady=(4, 4))
+    ).pack(fill="x", padx=10, pady=(4, 8))
 
     slider_row = ctk.CTkFrame(frame, fg_color="transparent")
     slider_row.pack(fill="x", padx=12, pady=(2, 6))
@@ -83,15 +83,15 @@ def build_card(parent, manifest, row, col, colspan, callbacks, card_builder):
         slider_row,
         text=slider_control.get("label", "伤害倍率"),
         font=("Microsoft YaHei", 12),
-        text_color="#d4d4d4",
+        text_color="#e0e0e0",
     ).grid(row=0, column=0, sticky="w", padx=(0, 8))
 
     value_label = ctk.CTkLabel(
         slider_row,
         text=f"{float(slider_control.get('default', 2.0)):.1f}x",
-        font=("Microsoft YaHei", 12),
+        font=("Microsoft YaHei", 11),
         text_color="#e0e0e0",
-        width=50,
+        width=28,
     )
     value_label.grid(row=0, column=2, sticky="e", padx=(8, 0))
 

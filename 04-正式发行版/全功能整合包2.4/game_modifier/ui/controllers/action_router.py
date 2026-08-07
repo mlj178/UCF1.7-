@@ -16,6 +16,8 @@ class ActionRouter:
         sync_config,
         schedule_save,
         play_toggle_sound=None,
+        run_in_background=None,
+        schedule_ui=None,
     ):
         self._registry = registry
         self._feature_service = feature_service
@@ -27,30 +29,67 @@ class ActionRouter:
         self._sync_config = sync_config
         self._schedule_save = schedule_save
         self._play_toggle_sound = play_toggle_sound or (lambda: None)
+        # 后台执行 RPC，避免阻塞 UI 线程；schedule_ui 把回调 post 回 UI 线程
+        self._run_in_background = run_in_background or (lambda fn: fn())
+        self._schedule_ui = schedule_ui or (lambda delay_ms, fn: fn())
 
     def toggle(self, feature_id):
         enabled = not bool(self._state.get(feature_id, False))
         action = "enable" if enabled else "disable"
-        result = self.action(feature_id, action)
-        if result is False:
-            return result
+
+        # 连接检查仍在 UI 线程，给即时反馈
+        manifest = self._manifest(feature_id)
+        action_meta = self._action_meta(manifest, action)
+        if self._requires_connection(action_meta) and not self._is_connected():
+            self._log("⚠ 尚未连接到游戏，请先点击「连接游戏」")
+            return False
+
+        # 乐观更新：UI 立即响应，不等待 RPC
         self._state[feature_id] = enabled
         self._update_switch(feature_id)
         self._schedule_save()
         self._play_toggle_sound()
-        return result
+
+        # 后台执行 RPC。这些功能采用「延迟 apply」设计（规范 §9.3）：
+        # enable 只置 state.enabled=true，实际写入靠 room-ready Hook；
+        # RPC 抛异常或返回 False 并不代表功能未生效，故不回滚 UI 状态。
+        def background():
+            try:
+                self._execute_toggle_rpc(feature_id, action, manifest, action_meta)
+            except Exception as exc:
+                self._log(f"⚠ 开关操作异常（功能可能延迟生效）: {feature_id}: {exc}")
+
+        self._run_in_background(background)
+        return None
+
+    def _execute_toggle_rpc(self, feature_id, action, manifest, action_meta):
+        """执行 enable/disable 的实际 RPC，在后台线程调用，不碰 UI。"""
+        route_type = action_meta.get("type")
+        if route_type == "plugin_feature":
+            return self._call_plugin_feature(feature_id, action, None)
+        if action == "enable":
+            return self._feature_service.enable(feature_id)
+        if action == "disable":
+            return self._feature_service.disable(feature_id)
+        return None
 
     def set_config(self, feature_id, key, value):
         normalized = self._normalize_config_value(value)
+        # UI 配置立即落盘与同步，不等待 RPC
         self._config.set(feature_id, {key: normalized})
         self._sync_config(feature_id, key, normalized)
         self._schedule_save()
-        result = None
+
         if self._is_connected() and (
             self._state.get(feature_id, False) or feature_id == "esp_box"
         ):
-            result = self._feature_service.set_config(feature_id, {key: normalized})
-        return result
+            def background():
+                try:
+                    self._feature_service.set_config(feature_id, {key: normalized})
+                except Exception as exc:
+                    self._log(f"⚠ 配置同步失败: {feature_id}.{key}: {exc}")
+            self._run_in_background(background)
+        return None
 
     def action(self, feature_id, action, payload=None):
         manifest = self._manifest(feature_id)

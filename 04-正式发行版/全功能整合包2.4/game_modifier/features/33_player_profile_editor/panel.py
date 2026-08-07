@@ -5,11 +5,11 @@ from .player_profile_service import get_default_player_data_path
 
 def build_card(parent, manifest, row, col, colspan, callbacks, card_builder):
     feature_id = manifest["feature_id"]
-    frame = ctk.CTkFrame(parent, corner_radius=6, fg_color="#3a3a3a", border_width=1, border_color="#555555")
+    frame = ctk.CTkFrame(parent, corner_radius=6, fg_color="transparent", border_width=1, border_color="#4b5563")
     frame.grid(row=row, column=col, columnspan=colspan, sticky="ew", padx=3, pady=3)
     frame.grid_columnconfigure(1, weight=1)
     ctk.CTkLabel(frame, text=manifest.get("display_name", ""), font=("Microsoft YaHei", 15, "bold"), text_color=manifest.get("layout", {}).get("title_color", "#60a5fa")).grid(row=0, column=0, columnspan=3, sticky="w", padx=12, pady=(8, 2))
-    ctk.CTkLabel(frame, text=manifest.get("desc", ""), text_color="#cbd5e1", font=("Microsoft YaHei", 12), anchor="w", justify="left", wraplength=560).grid(row=1, column=0, columnspan=3, sticky="ew", padx=12, pady=(0, 6))
+    ctk.CTkLabel(frame, text=manifest.get("desc", ""), text_color="#a0a0a0", font=("Microsoft YaHei", 12), anchor="w", justify="left", wraplength=280 * colspan).grid(row=1, column=0, columnspan=3, sticky="ew", padx=10, pady=(4, 8))
 
     path_text = str(get_default_player_data_path())
     ctk.CTkLabel(frame, text="文件", width=55, anchor="w").grid(row=2, column=0, padx=(12, 6), pady=4)

@@ -329,8 +329,8 @@ class UniversalHookManager:
                 
                 ok = (
                     bool(response.get("ok"))
-                    and response.get("esp_box") is bool(enabled)
-                    and response.get("esp_all_players") is (scope == "all_players")
+                    and bool(response.get("esp_box")) == bool(enabled)
+                    and bool(response.get("esp_all_players")) == (scope == "all_players")
                     and response.get("revision", -1) >= self._revision
                 )
                 if ok:
