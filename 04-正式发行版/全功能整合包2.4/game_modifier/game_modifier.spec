@@ -125,6 +125,14 @@ for resource_name in ("微信赞赏码.png", "音效1.MP3"):
         raise FileNotFoundError(f"缺少正式版必需资源：{resource_path}")
     datas.append((resource_path, "资源"))
 
+# 1.1 红色主题 Tab 资源（红色图片/红色文案 子目录）
+# 对应《33-设置页红色主题Tab设计.md》§5.1，目标路径需保留中文子目录名，
+# 与运行时 RESOURCE_DIR/红色图片 等路径一致。
+for red_subdir in ("红色图片", "红色文案"):
+    red_source = os.path.join(resource_dir, red_subdir)
+    if os.path.isdir(red_source):
+        add_data_tree(red_source, os.path.join("资源", red_subdir))
+
 # 2. 添加插件目录（manifest / script.js / panel.py）
 features_dir = os.path.join(current_dir, "features")
 if os.path.exists(features_dir):
@@ -195,6 +203,7 @@ a = Analysis(
         'ui.views.feature_tabs_view',
         'ui.views.nano4t_view',
         'ui.views.weapon_giver_view',
+        'ui.views.red_theme_tab',
         'ui.pages.plugin_feature_page',
         'ui.components.feature_card',
         'ui.controllers.action_router',

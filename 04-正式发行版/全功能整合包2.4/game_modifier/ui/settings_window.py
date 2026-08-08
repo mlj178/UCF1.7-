@@ -14,7 +14,8 @@ from core.config import (
 from core.hotkey_manager import HotkeyManager
 from core.sound_manager import SoundManager
 from core.weapon_catalog import get_weapon_name
-from ui.window_contract import APP_TITLE, APP_VERSION
+from ui.views.red_theme_tab import build_red_theme_tab
+from ui.window_contract import APP_TITLE
 
 
 class SettingsWindow(ctk.CTkToplevel):
@@ -40,6 +41,12 @@ class SettingsWindow(ctk.CTkToplevel):
 
         self._setup_hotkey_tab()
         self._setup_about_tab()
+        # 文档 §1：红色主题 tab 排在关于 tab 之后
+        self._setup_red_theme_tab()
+
+    def _setup_red_theme_tab(self):
+        tab = self._tabview.add("红色主题")
+        build_red_theme_tab(tab)
 
     def _setup_hotkey_tab(self):
         tab = self._tabview.add("快捷键")
@@ -174,18 +181,17 @@ class SettingsWindow(ctk.CTkToplevel):
 
         ctk.CTkLabel(about_frame, text=APP_TITLE,
                      font=("Microsoft YaHei", 18, "bold")).pack(pady=(12, 4))
-        ctk.CTkLabel(about_frame, text=f"版本: {APP_VERSION}",
-                     font=("Microsoft YaHei", 12)).pack(pady=2)
         ctk.CTkLabel(about_frame, text="作者: 挂呱呱呱",
                      font=("Microsoft YaHei", 12)).pack(pady=2)
-
+        ctk.CTkLabel(about_frame, text="2026年08月08日",
+                     font=("Microsoft YaHei", 12)).pack(pady=2)
         ctk.CTkLabel(about_frame, text="\nQQ群: 1095388251",
                      font=("Microsoft YaHei", 12)).pack(pady=4)
 
+
         bili_frame = ctk.CTkFrame(about_frame, fg_color="transparent")
         bili_frame.pack(pady=(12, 4))
-        ctk.CTkLabel(bili_frame, text="B站: ", font=("Microsoft YaHei", 12)).pack(side="left")
-        bili_btn = ctk.CTkButton(bili_frame, text="🔗 BiliBili", font=("Microsoft YaHei", 11),
+        bili_btn = ctk.CTkButton(bili_frame, text="🔗 B站主页", font=("Microsoft YaHei", 11),
                                    width=100, command=self._open_bilibili)
         bili_btn.pack(side="left")
 

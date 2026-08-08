@@ -1,0 +1,50 @@
+{
+    "feature_id":  "time",
+    "canonical_id":  "infinite_time",
+    "display_name":  "无限时间",
+    "category":  "other",
+    "tab":  "other_tab",
+    "order":  30,
+    "desc":  "设定时间为 9:59",
+    "script":  "script.js",
+    "layout":  {
+                   "card_type":  "simple",
+                   "columnspan":  1,
+                   "title_color":  "#4C9F9F"
+               },
+    "controls":  [
+                     {
+                         "type":  "switch",
+                         "action":  "enable"
+                     }
+                 ],
+    "config":  {
+
+               },
+    "rpc":  [
+                "enable",
+                "disable",
+                "setConfig",
+                "status",
+                "cleanup",
+                "pauseFor",
+                "pausefor"
+            ],
+    "lifecycle":  {
+                      "cleanup":  true
+                  },
+    "source":  {
+                   "runtime_script_js":  "features/03_time/script.js"
+               },
+    "ui_handles":  {
+                       "switch":  "time_switch"
+                   },
+    "runtime":  {
+                    "type":  "plugin_script"
+                },
+    "tab_title":  "其他",
+    "tab_order":  30,
+    "state":  {
+                  "sync_enabled_from_config":  true
+              }
+}
