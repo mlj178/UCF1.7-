@@ -49,7 +49,7 @@ def build_card(parent, manifest, row, col, colspan, callbacks, card_builder):
         synced = _SyncedVar(variable, value_label, formatter)
         synced.set(variable.get())
 
-        def on_change(value, key=key, control=control, synced=synced):
+        def on_change(value, key=key, control=control, synced=synced, value_label=value_label, formatter=formatter):
             numeric = round(float(value), 2 if float(control.get("step", 0.1)) < 0.1 else 1)
             value_label.configure(text=formatter(numeric))
             if not synced.syncing:

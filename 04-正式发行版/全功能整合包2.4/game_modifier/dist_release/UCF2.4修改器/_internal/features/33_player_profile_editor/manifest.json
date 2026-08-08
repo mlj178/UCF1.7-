@@ -1,0 +1,27 @@
+{
+  "feature_id": "player_profile_editor",
+  "canonical_id": "player_profile_editor",
+  "display_name": "玩家信息修改",
+  "category": "other",
+  "tab": "game_parameters_tab",
+  "tab_title": "游戏参数",
+  "tab_order": 80,
+  "order": 121,
+  "desc": "读取和修改本地 PlayerData.dat 的昵称、等级和 VIP 等级；修改后，重启游戏生效。",
+  "script": "",
+  "runtime": {"type": "local_file"},
+  "layout": {"card_type": "wide", "columnspan": 2, "title_color": "#60a5fa"},
+  "controls": [
+    {"type": "button", "action": "load_profile", "label": "读取"},
+    {"type": "button", "action": "save_profile", "label": "保存到 PlayerData.dat"}
+  ],
+  "config": {},
+  "rpc": [],
+  "actions": {
+    "load_profile": {"type": "plugin_feature", "requires_connection": false},
+    "save_profile": {"type": "plugin_feature", "requires_connection": false}
+  },
+  "lifecycle": {"cleanup": false, "restore": false, "requires_room_ready_reapply": false, "room_ready_retry": false},
+  "ui_handles": {},
+  "state": {"sync_enabled_from_config": false}
+}

@@ -9,14 +9,16 @@ if getattr(sys, 'frozen', False):
     RESOURCE_DIR = os.path.join(BASE_DIR, "资源")
     PLUGINS_DIR = os.path.join(BASE_DIR, "game_modifier", "plugins")
     FEATURES_DIR = os.path.join(BASE_DIR, "features")  # features 在打包目录内
+    # 用户可写数据重定向到 %LOCALAPPDATA%，避免写 Program Files（安装器打包规范 §7.1 方案A）
+    _local_app_data = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~\\AppData\\Local")
+    DATA_DIR = os.path.join(_local_app_data, "UCFModifier", "2.4", "data")
 else:
     APP_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     BASE_DIR = APP_DIR
     RESOURCE_DIR = os.path.join(os.path.dirname(APP_DIR), "资源")
     PLUGINS_DIR = os.path.join(APP_DIR, "plugins")
     FEATURES_DIR = os.path.join(APP_DIR, "features")
-
-DATA_DIR = os.path.join(APP_DIR, "data")
+    DATA_DIR = os.path.join(APP_DIR, "data")
 
 if not os.path.exists(DATA_DIR):
     os.makedirs(DATA_DIR)
