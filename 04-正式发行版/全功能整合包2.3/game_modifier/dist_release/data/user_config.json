@@ -9,11 +9,15 @@
     "speed": 10.0
   },
   "27_game_mode_override": {
-    "mode_key": "nano4_terminator"
+    "mode_key": "handgun"
   },
   "grenade_mode_lock999_keep_weapon_tuner": {
-    "infinite_grenade_scope": "local_only",
-    "force_throw_ready_enabled": false
+    "infinite_grenade_scope": "all_players",
+    "force_throw_ready_enabled": false,
+    "bot_throw_drive_cooldown_ms": 2300,
+    "damage_apply_scope": "all_players",
+    "range_apply_scope": "all_players",
+    "shoot_speed_apply_scope": "all_players"
   },
   "weapon_giver": {
     "respawn_weapon": true
