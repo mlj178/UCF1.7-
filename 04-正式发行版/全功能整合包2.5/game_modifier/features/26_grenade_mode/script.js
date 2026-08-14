@@ -14,7 +14,6 @@
  * - Bot 是否修改由 owner_filter 控制。
  * - v1.3 删除：穿墙、碰撞爆炸、距离衰减。
  * - v1.3 增加：CreateExplosion 参数级 damage/range 修改。
- * - v1.4 新增：throwReady 写入开关，命名为“连投就绪开关”。
  * - v1.4 新增：投掷动作加速，投掷上下文内临时调用 Animator.set_speed。
  * - v2.0 新增：VirtualGrenadeMode Observer，只观察 PlayerWeapons 切枪链路，不拦截。
  * - v2.1 新增：无限手雷作用范围下拉框 local_only / all_players。
@@ -144,15 +143,6 @@ const DefaultConfig = {
     infinite_grenade_scope: "all_players", // local_only 或 all_players
     target_count: 999,
     sync_plain_value: false,
-
-    force_throw_ready_enabled: true,
-    force_throw_ready_scope: "local_only",
-    force_throw_ready_value: true,
-    force_throw_ready_on_throw_leave: true,
-    force_throw_ready_on_deploy: true,
-    force_throw_ready_on_animation_end: true,
-    force_throw_ready_max_per_second: 10,
-    force_throw_ready_window_ms: 1000,
 
     throw_anim_speed_enabled: false,
     throw_anim_speed_value: 1.6,
@@ -286,8 +276,6 @@ const Runtime = {
     botAiOfficialVisible: {},
     botThrowStates: {},
     botLifeStates: {},
-    forceThrowReadyWindows: {},
-    pendingThrowReadyTimers: {},
     stats: {
         hook_hits: 0,
         lock_attempts: 0,
@@ -296,8 +284,6 @@ const Runtime = {
         sync_plain_writes: 0,
         throw_hits: 0,
         onFireAnimEnd_hits: 0,
-        throw_ready_writes: 0,
-        throw_ready_skipped: 0,
         throw_anim_context_push: 0,
         throw_anim_context_pop: 0,
         playWeaponAnim_hits: 0,
@@ -596,107 +582,12 @@ function getAmmoSnapshot(wpnThrowPtr) {
     const key = safeReadU32(ammoData, Offsets.Ammo_key, "ammo.key");
     const hidden = safeReadU32(ammoData, Offsets.Ammo_hidden, "ammo.hidden");
     const plain = safeReadU32(ammoData, Offsets.Ammo_plain_or_fake, "ammo.plain_or_fake");
-    const ready = safeReadU8(wpnThrowPtr, Offsets.WPN_Throw_throwReady, "throwReady");
     let value = null;
     if (key !== null && hidden !== null) value = (key ^ hidden) >>> 0;
-    return { ok: key !== null && hidden !== null, throwPtr: ptrStr(wpnThrowPtr), ammoDataPtr: ammoData, ammoData: ptrStr(ammoData), key: key, hidden: hidden, plain_or_fake: plain, value: value, throwReady: ready };
+    return { ok: key !== null && hidden !== null, throwPtr: ptrStr(wpnThrowPtr), ammoDataPtr: ammoData, ammoData: ptrStr(ammoData), key: key, hidden: hidden, plain_or_fake: plain, value: value };
 }
-function publicSnap(s) { if (!s) return null; return { ok: s.ok, throwPtr: s.throwPtr, ammoData: s.ammoData, key: s.key, hidden: s.hidden, plain_or_fake: s.plain_or_fake, value: s.value, throwReady: s.throwReady }; }
+function publicSnap(s) { if (!s) return null; return { ok: s.ok, throwPtr: s.throwPtr, ammoData: s.ammoData, key: s.key, hidden: s.hidden, plain_or_fake: s.plain_or_fake, value: s.value }; }
 function targetCount() { let n = parseInt(Runtime.config.target_count, 10); if (isNaN(n) || n < 1) n = 999; if (n > 9999) n = 9999; return n >>> 0; }
-
-function shouldForceThrowReady(name, phase) {
-    if (!Runtime.config.force_throw_ready_enabled) return false;
-    if (name === "WPN_Throw.Throw" && phase === "onLeave") return Runtime.config.force_throw_ready_on_throw_leave;
-    if ((name === "WPN_Throw.Deploy" || name === "WPN_Throw.UnDeploy") && Runtime.config.force_throw_ready_on_deploy) return true;
-    if ((name === "WPN_Throw.OnAnimationEnd" || name === "WPN_Throw.OnFireAnimEnd") && Runtime.config.force_throw_ready_on_animation_end) return true;
-    return false;
-}
-
-function forceThrowReadyBucket(scopeInfo) {
-    if (scopeInfo && scopeInfo.isMyWeapon === true) return "local_player";
-    if (scopeInfo && scopeInfo.isMyWeapon === false) return "bot_or_remote";
-    return "unknown";
-}
-
-function getForceThrowReadyWindow(scopeInfo) {
-    const bucket = forceThrowReadyBucket(scopeInfo);
-    let item = Runtime.forceThrowReadyWindows[bucket];
-    if (!item) {
-        item = { start: 0, count: 0 };
-        Runtime.forceThrowReadyWindows[bucket] = item;
-    }
-    return item;
-}
-
-function canForceThrowReadyNow(scopeInfo) {
-    const now = Date.now();
-    const windowMs = Math.max(100, parseInt(Runtime.config.force_throw_ready_window_ms, 10) || 1000);
-    const maxPerWindow = Math.max(1, parseInt(Runtime.config.force_throw_ready_max_per_second, 10) || 10);
-    const item = getForceThrowReadyWindow(scopeInfo);
-    if (!item.start || now - item.start >= windowMs) {
-        item.start = now;
-        item.count = 0;
-    }
-    if (item.count >= maxPerWindow) {
-        Runtime.stats.throw_ready_skipped += 1;
-        return false;
-    }
-    item.count += 1;
-    return true;
-}
-
-function forceThrowReadyRetryDelayMs(scopeInfo) {
-    const now = Date.now();
-    const windowMs = Math.max(100, parseInt(Runtime.config.force_throw_ready_window_ms, 10) || 1000);
-    const item = getForceThrowReadyWindow(scopeInfo);
-    if (!item.start) return 0;
-    const elapsed = now - item.start;
-    if (elapsed >= windowMs) return 0;
-    return Math.max(1, windowMs - elapsed + 5);
-}
-
-function scheduleForceThrowReadyRetry(wpnThrowPtr, reason, scopeInfo) {
-    try {
-        if (!Runtime.enabled || !Runtime.config.force_throw_ready_enabled) return false;
-        if (!isReadablePtr(wpnThrowPtr)) return false;
-        const key = ptrStr(wpnThrowPtr);
-        if (Runtime.pendingThrowReadyTimers[key]) return false;
-        const generation = Runtime.generation;
-        Runtime.pendingThrowReadyTimers[key] = setTimeout(function() {
-            delete Runtime.pendingThrowReadyTimers[key];
-            try {
-                if (!Runtime.enabled || Runtime.generation !== generation || !Runtime.config.force_throw_ready_enabled) return;
-                if (!isReadablePtr(wpnThrowPtr)) { Runtime.stats.throw_ready_skipped += 1; return; }
-                forceThrowReady(wpnThrowPtr, reason + ".retry");
-            } catch (e) { recordError("forceThrowReady.retry:" + reason, e); }
-        }, forceThrowReadyRetryDelayMs(scopeInfo));
-        return true;
-    } catch (e) { recordError("scheduleForceThrowReadyRetry:" + reason, e); return false; }
-}
-
-function clearPendingThrowReadyTimers() {
-    for (const key of Object.keys(Runtime.pendingThrowReadyTimers)) {
-        try { clearTimeout(Runtime.pendingThrowReadyTimers[key]); } catch (e) {}
-        delete Runtime.pendingThrowReadyTimers[key];
-    }
-}
-
-function forceThrowReady(wpnThrowPtr, reason) {
-    try {
-        if (!Runtime.enabled || !Runtime.config.force_throw_ready_enabled) return false;
-        const scopeInfo = throwReadyAllowedByScope(wpnThrowPtr, reason + '.throwReady');
-        if (!scopeInfo.allowedByInfiniteScope) return false;
-        if (!isReadablePtr(wpnThrowPtr)) { Runtime.stats.throw_ready_skipped += 1; return false; }
-        const value = Runtime.config.force_throw_ready_value ? 1 : 0;
-        const before = wpnThrowPtr.add(Offsets.WPN_Throw_throwReady).readU8();
-        if (before === value) { Runtime.stats.throw_ready_skipped += 1; return true; }
-        if (!canForceThrowReadyNow(scopeInfo)) { scheduleForceThrowReadyRetry(wpnThrowPtr, reason, scopeInfo); return false; }
-        wpnThrowPtr.add(Offsets.WPN_Throw_throwReady).writeU8(value);
-        Runtime.stats.throw_ready_writes += 1;
-        log("连投就绪开关已写入 throwReady", { reason: reason, throwPtr: ptrStr(wpnThrowPtr), before: before, after: value, writes: Runtime.stats.throw_ready_writes, note: "该开关可能导致连续投掷，默认关闭" });
-        return true;
-    } catch (e) { recordError("forceThrowReady:" + reason, e); return false; }
-}
 
 function getThreadKey() {
     try { return String(Process.getCurrentThreadId()); } catch (e) { return "main"; }
@@ -817,17 +708,6 @@ function throwWeaponAllowedByScope(wpnThrowPtr, reason) {
         logOnce("scope_skip:" + ptrStr(wpnThrowPtr), "跳过非作用范围内的手雷武器", Runtime.config.log_interval_ms, {
             reason: reason, scope: info.scope, weapon: info.weapon, isMyWeapon: info.isMyWeapon,
             note: "local_only=只给玩家自己；all_players=玩家和bot都给"
-        });
-    }
-    return info;
-}
-
-function throwReadyAllowedByScope(wpnThrowPtr, reason) {
-    const info = getThrowWeaponLocalInfo(wpnThrowPtr, Runtime.config.force_throw_ready_scope || "local_only");
-    if (!info.allowedByInfiniteScope) {
-        logOnce("throw_ready_scope_skip:" + ptrStr(wpnThrowPtr), "跳过非连投作用范围内的手雷武器", Runtime.config.log_interval_ms, {
-            reason: reason, scope: info.scope, weapon: info.weapon, isMyWeapon: info.isMyWeapon,
-            note: "local_only=只给玩家自己；all_players=玩家和人机都给"
         });
     }
     return info;
@@ -1150,16 +1030,10 @@ function hookThrowLike(name, rva, statName, enterConfigName, leaveConfigName) {
             if (Runtime.enabled && Runtime.config[enterConfigName]) {
                 try { lockAmmo(this.self, name + ".onEnter"); } catch (e) { recordError(name + ".onEnter", e); }
             }
-            if (Runtime.enabled && shouldForceThrowReady(name, "onEnter")) {
-                try { forceThrowReady(this.self, name + ".onEnter"); } catch (e) { recordError(name + ".forceReadyEnter", e); }
-            }
         },
         onLeave(retval) {
             if (Runtime.enabled && Runtime.config[leaveConfigName]) {
                 try { lockAmmo(this.self, name + ".onLeave"); } catch (e) { recordError(name + ".onLeave", e); }
-            }
-            if (Runtime.enabled && shouldForceThrowReady(name, "onLeave")) {
-                try { forceThrowReady(this.self, name + ".onLeave"); } catch (e) { recordError(name + ".forceReadyLeave", e); }
             }
             if (name === "WPN_Throw.OnAnimationEnd" || name === "WPN_Throw.OnFireAnimEnd") {
                 if (Runtime.config.throw_anim_speed_enabled) restoreTouchedAnimatorSpeeds(name + ".onLeave");
@@ -3178,7 +3052,6 @@ function cleanupHooks() {
 function resetVolatileRuntimeState(reason, options) {
     const keepKnownGrenadeIndexes = !!(options && options.keepKnownGrenadeIndexes);
     Runtime.generation += 1;
-    clearPendingThrowReadyTimers();
     Runtime.protectedWeapons = {};
     Runtime.trackedMissiles = {};
     Runtime.explosionContexts = {};
@@ -3192,7 +3065,6 @@ function resetVolatileRuntimeState(reason, options) {
         Runtime.lastBotGrenadeWeaponIndex = -1;
     }
     Runtime.botGrenadeGiveLast = {};
-    Runtime.forceThrowReadyWindows = {};
     Runtime.classCounts = {};
     Runtime.observerLast = {};
     Runtime.stats.protected_count = 0;
@@ -3212,7 +3084,7 @@ function getStatus() {
         feature_id: FEATURE_ID, version: VERSION, enabled: Runtime.enabled, initialized: Runtime.initialized, generation: Runtime.generation, config: Runtime.config,
         hook_count: Runtime.hooks.length, replacement_count: Runtime.replacements.length,
         hook_hits: Runtime.stats.hook_hits,
-        lock_attempts: Runtime.stats.lock_attempts, lock_writes: Runtime.stats.lock_writes, lock_skipped_same: Runtime.stats.lock_skipped_same, throw_ready_writes: Runtime.stats.throw_ready_writes, throw_ready_skipped: Runtime.stats.throw_ready_skipped,
+        lock_attempts: Runtime.stats.lock_attempts, lock_writes: Runtime.stats.lock_writes, lock_skipped_same: Runtime.stats.lock_skipped_same,
         remove_hits: Runtime.stats.remove_hits, remove_blocked: Runtime.stats.remove_blocked, remove_allowed: Runtime.stats.remove_allowed,
         protected_count: Runtime.stats.protected_count,
         capture_hits: Runtime.stats.capture_hits, tracked_count: Runtime.stats.tracked_count, tracked_expired: Runtime.stats.tracked_expired,
@@ -3239,4 +3111,4 @@ function getStatus() {
 }
 
 rpc.exports = { enable(config){ return enableFeature(config); }, disable(){ return disableFeature(); }, status(){ return getStatus(); }, cleanup(){ return cleanupFeature(); }, setConfig(config){ return setConfig(config); }, set_config(config){ return setConfig(config); }, debugDump(){ return getStatus(); }, debug_dump(){ return getStatus(); } };
-log("锁999+保护武器+手雷伤害范围速度+连投就绪/动作加速脚本已加载", { version: VERSION });
+log("锁999+保护武器+手雷伤害范围速度+动作加速脚本已加载", { version: VERSION });

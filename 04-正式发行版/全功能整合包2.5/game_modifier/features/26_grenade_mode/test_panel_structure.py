@@ -31,7 +31,7 @@ class GrenadePanelStructureTests(unittest.TestCase):
             self.panel.CARD_GROUPS,
             (
                 "手雷模式",
-                "无限手雷与连续投掷",
+                "无限手雷",
                 "手雷强化",
             ),
         )
@@ -39,7 +39,6 @@ class GrenadePanelStructureTests(unittest.TestCase):
     def test_user_switches_cover_each_card(self):
         for key in (
             "lock999_enabled",
-            "force_throw_ready_enabled",
             "enable_damage",
             "enable_range",
             "enable_shoot_speed",
@@ -62,8 +61,23 @@ class GrenadePanelStructureTests(unittest.TestCase):
         self.assertTrue(config["lock999_enabled"])
         self.assertEqual(config["damage_value"], 32.0)
 
+    def test_player_chain_throw_is_removed_but_bot_ready_drive_is_preserved(self):
+        controls = {
+            item["key"]: item
+            for item in self.manifest["controls"]
+        }
+        script = (FEATURE_DIR / "script.js").read_text(encoding="utf-8")
+
+        self.assertNotIn("force_throw_ready_enabled", controls)
+        self.assertNotIn("force_throw_ready_scope", controls)
+        self.assertFalse(any(key.startswith("force_throw_ready_") for key in self.manifest["config"]))
+        self.assertNotIn("forceThrowReady", script)
+        self.assertNotIn("pendingThrowReadyTimers", script)
+        self.assertNotIn("forceThrowReadyWindows", script)
+        self.assertIn("function forceBotThrowReadyDirect", script)
+        self.assertIn("bot_throw_drive_force_ready", script)
+
     def test_dependent_features_require_infinite_grenade(self):
-        self.assertTrue(self.panel.requires_infinite_grenade("force_throw_ready_enabled"))
         self.assertTrue(self.panel.requires_infinite_grenade("bot_grenade_mode_enabled"))
         self.assertFalse(self.panel.requires_infinite_grenade("enable_damage"))
 
@@ -76,13 +90,6 @@ class GrenadePanelStructureTests(unittest.TestCase):
                 ("enable_shoot_speed", "shoot_speed_value", "shoot_speed_apply_scope"),
             ),
         )
-
-    def test_chain_throw_requires_infinite_grenade(self):
-        config = {"lock999_enabled": False, "force_throw_ready_enabled": True}
-        self.assertFalse(self.panel.feature_should_run(config))
-
-        config["lock999_enabled"] = True
-        self.assertTrue(self.panel.feature_should_run(config))
 
     def test_page_auto_starts_shared_runtime_when_a_function_is_enabled(self):
         config = {"enable_damage": True}

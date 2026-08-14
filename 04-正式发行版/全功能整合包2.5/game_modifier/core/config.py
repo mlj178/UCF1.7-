@@ -27,13 +27,13 @@ HOTKEYS_FILE = os.path.join(DATA_DIR, "hotkeys.json")
 SETTINGS_FILE = os.path.join(DATA_DIR, "settings.json")
 NANO4T_FILE = os.path.join(DATA_DIR, "Nano-4T-selector.json")
 
-HOTKEY_POSITIONS = ['ctrl+1', 'ctrl+2', 'ctrl+3', 'ctrl+4', 'ctrl+5', 'f1', 'f2', 'f3', 'alt+1', 'alt+2', 'alt+3', 'alt+4']
+HOTKEY_POSITIONS = ['ctrl+1', 'ctrl+2', 'ctrl+3', 'ctrl+4', 'ctrl+5', 'f1', 'f2', 'alt+1', 'alt+2']
 
 HOTKEY_DISPLAY_NAMES = {
     'ctrl+1': 'Ctrl+1', 'ctrl+2': 'Ctrl+2', 'ctrl+3': 'Ctrl+3',
     'ctrl+4': 'Ctrl+4', 'ctrl+5': 'Ctrl+5',
-    'f1': 'F1', 'f2': 'F2', 'f3': 'F3',
-    'alt+1': 'Alt+1', 'alt+2': 'Alt+2', 'alt+3': 'Alt+3', 'alt+4': 'Alt+4',
+    'f1': 'F1', 'f2': 'F2',
+    'alt+1': 'Alt+1', 'alt+2': 'Alt+2',
 }
 
 DEDICATED_HOTKEY_ACTIONS = {
@@ -47,12 +47,12 @@ DEDICATED_HOTKEY_ACTIONS = {
         'action': 'teleporttopoint',
         'label': '定点瞬移：瞬移到点位1',
     },
-    'alt+3': {
+    'f1': {
         'feature_id': 'fixed_point_teleport',
         'action': 'savepoint2',
         'label': '定点瞬移：保存点位2',
     },
-    'alt+4': {
+    'f2': {
         'feature_id': 'fixed_point_teleport',
         'action': 'teleporttopoint2',
         'label': '定点瞬移：瞬移到点位2',
