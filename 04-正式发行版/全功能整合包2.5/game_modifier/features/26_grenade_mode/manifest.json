@@ -7,7 +7,7 @@
   "tab_title": "手雷功能",
   "tab_order": 60,
   "order": 0,
-  "desc": "手雷模式与连投需先开启无限手雷，关闭无限手雷将自动关闭。",
+  "desc": "手雷模式需先开启无限手雷，关闭无限手雷将自动关闭。",
   "script": "script.js",
   "runtime": {
     "type": "plugin_script"
@@ -146,26 +146,6 @@
         "my_player": "仅玩家",
         "all_players": "玩家和人机"
       }
-    },
-    {
-      "type": "switch",
-      "key": "force_throw_ready_enabled",
-      "label": "手雷连投模式",
-      "default": true
-    },
-    {
-      "type": "select",
-      "key": "force_throw_ready_scope",
-      "label": "连投生效对象",
-      "default": "local_only",
-      "values": [
-        "local_only",
-        "all_players"
-      ],
-      "display_values": {
-        "local_only": "仅玩家",
-        "all_players": "玩家和人机"
-      }
     }
   ],
   "config": {
@@ -173,13 +153,6 @@
     "infinite_grenade_scope": "all_players",
     "target_count": 999,
     "sync_plain_value": false,
-    "force_throw_ready_enabled": true,
-    "force_throw_ready_value": true,
-    "force_throw_ready_on_throw_leave": true,
-    "force_throw_ready_on_deploy": true,
-    "force_throw_ready_on_animation_end": true,
-    "force_throw_ready_max_per_second": 10,
-    "force_throw_ready_window_ms": 1000,
     "throw_anim_speed_enabled": false,
     "throw_anim_speed_value": 1.6,
     "throw_anim_speed_restore_value": 1.0,
@@ -276,8 +249,7 @@
     "observe_set_current_weapon": false,
     "verbose_log_enabled": false,
     "log_interval_ms": 1000,
-    "max_error_before_disable": 14,
-    "force_throw_ready_scope": "local_only"
+    "max_error_before_disable": 14
   },
   "rpc": [
     "enable",

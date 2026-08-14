@@ -108,13 +108,13 @@ def build_card(parent, manifest, row, col, colspan, callbacks, card_builder):
         "点位2",
         "savepoint2",
         "teleporttopoint2",
-        "保存点位2  Alt+3",
-        "瞬移到点位2  Alt+4",
+        "保存点位2  F1",
+        "瞬移到点位2  F2",
     )
 
     shortcut_label = ctk.CTkLabel(
         frame,
-        text="快捷键：Alt+1 保存点位1，Alt+2 瞬移到点位1；Alt+3 保存点位2，Alt+4 瞬移到点位2",
+        text="快捷键：Alt+1 保存点位1，Alt+2 瞬移到点位1；F1 保存点位2，F2 瞬移到点位2",
         text_color="#9aa3b2",
         font=("Microsoft YaHei", 11),
         anchor="w",

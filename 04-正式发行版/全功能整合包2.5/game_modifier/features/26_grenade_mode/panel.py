@@ -4,13 +4,13 @@ from pathlib import Path
 import customtkinter as ctk
 
 
-CARD_GROUPS = ("手雷模式", "无限手雷与连续投掷", "手雷强化")
+CARD_GROUPS = ("手雷模式", "无限手雷", "手雷强化")
 ENHANCEMENT_GROUPS = (
     ("enable_damage", "damage_value", "damage_apply_scope"),
     ("enable_range", "range_value", "range_apply_scope"),
     ("enable_shoot_speed", "shoot_speed_value", "shoot_speed_apply_scope"),
 )
-DEPENDENT_KEYS = ("force_throw_ready_enabled", "bot_grenade_mode_enabled")
+DEPENDENT_KEYS = ("bot_grenade_mode_enabled",)
 SESSION_ONLY_KEYS = ("bot_grenade_mode_enabled",)
 USER_SWITCH_KEYS = (
     "lock999_enabled",
@@ -23,7 +23,6 @@ USER_SWITCH_KEYS = (
 
 def feature_should_run(config):
     """判断是否有任意独立手雷功能需要共享运行时。"""
-    # 联动说明：连投本身不能单独启动，只有“无限手雷 + 连投”同时成立时才算连投生效。
     independent_keys = ("lock999_enabled", "enable_damage", "enable_range", "enable_shoot_speed")
     if any(bool(config.get(key, False)) for key in independent_keys):
         return True
@@ -352,7 +351,7 @@ def _sync_engine(context, config, handles):
 
 def _on_user_switch(context, config, handles, key, value, var, switch):
     config[key] = value
-    # 联动说明：连投和手雷模式都依赖无限手雷，开启任一依赖功能时自动打开无限手雷。
+    # 联动说明：手雷模式依赖无限手雷，开启时自动打开无限手雷。
     if requires_infinite_grenade(key) and value and not config.get("lock999_enabled", False):
         config["lock999_enabled"] = True
         _set_config(context, "lock999_enabled", True)
@@ -375,7 +374,7 @@ def build_panel(context, parent):
     config = _merged_config(context, manifest)
     handles = {}
 
-    # 联动说明：手雷模式是本次运行开关，清除旧版本可能留下的记忆，但不影响其他配置。
+    # 联动说明：手雷模式仅本次运行有效，启动时关闭并清除旧版本可能留下的记忆。
     for key in SESSION_ONLY_KEYS:
         context.config_manager.remove_user_key(context.feature_id, key)
 
@@ -402,7 +401,7 @@ def build_panel(context, parent):
     ).pack(side="left")
     ctk.CTkLabel(
         root,
-        text="三个卡片可单独使用；连投依赖无限手雷，关闭无限手雷会自动关闭连投。",
+        text="三个卡片可单独使用；手雷模式依赖无限手雷。",
         font=("Microsoft YaHei", 12),
         text_color="#a0a0a0",
         anchor="w",
@@ -418,8 +417,6 @@ def build_panel(context, parent):
     infinite_card = _card(root, CARD_GROUPS[1])
     _switch(infinite_card, context, controls["lock999_enabled"], config, handles, on_change=on_switch)
     _add_select_rows(infinite_card, context, controls, config, handles, ("infinite_grenade_scope",))
-    _switch(infinite_card, context, controls["force_throw_ready_enabled"], config, handles, on_change=on_switch)
-    _add_select_rows(infinite_card, context, controls, config, handles, ("force_throw_ready_scope",))
 
     enhancement_card = _card(root, CARD_GROUPS[2])
     _add_enhancement_rows(enhancement_card, context, controls, config, handles, on_switch)

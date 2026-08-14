@@ -13,6 +13,7 @@ from core.config import (
     HOTKEY_EXCLUDED,
 )
 from core.event_bus import EventBus
+from core.native_hotkey_listener import NativeHotkeyListener, VK_BY_POSITION
 
 
 class HotkeyManager:
@@ -21,6 +22,7 @@ class HotkeyManager:
     def __init__(self):
         self._hotkeys = self._load_hotkeys()
         self._hotkey_handles = []
+        self._native_hotkey_listener = NativeHotkeyListener()
         self._app = None
 
     @classmethod
@@ -83,6 +85,7 @@ class HotkeyManager:
 
     def setup_hotkeys(self, toggle_callback, silent=False):
         self._toggle_callback = toggle_callback
+        self._native_hotkey_listener.stop()
 
         for handle in self._hotkey_handles:
             try:
@@ -91,7 +94,44 @@ class HotkeyManager:
                 pass
         self._hotkey_handles = []
 
+        native_positions = tuple(
+            pos for pos in DEDICATED_HOTKEY_ACTIONS
+            if pos in VK_BY_POSITION
+        )
+        try:
+            native_results = self._native_hotkey_listener.start(
+                native_positions,
+                self._on_native_hotkey_triggered,
+            )
+        except Exception as exc:
+            native_results = {pos: False for pos in native_positions}
+            bus = EventBus.get_instance()
+            bus.emit(
+                'log_message',
+                level='warning',
+                module='快捷键',
+                message=f"Windows 原生快捷键初始化失败，已回退到 keyboard: {exc}",
+            )
+
         for pos, binding in DEDICATED_HOTKEY_ACTIONS.items():
+            if native_results.get(pos):
+                if not silent:
+                    bus = EventBus.get_instance()
+                    display = HOTKEY_DISPLAY_NAMES.get(pos, pos)
+                    label = binding.get('label', f"{binding.get('feature_id')}.{binding.get('action')}")
+                    bus.emit('log_message', level='info', module='快捷键',
+                             message=f"绑定 Windows 原生快捷键 {display} -> {label}")
+                continue
+            if pos in native_positions:
+                error = self._native_hotkey_listener.errors.get(pos, 'unknown')
+                bus = EventBus.get_instance()
+                bus.emit(
+                    'log_message',
+                    level='warning',
+                    module='快捷键',
+                    message=f"Windows 原生快捷键 {HOTKEY_DISPLAY_NAMES.get(pos, pos)} 注册失败 "
+                            f"(error={error})，已回退到 keyboard",
+                )
             try:
                 callback = functools.partial(self._on_dedicated_hotkey_triggered, binding)
                 handle = keyboard.add_hotkey(pos, callback)
@@ -139,6 +179,11 @@ class HotkeyManager:
             except Exception:
                 self._toggle_callback(payload)
 
+    def _on_native_hotkey_triggered(self, position):
+        binding = DEDICATED_HOTKEY_ACTIONS.get(position)
+        if binding:
+            self._on_dedicated_hotkey_triggered(binding)
+
     def save_and_apply(self, toggle_callback, silent=False):
         self._save_hotkeys()
         self.setup_hotkeys(toggle_callback, silent=silent)
@@ -154,6 +199,7 @@ class HotkeyManager:
         self._app = app
 
     def cleanup(self):
+        self._native_hotkey_listener.stop()
         for handle in self._hotkey_handles:
             try:
                 handle.unhook()

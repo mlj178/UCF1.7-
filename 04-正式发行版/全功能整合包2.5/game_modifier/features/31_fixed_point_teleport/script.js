@@ -263,6 +263,12 @@
         log("info", "resetRuntime: " + Runtime.stats.lastResetReason + ", gen=" + Runtime.generation);
     }
 
+    function clearPendingRoundActions(reason) {
+        Runtime.pending.saveSlot = 0;
+        Runtime.pending.teleportSlot = 0;
+        log("info", "round pending actions cleared: " + (reason || "round_boundary"));
+    }
+
     function handleRoundBoundary(reason, nextModeBase) {
         Runtime.roomGeneration += 1;
         Runtime.stats.roundBoundaryCount += 1;
@@ -350,7 +356,7 @@
             attachHook("GameManager.GameRoundEnd", RVA.GameManager_GameRoundEnd, {
                 onEnter: function () {
                     try {
-                        handleRoundBoundary("game_round_end");
+                        clearPendingRoundActions("game_round_end");
                     } catch (error) {
                         setError("GameManager.GameRoundEnd hook failed", error);
                     }
@@ -359,7 +365,7 @@
             attachHook("GameManager.NewGameRoundStart", RVA.GameManager_NewGameRoundStart, {
                 onEnter: function () {
                     try {
-                        handleRoundBoundary("new_game_round_start");
+                        clearPendingRoundActions("new_game_round_start");
                     } catch (error) {
                         setError("GameManager.NewGameRoundStart hook failed", error);
                     }

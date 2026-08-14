@@ -271,8 +271,7 @@ class App(ctk.CTk):
 
     def _setup_tk_hotkeys(self):
         tk_key_map = {
-            '<F1>': 'f1', '<F2>': 'f2', '<F3>': 'f3',
-            '<Alt-Key-1>': 'alt+1', '<Alt-Key-2>': 'alt+2', '<Alt-Key-3>': 'alt+3', '<Alt-Key-4>': 'alt+4',
+            '<Alt-Key-1>': 'alt+1', '<Alt-Key-2>': 'alt+2',
         }
         for tk_key, pos in tk_key_map.items():
             self.bind(tk_key, lambda e, p=pos: self._on_tk_hotkey(p))

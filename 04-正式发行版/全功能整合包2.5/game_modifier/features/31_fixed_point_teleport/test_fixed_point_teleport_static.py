@@ -4,7 +4,7 @@ from pathlib import Path
 
 
 BASE_DIR = Path(__file__).resolve().parent
-JS_FILE = BASE_DIR / "AAAAA-fixed_point_teleport_min.js"
+JS_FILE = BASE_DIR / "script.js"
 UI_FILE = BASE_DIR / "AAAAA-fixed_point_teleport_ui.py"
 DOC_FILE = BASE_DIR / "定点瞬移-简要说明.md"
 
@@ -73,17 +73,60 @@ class FixedPointTeleportStaticTests(unittest.TestCase):
         self.assertIn("Runtime.pending.saveSlot = 0", reset_fn)
         self.assertIn("Runtime.pending.teleportSlot = 0", reset_fn)
 
-    def test_js_hooks_round_lifecycle_to_clear_per_round_saved_point(self):
+    def test_js_preserves_saved_points_across_round_lifecycle(self):
         text = read_text(JS_FILE)
 
-        self.assertIn('attachHook("ModeBase.UpdateTimeUI"', text)
-        self.assertIn('attachHook("GameManager.GameRoundEnd"', text)
-        self.assertIn('attachHook("GameManager.NewGameRoundStart"', text)
-        self.assertIn('attachHook("GameManager.OnDestroy"', text)
-        self.assertIn('handleModeBaseSeen(args[0])', text)
-        self.assertIn('handleRoundBoundary("game_round_end")', text)
-        self.assertIn('handleRoundBoundary("new_game_round_start")', text)
-        self.assertIn('handleRoundBoundary("game_manager_destroy")', text)
+        self.assertIn("function clearPendingRoundActions(reason)", text)
+
+        clear_pending_fn = text.split("function clearPendingRoundActions(reason)", 1)[1].split(
+            "function handleRoundBoundary", 1
+        )[0]
+        round_end_hook = text.split('attachHook("GameManager.GameRoundEnd"', 1)[1].split(
+            'attachHook("GameManager.NewGameRoundStart"', 1
+        )[0]
+        new_round_hook = text.split('attachHook("GameManager.NewGameRoundStart"', 1)[1].split(
+            'attachHook("GameManager.OnDestroy"', 1
+        )[0]
+        round_clear_forbidden_tokens = [
+            "resetRuntime",
+            "resetSavedPointSlots",
+            "Runtime.savedPoints",
+            "Runtime.roomGeneration",
+        ]
+
+        self.assertIn("Runtime.pending.saveSlot = 0", clear_pending_fn)
+        self.assertIn("Runtime.pending.teleportSlot = 0", clear_pending_fn)
+        for forbidden_token in round_clear_forbidden_tokens:
+            self.assertNotIn(forbidden_token, clear_pending_fn)
+
+        self.assertIn('clearPendingRoundActions("game_round_end")', round_end_hook)
+        self.assertNotIn("handleRoundBoundary", round_end_hook)
+        self.assertIn('clearPendingRoundActions("new_game_round_start")', new_round_hook)
+        self.assertNotIn("handleRoundBoundary", new_round_hook)
+        for hook_segment in [round_end_hook, new_round_hook]:
+            for forbidden_token in round_clear_forbidden_tokens:
+                self.assertNotIn(forbidden_token, hook_segment)
+
+    def test_js_keeps_full_reset_for_room_lifecycle(self):
+        text = read_text(JS_FILE)
+
+        room_boundary_fn = text.split("function handleRoundBoundary(reason, nextModeBase)", 1)[1].split(
+            "function handleModeBaseSeen", 1
+        )[0]
+        mode_base_seen_fn = text.split("function handleModeBaseSeen(modeBase)", 1)[1].split(
+            "function captureLocalPlayer", 1
+        )[0]
+        mode_base_hook = text.split('attachHook("ModeBase.UpdateTimeUI"', 1)[1].split(
+            'attachHook("GameManager.GameRoundEnd"', 1
+        )[0]
+        game_manager_destroy_hook = text.split('attachHook("GameManager.OnDestroy"', 1)[1].split(
+            "Runtime.initialized = true", 1
+        )[0]
+
+        self.assertIn("handleModeBaseSeen(args[0])", mode_base_hook)
+        self.assertIn('handleRoundBoundary("mode_base_changed", modeBase)', mode_base_seen_fn)
+        self.assertIn('handleRoundBoundary("game_manager_destroy")', game_manager_destroy_hook)
+        self.assertIn("resetRuntime(Runtime.stats.lastRoomReason)", room_boundary_fn)
 
     def test_js_saved_point_is_bound_to_current_room_generation(self):
         text = read_text(JS_FILE)
@@ -206,8 +249,8 @@ class FixedPointTeleportStaticTests(unittest.TestCase):
             "RVA 0xB55FD0",
             "点位1",
             "点位2",
-            "Alt+3",
-            "Alt+4",
+            "F1",
+            "F2",
         ]:
             self.assertIn(token, text)
 
