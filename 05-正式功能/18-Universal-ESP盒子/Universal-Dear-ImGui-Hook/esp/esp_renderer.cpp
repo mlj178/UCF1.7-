@@ -7,7 +7,6 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
-#include <unordered_set>
 
 namespace esp {
 
@@ -17,11 +16,6 @@ int ESPRenderer::s_FrameCounter = 0;
 
 static bool SafeDrawPlayer(void* player, void* localPlayer) {
     if (!player || player == localPlayer) return false;
-    if (!ESPState::Instance().IsAllPlayersEnabled() &&
-        GameManager::GetPlayerTeam(player) == GameManager::GetPlayerTeam(localPlayer)) {
-        return false;
-    }
-    if (GameManager::IsPlayerDead(player)) return false;
 
 #if defined(_MSC_VER)
     __try {
@@ -75,54 +69,55 @@ void ESPRenderer::Render() {
     if (!ESPState::Instance().IsBoxEnabled()) return;
     if (!s_Enabled || !s_Initialized) return;
 
-    if (!GameManager::RefreshSession()) {
-        return;
-    }
+    PlayerSnapshot snapshot;
+    if (!GameManager::BuildPlayerSnapshot(&snapshot)) return;
 
     void* localPlayer = GameManager::GetLocalPlayer();
-    if (!localPlayer) {
-        return;
-    }
+    if (!localPlayer) return;
 
-    auto playersFromList = GameManager::GetAllPlayers();
-    auto playersFromBot = GameManager::GetBotPlayers();
-    if (playersFromList.empty() && playersFromBot.empty()) {
-        return;
-    }
-
-    std::vector<void*> allPlayers;
-    std::unordered_set<void*> seenPlayers;
-
-    // Primary source: players from GameManager alive lists
-    for (size_t i = 0; i < playersFromList.size(); i++) {
-        void* player = playersFromList[i];
-        if (player && IsValidPointer(player) && seenPlayers.find(player) == seenPlayers.end()) {
-            allPlayers.push_back(player);
-            seenPlayers.insert(player);
-        }
-    }
-
-    // Bot.Update is supplementary: only add players NOT already in the alive lists
-    for (size_t i = 0; i < playersFromBot.size(); i++) {
-        void* player = playersFromBot[i];
-        if (player && IsValidPointer(player) && seenPlayers.find(player) == seenPlayers.end()) {
-            allPlayers.push_back(player);
-            seenPlayers.insert(player);
-        }
-    }
-
+    const DWORD now = GetTickCount();
     int drawnCount = 0;
-    for (void* player : allPlayers) {
-        // Per-player guard keeps one bad entity from breaking the frame.
-        if (SafeDrawPlayer(player, localPlayer)) {
-            drawnCount++;
+    int rejectedSource = 0;
+    int rejectedObject = 0;
+    int rejectedTeam = 0;
+    for (const PlayerCandidate& candidate : snapshot.candidates) {
+        const bool botFresh =
+            policy::HasSource(candidate.sources, policy::SourceBotUpdate) &&
+            candidate.sessionEpoch == snapshot.sessionEpoch &&
+            policy::IsBotFresh(candidate.botLastSeenTick, now);
+        if (!policy::IsSourceEligible(snapshot.gameMode, candidate.sources, botFresh)) {
+            ++rejectedSource;
+            continue;
         }
+        if (!GameManager::IsCandidateRenderable(candidate, snapshot, localPlayer, now)) {
+            ++rejectedObject;
+            continue;
+        }
+        if (!ESPState::Instance().IsAllPlayersEnabled() &&
+            !GameManager::IsEnemy(candidate.player, localPlayer)) {
+            ++rejectedTeam;
+            continue;
+        }
+        if (SafeDrawPlayer(candidate.player, localPlayer)) ++drawnCount;
     }
 
     s_FrameCounter++;
     if (s_FrameCounter % config::LOG_INTERVAL == 0) {
-        DebugLog("[ESP] Players: fromList=%zu, fromBot=%zu, total=%zu, Drawn: %d\n",
-                 playersFromList.size(), playersFromBot.size(), allPlayers.size(), drawnCount);
+        DebugLog(
+            "[ESP] mode=%d epoch=%lu states=%d/%d/%d/%d/%d candidates=%zu "
+            "rejectedSource=%d rejectedObject=%d rejectedTeam=%d drawn=%d\n",
+            snapshot.gameMode,
+            snapshot.sessionEpoch,
+            static_cast<int>(snapshot.allPlayersState),
+            static_cast<int>(snapshot.blState),
+            static_cast<int>(snapshot.grState),
+            static_cast<int>(snapshot.blAliveState),
+            static_cast<int>(snapshot.grAliveState),
+            snapshot.candidates.size(),
+            rejectedSource,
+            rejectedObject,
+            rejectedTeam,
+            drawnCount);
     }
 }
 
@@ -241,14 +236,7 @@ ImVec4 ESPRenderer::GetPlayerColor(void* player, void* localPlayer) {
     if (!player) return ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
 
     int playerTeam = GameManager::GetPlayerTeam(player);
-    int localTeam = -1;
-
-    if (localPlayer) {
-        localTeam = GameManager::GetPlayerTeam(localPlayer);
-    }
-
-    // Compare teams to decide ally/enemy color.
-    bool isEnemy = (playerTeam != localTeam);
+    const bool isEnemy = GameManager::IsEnemy(player, localPlayer);
 
     // Team enum: BlackList=0, GlobalRisk=1.
 

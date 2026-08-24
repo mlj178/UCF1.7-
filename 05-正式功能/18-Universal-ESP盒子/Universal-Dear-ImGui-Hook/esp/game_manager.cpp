@@ -26,6 +26,7 @@ typedef void (__cdecl *BotUpdateFunc)(void* bot, void* methodInfo);
 typedef bool (__cdecl *GetIsDeadFn)(void* entity, void* methodInfo);
 typedef void* (__cdecl *GetHealthDataFn)(void* entity, void* methodInfo);
 typedef float (__cdecl *GetHealthRateFn)(void* healthData, void* methodInfo);
+typedef bool (__cdecl *IsSameTeamFn)(int team, int otherTeam, void* methodInfo);
 
 static BotUpdateFunc s_OriginalBotUpdate = nullptr;
 
@@ -306,6 +307,35 @@ void* GameManager::GetLocalPlayer() {
     }
 
     return nullptr;
+}
+
+static bool SafeCallIsSameTeam(
+    IsSameTeamFn fn,
+    int team,
+    int otherTeam,
+    bool* outSameTeam) {
+    if (!fn || !outSameTeam) return false;
+
+#if defined(_MSC_VER)
+    __try {
+        *outSameTeam = fn(team, otherTeam, nullptr);
+        return true;
+    } __except(EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+#else
+    SAFE_TRY {
+        *outSameTeam = fn(team, otherTeam, nullptr);
+        return true;
+    } SAFE_EXCEPT_RET(false)
+#endif
+}
+
+static void LogTeamRuleFallback() {
+    static int logCounter = 0;
+    if (logCounter++ % config::LOG_INTERVAL == 0) {
+        DebugLog("[ESP] ExpandUtil.IsSameTeam unavailable; using verified Neutral fallback\n");
+    }
 }
 
 int GameManager::GetGameMode() {
@@ -608,6 +638,27 @@ int GameManager::GetPlayerTeam(void* player) {
         return team;
     }
     return -1;
+}
+
+bool GameManager::IsEnemy(void* player, void* localPlayer) {
+    const int playerTeam = GetPlayerTeam(player);
+    const int localTeam = GetPlayerTeam(localPlayer);
+    if (playerTeam < 0 || localTeam < 0) return false;
+
+    void* base = IL2CPPBridge::GetBase();
+    auto isSameTeam = base
+        ? reinterpret_cast<IsSameTeamFn>(
+              static_cast<char*>(base) + RVAConstants::ExpandUtil_IsSameTeam)
+        : nullptr;
+
+    bool sameTeam = true;
+    if (isSameTeam && IsExecutableAddress(reinterpret_cast<void*>(isSameTeam)) &&
+        SafeCallIsSameTeam(isSameTeam, localTeam, playerTeam, &sameTeam)) {
+        return !sameTeam;
+    }
+
+    LogTeamRuleFallback();
+    return !policy::IsSameTeamByGameRule(localTeam, playerTeam);
 }
 
 void GameManager::InitializeBotHook() {
