@@ -26,6 +26,9 @@ struct RVAConstants {
     // GameManager.AddPlayer (for Hook method)
     static constexpr uintptr_t GM_AddPlayer = 0xAF9A90;
 
+    // ExpandUtil.IsSameTeam(Team, Team)
+    static constexpr uintptr_t ExpandUtil_IsSameTeam = 0xAF8520;
+
     // Component.get_transform
     static constexpr uintptr_t Component_get_transform = 0x32CF40;
 
@@ -60,6 +63,8 @@ struct OffsetConstants {
 
     // GameManager static fields (from dump.cs line 242584)
     static constexpr uintptr_t GM_myPlayer = 0x00;         // static Player myPlayer
+    static constexpr uintptr_t GM_gameMode = 0x04;         // static GameMode gameMode
+    static constexpr uintptr_t GM_gameRoundOver = 0x20;    // static bool gameRoundOver
 
     // GameManager instance fields
     static constexpr uintptr_t GM_allPlayers = 0x1C;       // Player[] allPlayers
