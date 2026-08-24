@@ -1,9 +1,11 @@
 #pragma once
 #include <vector>
 #include <unordered_map>
+#include <cstdint>
 #include <windows.h>
 #include "esp_common.h"  // 需要 IsValidPointer, SafeReadValue
 #include "il2cpp_bridge.h"
+#include "player_policy.h"
 
 namespace esp {
 
@@ -12,6 +14,31 @@ struct BotPlayerEntry {
     void* player;
     DWORD timestamp;  // GetTickCount() timestamp
     DWORD epoch;      // Session epoch for cross-round protection
+};
+
+enum class ContainerReadState {
+    Invalid,
+    Empty,
+    Valid,
+};
+
+struct PlayerCandidate {
+    void* player = nullptr;
+    std::uint32_t sources = policy::SourceNone;
+    DWORD botLastSeenTick = 0;
+    DWORD sessionEpoch = 0;
+};
+
+struct PlayerSnapshot {
+    int gameMode = -1;
+    bool roundOver = true;
+    DWORD sessionEpoch = 0;
+    ContainerReadState allPlayersState = ContainerReadState::Invalid;
+    ContainerReadState blState = ContainerReadState::Invalid;
+    ContainerReadState grState = ContainerReadState::Invalid;
+    ContainerReadState blAliveState = ContainerReadState::Invalid;
+    ContainerReadState grAliveState = ContainerReadState::Invalid;
+    std::vector<PlayerCandidate> candidates;
 };
 
 class GameManager {
@@ -26,6 +53,15 @@ public:
     static void* GetInstance();
     static void* GetLocalPlayer();
     static std::vector<void*> GetAllPlayers();
+    static bool BuildPlayerSnapshot(PlayerSnapshot* outSnapshot);
+    static int GetGameMode();
+    static bool IsGameRoundOver();
+    static bool IsCandidateRenderable(
+        const PlayerCandidate& candidate,
+        const PlayerSnapshot& snapshot,
+        void* localPlayer,
+        DWORD now);
+    static bool IsEnemy(void* player, void* localPlayer);
     
     static bool IsValidPlayer(void* player);
     static bool IsPlayerDead(void* player);

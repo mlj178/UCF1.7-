@@ -1,6 +1,7 @@
 #include "game_manager.h"
 #include "../stdafx.h"
 #include <algorithm>
+#include <unordered_map>
 
 namespace esp {
 
@@ -50,6 +51,11 @@ static bool IsSaneCount(int count, int maxCount) {
     return count >= 0 && count <= maxCount;
 }
 
+struct PlayerContainerRead {
+    ContainerReadState state = ContainerReadState::Invalid;
+    std::vector<void*> players;
+};
+
 static void AddUniquePlayer(std::vector<void*>& players, void* player) {
     if (!player) return;
 
@@ -64,43 +70,103 @@ static void AddUniquePlayer(std::vector<void*>& players, void* player) {
     players.push_back(player);
 }
 
-static void ReadArrayPlayers(void* arrayPtr, std::vector<void*>& players, int maxCount, const char* label) {
-    if (!arrayPtr || !IsValidPointer(arrayPtr)) return;
+static PlayerContainerRead ReadArrayPlayers(void* arrayPtr, int maxCount, const char* label) {
+    PlayerContainerRead result;
+    if (!arrayPtr || !IsValidPointer(arrayPtr)) return result;
 
     int length = 0;
-    if (!SafeReadValue<int>((char*)arrayPtr + OffsetConstants::Arr_len, &length)) return;
+    if (!SafeReadValue<int>((char*)arrayPtr + OffsetConstants::Arr_len, &length)) return result;
     if (!IsSaneCount(length, maxCount)) {
         DebugLog("[GameManager] Ignoring %s with invalid length: %d\n", label, length);
-        return;
+        return result;
+    }
+    if (length == 0) {
+        result.state = ContainerReadState::Empty;
+        return result;
     }
 
     for (int i = 0; i < length; ++i) {
         void* player = nullptr;
         if (SafeReadValue<void*>((char*)arrayPtr + OffsetConstants::Arr_data + i * sizeof(void*), &player)) {
-            AddUniquePlayer(players, player);
+            AddUniquePlayer(result.players, player);
         }
     }
+    result.state = ContainerReadState::Valid;
+    return result;
 }
 
-static void ReadListPlayers(void* listPtr, std::vector<void*>& players, int maxCount, const char* label) {
-    if (!listPtr || !IsValidPointer(listPtr)) return;
+static PlayerContainerRead ReadListPlayers(void* listPtr, int maxCount, const char* label) {
+    PlayerContainerRead result;
+    if (!listPtr || !IsValidPointer(listPtr)) return result;
 
     void* items = nullptr;
     int count = 0;
-    if (!SafeReadValue<void*>((char*)listPtr + OffsetConstants::List_items, &items)) return;
-    if (!SafeReadValue<int>((char*)listPtr + OffsetConstants::List_size, &count)) return;
+    if (!SafeReadValue<void*>((char*)listPtr + OffsetConstants::List_items, &items)) return result;
+    if (!SafeReadValue<int>((char*)listPtr + OffsetConstants::List_size, &count)) return result;
     if (!IsSaneCount(count, maxCount)) {
         DebugLog("[GameManager] Ignoring %s with invalid size: %d\n", label, count);
-        return;
+        return result;
     }
-    if (count == 0 || !items || !IsValidPointer(items)) return;
+    if (count == 0) {
+        result.state = ContainerReadState::Empty;
+        return result;
+    }
+    if (!items || !IsValidPointer(items)) return result;
 
     for (int i = 0; i < count; ++i) {
         void* player = nullptr;
         if (SafeReadValue<void*>((char*)items + OffsetConstants::Arr_data + i * sizeof(void*), &player)) {
-            AddUniquePlayer(players, player);
+            AddUniquePlayer(result.players, player);
         }
     }
+    result.state = ContainerReadState::Valid;
+    return result;
+}
+
+static void* GetGameManagerStaticFields() {
+    void* gameAssembly = IL2CPPBridge::GetBase();
+    if (!gameAssembly) return nullptr;
+
+    void* klass = nullptr;
+    void* typeInfoSlot = static_cast<char*>(gameAssembly) + RVAConstants::GameManager_TypeInfo;
+    if (!SafeReadValue<void*>(typeInfoSlot, &klass) || !klass || !IsValidPointer(klass)) {
+        return nullptr;
+    }
+
+    void* staticFields = nullptr;
+    if (!SafeReadValue<void*>(static_cast<char*>(klass) + OffsetConstants::Klass_staticFields,
+                              &staticFields) ||
+        !staticFields || !IsValidPointer(staticFields)) {
+        return nullptr;
+    }
+    return staticFields;
+}
+
+static void MergeCandidate(
+    PlayerSnapshot& snapshot,
+    std::unordered_map<void*, size_t>& index,
+    void* player,
+    std::uint32_t source,
+    DWORD botLastSeen = 0,
+    DWORD epoch = 0) {
+    if (!player) return;
+
+    auto found = index.find(player);
+    if (found == index.end()) {
+        PlayerCandidate candidate;
+        candidate.player = player;
+        candidate.sources = source;
+        candidate.botLastSeenTick = botLastSeen;
+        candidate.sessionEpoch = epoch;
+        index.emplace(player, snapshot.candidates.size());
+        snapshot.candidates.push_back(candidate);
+        return;
+    }
+
+    PlayerCandidate& candidate = snapshot.candidates[found->second];
+    candidate.sources |= source;
+    if (botLastSeen != 0) candidate.botLastSeenTick = botLastSeen;
+    if (epoch != 0) candidate.sessionEpoch = epoch;
 }
 
 static bool SafeCallIsDead(GetIsDeadFn fn, void* player, bool* outValue) {
@@ -229,60 +295,129 @@ void* GameManager::GetInstance() {
 void* GameManager::GetLocalPlayer() {
     if (!HasActiveSession()) return nullptr;
 
-    void* gameAssembly = IL2CPPBridge::GetBase();
-    if (!gameAssembly) return nullptr;
+    void* staticFields = GetGameManagerStaticFields();
+    if (!staticFields) return nullptr;
 
-    void* typeInfoSlot = (void*)((char*)gameAssembly + RVAConstants::GameManager_TypeInfo);
-    void* klass = nullptr;
-    if (SafeReadValue<void*>(typeInfoSlot, &klass) && klass && IsValidPointer(klass)) {
-        void* staticFields = nullptr;
-        if (SafeReadValue<void*>((char*)klass + OffsetConstants::Klass_staticFields, &staticFields)
-            && staticFields && IsValidPointer(staticFields)) {
-            void* myPlayer = nullptr;
-            if (SafeReadValue<void*>(staticFields, &myPlayer) && IsValidPlayer(myPlayer)) {
-                return myPlayer;
-            }
-        }
+    void* myPlayer = nullptr;
+    if (SafeReadValue<void*>(static_cast<char*>(staticFields) + OffsetConstants::GM_myPlayer,
+                             &myPlayer) &&
+        IsValidPlayer(myPlayer)) {
+        return myPlayer;
     }
 
     return nullptr;
 }
 
-std::vector<void*> GameManager::GetAllPlayers() {
-    std::vector<void*> result;
-    if (!RefreshSession()) return result;
+int GameManager::GetGameMode() {
+    void* staticFields = GetGameManagerStaticFields();
+    if (!staticFields) return -1;
 
-    void* instance = s_gameManagerInstance;
-    if (!instance) return result;
+    int gameMode = -1;
+    if (!SafeReadValue<int>(static_cast<char*>(staticFields) + OffsetConstants::GM_gameMode,
+                            &gameMode) ||
+        !policy::IsKnownGameMode(gameMode)) {
+        return -1;
+    }
+    return gameMode;
+}
 
-    // Primary source: playersBL_Alive + playersGR_Alive (only alive players)
-    void* playersBL_Alive = nullptr;
-    if (SafeReadValue<void*>((char*)instance + OffsetConstants::GM_playersBL_Alive, &playersBL_Alive)) {
-        ReadListPlayers(playersBL_Alive, result, 32, "playersBL_Alive");
+bool GameManager::IsGameRoundOver() {
+    void* staticFields = GetGameManagerStaticFields();
+    if (!staticFields) return true;
+
+    bool roundOver = true;
+    if (!SafeReadValue<bool>(
+            static_cast<char*>(staticFields) + OffsetConstants::GM_gameRoundOver,
+            &roundOver)) {
+        return true;
+    }
+    return roundOver;
+}
+
+bool GameManager::BuildPlayerSnapshot(PlayerSnapshot* outSnapshot) {
+    if (!outSnapshot) return false;
+    *outSnapshot = PlayerSnapshot{};
+    if (!RefreshSession() || !s_gameManagerInstance) return false;
+
+    PlayerSnapshot snapshot;
+    snapshot.gameMode = GetGameMode();
+    snapshot.roundOver = IsGameRoundOver();
+    snapshot.sessionEpoch = s_SessionEpoch;
+
+    void* allPlayers = nullptr;
+    void* playersBL = nullptr;
+    void* playersGR = nullptr;
+    void* playersBLAlive = nullptr;
+    void* playersGRAlive = nullptr;
+    SafeReadValue<void*>(static_cast<char*>(s_gameManagerInstance) + OffsetConstants::GM_allPlayers,
+                         &allPlayers);
+    SafeReadValue<void*>(static_cast<char*>(s_gameManagerInstance) + OffsetConstants::GM_playersBL,
+                         &playersBL);
+    SafeReadValue<void*>(static_cast<char*>(s_gameManagerInstance) + OffsetConstants::GM_playersGR,
+                         &playersGR);
+    SafeReadValue<void*>(
+        static_cast<char*>(s_gameManagerInstance) + OffsetConstants::GM_playersBL_Alive,
+        &playersBLAlive);
+    SafeReadValue<void*>(
+        static_cast<char*>(s_gameManagerInstance) + OffsetConstants::GM_playersGR_Alive,
+        &playersGRAlive);
+
+    const PlayerContainerRead allRead = ReadArrayPlayers(allPlayers, 64, "allPlayers");
+    const PlayerContainerRead blRead = ReadListPlayers(playersBL, 32, "playersBL");
+    const PlayerContainerRead grRead = ReadListPlayers(playersGR, 32, "playersGR");
+    const PlayerContainerRead blAliveRead =
+        ReadListPlayers(playersBLAlive, 32, "playersBL_Alive");
+    const PlayerContainerRead grAliveRead =
+        ReadListPlayers(playersGRAlive, 32, "playersGR_Alive");
+
+    snapshot.allPlayersState = allRead.state;
+    snapshot.blState = blRead.state;
+    snapshot.grState = grRead.state;
+    snapshot.blAliveState = blAliveRead.state;
+    snapshot.grAliveState = grAliveRead.state;
+
+    std::unordered_map<void*, size_t> index;
+    index.reserve(allRead.players.size() + blRead.players.size() + grRead.players.size() +
+                  blAliveRead.players.size() + grAliveRead.players.size());
+    for (void* player : allRead.players) {
+        MergeCandidate(snapshot, index, player, policy::SourceAllPlayers, 0, snapshot.sessionEpoch);
+    }
+    for (void* player : blRead.players) {
+        MergeCandidate(snapshot, index, player, policy::SourceBL, 0, snapshot.sessionEpoch);
+    }
+    for (void* player : grRead.players) {
+        MergeCandidate(snapshot, index, player, policy::SourceGR, 0, snapshot.sessionEpoch);
+    }
+    for (void* player : blAliveRead.players) {
+        MergeCandidate(snapshot, index, player, policy::SourceBLAlive, 0, snapshot.sessionEpoch);
+    }
+    for (void* player : grAliveRead.players) {
+        MergeCandidate(snapshot, index, player, policy::SourceGRAlive, 0, snapshot.sessionEpoch);
     }
 
-    void* playersGR_Alive = nullptr;
-    if (SafeReadValue<void*>((char*)instance + OffsetConstants::GM_playersGR_Alive, &playersGR_Alive)) {
-        ReadListPlayers(playersGR_Alive, result, 32, "playersGR_Alive");
-    }
-
-    // Fallback: if alive lists are empty, try allPlayers
-    if (result.empty()) {
-        void* allPlayersArr = nullptr;
-        if (SafeReadValue<void*>((char*)instance + OffsetConstants::GM_allPlayers, &allPlayersArr)) {
-            ReadArrayPlayers(allPlayersArr, result, 64, "allPlayers");
+    if (s_CritSecInitialized) EnterCriticalSection(&s_BotPlayersCS);
+    for (const auto& pair : s_BotPlayers) {
+        const BotPlayerEntry& entry = pair.second;
+        if (entry.epoch == s_SessionEpoch) {
+            MergeCandidate(snapshot, index, entry.player, policy::SourceBotUpdate,
+                           entry.timestamp, entry.epoch);
         }
     }
+    if (s_CritSecInitialized) LeaveCriticalSection(&s_BotPlayersCS);
 
-    std::sort(result.begin(), result.end());
-    result.erase(std::unique(result.begin(), result.end()), result.end());
+    *outSnapshot = std::move(snapshot);
+    return true;
+}
 
-    static int logCounter = 0;
-    if (logCounter++ % 120 == 0) {
-        DebugLog("[GameManager] Got %zu unique players\n", result.size());
+std::vector<void*> GameManager::GetAllPlayers() {
+    PlayerSnapshot snapshot;
+    std::vector<void*> players;
+    if (!BuildPlayerSnapshot(&snapshot)) return players;
+    players.reserve(snapshot.candidates.size());
+    for (const PlayerCandidate& candidate : snapshot.candidates) {
+        players.push_back(candidate.player);
     }
-
-    return result;
+    return players;
 }
 
 bool GameManager::IsValidPlayer(void* player) {

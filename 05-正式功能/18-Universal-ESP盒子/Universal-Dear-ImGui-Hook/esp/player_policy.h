@@ -2,7 +2,8 @@
 
 #include <cstdint>
 
-namespace esp::policy {
+namespace esp {
+namespace policy {
 
 constexpr int TEAM_BLACK_LIST = 0;
 constexpr int TEAM_GLOBAL_RISK = 1;
@@ -65,4 +66,5 @@ constexpr bool IsSourceEligible(int gameMode, std::uint32_t sources, bool botFre
     return false;
 }
 
-} // namespace esp::policy
+} // namespace policy
+} // namespace esp
