@@ -395,13 +395,20 @@ bool GameManager::BuildPlayerSnapshot(PlayerSnapshot* outSnapshot) {
         MergeCandidate(snapshot, index, player, policy::SourceGRAlive, 0, snapshot.sessionEpoch);
     }
 
+    const DWORD now = GetTickCount();
     if (s_CritSecInitialized) EnterCriticalSection(&s_BotPlayersCS);
-    for (const auto& pair : s_BotPlayers) {
-        const BotPlayerEntry& entry = pair.second;
-        if (entry.epoch == s_SessionEpoch) {
-            MergeCandidate(snapshot, index, entry.player, policy::SourceBotUpdate,
-                           entry.timestamp, entry.epoch);
+    for (auto it = s_BotPlayers.begin(); it != s_BotPlayers.end();) {
+        const BotPlayerEntry& entry = it->second;
+        const bool currentEpoch = entry.epoch == s_SessionEpoch;
+        const bool withinHardLimit =
+            static_cast<DWORD>(now - entry.timestamp) <= BOT_ENTRY_TIMEOUT_MS;
+        if (!currentEpoch || !withinHardLimit || !IsValidPlayer(entry.player)) {
+            it = s_BotPlayers.erase(it);
+            continue;
         }
+        MergeCandidate(snapshot, index, entry.player, policy::SourceBotUpdate,
+                       entry.timestamp, entry.epoch);
+        ++it;
     }
     if (s_CritSecInitialized) LeaveCriticalSection(&s_BotPlayersCS);
 
@@ -418,6 +425,62 @@ std::vector<void*> GameManager::GetAllPlayers() {
         players.push_back(candidate.player);
     }
     return players;
+}
+
+static bool IsPlayerClassCompatible(void* player, void* localPlayer) {
+    void* playerKlass = nullptr;
+    void* localKlass = nullptr;
+    return player && localPlayer &&
+           SafeReadValue<void*>(player, &playerKlass) &&
+           SafeReadValue<void*>(localPlayer, &localKlass) &&
+           playerKlass && playerKlass == localKlass &&
+           IsValidPointer(playerKlass);
+}
+
+static bool IsPlayerSpawned(void* player) {
+    if (!player) return false;
+
+    void* currentCharacter = nullptr;
+    void* characterContainer = nullptr;
+    void* characterController = nullptr;
+    if (!SafeReadValue<void*>(
+            static_cast<char*>(player) + OffsetConstants::P_currentCharacter,
+            &currentCharacter) ||
+        !SafeReadValue<void*>(
+            static_cast<char*>(player) + OffsetConstants::P_characterContainer,
+            &characterContainer) ||
+        !SafeReadValue<void*>(
+            static_cast<char*>(player) + OffsetConstants::E_characterController,
+            &characterController)) {
+        return false;
+    }
+
+    if (!currentCharacter || !IsValidPointer(currentCharacter)) return false;
+    const bool hasContainer = characterContainer && IsValidPointer(characterContainer);
+    const bool hasController = characterController && IsValidPointer(characterController);
+    return hasContainer || hasController;
+}
+
+bool GameManager::IsCandidateRenderable(
+    const PlayerCandidate& candidate,
+    const PlayerSnapshot& snapshot,
+    void* localPlayer,
+    DWORD now) {
+    if (!HasActiveSession() || snapshot.roundOver) return false;
+    if (candidate.sessionEpoch != snapshot.sessionEpoch) return false;
+    if (!candidate.player || candidate.player == localPlayer) return false;
+    if (!IsPlayerClassCompatible(candidate.player, localPlayer)) return false;
+
+    const bool botFresh =
+        policy::HasSource(candidate.sources, policy::SourceBotUpdate) &&
+        candidate.sessionEpoch == s_SessionEpoch &&
+        policy::IsBotFresh(candidate.botLastSeenTick, now);
+    if (!policy::IsSourceEligible(snapshot.gameMode, candidate.sources, botFresh)) {
+        return false;
+    }
+    if (IsPlayerDead(candidate.player)) return false;
+    if (!IsPlayerSpawned(candidate.player)) return false;
+    return true;
 }
 
 bool GameManager::IsValidPlayer(void* player) {
@@ -825,15 +888,6 @@ void GameManager::OnBotUpdate(void* botInstance) {
     
     // Validate player pointer
     if (!IsValidPointer(player) || !IsValidPlayer(player)) return;
-    
-    // CRITICAL: Check if player is in current room's allPlayers
-    if (!IsPlayerInCurrentRoom(player)) {
-        static int rejectCount = 0;
-        if (rejectCount++ % 60 == 0) {
-            DebugLog("[GameManager] OnBotUpdate: Rejected player 0x%p (not in current room)\n", player);
-        }
-        return;
-    }
     
     // Thread-safe write with current epoch
     if (s_CritSecInitialized) {
