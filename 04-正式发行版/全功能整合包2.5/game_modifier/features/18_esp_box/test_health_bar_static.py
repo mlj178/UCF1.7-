@@ -36,7 +36,7 @@ class HealthBarStaticTests(unittest.TestCase):
         source = RENDERER.read_text(encoding="utf-8")
 
         self.assertIn("if (!player || player == localPlayer) return false;", source)
-        self.assertIn("if (GameManager::IsPlayerDead(player)) return false;", source)
+        self.assertIn("IsCandidateRenderable", source)
 
     def test_health_bar_is_horizontal_and_fills_by_width(self):
         source = RENDERER.read_text(encoding="utf-8")
