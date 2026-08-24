@@ -47,7 +47,11 @@ class EspTargetScopeStaticTests(unittest.TestCase):
         self.assertIn("SetState", state)
         self.assertIn("esp_all_players", pipe)
         self.assertIn("IsAllPlayersEnabled", renderer)
-        self.assertIn("GetPlayerTeam(player)", renderer)
+        self.assertIn("GameManager::IsEnemy", renderer)
+        self.assertNotIn(
+            "GetPlayerTeam(player) == GameManager::GetPlayerTeam(localPlayer)",
+            renderer,
+        )
 
 
 if __name__ == "__main__":
