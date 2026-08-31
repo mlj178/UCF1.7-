@@ -127,7 +127,6 @@
 
   var MODES = {
     team_death: { label: '团队竞技', gameMode: 0, weaponLimited: 0 },
-    death_match: { label: '个人竞技', gameMode: 1, weaponLimited: 0 },
     special: { label: '刀战', gameMode: 2, weaponLimited: 1, weaponOnly: true, teamDeathOnNano: true },
     nano4: { label: '生化4（普通生化）', gameMode: 4, weaponLimited: 0 },
     nano6: { label: '生化6（剑客模式）', gameMode: 5, weaponLimited: 0 },
