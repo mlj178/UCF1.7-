@@ -3,6 +3,7 @@ import customtkinter as ctk
 
 MODE_OPTIONS = {
     "团队竞技": "team_death",
+    "个人竞技": "death_match",
     "刀战": "special",
     "生化4（普通生化）": "nano4",
     "生化6（剑客模式）": "nano6",
