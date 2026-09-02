@@ -59,6 +59,40 @@ DEDICATED_HOTKEY_ACTIONS = {
     },
 }
 
+ROLE_TRANSFORM_HOTKEY_ACTIONS = {
+    'ctrl+q': {
+        "label": "本地玩家：选择英雄",
+        "feature_id": "role_transform",
+        "action": "trigger",
+        "payload": {"action": "local_hero"},
+    },
+    'ctrl+w': {
+        "label": "本地玩家：选择超级终结者",
+        "feature_id": "role_transform",
+        "action": "trigger",
+        "payload": {"action": "local_terminator"},
+    },
+    'ctrl+e': {
+        "label": "所有 Bot：随机英雄",
+        "feature_id": "role_transform",
+        "action": "trigger",
+        "payload": {"action": "bot_hero"},
+    },
+    'ctrl+r': {
+        "label": "所有 Bot：随机超级终结者",
+        "feature_id": "role_transform",
+        "action": "trigger",
+        "payload": {"action": "bot_terminator"},
+    },
+}
+
+ROLE_TRANSFORM_HOTKEY_DISPLAY_NAMES = {
+    'ctrl+q': 'Ctrl+Q',
+    'ctrl+w': 'Ctrl+W',
+    'ctrl+e': 'Ctrl+E',
+    'ctrl+r': 'Ctrl+R',
+}
+
 def _load_feature_manifests():
     features_dir = Path(FEATURES_DIR)
     manifests = {}

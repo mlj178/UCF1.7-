@@ -10,6 +10,8 @@ from core.config import (
     HOTKEY_POSITIONS,
     HOTKEY_DISPLAY_NAMES,
     HOTKEY_EXCLUDED,
+    ROLE_TRANSFORM_HOTKEY_ACTIONS,
+    ROLE_TRANSFORM_HOTKEY_DISPLAY_NAMES,
 )
 from core.hotkey_manager import HotkeyManager
 from core.sound_manager import SoundManager
@@ -59,23 +61,36 @@ class SettingsWindow(ctk.CTkToplevel):
 
         feature_display_names = {v['name']: k for k, v in FEATURES_INFO.items()
                                  if k not in HOTKEY_EXCLUDED}
-        self._feature_display_names = feature_display_names
+        option_bindings = dict(feature_display_names)
+        self._feature_display_names = option_bindings
+
+        def binding_key(binding):
+            if not isinstance(binding, dict):
+                return binding
+            feature_id = binding.get('feature_id')
+            payload_action = (binding.get('payload') or {}).get('action')
+            return f"{feature_id}:{payload_action}"
+
+        display_names_by_binding = {
+            binding_key(binding): display_name
+            for display_name, binding in option_bindings.items()
+        }
 
         self._combo_widgets = {}
 
         hotkey_data = self._hotkey.get_hotkey_config()
 
         for pos, fid in hotkey_data.items():
-            if fid in HOTKEY_EXCLUDED:
+            if isinstance(fid, str) and fid in HOTKEY_EXCLUDED:
                 self._hotkey.remove_hotkey(pos)
                 hotkey_data[pos] = None
 
         def get_available_features(exclude_pos=None):
             available = ["未绑定"]
-            for display_name, feature_id in feature_display_names.items():
+            for display_name, feature_id in option_bindings.items():
                 is_bound = False
                 for pos, feat in hotkey_data.items():
-                    if pos != exclude_pos and feat == feature_id:
+                    if pos != exclude_pos and binding_key(feat) == binding_key(feature_id):
                         is_bound = True
                         break
                 if not is_bound:
@@ -114,8 +129,7 @@ class SettingsWindow(ctk.CTkToplevel):
                 continue
 
             feature_id = hotkey_data.get(pos)
-            feature_info = FEATURES_INFO.get(feature_id)
-            feature_name = feature_info['name'] if feature_info else "未绑定"
+            feature_name = display_names_by_binding.get(binding_key(feature_id), "未绑定")
 
             available_features = get_available_features(exclude_pos=pos)
             combo = ctk.CTkComboBox(row_frame, values=available_features,
@@ -127,7 +141,13 @@ class SettingsWindow(ctk.CTkToplevel):
 
             def on_combo_change(selected, position=pos):
                 if selected and selected != "未绑定":
-                    fid = feature_display_names[selected]
+                    fid = option_bindings[selected]
+                    if isinstance(fid, dict):
+                        fid = {
+                            'feature_id': fid['feature_id'],
+                            'action': fid['action'],
+                            'payload': dict(fid.get('payload') or {}),
+                        }
                     self._hotkey.set_hotkey(position, fid)
                     hotkey_data[position] = fid
                 else:
@@ -136,6 +156,26 @@ class SettingsWindow(ctk.CTkToplevel):
                 update_combo_options()
 
             combo.configure(command=on_combo_change)
+
+        ctk.CTkLabel(hotkey_frame, text="\n角色变身固定快捷键",
+                     font=("Microsoft YaHei", 14, "bold")).pack(pady=(20, 6))
+        for hotkey, binding in ROLE_TRANSFORM_HOTKEY_ACTIONS.items():
+            row_frame = ctk.CTkFrame(hotkey_frame, fg_color="#2a2a2a")
+            row_frame.pack(fill="x", padx=8, pady=3)
+            ctk.CTkLabel(
+                row_frame,
+                text=ROLE_TRANSFORM_HOTKEY_DISPLAY_NAMES[hotkey],
+                font=("Microsoft YaHei", 12),
+                text_color="#aaa",
+                width=60,
+            ).pack(side="left", padx=8)
+            ctk.CTkLabel(
+                row_frame,
+                text=f"{binding['label']}（固定绑定）",
+                font=("Microsoft YaHei", 11),
+                text_color="#a855f7",
+                width=240,
+            ).pack(side="left", padx=8)
         
         # === 武器快捷键部分 ===
         ctk.CTkLabel(hotkey_frame, text="\n武器快捷键绑定 - 快速赋予武器",
@@ -182,6 +222,8 @@ class SettingsWindow(ctk.CTkToplevel):
         ctk.CTkLabel(about_frame, text=APP_TITLE,
                      font=("Microsoft YaHei", 18, "bold")).pack(pady=(12, 4))
         ctk.CTkLabel(about_frame, text="作者: 挂呱呱呱",
+                     font=("Microsoft YaHei", 12)).pack(pady=2)
+        ctk.CTkLabel(about_frame, text="Contributor(贡献者)：少年与狗子",
                      font=("Microsoft YaHei", 12)).pack(pady=2)
         ctk.CTkLabel(about_frame, text="2026年08月08日",
                      font=("Microsoft YaHei", 12)).pack(pady=2)

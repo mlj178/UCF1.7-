@@ -1,0 +1,38 @@
+{
+  "feature_id": "35_room_player_count",
+  "canonical_id": "room_player_count",
+  "version": "2.5-room-count-100-hotfix4",
+  "display_name": "全模式房间人数",
+  "category": "other",
+  "tab": "other_tab",
+  "tab_title": "其他",
+  "tab_order": 30,
+  "order": 85,
+  "desc": "开局前应用；自动识别已验证的原始30人版或100人v3版，总人数可设为2—100人。",
+  "script": "script.js",
+  "runtime": { "type": "plugin_script" },
+  "layout": { "card_type": "simple", "columnspan": 1, "title_color": "#fbbf24" },
+  "controls": [
+    { "type": "switch", "action": "enable" },
+    { "type": "slider", "action": "setConfig", "key": "total_players", "min": 2, "max": 100, "step": 1, "default": 50, "suffix": "人" }
+  ],
+  "config": { "enabled": false, "total_players": 50 },
+  "actions": {
+    "apply_count": { "type": "set_config", "requires_connection": true }
+  },
+  "rpc": ["enable", "disable", "setConfig", "set_config", "setconfig", "status", "cleanup", "dispose"],
+  "lifecycle": {
+    "cleanup": true,
+    "restore": true,
+    "requires_room_ready_reapply": false,
+    "room_ready_retry": false,
+    "room_ready_reapply_exempt_reason": "人数补丁在点击游戏的开始按钮前写入固定代码与配置；不依赖房间内对象，且不应在进房后自动重放。"
+  },
+  "source": {
+    "single_feature_js": "05-正式功能/35-全模式房间人数/AAAAA-room_player_count_min.js",
+    "single_feature_py": "05-正式功能/35-全模式房间人数/AAAAA-room_player_count_ui.py",
+    "runtime_script_js": "features/35_room_player_count/script.js"
+  },
+  "ui_handles": { "switch": "room_player_count_switch", "slider_var": "room_player_count_var", "slider": "room_player_count_slider", "slider_label": "room_player_count_label" },
+  "state": { "sync_enabled_from_config": true }
+}

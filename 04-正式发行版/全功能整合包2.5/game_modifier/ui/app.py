@@ -283,15 +283,18 @@ class App(ctk.CTk):
             self._on_hotkey_toggle(dedicated_action)
             return
         feature_id = self._hotkey.hotkeys.get(position)
-        if feature_id and feature_id not in HOTKEY_EXCLUDED:
+        if feature_id and (not isinstance(feature_id, str) or feature_id not in HOTKEY_EXCLUDED):
             self._on_hotkey_toggle(feature_id)
 
     def _on_hotkey_toggle(self, feature_id):
         if isinstance(feature_id, dict):
             action = feature_id.get("action")
+            payload = feature_id.get("payload")
+            if isinstance(payload, dict):
+                payload = dict(payload)
             feature_id = feature_id.get("feature_id")
             if feature_id and action:
-                result = self._feature_controller.trigger_feature_action(feature_id, action)
+                result = self._feature_controller.trigger_feature_action(feature_id, action, payload)
                 if result is not False:
                     self._sound.play_toggle_sound()
             return

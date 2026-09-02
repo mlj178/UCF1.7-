@@ -11,9 +11,22 @@ from core.config import (
     HOTKEY_POSITIONS,
     HOTKEY_DISPLAY_NAMES,
     HOTKEY_EXCLUDED,
+    ROLE_TRANSFORM_HOTKEY_ACTIONS,
 )
 from core.event_bus import EventBus
 from core.native_hotkey_listener import NativeHotkeyListener, VK_BY_POSITION
+
+
+def binding_key(binding):
+    if not isinstance(binding, dict):
+        return binding
+    feature_id = binding.get('feature_id')
+    payload_action = (binding.get('payload') or {}).get('action')
+    return f"{feature_id}:{payload_action}"
+
+
+def is_role_transform_action(binding):
+    return isinstance(binding, dict) and binding.get('feature_id') == 'role_transform'
 
 
 class HotkeyManager:
@@ -52,7 +65,9 @@ class HotkeyManager:
                         if old_key and old_key in saved:
                             result[pos] = saved[old_key]
                 for pos in HOTKEY_POSITIONS:
-                    if result[pos] in HOTKEY_EXCLUDED:
+                    if is_role_transform_action(result[pos]):
+                        result[pos] = None
+                    elif isinstance(result[pos], str) and result[pos] in HOTKEY_EXCLUDED:
                         result[pos] = None
                 return result
             except Exception:
@@ -69,13 +84,15 @@ class HotkeyManager:
     def set_hotkey(self, position, feature_id):
         if position in DEDICATED_HOTKEY_ACTIONS:
             return False
-        if feature_id in HOTKEY_EXCLUDED:
+        if is_role_transform_action(feature_id):
+            return False
+        if isinstance(feature_id, str) and feature_id in HOTKEY_EXCLUDED:
             return False
         old_feature = self._hotkeys.get(position)
-        if old_feature == feature_id:
+        if binding_key(old_feature) == binding_key(feature_id):
             return True
         for pos, feat in self._hotkeys.items():
-            if feat == feature_id:
+            if binding_key(feat) == binding_key(feature_id):
                 self._hotkeys[pos] = None
         self._hotkeys[position] = feature_id
         return True
@@ -83,16 +100,18 @@ class HotkeyManager:
     def remove_hotkey(self, position):
         self._hotkeys[position] = None
 
-    def setup_hotkeys(self, toggle_callback, silent=False):
-        self._toggle_callback = toggle_callback
-        self._native_hotkey_listener.stop()
-
+    def _remove_registered_hotkeys(self):
         for handle in self._hotkey_handles:
             try:
-                handle.unhook()
+                keyboard.remove_hotkey(handle)
             except Exception:
                 pass
         self._hotkey_handles = []
+
+    def setup_hotkeys(self, toggle_callback, silent=False):
+        self._toggle_callback = toggle_callback
+        self._native_hotkey_listener.stop()
+        self._remove_registered_hotkeys()
 
         native_positions = tuple(
             pos for pos in DEDICATED_HOTKEY_ACTIONS
@@ -142,6 +161,18 @@ class HotkeyManager:
                     label = binding.get('label', f"{binding.get('feature_id')}.{binding.get('action')}")
                     bus.emit('log_message', level='info', module='快捷键',
                              message=f"绑定快捷键 {display} -> {label}")
+            except Exception:
+                pass
+
+        for pos, binding in ROLE_TRANSFORM_HOTKEY_ACTIONS.items():
+            try:
+                callback = functools.partial(self._on_dedicated_hotkey_triggered, binding)
+                handle = keyboard.add_hotkey(pos, callback)
+                self._hotkey_handles.append(handle)
+                if not silent:
+                    bus = EventBus.get_instance()
+                    bus.emit('log_message', level='info', module='快捷键',
+                             message=f"绑定快捷键 {pos.upper()} -> {binding['label']}")
             except Exception:
                 pass
 
@@ -200,9 +231,4 @@ class HotkeyManager:
 
     def cleanup(self):
         self._native_hotkey_listener.stop()
-        for handle in self._hotkey_handles:
-            try:
-                handle.unhook()
-            except Exception:
-                pass
-        self._hotkey_handles = []
+        self._remove_registered_hotkeys()
