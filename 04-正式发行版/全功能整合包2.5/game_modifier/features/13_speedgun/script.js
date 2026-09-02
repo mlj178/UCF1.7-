@@ -92,6 +92,13 @@ modules.speedgun = (function() {
   var rpgAnimSpeedFn = null;
   var grenadeAnimSpeedFn = null;
   var classGetNameFn = null;
+  var componentGetTransformFn = null;
+  var transformGetForwardFn = null;
+  var brainGetOutputCameraFn = null;
+  var scopeCameraTransform = null;
+  var scopeRayDirectionBuffer = null;
+  var scopeRayCorrectionLastLogAt = 0;
+  var scopeRayCorrectionLastWarnAt = 0;
   var isPlayerShooting = false;
   var pendingAcquiredWeapons = [];
   var acquiredWeaponRetryFrames = 3;
@@ -259,6 +266,283 @@ modules.speedgun = (function() {
     }
   }
 
+  // ===== ScopeSettleProbe（只读开镜稳定探测） =====
+  // 该探测不写入候选字段；它仅在本地枪械第一次开火时，对可能承载开镜收束状态的
+  // 武器、武器数据和 Recoil 对象做短时间序列采样，以便用实测结果确定后续修改目标。
+  var scopeSettleProbeRunId = 0;
+  var scopeSettleProbeLastStartAt = 0;
+  var scopeSettleProbeLastRecoil = null;
+  var pendingScopeSettleWeapon = null;
+  var scopeSettleProbeIntervalsMs = [0, 150, 350, 750, 1200, 1800, 2200];
+
+  function scopeSettleProbeFinite(value) {
+    return typeof value === 'number' && isFinite(value) && Math.abs(value) < 1000000.0;
+  }
+
+  function collectScopeSettleFloatBlock(target, label) {
+    var values = {};
+    if (!target || target.isNull()) return values;
+    for (var offset = 0x10; offset <= 0x240; offset += 4) {
+      try {
+        var value = target.add(offset).readFloat();
+        if (scopeSettleProbeFinite(value)) values[label + '+0x' + offset.toString(16)] = value;
+      } catch (_) {}
+    }
+    return values;
+  }
+
+  function discoverScopeSettleObjects(weapon) {
+    var objects = [];
+    var seen = {};
+    for (var offset = 0x10; offset <= 0x240; offset += Process.pointerSize) {
+      var candidate = safeReadPointer(weapon, offset);
+      if (!candidate) continue;
+      var address = candidate.toString();
+      if (seen[address]) continue;
+      seen[address] = true;
+      var className = getObjectClassName(candidate) || 'unknown';
+      objects.push({
+        pointer: candidate,
+        label: 'scopeObject+0x' + offset.toString(16) + ':' + className
+      });
+    }
+    return objects;
+  }
+
+  function collectScopeSettleSnapshot(weapon, recoil) {
+    var snapshot = {};
+    var data = safeReadPointer(weapon, 0x68);
+    var gunData = safeReadPointer(weapon, 0xEC);
+    var groups = [
+      { pointer: weapon, label: 'weapon' },
+      { pointer: data, label: 'weaponData' },
+      { pointer: gunData && data && gunData.equals(data) ? gunData : null, label: 'gunData' },
+      { pointer: recoil, label: 'recoil' }
+    ];
+    var controllers = discoverScopeSettleObjects(weapon);
+    for (var controllerIndex = 0; controllerIndex < controllers.length; controllerIndex++) groups.push(controllers[controllerIndex]);
+    for (var i = 0; i < groups.length; i++) {
+      var values = collectScopeSettleFloatBlock(groups[i].pointer, groups[i].label);
+      for (var key in values) snapshot[key] = values[key];
+    }
+    return snapshot;
+  }
+
+  function reportScopeSettleProbe(run) {
+    var paths = {};
+    for (var i = 0; i < run.samples.length; i++) {
+      var sample = run.samples[i];
+      for (var key in sample.values) {
+        if (!paths[key]) paths[key] = [];
+        paths[key].push({ atMs: sample.atMs, value: sample.values[key] });
+      }
+    }
+
+    var candidates = [];
+    for (var path in paths) {
+      var values = paths[path];
+      if (values.length < 5) continue;
+      var first = values[0].value;
+      var last = values[values.length - 1].value;
+      var maxAbs = 0.0;
+      var descending = 0;
+      for (var j = 0; j < values.length; j++) {
+        maxAbs = Math.max(maxAbs, Math.abs(values[j].value));
+        if (j > 0 && Math.abs(values[j].value) <= Math.abs(values[j - 1].value)) descending++;
+      }
+      if (maxAbs < 0.001 || descending < 4) continue;
+      if (Math.abs(last) > Math.abs(first) * 0.35) continue;
+      candidates.push({ path: path, first: first, last: last, descending: descending, values: values });
+    }
+    candidates.sort(function(a, b) { return Math.abs(b.first - b.last) - Math.abs(a.first - a.last); });
+    candidates = candidates.slice(0, 24);
+
+    sendLogFile('info', '射速', 'ScopeSettleProbe run=' + run.id + ' samples=' + run.samples.length + ' candidates=' + candidates.length);
+    for (var k = 0; k < candidates.length; k++) {
+      var candidate = candidates[k];
+      var series = candidate.values.map(function(item) { return item.atMs + 'ms:' + item.value.toFixed(5); }).join(',');
+      sendLogFile('info', '射速', 'ScopeSettleProbe candidate ' + candidate.path + ' first=' + candidate.first.toFixed(5) + ' last=' + candidate.last.toFixed(5) + ' series=[' + series + ']');
+    }
+    if (candidates.length === 0) {
+      sendLogFile('warn', '射速', 'ScopeSettleProbe 未在当前对象范围发现归零型字段；请保留本次日志，下一轮将扩大到开镜控制器。');
+    }
+    sendDevLog('info', '射速', '开镜稳定探测完成：样本 ' + run.samples.length + '，候选字段 ' + candidates.length + ' 个');
+  }
+
+  function scheduleScopeSettleProbe(weapon, source, recoil) {
+    var now = Date.now();
+    if (!weapon || weapon.isNull() || (now - scopeSettleProbeLastStartAt) < 3000) return;
+    scopeSettleProbeLastStartAt = now;
+    var frozenRecoil = recoil && !recoil.isNull() ? recoil : null;
+    var run = { id: ++scopeSettleProbeRunId, startedAt: now, samples: [] };
+    sendDevLog('info', '射速', '开镜稳定探测已开始 source=' + (source || 'shoot_fallback') + '：请本次开镜后保持不动约 3 秒');
+    scopeSettleProbeIntervalsMs.forEach(function(delayMs) {
+      setTimeout(function() {
+        try {
+          if (!enabled) return;
+          run.samples.push({
+            atMs: delayMs,
+            values: collectScopeSettleSnapshot(weapon, frozenRecoil)
+          });
+          if (delayMs === scopeSettleProbeIntervalsMs[scopeSettleProbeIntervalsMs.length - 1]) reportScopeSettleProbe(run);
+        } catch(e) {
+          sendLogFile('warn', '射速', 'ScopeSettleProbe sample failed at ' + delayMs + 'ms: ' + e.message);
+        }
+      }, delayMs);
+    });
+  }
+
+  function readScopeRayDirection(retBuffer) {
+    try {
+      if (!retBuffer || retBuffer.isNull()) return null;
+      var direction = {};
+      direction.x = retBuffer.add(0x0C).readFloat();
+      direction.y = retBuffer.add(0x10).readFloat();
+      direction.z = retBuffer.add(0x14).readFloat();
+      var length = Math.sqrt(direction.x * direction.x + direction.y * direction.y + direction.z * direction.z);
+      if (!scopeSettleProbeFinite(length) || length < 0.00001) return null;
+      direction.x /= length;
+      direction.y /= length;
+      direction.z /= length;
+      return direction;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function installScopeSettleZoomMethodHooks(mod) {
+    try {
+      var domainGetAddr = mod.findExportByName('il2cpp_domain_get');
+      var assembliesGetAddr = mod.findExportByName('il2cpp_domain_get_assemblies');
+      var assemblyGetImageAddr = mod.findExportByName('il2cpp_assembly_get_image');
+      var imageClassCountAddr = mod.findExportByName('il2cpp_image_get_class_count');
+      var imageGetClassAddr = mod.findExportByName('il2cpp_image_get_class');
+      var classGetMethodsAddr = mod.findExportByName('il2cpp_class_get_methods');
+      var methodGetNameAddr = mod.findExportByName('il2cpp_method_get_name');
+      var methodGetPointerAddr = mod.findExportByName('il2cpp_method_get_pointer');
+      if (!domainGetAddr || !assembliesGetAddr || !assemblyGetImageAddr || !imageClassCountAddr || !imageGetClassAddr || !classGetMethodsAddr || !methodGetNameAddr || !methodGetPointerAddr) {
+        sendLogFile('warn', '射速', 'ScopeSettleProbe zoom_method 枚举不可用：缺少 IL2CPP 导出');
+        return;
+      }
+
+      var il2cpp_domain_get = new NativeFunction(domainGetAddr, 'pointer', []);
+      var il2cpp_domain_get_assemblies = new NativeFunction(assembliesGetAddr, 'pointer', ['pointer', 'pointer']);
+      var il2cpp_assembly_get_image = new NativeFunction(assemblyGetImageAddr, 'pointer', ['pointer']);
+      var il2cpp_image_get_class_count = new NativeFunction(imageClassCountAddr, 'uint32', ['pointer']);
+      var il2cpp_image_get_class = new NativeFunction(imageGetClassAddr, 'pointer', ['pointer', 'uint32']);
+      var il2cpp_class_get_methods = new NativeFunction(classGetMethodsAddr, 'pointer', ['pointer', 'pointer']);
+      var il2cpp_method_get_name = new NativeFunction(methodGetNameAddr, 'pointer', ['pointer']);
+      var il2cpp_method_get_pointer = new NativeFunction(methodGetPointerAddr, 'pointer', ['pointer']);
+      var assemblyCountPtr = Memory.alloc(4);
+      assemblyCountPtr.writeU32(0);
+      var assemblies = il2cpp_domain_get_assemblies(il2cpp_domain_get(), assemblyCountPtr);
+      var assemblyCount = assemblyCountPtr.readU32();
+      var installed = 0;
+
+      for (var assemblyIndex = 0; assemblyIndex < assemblyCount; assemblyIndex++) {
+        var image = il2cpp_assembly_get_image(assemblies.add(assemblyIndex * Process.pointerSize).readPointer());
+        var classCount = il2cpp_image_get_class_count(image);
+        for (var classIndex = 0; classIndex < classCount; classIndex++) {
+          var klass = il2cpp_image_get_class(image, classIndex);
+          if (!klass || klass.isNull() || !classGetNameFn) continue;
+          var classNamePtr = classGetNameFn(klass);
+          var className = classNamePtr && !classNamePtr.isNull() ? classNamePtr.readUtf8String() : '';
+          if (className !== 'WPN_Gun') continue;
+
+          var iterator = Memory.alloc(Process.pointerSize);
+          iterator.writePointer(ptr(0));
+          while (true) {
+            var method = il2cpp_class_get_methods(klass, iterator);
+            if (!method || method.isNull()) break;
+            var methodNamePtr = il2cpp_method_get_name(method);
+            var methodName = methodNamePtr && !methodNamePtr.isNull() ? methodNamePtr.readUtf8String() : '';
+            if (!/zoom/i.test(methodName) || /closezoom/i.test(methodName)) continue;
+            var methodPointer = il2cpp_method_get_pointer(method);
+            if (!methodPointer || methodPointer.isNull()) continue;
+            (function(name, address) {
+              hooks.push(Interceptor.attach(address, {
+                onEnter: function(args) {
+                  try {
+                    if (args[0] && !args[0].isNull() && isMyWeaponFn(args[0], ptr(0))) {
+                      scheduleScopeSettleProbe(args[0], 'zoom_method:' + name);
+                    }
+                  } catch (_) {}
+                }
+              }));
+            })(methodName, methodPointer);
+            installed++;
+            sendLogFile('info', '射速', 'ScopeSettleProbe zoom_method hook installed: WPN_Gun.' + methodName + ' @ ' + methodPointer);
+          }
+        }
+      }
+      sendDevLog('info', '射速', 'ScopeSettleProbe 已安装开镜方法 Hook：' + installed + ' 个');
+    } catch(e) {
+      sendLogFile('warn', '射速', 'ScopeSettleProbe zoom_method 枚举失败: ' + e.message);
+    }
+  }
+
+  // ===== 开镜即时稳定修正 =====
+  // 开镜收束最终体现在 Recoil.GetShootRay 输出的方向上。这里不再猜测中间
+  // 计时字段，而是在本地玩家开火的最后一步将方向同步为当前镜头前向量。
+  function cacheScopeCamera(brain) {
+    try {
+      if (!brain || brain.isNull() || !brainGetOutputCameraFn || !componentGetTransformFn) return false;
+      var camera = brainGetOutputCameraFn(brain, ptr(0));
+      if (!camera || camera.isNull()) return false;
+      var transform = componentGetTransformFn(camera, ptr(0));
+      if (!transform || transform.isNull()) return false;
+      scopeCameraTransform = transform;
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function readScopeCameraForward() {
+    try {
+      if (!scopeCameraTransform || scopeCameraTransform.isNull() || !transformGetForwardFn || !scopeRayDirectionBuffer) return null;
+      transformGetForwardFn(scopeRayDirectionBuffer, scopeCameraTransform, ptr(0));
+      var x = scopeRayDirectionBuffer.readFloat();
+      var y = scopeRayDirectionBuffer.add(4).readFloat();
+      var z = scopeRayDirectionBuffer.add(8).readFloat();
+      var length = Math.sqrt(x * x + y * y + z * z);
+      if (!scopeSettleProbeFinite(length) || length < 0.00001) return null;
+      return { x: x / length, y: y / length, z: z / length };
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function writeScopeRayDirection(retBuffer, direction) {
+    try {
+      if (!retBuffer || retBuffer.isNull() || !direction) return false;
+      retBuffer.add(0x0C).writeFloat(direction.x);
+      retBuffer.add(0x10).writeFloat(direction.y);
+      retBuffer.add(0x14).writeFloat(direction.z);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function applyInstantScopeStability(retBuffer) {
+    var forward = readScopeCameraForward();
+    var now = Date.now();
+    if (!forward) {
+      if ((now - scopeRayCorrectionLastWarnAt) >= 3000) {
+        scopeRayCorrectionLastWarnAt = now;
+        sendLogFile('warn', '射速', 'ScopeSettleCorrection skipped: camera_forward_unavailable');
+      }
+      return false;
+    }
+    var applied = writeScopeRayDirection(retBuffer, forward);
+    if (applied && (now - scopeRayCorrectionLastLogAt) >= 3000) {
+      scopeRayCorrectionLastLogAt = now;
+      sendLogFile('info', '射速', 'ScopeSettleCorrection applied: final ray aligned to camera forward');
+    }
+    return applied;
+  }
+
   // ===== NativeFunction 初始化与状态清理 =====
   function resetNativeFunctions() {
     isMyWeaponFn = null;
@@ -267,6 +551,11 @@ modules.speedgun = (function() {
     rpgAnimSpeedFn = null;
     grenadeAnimSpeedFn = null;
     classGetNameFn = null;
+    componentGetTransformFn = null;
+    transformGetForwardFn = null;
+    brainGetOutputCameraFn = null;
+    scopeCameraTransform = null;
+    scopeRayDirectionBuffer = null;
   }
 
   function initNativeFunctions(base) {
@@ -275,6 +564,10 @@ modules.speedgun = (function() {
     setAnimSpeed = new NativeFunction(base.add(0xAA8C30), "void", ["pointer", "float", "pointer"]);
     rpgAnimSpeedFn = new NativeFunction(base.add(0xB66CA0), "void", ["pointer", "pointer"]);
     grenadeAnimSpeedFn = new NativeFunction(base.add(0xB5F7A0), "void", ["pointer", "pointer"]);
+    componentGetTransformFn = new NativeFunction(base.add(0x32CF40), "pointer", ["pointer", "pointer"]);
+    transformGetForwardFn = new NativeFunction(base.add(0x3F3F20), "void", ["pointer", "pointer", "pointer"]);
+    brainGetOutputCameraFn = new NativeFunction(base.add(0x82CDB0), "pointer", ["pointer", "pointer"]);
+    scopeRayDirectionBuffer = Memory.alloc(12);
   }
 
   function initClassNameFunction(mod) {
@@ -297,6 +590,10 @@ modules.speedgun = (function() {
 
   function resetRuntimeState() {
     isPlayerShooting = false;
+    pendingScopeSettleWeapon = null;
+    scopeSettleProbeLastRecoil = null;
+    scopeRayCorrectionLastLogAt = 0;
+    scopeRayCorrectionLastWarnAt = 0;
     clearAcquiredWeaponTasks();
   }
 
@@ -317,6 +614,7 @@ modules.speedgun = (function() {
 
       initClassNameFunction(mod);
       installPendingWeaponUpdateHook(base);
+      installScopeSettleZoomMethodHooks(mod);
 
       // 1) WPN_Gun.AnimSpeedSetting — 枪械(背包)动画加速（改进：onEnter立即设置）
       try {
@@ -475,6 +773,8 @@ modules.speedgun = (function() {
             try {
               if (isMyWeaponFn(this.self, ptr(0))) {
                 isPlayerShooting = true;
+                pendingScopeSettleWeapon = this.self;
+                scopeSettleProbeLastRecoil = null;
                 this.self.add(0xF0).writeU8(0);
                 this.self.add(0x110).writeFloat(0.0);
                 this.self.add(0x108).writeS32(0);
@@ -498,10 +798,49 @@ modules.speedgun = (function() {
                 this.self.add(0x108).writeS32(0);
               }
             } catch(e) {}
+            if (pendingScopeSettleWeapon && pendingScopeSettleWeapon.equals(this.self)) {
+              scheduleScopeSettleProbe(this.self, 'shoot_fallback', scopeSettleProbeLastRecoil);
+              pendingScopeSettleWeapon = null;
+            }
             isPlayerShooting = false;
           }
         }));
       } catch(e) { sendDevLog('warn', '射速', 'GunShoot Hook失败: ' + e.message); }
+
+      // 2.05) Brain.PushStateToUnityCamera — 缓存正在输出的本地镜头，用作最终弹道方向。
+      try {
+        hooks.push(Interceptor.attach(base.add(0x82B750), {
+          onEnter: function(args) { this.brain = args[0]; },
+          onLeave: function() { cacheScopeCamera(this.brain); }
+        }));
+      } catch(e) { sendDevLog('warn', '射速', '镜头方向缓存 Hook失败: ' + e.message); }
+
+      // 2.1) Recoil.GetShootRay — 只保存本地本次射击的 Recoil 指针，供 ScopeSettleProbe 读取。
+      try {
+        hooks.push(Interceptor.attach(base.add(0xB195C0), {
+          onEnter: function(args) {
+            try {
+              this.retBuffer = args[0];
+              this.localShot = isPlayerShooting;
+              if (isPlayerShooting && args[1] && !args[1].isNull()) {
+                scopeSettleProbeLastRecoil = args[1];
+                if (pendingScopeSettleWeapon) {
+                  scheduleScopeSettleProbe(pendingScopeSettleWeapon, 'shoot_ray', args[1]);
+                  pendingScopeSettleWeapon = null;
+                }
+              }
+            } catch (_) {}
+          },
+          onLeave: function() {
+            if (!this.localShot) return;
+            var originalDirection = readScopeRayDirection(this.retBuffer);
+            var corrected = applyInstantScopeStability(this.retBuffer);
+            var direction = readScopeRayDirection(this.retBuffer);
+            if (!direction) return;
+            sendLogFile('info', '射速', 'ScopeSettleProbe final_ray corrected=' + corrected + ' original=' + (originalDirection ? originalDirection.x.toFixed(6) + ',' + originalDirection.y.toFixed(6) + ',' + originalDirection.z.toFixed(6) : 'unavailable') + ' final=' + direction.x.toFixed(6) + ',' + direction.y.toFixed(6) + ',' + direction.z.toFixed(6));
+          }
+        }));
+      } catch(e) { sendDevLog('warn', '射速', 'Recoil.GetShootRay ScopeSettleProbe Hook失败: ' + e.message); }
 
       // 2.5) WPN_Gun.get_isSemiGun — 半自动→全自动
       try {

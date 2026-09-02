@@ -112,7 +112,7 @@ modules.gravity = (function() {
       var ap = gm.add(0x1C).readPointer();
       if (!ap || ap.isNull()) return;
       var total = ap.add(0xC).readU32();
-      if (total < 1 || total > 64) return;
+      if (total < 1 || total > 100) return;
       loopCount++;
       for (var i = 0; i < total; i++) {
         var pp = ap.add(0x10 + i * 8).readPointer();
