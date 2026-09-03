@@ -14,6 +14,16 @@ FORMAL_JS = (
 
 
 class RoomPlayerCountStaticTests(unittest.TestCase):
+    def test_help_text_is_short_and_wraps_inside_the_card(self):
+        manifest = json.loads((FEATURE_DIR / "manifest.json").read_text(encoding="utf-8"))
+        panel = (FEATURE_DIR / "panel.py").read_text(encoding="utf-8")
+        expected = "开启后，设置人数并点击“应用人数”。下一局生效；关闭后恢复默认人数。"
+
+        self.assertEqual(expected, manifest["desc"])
+        self.assertNotIn("功能说明：", manifest["desc"])
+        self.assertIn("wraplength=250", panel)
+        self.assertIn(expected, panel)
+
     def test_manifest_places_room_count_in_the_right_column_across_two_rows(self):
         manifest = json.loads((FEATURE_DIR / "manifest.json").read_text(encoding="utf-8"))
 
