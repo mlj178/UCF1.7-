@@ -113,27 +113,35 @@ def build_card(parent, manifest, row, col, colspan, callbacks, card_builder):
     feature_id = manifest["feature_id"]
     control = next(c for c in manifest["controls"] if c["type"] == "slider")
     initial = _count(control.get("default", 50))
+    rowspan = int(manifest.get("layout", {}).get("rowspan", 1))
     frame = ctk.CTkFrame(parent, corner_radius=6, fg_color="transparent",
                          border_width=1, border_color="#4b5563")
-    frame.grid(row=row, column=col, columnspan=colspan, sticky="ew", padx=3, pady=3)
+    frame.grid(row=row, column=col, columnspan=colspan, rowspan=rowspan,
+               sticky="nsew", padx=3, pady=3)
     top = ctk.CTkFrame(frame, fg_color="transparent")
     top.pack(fill="x", padx=10, pady=(6, 0))
-    top.grid_columnconfigure(1, weight=1)
+    top.grid_columnconfigure(0, weight=1)
     ctk.CTkLabel(top, text=manifest["display_name"],
                  font=("Microsoft YaHei", 15, "bold"),
                  text_color=manifest.get("layout", {}).get("title_color", "#fbbf24")
                  ).grid(row=0, column=0, sticky="w", padx=(0, 8))
     variable = _CountVar(master=top, value=initial)
-    label = _CountLabel(top, text=f"{initial}人", width=44,
+    slider_row = ctk.CTkFrame(frame, fg_color="transparent")
+    slider_row.pack(fill="x", padx=10, pady=(2, 4))
+    slider_row.grid_columnconfigure(0, weight=1)
+    slider = ctk.CTkSlider(slider_row, from_=2, to=100, number_of_steps=98,
+                           variable=variable)
+    slider.grid(row=0, column=0, sticky="ew")
+    label = _CountLabel(slider_row, text=f"{initial}人", width=44,
                         font=("Microsoft YaHei", 11), text_color="#e0e0e0")
-    label.grid(row=0, column=2, sticky="e", padx=(6, 0))
-
-    slider = ctk.CTkSlider(top, from_=2, to=100, number_of_steps=98,
-                          width=110, variable=variable)
-    slider.grid(row=0, column=1, sticky="ew")
-    ctk.CTkLabel(frame, text=manifest["desc"], font=("Microsoft YaHei", 12),
+    label.grid(row=0, column=1, sticky="e", padx=(8, 0))
+    help_text = manifest.get(
+        "desc",
+        "功能说明：开启后，设置总人数并点击“应用人数”。人数在下一局开始时生效；关闭功能会立即恢复默认人数。",
+    )
+    ctk.CTkLabel(frame, text=help_text, font=("Microsoft YaHei", 12),
                  text_color="#a0a0a0", wraplength=280, justify="left", anchor="w"
-                 ).pack(fill="x", padx=10, pady=(4, 8))
+                 ).pack(fill="x", padx=10, pady=(2, 8))
     apply_row = ctk.CTkFrame(frame, fg_color="transparent")
     apply_row.pack(fill="x", padx=10, pady=(0, 8))
     feedback = ctk.CTkLabel(apply_row, text="请拖动滑条或点击应用人数", anchor="w",
@@ -143,7 +151,7 @@ def build_card(parent, manifest, row, col, colspan, callbacks, card_builder):
     controller = _RoomCountController(frame, variable, label, feedback, callbacks,
                                       feature_id, control["key"])
     switch = ctk.CTkSwitch(top, text="", width=42, command=controller.toggle)
-    switch.grid(row=0, column=3, sticky="e", padx=(8, 0))
+    switch.grid(row=0, column=1, sticky="e", padx=(8, 0))
     slider.configure(command=controller.change)
     apply_button = ctk.CTkButton(apply_row, text="应用人数", width=86, height=28,
                                  font=("Microsoft YaHei", 12), command=controller.apply)
