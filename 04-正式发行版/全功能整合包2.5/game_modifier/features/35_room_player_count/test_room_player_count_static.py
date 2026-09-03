@@ -14,6 +14,20 @@ FORMAL_JS = (
 
 
 class RoomPlayerCountStaticTests(unittest.TestCase):
+    def test_manifest_places_room_count_in_the_right_column_across_two_rows(self):
+        manifest = json.loads((FEATURE_DIR / "manifest.json").read_text(encoding="utf-8"))
+
+        self.assertEqual(2, manifest["layout"]["rowspan"])
+        self.assertEqual(85, manifest["order"])
+
+    def test_panel_places_slider_on_its_own_row_with_user_facing_help(self):
+        text = (FEATURE_DIR / "panel.py").read_text(encoding="utf-8")
+
+        self.assertIn('slider_row = ctk.CTkFrame(frame, fg_color="transparent")', text)
+        self.assertIn('slider_row.pack(fill="x", padx=10, pady=(2, 4))', text)
+        self.assertIn("功能说明：开启后，设置总人数并点击“应用人数”。", text)
+        self.assertIn("关闭功能会立即恢复默认人数。", text)
+
     def test_panel_exposes_a_switch_and_requires_it_before_apply(self):
         text = (FEATURE_DIR / "panel.py").read_text(encoding="utf-8")
 
