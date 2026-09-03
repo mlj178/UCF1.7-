@@ -32,7 +32,7 @@ class _CountLabel(ctk.CTkLabel):
 
 
 class _RoomCountController:
-    """Use an explicit action, not the disabled-feature-gated slider route."""
+    """Keep room-size writes behind the feature's explicit lifecycle switch."""
 
     def __init__(self, host, variable, value_label, feedback, callbacks, feature_id, key):
         self.host = host
@@ -43,10 +43,7 @@ class _RoomCountController:
         self.feature_id = feature_id
         self.key = key
         self.requested = None
-        self.pending = None
         self.closed = False
-        self.was_connected = self.connected()
-        self.poll = host.after(500, self.check_connection)
 
     def connected(self):
         return bool(self.callbacks["is_connected"]())
@@ -57,39 +54,43 @@ class _RoomCountController:
     def log(self, message):
         self.callbacks.get("log", lambda *_: None)("[房间人数] " + message)
 
-    def cancel_pending(self):
-        if self.pending is not None:
-            self.host.after_cancel(self.pending)
-            self.pending = None
+    def enabled(self):
+        return bool(self.callbacks["is_enabled"](self.feature_id))
+
+    def toggle(self):
+        self.callbacks["toggle"](self.feature_id)
+        if self.enabled():
+            self.show("已开启：请点击应用人数", "#fbbf24")
+            self.log("功能已开启，等待手动应用人数。")
+        else:
+            self.show("已关闭：正在恢复原始人数逻辑", "#fbbf24")
+            self.log("功能已关闭，正在恢复原始人数逻辑。")
 
     def change(self, value):
         self.requested = _count(value)
         self.variable.set(self.requested)
         self.value_label.configure(text=f"{self.requested}人")
-        self.cancel_pending()
-        self.show("待应用：松开滑条后自动生效")
-        # Coalesce rapid pointer events so an older request cannot arrive last.
-        self.pending = self.host.after(180, self.apply)
+        self.show("待应用：点击应用人数后生效")
 
     def apply(self):
         if self.closed:
             return
-        self.cancel_pending()
         self.requested = _count(self.variable.get())
+        if not self.callbacks["is_enabled"](self.feature_id):
+            self.show("请先开启功能，再点击应用人数", "#fbbf24")
+            self.log("功能未开启，未应用人数。")
+            return
         if not self.connected():
-            # This route is safe while disconnected: it saves only local config.
+            # Persist the selection, but never arrange an automatic write on reconnect.
             self.callbacks["set_config"](self.feature_id, self.key, self.requested)
-            self.show("未连接：已保存，连接后自动应用", "#fbbf24")
-            self.log("尚未连接游戏；人数已保存，连接后自动应用。")
+            self.show("未连接：人数已保存；连接后请手动点击应用人数", "#fbbf24")
+            self.log("尚未连接游戏；人数已保存，连接后请手动点击应用人数。")
             return
         self.show("正在应用人数…", "#fbbf24")
         try:
-            # Manifest's set_config action persists config and calls the runtime
-            # directly, even when ActionRouter._state[feature_id] is initially False.
-            # script.js setConfig enables the patch idempotently on the first call.
             result = self.callbacks["action"](
                 self.feature_id, "apply_count",
-                {self.key: self.requested, "enabled": True},
+                {self.key: self.requested},
             )
         except Exception as error:
             self.show("应用失败：请查看日志并重试", "#f87171")
@@ -103,22 +104,9 @@ class _RoomCountController:
         self.show(f"已应用 {self.requested}人（机器人{self.requested - 1}），下局生效", "#4ade80")
         self.log(f"已应用总人数 {self.requested}（机器人 {self.requested - 1}），请开始新对局。")
 
-    def check_connection(self):
-        if self.closed:
-            return
-        connected = self.connected()
-        if not connected and self.was_connected:
-            self.show("连接已断开：重新连接后自动应用", "#fbbf24")
-        if connected and not self.was_connected and self.requested is not None:
-            self.apply()
-        self.was_connected = connected
-        self.poll = self.host.after(500, self.check_connection)
-
     def close(self, event):
         if event.widget is self.host and not self.closed:
             self.closed = True
-            self.cancel_pending()
-            self.host.after_cancel(self.poll)
 
 
 def build_card(parent, manifest, row, col, colspan, callbacks, card_builder):
@@ -154,8 +142,9 @@ def build_card(parent, manifest, row, col, colspan, callbacks, card_builder):
     feedback.pack(side="left", fill="x", expand=True)
     controller = _RoomCountController(frame, variable, label, feedback, callbacks,
                                       feature_id, control["key"])
+    switch = ctk.CTkSwitch(top, text="", width=42, command=controller.toggle)
+    switch.grid(row=0, column=3, sticky="e", padx=(8, 0))
     slider.configure(command=controller.change)
-    slider.bind("<ButtonRelease-1>", lambda event: controller.apply(), add=True)
     apply_button = ctk.CTkButton(apply_row, text="应用人数", width=86, height=28,
                                  font=("Microsoft YaHei", 12), command=controller.apply)
     apply_button.pack(side="right", padx=(6, 0))
@@ -163,7 +152,7 @@ def build_card(parent, manifest, row, col, colspan, callbacks, card_builder):
     tk.Misc.bind(frame, "<Destroy>", controller.close, add="+")
     handles = manifest.get("ui_handles", {})
     return {
-        handles.get("switch", "room_player_count_switch"): None,
+        handles.get("switch", "room_player_count_switch"): switch,
         handles.get("slider_var", "room_player_count_var"): variable,
         handles.get("slider", "room_player_count_slider"): slider,
         handles.get("slider_label", "room_player_count_label"): label,
