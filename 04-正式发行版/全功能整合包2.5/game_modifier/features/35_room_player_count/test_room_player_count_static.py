@@ -30,7 +30,7 @@ class RoomPlayerCountStaticTests(unittest.TestCase):
     def test_runtime_enable_only_arms_and_apply_requires_enabled(self):
         text = RUNTIME_JS.read_text(encoding="utf-8")
         enable_body = text.split("function enable(config)", 1)[1].split(
-            "function applyConfig(config)", 1
+            "function installPatch(requested)", 1
         )[0]
         apply_body = text.split("function applyConfig(config)", 1)[1].split(
             "function disable()", 1
