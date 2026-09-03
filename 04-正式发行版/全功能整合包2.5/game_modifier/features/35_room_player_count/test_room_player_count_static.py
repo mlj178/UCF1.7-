@@ -1,3 +1,4 @@
+import json
 import unittest
 from pathlib import Path
 
@@ -13,6 +14,33 @@ FORMAL_JS = (
 
 
 class RoomPlayerCountStaticTests(unittest.TestCase):
+    def test_panel_exposes_a_switch_and_requires_it_before_apply(self):
+        text = (FEATURE_DIR / "panel.py").read_text(encoding="utf-8")
+
+        self.assertIn("ctk.CTkSwitch", text)
+        self.assertIn('callbacks["toggle"](self.feature_id)', text)
+        self.assertIn('if not self.callbacks["is_enabled"](self.feature_id):', text)
+        self.assertIn("请先开启功能", text)
+
+    def test_manifest_disables_startup_restore(self):
+        manifest = json.loads((FEATURE_DIR / "manifest.json").read_text(encoding="utf-8"))
+
+        self.assertFalse(manifest["lifecycle"]["restore"])
+
+    def test_runtime_enable_only_arms_and_apply_requires_enabled(self):
+        text = RUNTIME_JS.read_text(encoding="utf-8")
+        enable_body = text.split("function enable(config)", 1)[1].split(
+            "function applyConfig(config)", 1
+        )[0]
+        apply_body = text.split("function applyConfig(config)", 1)[1].split(
+            "function disable()", 1
+        )[0]
+
+        self.assertNotIn("writeState(", enable_body)
+        self.assertIn("enabled = true", enable_body)
+        self.assertIn("if (!enabled)", apply_body)
+        self.assertIn("feature_disabled", apply_body)
+
     def test_known_30_player_baseline_has_a_complete_reversible_v3_profile(self):
         required_rvas = [
             "0x12AF7F", "0x154FBA", "0x2BF6F8", "0x3D18E2", "0x5C0E4B",
