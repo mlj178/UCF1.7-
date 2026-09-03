@@ -137,10 +137,10 @@ def build_card(parent, manifest, row, col, colspan, callbacks, card_builder):
     label.grid(row=0, column=1, sticky="e", padx=(8, 0))
     help_text = manifest.get(
         "desc",
-        "功能说明：开启后，设置总人数并点击“应用人数”。人数在下一局开始时生效；关闭功能会立即恢复默认人数。",
+        "开启后，设置人数并点击“应用人数”。下一局生效；关闭后恢复默认人数。",
     )
     ctk.CTkLabel(frame, text=help_text, font=("Microsoft YaHei", 12),
-                 text_color="#a0a0a0", wraplength=280, justify="left", anchor="w"
+                 text_color="#a0a0a0", wraplength=250, justify="left", anchor="w"
                  ).pack(fill="x", padx=10, pady=(2, 8))
     apply_row = ctk.CTkFrame(frame, fg_color="transparent")
     apply_row.pack(fill="x", padx=10, pady=(0, 8))
