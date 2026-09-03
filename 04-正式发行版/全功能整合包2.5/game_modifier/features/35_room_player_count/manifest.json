@@ -23,10 +23,10 @@
   "rpc": ["enable", "disable", "setConfig", "set_config", "setconfig", "status", "cleanup", "dispose"],
   "lifecycle": {
     "cleanup": true,
-    "restore": true,
+    "restore": false,
     "requires_room_ready_reapply": false,
     "room_ready_retry": false,
-    "room_ready_reapply_exempt_reason": "人数补丁在点击游戏的开始按钮前写入固定代码与配置；不依赖房间内对象，且不应在进房后自动重放。"
+    "room_ready_reapply_exempt_reason": "人数只在用户开启后手动点击应用人数时写入；关闭开关立即恢复补丁，重连游戏不自动重放。"
   },
   "source": {
     "single_feature_js": "05-正式功能/35-全模式房间人数/AAAAA-room_player_count_min.js",

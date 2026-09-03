@@ -5,6 +5,7 @@
 
   var FEATURE_ID = '35_room_player_count';
   var enabled = false;
+  var patchApplied = false;
   var totalPlayers = 50;
   var gameAssembly = null;
   var maxTotalPlayers = null;
@@ -333,14 +334,21 @@
 
   function successResult() {
     return { ok: true, enabled: enabled, total_players: totalPlayers, bots: totalPlayers - 1,
-      max_total_players: maxTotalPlayers, adopted_existing_patch: adoptedPatch,
+      max_total_players: maxTotalPlayers, patch_applied: patchApplied, adopted_existing_patch: adoptedPatch,
       patch_profile: activePatchProfile, profile_patched_by_this_script: profilePatchedByThisScript };
   }
 
   function enable(config) {
     var requested = normalize(config && Object.prototype.hasOwnProperty.call(config, 'total_players') ?
       config.total_players : totalPlayers);
-    if (enabled) return applyConfig({ total_players: requested });
+    totalPlayers = requested;
+    enabled = true;
+    log('info', '已开启；请点击“应用人数”后写入当前设置。');
+    status(true);
+    return successResult();
+  }
+
+  function installPatch(requested) {
     gameAssembly = Process.findModuleByName('GameAssembly.dll');
     maxTotalPlayers = null;
     if (!gameAssembly || Process.pointerSize !== 4) {
@@ -370,7 +378,7 @@
     totalPlayers = requested;
     lastWrittenBots = requested - 1;
     adoptedPatch = before.active || !profile.patchedByThisScript;
-    enabled = true;
+    patchApplied = true;
     startEntityDiagnostic();
     if (profile.patchedByThisScript) log('info', '当前游戏已临时适配为100人版；断开连接后会恢复原始30人版。');
     else if (adoptedPatch) log('info', '检测到已安装的人数补丁，已重新接管；请勿同时运行多份修改器');
@@ -383,7 +391,10 @@
   function applyConfig(config) {
     var requested = normalize(config && Object.prototype.hasOwnProperty.call(config, 'total_players') ?
       config.total_players : totalPlayers);
-    if (!enabled) return enable({ total_players: requested });
+    if (!enabled) {
+      return resultFailure('feature_disabled', '请先开启全模式房间人数功能，再点击应用人数');
+    }
+    if (!patchApplied) return installPatch(requested);
     var layout;
     try {
       layout = inspectLayout();
@@ -399,8 +410,8 @@
     if (!layout.active) {
       // A previous script's cleanup may have restored the known pristine state.
       stopEntityDiagnostic();
-      enabled = false;
-      return enable({ total_players: requested });
+      patchApplied = false;
+      return installPatch(requested);
     }
     var count = gameAssembly.base.add(BOT_CAVE_RVA + BOT_COUNT_IMM_OFFSET);
     try {
@@ -420,7 +431,7 @@
   function disable() {
     stopEntityDiagnostic();
     var restored = true;
-    if (enabled && gameAssembly) {
+    if (patchApplied && gameAssembly) {
       try {
         var layout = inspectLayout();
         if (layout.active && layout.bots === lastWrittenBots) {
@@ -438,6 +449,7 @@
       }
     }
     enabled = false;
+    patchApplied = false;
     lastWrittenBots = null;
     adoptedPatch = false;
     if (restored && profilePatchedByThisScript && !restoreBaselineProfile()) restored = false;
@@ -453,6 +465,7 @@
     setConfig: applyConfig,
     set_config: applyConfig,
     status: function () { return { enabled: enabled, total_players: totalPlayers, bots: totalPlayers - 1,
+      patch_applied: patchApplied,
       max_total_players: maxTotalPlayers, adopted_existing_patch: adoptedPatch,
       patch_profile: activePatchProfile, profile_patched_by_this_script: profilePatchedByThisScript,
       version: 'room-count-100-hotfix4' }; },
