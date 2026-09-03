@@ -35,8 +35,8 @@ class RoomPlayerCountStaticTests(unittest.TestCase):
 
         self.assertIn('slider_row = ctk.CTkFrame(frame, fg_color="transparent")', text)
         self.assertIn('slider_row.pack(fill="x", padx=10, pady=(2, 4))', text)
-        self.assertIn("功能说明：开启后，设置总人数并点击“应用人数”。", text)
-        self.assertIn("关闭功能会立即恢复默认人数。", text)
+        self.assertIn("开启后，设置人数并点击“应用人数”。", text)
+        self.assertIn("关闭后恢复默认人数。", text)
 
     def test_panel_exposes_a_switch_and_requires_it_before_apply(self):
         text = (FEATURE_DIR / "panel.py").read_text(encoding="utf-8")
