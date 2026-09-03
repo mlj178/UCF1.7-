@@ -8,10 +8,10 @@
   "tab_title": "其他",
   "tab_order": 30,
   "order": 85,
-  "desc": "开局前应用；自动识别已验证的原始30人版或100人v3版，总人数可设为2—100人。",
+  "desc": "功能说明：开启后，设置总人数并点击“应用人数”。人数在下一局开始时生效；关闭功能会立即恢复默认人数。",
   "script": "script.js",
   "runtime": { "type": "plugin_script" },
-  "layout": { "card_type": "simple", "columnspan": 1, "title_color": "#fbbf24" },
+  "layout": { "card_type": "simple", "columnspan": 1, "rowspan": 2, "title_color": "#fbbf24" },
   "controls": [
     { "type": "switch", "action": "enable" },
     { "type": "slider", "action": "setConfig", "key": "total_players", "min": 2, "max": 100, "step": 1, "default": 50, "suffix": "人" }
