@@ -5,7 +5,7 @@ from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent
 JS_FILE = BASE_DIR / "script.js"
-UI_FILE = BASE_DIR / "AAAAA-fixed_point_teleport_ui.py"
+UI_FILE = BASE_DIR / "panel.py"
 DOC_FILE = BASE_DIR / "定点瞬移-简要说明.md"
 
 
@@ -195,27 +195,15 @@ class FixedPointTeleportStaticTests(unittest.TestCase):
         ]:
             self.assertIn(status_key, text)
 
-    def test_ui_loads_script_and_uses_standard_rpc(self):
+    def test_panel_exposes_standard_plugin_callbacks(self):
         text = read_text(UI_FILE)
 
         self.assertIn("import customtkinter as ctk", text)
-        self.assertIn("import frida", text)
-        self.assertIn("import psutil", text)
-        self.assertIn('JS_FILE = os.path.join(BASE_DIR, "AAAAA-fixed_point_teleport_min.js")', text)
-        self.assertIn('GAME_PROCESS_NAME = "UnityCrossFire.exe"', text)
         self.assertIn("ctk.CTkSwitch", text)
         self.assertIn("ctk.CTkButton", text)
-        self.assertIn("ctk.CTkTextbox", text)
-        self.assertIn("self.script.exports_sync.enable()", text)
-        self.assertIn("self.script.exports_sync.disable()", text)
-        self.assertIn("self.script.exports_sync.status()", text)
-        self.assertIn("self.script.exports_sync.cleanup()", text)
-        self.assertIn("self.script.exports_sync.setconfig", text)
-        self.assertIn("self.script.exports_sync.savepoint()", text)
-        self.assertIn("self.script.exports_sync.teleporttopoint()", text)
-        self.assertIn("self.script.exports_sync.savepoint2()", text)
-        self.assertIn("self.script.exports_sync.teleporttopoint2()", text)
-        self.assertNotIn("self.script.exports_sync.clearpoint()", text)
+        self.assertIn('callbacks["toggle"](feature_id)', text)
+        self.assertIn('callbacks["action"](feature_id, action)', text)
+        self.assertNotIn("clearpoint", text)
 
     def test_ui_exposes_second_point_slot(self):
         text = read_text(UI_FILE)

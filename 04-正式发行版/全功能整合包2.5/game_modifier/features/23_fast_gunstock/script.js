@@ -1,14 +1,11 @@
 // ============================================================
-// AAAAA-fast_gunstock_v3_1_formal_safe.js
-// 极速枪托 v3.1 正式功能安全版
+// AAAAA-fast_gunstock_v3_2_natural_damage.js
+// 极速枪托 v3.2：原始伤害事件完成后解锁
 //
-// 固定参数：
-// - 提前伤害延迟：100ms
-// - 伤害后解锁延迟：40ms
-// - 最大保护窗口：900ms
-// - attackIndex：0
-// - 解锁时调用 OnKnifeAttackExit：固定开启
-// - 解锁时清 knifeAttackAnim：固定开启
+// 行为：
+// - 不主动调用 KnifeAttackEvent，不伪造或补发伤害
+// - 本次原始 KnifeAttackEvent 完整返回后才解除枪托锁
+// - 最大保护窗口只处理异常中断（切枪、死亡、动画异常）
 //
 // 安全策略：
 // - attach-only，不 replace KnifeAttackEvent
@@ -41,12 +38,8 @@
   };
 
   var CFG = {
-    earlyDamageDelayMs: 100,
-    unlockDelayMs: 40,
     maxGuardMs: 900,
-    attackIndex: 0,
     callExitOnUnlock: true,
-    clearLockOnUnlock: true,
     observeNaturalAfterUnlockMs: 250,
     guardLockValue: 1
   };
@@ -59,7 +52,6 @@
     seq: 0,
     current: null,
 
-    manualCallingDamage: false,
     manualCallingExit: false,
 
     observeWeaponKey: '',
@@ -69,7 +61,6 @@
     rightHits: 0,
     firstAllowed: 0,
     guardedRights: 0,
-    earlyDamageCalls: 0,
     naturalDamageHits: 0,
     duplicateNaturalHits: 0,
     exitHits: 0,
@@ -84,7 +75,6 @@
     lastError: null,
 
     isMyWeaponFn: null,
-    knifeAttackEventFn: null,
     onKnifeAttackExitFn: null,
     hooks: [],
     logCounter: {}
@@ -97,7 +87,7 @@
     st.logCounter[mod]++;
     if (st.logCounter[mod] > MAX_LOGS_PER_MODULE) return;
 
-    var text = '[极速枪托v3.1][' + mod + '] ' + msg;
+    var text = '[极速枪托v3.2][' + mod + '] ' + msg;
     console.log('[' + level + '] ' + text);
     try {
       var mappedLevel = {
@@ -106,7 +96,7 @@
         '警告': 'warn',
         '错误': 'error'
       }[level] || level;
-      send({ type: 'log', level: mappedLevel, module: '极速枪托v3.1/' + mod, message: msg, audience: 'both' });
+      send({ type: 'log', level: mappedLevel, module: '极速枪托v3.2/' + mod, message: msg, audience: 'both' });
     } catch (e) {}
   }
 
@@ -144,13 +134,6 @@
         m.base.add(RVA.Weapon_get_isMyWeapon),
         'bool',
         ['pointer', 'pointer'],
-        ABI
-      );
-
-      st.knifeAttackEventFn = new NativeFunction(
-        m.base.add(RVA.KnifeAttackEvent),
-        'void',
-        ['pointer', 'int', 'pointer'],
         ABI
       );
 
@@ -285,8 +268,6 @@
       phase: '等待伤害',
       damageDone: false,
       unlocked: false,
-      earlyTimer: null,
-      unlockTimer: null,
       maxTimer: null
     };
 
@@ -294,10 +275,6 @@
     st.firstAllowed++;
 
     log('成功', '右键', '放行第一次右键，seq=' + atk.seq + '，weapon=' + w);
-
-    atk.earlyTimer = setTimeout(function () {
-      doEarlyDamage(atk);
-    }, CFG.earlyDamageDelayMs);
 
     atk.maxTimer = setTimeout(function () {
       if (st.current === atk && !atk.unlocked) {
@@ -307,53 +284,6 @@
       }
     }, CFG.maxGuardMs);
 
-    log('信息', '提前伤害',
-      '预约 ' + CFG.earlyDamageDelayMs +
-      'ms 后提前伤害；最大保护窗口=' + CFG.maxGuardMs +
-      'ms，seq=' + atk.seq
-    );
-  }
-
-  function doEarlyDamage(atk) {
-    if (!st.enabled) return;
-    if (!atk || st.current !== atk || atk.unlocked || atk.damageDone) return;
-    if (!initNative()) return;
-
-    try {
-      st.manualCallingDamage = true;
-      st.knifeAttackEventFn(atk.weapon, CFG.attackIndex | 0, ptr(0));
-
-      atk.damageDone = true;
-      atk.phase = '等待解锁';
-      st.earlyDamageCalls++;
-
-      var used = nowMs() - atk.startMs;
-      log('成功', '提前伤害',
-        '已调用 KnifeAttackEvent，距右键=' + used + 'ms，seq=' + atk.seq
-      );
-
-      scheduleUnlock(atk, '提前伤害完成');
-    } catch (e) {
-      st.lastError = '提前伤害调用失败：' + e.message;
-      log('错误', '提前伤害', st.lastError);
-    } finally {
-      st.manualCallingDamage = false;
-    }
-  }
-
-  function scheduleUnlock(atk, reason) {
-    if (!atk || atk.unlocked) return;
-
-    clearTimer(atk.unlockTimer);
-
-    atk.unlockTimer = setTimeout(function () {
-      unlockAttack(atk, reason);
-    }, CFG.unlockDelayMs);
-
-    log('信息', '解锁',
-      reason + '：预约 ' + CFG.unlockDelayMs +
-      'ms 后解锁，seq=' + atk.seq
-    );
   }
 
   function unlockAttack(atk, reason) {
@@ -362,8 +292,6 @@
     atk.unlocked = true;
     atk.phase = '已解锁';
 
-    clearTimer(atk.earlyTimer);
-    clearTimer(atk.unlockTimer);
     clearTimer(atk.maxTimer);
 
     if (CFG.callExitOnUnlock && initNative()) {
@@ -377,10 +305,6 @@
       } finally {
         st.manualCallingExit = false;
       }
-    }
-
-    if (CFG.clearLockOnUnlock) {
-      writeLock(atk.weapon, 0, reason + ' 清锁');
     }
 
     beginObserve(atk);
@@ -420,13 +344,13 @@
 
     if (!atk.damageDone) {
       log('信息', '原始结束',
-        source + ' 在提前伤害前到达，暂不解锁，等待 KnifeAttackEvent，seq=' + atk.seq
+        source + ' 在原始伤害事件前到达，暂不解锁，等待 KnifeAttackEvent，seq=' + atk.seq
       );
       return;
     }
 
     log('信息', '原始结束',
-      source + ' 在提前伤害后到达，保持当前解锁计划，seq=' + atk.seq
+      source + ' 在原始伤害事件后到达，当前攻击已按原始事件处理，seq=' + atk.seq
     );
   }
 
@@ -477,7 +401,8 @@
             var lockValue = readLock(w);
             if (lockValue !== 0) {
               st.staleLockClears++;
-              writeLock(w, 0, '开始前发现残留锁，自动清理');
+              log('信息', '右键', '上一击仍处于游戏锁定状态，拒绝本次右键，lock=' + lockValue);
+              return;
             }
 
             startAttack(w);
@@ -490,15 +415,16 @@
 
       st.hooks.push(Interceptor.attach(m.base.add(RVA.KnifeAttackEvent), {
         onEnter: function (args) {
+          this.weapon = args[0];
+          this.local = st.enabled && isLocalWeapon(this.weapon);
+          this.attackIndex = 0;
+          try { this.attackIndex = args[1].toInt32(); } catch (e) {}
+        },
+        onLeave: function () {
           try {
-            if (!st.enabled) return;
-            if (st.manualCallingDamage) return;
-
-            var w = args[0];
-            if (!isLocalWeapon(w)) return;
-
-            var idx = 0;
-            try { idx = args[1].toInt32(); } catch (e) {}
+            if (!this.local) return;
+            var w = this.weapon;
+            var idx = this.attackIndex;
 
             if (currentBelongs(w)) {
               var atk = st.current;
@@ -508,15 +434,13 @@
                 atk.phase = '等待解锁';
                 st.naturalDamageHits++;
 
-                clearTimer(atk.earlyTimer);
-
                 var used = nowMs() - atk.startMs;
                 log('成功', '自然伤害',
                   '原游戏 KnifeAttackEvent 先到，attackIndex=' + idx +
                   '，距右键=' + used + 'ms，seq=' + atk.seq
                 );
 
-                scheduleUnlock(atk, '自然伤害完成');
+                unlockAttack(atk, '自然伤害完成');
               } else {
                 st.duplicateNaturalHits++;
                 log('信息', '重复自然伤害',
@@ -531,7 +455,7 @@
             if (isInObserveWindow(w)) {
               st.duplicateNaturalHits++;
               log('信息', '重复自然伤害',
-                '提前伤害解锁后观察到自然 KnifeAttackEvent，视为重复自然伤害观察，seq=' +
+                '自然伤害解锁后观察到自然 KnifeAttackEvent，视为重复自然伤害观察，seq=' +
                 st.observeSeq + '，attackIndex=' + idx
               );
               return;
@@ -587,7 +511,7 @@
       }));
 
       st.installed = true;
-      log('成功', 'Hook', 'v3.1 正式功能安全版 Hook 已安装：attach-only，不 replace，不碰动画');
+      log('成功', 'Hook', 'v3.2 Hook 已安装：attach-only，保留原始伤害事件，不碰动画');
       return true;
     } catch (e) {
       st.lastError = 'Hook 安装失败：' + e.message;
@@ -604,7 +528,7 @@
 
     st.enabled = true;
     log('成功', '状态',
-      '极速枪托 v3.1 已开启：100ms/40ms/900ms/attackIndex=0，安全模式'
+      '极速枪托 v3.2 已开启：仅在原始伤害事件完成后解锁；异常保护=' + CFG.maxGuardMs + 'ms'
     );
     sendStatus('fast_gunstock', true);
     return true;
@@ -613,7 +537,7 @@
   function disable() {
     st.enabled = false;
     if (st.current) forceClear();
-    log('信息', '状态', '极速枪托 v3.1 已关闭');
+    log('信息', '状态', '极速枪托 v3.2 已关闭');
     sendStatus('fast_gunstock', false);
     return true;
   }
@@ -640,12 +564,8 @@
       installed: st.installed,
       initialized: st.initialized,
 
-      earlyDamageDelayMs: CFG.earlyDamageDelayMs,
-      unlockDelayMs: CFG.unlockDelayMs,
       maxGuardMs: CFG.maxGuardMs,
-      attackIndex: CFG.attackIndex,
       callExitOnUnlock: CFG.callExitOnUnlock,
-      clearLockOnUnlock: CFG.clearLockOnUnlock,
 
       protecting: st.current ? true : false,
       phase: phase,
@@ -655,7 +575,6 @@
       rightHits: st.rightHits,
       firstAllowed: st.firstAllowed,
       guardedRights: st.guardedRights,
-      earlyDamageCalls: st.earlyDamageCalls,
       naturalDamageHits: st.naturalDamageHits,
       duplicateNaturalHits: st.duplicateNaturalHits,
       exitHits: st.exitHits,
@@ -718,5 +637,5 @@
   rpc.exports.setconfig = rpc.exports.setConfig;
   rpc.exports.forceclear = rpc.exports.forceClear;
 
-  log('成功', '初始化', '极速枪托 v3.1 正式功能安全版脚本已加载');
+  log('成功', '初始化', '极速枪托 v3.2 原始伤害完成后解锁脚本已加载');
 })();

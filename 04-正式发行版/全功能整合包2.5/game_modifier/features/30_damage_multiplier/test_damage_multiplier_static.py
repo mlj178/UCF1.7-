@@ -5,9 +5,8 @@ from pathlib import Path
 
 
 BASE_DIR = Path(__file__).resolve().parent
-JS_FILE = BASE_DIR / "AAAAA-damage_multiplier_min.js"
-RUNTIME_JS_FILE = BASE_DIR / "script.js"
-UI_FILE = BASE_DIR / "AAAAA-damage_multiplier_ui.py"
+JS_FILE = BASE_DIR / "script.js"
+UI_FILE = BASE_DIR / "panel.py"
 MANIFEST_FILE = BASE_DIR / "manifest.json"
 FEATURE_FILE = BASE_DIR / "feature.py"
 
@@ -72,7 +71,7 @@ class DamageMultiplierStaticTests(unittest.TestCase):
         self.assertIn("sentry_owner_hits", text)
 
     def test_js_clears_owner_maps_on_round_boundaries_and_validates_owner_pointers(self):
-        for path in [JS_FILE, RUNTIME_JS_FILE]:
+        for path in [JS_FILE]:
             text = read_text(path)
 
             for token in [
@@ -98,7 +97,7 @@ class DamageMultiplierStaticTests(unittest.TestCase):
             self.assertIn("!isReadablePtr(ownerPtr)", remember_owner_fn)
 
     def test_js_logs_damage_diagnostics_for_fractional_multiplier_analysis(self):
-        for path in [JS_FILE, RUNTIME_JS_FILE]:
+        for path in [JS_FILE]:
             text = read_text(path)
 
             for token in [
@@ -139,41 +138,34 @@ class DamageMultiplierStaticTests(unittest.TestCase):
         ]:
             self.assertIn(status_key, text)
 
-    def test_ui_loads_script_and_uses_standard_rpc(self):
+    def test_panel_delegates_toggle_and_configuration_to_plugin_callbacks(self):
         text = read_text(UI_FILE)
 
         self.assertIn("import customtkinter as ctk", text)
-        self.assertIn("import frida", text)
-        self.assertIn("import psutil", text)
-        self.assertIn('JS_FILE = os.path.join(BASE_DIR, "AAAAA-damage_multiplier_min.js")', text)
-        self.assertIn('GAME_PROCESS_NAME = "UnityCrossFire.exe"', text)
         self.assertIn("ctk.CTkSwitch", text)
         self.assertIn("ctk.CTkSlider", text)
-        self.assertIn("ctk.CTkTextbox", text)
-        self.assertIn("self.script.exports_sync.enable()", text)
-        self.assertIn("self.script.exports_sync.disable()", text)
-        self.assertIn("self.script.exports_sync.status()", text)
-        self.assertIn("self.script.exports_sync.cleanup()", text)
-        self.assertIn("self.script.exports_sync.setconfig", text)
+        self.assertIn('callbacks["toggle"](feature_id)', text)
+        self.assertIn('callbacks["set_config"](feature_id, "multiplier", numeric)', text)
 
     def test_ui_does_not_offer_enemy_or_global_default(self):
         text = read_text(UI_FILE)
+        manifest = json.loads(read_text(MANIFEST_FILE))
 
         self.assertNotRegex(text, re.compile(r"全局伤害|敌人伤害|所有玩家", re.I))
-        self.assertIn("调整伤害倍率", text)
-        self.assertIn("放大玩家造成的输出伤害", text)
-        self.assertNotIn("缩小/放大", text)
+        self.assertEqual(manifest["display_name"], "调整伤害倍率")
+        self.assertEqual(manifest["desc"], "放大玩家造成的输出伤害。")
+        self.assertNotIn("缩小/放大", manifest["desc"])
 
     def test_multiplier_range_is_boost_only_in_ui_manifest_and_scripts(self):
         ui_text = read_text(UI_FILE)
         feature_text = read_text(FEATURE_FILE)
-        js_texts = [read_text(JS_FILE), read_text(RUNTIME_JS_FILE)]
+        js_texts = [read_text(JS_FILE)]
         manifest = json.loads(read_text(MANIFEST_FILE))
         slider = next(control for control in manifest["controls"] if control.get("key") == "multiplier")
 
-        self.assertIn("from_=1.0", ui_text)
-        self.assertIn("to=20.0", ui_text)
-        self.assertIn("number_of_steps=190", ui_text)
+        self.assertIn('from_=float(slider_control.get("min", 0.0))', ui_text)
+        self.assertIn('to=float(slider_control.get("max", 20.0))', ui_text)
+        self.assertIn("number_of_steps=_steps(slider_control)", ui_text)
         self.assertEqual(slider["min"], 1.0)
         self.assertEqual(slider["max"], 20.0)
         self.assertEqual(manifest["desc"], "放大玩家造成的输出伤害。")
@@ -182,21 +174,12 @@ class DamageMultiplierStaticTests(unittest.TestCase):
             self.assertIn("min_multiplier: 1.0", js_text)
             self.assertIn("max_multiplier: 20.0", js_text)
 
-    def test_ui_enable_switch_does_not_queue_config_before_enable(self):
+    def test_panel_does_not_enable_the_feature_while_changing_the_slider(self):
         text = read_text(UI_FILE)
 
-        enable_fn = text.split("def _on_enable_changed", 1)[1].split("def _on_multiplier_preview", 1)[0]
-        enabled_branch = enable_fn.split("if enabled:", 1)[1].split("else:", 1)[0]
-
-        self.assertNotIn("self._send_config()", enabled_branch)
-        self.assertIn('self._rpc_call("enable")', enabled_branch)
-
-        rpc_worker = text.split("def _rpc_worker", 1)[1].split("def _refresh_status", 1)[0]
-        self.assertIn("self.script.exports_sync.setconfig(self._current_config())", rpc_worker)
-        self.assertLess(
-            rpc_worker.index("self.script.exports_sync.setconfig(self._current_config())"),
-            rpc_worker.index("self.script.exports_sync.enable()"),
-        )
+        on_change = text.split("def on_change(value):", 1)[1].split("slider = ctk.CTkSlider", 1)[0]
+        self.assertIn('callbacks["set_config"](feature_id, "multiplier", numeric)', on_change)
+        self.assertNotIn('callbacks["toggle"]', on_change)
 
 
 if __name__ == "__main__":

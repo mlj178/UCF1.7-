@@ -14,6 +14,17 @@ FORMAL_JS = (
 
 
 class RoomPlayerCountStaticTests(unittest.TestCase):
+    def test_manifest_marks_room_count_as_not_visible_in_ui(self):
+        manifest = json.loads((FEATURE_DIR / "manifest.json").read_text(encoding="utf-8"))
+
+        self.assertFalse(manifest["ui"]["visible"])
+
+    def test_plugin_page_skips_features_explicitly_hidden_from_ui(self):
+        page = FEATURE_DIR.parents[1] / "ui" / "pages" / "plugin_feature_page.py"
+        text = page.read_text(encoding="utf-8")
+
+        self.assertIn('if manifest.get("ui", {}).get("visible", True) is False:', text)
+
     def test_help_text_is_short_and_wraps_inside_the_card(self):
         manifest = json.loads((FEATURE_DIR / "manifest.json").read_text(encoding="utf-8"))
         panel = (FEATURE_DIR / "panel.py").read_text(encoding="utf-8")

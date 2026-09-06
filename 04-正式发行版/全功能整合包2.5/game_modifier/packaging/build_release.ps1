@@ -74,13 +74,18 @@ Write-Output "[7/8] Inno Setup 编译中..."
 if ($LASTEXITCODE -ne 0) { throw "Inno Setup 编译失败（退出码 $LASTEXITCODE）" }
 
 # 8. 校验安装器产物并生成 SHA256
-$installerPath = Join-Path $releaseDir "$appExeName安装器.exe"
+$installerPath = Join-Path $releaseDir "${appExeName}安装器.exe"
 if (-not (Test-Path -LiteralPath $installerPath -PathType Leaf)) {
     throw "未找到安装器产物：$installerPath"
 }
 $hash = (Get-FileHash -LiteralPath $installerPath -Algorithm SHA256).Hash
 $hashFile = Join-Path $releaseDir 'SHA256.txt'
-"$hash  $appExeName安装器.exe" | Out-File -Encoding utf8 -FilePath $hashFile
+"$hash  ${appExeName}安装器.exe" | Out-File -Encoding utf8 -FilePath $hashFile
+$readmeSource = Join-Path $projectDir 'packaging\README.txt'
+if (-not (Test-Path -LiteralPath $readmeSource -PathType Leaf)) {
+    throw "未找到发布说明：$readmeSource"
+}
+Copy-Item -LiteralPath $readmeSource -Destination (Join-Path $releaseDir 'README.txt') -Force
 Write-Output "[8/8] 构建完成"
 Write-Output ""
 Write-Output "安装器：$installerPath"

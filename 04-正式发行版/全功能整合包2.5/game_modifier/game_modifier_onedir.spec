@@ -151,11 +151,13 @@ for plugin_file in ("inject.exe", "Universal-ImGui-Hook.dll", "universal_hook.js
 ui_dir = os.path.join(current_dir, "ui")
 if os.path.exists(ui_dir):
     for root, dirs, files in os.walk(ui_dir):
+        dirs[:] = [name for name in dirs if name != "__pycache__"]
         for file in files:
-            if not file.endswith('.py'):
-                file_path = os.path.join(root, file)
-                rel_path = os.path.relpath(root, current_dir)
-                datas.append((file_path, rel_path))
+            if file.endswith((".py", ".pyc", ".pyo")) or file.startswith("test_") or file.endswith("_test"):
+                continue
+            file_path = os.path.join(root, file)
+            rel_path = os.path.relpath(root, current_dir)
+            datas.append((file_path, rel_path))
 
 a = Analysis(
     ['main.py'],

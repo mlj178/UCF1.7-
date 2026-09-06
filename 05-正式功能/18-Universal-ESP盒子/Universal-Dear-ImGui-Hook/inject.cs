@@ -52,13 +52,11 @@ public class DllInjector
 
     public static void Log(string message, string level)
     {
-        // DISABLED: 日志输出已注释
-        /*
+        // 仅输出到控制台（Python 侧解析 stdout 判断注入结果），不再持久化 inject_log.txt
         string timestamp = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff");
         string line = string.Format("[{0}] [{1}] {2}", timestamp, level, message);
         Console.WriteLine(line);
-        try { File.AppendAllText(logFile, line + "\n"); } catch { }
-        */
+        // 文件日志持久化已停用（不再 File.AppendAllText(logFile, line + "\n")）
     }
 
     public static IntPtr GetRemoteModuleBase(IntPtr hProcess, string moduleName)

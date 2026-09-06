@@ -19,6 +19,23 @@ class WeaponCatalogStaticTests(unittest.TestCase):
         for entry, label in required_entries.items():
             self.assertIn(entry, text, label)
 
+    def test_weapon_giver_catalog_keeps_nano_stun_grenade_label(self):
+        text = CATALOG_FILE.read_text(encoding="utf-8")
+
+        self.assertIn(
+            '("2977", "震撼弹", "震撼弹", "投掷"),',
+            text,
+        )
+        self.assertNotIn("震撼弹（剑客模式）", text)
+
+    def test_weapon_giver_catalog_includes_standard_stun_grenade(self):
+        text = CATALOG_FILE.read_text(encoding="utf-8")
+
+        self.assertIn(
+            '("1071", "震荡弹", "震荡弹", "投掷"),',
+            text,
+        )
+
     def test_weapon_giver_catalog_excludes_removed_crazyknife_variants(self):
         text = CATALOG_FILE.read_text(encoding="utf-8")
 

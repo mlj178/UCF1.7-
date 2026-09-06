@@ -223,9 +223,9 @@ class SettingsWindow(ctk.CTkToplevel):
                      font=("Microsoft YaHei", 18, "bold")).pack(pady=(12, 4))
         ctk.CTkLabel(about_frame, text="作者: 挂呱呱呱",
                      font=("Microsoft YaHei", 12)).pack(pady=2)
-        ctk.CTkLabel(about_frame, text="Contributor(贡献者)：少年与狗子",
+        ctk.CTkLabel(about_frame, text="代码贡献者：少年与狗子",
                      font=("Microsoft YaHei", 12)).pack(pady=2)
-        ctk.CTkLabel(about_frame, text="2026年08月08日",
+        ctk.CTkLabel(about_frame, text="2026年09月09日",
                      font=("Microsoft YaHei", 12)).pack(pady=2)
         ctk.CTkLabel(about_frame, text="\nQQ群: 1095388251",
                      font=("Microsoft YaHei", 12)).pack(pady=4)

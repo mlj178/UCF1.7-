@@ -26,6 +26,8 @@ class PluginFeaturePage:
         col = 0
         for feature in sorted(features, key=lambda feature: int(feature.manifest.get("order", 0))):
             manifest = feature.manifest
+            if manifest.get("ui", {}).get("visible", True) is False:
+                continue
             layout = manifest.get("layout", {})
             colspan = int(layout.get("columnspan", 1))
             rowspan = int(layout.get("rowspan", 1))

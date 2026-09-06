@@ -94,6 +94,9 @@ public:
     void Log(const char* message) {
         EnterCriticalSection(&cs);
 
+        // NOTE: 发布版停用日志持久化。以下代码被注释，不再创建/追加 esp_debug.log。
+        // 仅保留 OutputDebugStringA 输出，供调试器(DBGVIEW)观察，不落盘。
+        /*
         if (!initialized) {
             // Build log path next to the DLL module
             wchar_t wLogPath[MAX_PATH] = {0};
@@ -146,6 +149,7 @@ public:
                     st.wHour, st.wMinute, st.wSecond, st.wMilliseconds, message);
             fflush(logFile);
         }
+        */
 
         OutputDebugStringA(message);
         LeaveCriticalSection(&cs);

@@ -6,6 +6,12 @@
 #ifndef AppVersion
   #define AppVersion "2.5"
 #endif
+#ifndef BuildDistDir
+  #define BuildDistDir "..\dist_release"
+#endif
+#ifndef ReleaseOutputDir
+  #define ReleaseOutputDir "..\release"
+#endif
 #define AppName "全功能整合包" + AppVersion
 #define AppExeName "UCF" + AppVersion + "修改器"
 #define InstallFolder "UCF-Trainer-" + AppVersion
@@ -23,7 +29,7 @@ ArchitecturesAllowed=x64
 PrivilegesRequired=admin
 UninstallDisplayIcon={app}\{#AppExeName}.exe
 ; 产物输出到 game_modifier 同级的 release/（脚本从 packaging/ 调用，故 ..\release）
-OutputDir=..\release
+OutputDir={#ReleaseOutputDir}
 OutputBaseFilename={#AppExeName}安装器
 DisableProgramGroupPage=yes
 WizardStyle=modern
@@ -40,7 +46,7 @@ Name: "desktopicon"; Description: "在桌面创建快捷方式"; GroupDescriptio
 
 [Files]
 ; onedir 产物整目录拷入，排除构建中间产物与开发者 data
-Source: "..\dist_release\{#AppExeName}\*"; DestDir: "{app}"; \
+Source: "{#BuildDistDir}\{#AppExeName}\*"; DestDir: "{app}"; \
     Flags: recursesubdirs createallsubdirs ignoreversion; \
     Excludes: "build\*,dist\*,__pycache__\*,*.spec.bak,logs\*,data\*"
 
