@@ -1,0 +1,95 @@
+{
+  "feature_id": "role_transform",
+  "canonical_id": "role_transform",
+  "display_name": "角色变身",
+  "category": "special",
+  "tab": "nano4t_tab",
+  "tab_title": "多人生化",
+  "tab_order": 40,
+  "order": 60,
+  "desc": "在多人生化模式中选择本地玩家角色，或让当前存活 Bot 随机变身。",
+  "script": "script.js",
+  "runtime": {
+    "type": "plugin_script"
+  },
+  "ui": {
+    "mode": "special_inline_card"
+  },
+  "layout": {
+    "card_type": "wide",
+    "columnspan": 2,
+    "title_color": "#A855F7"
+  },
+  "controls": [
+    {
+      "type": "button",
+      "action": "trigger",
+      "label": "本地玩家：选择英雄",
+      "payload": {
+        "action": "local_hero"
+      }
+    },
+    {
+      "type": "button",
+      "action": "trigger",
+      "label": "本地玩家：选择超级终结者",
+      "payload": {
+        "action": "local_terminator"
+      }
+    },
+    {
+      "type": "button",
+      "action": "trigger",
+      "label": "所有 Bot：随机英雄",
+      "payload": {
+        "action": "bot_hero"
+      }
+    },
+    {
+      "type": "button",
+      "action": "trigger",
+      "label": "所有 Bot：随机超级终结者",
+      "payload": {
+        "action": "bot_terminator"
+      }
+    }
+  ],
+  "config": {},
+  "rpc": [
+    "enable",
+    "disable",
+    "status",
+    "cleanup",
+    "trigger",
+    "setConfig",
+    "set_config",
+    "setconfig"
+  ],
+  "actions": {
+    "trigger": {
+      "type": "rpc",
+      "requires_connection": true
+    }
+  },
+  "lifecycle": {
+    "cleanup": true,
+    "restore": false,
+    "requires_room_ready_reapply": false,
+    "room_ready_retry": false,
+    "room_ready_reapply_exempt_reason": "四个按钮都是用户手动触发的一次性动作；无有效房间时本次失败，不跨房间重放。"
+  },
+  "source": {
+    "single_feature_js": "05-正式功能/34-角色变身/AAAAA-role_transform_min.js",
+    "single_feature_py": "05-正式功能/34-角色变身/AAAAA-role_transform_ui.py",
+    "runtime_script_js": "features/34_role_transform/script.js"
+  },
+  "ui_handles": {
+    "local_hero": "role_transform_local_hero_button",
+    "local_terminator": "role_transform_local_terminator_button",
+    "bot_hero": "role_transform_bot_hero_button",
+    "bot_terminator": "role_transform_bot_terminator_button"
+  },
+  "state": {
+    "sync_enabled_from_config": false
+  }
+}

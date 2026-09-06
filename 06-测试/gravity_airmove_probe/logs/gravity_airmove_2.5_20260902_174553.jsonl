@@ -1,8 +1,0 @@
-{"host_timestamp": "2026-09-02T17:45:53.859+08:00", "name": "UnityCrossFire.exe", "pid": 4480, "type": "target_found"}
-{"arch": "ia32", "base": "0x5be30000", "host_timestamp": "2026-09-02T17:45:54.144+08:00", "module": "GameAssembly.dll", "pointer_size": 4, "size": 16461824, "timestamp": 1788342354143, "type": "probe_metadata"}
-{"hook": "Player.get_isMyPlayer", "host_timestamp": "2026-09-02T17:45:54.144+08:00", "rva": 11886544, "timestamp": 1788342354144, "type": "hook_installed"}
-{"hook": "Player.MoveByLocalDirection", "host_timestamp": "2026-09-02T17:45:54.144+08:00", "rva": 11864576, "timestamp": 1788342354144, "type": "hook_installed"}
-{"hook": "CharacterController.Move", "host_timestamp": "2026-09-02T17:45:54.144+08:00", "rva": 11239952, "timestamp": 1788342354144, "type": "hook_installed"}
-{"host_timestamp": "2026-09-02T17:45:54.144+08:00", "name": "UnityCrossFire.exe", "pid": 4480, "type": "probe_attached"}
-{"crash": null, "host_timestamp": "2026-09-02T17:46:19.654+08:00", "reason": "process-terminated", "type": "session_detached"}
-{"host_timestamp": "2026-09-02T17:46:19.654+08:00", "type": "probe_detached"}

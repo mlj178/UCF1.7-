@@ -7,6 +7,10 @@ RUNNER_PATH = Path(__file__).with_name("run_fast_stock_hit_probe.py")
 TRIAL_SCRIPT_PATH = Path(__file__).with_name("AAAAA-fast_stock_hit_stun_bypass_min.js")
 PRECISE_SCRIPT_PATH = Path(__file__).with_name("AAAAA-fast_stock_hit_stun_precise_min.js")
 WAIT_SCRIPT_PATH = Path(__file__).with_name("AAAAA-fast_stock_hit_stun_wait_min.js")
+ANIM_SCRIPT_PATH = Path(__file__).with_name("AAAAA-fast_stock_anim_boost_min.js")
+GATE_SCRIPT_PATH = Path(__file__).with_name("AAAAA-fast_stock_gate_probe_min.js")
+UNLOCK_SCRIPT_PATH = Path(__file__).with_name("AAAAA-fast_stock_damage_unlock_min.js")
+HURT_PROBE_SCRIPT_PATH = Path(__file__).with_name("AAAAA-fast_stock_natural_unlock_hurt_probe_min.js")
 
 
 class FastStockHitProbeStaticTests(unittest.TestCase):
@@ -127,6 +131,116 @@ class FastStockHitProbeStaticTests(unittest.TestCase):
 
         self.assertIn('"wait"', source)
         self.assertIn("AAAAA-fast_stock_hit_stun_wait_min.js", source)
+
+    def test_anim_trial_boosts_only_local_stock_animation_and_preserves_damage_event_flow(self):
+        source = ANIM_SCRIPT_PATH.read_text(encoding="utf-8")
+
+        for required in (
+            "WPN_Gun_OnSpecialBtnDown: 0xB629F0",
+            "WPN_Gun_OnAnimationExit: 0xB62800",
+            "KnifeHitStunCoroutine_MoveNext: 0xB73050",
+            "Animator_set_speed: 0xAA8C30",
+            "BOOST_SPEED: 10.0",
+            "stock_anim_boost_applied",
+            "stock_hit_stun_boost_reapplied",
+            "stock_anim_speed_restored",
+            "Interceptor.attach",
+            "Interceptor.detachAll",
+        ):
+            self.assertIn(required, source)
+
+        self.assertNotIn("Weapon_CallKnifeAttack", source)
+        self.assertNotIn("Interceptor.replace", source)
+        self.assertNotIn(".writeFloat(", source)
+        self.assertNotIn(".writeU8(", source)
+
+    def test_runner_can_select_the_animation_boost_validation_script(self):
+        source = RUNNER_PATH.read_text(encoding="utf-8")
+
+        self.assertIn('"anim"', source)
+        self.assertIn("AAAAA-fast_stock_anim_boost_min.js", source)
+
+    def test_gate_probe_observes_the_full_stock_to_unlock_chain_without_changing_game_state(self):
+        source = GATE_SCRIPT_PATH.read_text(encoding="utf-8").lower()
+
+        for rva in (
+            "0xb629f0",  # special button input / knifeAttackAnim gate
+            "0xb62730",  # original animation damage event
+            "0xb6b380",  # original knife damage calculation
+            "0xb3f470",  # actual damage received
+            "0xb627a0",  # animation-end callback
+            "0xb62800",  # animation-exit / unlock path
+            "0xb62990",  # OnKnifeAttackExit
+        ):
+            self.assertIn(rva, source)
+
+        for event in (
+            "stock_input_gate",
+            "stock_damage_animation_event",
+            "stock_damage_call",
+            "stock_damage_received",
+            "stock_animation_end",
+            "stock_animation_exit",
+            "stock_gate_unlocked",
+        ):
+            self.assertIn(event, source)
+
+        self.assertIn("interceptor.attach", source)
+        for forbidden in ("interceptor.replace", ".writefloat(", ".writeu8(", ".writes32(", ".writepointer("):
+            self.assertNotIn(forbidden, source)
+
+    def test_runner_can_select_the_gate_probe(self):
+        source = RUNNER_PATH.read_text(encoding="utf-8")
+
+        self.assertIn('"gate"', source)
+        self.assertIn("AAAAA-fast_stock_gate_probe_min.js", source)
+
+    def test_damage_unlock_trial_reuses_the_confirmed_original_unlock_after_original_damage_event(self):
+        source = UNLOCK_SCRIPT_PATH.read_text(encoding="utf-8")
+
+        for required in (
+            "WPN_Gun_KnifeAttackEvent: 0xB62730",
+            "WPN_Gun_OnKnifeAttackExit: 0xB62990",
+            "originalOnKnifeAttackExit",
+            "knife_attack_anim",
+            "local_stock_unlocked_after_damage",
+            "MIN_UNLOCK_INTERVAL_MS",
+            "Interceptor.attach",
+        ):
+            self.assertIn(required, source)
+
+        self.assertNotIn("Interceptor.replace", source)
+        self.assertNotIn(".writeFloat(", source)
+        self.assertNotIn(".writeU8(", source)
+        self.assertNotIn(".writeS32(", source)
+
+    def test_runner_can_select_the_damage_unlock_trial(self):
+        source = RUNNER_PATH.read_text(encoding="utf-8")
+
+        self.assertIn('"unlock"', source)
+        self.assertIn("AAAAA-fast_stock_damage_unlock_min.js", source)
+
+    def test_natural_unlock_hurt_probe_observes_actual_entity_hurt_after_a_natural_damage_event(self):
+        source = HURT_PROBE_SCRIPT_PATH.read_text(encoding="utf-8")
+
+        for required in (
+            "WPN_Gun_KnifeAttackEvent: 0xB62730",
+            "Entity_OnEntityHurt: 0xB3F470",
+            "WPN_Gun_OnKnifeAttackExit: 0xB62990",
+            "natural_stock_damage_event",
+            "correlated_entity_hurt",
+            "originalOnKnifeAttackExit",
+            "MAX_HURT_CORRELATION_MS",
+        ):
+            self.assertIn(required, source)
+
+        for forbidden in ("Interceptor.replace", ".writeFloat(", ".writeU8(", ".writeS32(", ".writePointer("):
+            self.assertNotIn(forbidden, source)
+
+    def test_runner_can_select_the_natural_unlock_hurt_probe(self):
+        source = RUNNER_PATH.read_text(encoding="utf-8")
+        self.assertIn('"hurt"', source)
+        self.assertIn("AAAAA-fast_stock_natural_unlock_hurt_probe_min.js", source)
 
 
 if __name__ == "__main__":

@@ -1,0 +1,32 @@
+{
+  "feature_id": "brightness_probe",
+  "canonical_id": "brightness_probe",
+  "display_name": "亮度调节",
+  "category": "other",
+  "tab": "game_parameters_tab",
+  "tab_title": "游戏参数",
+  "tab_order": 80,
+  "order": 120,
+  "desc": "",
+  "script": "script.js",
+  "runtime": {"type": "plugin_script"},
+  "layout": {"card_type": "wide", "columnspan": 2, "title_color": "#facc15"},
+  "controls": [
+    {"type": "slider", "action": "setConfig", "key": "exposure", "label": "曝光", "min": -2.0, "max": 4.0, "step": 0.1, "default": 1.5, "format": "{:.2f}"},
+    {"type": "slider", "action": "setConfig", "key": "contrast", "label": "对比度", "min": -50.0, "max": 50.0, "step": 1.0, "default": 0.0, "format": "{:.0f}"},
+    {"type": "slider", "action": "setConfig", "key": "saturation", "label": "饱和度", "min": -100.0, "max": 100.0, "step": 1.0, "default": 0.0, "format": "{:.0f}"},
+    {"type": "slider", "action": "setConfig", "key": "gamma", "label": "中间调 Gamma", "min": -1.0, "max": 1.0, "step": 0.01, "default": 0.0, "format": "{:.2f}"},
+    {"type": "slider", "action": "setConfig", "key": "gain", "label": "亮部 Gain", "min": -1.0, "max": 1.0, "step": 0.01, "default": 0.0, "format": "{:.2f}"},
+    {"type": "button", "action": "applybrightness", "label": "应用参数"},
+    {"type": "button", "action": "resetbrightness", "label": "恢复游戏初始值"}
+  ],
+  "config": {"exposure": 1.5, "contrast": 0.0, "saturation": 0.0, "gamma": 0.0, "gain": 0.0, "update_volume_stack": true},
+  "rpc": ["enable", "disable", "setConfig", "setconfig", "applyBrightness", "applybrightness", "resetBrightness", "resetbrightness", "status", "cleanup"],
+  "actions": {
+    "applybrightness": {"type": "rpc", "requires_connection": true},
+    "resetbrightness": {"type": "rpc", "requires_connection": true}
+  },
+  "lifecycle": {"cleanup": true, "restore": false, "requires_room_ready_reapply": false, "room_ready_retry": false},
+  "ui_handles": {"exposure_var": "brightness_probe_exposure_var", "contrast_var": "brightness_probe_contrast_var", "saturation_var": "brightness_probe_saturation_var", "gamma_var": "brightness_probe_gamma_var", "gain_var": "brightness_probe_gain_var"},
+  "state": {"sync_enabled_from_config": false}
+}
