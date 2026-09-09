@@ -75,11 +75,16 @@ class RoleTransformIntegrationTests(unittest.TestCase):
         self.assertEqual("special_inline_card", manifest["ui"]["mode"])
         self.assertFalse(manifest["lifecycle"]["restore"])
         self.assertFalse(manifest["state"]["sync_enabled_from_config"])
+        buttons = [item for item in manifest["controls"] if item.get("type") == "button"]
         self.assertEqual(
             EXPECTED_ACTIONS,
-            {item["payload"]["action"] for item in manifest["controls"]},
+            {item["payload"]["action"] for item in buttons},
         )
-        self.assertEqual({"trigger"}, {item["action"] for item in manifest["controls"]})
+        self.assertEqual({"trigger"}, {item["action"] for item in buttons})
+        switches = [item for item in manifest["controls"] if item.get("type") == "switch"]
+        self.assertEqual(1, len(switches))
+        self.assertEqual("enable", switches[0]["action"])
+        self.assertEqual("role_transform_switch", manifest["ui_handles"]["switch"])
         self.assertTrue(manifest["actions"]["trigger"]["requires_connection"])
         self.assertEqual(
             "05-正式功能/34-角色变身/AAAAA-role_transform_min.js",
@@ -185,7 +190,11 @@ class RoleTransformIntegrationTests(unittest.TestCase):
 
     def test_action_router_forwards_button_payload_to_trigger_rpc(self):
         manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
-        control = manifest["controls"][0]
+        control = next(
+            item
+            for item in manifest["controls"]
+            if (item.get("payload") or {}).get("action") == "local_hero"
+        )
         calls = []
 
         class Feature:

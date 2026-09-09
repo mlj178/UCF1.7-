@@ -32,12 +32,25 @@ def build_card(parent, manifest, row, col, colspan, callbacks, card_builder):
         pady=3,
     )
 
+    ui_handles = manifest.get("ui_handles", {})
+
+    title_frame = ctk.CTkFrame(frame, fg_color="transparent")
+    title_frame.pack(fill="x", padx=12, pady=(8, 2))
+
     ctk.CTkLabel(
-        frame,
+        title_frame,
         text=manifest.get("display_name", "角色变身"),
         font=("Microsoft YaHei", 15, "bold"),
         text_color=manifest.get("layout", {}).get("title_color", "#A855F7"),
-    ).pack(anchor="w", padx=12, pady=(8, 2))
+    ).pack(side="left", anchor="w")
+
+    switch = ctk.CTkSwitch(
+        title_frame,
+        text="",
+        font=("Microsoft YaHei", 12),
+        command=lambda: callbacks["toggle"](feature_id),
+    )
+    switch.pack(side="right", padx=6)
 
     ctk.CTkLabel(
         frame,
@@ -60,7 +73,13 @@ def build_card(parent, manifest, row, col, colspan, callbacks, card_builder):
         payload = dict(control.get("payload") or {})
         return callbacks["action"](feature_id, action, payload)
 
-    for index, control in enumerate(manifest.get("controls", [])):
+    button_controls = [
+        control
+        for control in manifest.get("controls", [])
+        if control.get("type") == "button"
+    ]
+
+    for index, control in enumerate(button_controls):
         payload_action = (control.get("payload") or {}).get("action", str(index))
         button = ctk.CTkButton(
             button_frame,
@@ -83,5 +102,6 @@ def build_card(parent, manifest, row, col, colspan, callbacks, card_builder):
         )
         handles[handle_name] = button
 
+    handles[ui_handles.get("switch", f"{feature_id}_switch")] = switch
     handles[f"{feature_id}_frame"] = frame
     return handles

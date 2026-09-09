@@ -22,6 +22,10 @@
   },
   "controls": [
     {
+      "type": "switch",
+      "action": "enable"
+    },
+    {
       "type": "button",
       "action": "trigger",
       "label": "本地玩家：选择英雄",
@@ -84,6 +88,7 @@
     "runtime_script_js": "features/34_role_transform/script.js"
   },
   "ui_handles": {
+    "switch": "role_transform_switch",
     "local_hero": "role_transform_local_hero_button",
     "local_terminator": "role_transform_local_terminator_button",
     "bot_hero": "role_transform_bot_hero_button",

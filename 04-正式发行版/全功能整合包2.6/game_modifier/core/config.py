@@ -60,25 +60,25 @@ DEDICATED_HOTKEY_ACTIONS = {
 }
 
 ROLE_TRANSFORM_HOTKEY_ACTIONS = {
-    'ctrl+q': {
+    'alt+q': {
         "label": "本地玩家：选择英雄",
         "feature_id": "role_transform",
         "action": "trigger",
         "payload": {"action": "local_hero"},
     },
-    'ctrl+w': {
+    'alt+w': {
         "label": "本地玩家：选择超级终结者",
         "feature_id": "role_transform",
         "action": "trigger",
         "payload": {"action": "local_terminator"},
     },
-    'ctrl+e': {
+    'alt+e': {
         "label": "所有 Bot：随机英雄",
         "feature_id": "role_transform",
         "action": "trigger",
         "payload": {"action": "bot_hero"},
     },
-    'ctrl+r': {
+    'alt+r': {
         "label": "所有 Bot：随机超级终结者",
         "feature_id": "role_transform",
         "action": "trigger",
@@ -87,10 +87,10 @@ ROLE_TRANSFORM_HOTKEY_ACTIONS = {
 }
 
 ROLE_TRANSFORM_HOTKEY_DISPLAY_NAMES = {
-    'ctrl+q': 'Ctrl+Q',
-    'ctrl+w': 'Ctrl+W',
-    'ctrl+e': 'Ctrl+E',
-    'ctrl+r': 'Ctrl+R',
+    'alt+q': 'Alt+Q',
+    'alt+w': 'Alt+W',
+    'alt+e': 'Alt+E',
+    'alt+r': 'Alt+R',
 }
 
 def _load_feature_manifests():

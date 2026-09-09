@@ -16,7 +16,7 @@ class RoleTransformActionHotkeyTests(unittest.TestCase):
 
         self.assertIsNotNone(actions)
         self.assertEqual(
-            ("ctrl+q", "ctrl+w", "ctrl+e", "ctrl+r"),
+            ("alt+q", "alt+w", "alt+e", "alt+r"),
             tuple(actions),
         )
         self.assertEqual(
