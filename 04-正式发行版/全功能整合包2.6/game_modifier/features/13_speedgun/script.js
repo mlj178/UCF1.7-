@@ -1,4 +1,4 @@
-﻿// Local helpers for this feature only.
+// Local helpers for this feature only.
 var modules = {};
 var __localMaxLogsPerModule = 10;
 var __localModuleLogCounts = {};
@@ -80,15 +80,33 @@ function registerCleanup(callback) {
 }
 
 // speed_gun.js - 射速变快 + 连狙 — 终极武器修改
-// 10个Hook点：动画加速10x + 清除射击间隔 + 半自动→全自动 + 狙击镜不关闭 + RPG特殊处理 + 后坐力清零 + 扩散归零
+// 10个Hook点：射速滑块(间隔闸门+FireSpeed动画参数双控) + 半自动→全自动 + 狙击镜不关闭 + RPG特殊处理 + 后坐力清零 + 扩散归零
 
 modules.speedgun = (function() {
   // ===== 配置与运行状态 =====
   var enabled = false;
+  // 射速倍率 fireRate(1.0 原速 ~ 10.0 极速)：幂曲线双控机制——
+  // ①射击间隔闸门 WPN_Gun+0x110 nextAllowedShootTime：每发真实射出后在 GunShoot_NoCheck.onLeave
+  //   重写为 lastShootTime(+0xFC) + base * ((11-fireRate)/10)^1.7（幂曲线，加速度越来越快；
+  //   M=1→原速，M=9≈×0.065，M=10≈×0.019，狙击 1.5s→0.03s）。绝对值写入，半自动枪 RPM=0
+  //   时游戏会写 +Inf 必须覆盖，否则永久锁死。base：全自动枪取 60/shotsPerMinute（只读）；
+  //   半自动/狙击枪 RPM=0——其原版节拍器是"正式开火动画挡下一发"，已被连狙(清 isSemiGun
+  //   → 走 PlayTempAnim 临时动画)绕过，故按武器类型补基准节奏（下方两个常量，可调）；
+  // ②开火动画速度 realData+0xD0 fireAnimMultiplier = fireRate，并每发调 WPN_Gun.AnimSpeedSetting
+  //   (游戏原生函数 → CFAnimator.SetFloat("FireSpeed", M)，只缩放开火动画，非全局动画器倍率)。
+  // 默认 10.0 对齐原极速行为。
+  var fireRate = 10.0;
+  // 半自动/狙击枪(RPM=0)的基准射击间隔（秒）：狙击≈拉栓节奏，其余半自动≈手枪节奏。
+  // M=1 时按此节奏连发（再经幂曲线缩放）；实测偏快/偏慢直接调这两个常量。
+  var SEMI_BASE_SNIPER = 1.5;
+  var SEMI_BASE_DEFAULT = 0.25;
   var hooks = [];
   var isMyWeaponFn = null;
   var getCharAnim = null;
   var setAnimSpeed = null;
+  var getShootIntervalFn = null;
+  var isSniperFn = null;
+  var animSpeedSettingFn = null;
   var rpgAnimSpeedFn = null;
   var grenadeAnimSpeedFn = null;
   var classGetNameFn = null;
@@ -137,14 +155,63 @@ modules.speedgun = (function() {
       if (!data || !gunData || !gunData.equals(data)) return false;
       if (requireGrenadeGun === true && getObjectClassName(data) !== 'WD_GrenadeGun') return false;
 
-      gunData.add(0xD0).writeFloat(10.0);
+      gunData.add(0xD0).writeFloat(fireRate);
       weapon.add(0xF0).writeU8(0);
       weapon.add(0x108).writeS32(0);
-      weapon.add(0x110).writeFloat(0.0);
+      // 闸门 +0x110 不在此处写：半自动枪 RPM=0，游戏部署路径可能写 +Inf；
+      // 统一交给 GunShoot_NoCheck.onLeave 的每发公式管理，杜绝锁死。
       return true;
     } catch(e) {
       return false;
     }
+  }
+
+  // ===== 射速闸门 + FireSpeed 双控（滑块核心，仅在 GunShoot_NoCheck.onLeave 调用） =====
+  // 前提：GunShoot_NoCheck 是"真实射出一发"的必经点（GunShoot 闸门检查通过后进入），
+  // 且函数开头已写 lastShootTime(+0xFC)=Time.time、全自动分支可能写 +0x110=Time.time+60/RPM
+  // （半自动枪 RPM=0 → +Inf）。onLeave 时用绝对值整体覆盖闸门：
+  //   闸门 = lastShootTime + base * pow((11 - M)/10, 1.7)
+  // （幂曲线：加速度越来越快；M=1→×1.0 原速，M=10→≈×0.019，狙击 1.5s→0.03s<0.05s）
+  // base：全自动枪取 get_shootIntervalTime()（只读共享数据）；半自动/狙击枪 RPM=0 →
+  // 原版靠"正式开火动画挡下一发"节流，但连狙清 isSemiGun 后走临时动画不再挡发，
+  // 故按武器类型补基准节奏（isSniper → 1.5s，其余半自动 → 0.25s，常量在文件头）。
+  // isSniper 只读 realData.wpnClass==1，不受本功能清除的字段影响，可安全直接调用。
+  // 同步写 realData+0xD0 = M 并调 WPN_Gun.AnimSpeedSetting（游戏原生 SetFloat("FireSpeed", M)）。
+  // 任何异常 fail-open：闸门写 0（回到旧版连点即发），绝不留锁死状态。
+  function applyFireRateGate(weapon) {
+    var gate = 0.0;
+    try {
+      var realData = safeReadPointer(weapon, 0xEC);
+      var base = 0.0;
+      if (realData && getShootIntervalFn) {
+        var raw = getShootIntervalFn(realData, ptr(0));
+        if (isFinite(raw) && raw > 0.0) base = raw;
+      }
+      if (base <= 0.0) {
+        // 半自动/狙击枪（RPM=0）：类型基准节奏兜底，经幂曲线缩放。注释里的 ÷M 描述按此更新。
+        var sniper = false;
+        try { sniper = isSniperFn ? !!isSniperFn(weapon, ptr(0)) : false; } catch(_) { sniper = false; }
+        base = sniper ? SEMI_BASE_SNIPER : SEMI_BASE_DEFAULT;
+      }
+      // 幂曲线：间隔 = base * ((11 - M)/10)^1.7。每档缩短比例递增，末段加速最猛。
+      var ratio = (11.0 - fireRate) / 10.0;
+      if (ratio < 0.0) ratio = 0.0;
+      var interval = base * Math.pow(ratio, 1.7);
+      var lastShoot = weapon.add(0xFC).readFloat();
+      if (isFinite(lastShoot) && lastShoot > 0.0) {
+        gate = lastShoot + interval;
+      }
+      // lastShoot 无效时 gate 保持 0（放行），等下一发建立基准。
+      weapon.add(0x110).writeFloat(gate);
+      if (realData) {
+        realData.add(0xD0).writeFloat(fireRate);
+      }
+      if (animSpeedSettingFn) {
+        animSpeedSettingFn(weapon, ptr(0));
+      }
+      return;
+    } catch(e) {}
+    try { weapon.add(0x110).writeFloat(0.0); } catch(_) {}
   }
 
   function applyRpgDataSpeed(weapon) {
@@ -548,6 +615,9 @@ modules.speedgun = (function() {
     isMyWeaponFn = null;
     getCharAnim = null;
     setAnimSpeed = null;
+    getShootIntervalFn = null;
+    isSniperFn = null;
+    animSpeedSettingFn = null;
     rpgAnimSpeedFn = null;
     grenadeAnimSpeedFn = null;
     classGetNameFn = null;
@@ -562,6 +632,12 @@ modules.speedgun = (function() {
     isMyWeaponFn = new NativeFunction(base.add(0xB6E1D0), "bool", ["pointer", "pointer"]);
     getCharAnim = new NativeFunction(base.add(0xB35310), "pointer", ["pointer", "pointer"]);
     setAnimSpeed = new NativeFunction(base.add(0xAA8C30), "void", ["pointer", "float", "pointer"]);
+    // WeaponData_Gun.get_shootIntervalTime：返回 60/shotsPerMinute，用于读取原射击间隔（只读共享数据，安全）。
+    getShootIntervalFn = new NativeFunction(base.add(0xB78EF0), "float", ["pointer", "pointer"]);
+    // WPN_Gun.get_isSniper：只读 realData(+0x68).wpnClass(+0x10)==1，半自动兜底时区分狙击/其他半自动。
+    isSniperFn = new NativeFunction(base.add(0xB63AE0), "bool", ["pointer", "pointer"]);
+    // WPN_Gun.AnimSpeedSetting：游戏原生函数，经 shouldSetFireSpeed 检查后 SetFloat("FireSpeed", fireAnimMultiplier)。
+    animSpeedSettingFn = new NativeFunction(base.add(0xB60B00), "void", ["pointer", "pointer"]);
     rpgAnimSpeedFn = new NativeFunction(base.add(0xB66CA0), "void", ["pointer", "pointer"]);
     grenadeAnimSpeedFn = new NativeFunction(base.add(0xB5F7A0), "void", ["pointer", "pointer"]);
     componentGetTransformFn = new NativeFunction(base.add(0x32CF40), "pointer", ["pointer", "pointer"]);
@@ -685,7 +761,7 @@ modules.speedgun = (function() {
               if (isMyWeaponFn(this.self, ptr(0))) {
                 var realData = this.self.add(0xEC).readPointer();
                 if (!realData.isNull()) {
-                  realData.add(0xD0).writeFloat(10.0);
+                  realData.add(0xD0).writeFloat(fireRate);
                 }
               }
             } catch(e) {}
@@ -765,7 +841,7 @@ modules.speedgun = (function() {
         }));
       } catch(e) { sendDevLog('warn', '射速', 'WPN_GrenadeGun.Deploy Hook失败: ' + e.message); }
 
-      // 2) GunShoot — 清除射击间隔 + 半自动 => 全自动（改进：onEnter立即修改）
+      // 2) GunShoot — 半自动→全自动（闸门检查入口；实际射出一发走 GunShoot_NoCheck）
       try {
         hooks.push(Interceptor.attach(base.add(0xB624C0), {
           onEnter: function(args) {
@@ -776,7 +852,8 @@ modules.speedgun = (function() {
                 pendingScopeSettleWeapon = this.self;
                 scopeSettleProbeLastRecoil = null;
                 this.self.add(0xF0).writeU8(0);
-                this.self.add(0x110).writeFloat(0.0);
+                // 不在此处碰 +0x110 闸门：GunShoot 按住时每帧被调用（含未射出的帧），
+                // 闸门只允许在真实射出后（GunShoot_NoCheck.onLeave）统一重写。
                 this.self.add(0x108).writeS32(0);
                 var anim = getCharAnim(this.self, ptr(0));
                 if (!anim.isNull()) {
@@ -794,7 +871,6 @@ modules.speedgun = (function() {
             if (!this.self) return;
             try {
               if (isMyWeaponFn(this.self, ptr(0))) {
-                this.self.add(0x110).writeFloat(0.0);
                 this.self.add(0x108).writeS32(0);
               }
             } catch(e) {}
@@ -806,6 +882,23 @@ modules.speedgun = (function() {
           }
         }));
       } catch(e) { sendDevLog('warn', '射速', 'GunShoot Hook失败: ' + e.message); }
+
+      // 2.01) GunShoot_NoCheck — 真实射出一发的必经点，滑块核心在此生效。
+      // 函数开头写 lastShootTime(+0xFC)，全自动分支写闸门(+0x110)（半自动枪写 +Inf）；
+      // onLeave 用绝对值整体覆盖闸门（lastShoot + base/M），并同步 FireSpeed 动画倍率。
+      try {
+        hooks.push(Interceptor.attach(base.add(0xB621F0), {
+          onEnter: function(args) { this.self = args[0]; },
+          onLeave: function(retVal) {
+            if (!this.self) return;
+            try {
+              if (isMyWeaponFn(this.self, ptr(0))) {
+                applyFireRateGate(this.self);
+              }
+            } catch(e) {}
+          }
+        }));
+      } catch(e) { sendDevLog('warn', '射速', 'GunShoot_NoCheck Hook失败: ' + e.message); }
 
       // 2.05) Brain.PushStateToUnityCamera — 缓存正在输出的本地镜头，用作最终弹道方向。
       try {
@@ -885,7 +978,7 @@ modules.speedgun = (function() {
                   if (wpnClass === 5) {
                     var realData = this.wpn.add(0xEC).readPointer();
                     if (!realData.isNull()) {
-                      realData.add(0xD0).writeFloat(10.0);
+                      realData.add(0xD0).writeFloat(fireRate);
                     }
                   }
                   if (wpnClass === 1 || wpnClass === 2) {
@@ -1011,13 +1104,21 @@ modules.speedgun = (function() {
     return enabled;
   }
 
+  // 由配置同步：滑块拖到 1.0(正常)~10.0(极速)。负值/非法值回到默认 10.0。
+  function setFireRate(value) {
+    var numeric = Number(value);
+    if (!isFinite(numeric) || numeric <= 0) numeric = 10.0;
+    fireRate = numeric;
+  }
+
   return {
     enable: enableFeature,
     disable: disableFeature,
     clearRoomState: clearRoomState,
     notifyWeaponAcquired: notifyWeaponAcquired,
     processPendingWeaponSpeed: processPendingWeaponSpeed,
-    isEnabled: isEnabled
+    isEnabled: isEnabled,
+    setFireRate: setFireRate
   };
 })();
 
@@ -1040,6 +1141,10 @@ function __pluginApplyConfig(config) {
   }
   var module = __pluginModule();
   if (!module) return { ok: false, reason: 'module_not_loaded', config: __pluginConfig };
+
+  if (typeof module.setFireRate === 'function' && __pluginConfig.fire_rate != null) {
+    module.setFireRate(__pluginConfig.fire_rate);
+  }
 
   return { ok: true, config: __pluginConfig };
 }

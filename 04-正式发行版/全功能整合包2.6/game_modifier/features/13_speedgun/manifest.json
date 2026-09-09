@@ -5,7 +5,7 @@
     "category":  "weapon",
     "tab":  "weapon_tab",
     "order":  86,
-    "desc":  "• 射速 10 倍加速\n• 连狙：半自动 → 全自动，狙击镜常开\n• 后坐力清零 + 扩散归零",
+    "desc":  "• 射速滑块：1.0x 原速 ~ 10.0x 极速，全枪型生效\n• 连狙：半自动 → 全自动，狙击镜常开\n• 后坐力清零 + 扩散归零",
     "script":  "script.js",
     "layout":  {
                    "card_type":  "simple",
@@ -16,10 +16,20 @@
                      {
                          "type":  "switch",
                          "action":  "enable"
+                     },
+                     {
+                         "type":  "slider",
+                         "action":  "setConfig",
+                         "key":  "fire_rate",
+                         "label":  "射速倍率",
+                         "min":  1.0,
+                         "max":  10.0,
+                         "step":  0.1,
+                         "default":  10.0
                      }
                  ],
     "config":  {
-
+                   "fire_rate":  10.0
                },
     "rpc":  [
                 "enable",
@@ -36,15 +46,18 @@
                    "runtime_script_js":  "features/13_speedgun/script.js"
                },
     "ui_handles":  {
-                       "switch":  "speedgun_switch"
+                       "switch":  "speedgun_switch",
+                       "slider_var":  "speedgun_rate_var",
+                       "slider_slider":  "speedgun_rate_slider",
+                       "slider_label":  "speedgun_rate_label"
                    },
     "ui_text":  {
                     "lines":  [
-                                  "• 射速 10 倍加速",
+                                  "• 射速滑块：1.0x 原速 ~ 10.0x 极速，全枪型生效",
                                   "• 连狙：半自动 → 全自动，狙击镜常开",
                                   "• 后坐力清零 + 扩散归零"
                               ]
-                },
+               },
     "runtime":  {
                     "type":  "plugin_script"
                 },

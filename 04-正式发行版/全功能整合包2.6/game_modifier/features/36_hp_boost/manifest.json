@@ -1,0 +1,83 @@
+{
+  "feature_id": "hp_boost",
+  "canonical_id": "hp_boost",
+  "display_name": "增加血量",
+  "category": "player",
+  "tab": "player_tab",
+  "tab_title": "人物属性",
+  "tab_order": 20,
+  "order": 50,
+  "desc": "开启后，每触发一次快捷键或「加血一次」按钮，为本地玩家加一次血（上限同步提升）。",
+  "script": "script.js",
+  "runtime": {
+    "type": "plugin_script"
+  },
+  "hotkey": {
+    "enabled": true
+  },
+  "layout": {
+    "card_type": "simple",
+    "columnspan": 1,
+    "title_color": "#4ade80"
+  },
+  "controls": [
+    {
+      "type": "switch",
+      "action": "enable"
+    },
+    {
+      "type": "slider",
+      "action": "setConfig",
+      "key": "add_amount",
+      "label": "单次加血量",
+      "min": 1,
+      "max": 2000,
+      "step": 1,
+      "default": 10
+    },
+    {
+      "type": "button",
+      "action": "addhp",
+      "label": "加血一次"
+    }
+  ],
+  "config": {
+    "add_amount": 10
+  },
+  "actions": {
+    "addhp": {
+      "type": "rpc",
+      "requires_connection": true
+    }
+  },
+  "rpc": [
+    "enable",
+    "disable",
+    "setConfig",
+    "set_config",
+    "setconfig",
+    "status",
+    "cleanup",
+    "addhp"
+  ],
+  "lifecycle": {
+    "cleanup": true,
+    "restore": true,
+    "requires_room_ready_reapply": false,
+    "room_ready_retry": false,
+    "room_ready_reapply_exempt_reason": "加血是一次性动作：由 Player.Update 主线程 Hook 执行一次后即清除；开关只决定是否响应 F3/按钮，无持续生效状态需要进房后二次应用。"
+  },
+  "source": {
+    "single_feature_js": "05-正式功能/36-增加血量/script.js",
+    "runtime_script_js": "features/36_hp_boost/script.js"
+  },
+  "ui_handles": {
+    "switch": "hp_boost_switch",
+    "add_amount_var": "hp_boost_add_amount_var",
+    "add_amount_label": "hp_boost_add_amount_label",
+    "button": "hp_boost_add_btn"
+  },
+  "state": {
+    "sync_enabled_from_config": true
+  }
+}
