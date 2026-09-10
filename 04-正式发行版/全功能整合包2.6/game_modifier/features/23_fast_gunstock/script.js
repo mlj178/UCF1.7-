@@ -27,14 +27,16 @@
     KnifeAttackEvent: 0xB62730,
     OnKnifeAttackExit: 0xB62990,
     OnAnimationExit: 0xB62800,
-    Weapon_get_isMyWeapon: 0xB6E1D0
+    Weapon_get_isMyWeapon: 0xB6E1D0,
+    Player_get_isNanoGhost: 0xB56050
   };
 
   var OFF = {
     realData: 0xEC,
     knifeAttacks: 0x180,
     knifeAttackCount: 0x118,
-    knifeAttackAnim: 0x11C
+    knifeAttackAnim: 0x11C,
+    owner: 0x30
   };
 
   var CFG = {
@@ -70,12 +72,14 @@
     staleLockClears: 0,
     nonLocalSkips: 0,
     noKnifeSkips: 0,
+    ghostSkips: 0,
     maxGuardClears: 0,
 
     lastError: null,
 
     isMyWeaponFn: null,
     onKnifeAttackExitFn: null,
+    isNanoGhostFn: null,
     hooks: [],
     logCounter: {}
   };
@@ -144,6 +148,13 @@
         ABI
       );
 
+      st.isNanoGhostFn = new NativeFunction(
+        m.base.add(RVA.Player_get_isNanoGhost),
+        'bool',
+        ['pointer', 'pointer'],
+        ABI
+      );
+
       st.initialized = true;
       log('成功', '初始化', 'NativeFunction 初始化完成');
       return true;
@@ -206,6 +217,21 @@
       return st.isMyWeaponFn(w, ptr(0)) ? true : false;
     } catch (e) {
       st.lastError = '判断本地武器失败：' + e.message;
+      return false;
+    }
+  }
+
+  function isLocalPlayerNanoGhost(w) {
+    if (!w || w.isNull()) return false;
+    if (!initNative()) return false;
+
+    var owner = rp(w.add(OFF.owner));
+    if (!owner || owner.isNull()) return false;
+
+    try {
+      return st.isNanoGhostFn(owner, ptr(0)) ? true : false;
+    } catch (e) {
+      st.lastError = '判断生化幽灵身份失败：' + e.message;
       return false;
     }
   }
@@ -383,6 +409,14 @@
 
             if (!isLocalWeapon(w)) {
               st.nonLocalSkips++;
+              return;
+            }
+
+            if (isLocalPlayerNanoGhost(w)) {
+              st.ghostSkips++;
+              if (st.ghostSkips <= 3) {
+                log('信息', '身份', '本地玩家为生化幽灵，极速枪托不生效');
+              }
               return;
             }
 
@@ -585,6 +619,7 @@
       maxGuardClears: st.maxGuardClears,
       nonLocalSkips: st.nonLocalSkips,
       noKnifeSkips: st.noKnifeSkips,
+      ghostSkips: st.ghostSkips,
       config: pluginConfig,
 
       lastError: st.lastError

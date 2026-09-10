@@ -49,7 +49,7 @@ class RoleTransformIntegrationTests(unittest.TestCase):
 
         self.assertEqual([], missing)
 
-    def test_trigger_accepts_payload_and_lazy_enables_before_queueing(self):
+    def test_trigger_requires_enabled_switch_before_queueing(self):
         script = SCRIPT.read_text(encoding="utf-8")
         body = script.split("function queueAction", 1)[1].split(
             "function status", 1
@@ -57,8 +57,12 @@ class RoleTransformIntegrationTests(unittest.TestCase):
 
         self.assertIn("actionOrPayload", body)
         self.assertIn("actionOrPayload.action", body)
-        self.assertIn("enableFeature()", body)
-        self.assertLess(body.index("enableFeature()"), body.index("Runtime.pendingAction = action"))
+        self.assertIn("reject('feature is disabled')", body)
+        self.assertNotIn("enableFeature()", body)
+        self.assertLess(
+            body.index("reject('feature is disabled')"),
+            body.index("Runtime.pendingAction = action"),
+        )
 
     def test_cleanup_accepts_integrated_runtime_payload(self):
         script = SCRIPT.read_text(encoding="utf-8")
@@ -81,6 +85,11 @@ class RoleTransformIntegrationTests(unittest.TestCase):
             {item["payload"]["action"] for item in buttons},
         )
         self.assertEqual({"trigger"}, {item["action"] for item in buttons})
+        labels_by_action = {item["payload"]["action"]: item["label"] for item in buttons}
+        self.assertEqual("人类 Bot：随机英雄", labels_by_action["bot_hero"])
+        self.assertEqual(
+            "幽灵 Bot：随机超级终结者", labels_by_action["bot_terminator"]
+        )
         switches = [item for item in manifest["controls"] if item.get("type") == "switch"]
         self.assertEqual(1, len(switches))
         self.assertEqual("enable", switches[0]["action"])
@@ -112,12 +121,44 @@ class RoleTransformIntegrationTests(unittest.TestCase):
             "NanoRoleSelect_OpenMasterRole: 0x00B4ED30",
             "Mode_Nano4_Terminator_BecomeRandomMasterHero: 0x00B42E90",
             "Mode_Nano4_Terminator_TryBecomeRandomMasterTerminator: 0x00B45B90",
+            "Player_get_isNanoGhost: 0x00B56050",
+            "GameManager_gameMode: 0x04",
             "function consumePendingAction",
+            "function playerFaction",
+            "function getGameMode",
+            "function isNanoGameMode",
             "Native.openMasterRole(selector, isHero ? 1 : 0, ptr(0))",
             "Native.becomeRandomMasterHero(mode, player, 0, ptr(0))",
             "Native.tryBecomeRandomMasterTerminator(mode, player, ptr(0))",
+            "Native.isNanoGhost(player, ptr(0))",
         ):
             self.assertIn(token, script)
+
+    def test_bot_transform_is_faction_scoped(self):
+        script = SCRIPT.read_text(encoding="utf-8")
+        foreach = script.split("function forEachEligibleBot", 1)[1].split(
+            "function applyBotTransform", 1
+        )[0]
+        apply = script.split("function applyBotTransform", 1)[1].split(
+            "function executeAction", 1
+        )[0]
+
+        self.assertIn("playerFaction(player) !== requiredFaction", foreach)
+        self.assertIn("isHero ? 'human' : 'ghost'", apply)
+        self.assertIn("}, requiredFaction)", apply)
+
+    def test_actions_are_limited_to_nano_game_modes(self):
+        script = SCRIPT.read_text(encoding="utf-8")
+        body = script.split("function executeAction", 1)[1].split(
+            "function consumePendingAction", 1
+        )[0]
+
+        self.assertIn("NANO_MODE_MIN = 3", script)
+        self.assertIn("NANO_MODE_MAX = 6", script)
+        self.assertIn(
+            "gameMode >= NANO_MODE_MIN && gameMode <= NANO_MODE_MAX", script
+        )
+        self.assertIn("if (!isNanoGameMode()) {", body)
 
     def test_panel_places_itself_after_existing_inline_cards(self):
         panel = load_panel_module()
@@ -162,21 +203,6 @@ class RoleTransformIntegrationTests(unittest.TestCase):
             : actionOrPayload && actionOrPayload.action;
         if (!VALID_ACTIONS[action]) {""",
         )
-        expected = expected.replace(
-            """if (!Runtime.enabled || !Runtime.initialized) {
-            reject('feature is disabled');
-            return status();
-        }
-        if (Runtime.pendingAction) {""",
-            """if (!Runtime.enabled || !Runtime.initialized) {
-            enableFeature();
-        }
-        if (!Runtime.enabled || !Runtime.initialized) {
-            reject('feature initialization failed');
-            return status();
-        }
-        if (Runtime.pendingAction) {""",
-        )
 
         self.assertEqual(expected, SCRIPT.read_text(encoding="utf-8"))
 
@@ -184,9 +210,17 @@ class RoleTransformIntegrationTests(unittest.TestCase):
         record = PERSISTENCE_RECORD.read_text(encoding="utf-8")
 
         self.assertIn(
-            "| 34-角色变身 | 四个变身按钮 | 不记录动作或参数 | 不恢复 |",
+            "| 34-角色变身 | 开关（门控）、四个变身按钮 | 不记录动作或参数 | 不恢复 |",
             record,
         )
+
+    def test_app_keeps_feature_state_dict_identity_for_switch_updates(self):
+        app_source = (ROOT.parents[1] / "ui" / "app.py").read_text(encoding="utf-8")
+        body = app_source.split("def _apply_persistent_state", 1)[1].split("\n    def ", 1)[0]
+
+        self.assertIn("self._features.clear()", body)
+        self.assertIn("self._features.update(state.features)", body)
+        self.assertNotIn("self._features = dict(", body)
 
     def test_action_router_forwards_button_payload_to_trigger_rpc(self):
         manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))

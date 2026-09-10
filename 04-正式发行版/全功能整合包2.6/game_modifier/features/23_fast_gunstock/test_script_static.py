@@ -24,6 +24,15 @@ class FastGunstockNaturalDamageTests(unittest.TestCase):
         self.assertNotIn("unlockDelayMs", source)
         self.assertIn("最大保护窗口", source)
 
+    def test_skips_when_local_player_is_nano_ghost(self):
+        source = SCRIPT_PATH.read_text(encoding="utf-8")
+
+        self.assertIn("Player_get_isNanoGhost: 0xB56050", source)
+        self.assertIn("owner: 0x30", source)
+        self.assertIn("isLocalPlayerNanoGhost(w)", source)
+        self.assertIn("本地玩家为生化幽灵，极速枪托不生效", source)
+        self.assertIn("ghostSkips", source)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -7,7 +7,7 @@
   "tab_title": "多人生化",
   "tab_order": 40,
   "order": 60,
-  "desc": "在多人生化模式中选择本地玩家角色，或让当前存活 Bot 随机变身。",
+  "desc": "多人生化模式：选择本地玩家角色；人类 Bot 随机变身英雄，生化幽灵 Bot 随机变身超级终结者。",
   "script": "script.js",
   "runtime": {
     "type": "plugin_script"
@@ -44,7 +44,7 @@
     {
       "type": "button",
       "action": "trigger",
-      "label": "所有 Bot：随机英雄",
+      "label": "人类 Bot：随机英雄",
       "payload": {
         "action": "bot_hero"
       }
@@ -52,7 +52,7 @@
     {
       "type": "button",
       "action": "trigger",
-      "label": "所有 Bot：随机超级终结者",
+      "label": "幽灵 Bot：随机超级终结者",
       "payload": {
         "action": "bot_terminator"
       }

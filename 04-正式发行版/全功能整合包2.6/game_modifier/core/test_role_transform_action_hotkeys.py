@@ -39,8 +39,8 @@ class RoleTransformActionHotkeyTests(unittest.TestCase):
             {
                 "本地玩家：选择英雄",
                 "本地玩家：选择超级终结者",
-                "所有 Bot：随机英雄",
-                "所有 Bot：随机超级终结者",
+                "人类 Bot：随机英雄",
+                "幽灵 Bot：随机超级终结者",
             },
             {item["label"] for item in actions.values()},
         )

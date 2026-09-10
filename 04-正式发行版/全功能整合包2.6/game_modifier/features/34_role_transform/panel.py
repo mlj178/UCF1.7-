@@ -34,6 +34,21 @@ def build_card(parent, manifest, row, col, colspan, callbacks, card_builder):
 
     ui_handles = manifest.get("ui_handles", {})
 
+    handles = {}
+    action_buttons = []
+
+    def feature_enabled():
+        return bool(callbacks["is_enabled"](feature_id))
+
+    def sync_action_buttons():
+        state = "normal" if feature_enabled() else "disabled"
+        for button in action_buttons:
+            button.configure(state=state)
+
+    def on_switch_toggle():
+        callbacks["toggle"](feature_id)
+        sync_action_buttons()
+
     title_frame = ctk.CTkFrame(frame, fg_color="transparent")
     title_frame.pack(fill="x", padx=12, pady=(8, 2))
 
@@ -48,7 +63,7 @@ def build_card(parent, manifest, row, col, colspan, callbacks, card_builder):
         title_frame,
         text="",
         font=("Microsoft YaHei", 12),
-        command=lambda: callbacks["toggle"](feature_id),
+        command=on_switch_toggle,
     )
     switch.pack(side="right", padx=6)
 
@@ -66,11 +81,14 @@ def build_card(parent, manifest, row, col, colspan, callbacks, card_builder):
     button_frame.pack(fill="x", padx=8, pady=(0, 8))
     button_frame.grid_columnconfigure((0, 1), weight=1, uniform="role_actions")
 
-    handles = {}
-
     def run_action(control):
         action = control.get("action", "trigger")
         payload = dict(control.get("payload") or {})
+        if not feature_enabled():
+            log = callbacks.get("log")
+            if callable(log):
+                log("⚠ 请先打开「角色变身」开关，变身按钮才会生效")
+            return False
         return callbacks["action"](feature_id, action, payload)
 
     button_controls = [
@@ -96,12 +114,14 @@ def build_card(parent, manifest, row, col, colspan, callbacks, card_builder):
             padx=4,
             pady=4,
         )
+        action_buttons.append(button)
         handle_name = manifest.get("ui_handles", {}).get(
             payload_action,
             f"role_transform_{payload_action}_button",
         )
         handles[handle_name] = button
 
+    sync_action_buttons()
     handles[ui_handles.get("switch", f"{feature_id}_switch")] = switch
     handles[f"{feature_id}_frame"] = frame
     return handles
