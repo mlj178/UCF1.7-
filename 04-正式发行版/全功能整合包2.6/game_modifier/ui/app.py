@@ -249,7 +249,8 @@ class App(ctk.CTk):
         self._ready = False
         self._event_bus.emit("game_disconnected")
         if not keep_features:
-            self._features = {k: False for k in self._features}
+            for feature_id in self._features:
+                self._features[feature_id] = False
 
     def _toggle_collapse(self):
         self._collapsed = not self._collapsed
@@ -334,7 +335,8 @@ class App(ctk.CTk):
 
     def _apply_persistent_state(self, state):
         self._persistent_state = state
-        self._features = dict(state.features)
+        self._features.clear()
+        self._features.update(state.features)
 
         self._sync_plugin_controls_from_config()
 

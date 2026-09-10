@@ -32,7 +32,8 @@
     GameManager_OnDestroy: 0xAFB6F0,
     SelectWeaponBag: 0xB52830,
     HudBagUpdate: 0xB00360,
-    ObscuredBoolEncrypt: 0x7F93D0
+    ObscuredBoolEncrypt: 0x7F93D0,
+    Player_get_isNanoGhost: 0xB56050
   };
 
   var OFF = {
@@ -57,12 +58,14 @@
     hudUpdateHook: null,
     gameManagerHook: null,
     encryptBool: null,
+    isNanoGhostFn: null,
     cachedMyPlayer: null,
     cachedWeaponBag: null,
     localWeaponBagKeys: {},
     selectHits: 0,
     hudHits: 0,
     patchedCount: 0,
+    ghostSkips: 0,
     lastError: null
   };
 
@@ -157,8 +160,14 @@
         ['int', 'uint8', 'pointer'],
         CALL_CONV
       );
+      state.isNanoGhostFn = new NativeFunction(
+        mod.base.add(RVA.Player_get_isNanoGhost),
+        'bool',
+        ['pointer', 'pointer'],
+        CALL_CONV
+      );
       state.initialized = true;
-      log('success', 'INIT', 'ObscuredBool.Encrypt 初始化成功');
+      log('success', 'INIT', 'ObscuredBool.Encrypt / Player.get_isNanoGhost 初始化成功');
       return true;
     } catch(e) {
       state.lastError = 'ObscuredBool.Encrypt 初始化失败: ' + e.message;
@@ -208,6 +217,24 @@
       }
       return !!(state.cachedMyPlayer && !state.cachedMyPlayer.isNull() && player.equals(state.cachedMyPlayer));
     } catch(e) {
+      return false;
+    }
+  }
+
+  function isLocalPlayerNanoGhost() {
+    if (!initNativeFunctions()) return false;
+
+    if (!state.cachedMyPlayer || state.cachedMyPlayer.isNull()) {
+      refreshLocalPlayerCache();
+    }
+
+    var player = state.cachedMyPlayer;
+    if (!player || player.isNull()) return false;
+
+    try {
+      return state.isNanoGhostFn(player, ptr(0)) ? true : false;
+    } catch(e) {
+      state.lastError = '判断生化幽灵身份失败: ' + e.message;
       return false;
     }
   }
@@ -296,6 +323,14 @@
             return;
           }
 
+          if (isLocalPlayerNanoGhost()) {
+            state.ghostSkips++;
+            if (state.ghostSkips <= 3) {
+              log('info', 'IDENTITY', '本地玩家为生化幽灵，无限背包不生效');
+            }
+            return;
+          }
+
           this._ubBag = readPtr(this._ubPlayer.add(OFF.Player_weaponBag));
 
           if (!this._ubBag) {
@@ -362,6 +397,11 @@
       state.hudUpdateHook = Interceptor.attach(hookAddr, {
         onEnter: function(args) {
           if (!state.enabled) return;
+
+          if (isLocalPlayerNanoGhost()) {
+            state.ghostSkips++;
+            return;
+          }
 
           state.hudHits++;
           var hudBag = args[0];
@@ -459,6 +499,7 @@
       selectHits: state.selectHits,
       hudHits: state.hudHits,
       patchedCount: state.patchedCount,
+      ghostSkips: state.ghostSkips,
       cachedMyPlayer: state.cachedMyPlayer ? state.cachedMyPlayer.toString() : null,
       cachedWeaponBag: state.cachedWeaponBag ? state.cachedWeaponBag.toString() : null,
       config: pluginConfig,

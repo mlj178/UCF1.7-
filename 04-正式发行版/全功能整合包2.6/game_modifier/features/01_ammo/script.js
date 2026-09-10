@@ -1,4 +1,4 @@
-﻿// Local helpers for this feature only.
+// Local helpers for this feature only.
 var modules = {};
 var __localMaxLogsPerModule = 10;
 var __localModuleLogCounts = {};
@@ -89,6 +89,7 @@ modules.ammo = (function() {
   var originalConsumeBase = null;
   var isMyPlayer = null;
   var isMyWeapon = null;
+  var scope = 'player_only';
 
   function writeObscuredInt(fieldPtr, value) {
     try {
@@ -107,7 +108,7 @@ modules.ammo = (function() {
 
   function setLocalRpgClip10(weaponPtr) {
     try {
-      if (!weaponPtr || weaponPtr.isNull() || !isLocalWeapon(weaponPtr)) return false;
+      if (!weaponPtr || weaponPtr.isNull() || !shouldAffect(weaponPtr)) return false;
       var ammo = weaponPtr.add(0xEC).readPointer();
       if (!ammo || ammo.isNull() || !isReadablePtr(ammo)) return false;
       var clipOk = writeObscuredInt(ammo.add(0x08), 10);
@@ -148,6 +149,20 @@ modules.ammo = (function() {
     return false;
   }
 
+  function isAllScope() {
+    return scope === 'all_players' || scope === 'all';
+  }
+
+  function shouldAffect(weaponPtr) {
+    if (!weaponPtr || weaponPtr.isNull()) return false;
+    if (isAllScope()) return true;
+    return isLocalWeapon(weaponPtr);
+  }
+
+  function scopeLabel() {
+    return isAllScope() ? '玩家和所有人机' : '仅限玩家';
+  }
+
   return {
     enable: function() {
       if (enabled) return;
@@ -167,13 +182,13 @@ modules.ammo = (function() {
         isMyWeapon = new NativeFunction(addrIsMyWeapon, 'bool', ['pointer', 'pointer']);
 
         Interceptor.replace(addrConsumeAmmo, new NativeCallback(function(thisPtr, methodInfo) {
-          if (isLocalWeapon(thisPtr)) {
+          if (shouldAffect(thisPtr)) {
             return 1;
           }
           return originalConsumeAmmo(thisPtr, methodInfo);
         }, 'bool', ['pointer', 'pointer']));
         hooks.push({ type: 'replace', addr: addrConsumeAmmo });
-        sendLog('info', '无限子弹', 'WPN_Gun.ConsumeAmmo 已替换（仅玩家）');
+        sendLog('info', '无限子弹', 'WPN_Gun.ConsumeAmmo 已替换（' + scopeLabel() + '）');
       } catch (e) {
         sendBothLog('error', '无限子弹', '无限子弹初始化失败，请稍后重试', 'Ammo replace WPN_Gun.ConsumeAmmo failed: ' + e);
       }
@@ -181,13 +196,13 @@ modules.ammo = (function() {
       try {
         var addrConsumeBase = base.add(0xB6C310);
         Interceptor.replace(addrConsumeBase, new NativeCallback(function(thisPtr, methodInfo) {
-          if (isLocalWeapon(thisPtr)) {
+          if (shouldAffect(thisPtr)) {
             return 1;
           }
           return originalConsumeBase(thisPtr, methodInfo);
         }, 'bool', ['pointer', 'pointer']));
         hooks.push({ type: 'replace', addr: addrConsumeBase });
-        sendLog('info', '无限子弹', 'Weapon.ConsumeAmmo 已替换（仅玩家）');
+        sendLog('info', '无限子弹', 'Weapon.ConsumeAmmo 已替换（' + scopeLabel() + '）');
       } catch (e) {
         sendDevLog('warn', '无限子弹', '替换 Weapon.ConsumeAmmo 失败: ' + e, 'Ammo fallback replace failed');
       }
@@ -201,7 +216,7 @@ modules.ammo = (function() {
           onEnter: function(args) {
             try {
               var self = args[0];
-              if (self && !self.isNull() && isLocalWeapon(self)) {
+              if (self && !self.isNull() && shouldAffect(self)) {
                 rpgFillAmmoFn(self, ptr(0));
                 setLocalRpgClip10(self);
                 this.rpgSelf = self;
@@ -215,7 +230,7 @@ modules.ammo = (function() {
           }
         });
         hooks.push({ type: 'attach', handle: rpgFireHook });
-        sendLog('info', '无限子弹', 'RPG/AT4 无限子弹已启用（仅玩家）');
+        sendLog('info', '无限子弹', 'RPG/AT4 无限子弹已启用（' + scopeLabel() + '）');
       } catch (e) {
         sendDevLog('warn', '无限子弹', 'RPG/AT4 初始化失败: ' + e, 'Ammo RPG/AT4 hook init failed');
       }
@@ -233,13 +248,13 @@ modules.ammo = (function() {
           }
         });
         hooks.push({ type: 'attach', handle: rpgReloadHook });
-        sendLog('info', '无限子弹', 'RPG/AT4 弹匣已维持为10（仅玩家）');
+        sendLog('info', '无限子弹', 'RPG/AT4 弹匣已维持为10（' + scopeLabel() + '）');
       } catch (e) {
         sendDevLog('warn', '无限子弹', 'RPG/AT4 换弹挂钩失败: ' + e, 'Ammo RPG/AT4 reload hook init failed');
       }
 
       enabled = true;
-      sendLog('success', '无限子弹', '已启用 (Zero ammo consumption, player only)');
+      sendLog('success', '无限子弹', '已启用 (Zero ammo consumption, scope=' + scope + ')');
       sendStatus('ammo', true);
     },
     disable: function() {
@@ -261,6 +276,16 @@ modules.ammo = (function() {
       enabled = false;
       sendLog('info', '无限子弹', '已禁用');
       sendStatus('ammo', false);
+    },
+    setconfig: function(scopeValue) {
+      if (typeof scopeValue === 'string' && scopeValue.length) {
+        scope = (scopeValue === 'all_players' || scopeValue === 'all') ? 'all_players' : 'player_only';
+      }
+      sendLog('info', '无限子弹', '应用范围已更新: ' + scopeLabel());
+      return { ok: true, scope: scope };
+    },
+    getstatus: function() {
+      return { enabled: enabled, scope: scope, hooks: hooks.length };
     }
   };
 })();
@@ -270,7 +295,7 @@ modules.ammo = (function() {
 var __pluginFeatureId = "ammo";
 var __pluginModuleName = "ammo";
 var __pluginEnabled = false;
-var __pluginConfig = {};
+var __pluginConfig = { scope: "player_only" };
 
 function __pluginModule() {
   return modules[__pluginModuleName];
@@ -284,7 +309,7 @@ function __pluginApplyConfig(config) {
   }
   var module = __pluginModule();
   if (!module) return { ok: false, reason: 'module_not_loaded', config: __pluginConfig };
-
+  if (typeof module.setconfig === 'function') module.setconfig(__pluginConfig.scope);
   return { ok: true, config: __pluginConfig };
 }
 

@@ -73,13 +73,13 @@ ROLE_TRANSFORM_HOTKEY_ACTIONS = {
         "payload": {"action": "local_terminator"},
     },
     'alt+e': {
-        "label": "所有 Bot：随机英雄",
+        "label": "人类 Bot：随机英雄",
         "feature_id": "role_transform",
         "action": "trigger",
         "payload": {"action": "bot_hero"},
     },
     'alt+r': {
-        "label": "所有 Bot：随机超级终结者",
+        "label": "幽灵 Bot：随机超级终结者",
         "feature_id": "role_transform",
         "action": "trigger",
         "payload": {"action": "bot_terminator"},

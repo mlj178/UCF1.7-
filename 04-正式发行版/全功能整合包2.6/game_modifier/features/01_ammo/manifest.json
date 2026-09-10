@@ -16,10 +16,25 @@
                      {
                          "type":  "switch",
                          "action":  "enable"
+                     },
+                     {
+                         "type":  "combo",
+                         "action":  "setConfig",
+                         "key":  "scope",
+                         "label":  "应用范围:",
+                         "values":  [
+                                        "player_only",
+                                        "all_players"
+                                    ],
+                         "display_values":  {
+                                                "player_only":  "仅限玩家",
+                                                "all_players":  "玩家和所有人机"
+                                            },
+                         "default":  "player_only"
                      }
                  ],
     "config":  {
-
+                   "scope":  "player_only"
                },
     "rpc":  [
                 "enable",
@@ -35,7 +50,9 @@
                    "runtime_script_js":  "features/01_ammo/script.js"
                },
     "ui_handles":  {
-                       "switch":  "ammo_switch"
+                       "switch":  "ammo_switch",
+                       "scope_var":  "ammo_scope_var",
+                       "scope_combo":  "ammo_scope_combo"
                    },
     "runtime":  {
                     "type":  "plugin_script"

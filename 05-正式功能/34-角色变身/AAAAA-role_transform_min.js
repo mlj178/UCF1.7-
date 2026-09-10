@@ -7,6 +7,8 @@
     var MODULE_NAME = 'GameAssembly.dll';
     var CALL_CONV = 'mscdecl';
     var MAX_PLAYER_SLOTS = 64;
+    var NANO_MODE_MIN = 3;
+    var NANO_MODE_MAX = 6;
 
     var RVA = {
         ModeBase_Update: 0x00AF6A00,
@@ -18,12 +20,14 @@
         Mode_Nano4_Terminator_BecomeRandomMasterHero: 0x00B42E90,
         Mode_Nano4_Terminator_TryBecomeRandomMasterTerminator: 0x00B45B90,
         Player_get_isMyPlayer: 0x00B55FD0,
+        Player_get_isNanoGhost: 0x00B56050,
         HealthData_get_isDead: 0x00AE4830
     };
 
     var OFF = {
         Il2CppClass_static_fields: 0x5C,
         GameManager_myPlayer: 0x00,
+        GameManager_gameMode: 0x04,
         GameManager_allPlayers: 0x1C,
         Player_healthData: 0x1C,
         Player_clientData: 0x94,
@@ -77,6 +81,7 @@
         becomeRandomMasterHero: null,
         tryBecomeRandomMasterTerminator: null,
         isMyPlayer: null,
+        isNanoGhost: null,
         isDead: null
     };
 
@@ -134,6 +139,7 @@
             Native.becomeRandomMasterHero = new NativeFunction(Runtime.base.add(RVA.Mode_Nano4_Terminator_BecomeRandomMasterHero), 'void', ['pointer', 'pointer', 'int', 'pointer'], CALL_CONV);
             Native.tryBecomeRandomMasterTerminator = new NativeFunction(Runtime.base.add(RVA.Mode_Nano4_Terminator_TryBecomeRandomMasterTerminator), 'void', ['pointer', 'pointer', 'pointer'], CALL_CONV);
             Native.isMyPlayer = new NativeFunction(Runtime.base.add(RVA.Player_get_isMyPlayer), 'bool', ['pointer', 'pointer'], CALL_CONV);
+            Native.isNanoGhost = new NativeFunction(Runtime.base.add(RVA.Player_get_isNanoGhost), 'bool', ['pointer', 'pointer'], CALL_CONV);
             Native.isDead = new NativeFunction(Runtime.base.add(RVA.HealthData_get_isDead), 'bool', ['pointer', 'pointer'], CALL_CONV);
             Native.ready = true;
             return true;
@@ -165,6 +171,24 @@
             fail('Singleton<GameManager>.get_instance', error);
             return ptr(0);
         }
+    }
+
+    function getGameMode() {
+        try {
+            var typeInfo = Runtime.base.add(RVA.GameManager_TypeInfo).readPointer();
+            if (!readable(typeInfo)) return -1;
+            var staticFields = typeInfo.add(OFF.Il2CppClass_static_fields).readPointer();
+            if (!readable(staticFields)) return -1;
+            return staticFields.add(OFF.GameManager_gameMode).readS32();
+        } catch (error) {
+            fail('GameManager.gameMode', error);
+            return -1;
+        }
+    }
+
+    function isNanoGameMode() {
+        var gameMode = getGameMode();
+        return gameMode >= NANO_MODE_MIN && gameMode <= NANO_MODE_MAX;
     }
 
     function isLocalPlayer(player) {
@@ -231,7 +255,17 @@
         }
     }
 
-    function forEachEligibleBot(callback) {
+    function playerFaction(player) {
+        if (!readable(player)) return '';
+        try {
+            return Native.isNanoGhost(player, ptr(0)) ? 'ghost' : 'human';
+        } catch (error) {
+            fail('Player.get_isNanoGhost', error);
+            return '';
+        }
+    }
+
+    function forEachEligibleBot(callback, requiredFaction) {
         var manager = getGameManager();
         if (!readable(manager)) {
             reject('GameManager is unavailable');
@@ -253,6 +287,10 @@
                     Runtime.stats.bots_skipped += 1;
                     continue;
                 }
+                if (requiredFaction && playerFaction(player) !== requiredFaction) {
+                    Runtime.stats.bots_skipped += 1;
+                    continue;
+                }
                 try {
                     callback(player);
                     applied += 1;
@@ -267,16 +305,17 @@
     }
 
     function applyBotTransform(mode, isHero) {
+        var requiredFaction = isHero ? 'human' : 'ghost';
         var applied = forEachEligibleBot(function (player) {
             if (isHero) {
                 Native.becomeRandomMasterHero(mode, player, 0, ptr(0));
             } else {
                 Native.tryBecomeRandomMasterTerminator(mode, player, ptr(0));
             }
-        });
+        }, requiredFaction);
         var action = isHero ? 'bot_hero' : 'bot_terminator';
         Runtime.stats[action + '_applied'] += applied;
-        Runtime.stats.last_result = 'applied to ' + applied + ' bot(s)';
+        Runtime.stats.last_result = 'applied to ' + applied + ' ' + requiredFaction + ' bot(s)';
         log('info', action + ': ' + Runtime.stats.last_result);
     }
 
@@ -285,6 +324,10 @@
         Runtime.stats.last_error = '';
         if (!Runtime.enabled || !ensureNative()) {
             reject('feature is not ready');
+            return;
+        }
+        if (!isNanoGameMode()) {
+            reject('not in multiplayer-nano mode');
             return;
         }
         var mode = Native.getModeNano4(ptr(0));
