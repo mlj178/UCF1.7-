@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>多人生化 Tab 布局预览</title>
+  <style>
+    :root {
+      --bg: #1a1d24;
+      --panel: #22262f;
+      --panel-2: #1e222b;
+      --border: #3a4150;
+      --ink: #e8eaef;
+      --muted: #9aa3b2;
+      --purple: #a855f7;
+      --purple-dim: #7c3aed;
+      --teal: #2dd4bf;
+      --amber: #fbbf24;
+      --cyan: #22d3ee;
+      --green: #4ade80;
+      --switch-on: #22c55e;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--ink);
+      min-height: 100vh;
+      padding: 24px;
+    }
+
+    .page {
+      max-width: 920px;
+      margin: 0 auto;
+    }
+
+    h1 {
+      font-size: 20px;
+      font-weight: 600;
+      margin: 0 0 6px;
+    }
+    .sub {
+      color: var(--muted);
+      font-size: 13px;
+      margin-bottom: 18px;
+      line-height: 1.5;
+    }
+
+    .app {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 8px 32px rgba(0,0,0,.35);
+    }
+
+    .tabs {
+      display: flex;
+      gap: 4px;
+      padding: 10px 12px 0;
+      border-bottom: 1px solid var(--border);
+      background: var(--panel-2);
+      overflow-x: auto;
+    }
+    .tab {
+      padding: 10px 14px;
+      font-size: 13px;
+      color: var(--muted);
+      border-radius: 8px 8px 0 0;
+      white-space: nowrap;
+      border: 1px solid transparent;
+      border-bottom: none;
+    }
+    .tab.active {
+      color: var(--ink);
+      background: var(--panel);
+      border-color: var(--border);
+      font-weight: 600;
+    }
+
+    .content {
+      padding: 16px;
+      display: grid;
+      gap: 14px;
+    }
+
+    .section {
+      border: 1px dashed var(--border);
+      border-radius: 10px;
+      padding: 12px;
+    }
+    .section-head {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+    .section-badge {
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      background: var(--panel-2);
+    }
+    .section-title {
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: .02em;
+    }
+    .section-hint {
+      margin-left: auto;
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+    @media (max-width: 720px) {
+      .grid-2 { grid-template-columns: 1fr; }
+    }
+
+    .card {
+      background: var(--panel-2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px 14px;
+    }
+    .card.wide {
+      grid-column: 1 / -1;
+    }
+    .card-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 8px;
+    }
+    .card-title {
+      font-size: 14px;
+      font-weight: 700;
+    }
+    .card-desc {
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.55;
+      margin-bottom: 12px;
+    }
+
+    .switch {
+      width: 42px;
+      height: 22px;
+      border-radius: 999px;
+      background: #4b5563;
+      position: relative;
+      flex-shrink: 0;
+    }
+    .switch.on { background: var(--switch-on); }
+    .switch::after {
+      content: "";
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: #fff;
+    }
+    .switch.on::after { left: 22px; }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      height: 34px;
+      padding: 0 12px;
+      border-radius: 6px;
+      border: 1px solid transparent;
+      font-size: 12px;
+      font-weight: 600;
+      color: #fff;
+      cursor: default;
+    }
+    .btn-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+    .btn-purple { background: #7e22ce; }
+    .btn-amber { background: #b45309; }
+    .btn-teal { background: #0f766e; }
+    .btn-cyan { background: #0e7490; }
+    .btn-blue { background: #1e40af; }
+    .btn-flat {
+      background: #374151;
+      color: var(--ink);
+    }
+
+    .mode-tag {
+      display: inline-block;
+      font-size: 11px;
+      padding: 2px 6px;
+      border-radius: 4px;
+      margin-left: 6px;
+      vertical-align: middle;
+      font-weight: 500;
+    }
+    .tag-4t {
+      background: rgba(168, 85, 247, .15);
+      color: #c4b5fd;
+      border: 1px solid rgba(168, 85, 247, .35);
+    }
+    .tag-nano6 {
+      background: rgba(34, 211, 238, .12);
+      color: #67e8f9;
+      border: 1px solid rgba(34, 211, 238, .35);
+    }
+    .tag-any {
+      background: rgba(74, 222, 128, .1);
+      color: #86efac;
+      border: 1px solid rgba(74, 222, 128, .3);
+    }
+
+    .group-frame {
+      border: 1px solid rgba(168, 85, 247, .45);
+      border-radius: 10px;
+      padding: 10px;
+      background: rgba(168, 85, 247, .06);
+    }
+    .group-label {
+      font-size: 11px;
+      color: #d8b4fe;
+      margin: 0 0 10px 2px;
+      font-weight: 600;
+      letter-spacing: .04em;
+    }
+
+    .legend {
+      margin-top: 18px;
+      padding: 14px 16px;
+      border-radius: 10px;
+      background: var(--panel-2);
+      border: 1px solid var(--border);
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.7;
+    }
+    .legend strong { color: var(--ink); }
+    .legend ul {
+      margin: 6px 0 0;
+      padding-left: 18px;
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <h1>多人生化 Tab · 推荐布局预览</h1>
+    <p class="sub">
+      方案 A：不拆 Tab；按「用途」分区；变身相关收成一组，紧挨现有角色变身。
+      救世主跟 4T，剑客卡标明生化6。
+    </p>
+
+    <div class="app">
+      <div class="tabs">
+        <div class="tab">武器</div>
+        <div class="tab">人物属性</div>
+        <div class="tab active">多人生化</div>
+        <div class="tab">其他</div>
+        <div class="tab">游戏测试</div>
+      </div>
+
+      <div class="content">
+        <!-- A -->
+        <section class="section">
+          <div class="section-head">
+            <span class="section-badge">A</span>
+            <span class="section-title">回合与 Buff</span>
+            <span class="section-hint">仅多人生化 4T</span>
+          </div>
+          <div class="grid-2">
+            <article class="card">
+              <div class="card-top">
+                <div class="card-title">强制决战回合</div>
+                <div class="switch on"></div>
+              </div>
+              <div class="card-desc">强制进入决战回合</div>
+              <button class="btn btn-flat" style="width:100%">查看状态</button>
+            </article>
+            <article class="card">
+              <div class="card-top">
+                <div class="card-title">多人生化Buff选择</div>
+                <div class="switch"></div>
+              </div>
+              <div class="card-desc">选择本局生效的人类 / 生化 Buff</div>
+              <button class="btn btn-flat" style="width:100%">打开 Buff 选择</button>
+            </article>
+          </div>
+        </section>
+
+        <!-- B -->
+        <section class="section">
+          <div class="section-head">
+            <span class="section-badge">B</span>
+            <span class="section-title">技能</span>
+            <span class="section-hint">生化通用</span>
+          </div>
+          <article class="card">
+            <div class="card-top">
+              <div class="card-title">
+                技能无冷却
+                <span class="mode-tag tag-any">生化 4 / 6 / 4T</span>
+              </div>
+              <div class="switch"></div>
+            </div>
+            <div class="card-desc">生化模式下所有技能无冷却（描述会写清不限于多人生化）</div>
+          </article>
+        </section>
+
+        <!-- C -->
+        <section class="section">
+          <div class="section-head">
+            <span class="section-badge">C</span>
+            <span class="section-title">角色变身</span>
+            <span class="section-hint">一组放在一起，颜色同源</span>
+          </div>
+
+          <div class="group-frame">
+            <div class="group-label">角色变身 · TRANSFORM</div>
+
+            <div class="grid-2">
+              <!-- existing role transform wide -->
+              <article class="card wide">
+                <div class="card-top">
+                  <div class="card-title" style="color:#c084fc;">
+                    角色变身
+                    <span class="mode-tag tag-4t">多人生化 4T</span>
+                  </div>
+                  <div class="switch on"></div>
+                </div>
+                <div class="card-desc">
+                  本地玩家：选择英雄 / 超级终结者；人类 Bot 随机英雄；幽灵 Bot 随机超级终结者。
+                </div>
+                <div class="btn-row">
+                  <button class="btn btn-purple">本地：选择英雄</button>
+                  <button class="btn btn-purple">本地：选择终结者</button>
+                  <button class="btn btn-purple">人类 Bot：随机英雄</button>
+                  <button class="btn btn-purple">幽灵 Bot：随机终结者</button>
+                </div>
+              </article>
+
+              <!-- new: savior -->
+              <article class="card">
+                <div class="card-top">
+                  <div class="card-title" style="color:#fbbf24;">
+                    直接变身救世主
+                    <span class="mode-tag tag-4t">多人生化 4T</span>
+                  </div>
+                  <div class="switch"></div>
+                </div>
+                <div class="card-desc">
+                  本地 / 人类佣兵 Bot → 救世主。非人类、已变英雄会跳过。
+                </div>
+                <div class="btn-row" style="grid-template-columns:1fr;">
+                  <button class="btn btn-amber">本地变身救世主</button>
+                  <button class="btn btn-teal">人类 Bot 变救世主</button>
+                </div>
+              </article>
+
+              <!-- new: ghostblade -->
+              <article class="card">
+                <div class="card-top">
+                  <div class="card-title" style="color:#22d3ee;">
+                    直接变身剑客
+                    <span class="mode-tag tag-nano6">生化6 剑客</span>
+                  </div>
+                  <div class="switch"></div>
+                </div>
+                <div class="card-desc">
+                  仅生化6（剑客模式）。本地 / 佣兵 Bot → 剑客。
+                </div>
+                <div class="btn-row" style="grid-template-columns:1fr;">
+                  <button class="btn btn-cyan">本地变身剑客</button>
+                  <button class="btn btn-blue">Bot 变剑客</button>
+                </div>
+              </article>
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+
+    <div class="legend">
+      <strong>布局说明</strong>
+      <ul>
+        <li><strong>A 回合与 Buff</strong>：决战回合 + Buff 选择，都只服务多人生化。</li>
+        <li><strong>B 技能</strong>：技能无冷却单独一区，文案标明生化通用，避免被当成 4T 专属。</li>
+        <li><strong>C 角色变身组</strong>：紫框整组；随机变身在上（宽卡），救世主 / 剑客并排在下。</li>
+        <li>模式标签：紫 = 4T 多人生化，青 = 生化6，绿 = 生化通用。</li>
+        <li>本次只改 UI 归属 / order / 文案颜色，不改 JS 运行逻辑。</li>
+      </ul>
+    </div>
+  </div>
+</body>
+</html>

@@ -411,6 +411,13 @@ def build_panel(context, parent):
         _on_user_switch(context, config, handles, key, value, var, switch)
 
     bot_card = _card(root, CARD_GROUPS[0])
+    ctk.CTkLabel(
+        bot_card,
+        text="人机禁枪改投雷，全员进入手雷战。",
+        font=("Microsoft YaHei", 12),
+        text_color="#a0a0a0",
+        anchor="w",
+    ).pack(fill="x", padx=12, pady=(0, 4))
     _switch(bot_card, context, controls["bot_grenade_mode_enabled"], config, handles, on_change=on_switch)
     _add_slider_rows(bot_card, context, controls, config, handles, ("bot_throw_drive_cooldown_ms",))
 

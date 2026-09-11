@@ -28,6 +28,7 @@ def _control(manifest, control_type=None, key=None):
 def build_card(parent, manifest, row, col, colspan, callbacks, card_builder):
     feature_id = manifest["feature_id"]
     handles = manifest.get("ui_handles", {})
+    lines = manifest.get("ui_text", {}).get("lines", [manifest.get("desc", "")])
 
     switch_control = _control(manifest, "switch")
     slider_control = _control(manifest, "slider", "add_amount")
@@ -63,7 +64,7 @@ def build_card(parent, manifest, row, col, colspan, callbacks, card_builder):
 
     ctk.CTkLabel(
         frame,
-        text=manifest.get("desc", ""),
+        text="\n".join(lines),
         text_color="#a0a0a0",
         font=("Microsoft YaHei", 12),
         wraplength=280 * colspan,
@@ -156,15 +157,7 @@ def build_card(parent, manifest, row, col, colspan, callbacks, card_builder):
         fg_color="#16a34a",
         hover_color="#15803d",
     )
-    button.pack(fill="x", padx=12, pady=(0, 2))
-
-    ctk.CTkLabel(
-        frame,
-        text="快捷键：可在设置页绑定到 Ctrl+1~5（需先开启开关）",
-        text_color="#9aa3b2",
-        font=("Microsoft YaHei", 11),
-        anchor="w",
-    ).pack(fill="x", padx=12, pady=(0, 8))
+    button.pack(fill="x", padx=12, pady=(0, 10))
 
     return {
         handles.get("switch", "hp_boost_switch"): switch,

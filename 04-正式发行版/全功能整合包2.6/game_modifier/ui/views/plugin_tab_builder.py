@@ -76,8 +76,14 @@ class PluginTabBuilder:
             is_enabled=self._is_enabled,
         )
         bind_view_handles(self._host, feature_tabs_view.build(tab_scrolls=ordinary_scrolls))
+        # 按 tab 标题批量构建 special_inline_card，交给 build_features 的双列网格排版，
+        # 避免逐卡 build 导致同排卡片各自从 row=0 开始而被拆成多行。
+        inline_by_tab = {}
         for feature in self._inline_card_features():
             title = feature.manifest.get("tab_title") or feature.manifest.get("ui", {}).get("tab_title")
+            if title:
+                inline_by_tab.setdefault(title, []).append(feature)
+        for title, features in inline_by_tab.items():
             special_tab = self._special_tabs.get(title)
             if not special_tab:
                 continue
@@ -86,7 +92,7 @@ class PluginTabBuilder:
             if card_host is not None:
                 bind_view_handles(
                     self._host,
-                    feature_tabs_view.build_inline_cards(card_host, [feature]),
+                    feature_tabs_view.build_inline_cards(card_host, features),
                 )
 
         return tab_view

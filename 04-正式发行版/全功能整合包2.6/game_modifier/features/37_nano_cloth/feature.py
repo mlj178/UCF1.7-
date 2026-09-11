@@ -6,4 +6,4 @@ class PluginFeature(PluginFeatureBase):
     js_filename = "script.js"
     name = "增加防化服"
     category = "player"
-    desc = "每触发一次将本地玩家防化服设为滑块值（多人生化模式）。"
+    desc = "每触发一次将本地玩家防化服设为滑块值。"

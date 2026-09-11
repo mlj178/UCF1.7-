@@ -30,6 +30,7 @@ def _control(manifest, control_type=None, key=None):
 def build_card(parent, manifest, row, col, colspan, callbacks, card_builder):
     feature_id = manifest["feature_id"]
     handles = manifest.get("ui_handles", {})
+    lines = manifest.get("ui_text", {}).get("lines", [manifest.get("desc", "")])
 
     switch_control = _control(manifest, "switch")
     slider_control = _control(manifest, "slider", "cloth_count")
@@ -65,7 +66,7 @@ def build_card(parent, manifest, row, col, colspan, callbacks, card_builder):
 
     ctk.CTkLabel(
         frame,
-        text=manifest.get("desc", ""),
+        text="\n".join(lines),
         text_color="#a0a0a0",
         font=("Microsoft YaHei", 12),
         wraplength=280 * colspan,

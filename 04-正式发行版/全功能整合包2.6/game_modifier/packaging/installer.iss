@@ -1,10 +1,10 @@
-﻿; UCF 修改器 Inno Setup 安装器脚本（onedir 形态）
+; UCF 修改器 Inno Setup 安装器脚本（onedir 形态）
 ; 对应《安装器打包规范-onedir+InnoSetup.md》§8
-; 版本号默认取 2.5，可被 build_release.ps1 通过 /DAppVersion=x.x 覆盖。
-; 编译：iscc /DAppVersion=2.5 packaging\installer.iss
+; 版本号默认取 2.6，可被 build_release.ps1 通过 /DAppVersion=x.x 覆盖。
+; 编译：iscc /DAppVersion=2.6 packaging\installer.iss
 
 #ifndef AppVersion
-  #define AppVersion "2.5"
+  #define AppVersion "2.6"
 #endif
 #ifndef BuildDistDir
   #define BuildDistDir "..\dist_release"

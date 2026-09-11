@@ -11,7 +11,7 @@ if getattr(sys, 'frozen', False):
     FEATURES_DIR = os.path.join(BASE_DIR, "features")  # features 在打包目录内
     # 用户可写数据重定向到 %LOCALAPPDATA%，避免写 Program Files（安装器打包规范 §7.1 方案A）
     _local_app_data = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~\\AppData\\Local")
-    DATA_DIR = os.path.join(_local_app_data, "UCFModifier", "2.5", "data")
+    DATA_DIR = os.path.join(_local_app_data, "UCFModifier", "2.6", "data")
 else:
     APP_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     BASE_DIR = APP_DIR
