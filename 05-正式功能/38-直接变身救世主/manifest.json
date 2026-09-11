@@ -1,0 +1,83 @@
+{
+  "feature_id": "become_savior",
+  "canonical_id": "become_savior",
+  "display_name": "直接变身救世主",
+  "category": "special",
+  "tab": "nano4t_tab",
+  "tab_title": "多人生化",
+  "tab_order": 40,
+  "order": 61,
+  "desc": "多人生化 4T：本地玩家或人类佣兵 Bot 直接变成救世主。非人类、已变英雄会跳过。",
+  "script": "script.js",
+  "runtime": {
+    "type": "plugin_script"
+  },
+  "ui": {
+    "mode": "special_inline_card"
+  },
+  "layout": {
+    "card_type": "simple",
+    "columnspan": 1,
+    "title_color": "#fbbf24"
+  },
+  "controls": [
+    {
+      "type": "switch",
+      "action": "enable"
+    },
+    {
+      "type": "button",
+      "action": "trigger",
+      "label": "本地变身救世主",
+      "payload": {
+        "action": "local_savior"
+      }
+    },
+    {
+      "type": "button",
+      "action": "trigger",
+      "label": "人类 Bot 变救世主",
+      "payload": {
+        "action": "bot_savior"
+      }
+    }
+  ],
+  "config": {
+    "require_enabled_for_actions": true
+  },
+  "actions": {
+    "trigger": {
+      "type": "rpc",
+      "requires_connection": true
+    }
+  },
+  "rpc": [
+    "enable",
+    "disable",
+    "setConfig",
+    "set_config",
+    "setconfig",
+    "status",
+    "cleanup",
+    "trigger"
+  ],
+  "lifecycle": {
+    "cleanup": true,
+    "restore": true,
+    "requires_room_ready_reapply": false,
+    "room_ready_retry": false,
+    "room_ready_reapply_exempt_reason": "变身是一次性动作：由 ModeBase.Update 主线程 Hook 执行一次后即清除；开关只决定是否响应按钮，无持续写入状态需要进房后二次应用。"
+  },
+  "source": {
+    "single_feature_js": "05-正式功能/38-直接变身救世主/script.js",
+    "runtime_script_js": "features/38_become_savior/script.js"
+  },
+  "ui_handles": {
+    "switch": "become_savior_switch",
+    "local_button": "become_savior_local_btn",
+    "bot_button": "become_savior_bot_btn"
+  },
+  "state": {
+    "sync_enabled_from_config": true
+  }
+}

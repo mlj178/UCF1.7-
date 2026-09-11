@@ -134,7 +134,7 @@ class FridaManager:
                 "log_message",
                 level="info",
                 module="系统",
-                message="全功能整合包插件运行时 v2.5 已就绪",
+                message="全功能整合包插件运行时 v2.6 已就绪",
                 audience="dev",
                 dev_detail="Frida session attached; plugin scripts load on demand",
             )

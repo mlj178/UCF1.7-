@@ -1,0 +1,83 @@
+{
+  "feature_id": "become_ghostblade",
+  "canonical_id": "become_ghostblade",
+  "display_name": "直接变身剑客",
+  "category": "special",
+  "tab": "nano4t_tab",
+  "tab_title": "多人生化",
+  "tab_order": 40,
+  "order": 62,
+  "desc": "生化6（剑客模式）：本地玩家或佣兵 Bot 直接变成剑客。非佣兵、已死亡会跳过。",
+  "script": "script.js",
+  "runtime": {
+    "type": "plugin_script"
+  },
+  "ui": {
+    "mode": "special_inline_card"
+  },
+  "layout": {
+    "card_type": "simple",
+    "columnspan": 1,
+    "title_color": "#22d3ee"
+  },
+  "controls": [
+    {
+      "type": "switch",
+      "action": "enable"
+    },
+    {
+      "type": "button",
+      "action": "trigger",
+      "label": "本地变身剑客",
+      "payload": {
+        "action": "local_ghostblade"
+      }
+    },
+    {
+      "type": "button",
+      "action": "trigger",
+      "label": "Bot 变剑客",
+      "payload": {
+        "action": "bot_ghostblade"
+      }
+    }
+  ],
+  "config": {
+    "require_enabled_for_actions": true
+  },
+  "actions": {
+    "trigger": {
+      "type": "rpc",
+      "requires_connection": true
+    }
+  },
+  "rpc": [
+    "enable",
+    "disable",
+    "setConfig",
+    "set_config",
+    "setconfig",
+    "status",
+    "cleanup",
+    "trigger"
+  ],
+  "lifecycle": {
+    "cleanup": true,
+    "restore": true,
+    "requires_room_ready_reapply": false,
+    "room_ready_retry": false,
+    "room_ready_reapply_exempt_reason": "变身是一次性动作：由 ModeBase.Update 主线程 Hook 执行一次后即清除；开关只决定是否响应按钮，无持续写入状态需要进房后二次应用。"
+  },
+  "source": {
+    "single_feature_js": "05-正式功能/39-直接变身剑客/script.js",
+    "runtime_script_js": "features/39_become_ghostblade/script.js"
+  },
+  "ui_handles": {
+    "switch": "become_ghostblade_switch",
+    "local_button": "become_ghostblade_local_btn",
+    "bot_button": "become_ghostblade_bot_btn"
+  },
+  "state": {
+    "sync_enabled_from_config": true
+  }
+}

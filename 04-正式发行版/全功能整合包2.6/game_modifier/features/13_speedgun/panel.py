@@ -22,16 +22,43 @@ def build_card(scroll, manifest, row, col, colspan, callbacks, card_builder):
     feature_id = manifest["feature_id"]
     handles = manifest.get("ui_handles", {})
     slider_control = _control(manifest, "slider", "fire_rate")
+    lines = manifest.get("ui_text", {}).get("lines", [manifest.get("desc", "")])
 
-    frame, switch, _ = card_builder.make_feature_card(
+    frame = ctk.CTkFrame(
         scroll,
-        row,
-        col,
-        colspan,
-        manifest,
-        title_color=manifest.get("layout", {}).get("title_color"),
+        corner_radius=6,
+        fg_color="transparent",
+        border_width=1,
+        border_color="#4b5563",
     )
-    frame.grid_configure(sticky="nsew")
+    frame.grid(row=row, column=col, columnspan=colspan, sticky="nsew", padx=3, pady=3)
+
+    top = ctk.CTkFrame(frame, fg_color="transparent")
+    top.pack(fill="x", padx=8, pady=(6, 0))
+    ctk.CTkLabel(
+        top,
+        text=manifest["display_name"],
+        font=("Microsoft YaHei", 15, "bold"),
+        text_color=manifest.get("layout", {}).get("title_color", "#e0e0e0"),
+    ).pack(side="left", padx=4)
+    switch = ctk.CTkSwitch(
+        top,
+        text="",
+        font=("Microsoft YaHei", 12),
+        width=50,
+        command=lambda: callbacks["toggle"](feature_id),
+    )
+    switch.pack(side="right", padx=6)
+
+    ctk.CTkLabel(
+        frame,
+        text="\n".join(lines),
+        text_color="#a0a0a0",
+        font=("Microsoft YaHei", 12),
+        wraplength=280 * colspan,
+        justify="left",
+        anchor="w",
+    ).pack(fill="x", padx=10, pady=(4, 8))
 
     slider_row = ctk.CTkFrame(frame, fg_color="transparent")
     slider_row.pack(fill="x", padx=12, pady=(2, 8))

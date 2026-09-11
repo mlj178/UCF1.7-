@@ -1,4 +1,4 @@
-# UCF 2.5 non-destructive onedir + Inno Setup release builder.
+# UCF 2.6 non-destructive onedir + Inno Setup release builder.
 # This file is ASCII-only so Windows PowerShell can execute it without a UTF-8 BOM.
 
 $ErrorActionPreference = 'Stop'
