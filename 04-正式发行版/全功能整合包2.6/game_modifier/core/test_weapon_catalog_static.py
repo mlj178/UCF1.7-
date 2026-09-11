@@ -12,8 +12,10 @@ class WeaponCatalogStaticTests(unittest.TestCase):
 
         required_entries = {
             '("120", "NANOKNIFE", "NANOKNIFE",': "NANOKNIFE",
-            '("541", "\u53cc\u6301\u5e93\u514b\u91cc", "\u53cc\u6301\u5e93\u514b\u91cc",': "Ghost Hunter dual kukri",
-            '("673", "\u53cc\u6301\u6218\u65a7", "\u53cc\u6301\u6218\u65a7",': "The Vengeance dual axe",
+            '("541", "双持库克里", "双持库克里（幽灵猎手）",': "Ghost Hunter dual kukri",
+            '("673", "双持战斧", "双持战斧（复仇女神）",': "The Vengeance dual axe",
+            '("390", "FAL CAMO", "FAL CAMO（榴弹）",': "FAL CAMO grenade label",
+            '("3494", "Nano AT4", "Nano AT4（火箭筒）",': "Nano AT4 rocket launcher label",
         }
 
         for entry, label in required_entries.items():
