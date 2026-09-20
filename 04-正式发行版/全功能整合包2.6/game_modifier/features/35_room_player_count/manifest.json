@@ -1,7 +1,7 @@
 {
   "feature_id": "35_room_player_count",
   "canonical_id": "room_player_count",
-  "version": "2.5-room-count-100-hotfix4",
+  "version": "2.5-room-count-100-hotfix6",
   "display_name": "全模式房间人数",
   "category": "other",
   "tab": "other_tab",
@@ -11,7 +11,7 @@
   "desc": "开启后，设置人数并点击“应用人数”。下一局生效；关闭后恢复默认人数。",
   "script": "script.js",
   "runtime": { "type": "plugin_script" },
-  "ui": { "visible": false },
+  "ui": { "visible": true },
   "layout": { "card_type": "simple", "columnspan": 1, "rowspan": 2, "title_color": "#fbbf24" },
   "controls": [
     { "type": "switch", "action": "enable" },

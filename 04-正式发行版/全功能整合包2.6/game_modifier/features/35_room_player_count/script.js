@@ -49,6 +49,30 @@
     [0xB74657, '3b 48 0c 0f 83 34 01 00 00 8b 53 18 8b 4c 88 10', '83 f9 1d 7e 03 6a 1d 59 8b 53 18 8b 4c 88 10 90']
   ];
 
+  // ModeBase_Nano::GetNanoGhostCount reads asset->nanoGenerateCount[thisRoundPlayer - 1]
+  // and lets the runtime raise IndexOutOfRangeException when that index leaves the
+  // table.  The table lives in the Unity assets, which the room-count profile never
+  // touches, and every mode owns its own copy through NanoModeAsset (剑客 uses
+  // Nano6ModeAsset), so the table length is whatever that mode was authored with - it
+  // is not always 30 slots.  At 100 players the index always runs off the end and the
+  // exception aborts the round-start coroutine: 剑客 stops before creating any ghost,
+  // 普通生化 and 多人生化 stop right after their terminators.
+  // The out-of-range branch (jnb loc_10AF04FB) is the only entry into the exception
+  // path, so replace that path with "return the last authored slot".  ecx already
+  // holds the int[] and ebp is still on the stack, so the replacement tail fits in the
+  // original 13 bytes: mov edx,[ecx+0Ch] / dec edx / mov eax,[ecx+edx*4+10h] /
+  // pop ebp / retn.  The in-range path keeps the original bytes untouched.
+  var NANO_GHOST_TAIL_RVA = 0xAF04FB;
+  var NANO_GHOST_TAIL_BASE_HEX = '6a 00 e8 fe 74 67 ff 50 e8 28 78 67 ff';
+  var NANO_GHOST_TAIL_FIXED_HEX = '8b 51 0c 4a 8b 44 91 10 5d c3 90 90 90';
+  // hotfix5 clamped the index itself to slot 29, which is only correct for the modes
+  // whose table really has 30 slots and also removes the bounds check.  Put the index
+  // back when an older script in this process left it behind, otherwise the tail above
+  // would never be reached.
+  var NANO_GHOST_INDEX_RVA = 0xAF04EA;
+  var NANO_GHOST_INDEX_BASE_HEX = '48 3b 41 0c 73 0b';
+  var NANO_GHOST_INDEX_LEGACY_HEX = '3c 1d 76 02 b0 1d';
+
   // Runtime diagnostics.  The room/TAB list is separate from the Player[]
   // owned by GameManager, so counting the latter tells us whether a mode is
   // failing while creating players, spawning them, or only drawing models.
@@ -260,6 +284,62 @@
     return true;
   }
 
+  function readHex(rva, length) {
+    return readBytes(rva, length).map(function (n) {
+      return ('0' + n.toString(16)).slice(-2);
+    }).join(' ');
+  }
+
+  function nanoGhostTailState() {
+    var actual = readBytes(NANO_GHOST_TAIL_RVA, hexBytes(NANO_GHOST_TAIL_BASE_HEX).length);
+    if (bytesEqual(actual, NANO_GHOST_TAIL_BASE_HEX)) return 'base';
+    if (bytesEqual(actual, NANO_GHOST_TAIL_FIXED_HEX)) return 'fixed';
+    return 'unknown';
+  }
+
+  function clearLegacyNanoGhostClamp() {
+    if (!bytesEqual(readBytes(NANO_GHOST_INDEX_RVA, 6), NANO_GHOST_INDEX_LEGACY_HEX)) return;
+    var address = gameAssembly.base.add(NANO_GHOST_INDEX_RVA);
+    var value = hexBytes(NANO_GHOST_INDEX_BASE_HEX);
+    if (!Memory.protect(address, value.length, 'rwx')) throw new Error('内存保护设置失败');
+    address.writeByteArray(value);
+  }
+
+  function writeNanoGhostTail(fixed) {
+    var value = hexBytes(fixed ? NANO_GHOST_TAIL_FIXED_HEX : NANO_GHOST_TAIL_BASE_HEX);
+    var address = gameAssembly.base.add(NANO_GHOST_TAIL_RVA);
+    if (!Memory.protect(address, value.length, 'rwx')) throw new Error('内存保护设置失败');
+    address.writeByteArray(value);
+    if (nanoGhostTailState() !== (fixed ? 'fixed' : 'base')) {
+      throw new Error('幽灵数量越界处理写入后校验失败 RVA 0x' + NANO_GHOST_TAIL_RVA.toString(16));
+    }
+  }
+
+  function applyNanoGhostTailFallback() {
+    clearLegacyNanoGhostClamp();
+    var state = nanoGhostTailState();
+    if (state === 'fixed') return true;
+    if (state !== 'base') {
+      throw new Error('幽灵数量越界处理点不是已验证的原始字节 RVA 0x' +
+        NANO_GHOST_TAIL_RVA.toString(16) + '，实际字节 ' + readHex(NANO_GHOST_TAIL_RVA, 13));
+    }
+    writeNanoGhostTail(true);
+    log('info', '生化幽灵开局数量改按各模式配置表的实际档位取值，超员时不再卡逻辑、也不会少幽灵');
+    return true;
+  }
+
+  function restoreNanoGhostTail() {
+    clearLegacyNanoGhostClamp();
+    var state = nanoGhostTailState();
+    if (state === 'base') return true;
+    if (state !== 'fixed') {
+      log('error', '幽灵数量越界处理已被其他修改器改变，未覆盖其设置；请重启游戏');
+      return false;
+    }
+    writeNanoGhostTail(false);
+    return true;
+  }
+
   function expectPattern(rva, hex) {
     var pattern = hex.split(' '), actual = readBytes(rva, pattern.length);
     for (var i = 0; i < pattern.length; i++) {
@@ -368,10 +448,12 @@
     if (tooLarge) return tooLarge;
     try {
       writeState({ bot: [0x90, 0x90], conversion: 0xEB, name: 0xEB, bots: requested - 1 });
+      applyNanoGhostTailFallback();
       var after = inspectLayout();
       if (!after.active || after.bots !== requested - 1) throw new Error('写入后校验失败');
     } catch (e) {
       try { writeState(before); } catch (_) {}
+      try { restoreNanoGhostTail(); } catch (_) {}
       try { restoreBaselineProfile(); } catch (_) {}
       return resultFailure('patch_failed', '安装人数补丁失败：' + (e.message || e));
     }
@@ -447,6 +529,12 @@
         restored = false;
         log('error', '人数补丁恢复失败，请重启游戏：' + (e.message || e));
       }
+      try {
+        if (!restoreNanoGhostTail()) restored = false;
+      } catch (e) {
+        restored = false;
+        log('error', '幽灵数量越界处理恢复失败，请重启游戏：' + (e.message || e));
+      }
     }
     enabled = false;
     patchApplied = false;
@@ -468,7 +556,7 @@
       patch_applied: patchApplied,
       max_total_players: maxTotalPlayers, adopted_existing_patch: adoptedPatch,
       patch_profile: activePatchProfile, profile_patched_by_this_script: profilePatchedByThisScript,
-      version: 'room-count-100-hotfix4' }; },
+      version: 'room-count-100-hotfix6' }; },
     cleanup: disable,
     dispose: disable
   };
