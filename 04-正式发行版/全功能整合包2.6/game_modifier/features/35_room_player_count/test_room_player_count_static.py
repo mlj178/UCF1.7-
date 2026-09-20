@@ -14,10 +14,10 @@ FORMAL_JS = (
 
 
 class RoomPlayerCountStaticTests(unittest.TestCase):
-    def test_manifest_marks_room_count_as_not_visible_in_ui(self):
+    def test_manifest_marks_room_count_as_visible_in_ui(self):
         manifest = json.loads((FEATURE_DIR / "manifest.json").read_text(encoding="utf-8"))
 
-        self.assertFalse(manifest["ui"]["visible"])
+        self.assertTrue(manifest["ui"]["visible"])
 
     def test_plugin_page_skips_features_explicitly_hidden_from_ui(self):
         page = FEATURE_DIR.parents[1] / "ui" / "pages" / "plugin_feature_page.py"
@@ -93,6 +93,21 @@ class RoomPlayerCountStaticTests(unittest.TestCase):
             self.assertIn("profilePatchedByThisScript", text, path.name)
             for rva in required_rvas:
                 self.assertIn(rva, text, f"{path.name} missing {rva}")
+
+    def test_nano_ghost_count_falls_back_to_the_last_authored_slot(self):
+        text = RUNTIME_JS.read_text(encoding="utf-8")
+
+        self.assertIn("NANO_GHOST_TAIL_RVA = 0xAF04FB", text)
+        self.assertIn("NANO_GHOST_TAIL_BASE_HEX = '6a 00 e8 fe 74 67 ff 50 e8 28 78 67 ff'", text)
+        self.assertIn("NANO_GHOST_TAIL_FIXED_HEX = '8b 51 0c 4a 8b 44 91 10 5d c3 90 90 90'", text)
+        self.assertIn("NANO_GHOST_INDEX_LEGACY_HEX = '3c 1d 76 02 b0 1d'", text)
+
+        install = text.split("function installPatch(requested)", 1)[1].split(
+            "function applyConfig(config)", 1
+        )[0]
+        self.assertIn("applyNanoGhostTailFallback()", install)
+        self.assertIn("restoreNanoGhostTail()", install)
+        self.assertIn("restoreNanoGhostTail()", text.split("function disable()", 1)[1])
 
     def test_profile_writes_are_validated_before_write_and_restored_on_cleanup(self):
         text = RUNTIME_JS.read_text(encoding="utf-8")
