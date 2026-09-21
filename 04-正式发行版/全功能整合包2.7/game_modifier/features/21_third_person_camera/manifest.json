@@ -1,0 +1,79 @@
+{
+  "feature_id": "third_person_camera",
+  "canonical_id": "third_person_camera",
+  "display_name": "第三人称视角",
+  "category": "other",
+  "tab": "other_tab",
+  "tab_title": "其他",
+  "tab_order": 30,
+  "order": 70,
+  "desc": "切换成第三人称视角",
+  "hotkey": {
+    "enabled": true
+  },
+  "script": "script.js",
+  "runtime": {
+    "type": "plugin_script"
+  },
+  "layout": {
+    "card_type": "simple",
+    "columnspan": 1,
+    "rowspan": 2
+  },
+  "controls": [
+    {
+      "type": "switch",
+      "action": "enable",
+      "label": "开启 / 关闭第三人称"
+    },
+    {
+      "type": "slider",
+      "action": "setConfig",
+      "key": "distance",
+      "label": "镜头距离",
+      "min": 1.5,
+      "max": 8.0,
+      "step": 0.1,
+      "default": 3.0
+    },
+    {
+      "type": "slider",
+      "action": "setConfig",
+      "key": "pivotHeight",
+      "label": "上背部枢轴高度",
+      "min": 0.5,
+      "max": 2.5,
+      "step": 0.1,
+      "default": 1.35
+    }
+  ],
+  "config": {
+    "distance": 3.0,
+    "pivotHeight": 1.35
+  },
+  "rpc": [
+    "enable",
+    "disable",
+    "setConfig",
+    "status",
+    "cleanup",
+    "setconfig",
+    "getstatus"
+  ],
+  "lifecycle": {
+    "cleanup": true,
+    "restore": true
+  },
+  "state": {
+    "sync_enabled_from_config": true
+  },
+  "ui_handles": {
+    "switch": "third_person_camera_switch",
+    "distance_var": "third_person_camera_distance_var",
+    "distance_slider": "third_person_camera_distance_slider",
+    "distance_label": "third_person_camera_distance_label",
+    "pivotHeight_var": "third_person_camera_pivot_height_var",
+    "pivotHeight_slider": "third_person_camera_pivot_height_slider",
+    "pivotHeight_label": "third_person_camera_pivot_height_label"
+  }
+}

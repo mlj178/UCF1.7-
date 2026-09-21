@@ -1,0 +1,73 @@
+{
+  "feature_id": "damage_multiplier",
+  "canonical_id": "damage_multiplier",
+  "display_name": "调整伤害倍率",
+  "category": "weapon",
+  "tab": "weapon_tab",
+  "tab_title": "武器",
+  "tab_order": 10,
+  "order": 88,
+  "desc": "放大玩家造成的输出伤害。",
+  "script": "script.js",
+  "runtime": {
+    "type": "plugin_script"
+  },
+  "layout": {
+    "card_type": "simple",
+    "columnspan": 1,
+    "title_color": "#f97316"
+  },
+  "controls": [
+    {
+      "type": "switch",
+      "action": "enable"
+    },
+    {
+      "type": "slider",
+      "action": "setConfig",
+      "key": "multiplier",
+      "label": "伤害倍率",
+      "min": 1.0,
+      "max": 20.0,
+      "step": 0.1,
+      "default": 2.0
+    }
+  ],
+  "config": {
+    "multiplier": 2.0,
+    "skip_local_victim": true,
+    "include_infect": false,
+    "allow_other_damage_type": true,
+    "enable_owner_mapping": true,
+    "diagnostic_log": true
+  },
+  "rpc": [
+    "enable",
+    "disable",
+    "setConfig",
+    "set_config",
+    "setconfig",
+    "status",
+    "cleanup"
+  ],
+  "lifecycle": {
+    "cleanup": true,
+    "restore": true,
+    "requires_room_ready_reapply": false,
+    "room_ready_retry": false,
+    "room_ready_reapply_exempt_reason": "功能安装固定 RVA Hook，伤害事件命中时按 enabled/config 状态判断，不依赖进房时立即写入房间内对象。"
+  },
+  "source": {
+    "single_feature_js": "05-正式功能/30-增加伤害倍率/AAAAA-damage_multiplier_min.js",
+    "runtime_script_js": "features/30_damage_multiplier/script.js"
+  },
+  "ui_handles": {
+    "switch": "damage_multiplier_switch",
+    "multiplier_var": "damage_multiplier_var",
+    "multiplier_slider": "damage_multiplier_slider",
+    "multiplier_label": "damage_multiplier_label"
+  },
+  "state": {
+    "sync_enabled_from_config": true
+  }
+}
