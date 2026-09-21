@@ -382,7 +382,7 @@ def build_red_theme_tab(tab_frame):
     按文档 §2 从上到下竖向排列：图片轮播 → 文字展示。
     资源不齐的区块降级为占位提示，不影响其他区块。
     """
-    scrollable = ctk.CTkScrollableFrame(tab_frame, fg_color="transparent")
+    scrollable = ctk.CTkFrame(tab_frame, fg_color="transparent")
     scrollable.pack(fill="both", expand=True)
 
     # 1. 图片轮播区

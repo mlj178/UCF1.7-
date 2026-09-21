@@ -45,6 +45,7 @@ class SettingsWindow(ctk.CTkToplevel):
 
         self._setup_hotkey_tab()
         self._setup_about_tab()
+        self._setup_thanks_tab()
         # 文档 §1：红色主题 tab 排在关于 tab 之后
         self._setup_red_theme_tab()
 
@@ -238,7 +239,7 @@ class SettingsWindow(ctk.CTkToplevel):
         return get_weapon_name(weapon_id)
     def _setup_about_tab(self):
         tab = self._tabview.add("关于")
-        about_frame = ctk.CTkScrollableFrame(tab, corner_radius=0)
+        about_frame = ctk.CTkFrame(tab, corner_radius=0, fg_color="transparent")
         about_frame.pack(fill="both", expand=True, padx=4, pady=4)
 
         ctk.CTkLabel(about_frame, text=APP_TITLE,
@@ -249,7 +250,7 @@ class SettingsWindow(ctk.CTkToplevel):
                      font=("Microsoft YaHei", 12)).pack(pady=2)
         ctk.CTkLabel(about_frame, text="游戏原作者：內個_shei_鸭",
                      font=("Microsoft YaHei", 12)).pack(pady=2)
-        ctk.CTkLabel(about_frame, text="2026年09月21日",
+        ctk.CTkLabel(about_frame, text="更新日期：2026年09月21日",
                      font=("Microsoft YaHei", 12)).pack(pady=2)
         ctk.CTkLabel(about_frame, text="\nQQ群: 1095388251",
                      font=("Microsoft YaHei", 12)).pack(pady=4)
@@ -287,11 +288,48 @@ class SettingsWindow(ctk.CTkToplevel):
             ctk.CTkLabel(about_frame, text="赞赏码图片未找到",
                          font=("Microsoft YaHei", 11), text_color="#888").pack(pady=4)
 
+    def _setup_thanks_tab(self):
+        tab = self._tabview.add("致谢")
+        thanks_frame = ctk.CTkFrame(tab, corner_radius=0, fg_color="transparent")
+        thanks_frame.pack(fill="both", expand=True, padx=8, pady=8)
+
+        # 标题：参考 html 的 .label，灰色 + 字距
+        ctk.CTkLabel(thanks_frame, text="致　　谢",
+                     font=("Microsoft YaHei", 18), text_color="#9a8f7d").pack(pady=(20, 8))
+
+        # 引言：参考 html 的 .verse，居中 + 深灰
+        ctk.CTkLabel(thanks_frame, text="“一枝独秀不是春，百花齐放春满园”",
+                     font=("Microsoft YaHei", 15), text_color="#9a8f7d").pack(pady=(0, 16))
+
+        thanks_lines = [
+            "感谢B站朋友们的投币和留言，感谢打赏的老板们，感谢原作者內個_shei_鸭。",
+            "",
+            "这修改器是大家集思广益的结果。把它开源，是因为它本来就该属于大家。",
+            "",
+            "在此祝愿大家事事顺心，平安喜乐。",
+            "",
+            "谢谢你们。",
+        ]
+        for line in thanks_lines:
+            ctk.CTkLabel(thanks_frame, text=line, anchor="w",
+                         wraplength=440, justify="left",
+                         font=("Microsoft YaHei", 15)).pack(fill="x", pady=2)
+
+        # 落款：参考 html 的 .sign，底部横线 + 灰色
+        sign_frame = ctk.CTkFrame(thanks_frame, fg_color="transparent")
+        sign_frame.pack(fill="x", pady=(26, 10))
+        sep = ctk.CTkFrame(sign_frame, height=1, fg_color="#ddd6c8")
+        sep.pack(fill="x")
+        sign_label = ctk.CTkLabel(sign_frame,
+                                  text="2026年9月21日                   江苏 · 海州",
+                                  font=("Microsoft YaHei", 13), text_color="#9a8f7d")
+        sign_label.pack(fill="x", pady=(8, 0))
+
     def _open_bilibili(self):
         webbrowser.open("https://space.bilibili.com/481324794")
 
     def _open_source_code(self):
-        webbrowser.open("https://github.com/mlj178/UCF1.7-/tree/dev/04-%E6%AD%A3%E5%BC%8F%E5%8F%91%E8%A1%8C%E7%89%88")
+        webbrowser.open("https://github.com/mlj178/UCF1.7-")
 
     def _on_save(self):
         self._hotkey.save_and_apply(
