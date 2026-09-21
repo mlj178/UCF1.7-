@@ -308,7 +308,12 @@ modules.weapon_giver = (function() {
     try {
       if (!_isDeadFunc || !player || player.isNull()) return true;
       var result = _isDeadFunc(player, ptr(0));
-      return result !== 0;
+      // IDA: Entity.get_isDead 尾跳到 HealthData.get_isDead，结尾是
+      //   test eax, eax / setle al / ... / ret
+      // setle 只写 AL，EAX 高 24 位残留的是血量值。若按 'int' 读整个 EAX，
+      // 血量 >= 256（英雄/超级终结者/生化幽灵）时高位非零，会被误判为"已死亡"。
+      // 因此这里只取低字节。
+      return (result & 0xFF) !== 0;
     } catch(e) {
       return true;
     }

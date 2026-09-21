@@ -12,6 +12,8 @@ from core.config import (
     HOTKEY_EXCLUDED,
     ROLE_TRANSFORM_HOTKEY_ACTIONS,
     ROLE_TRANSFORM_HOTKEY_DISPLAY_NAMES,
+    DIRECT_TRANSFORM_HOTKEY_ACTIONS,
+    DIRECT_TRANSFORM_HOTKEY_DISPLAY_NAMES,
 )
 from core.hotkey_manager import HotkeyManager
 from core.sound_manager import SoundManager
@@ -176,7 +178,27 @@ class SettingsWindow(ctk.CTkToplevel):
                 text_color="#a855f7",
                 width=240,
             ).pack(side="left", padx=8)
-        
+
+        ctk.CTkLabel(hotkey_frame, text="\n直接变身固定快捷键",
+                     font=("Microsoft YaHei", 14, "bold")).pack(pady=(20, 6))
+        for hotkey, binding in DIRECT_TRANSFORM_HOTKEY_ACTIONS.items():
+            row_frame = ctk.CTkFrame(hotkey_frame, fg_color="#2a2a2a")
+            row_frame.pack(fill="x", padx=8, pady=3)
+            ctk.CTkLabel(
+                row_frame,
+                text=DIRECT_TRANSFORM_HOTKEY_DISPLAY_NAMES[hotkey],
+                font=("Microsoft YaHei", 12),
+                text_color="#aaa",
+                width=60,
+            ).pack(side="left", padx=8)
+            ctk.CTkLabel(
+                row_frame,
+                text=f"{binding['label']}（固定绑定）",
+                font=("Microsoft YaHei", 11),
+                text_color="#38bdf8",
+                width=240,
+            ).pack(side="left", padx=8)
+
         # === 武器快捷键部分 ===
         ctk.CTkLabel(hotkey_frame, text="\n武器快捷键绑定 - 快速赋予武器",
                      font=("Microsoft YaHei", 14, "bold")).pack(pady=(20, 6))
@@ -221,11 +243,13 @@ class SettingsWindow(ctk.CTkToplevel):
 
         ctk.CTkLabel(about_frame, text=APP_TITLE,
                      font=("Microsoft YaHei", 18, "bold")).pack(pady=(12, 4))
-        ctk.CTkLabel(about_frame, text="作者: 挂呱呱呱",
+        ctk.CTkLabel(about_frame, text="修改器作者: 挂呱呱呱",
                      font=("Microsoft YaHei", 12)).pack(pady=2)
         ctk.CTkLabel(about_frame, text="代码贡献者：少年与狗子",
                      font=("Microsoft YaHei", 12)).pack(pady=2)
-        ctk.CTkLabel(about_frame, text="2026年09月09日",
+        ctk.CTkLabel(about_frame, text="游戏原作者：內個_shei_鸭",
+                     font=("Microsoft YaHei", 12)).pack(pady=2)
+        ctk.CTkLabel(about_frame, text="2026年09月21日",
                      font=("Microsoft YaHei", 12)).pack(pady=2)
         ctk.CTkLabel(about_frame, text="\nQQ群: 1095388251",
                      font=("Microsoft YaHei", 12)).pack(pady=4)

@@ -93,6 +93,41 @@ ROLE_TRANSFORM_HOTKEY_DISPLAY_NAMES = {
     'alt+r': 'Alt+R',
 }
 
+# 直接变身救世主 / 剑客的固定快捷键：依次对应两张卡片的四个按钮
+DIRECT_TRANSFORM_HOTKEY_ACTIONS = {
+    'alt+a': {
+        "label": "玩家变身救世主",
+        "feature_id": "become_savior",
+        "action": "trigger",
+        "payload": {"action": "local_savior"},
+    },
+    'alt+s': {
+        "label": "人类人机变救世主",
+        "feature_id": "become_savior",
+        "action": "trigger",
+        "payload": {"action": "bot_savior"},
+    },
+    'alt+d': {
+        "label": "玩家变身剑客",
+        "feature_id": "become_ghostblade",
+        "action": "trigger",
+        "payload": {"action": "local_ghostblade"},
+    },
+    'alt+f': {
+        "label": "人类人机变剑客",
+        "feature_id": "become_ghostblade",
+        "action": "trigger",
+        "payload": {"action": "bot_ghostblade"},
+    },
+}
+
+DIRECT_TRANSFORM_HOTKEY_DISPLAY_NAMES = {
+    'alt+a': 'Alt+A',
+    'alt+s': 'Alt+S',
+    'alt+d': 'Alt+D',
+    'alt+f': 'Alt+F',
+}
+
 def _load_feature_manifests():
     features_dir = Path(FEATURES_DIR)
     manifests = {}

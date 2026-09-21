@@ -12,6 +12,9 @@ from core.config import (
     HOTKEY_DISPLAY_NAMES,
     HOTKEY_EXCLUDED,
     ROLE_TRANSFORM_HOTKEY_ACTIONS,
+    ROLE_TRANSFORM_HOTKEY_DISPLAY_NAMES,
+    DIRECT_TRANSFORM_HOTKEY_ACTIONS,
+    DIRECT_TRANSFORM_HOTKEY_DISPLAY_NAMES,
 )
 from core.event_bus import EventBus
 from core.native_hotkey_listener import NativeHotkeyListener, VK_BY_POSITION
@@ -164,17 +167,22 @@ class HotkeyManager:
             except Exception:
                 pass
 
-        for pos, binding in ROLE_TRANSFORM_HOTKEY_ACTIONS.items():
-            try:
-                callback = functools.partial(self._on_dedicated_hotkey_triggered, binding)
-                handle = keyboard.add_hotkey(pos, callback)
-                self._hotkey_handles.append(handle)
-                if not silent:
-                    bus = EventBus.get_instance()
-                    bus.emit('log_message', level='info', module='快捷键',
-                             message=f"绑定快捷键 {pos.upper()} -> {binding['label']}")
-            except Exception:
-                pass
+        for actions, display_names in (
+            (ROLE_TRANSFORM_HOTKEY_ACTIONS, ROLE_TRANSFORM_HOTKEY_DISPLAY_NAMES),
+            (DIRECT_TRANSFORM_HOTKEY_ACTIONS, DIRECT_TRANSFORM_HOTKEY_DISPLAY_NAMES),
+        ):
+            for pos, binding in actions.items():
+                try:
+                    callback = functools.partial(self._on_dedicated_hotkey_triggered, binding)
+                    handle = keyboard.add_hotkey(pos, callback)
+                    self._hotkey_handles.append(handle)
+                    if not silent:
+                        bus = EventBus.get_instance()
+                        display = display_names.get(pos, pos.upper())
+                        bus.emit('log_message', level='info', module='快捷键',
+                                 message=f"绑定快捷键 {display} -> {binding['label']}")
+                except Exception:
+                    pass
 
         for pos in HOTKEY_POSITIONS:
             if pos in DEDICATED_HOTKEY_ACTIONS:

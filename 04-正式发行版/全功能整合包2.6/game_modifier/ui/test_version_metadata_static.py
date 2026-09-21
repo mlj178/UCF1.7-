@@ -16,12 +16,14 @@ class VersionMetadataStaticTests(unittest.TestCase):
     def test_about_page_shows_contributor_immediately_after_author(self):
         text = SETTINGS_WINDOW.read_text(encoding="utf-8")
         self.assertIn('text="代码贡献者：少年与狗子"', text)
-        author_index = text.index('text="作者: 挂呱呱呱"')
+        author_index = text.index('text="修改器作者: 挂呱呱呱"')
         contributor_index = text.index('text="代码贡献者：少年与狗子"')
-        date_index = text.index('text="2026年09月09日"')
+        game_author_index = text.index('text="游戏原作者：內個_shei_鸭"')
+        date_index = text.index('text="2026年09月21日"')
 
         self.assertLess(author_index, contributor_index)
-        self.assertLess(contributor_index, date_index)
+        self.assertLess(contributor_index, game_author_index)
+        self.assertLess(game_author_index, date_index)
 
     def test_installer_default_version_is_2_6(self):
         text = INSTALLER_SCRIPT.read_text(encoding="utf-8")
