@@ -1,4 +1,4 @@
-﻿# UCF 修改器 onedir + Inno Setup 一键构建脚本
+# UCF 修改器 onedir + Inno Setup 一键构建脚本
 # 对应《安装器打包规范-onedir+InnoSetup.md》§10
 # 用法：在 game_modifier/ 目录下执行  powershell -ExecutionPolicy Bypass -File packaging\build_release.ps1
 # 产物：release/UCF<版本>修改器安装器.exe + release/SHA256.txt
@@ -86,6 +86,11 @@ if (-not (Test-Path -LiteralPath $readmeSource -PathType Leaf)) {
     throw "未找到发布说明：$readmeSource"
 }
 Copy-Item -LiteralPath $readmeSource -Destination (Join-Path $releaseDir 'README.txt') -Force
+$disclaimerSource = Join-Path $projectDir 'packaging\免责声明.txt'
+if (-not (Test-Path -LiteralPath $disclaimerSource -PathType Leaf)) {
+    throw "未找到免责声明：$disclaimerSource"
+}
+Copy-Item -LiteralPath $disclaimerSource -Destination (Join-Path $releaseDir '免责声明.txt') -Force
 Write-Output "[8/8] 构建完成"
 Write-Output ""
 Write-Output "安装器：$installerPath"

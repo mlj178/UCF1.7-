@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>免费声明 - 文案与位置预览</title>
+<style>
+  :root {
+    --bg: #1a1a1a;
+    --win: #242424;
+    --frame: #2b2b2b;
+    --tabview: #1d1d1d;
+    --border: #3a3a3a;
+    --text: #dce4ee;
+    --dim: #888888;
+    --blue: #1f538d;
+    --red-bg: #3a1a1a;
+    --red-line: #7a2a2a;
+    --red-text: #ff8888;
+    --gold: #9a8f7d;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 36px 24px 80px;
+    background: var(--bg); color: var(--text);
+    font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+    font-size: 14px; line-height: 1.7;
+  }
+  .wrap { max-width: 1180px; margin: 0 auto; }
+
+  h1 { font-size: 22px; margin: 0 0 6px; }
+  .sub { color: var(--dim); font-size: 13px; margin-bottom: 26px; }
+
+  h2 { font-size: 16px; margin: 40px 0 6px; padding-left: 10px; border-left: 3px solid var(--blue); }
+  .desc { color: var(--dim); font-size: 12.5px; margin: 0 0 16px; padding-left: 13px; }
+
+  .row { display: flex; gap: 28px; flex-wrap: wrap; align-items: flex-start; }
+  .col { flex: 1 1 480px; max-width: 520px; }
+
+  .variant-tag {
+    display: inline-block; font-size: 12px; color: var(--dim);
+    margin-bottom: 8px;
+  }
+  .variant-tag b { color: var(--text); font-weight: 600; }
+
+  /* 模拟设置窗口 */
+  .mock-window {
+    width: 500px; max-width: 100%;
+    background: var(--win); border: 1px solid var(--border);
+    border-radius: 8px; padding: 12px;
+  }
+  .tabview { background: var(--tabview); border: 1px solid #333; border-radius: 8px; padding: 8px; }
+  .tabs { display: flex; gap: 4px; margin-bottom: 8px; }
+  .tab {
+    font-size: 13px; padding: 6px 10px; border-radius: 6px;
+    color: #aaa; white-space: nowrap;
+  }
+  .tab.active { background: var(--blue); color: #fff; }
+  .tab.is-new { border: 1px dashed var(--red-text); color: var(--red-text); }
+  .tab-panel { background: var(--frame); border-radius: 6px; padding: 12px 10px 16px; }
+
+  /* 关于 tab 原始内容 */
+  .c { text-align: center; }
+  .app-title { font-size: 18px; font-weight: 700; color: #fff; }
+  .info { font-size: 12.5px; color: var(--text); margin: 3px 0; }
+  .btn {
+    display: inline-block; font-size: 12px; color: #fff; background: #3a3a3a;
+    padding: 5px 12px; border-radius: 6px; margin: 0 4px;
+  }
+  .donate-box {
+    margin: 10px auto 0; width: 150px; height: 110px;
+    background: #333; border-radius: 6px; color: var(--dim);
+    font-size: 12px; display: flex; align-items: center; justify-content: center;
+  }
+
+  /* 新增声明条 */
+  .notice {
+    background: var(--red-bg); border: 1px solid var(--red-line); border-radius: 6px;
+    padding: 9px 12px; margin: 4px 0 12px; color: var(--red-text);
+    font-size: 12.5px; line-height: 1.75;
+  }
+  .notice .notice-title { font-weight: 700; font-size: 13px; display: block; margin-bottom: 2px; }
+  .notice .channel { color: #ffc9c9; }
+
+  /* 启动日志 */
+  .log-panel {
+    background: #1d1d1d; border: 1px solid var(--border); border-radius: 6px;
+    font-family: Consolas, "Courier New", monospace; font-size: 12px;
+    padding: 8px 10px; line-height: 1.85; color: var(--text);
+  }
+  .log-panel .new-line { color: var(--red-text); }
+  .log-panel .ts { color: #7f8c9a; }
+
+  /* 免费声明 tab 正文 */
+  .free-panel { padding: 22px 18px 20px; text-align: center; }
+  .free-title { font-size: 18px; color: var(--gold); letter-spacing: 2px; }
+  .free-main { font-size: 15px; font-weight: 700; color: var(--red-text); margin: 16px 0 14px; }
+  .free-list { text-align: left; font-size: 14px; line-height: 2; padding: 0 6px; }
+  .free-list .num { color: var(--gold); margin-right: 6px; }
+  .free-list .hl { color: var(--red-text); }
+  .free-rule { height: 1px; background: #4a4a4a; margin: 22px 6px 10px; }
+  .free-sign { font-size: 12.5px; color: var(--gold); }
+
+  /* 标注 */
+  .mark { position: relative; }
+  .mark::after {
+    content: attr(data-mark);
+    position: absolute; top: -9px; right: -9px;
+    background: #c0392b; color: #fff; font-size: 11px;
+    padding: 1px 7px; border-radius: 10px;
+  }
+  .annotated { outline: 1px dashed var(--red-text); outline-offset: 3px; border-radius: 6px; }
+
+  .notes {
+    background: #202020; border: 1px solid var(--border); border-radius: 8px;
+    padding: 14px 18px; font-size: 13px; color: #c9c9c9;
+  }
+  .notes li { margin: 4px 0; }
+  .k { color: var(--red-text); }
+  .k2 { color: var(--gold); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>「免费声明」文案与位置预览</h1>
+  <div class="sub">
+    模拟程序真实配色（CustomTkinter 深色主题 #242424 / #2b2b2b，标签选中色 #1f538d）。<br>
+    红色虚线框 = 本次新增内容。A 版 = 简短直接版，B 版 = 温和正式版。两者择一，不是都写。
+  </div>
+
+  <!-- ================= 1. 关于 Tab 顶部 ================= -->
+  <h2>位置一：「关于」Tab 顶部</h2>
+  <p class="desc">插在「全功能整合包 v2.7」标题下方、作者信息上方。改动点：settings_window.py 的 _setup_about_tab()。</p>
+
+  <div class="row">
+    <div class="col">
+      <div class="variant-tag">方案 <b>A · 简短直接版</b></div>
+      <div class="mock-window">
+        <div class="tabview">
+          <div class="tabs">
+            <div class="tab">快捷键</div>
+            <div class="tab active">关于</div>
+            <div class="tab">致谢</div>
+            <div class="tab">红色主题</div>
+          </div>
+          <div class="tab-panel">
+            <div class="c">
+              <div class="app-title">全功能整合包 v2.7</div>
+              <div class="annotated mark" data-mark="新增" style="margin-top:10px;">
+                <div class="notice" style="margin:0; text-align:left;">
+                  <span class="notice-title">本修改器完全免费</span>
+                  从未出售，从未授权任何人出售。如果你是花钱买到的，那你被骗了——请立即申请退款，并向平台举报卖家。
+                </div>
+              </div>
+              <div class="info">修改器作者: 挂呱呱呱</div>
+              <div class="info">代码贡献者：少年与狗子</div>
+              <div class="info">游戏原作者：內個_shei_鸭</div>
+              <div class="info">更新日期：2026年09月21日</div>
+              <div class="info" style="margin-top:8px;">QQ群: 1095388251</div>
+              <div style="margin-top:14px;">
+                <span class="btn">🔗 B站主页</span>
+                <span class="btn">🔗 全功能整合包源代码</span>
+              </div>
+              <div class="info" style="margin-top:14px;">微信赞赏码:</div>
+              <div class="donate-box">（赞赏码图片，原样保留）</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col">
+      <div class="variant-tag">方案 <b>B · 温和正式版</b></div>
+      <div class="mock-window">
+        <div class="tabview">
+          <div class="tabs">
+            <div class="tab">快捷键</div>
+            <div class="tab active">关于</div>
+            <div class="tab">致谢</div>
+            <div class="tab">红色主题</div>
+          </div>
+          <div class="tab-panel">
+            <div class="c">
+              <div class="app-title">全功能整合包 v2.7</div>
+              <div class="annotated mark" data-mark="新增" style="margin-top:10px;">
+                <div class="notice" style="margin:0; text-align:left;">
+                  <span class="notice-title">本修改器完全免费并已开源</span>
+                  仅供学习交流使用，作者从未以任何形式出售本软件，也未授权任何第三方代售。若你是付费获取，说明你被欺骗了，请尽快联系卖家退款——它本可以免费获得。
+                </div>
+              </div>
+              <div class="info">修改器作者: 挂呱呱呱</div>
+              <div class="info">代码贡献者：少年与狗子</div>
+              <div class="info">游戏原作者：內個_shei_鸭</div>
+              <div class="info">更新日期：2026年09月21日</div>
+              <div class="info" style="margin-top:8px;">QQ群: 1095388251</div>
+              <div style="margin-top:14px;">
+                <span class="btn">🔗 B站主页</span>
+                <span class="btn">🔗 全功能整合包源代码</span>
+              </div>
+              <div class="info" style="margin-top:14px;">微信赞赏码:</div>
+              <div class="donate-box">（赞赏码图片，原样保留）</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= 2. 启动日志首行 ================= -->
+  <h2>位置二：主窗口底部启动日志的首行</h2>
+  <p class="desc">程序一打开就出现在日志区第一行，零点击可见。改动点：app.py 中 self._log(STARTUP_LOG_TITLE) 之后追加一行。</p>
+
+  <div class="row">
+    <div class="col">
+      <div class="variant-tag">方案 <b>A · 简短直接版</b>（单行）</div>
+      <div class="log-panel">
+        <div><span class="ts">[21:04:07]</span> 全功能整合包 v2.7</div>
+        <div class="new-line"><span class="ts">[21:04:07]</span> 本修改器完全免费，从未出售、从未授权任何人出售 —— 付费购买均属被骗，请退款并举报卖家</div>
+        <div><span class="ts">[21:04:07]</span> 正在检测游戏进程...</div>
+        <div><span class="ts">[21:04:09]</span> 未检测到游戏，请先启动游戏</div>
+      </div>
+    </div>
+    <div class="col">
+      <div class="variant-tag">方案 <b>B · 温和正式版</b>（单行）</div>
+      <div class="log-panel">
+        <div><span class="ts">[21:04:07]</span> 全功能整合包 v2.7</div>
+        <div class="new-line"><span class="ts">[21:04:07]</span> 本修改器完全免费并已开源，作者从未授权任何第三方代售 —— 若为付费获取，请立即联系卖家退款</div>
+        <div><span class="ts">[21:04:07]</span> 正在检测游戏进程...</div>
+        <div><span class="ts">[21:04:09]</span> 未检测到游戏，请先启动游戏</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= 3. 免费声明 Tab ================= -->
+  <h2>位置三：新增独立「免费声明」Tab</h2>
+  <p class="desc">建议排在「致谢」之后、「红色主题」之前，与其他说明类 tab 归为一组。改动点：settings_window.py 的 _setup_ui() 中新增 _setup_free_tab()。</p>
+
+  <div class="row">
+    <div class="col">
+      <div class="variant-tag">方案 <b>A · 简短直接版</b></div>
+      <div class="mock-window">
+        <div class="tabview">
+          <div class="tabs">
+            <div class="tab">快捷键</div>
+            <div class="tab">关于</div>
+            <div class="tab">致谢</div>
+            <div class="tab is-new">免费声明</div>
+            <div class="tab">红色主题</div>
+          </div>
+          <div class="tab-panel free-panel">
+            <div class="free-title">免 费 声 明</div>
+            <div class="free-main">本修改器完全免费，从未出售、从未授权任何人出售。</div>
+            <div class="free-list">
+              <div><span class="num">1.</span>如果你是花钱买到的，<span class="hl">那你被骗了</span>。</div>
+              <div><span class="num">2.</span>请立即申请退款，并向平台举报卖家。</div>
+              <div><span class="num">3.</span>官方渠道只有：B站主页、GitHub 源码仓库、QQ群 1095388251。</div>
+              <div><span class="num">4.</span>「关于」页的赞赏码是自愿打赏，与功能无关，<span class="hl">不是购买入口</span>。</div>
+              <div><span class="num">5.</span>任何以本修改器名义收费的行为，均与作者无关。</div>
+            </div>
+            <div class="free-rule"></div>
+            <div class="free-sign">全功能整合包 · 永久免费</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col">
+      <div class="variant-tag">方案 <b>B · 温和正式版</b></div>
+      <div class="mock-window">
+        <div class="tabview">
+          <div class="tabs">
+            <div class="tab">快捷键</div>
+            <div class="tab">关于</div>
+            <div class="tab">致谢</div>
+            <div class="tab is-new">免费声明</div>
+            <div class="tab">红色主题</div>
+          </div>
+          <div class="tab-panel free-panel">
+            <div class="free-title">免 费 声 明</div>
+            <div class="free-main">本修改器完全免费并已开源，仅供学习交流使用。</div>
+            <div class="free-list">
+              <div><span class="num">1.</span>作者从未以任何形式出售本软件，也未授权任何第三方代售。</div>
+              <div><span class="num">2.</span>若你是付费获取，说明你被欺骗了，请尽快联系卖家退款。</div>
+              <div><span class="num">3.</span>官方渠道只有：B站主页、GitHub 源码仓库、QQ群 1095388251。</div>
+              <div><span class="num">4.</span>「关于」页的赞赏码为自愿打赏，与软件功能无关，不构成购买行为。</div>
+              <div><span class="num">5.</span>如发现他人转售，欢迎向作者反馈，以帮助更多玩家避免损失。</div>
+            </div>
+            <div class="free-rule"></div>
+            <div class="free-sign">全功能整合包 · 永久免费 · 已开源</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= 备注 ================= -->
+  <h2>备注与取舍</h2>
+  <div class="notes">
+    <ul style="padding-left:18px; margin:0;">
+      <li><span class="k">A / B 只选一个</span>，不要同时出现，否则语气打架；选定的版本三处（关于页 / 日志 / 声明页）保持同一套措辞。</li>
+      <li><span class="k2">关于页只能用短版</span>：500px 宽的窗口里，A、B 的长句会占 3 行左右。若嫌高，可只保留「本修改器完全免费，从未出售，也从未授权任何人代售」+ 一行小字「付费获取即被骗，请退款并举报」。</li>
+      <li><span class="k2">日志区只能单行</span>：宽度固定，超过约 60 字会折行，所以日志版是精简句，与声明页不要求逐字一致。</li>
+      <li>「免费声明」Tab 里<span class="k2">必须保留赞赏码说明</span>（第 4 条），否则「关于」页的赞赏码会被误当成购买入口。</li>
+      <li>声明里<span class="k2">不要出现任何价格、交易、购买引导字样</span>，只写「从未售卖 + 退款举报」，避免被平台判定为交易纠纷内容。</li>
+      <li>本次不改动：<span class="k2">APP_TITLE 标题栏、发布包说明文件、安装包 installer.iss</span>。需要的话再单独加。</li>
+    </ul>
+  </div>
+
+</div>
+</body>
+</html>
