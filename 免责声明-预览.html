@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>免责声明 - 文案与位置预览</title>
+<style>
+  :root {
+    --bg: #1a1a1a;
+    --win: #242424;
+    --frame: #2b2b2b;
+    --tabview: #1d1d1d;
+    --border: #3a3a3a;
+    --text: #dce4ee;
+    --dim: #888888;
+    --blue: #1f538d;
+    --red-bg: #3a1a1a;
+    --red-line: #7a2a2a;
+    --red-text: #ff8888;
+    --gold: #9a8f7d;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 36px 24px 80px;
+    background: var(--bg); color: var(--text);
+    font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+    font-size: 14px; line-height: 1.7;
+  }
+  .wrap { max-width: 1180px; margin: 0 auto; }
+
+  h1 { font-size: 22px; margin: 0 0 6px; }
+  .sub { color: var(--dim); font-size: 13px; margin-bottom: 26px; }
+
+  h2 { font-size: 16px; margin: 44px 0 6px; padding-left: 10px; border-left: 3px solid var(--blue); }
+  .desc { color: var(--dim); font-size: 12.5px; margin: 0 0 16px; padding-left: 13px; }
+
+  .row { display: flex; gap: 28px; flex-wrap: wrap; align-items: flex-start; }
+  .col { flex: 1 1 480px; max-width: 520px; }
+
+  .variant-tag { display: inline-block; font-size: 12px; color: var(--dim); margin-bottom: 8px; }
+  .variant-tag b { color: var(--text); font-weight: 600; }
+
+  /* 模拟设置窗口 */
+  .mock-window {
+    width: 500px; max-width: 100%;
+    background: var(--win); border: 1px solid var(--border);
+    border-radius: 8px; padding: 12px;
+  }
+  .tabview { background: var(--tabview); border: 1px solid #333; border-radius: 8px; padding: 8px; }
+  .tabs { display: flex; gap: 3px; margin-bottom: 8px; font-size: 12.5px; }
+  .tab { padding: 6px 8px; border-radius: 6px; color: #aaa; white-space: nowrap; }
+  .tab.active { background: var(--blue); color: #fff; }
+  .tab.is-new { border: 1px dashed var(--red-text); color: var(--red-text); }
+  .tab-panel { background: var(--frame); border-radius: 6px; padding: 12px 10px 16px; }
+
+  /* 声明正文排版 */
+  .decl-title { font-size: 18px; color: var(--gold); letter-spacing: 2px; text-align: center; }
+  .decl-group { font-size: 12.5px; color: var(--gold); margin: 16px 0 4px; }
+  .decl-list { text-align: left; font-size: 14px; line-height: 1.95; }
+  .decl-list .num { color: var(--gold); margin-right: 5px; }
+  .decl-rule { height: 1px; background: #4a4a4a; margin: 20px 4px 10px; }
+  .decl-sign { font-size: 12.5px; color: var(--gold); text-align: center; }
+
+  /* 免费声明区块（复用于合并方案） */
+  .free-block {
+    background: var(--red-bg); border: 1px solid var(--red-line); border-radius: 6px;
+    padding: 10px 12px; color: var(--red-text); font-size: 12.5px; line-height: 1.85;
+  }
+  .free-block .block-title { font-weight: 700; font-size: 13px; display: block; margin-bottom: 3px; }
+
+  /* 弹窗 */
+  .dialog-wrap { padding: 24px 0 0; display: flex; justify-content: center; }
+  .dialog {
+    width: 420px; background: var(--win); border: 1px solid var(--border);
+    border-radius: 10px; padding: 16px 18px 14px; text-align: center;
+  }
+  .dialog .dlg-title { font-size: 15px; font-weight: 700; color: #ffcc00; }
+  .dialog .dlg-body { font-size: 13px; line-height: 1.9; margin-top: 10px; text-align: left; color: var(--text); }
+  .dialog .dlg-actions { margin-top: 16px; }
+  .dlg-btn {
+    display: inline-block; font-size: 12.5px; padding: 6px 16px; border-radius: 6px;
+    margin: 0 5px; color: #fff; background: #3a3a3a;
+  }
+  .dlg-btn.primary { background: #1f538d; }
+  .dlg-btn.danger { background: #7a2a2a; color: #ffc9c9; }
+
+  /* 表格 */
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { border: 1px solid var(--border); padding: 8px 10px; text-align: left; vertical-align: top; }
+  th { background: #262626; color: #c9c9c9; font-weight: 600; }
+  td.k { color: var(--red-text); white-space: nowrap; }
+  td.r { color: #8fd18f; white-space: nowrap; }
+
+  /* 日志 */
+  .log-panel {
+    background: #1d1d1d; border: 1px solid var(--border); border-radius: 6px;
+    font-family: Consolas, "Courier New", monospace; font-size: 12px;
+    padding: 8px 10px; line-height: 1.85;
+  }
+  .log-panel .new-line { color: #ffcc00; }
+  .log-panel .ts { color: #7f8c9a; }
+
+  .notes { background: #202020; border: 1px solid var(--border); border-radius: 8px; padding: 14px 18px; font-size: 13px; color: #c9c9c9; }
+  .notes li { margin: 5px 0; }
+  .k { color: var(--red-text); }
+  .k2 { color: var(--gold); }
+  .k3 { color: #ffcc00; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>「免责声明」文案与位置预览</h1>
+  <div class="sub">
+    配色与上一个预览一致（CustomTkinter 深色 #242424 / #2b2b2b，标签选中色 #1f538d）。红色虚线框 = 新增内容。<br>
+    实测数据：设置窗口内标签栏可用约 <b>476px</b>；5 个 tab 占 350px，6 个 tab 占 436px。
+  </div>
+
+  <!-- ============ 一、文案 ============ -->
+  <h2>一、文案怎么写</h2>
+  <p class="desc">推荐完整版（9 条，分四组）。分组是为了让用户扫一眼就抓到重点，而不是看到一堵墙。</p>
+
+  <div class="row">
+    <div class="col">
+      <div class="variant-tag">方案 <b>完整版</b>（用于独立 Tab 或合并区块）</div>
+      <div class="mock-window">
+        <div class="tabview">
+          <div class="tabs">
+            <div class="tab">快捷键</div>
+            <div class="tab">关于</div>
+            <div class="tab">致谢</div>
+            <div class="tab">免费声明</div>
+            <div class="tab active is-new">免责声明</div>
+            <div class="tab">红色主题</div>
+          </div>
+          <div class="tab-panel">
+            <div class="decl-title">免 责 声 明</div>
+
+            <div class="decl-group">使用范围</div>
+            <div class="decl-list">
+              <div><span class="num">1.</span>本程序仅供个人学习、研究与单机娱乐使用，禁止用于任何商业用途或盈利活动。</div>
+              <div><span class="num">2.</span>本程序为非官方工具，与游戏开发商、发行商及原作者无任何隶属或合作关系，未获其授权或认可；游戏本体及其素材版权归原作者所有。</div>
+            </div>
+
+            <div class="decl-group">风险提示</div>
+            <div class="decl-list">
+              <div><span class="num">3.</span>使用本程序可能导致游戏崩溃、存档损坏或数据丢失，请在操作前自行备份存档。</div>
+              <div><span class="num">4.</span>若将本程序用于联机或官方服务器，可能导致账号被封禁或受到平台处罚，相关后果由使用者自行承担。</div>
+              <div><span class="num">5.</span>请勿利用本程序破坏他人游戏体验，或从事任何违反当地法律法规的行为。</div>
+            </div>
+
+            <div class="decl-group">责任限制</div>
+            <div class="decl-list">
+              <div><span class="num">6.</span>本程序按「现状」提供，不提供任何明示或暗示的担保，包括但不限于适销性与特定用途适用性（AGPL-3.0 第 15 条）。</div>
+              <div><span class="num">7.</span>因下载、安装或使用本程序所致的任何直接或间接损失，作者及贡献者不承担任何责任（AGPL-3.0 第 16 条）。</div>
+              <div><span class="num">8.</span>第三方基于本程序修改或二次分发的版本，其内容与后果均与原作者无关，请自行甄别来源。</div>
+            </div>
+
+            <div class="decl-group">生效</div>
+            <div class="decl-list">
+              <div><span class="num">9.</span>你开始使用本程序，即视为已阅读并同意以上全部条款；如不同意，请立即停止使用并删除本程序。</div>
+            </div>
+
+            <div class="decl-rule"></div>
+            <div class="decl-sign">全功能整合包 · 遵循 AGPL-3.0 开源许可 · 不提供任何担保</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col">
+      <div class="variant-tag">方案 <b>精简版</b>（Tab 空间紧张、或想和免费声明塞进一个页）</div>
+      <div class="mock-window">
+        <div class="tabview">
+          <div class="tabs">
+            <div class="tab">快捷键</div>
+            <div class="tab">关于</div>
+            <div class="tab">致谢</div>
+            <div class="tab active is-new">声明</div>
+            <div class="tab">红色主题</div>
+          </div>
+          <div class="tab-panel">
+            <div class="decl-title">免 责 声 明</div>
+            <div class="decl-list" style="margin-top:14px;">
+              <div><span class="num">1.</span>仅供个人学习与单机娱乐使用，禁止商业用途。</div>
+              <div><span class="num">2.</span>非官方工具，与游戏开发商、发行商及原作者无关。</div>
+              <div><span class="num">3.</span>使用可能导致游戏崩溃、存档损坏或账号封禁，请先备份存档，风险由使用者自行承担。</div>
+              <div><span class="num">4.</span>本程序按「现状」提供，不提供任何担保；由此产生的任何损失，作者及贡献者不承担责任。</div>
+              <div><span class="num">5.</span>开始使用即视为同意以上条款。</div>
+            </div>
+            <div class="decl-rule"></div>
+            <div class="decl-sign">全功能整合包 · 遵循 AGPL-3.0 · 不提供任何担保</div>
+          </div>
+        </div>
+      </div>
+      <div style="margin-top:14px;" class="variant-tag">说明：上面这个 mock 的 tab 名换成了「声明」，就是下面的合并方案。</div>
+    </div>
+  </div>
+
+  <!-- ============ 二、位置 ============ -->
+  <h2>二、放在什么位置</h2>
+  <p class="desc">免责声明和免费声明不同：免费声明的目的是「别被骗」，免责声明的目的是「使用者已知晓风险」——后者越靠近「用户必须看见」越有意义。</p>
+
+  <table>
+    <tr>
+      <th style="width:22%;">位置</th>
+      <th style="width:34%;">做法</th>
+      <th style="width:20%;">优点</th>
+      <th style="width:24%;">代价 / 风险</th>
+    </tr>
+    <tr>
+      <td class="k">① 新增独立「免责声明」Tab</td>
+      <td>排在「免费声明」之后、「红色主题」之前，共 6 个 tab</td>
+      <td class="r">与免费声明并列，结构清晰</td>
+      <td>标签栏 436px / 可用 476px，余量只剩约 40px；日后再加 tab 就会挤</td>
+    </tr>
+    <tr>
+      <td class="k">② 合并进「免费声明」Tab，改名「声明」</td>
+      <td>一个 tab 内上下两个区块：免费声明（红底条）+ 免责声明（正文）</td>
+      <td class="r">tab 数量不变（5 个，350px），最稳；两个声明天然是一组</td>
+      <td>单页内容变长，500×650 窗口可能需要滚动</td>
+    </tr>
+    <tr>
+      <td class="k">③ 首次启动弹窗（需点击「我已知晓」）</td>
+      <td>第一次运行弹一次，点击后写入 data 目录的已读标记，之后不再弹</td>
+      <td class="r">唯一能证明「用户确实看过并同意」的形式，免责效力最强</td>
+      <td>打扰一次；需要新增已读标记的读写逻辑</td>
+    </tr>
+    <tr>
+      <td class="k">④ 主窗口启动日志加一行</td>
+      <td>紧跟在免费声明那行之后，黄字一行：「使用风险自负，请先备份存档」</td>
+      <td class="r">零点击可见，改动 1 行</td>
+      <td>只能放一句话，不构成完整声明</td>
+    </tr>
+    <tr>
+      <td class="k">⑤ 发布包 / 安装包 / README</td>
+      <td>发布包内放 免责声明.txt；installer.iss 许可页；README「许可」一节已有一句</td>
+      <td class="r">覆盖解压即用、不看程序的人</td>
+      <td>需同步打包脚本，否则打包后丢文件</td>
+    </tr>
+  </table>
+
+  <p class="desc" style="margin-top:14px;">
+    我的建议：<b>② 合并成「声明」Tab + ④ 日志一行</b>，想要更强效力再加 ③ 首次弹窗。
+    纯软件层面，① 和 ② 的免责效力其实没差别（都藏在设置里），所以没必要为了多一个 tab 去挤标签栏。
+  </p>
+
+  <!-- ============ 三、弹窗与日志 mock ============ -->
+  <h2>三、③ 首次启动弹窗 / ④ 日志一行</h2>
+
+  <div class="row">
+    <div class="col">
+      <div class="variant-tag">③ 首次启动弹窗（弹一次，点过不再弹）</div>
+      <div class="dialog-wrap">
+        <div class="dialog">
+          <div class="dlg-title">使用前请阅读</div>
+          <div class="dlg-body">
+            本工具为免费开源的第三方非官方修改器，仅供个人单机学习娱乐使用。<br>
+            使用可能导致游戏崩溃、存档损坏或账号封禁，请先备份存档，风险自负。<br>
+            本程序按「现状」提供，不提供任何担保，作者不承担因使用产生的责任。
+          </div>
+          <div class="dlg-actions">
+            <span class="dlg-btn primary">我已知晓并继续</span>
+            <span class="dlg-btn danger">不同意，退出</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col">
+      <div class="variant-tag">④ 主窗口底部启动日志（在免费声明那行之后）</div>
+      <div class="log-panel">
+        <div><span class="ts">[21:04:07]</span> 全功能整合包 v2.7</div>
+        <div style="color:#ff8888;"><span class="ts">[21:04:07]</span> 本修改器完全免费并已开源，作者从未授权任何第三方代售 —— 若为付费获取，请立即联系卖家退款</div>
+        <div class="new-line"><span class="ts">[21:04:07]</span> 仅供个人单机学习娱乐，使用风险自负，请先备份存档</div>
+        <div><span class="ts">[21:04:07]</span> 正在检测游戏进程...</div>
+        <div><span class="ts">[21:04:09]</span> 未检测到游戏，请先启动游戏</div>
+      </div>
+      <div class="variant-tag" style="margin-top:12px;">说明：上面第一行红字是上一轮已加好的免费声明。</div>
+    </div>
+  </div>
+
+  <!-- ============ 四、要点 ============ -->
+  <h2>四、撰写要点与雷区</h2>
+  <div class="notes">
+    <ul style="padding-left:18px; margin:0;">
+      <li><span class="k2">为什么必须写「非官方」</span>：这是整份声明里最能保护你的一条。写明与游戏开发商、发行商、原作者无关联，等于把他们可能追责的方向提前切断。</li>
+      <li><span class="k3">AGPL-3.0 第 5(d) 条要求交互界面显示「适当的法律声明」</span>——版权声明 + 无担保声明 + 如何查看许可证。本程序目前界面上没有，加这个免责声明页正好补上这个缺口，结尾那句「遵循 AGPL-3.0 · 不提供任何担保」就是针对这条。</li>
+      <li><span class="k2">先写风险、后写免责</span>：先告诉用户「会崩、会坏档、会封号，先备份」，再写「我不负责」。顺序反了会显得只是甩锅。所以 3-5 条（风险）放在 6-8 条（责任限制）前面。</li>
+      <li><span class="k">不要写「最终解释权归作者所有」</span>：这类条款在法律上基本无效，还容易激起反感，属于典型的自减分写法。</li>
+      <li><span class="k">不要写「请于 24 小时内删除」</span>：这是早期破解圈的模板话术。项目已经 AGPL 开源，一边开源一边要求删除是自相矛盾的，会削弱整份声明的可信度。</li>
+      <li><span class="k2">必须有「不同意即停止使用」</span>：没有这句，声明就只是一段说明文字；有了它，才构成「用户以使用行为表示接受」的闭环。这也是 ③ 弹窗比藏在设置里更强的唯一原因。</li>
+      <li><span class="k2">免责声明的边界</span>：它不能免除故意或重大过失造成的责任，因此不要期待它「万能」。它的真实价值是两点——履行风险告知义务、以及在争议发生时证明用户已被提醒。</li>
+      <li><span class="k2">和免费声明互相支撑</span>：免费声明证明「没有交易关系、没有对价」，免责声明里的责任限制因此更容易被认可；两条一起写在同一个页里，逻辑是连贯的。</li>
+      <li>另外一个顺带的好处：<span class="k2">「请勿用于联机、破坏他人体验」</span>这条，本身就是对社区和游戏原作者的尊重，和致谢页的态度是一致的，不是单纯的法律防御。</li>
+    </ul>
+  </div>
+
+</div>
+</body>
+</html>

@@ -46,6 +46,8 @@ class SettingsWindow(ctk.CTkToplevel):
         self._setup_hotkey_tab()
         self._setup_about_tab()
         self._setup_thanks_tab()
+        self._setup_free_tab()
+        self._setup_disclaimer_tab()
         # 文档 §1：红色主题 tab 排在关于 tab 之后
         self._setup_red_theme_tab()
 
@@ -326,6 +328,75 @@ class SettingsWindow(ctk.CTkToplevel):
                                   text="2026年9月21日                   江苏 · 海州",
                                   font=("Microsoft YaHei", 13), text_color="#9a8f7d")
         sign_label.pack(fill="x", pady=(8, 0))
+
+    def _setup_free_tab(self):
+        tab = self._tabview.add("免费声明")
+        free_frame = ctk.CTkFrame(tab, corner_radius=0, fg_color="transparent")
+        free_frame.pack(fill="both", expand=True, padx=8, pady=8)
+
+        # 标题与落款沿用「致谢」tab 的灰色样式，保持两个说明页观感一致
+        ctk.CTkLabel(free_frame, text="免 费 声 明",
+                     font=("Microsoft YaHei", 18), text_color="#9a8f7d").pack(pady=(20, 14))
+
+        free_lines = [
+            "1.作者从未以任何形式出售本软件，也未授权任何第三方代售。",
+            "2.若你是付费获取，说明你被欺骗了，请尽快联系卖家退款。",
+            "3.官方渠道只有：B站主页、GitHub 源码仓库、QQ群 1095388251。",
+            "4.「关于」页的赞赏码为自愿打赏，与软件功能无关，不构成购买行为。",
+            "5.任何以本修改器名义收费的行为，均与作者无关。",
+        ]
+        for line in free_lines:
+            ctk.CTkLabel(free_frame, text=line, anchor="w",
+                         wraplength=440, justify="left",
+                         font=("Microsoft YaHei", 15)).pack(fill="x", pady=3)
+
+        sign_frame = ctk.CTkFrame(free_frame, fg_color="transparent")
+        sign_frame.pack(fill="x", pady=(26, 10))
+        sep = ctk.CTkFrame(sign_frame, height=1, fg_color="#ddd6c8")
+        sep.pack(fill="x")
+        ctk.CTkLabel(sign_frame, text="全功能整合包 · 永久免费 · 已开源",
+                     font=("Microsoft YaHei", 13), text_color="#9a8f7d").pack(fill="x", pady=(8, 0))
+
+    def _setup_disclaimer_tab(self):
+        tab = self._tabview.add("免责声明")
+        frame = ctk.CTkFrame(tab, corner_radius=0, fg_color="transparent")
+        frame.pack(fill="both", expand=True, padx=8, pady=8)
+
+        ctk.CTkLabel(frame, text="免 责 声 明",
+                     font=("Microsoft YaHei", 18), text_color="#9a8f7d").pack(pady=(18, 10))
+
+        # 分四组：使用范围 / 风险提示 / 责任限制 / 生效
+        sections = [
+            ("使用范围", [
+                "仅供个人学习与单机娱乐使用，禁止商业用途。",
+                "非官方工具，与游戏开发商、发行商及原作者无关。",
+            ]),
+            ("风险提示", [
+                "请勿利用本程序破坏他人游戏体验，或从事任何违反当地法律法规的行为。",
+            ]),
+            ("责任限制", [
+                "第三方基于本程序修改或二次分发的版本，其内容与后果均与原作者无关，请自行甄别来源。",
+            ]),
+            ("生效", [
+                "你开始使用本程序，即视为已阅读并同意以上全部条款；如不同意，请立即停止使用并删除本程序。",
+            ]),
+        ]
+        for group, lines in sections:
+            ctk.CTkLabel(frame, text=group, anchor="w",
+                         font=("Microsoft YaHei", 13, "bold"),
+                         text_color="#9a8f7d").pack(fill="x", pady=(10, 2))
+            for line in lines:
+                ctk.CTkLabel(frame, text=line, anchor="w",
+                             wraplength=440, justify="left",
+                             font=("Microsoft YaHei", 14)).pack(fill="x", pady=2)
+
+        sign_frame = ctk.CTkFrame(frame, fg_color="transparent")
+        sign_frame.pack(fill="x", pady=(22, 10))
+        sep = ctk.CTkFrame(sign_frame, height=1, fg_color="#ddd6c8")
+        sep.pack(fill="x")
+        ctk.CTkLabel(sign_frame, text="全功能整合包 · 遵循 AGPL-3.0 开源许可 · 不提供任何担保",
+                     font=("Microsoft YaHei", 12), text_color="#9a8f7d",
+                     wraplength=440, justify="center").pack(fill="x", pady=(8, 0))
 
     def _open_bilibili(self):
         webbrowser.open("https://space.bilibili.com/481324794")

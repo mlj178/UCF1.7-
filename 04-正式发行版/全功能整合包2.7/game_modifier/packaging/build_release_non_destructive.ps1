@@ -72,6 +72,12 @@ $readmeSource = Join-Path $projectDir 'packaging\README.txt'
 if (Test-Path -LiteralPath $readmeSource -PathType Leaf) {
     Copy-Item -LiteralPath $readmeSource -Destination (Join-Path $releaseDir 'README.txt')
 }
+# Disclaimer file (name built from char codes to keep this script ASCII-only)
+$disclaimerName = (-join ([char]0x514D, [char]0x8D23, [char]0x58F0, [char]0x660E)) + '.txt'
+$disclaimerSource = Join-Path $projectDir ('packaging\' + $disclaimerName)
+if (Test-Path -LiteralPath $disclaimerSource -PathType Leaf) {
+    Copy-Item -LiteralPath $disclaimerSource -Destination (Join-Path $releaseDir $disclaimerName)
+}
 
 Write-Output "Installer: $installerPath"
 Write-Output "SHA256: $hash"

@@ -88,6 +88,7 @@ class App(ctk.CTk):
         self._migrate_plugin_config_from_persistent_state()
 
         self.settings_window = None
+        self._disclaimer_dialog = None
         self._panel_context = PanelContext(self)
         self._event_controller = AppEventController(self)
         self._tab_builder = None
@@ -98,11 +99,14 @@ class App(ctk.CTk):
         self._load_feature_state()
         self._hotkey.set_app(self)
         self._log(STARTUP_LOG_TITLE)
+        self._log("本修改器完全免费并已开源，作者从未授权任何第三方代售 —— 若为付费获取，请立即联系卖家退款")
+        self._log("仅供个人学习与单机娱乐使用，禁止商业用途。非官方工具，使用风险自负", color="#ffcc00")
         self._log("正在检测游戏进程...")
 
         # 配置文件保持同步读取；全局快捷键在窗口显示后再注册。
         self.after(100, self._initialize_hotkeys_after_ui)
         self.after(300, self._prebuild_plugin_tabs)
+        self.after(500, self._show_first_run_disclaimer)
 
         for feature_id in self._features:
             self._update_switch(feature_id)
@@ -178,9 +182,9 @@ class App(ctk.CTk):
     def _setup_events(self):
         self._event_controller.register(self._event_bus)
 
-    def _log(self, msg):
+    def _log(self, msg, color=None):
         ts = time.strftime("%H:%M:%S")
-        self._safe_after(0, lambda: self._log_ui(ts, msg))
+        self._safe_after(0, lambda: self._log_ui(ts, msg, color))
 
     def _safe_after(self, delay_ms, callback, *args):
         if self._stop:
@@ -216,9 +220,16 @@ class App(ctk.CTk):
             if not self._stop:
                 self.after(delay_ms, callback, *args)
 
-    def _log_ui(self, ts, msg):
+    def _log_ui(self, ts, msg, color=None):
         self.log_box.configure(state="normal")
+        start = self.log_box.index("end-1c")
         self.log_box.insert("end", f"[{ts}] {msg}\n")
+        if color:
+            # CTkTextbox 不支持 tag 配置，需取底层 tkinter.Text（同红色主题 Tab 的做法）
+            tag = f"color_{color.lstrip('#')}"
+            inner_text = getattr(self.log_box, "_textbox", self.log_box)
+            inner_text.tag_configure(tag, foreground=color)
+            inner_text.tag_add(tag, start, "end-1c")
         self.log_box.see("end")
         self.log_box.configure(state="disabled")
 
@@ -319,6 +330,13 @@ class App(ctk.CTk):
     def _show_settings(self):
         from ui.settings_window import SettingsWindow
         SettingsWindow(self)
+
+    def _show_first_run_disclaimer(self):
+        """首次启动时弹出免责声明；用户点过「我已知晓」后不再弹出。"""
+        if self._stop:
+            return
+        from ui.disclaimer_dialog import show_if_needed
+        self._disclaimer_dialog = show_if_needed(self)
 
     def _load_feature_state(self):
         try:

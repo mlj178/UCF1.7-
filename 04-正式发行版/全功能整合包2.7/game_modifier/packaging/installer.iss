@@ -33,6 +33,8 @@ OutputDir={#ReleaseOutputDir}
 OutputBaseFilename={#AppExeName}安装器
 DisableProgramGroupPage=yes
 WizardStyle=modern
+; 安装前展示免责声明页，用户须点「I accept the agreement」才能继续；文件与本脚本同目录
+LicenseFile=免责声明.txt
 
 [Languages]
 ; Inno Setup 6.7.3 官方语言包不含简体中文 ISL（位于 Unofficial 目录）。
