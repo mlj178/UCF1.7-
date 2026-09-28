@@ -45,7 +45,6 @@ class SettingsWindow(ctk.CTkToplevel):
 
         self._setup_hotkey_tab()
         self._setup_about_tab()
-        self._setup_thanks_tab()
         self._setup_free_tab()
         self._setup_disclaimer_tab()
         # 文档 §1：红色主题 tab 排在关于 tab 之后
@@ -290,51 +289,12 @@ class SettingsWindow(ctk.CTkToplevel):
             ctk.CTkLabel(about_frame, text="赞赏码图片未找到",
                          font=("Microsoft YaHei", 11), text_color="#888").pack(pady=4)
 
-    def _setup_thanks_tab(self):
-        tab = self._tabview.add("致谢")
-        thanks_frame = ctk.CTkFrame(tab, corner_radius=0, fg_color="transparent")
-        thanks_frame.pack(fill="both", expand=True, padx=8, pady=8)
-
-        # 标题：参考 html 的 .label，灰色 + 字距
-        ctk.CTkLabel(thanks_frame, text="致　　谢",
-                     font=("Microsoft YaHei", 18), text_color="#9a8f7d").pack(pady=(20, 8))
-
-        # 引言：参考 html 的 .verse，居中 + 深灰
-        ctk.CTkLabel(thanks_frame, text="“一枝独秀不是春，百花齐放春满园”",
-                     font=("Microsoft YaHei", 15), text_color="#9a8f7d").pack(pady=(0, 16))
-
-        thanks_lines = [
-            "       26年4月，UCF1.7这款游戏发布后，制作了这款修改器，并把它分享到了网上。没想到收到了许多网友的反馈与支持，于是持续更新至今。",
-
-            "       修改器早期开发那阵子，有时灵感一来，会兴奋得从床上爬起来敲代码。那段时间，白天睡觉，晚上写代码、剪视频，乐此不疲。",  
-   
-            "       就这样，修改器不断成长，从1.0到2.7。这离不开大家的反馈与建议，它是集思广益的成果。选择开源，是因为它本来就该属于大家；也希望通过开源打破技术垄断，用AI构建游戏世界的乌托邦，让技术普惠。",
-   
-            "       这一路，也离不开大家的支持与陪伴。感谢B站朋友们的投币和留言，感谢老板们的打赏，也感谢游戏原作者內個_shei_鸭。",
-        
-            "       在此祝大家事事顺心，平安喜乐。",
-        ]
-        for line in thanks_lines:
-            ctk.CTkLabel(thanks_frame, text=line, anchor="w",
-                         wraplength=440, justify="left",
-                         font=("Microsoft YaHei", 15)).pack(fill="x", pady=2)
-
-        # 落款：参考 html 的 .sign，底部横线 + 灰色
-        sign_frame = ctk.CTkFrame(thanks_frame, fg_color="transparent")
-        sign_frame.pack(fill="x", pady=(26, 10))
-        sep = ctk.CTkFrame(sign_frame, height=1, fg_color="#ddd6c8")
-        sep.pack(fill="x")
-        sign_label = ctk.CTkLabel(sign_frame,
-                                  text="2026年9月21日                   江苏 · 海州",
-                                  font=("Microsoft YaHei", 13), text_color="#9a8f7d")
-        sign_label.pack(fill="x", pady=(8, 0))
-
     def _setup_free_tab(self):
         tab = self._tabview.add("免费声明")
         free_frame = ctk.CTkFrame(tab, corner_radius=0, fg_color="transparent")
         free_frame.pack(fill="both", expand=True, padx=8, pady=8)
 
-        # 标题与落款沿用「致谢」tab 的灰色样式，保持两个说明页观感一致
+        # 标题与落款使用统一的灰色说明页样式，保持各说明页观感一致
         ctk.CTkLabel(free_frame, text="免 费 声 明",
                      font=("Microsoft YaHei", 18), text_color="#9a8f7d").pack(pady=(20, 14))
 
