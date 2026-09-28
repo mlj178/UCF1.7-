@@ -13,6 +13,7 @@ HERO_TYPE_NAME = "英雄"
 HOTKEY_BUTTON_TEXT = "⌨"
 WEAPON_COLUMNS = 3
 ROW_BUILD_BATCH_SIZE = 2
+BADGE_ROW_HEIGHT = 22
 
 
 @dataclass
@@ -202,11 +203,11 @@ class BatchedWeaponGrid:
             border_width=1,
             border_color="#4b5563",
         )
-        card.grid(row=0, column=col, padx=3, pady=3, sticky="nsew")
+        card.grid(row=0, column=col, padx=3, pady=3, sticky="new")
+        card.grid_columnconfigure(0, weight=1)
 
         top_frame = ctk.CTkFrame(card, fg_color="transparent")
-        top_frame.pack(fill="x", padx=3, pady=(3, 0))
-        self._weapon_top_frames[weapon_id] = top_frame
+        top_frame.grid(row=0, column=0, sticky="ew", padx=3, pady=(2, 0))
 
         ctk.CTkLabel(
             top_frame,
@@ -214,15 +215,20 @@ class BatchedWeaponGrid:
             font=("Microsoft YaHei", 10, "bold"),
             text_color="#ecf0f1",
             anchor="w",
-        ).pack(side="left", padx=3, fill="x", expand=True)
+        ).pack(side="left", padx=2, fill="x", expand=True)
 
-        hotkey_badge = self._create_hotkey_badge(top_frame, weapon_id, cn_name)
+        badge_row = ctk.CTkFrame(card, fg_color="transparent", height=BADGE_ROW_HEIGHT)
+        badge_row.grid(row=1, column=0, sticky="ew", padx=3, pady=0)
+        badge_row.grid_propagate(False)
+        self._weapon_top_frames[weapon_id] = badge_row
+
+        hotkey_badge = self._create_hotkey_badge(badge_row, weapon_id, cn_name)
         if hotkey_badge:
-            hotkey_badge.pack(side="right", padx=3)
+            hotkey_badge.pack(anchor="w")
             self._weapon_hotkey_badges[weapon_id] = hotkey_badge
 
         actions_frame = ctk.CTkFrame(card, fg_color="transparent")
-        actions_frame.pack(padx=3, pady=(1, 3))
+        actions_frame.grid(row=2, column=0, sticky="w", padx=3, pady=(1, 2))
         ctk.CTkButton(
             actions_frame,
             text=GIVE_BUTTON_TEXT,

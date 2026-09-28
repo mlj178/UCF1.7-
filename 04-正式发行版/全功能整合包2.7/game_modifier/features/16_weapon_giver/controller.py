@@ -109,26 +109,27 @@ class WeaponInteractionController:
         if not hotkey:
             return None
 
-        badge_frame = ctk.CTkFrame(parent, fg_color="#3498db", corner_radius=3)
+        badge_frame = ctk.CTkFrame(parent, fg_color="#3498db", corner_radius=3, height=22)
         display_name = WEAPON_HOTKEY_DISPLAY_NAMES.get(hotkey, hotkey)
         ctk.CTkLabel(
             badge_frame,
             text=f"⌨ {display_name}",
             font=("Microsoft YaHei", 8),
             text_color="white",
-        ).pack(side="left", padx=2)
+        ).pack(side="left", padx=(3, 1), pady=1)
 
         ctk.CTkButton(
             badge_frame,
             text="✕",
-            width=15,
-            height=15,
+            width=14,
+            height=14,
             font=("Microsoft YaHei", 7),
             command=lambda: self.unbind_weapon_hotkey(weapon_id, weapon_name),
             fg_color="transparent",
             hover_color="#e74c3c",
             text_color="white",
-        ).pack(side="left", padx=1)
+            border_width=0,
+        ).pack(side="left", padx=(0, 2))
         return badge_frame
 
     def unbind_weapon_hotkey(self, weapon_id, _weapon_name):
@@ -208,10 +209,10 @@ class WeaponInteractionController:
             del state.weapon_hotkey_badges[weapon_id]
 
         if weapon_id in state.weapon_top_frames:
-            top_frame = state.weapon_top_frames[weapon_id]
-            new_badge = self.create_hotkey_badge(top_frame, weapon_id, weapon_name)
+            badge_row = state.weapon_top_frames[weapon_id]
+            new_badge = self.create_hotkey_badge(badge_row, weapon_id, weapon_name)
             if new_badge:
-                new_badge.pack(side="right", padx=3)
+                new_badge.pack(anchor="w")
                 state.weapon_hotkey_badges[weapon_id] = new_badge
 
     def init_hotkey_manager(self):
