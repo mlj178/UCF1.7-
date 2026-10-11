@@ -16,7 +16,9 @@ from core.config import (
     DIRECT_TRANSFORM_HOTKEY_ACTIONS,
     DIRECT_TRANSFORM_HOTKEY_DISPLAY_NAMES,
 )
+from core.config import write_json_atomic
 from core.event_bus import EventBus
+from core.log_manager import get_logger
 from core.native_hotkey_listener import NativeHotkeyListener, VK_BY_POSITION
 
 
@@ -73,16 +75,19 @@ class HotkeyManager:
                     elif isinstance(result[pos], str) and result[pos] in HOTKEY_EXCLUDED:
                         result[pos] = None
                 return result
-            except Exception:
-                pass
+            except Exception as exc:
+                get_logger("HotkeyManager").warning(
+                    "读取快捷键配置失败，已回退默认值 %s: %s", HOTKEYS_FILE, exc
+                )
         return result
 
     def _save_hotkeys(self):
         try:
-            with open(HOTKEYS_FILE, 'w', encoding='utf-8') as f:
-                json.dump(self._hotkeys, f, ensure_ascii=False, indent=2)
-        except Exception:
-            pass
+            write_json_atomic(HOTKEYS_FILE, self._hotkeys)
+        except Exception as exc:
+            get_logger("HotkeyManager").error(
+                "保存快捷键配置失败 %s: %s", HOTKEYS_FILE, exc
+            )
 
     def set_hotkey(self, position, feature_id):
         if position in DEDICATED_HOTKEY_ACTIONS:
@@ -164,8 +169,8 @@ class HotkeyManager:
                     label = binding.get('label', f"{binding.get('feature_id')}.{binding.get('action')}")
                     bus.emit('log_message', level='info', module='快捷键',
                              message=f"绑定快捷键 {display} -> {label}")
-            except Exception:
-                pass
+            except Exception as exc:
+                get_logger("HotkeyManager").warning("注册快捷键 %s 失败: %s", pos, exc)
 
         for actions, display_names in (
             (ROLE_TRANSFORM_HOTKEY_ACTIONS, ROLE_TRANSFORM_HOTKEY_DISPLAY_NAMES),
@@ -181,8 +186,8 @@ class HotkeyManager:
                         display = display_names.get(pos, pos.upper())
                         bus.emit('log_message', level='info', module='快捷键',
                                  message=f"绑定快捷键 {display} -> {binding['label']}")
-                except Exception:
-                    pass
+                except Exception as exc:
+                    get_logger("HotkeyManager").warning("注册快捷键 %s 失败: %s", pos, exc)
 
         for pos in HOTKEY_POSITIONS:
             if pos in DEDICATED_HOTKEY_ACTIONS:
@@ -198,25 +203,37 @@ class HotkeyManager:
                         display = HOTKEY_DISPLAY_NAMES.get(pos, pos)
                         bus.emit('log_message', level='info', module='快捷键',
                                  message=f"绑定快捷键 {display} -> {feature}")
-                except Exception:
-                    pass
+                except Exception as exc:
+                    get_logger("HotkeyManager").warning("注册快捷键 %s 失败: %s", pos, exc)
+
+    def _dispatch_to_ui(self, callback):
+        """把回调安全地投递到 Tk 主线程。
+
+        keyboard 回调与原生热键回调都运行在后台线程，直接调用 Tk 的 after()
+        可能抛 "main thread is not in main loop"；原先的兜底是在后台线程里
+        直接执行回调（跨线程操作 UI，更危险）。这里优先使用 App 提供的
+        _safe_after（未进入 mainloop 时会排队、窗口销毁后直接丢弃）。
+        """
+        safe_after = getattr(self._app, "_safe_after", None)
+        if callable(safe_after):
+            try:
+                safe_after(0, callback)
+                return
+            except Exception as exc:
+                get_logger("HotkeyManager").warning("投递快捷键回调到主线程失败: %s", exc)
+        try:
+            self._app.after(0, callback)
+        except Exception:
+            callback()
 
     def _on_hotkey_triggered(self, feature):
         if self._app and self._toggle_callback:
-            callback = functools.partial(self._toggle_callback, feature)
-            try:
-                self._app.after(0, callback)
-            except Exception:
-                self._toggle_callback(feature)
+            self._dispatch_to_ui(functools.partial(self._toggle_callback, feature))
 
     def _on_dedicated_hotkey_triggered(self, binding):
         if self._app and self._toggle_callback:
             payload = dict(binding)
-            callback = functools.partial(self._toggle_callback, payload)
-            try:
-                self._app.after(0, callback)
-            except Exception:
-                self._toggle_callback(payload)
+            self._dispatch_to_ui(functools.partial(self._toggle_callback, payload))
 
     def _on_native_hotkey_triggered(self, position):
         binding = DEDICATED_HOTKEY_ACTIONS.get(position)

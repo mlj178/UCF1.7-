@@ -1,4 +1,4 @@
-﻿// Local helpers for this feature only.
+// Local helpers for this feature only.
 var modules = {};
 var __localMaxLogsPerModule = 10;
 var __localModuleLogCounts = {};
@@ -104,8 +104,12 @@ modules.gravity = (function() {
     try { var methodInfo = getGameAssembly().base.add(0xE1CE64).readPointer(); var temp = singletonGetter(methodInfo); if (temp && !temp.isNull()) { gm = temp; playerState = {}; } } catch(e) {}
   }
 
+  var lastLoopAtMs = 0;
   function loop() {
     if (!state.enabled) return;
+    var _nowMs = Date.now();
+    if (_nowMs - lastLoopAtMs < 50) return;
+    lastLoopAtMs = _nowMs;
     if (roomShuttingDown) return;
     if (!hasGm()) { tryGetGM(); if (!hasGm()) { gm = null; playerState = {}; return; } }
     try {
@@ -115,9 +119,9 @@ modules.gravity = (function() {
       if (total < 1 || total > 100) return;
       loopCount++;
       for (var i = 0; i < total; i++) {
-        var pp = ap.add(0x10 + i * 8).readPointer();
+        var pp = ap.add(0x10 + i * Process.pointerSize).readPointer();
         if (!pp || pp.isNull()) continue;
-        if (state.mode !== 'all' && !isMyPlayer(pp)) continue;
+        if (state.mode !== 'all' && !isMyPlayer(pp, ptr(0))) continue;
         var key = pp.toString();
         var isGrounded = pp.add(0x70).readU8() !== 0;
         var vd = pp.add(0x90).readPointer();
@@ -141,7 +145,7 @@ modules.gravity = (function() {
       var now = Date.now();
       if (now - lastLogTime > 4000) {
         lastLogTime = now;
-        for (var i = 0; i < total; i++) { var ppp = ap.add(0x10 + i * 8).readPointer(); if (ppp && !ppp.isNull() && isMyPlayer(ppp)) { var pvd = ppp.add(0x90).readPointer(); if (pvd) { var vy = pvd.add(0x10).readFloat(); var pg = ppp.add(0x70).readU8() !== 0; sendLog('info', '轻重力', 'vy=' + vy.toFixed(3) + ' gnd=' + pg + ' grav=' + state.gravityScale.toFixed(2) + ' jump=' + state.jumpScale.toFixed(2)); } break; } }
+        for (var i = 0; i < total; i++) { var ppp = ap.add(0x10 + i * Process.pointerSize).readPointer(); if (ppp && !ppp.isNull() && isMyPlayer(ppp, ptr(0))) { var pvd = ppp.add(0x90).readPointer(); if (pvd) { var vy = pvd.add(0x10).readFloat(); var pg = ppp.add(0x70).readU8() !== 0; sendLog('info', '轻重力', 'vy=' + vy.toFixed(3) + ' gnd=' + pg + ' grav=' + state.gravityScale.toFixed(2) + ' jump=' + state.jumpScale.toFixed(2)); } break; } }
       }
     } catch(_) {}
   }
@@ -155,14 +159,14 @@ modules.gravity = (function() {
         return;
       }
       var base = mod.base;
-      isMyPlayer = new NativeFunction(base.add(0xB55FD0), 'bool', ['pointer']);
+      isMyPlayer = new NativeFunction(base.add(0xB55FD0), 'bool', ['pointer', 'pointer']);
       singletonGetter = new NativeFunction(base.add(0x4A8170), 'pointer', ['pointer']);
       try { gmHook = Interceptor.attach(base.add(0xAF9A90), { onEnter: function(args) { var newGm = args[0]; if (newGm && !newGm.isNull()) { roomShuttingDown = false; gm = newGm; playerState = {}; } } }); } catch(e) {}
       try { jumpHook = Interceptor.attach(base.add(0xB51780), { onEnter: function(args) { if (roomShuttingDown || !state.airJump || !state.enabled) return; try { var pp = args[0]; if (pp && !pp.isNull()) { var grounded = pp.add(0x70).readU8(); if (!grounded) pp.add(0x70).writeU8(1); } } catch(_) {} } }); } catch(e) {}
-      try { lifecycleHooks.push(Interceptor.attach(base.add(0xAF6A00), { onEnter: function() { roomShuttingDown = false; } })); } catch(e) {}
+      try { lifecycleHooks.push(Interceptor.attach(base.add(0xAF6A00), { onEnter: function() { roomShuttingDown = false; loop(); } })); } catch(e) {}
       try { lifecycleHooks.push(Interceptor.attach(base.add(0xAEE850), { onEnter: beginRoomShutdown })); } catch(e) {}
       try { lifecycleHooks.push(Interceptor.attach(base.add(0xAFB6F0), { onEnter: beginRoomShutdown })); } catch(e) {}
-      timer = setInterval(loop, 50);
+      // P0：loop 改由 ModeBase.Update 主线程钩子按 50ms 节流驱动，避免在 Frida JS 线程读写游戏对象
       state.enabled = true; state.airJump = true; state.airMove = true; enabled = true;
       sendLog('success', '轻重力', '已启用 (重力=' + state.gravityScale.toFixed(1) + ', 跳跃=' + state.jumpScale.toFixed(1) + ', 模式=' + state.mode + ')');
       sendStatus('gravity', true);

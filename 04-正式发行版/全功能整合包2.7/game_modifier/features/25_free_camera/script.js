@@ -192,6 +192,17 @@
         try { return p.isNull(); } catch (_) { return true; }
     }
 
+    // P1：UnityEngine.Object 活体校验（m_CachedPtr 在 +0x8，为 0 表示 native 对象已销毁）
+    function isAliveUnityObject(p) {
+        try {
+            if (isNull(p)) return false;
+            var cached = p.add(0x8).readPointer();
+            return !!(cached && !cached.isNull());
+        } catch (_) {
+            return false;
+        }
+    }
+
     function isExecutable(p) {
         try {
             var range = Process.findRangeByAddress(p);
@@ -630,6 +641,10 @@
         writeQuaternionFromPitchYaw(writeRotBuffer, state.freeCam.pitch, state.freeCam.yaw);
 
         try {
+            // P1：相机 Transform 可能随场景切换销毁；写入前验活，避免对已销毁对象调 native
+            if (!isAliveUnityObject(transform)) {
+                throw new Error('camera transform is no longer alive');
+            }
             native.transformSetPosition(transform, writePosBuffer, ptr(0));
             native.transformSetRotation(transform, writeRotBuffer, ptr(0));
 
@@ -780,6 +795,7 @@
         state.applied = false;
         state.lastApplyReason = 'disable';
         resetFreeCam('disable');
+        removeHooks();
         sendLog('info', '自由视角 v1.3 已关闭');
         return { ok: true, enabled: false, message: '自由视角已关闭' };
     }

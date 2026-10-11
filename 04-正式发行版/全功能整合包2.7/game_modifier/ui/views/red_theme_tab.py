@@ -272,9 +272,11 @@ class _ImageCarousel(_RedMediaBlock):
 
         try:
             from PIL import Image
-            img = Image.open(path)
-            # 等比缩放到容器尺寸内（不裁剪、不变形）
-            img.thumbnail((_IMAGE_CONTAINER_W, _IMAGE_CONTAINER_H), Image.LANCZOS)
+            # with 确保原图文件句柄在缩略图生成后立即关闭，避免切换图片时句柄堆积
+            with Image.open(path) as source:
+                # 等比缩放到容器尺寸内（不裁剪、不变形）
+                source.thumbnail((_IMAGE_CONTAINER_W, _IMAGE_CONTAINER_H), Image.LANCZOS)
+                img = source.copy()
             self._ctk_image = ctk.CTkImage(
                 light_image=img, dark_image=img, size=img.size
             )

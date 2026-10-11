@@ -231,20 +231,34 @@
     return 'unknown';
   }
 
+  // P1：写入代码段后恢复原内存保护，避免 GameAssembly 的 .text 长期处于 rwx
+  function protectRwxWithRestore(address, size, store) {
+    try {
+      var range = Process.findRangeByAddress(address);
+      if (range && range.protection) store.push([address, size, range.protection]);
+    } catch (e) {}
+    if (!Memory.protect(address, size, 'rwx')) throw new Error('内存保护设置失败');
+  }
+  function restoreProtections(store) {
+    for (var i = 0; i < store.length; i++) {
+      try { Memory.protect(store[i][0], store[i][1], store[i][2]); } catch (e) {}
+    }
+  }
+
   function writeProfileBytes(kind) {
     var index = kind === 'v3' ? 2 : 1;
+    var savedProtections = [];
     for (var i = 0; i < BASE_30_TO_V3_PROFILE.length; i++) {
       var entry = BASE_30_TO_V3_PROFILE[i];
       var address = gameAssembly.base.add(entry[0]);
       var value = hexBytes(entry[index]);
-      if (!Memory.protect(address, value.length, 'rwx')) {
-        throw new Error('内存保护设置失败 RVA 0x' + entry[0].toString(16));
-      }
+      protectRwxWithRestore(address, value.length, savedProtections);
     }
     for (var j = 0; j < BASE_30_TO_V3_PROFILE.length; j++) {
       var writeEntry = BASE_30_TO_V3_PROFILE[j];
-      gameAssembly.base.add(writeEntry[0]).writeByteArray(hexBytes(writeEntry[index]));
+      gameAssembly.base.add(writeEntry[0]).writeByteArray(hexBytes(writeEntry[1 + index]));
     }
+    restoreProtections(savedProtections);
     var expected = kind === 'v3' ? 'v3' : 'base';
     if (profileState() !== expected) throw new Error('人数基础补丁写入后校验失败');
   }
@@ -403,13 +417,15 @@
     var conversion = gameAssembly.base.add(BOT_CONVERSION_BRANCH_RVA);
     var name = gameAssembly.base.add(BOT_NAME_CAVE_RVA + BOT_NAME_BRANCH_OFFSET);
     // Request all protections before the first write; install the active branch last.
+    var savedProtections = [];
     [[bot, 2], [count, 4], [conversion, 1], [name, 1]].forEach(function (entry) {
-      if (!Memory.protect(entry[0], entry[1], 'rwx')) throw new Error('内存保护设置失败');
+      protectRwxWithRestore(entry[0], entry[1], savedProtections);
     });
     count.writeU32(value.bots);
     name.writeU8(value.name);
     conversion.writeU8(value.conversion);
     bot.writeByteArray(value.bot);
+    restoreProtections(savedProtections);
   }
 
   function successResult() {

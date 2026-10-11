@@ -10,7 +10,7 @@ from core.plugin.plugin_registry import PluginRegistry
 from core.sound_manager import SoundManager
 from core.hotkey_manager import HotkeyManager
 from core.game_session_manager import GameSessionManager
-from core.log_manager import setup_logging
+from core.log_manager import log_to_file, setup_logging
 from core.services import (
     AppPersistenceService,
     FeatureCommandService,
@@ -348,8 +348,8 @@ class App(ctk.CTk):
             self._sync_plugin_controls_from_config()
             for fid in self._features:
                 self._update_switch(fid)
-        except Exception:
-            pass
+        except Exception as exc:
+            log_to_file("error", "App", f"加载功能状态失败: {exc}")
 
     def _apply_persistent_state(self, state):
         self._persistent_state = state
@@ -463,8 +463,8 @@ class App(ctk.CTk):
                 self._collect_persistent_state(),
                 restorable_feature_ids=self._restorable_feature_ids,
             )
-        except Exception:
-            pass
+        except Exception as exc:
+            log_to_file("error", "App", f"保存功能状态失败: {exc}")
 
     def _collect_persistent_state(self):
         from core.state import AppState
@@ -474,12 +474,18 @@ class App(ctk.CTk):
         return state
 
     def _schedule_save_state(self):
+        if self._stop:
+            # 退出流程中不再排新的定时器，避免与 destroy() 竞争
+            return
         if hasattr(self, '_save_state_timer') and self._save_state_timer:
             self.after_cancel(self._save_state_timer)
         self._save_state_timer = self.after(3000, self._save_feature_state)
 
     def _on_close(self):
         self._stop = True
+        if getattr(self, '_save_state_timer', None):
+            self.after_cancel(self._save_state_timer)
+            self._save_state_timer = None
         with self._pending_ui_lock:
             self._pending_ui_callbacks = []
         self._event_bus.emit("app_closing")

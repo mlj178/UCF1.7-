@@ -1,4 +1,4 @@
-﻿// Local helpers for this feature only.
+// Local helpers for this feature only.
 var modules = {};
 var __localMaxLogsPerModule = 10;
 var __localModuleLogCounts = {};
@@ -160,6 +160,11 @@ modules.time = (function() {
       });
       hooks.push(h4);
 
+      var h5 = Interceptor.attach(base.add(0xAEBD40), { // GameManager.OnDestroy：房间销毁时清空悬垂指针
+        onEnter: function() { modeBaseInstance = null; }
+      });
+      hooks.push(h5);
+
       intervalId = setInterval(function() {
         if (Date.now() < pauseUntil) return;
         if (modeBaseInstance) {
@@ -174,7 +179,7 @@ modules.time = (function() {
     },
     disable: function() {
       if (!enabled) return;
-      for (var i = 0; i < hooks.length; i++) hooks[i].detach();
+      for (var i = 0; i < hooks.length; i++) { try { hooks[i].detach(); } catch (e) {} }
       hooks = [];
       if (intervalId) { clearInterval(intervalId); intervalId = null; }
       modeBaseInstance = null; enabled = false;

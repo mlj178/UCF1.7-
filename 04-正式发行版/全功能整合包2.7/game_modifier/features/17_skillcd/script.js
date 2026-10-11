@@ -1,4 +1,4 @@
-﻿// Local helpers for this feature only.
+// Local helpers for this feature only.
 var modules = {};
 var __localMaxLogsPerModule = 10;
 var __localModuleLogCounts = {};
@@ -92,6 +92,8 @@ modules.skillcd = (function() {
 
   var RVA = {
     EndCold: 0xAE1BC0,
+    Skill_Common_TypeInfo: 0xE30EB0,
+    Skill_SentryGun_TypeInfo: 0xE30EF8,
     PlayerGetIsMyPlayer: 0xB55FD0,
     PlayerUpdate: 0xB551D0,
     PlayerOnDestroy: 0xB511C0,
@@ -149,6 +151,22 @@ modules.skillcd = (function() {
     }
   }
 
+  // P1：EndCold 的函数体是 this->coldFinishTime(0x1C) = 0（IDA 已确认）。
+  // Skill_ModeChange 的 0x1C 是 getModeState 托管委托，误调用会把委托指针清零 → 游戏 NullReferenceException。
+  // 因此只允许 Skill_Common 及其唯一子类 Skill_SentryGun。
+  function isColdCooldownSkillClass(klass) {
+    try {
+      if (!klass || klass.isNull()) return false;
+      var mod = getGameAssembly();
+      if (!mod) return false;
+      var commonType = mod.base.add(RVA.Skill_Common_TypeInfo).readPointer();
+      var sentryType = mod.base.add(RVA.Skill_SentryGun_TypeInfo).readPointer();
+      if (commonType && !commonType.isNull() && klass.equals(commonType)) return true;
+      if (sentryType && !sentryType.isNull() && klass.equals(sentryType)) return true;
+      return false;
+    } catch (e) { return false; }
+  }
+
   function scanAndEndCold(playerPtr) {
     if (!enabled || processing || !endColdFn || !playerPtr || playerPtr.isNull()) return;
     if (!myPlayerPtr || !myPlayerPtr.equals(playerPtr)) return;
@@ -172,12 +190,14 @@ modules.skillcd = (function() {
         var klass = readPtr(skill);
         if (!klass || !readPtr(klass)) continue;
 
+        if (!isColdCooldownSkillClass(klass)) continue;
+
         var coldFinish = readF32(skill.add(0x1C));
         var coldTime = readF32(skill.add(0x24));
         if (coldFinish === null || coldTime === null) continue;
         if (!isFinite(coldFinish) || !isFinite(coldTime)) continue;
 
-        endColdFn(skill);
+        endColdFn(skill, ptr(0));
       }
     } catch (e) {
       // Frida can catch read errors, but native access violations are prevented
@@ -215,7 +235,7 @@ modules.skillcd = (function() {
 
       var base = mod.base;
       try {
-        endColdFn = new NativeFunction(base.add(RVA.EndCold), 'void', ['pointer']);
+        endColdFn = new NativeFunction(base.add(RVA.EndCold), 'void', ['pointer', 'pointer']);
         sendLog('info', '技能CD', 'EndCold 函数就绪 (RVA 0xAE1BC0)');
 
         // Observe the game's real result; do not replace get_isMyPlayer.

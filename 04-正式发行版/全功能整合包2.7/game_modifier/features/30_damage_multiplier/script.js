@@ -269,7 +269,9 @@
     function clearOwnerMaps(reason) {
         Runtime.missileOwners = {};
         Runtime.sentryOwners = {};
-        Runtime.playerHurtDepth = 0;
+        // P1：不能在这里重置重入计数——本函数可能由"回合结束"在伤害调用栈内触发，
+        // 清零会让 Entity 钩子的重入跳过失效，同一个 DamageEventData 被乘两次。
+        // playerHurtDepth 由伤害钩子自己配对增减。
         logLimited('owner_clear:' + reason, 'info', 'owner maps cleared: ' + reason, 1000);
     }
 

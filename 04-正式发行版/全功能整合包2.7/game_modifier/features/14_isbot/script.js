@@ -1,4 +1,4 @@
-﻿// Local helpers for this feature only.
+// Local helpers for this feature only.
 var modules = {};
 var __localMaxLogsPerModule = 10;
 var __localModuleLogCounts = {};
@@ -132,9 +132,10 @@ modules.isbot = (function() {
     try {
       var obj = p.readPointer();
       if (!obj || obj.isNull()) return '?';
-      var len = obj.add(-4).readS32();
+      // P1：32 位 IL2CPP 字符串是 length@0x08 / chars@0x0C(UTF-16)；原来读 +0x4 且按 UTF-8 解码
+      var len = obj.add(0x08).readS32();
       if (len < 0 || len > 64) return '?';
-      return obj.readUtf8String(len);
+      return obj.add(0x0C).readUtf16String(len) || '?';
     } catch (e) {
       return '?';
     }
@@ -352,7 +353,22 @@ modules.isbot = (function() {
       pendingRestoreOnCapture = true;
       if (options && options.cleanup) {
         pendingRestoreOnCapture = !restored;
-        uninstallHook();
+        // P1：还原失败时不能卸 hook——唯一的还原入口就在 hook 回调里，卸了就永远是 isBot=1。
+        // 保留 hook 并加一个重试定时器，成功还原后再卸。
+        if (restored) {
+          uninstallHook();
+        } else {
+          if (retryInterval) { clearInterval(retryInterval); retryInterval = null; }
+          retryInterval = setInterval(function () {
+            try {
+              if (writeBot(0) || forceWriteBot(0)) {
+                pendingRestoreOnCapture = false;
+                if (retryInterval) { clearInterval(retryInterval); retryInterval = null; }
+                uninstallHook();
+              }
+            } catch (e) {}
+          }, 1000);
+        }
       }
       localPlayer = null;
       clientData = null;

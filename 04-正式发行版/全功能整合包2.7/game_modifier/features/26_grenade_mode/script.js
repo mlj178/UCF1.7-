@@ -43,7 +43,7 @@
  */
 
 const FEATURE_ID = "grenade_mode_lock999_keep_weapon_tuner";
-const VERSION = "2.12.8";
+const VERSION = "2.13.0";
 const MODULE_NAME = "GameAssembly.dll";
 const CALL_CONV = "mscdecl";
 
@@ -127,7 +127,7 @@ const Offsets = {
     WeaponData_slot: 0x8C,
     Ammo_key: 0x08,
     Ammo_hidden: 0x0C,
-    Ammo_plain_or_fake: 0x10,
+    Ammo_plain_or_fake: 0x14, // ObscuredInt: key0/hidden4/inited8/fakeValueC/fakeValueActive10（相对 clip 起点 0x8）
 
     Missile_owner: 0x30,
     Missile_ownerInitalTeam: 0x34,
@@ -258,6 +258,10 @@ const Runtime = {
     moduleBase: ptr(0),
     hooks: [],
     replacements: [],
+    // v2.13 分组安装：group -> { hooks: [name...], replacements: [name...] }
+    groups: {},
+    currentGroup: null,
+    groupNeeds: {},
     config: Object.assign({}, DefaultConfig),
     natives: {},
     protectedWeapons: {},
@@ -278,6 +282,8 @@ const Runtime = {
     botLifeStates: {},
     stats: {
         hook_hits: 0,
+        remove_original_error: 0,
+        replace_auto_reverted: 0,
         lock_attempts: 0,
         lock_writes: 0,
         lock_skipped_same: 0,
@@ -557,11 +563,146 @@ function ensureModule() {
     return Runtime.moduleBase;
 }
 function addrOf(rva) { return ensureModule().add(rva); }
+
+// ============================================================================
+// v2.13 分组安装框架
+// ----------------------------------------------------------------------------
+// 背景（真实根因，2026-10-11 定位）：
+//   Interceptor.replace 把游戏函数换成我们的 JS 回调后，我们在回调里用 NativeFunction
+//   回call原函数。原函数内部一旦抛出**托管异常**（il2cpp 用 C++ EH，Windows 异常码
+//   0xE06D7363），Frida 的异常处理器会先抓到它，把它变成 JS 的 "Error: system error"
+//   （见 Frida 内部异常类型表：arithmetic error / breakpoint triggered /
+//   single-step triggered / system error），游戏自己的异常处理帧就再也收不到了。
+//   日志实证：人类→终结者变身那一刻
+//     14:13:51.070 手雷模式 异常：PlayerWeapons.Remove.replacement | Error: system error
+//     14:13:51.070 手雷模式 异常：GameManager.GiveWeapon.replacement | Error: system error
+//     14:13:51.071 手雷模式 异常：GameManager.GiveWeapon.original_after_error | Error: system error
+//   IDA 实证：这两个函数本来就带"抛托管异常"的出口，变身时正好会走到：
+//     GameManager.GiveWeapon 0x10AFB390 → loc_10AFB4A4: call sub_10167D60（il2cpp 抛异常）
+//     PlayerWeapons.Remove   0x10B15FD0 → 0x10B164BA: call sub_10167D60（同上，
+//       武器/模型正在销毁时 weapon->data、this->owner、_modelInfo 等空判会 break 到这里）
+//   → 发枪/收枪被静默中断 → 手上的武器 isUsing=0、fireBtn=1、animTag 卡在 KnifeAtk
+//   → 轻击/重击动作卡住、无法攻击（并跨回合残留）。
+// 因此遵循三条硬规则：
+//   1) 配置不需要的 Hook/Replace 一律不装（尤其是不装武器切换链路上的 Replace）；
+//   2) 能只观察就不替换（GiveWeapon 改为 attach，原函数由游戏自己调用）；
+//   3) 必须替换的，回调里不做任何多余的游戏方法调用，出错立刻 revert 回原厂行为。
+// ============================================================================
+const GROUP_NAMES = ["throwLock", "capture", "tuner", "animSpeed", "observers", "removeGuard", "botRecord", "botDrive", "vbc", "botAI"];
+
+function groupState(name) {
+    if (!Runtime.groups[name]) Runtime.groups[name] = { hooks: [], replacements: [], installed: false };
+    return Runtime.groups[name];
+}
+function groupInstalled(name) {
+    const g = Runtime.groups[name];
+    return !!(g && g.installed);
+}
+function inGroup(name) { Runtime.currentGroup = name; }
+function endGroup() { Runtime.currentGroup = null; }
+
 function addHook(name, rva, callbacks) {
     const address = addrOf(rva);
     const h = Interceptor.attach(address, callbacks);
-    Runtime.hooks.push({ name: name, handle: h, address: address });
-    log("Hook 已安装", { name: name, address: address.toString() });
+    const item = { name: name, handle: h, address: address, group: Runtime.currentGroup };
+    Runtime.hooks.push(item);
+    if (Runtime.currentGroup) groupState(Runtime.currentGroup).hooks.push(name);
+    log("Hook 已安装", { name: name, address: address.toString(), group: Runtime.currentGroup || "none" });
+}
+function replaceFunction(name, address, replacement, mode) {
+    Interceptor.replace(address, replacement);
+    const item = { name: name, address: address, replacement: replacement, group: Runtime.currentGroup };
+    Runtime.replacements.push(item);
+    if (Runtime.currentGroup) groupState(Runtime.currentGroup).replacements.push(name);
+    log("Replace 已安装", { name: name, address: address.toString(), mode: mode, group: Runtime.currentGroup || "none" });
+}
+function detachGroupHooks(name) {
+    const g = Runtime.groups[name];
+    if (!g) return;
+    const kept = [];
+    for (const item of Runtime.hooks) {
+        if (item.group === name) {
+            try { if (item.handle && item.handle.detach) item.handle.detach(); } catch (e) { recordError("detachGroupHooks:" + name, e); }
+        } else {
+            kept.push(item);
+        }
+    }
+    Runtime.hooks = kept;
+    g.hooks = [];
+}
+function revertGroupReplacements(name) {
+    const g = Runtime.groups[name];
+    if (!g) return;
+    const kept = [];
+    for (const item of Runtime.replacements) {
+        if (item.group === name) {
+            try { if (item.address) Interceptor.revert(item.address); } catch (e) { recordError("revertGroupReplacements:" + name, e); }
+        } else {
+            kept.push(item);
+        }
+    }
+    Runtime.replacements = kept;
+    g.replacements = [];
+}
+function uninstallGroup(name) {
+    if (!Runtime.groups[name]) { Runtime.groups[name] = { hooks: [], replacements: [], installed: false }; return; }
+    detachGroupHooks(name);
+    revertGroupReplacements(name);
+    Runtime.groups[name].installed = false;
+}
+function installGroup(name) {
+    if (groupInstalled(name)) return true;
+    const installer = GROUP_INSTALLERS[name];
+    if (!installer) return false;
+    inGroup(name);
+    try { installer(); Runtime.groups[name].installed = true; return true; }
+    catch (e) { recordError("installGroup:" + name, e); Runtime.groups[name].installed = true; return false; }
+    finally { endGroup(); }
+}
+function computeGroupNeeds() {
+    const c = Runtime.config;
+    const anyEnhance = !!(c.enable_damage || c.enable_range || c.enable_shoot_speed);
+    const tuner = !!(c.runtime_tuner_enabled && anyEnhance);
+    const botMode = !!c.bot_grenade_mode_enabled;
+    const botAI = !!(c.bot_ai_probe_enabled || c.bot_ai_hook_drive_enabled || c.bot_ai_checkattack_drive_enabled || c.bot_ai_camerarotation_drive_enabled || c.bot_ai_trysettarget_drive_enabled);
+    const observer = !!(c.virtual_grenade_observer_enabled || c.bot_attack_observer_enabled || c.bot_grenade_behavior_observer_enabled);
+    return {
+        // 无限手雷/手雷模式才需要 WPN_Throw 入口与 ammo 锁定
+        throwLock: !!(c.lock999_enabled || botMode),
+        // 只对玩家/发射体做数值改写时也要捕获 missile；bot 模式需要记录 missile
+        capture: !!(tuner || botMode),
+        tuner: tuner,
+        // 投掷动作加速（默认关闭）才会碰 Animator/CFAnimator
+        animSpeed: !!c.throw_anim_speed_enabled,
+        // 纯观察类 Hook（PlayerWeapons/BotControl/GunShoot），只在明确观察或 bot 模式时安装
+        observers: !!(observer || botMode),
+        // 武器保护：只有"无限手雷 + 保护武器对象"才需要替换 PlayerWeapons.Remove
+        removeGuard: !!(c.lock999_enabled && c.protect_weapon_remove),
+        botRecord: !!(botMode || c.virtual_grenade_observer_enabled),
+        botDrive: !!(botMode && c.bot_throw_drive_enabled),
+        vbc: !!(botMode && c.virtual_botcontrol_enabled && c.virtual_botcontrol_replace_botcontrol),
+        botAI: !!(botMode && botAI)
+    };
+}
+function syncInstalledGroups(reason) {
+    ensureModule();
+    setupNatives();
+    const needs = computeGroupNeeds();
+    Runtime.groupNeeds = needs;
+    for (const name of GROUP_NAMES) {
+        if (needs[name]) installGroup(name);
+        else uninstallGroup(name);
+    }
+    try { Interceptor.flush(); } catch (e) {}
+    Runtime.initialized = true;
+    log("按配置同步 Hook/Replace 完成", {
+        reason: reason || "sync",
+        needs: needs,
+        hooks: Runtime.hooks.length,
+        replacements: Runtime.replacements.length,
+        replacement_names: Runtime.replacements.map(function (i) { return i.name; })
+    });
+    return true;
 }
 function readPointer(base, offset) { try { if (!isReadablePtr(base)) return ptr(0); return base.add(offset).readPointer(); } catch (e) { return ptr(0); } }
 function safeReadPointer(base, offset, reason) {
@@ -638,16 +779,31 @@ function setCFAnimatorSpeed(cfAnimator, reason) {
         return setAnimatorSpeed(animator, Runtime.config.throw_anim_speed_value, reason);
     } catch (e) { recordError("setCFAnimatorSpeed:" + reason, e); return false; }
 }
+function isAliveUnityObject(p) {
+    try {
+        if (!p || p.isNull() || !isReadablePtr(p)) return false;
+        // UnityEngine.Object.m_CachedPtr(+0x8)：为 0 说明 native 侧已销毁
+        const cached = readPointer(p, 0x08);
+        return !!(cached && !cached.isNull() && isReadablePtr(cached));
+    } catch (e) { return false; }
+}
+
 function restoreTouchedAnimatorSpeeds(reason) {
     try {
         if (!Runtime.config.throw_anim_speed_restore_on_end) return;
         setupNatives();
         const restoreValue = Number(Runtime.config.throw_anim_speed_restore_value || 1.0);
+        const now = Date.now();
         for (const k of Object.keys(Runtime.touchedAnimators)) {
+            const item = Runtime.touchedAnimators[k];
             const p = ptr(k);
-            if (isReadablePtr(p)) {
+            // P1：Animator 可能随 GameObject 销毁/回收；用 m_CachedPtr 验活 + TTL，避免对已销毁对象调 icall
+            const stale = !item || (now - (item.last || 0) > 5000);
+            if (!stale && isAliveUnityObject(p)) {
                 Runtime.natives.Animator_set_speed(p, restoreValue, ptr(0));
                 Runtime.stats.anim_speed_restores += 1;
+            } else {
+                Runtime.stats.anim_speed_restores_skipped = (Runtime.stats.anim_speed_restores_skipped || 0) + 1;
             }
             delete Runtime.touchedAnimators[k];
         }
@@ -1075,6 +1231,17 @@ function isThrowWeaponClass(cls) {
     return cls === 7 || cls === 8 || cls === 9;
 }
 
+// v2.13：纯内存读取武器类别，绝不调用游戏方法。
+// 用于 Interceptor.replace 的回调（武器切换链路），避免托管异常被 Frida 变成 system error。
+function readWeaponClassOnly(weapon) {
+    try {
+        if (!weapon || weapon.isNull() || !isReadablePtr(weapon)) return null;
+        const data = readPointer(weapon, Offsets.Weapon_data);
+        if (!data || data.isNull() || !isReadablePtr(data)) return null;
+        return safeReadI32(data, Offsets.WeaponData_wpnClass, "readWeaponClassOnly");
+    } catch (e) { return null; }
+}
+
 function readWeaponInfo(weapon) {
     const info = {
         weapon: ptrStr(weapon),
@@ -1156,6 +1323,9 @@ function makeBotGrenadeRecord(playerWeaponsPtr, pwInfo, weaponInfo, reason, botP
 function isValidBotGrenadeRecord(rec, reason) {
     try {
         if (!rec || !rec.grenadeWeapon || rec.grenadeWeapon === "0x0") return false;
+        // P1：TTL，避免跨回合/复活后继续用旧的武器指针
+        const ttl = Runtime.config.bot_grenade_record_ttl_ms || 8000;
+        if (rec.lastSeen && (Date.now() - rec.lastSeen) > ttl) return false;
         const p = ptr(rec.grenadeWeapon);
         if (!p || p.isNull() || !isReadablePtr(p)) return false;
         const wi = readWeaponInfo(p);
@@ -1191,6 +1361,29 @@ function botGrenadeAliasKeys(playerWeaponsPtr, pwInfo, botPtr, reason) {
     } catch (e) {}
 
     return keys;
+}
+
+function purgeBotGrenadeRecordsFor(playerWeaponsPtr) {
+    // P1：记录写了 pw:/owner:/bot:/playerFromBot: 4 个别名键 + 裸键；只删裸键会留下跨回合的旧武器指针。
+    try {
+        const baseKey = ptrStr(playerWeaponsPtr);
+        if (!baseKey || baseKey === "0x0" || baseKey === "invalid") return 0;
+        let removed = 0;
+        for (const k of Object.keys(Runtime.botGrenadeWeapons)) {
+            if (k === baseKey || k.slice(-(baseKey.length + 1)) === ":" + baseKey) {
+                delete Runtime.botGrenadeWeapons[k];
+                removed += 1;
+            }
+        }
+        for (const k of Object.keys(Runtime.botGrenadeWeaponIndex)) {
+            const it = Runtime.botGrenadeWeaponIndex[k];
+            if (it && it.playerWeapons === baseKey) delete Runtime.botGrenadeWeaponIndex[k];
+        }
+        for (const k of Object.keys(Runtime.botGrenadeGiveLast)) {
+            if (k.indexOf(baseKey) >= 0) delete Runtime.botGrenadeGiveLast[k];
+        }
+        return removed;
+    } catch (e) { return 0; }
 }
 
 function storeBotGrenadeRecordAliases(playerWeaponsPtr, pwInfo, weaponInfo, reason, botPtr) {
@@ -1888,7 +2081,7 @@ function installVirtualGrenadeObserverHooks() {
                     resetBotLifeState(args[0], ptr(0), "PlayerWeapons.RemoveAll.onEnter", true);
                 }
             } catch (e) {}
-            try { delete Runtime.botGrenadeWeapons[ptrStr(args[0])]; } catch (e) {}
+            try { purgeBotGrenadeRecordsFor(args[0]); } catch (e) {}
             if (!Runtime.enabled || !Runtime.config.virtual_grenade_observer_enabled) return;
             logWeaponObserver("PlayerWeapons.RemoveAll.onEnter", { playerWeapons: readPlayerWeaponsInfo(args[0]) }, false);
         }
@@ -1896,44 +2089,58 @@ function installVirtualGrenadeObserverHooks() {
 }
 
 function installRemoveGuard() {
+    // v2.13：本替换只在“无限手雷 + 保护武器对象”时安装（见 computeGroupNeeds.removeGuard）。
+    // 回调里只做纯内存读取，不调用任何游戏方法（Weapon.get_isMyWeapon 等），
+    // 因为在这个链路上调用游戏方法一旦抛出托管异常，Frida 会先抓住并变成 system error，
+    // 导致收枪被静默中断、武器状态与手雷保护同时失效。
     const address = addrOf(RVA.PlayerWeapons_Remove);
     Runtime.natives.PlayerWeapons_Remove_Original = new NativeFunction(address, "void", ["pointer", "pointer", "bool", "pointer"], CALL_CONV);
     const replacement = new NativeCallback(function(thisPtr, weapon, recycle, methodInfo) {
-        Runtime.stats.remove_hits += 1; Runtime.stats.last_hook = "PlayerWeapons.Remove";
+        Runtime.stats.remove_hits += 1;
+        Runtime.stats.last_hook = "PlayerWeapons.Remove";
+        let blocked = false;
         try {
-            if (Runtime.enabled && Runtime.config.virtual_grenade_observer_enabled) {
-                const weaponInfo = readWeaponInfo(weapon);
-                const pwInfo = readPlayerWeaponsInfo(thisPtr);
-                observeWeaponClass(weaponInfo);
-                recordBotGrenadeWeapon(thisPtr, pwInfo, weaponInfo, "PlayerWeapons.Remove.onEnter");
-                logWeaponObserver("PlayerWeapons.Remove.onEnter", { playerWeapons: pwInfo, weaponInfo: weaponInfo, recycle: !!recycle }, false);
+            if (Runtime.enabled && Runtime.config.lock999_enabled && Runtime.config.protect_weapon_remove
+                && isProtectedThrowWeapon(weapon) && isThrowWeaponClass(readWeaponClassOnly(weapon))) {
+                blocked = true;
             }
-            if (Runtime.enabled && Runtime.config.protect_weapon_remove && isProtectedThrowWeapon(weapon)) {
-                const scopeInfo = throwWeaponAllowedByScope(weapon, "PlayerWeapons.Remove.guard");
-                const weaponInfoForRemove = readWeaponInfo(weapon);
-                if (scopeInfo.isMyWeapon === false && weaponInfoForRemove && weaponInfoForRemove.isThrowClass) Runtime.stats.bot_remove_throw_hits += 1;
-                if (scopeInfo.allowedByInfiniteScope) {
-                    Runtime.stats.remove_blocked += 1;
-                    log("已阻止删除当前手雷武器对象", {
-                        thisPtr: ptrStr(thisPtr), weapon: ptrStr(weapon), recycle: !!recycle, blocked: Runtime.stats.remove_blocked,
-                        scope: scopeInfo.scope, isMyWeapon: scopeInfo.isMyWeapon
-                    });
-                    return;
-                }
-            }
-            Runtime.stats.remove_allowed += 1;
+        } catch (e) {
+            recordError("PlayerWeapons.Remove.guard", e);
+        }
+        if (blocked) {
+            Runtime.stats.remove_blocked += 1;
+            logOnce("remove_blocked:" + ptrStr(weapon), "已阻止删除当前手雷武器对象", Runtime.config.log_interval_ms, {
+                thisPtr: ptrStr(thisPtr), weapon: ptrStr(weapon), recycle: !!recycle,
+                blocked: Runtime.stats.remove_blocked, note: "无限手雷保护：该对象仍在 protectedWeapons 表里"
+            });
+            return;
+        }
+        Runtime.stats.remove_allowed += 1;
+        try {
             Runtime.natives.PlayerWeapons_Remove_Original(thisPtr, weapon, recycle, methodInfo);
         } catch (e) {
-            recordError("PlayerWeapons.Remove.replacement", e);
-            try { Runtime.natives.PlayerWeapons_Remove_Original(thisPtr, weapon, recycle, methodInfo); } catch (e2) { recordError("PlayerWeapons.Remove.original_after_error", e2); }
+            Runtime.stats.remove_original_error += 1;
+            recordError("PlayerWeapons.Remove.original", e);
+            // 自愈：原函数抛出托管异常时说明 Frida 已经把游戏自己的异常帧挡掉了，
+            // 立刻撤销本替换让游戏完全回到原厂行为，避免整条武器切换流程被静默中断。
+            try {
+                const item = Runtime.replacements.filter(function (i) { return i.address.equals(address); })[0];
+                Interceptor.revert(address);
+                Interceptor.flush();
+                Runtime.replacements = Runtime.replacements.filter(function (i) { return !i.address.equals(address); });
+                if (item && item.group && Runtime.groups[item.group]) {
+                    Runtime.groups[item.group].replacements = Runtime.groups[item.group].replacements.filter(function (n) { return n !== item.name; });
+                }
+                Runtime.stats.replace_auto_reverted += 1;
+            } catch (e2) { recordError("PlayerWeapons.Remove.autoRevert", e2); }
+            logOnce("remove_guard_reverted", "已自动撤销 PlayerWeapons.Remove 替换并回到原厂行为", 1000, {
+                error: "" + e, auto_reverted: Runtime.stats.replace_auto_reverted,
+                note: "原函数内部的托管异常被 Frida 变成 system error；撤销后武器切换不再经过我们的 JS"
+            });
         }
     }, "void", ["pointer", "pointer", "bool", "pointer"], CALL_CONV);
-    Interceptor.replace(address, replacement);
-    Runtime.replacements.push({ name: "PlayerWeapons.Remove", address: address, replacement: replacement });
-    log("Replace 已安装", { name: "PlayerWeapons.Remove", address: address.toString(), mode: "仅保护当前手雷对象" });
+    replaceFunction("PlayerWeapons.Remove", address, replacement, "仅保护当前手雷对象（纯内存判断，出错自动撤销）");
 }
-
-
 
 function isBotThrowDriveActive() {
     return Runtime.enabled && Runtime.config.bot_grenade_mode_enabled && Runtime.config.bot_throw_drive_enabled;
@@ -2173,9 +2380,7 @@ function installVirtualBotControlControls() {
                     try { Runtime.natives[nativeName](weaponPtr, botPtr, methodInfo); } catch (e2) { recordError(name + ".VirtualBotControl.original_after_error", e2); }
                 }
             }, "void", ["pointer", "pointer", "pointer"], CALL_CONV);
-            Interceptor.replace(address, replacement);
-            Runtime.replacements.push({ name: name, address: address, replacement: replacement });
-            log("Replace 已安装", { name: name, address: address.toString(), mode: "VirtualBotControl: BotControl层转手雷Throw" });
+            replaceFunction(name, address, replacement, "VirtualBotControl: BotControl层转手雷Throw");
         } catch (e) {
             Runtime.stats.vbc_errors += 1;
             recordError("installVirtualBotControlControls:" + name, e);
@@ -2274,8 +2479,9 @@ function evaluateSmartGrenadeAI(botPtr, got, info, name, retval) {
 
         // v2.12.1终版：只保留官方可见/无遮挡判断。
         if (name === "Bot.CheckAttackTarget.onLeave") {
-            let ok = false;
-            try { ok = retval ? (retval.toInt32() !== 0) : false; } catch (e) { ok = false; }
+            // P1：Bot.CheckAttackTarget 是 void（IDA: 0xB2DD80 return void），onLeave 的 EAX 是脏值，
+            // 不能当布尔用。改用官方 attackTarget 字段是否有效作为"官方可见"信号。
+            let ok = !!(info && info.hasAttackTarget);
             Runtime.botAiOfficialVisible[botKey] = { ok: ok, ts: now };
             result.officialVisible = ok;
             result.officialVisibilityFresh = true;
@@ -2891,9 +3097,7 @@ function installBotThrowDriveControls() {
                 try { Runtime.natives.Bot_UseWeapon_Original(botPtr, methodInfo); } catch (e2) { recordError("Bot.UseWeapon.original_after_error", e2); }
             }
         }, "void", ["pointer", "pointer"], CALL_CONV);
-        Interceptor.replace(useAddr, replacement);
-        Runtime.replacements.push({ name: "Bot.UseWeapon", address: useAddr, replacement: replacement });
-        log("Replace 已安装", { name: "Bot.UseWeapon", address: useAddr.toString(), mode: "Bot投掷驱动: 调用WPN_Throw.Throw" });
+        replaceFunction("Bot.UseWeapon", useAddr, replacement, "Bot投掷驱动: 调用WPN_Throw.Throw");
     } catch (e) {
         recordError("installBotThrowDriveControls.Bot.UseWeapon", e);
     }
@@ -2903,142 +3107,159 @@ function installBotThrowDriveControls() {
 function installBotGrenadeRecordControls() {
     // Bot.SelectWeapon 全局强制slot=3方案已删除；终版只在状态机投掷阶段临时Select(3)。
 
-    // GameManager.GiveWeapon：终版只观察并记录bot的Grenade，不再拦截非Grenade发枪。
-    try {
-        const giveAddr = addrOf(RVA.GameManager_GiveWeapon);
-        Runtime.natives.GameManager_GiveWeapon_Original = new NativeFunction(giveAddr, "pointer", ["pointer", "int", "bool", "bool", "pointer"], CALL_CONV);
-        const giveReplacement = new NativeCallback(function(playerPtr, weaponIndex, autoGiveUp, autoSelect, methodInfo) {
+    // v2.13：GameManager.GiveWeapon 从 Interceptor.replace 改成 Interceptor.attach（只观察）。
+    // 原因：replace + NativeFunction 回call 会把原函数内部的托管异常变成 Frida 的 "system error"
+    // （实证日志：人类→终结者变身时 GiveWeapon.replacement / original_after_error 同时报 system error），
+    // 游戏自己的异常帧收不到异常 → 发枪被静默中断 → 手上武器 isUsing=0、动作卡死。
+    // 本组功能本来就只是"记录 bot 拿到的手雷"，完全不需要替换原函数。
+    addHook("GameManager.GiveWeapon", RVA.GameManager_GiveWeapon, {
+        onEnter(args) {
             Runtime.stats.vg_giveweapon_hits += 1;
             Runtime.stats.last_hook = "GameManager.GiveWeapon";
+            this.giveCtx = false;
+            this.playerPtr = args[0];
+            try { this.weaponIndex = args[1].toInt32(); } catch (e) { this.weaponIndex = "read_failed"; }
             try {
-                if (isBotGrenadeModeActive() && Runtime.config.virtual_grenade_giveweapon_enabled) {
-                    setupNatives();
-                    const pw = Runtime.natives.Player_get_wpns(playerPtr, ptr(0));
-                    const pwInfo = (!pw || pw.isNull()) ? null : readPlayerWeaponsInfo(pw);
-                    const isBotPlayer = pwInfo && pwInfo.ownerIsLocal === false;
-                    if (isBotPlayer) {
-                        Runtime.stats.vg_giveweapon_bot_hits += 1;
-                        if (Runtime.config.bot_throw_respawn_reset_on_giveweapon) {
-                            resetBotLifeState(pw, ptr(0), "GameManager.GiveWeapon.bot", false);
-                        }
-                        const previewWeapon = Runtime.natives.GameManager_GetWeapon_Original(weaponIndex, ptr(0));
-                        const previewInfo = readWeaponInfo(previewWeapon);
-                        const previewSlot = getWeaponDataSlot(previewInfo);
-                        if (botSoftLockAllowedClass(previewInfo.wpnClass)) {
-                            rememberGrenadeWeaponIndex(weaponIndex, previewInfo, "GameManager.GiveWeapon.preview");
-                        }
-                        if (!botSoftLockAllowedClass(previewInfo.wpnClass)) {
-                            Runtime.stats.vg_giveweapon_observed_nongrenade += 1;
-                            Runtime.stats.vg_giveweapon_preserved_nongrenade += 1;
-                            logOnce("vg_give_non_grenade:" + weaponIndex + ":" + previewInfo.className, "BotGrenadeRecord.GiveWeapon", Runtime.config.virtual_grenade_log_interval_ms || 1000, {
-                                player: ptrStr(playerPtr),
-                                playerWeapons: ptrStr(pw),
-                                weaponIndex: weaponIndex,
-                                className: previewInfo.className,
-                                wpnClass: previewInfo.wpnClass,
-                                slot: previewSlot,
-                                note: "v2.12终版：只观察并保留bot官方武器，不再拦截非Grenade发枪"
-                            });
-                        } else {
-                            Runtime.stats.vg_giveweapon_allowed_grenade += 1;
-                        }
-
-                        const ret = Runtime.natives.GameManager_GiveWeapon_Original(playerPtr, weaponIndex, autoGiveUp, autoSelect, methodInfo);
-                        const retInfo = readWeaponInfo(ret);
-                        rememberGrenadeWeaponIndex(weaponIndex, retInfo, "GameManager.GiveWeapon.return");
-                        recordBotGrenadeWeapon(pw, pwInfo, retInfo, "GameManager.GiveWeapon.return");
-                        return ret;
-                    }
+                if (!isBotGrenadeModeActive() || !Runtime.config.virtual_grenade_giveweapon_enabled) return;
+                const playerPtr = args[0];
+                // Player.get_wpns 直接读 this+0xA0 且不判空：非法 this 会立即访问违例（Frida 抓不到）
+                if (!playerPtr || playerPtr.isNull() || !isReadablePtr(playerPtr)) return;
+                setupNatives();
+                const pw = Runtime.natives.Player_get_wpns(playerPtr, ptr(0));
+                if (!pw || pw.isNull()) return;
+                const pwInfo = readPlayerWeaponsInfo(pw);
+                if (!pwInfo || pwInfo.ownerIsLocal !== false) return;
+                this.giveCtx = true;
+                this.pw = pw;
+                this.pwInfo = pwInfo;
+                Runtime.stats.vg_giveweapon_bot_hits += 1;
+                if (Runtime.config.bot_throw_respawn_reset_on_giveweapon) {
+                    resetBotLifeState(pw, ptr(0), "GameManager.GiveWeapon.bot", false);
                 }
-                return Runtime.natives.GameManager_GiveWeapon_Original(playerPtr, weaponIndex, autoGiveUp, autoSelect, methodInfo);
-            } catch (e) {
-                Runtime.stats.vg_giveweapon_errors += 1;
-                recordError("GameManager.GiveWeapon.replacement", e);
-                try { return Runtime.natives.GameManager_GiveWeapon_Original(playerPtr, weaponIndex, autoGiveUp, autoSelect, methodInfo); }
-                catch (e2) { recordError("GameManager.GiveWeapon.original_after_error", e2); return ptr(0); }
-            }
-        }, "pointer", ["pointer", "int", "bool", "bool", "pointer"], CALL_CONV);
-        Interceptor.replace(giveAddr, giveReplacement);
-        Runtime.replacements.push({ name: "GameManager.GiveWeapon", address: giveAddr, replacement: giveReplacement });
-        log("Replace 已安装", { name: "GameManager.GiveWeapon", address: giveAddr.toString(), mode: "BotGrenadeRecord: bot只允许Grenade" });
-    } catch (e) {
-        recordError("installBotGrenadeRecordControls.GameManager.GiveWeapon", e);
-    }
+            } catch (e) { recordError("GameManager.GiveWeapon.onEnter", e); }
+        },
+        onLeave(retval) {
+            if (!this.giveCtx) return;
+            try {
+                const retInfo = readWeaponInfo(retval);
+                const isGrenade = botSoftLockAllowedClass(retInfo.wpnClass);
+                if (isGrenade) {
+                    Runtime.stats.vg_giveweapon_allowed_grenade += 1;
+                    rememberGrenadeWeaponIndex(this.weaponIndex, retInfo, "GameManager.GiveWeapon.return");
+                } else {
+                    Runtime.stats.vg_giveweapon_observed_nongrenade += 1;
+                    Runtime.stats.vg_giveweapon_preserved_nongrenade += 1;
+                    logOnce("vg_give_non_grenade:" + this.weaponIndex + ":" + retInfo.className, "BotGrenadeRecord.GiveWeapon", Runtime.config.virtual_grenade_log_interval_ms || 1000, {
+                        player: ptrStr(this.playerPtr),
+                        playerWeapons: ptrStr(this.pw),
+                        weaponIndex: this.weaponIndex,
+                        className: retInfo.className,
+                        wpnClass: retInfo.wpnClass,
+                        slot: getWeaponDataSlot(retInfo),
+                        note: "v2.13：只观察并保留bot官方武器，不替换原函数；wpnClass 取自发枪返回值"
+                    });
+                }
+                recordBotGrenadeWeapon(this.pw, this.pwInfo, retInfo, "GameManager.GiveWeapon.return");
+            } catch (e) { recordError("GameManager.GiveWeapon.onLeave", e); }
+        }
+    });
 }
 
 
-function installHooks() {
-    if (Runtime.initialized) return true;
-    ensureModule(); setupNatives();
-
-    hookThrowLike("WPN_Throw.Throw", RVA.WPN_Throw_Throw, "throw_hits", "lock_on_throw_enter", "lock_on_throw_leave");
-    hookThrowLike("WPN_Throw.Deploy", RVA.WPN_Throw_Deploy, "deploy_hits", "lock_on_deploy", "lock_on_deploy");
-    hookThrowLike("WPN_Throw.UnDeploy", RVA.WPN_Throw_UnDeploy, "unDeploy_hits", "lock_on_unDeploy", "lock_on_unDeploy");
-    hookThrowLike("WPN_Throw.Init", RVA.WPN_Throw_Init, "init_hits", "lock_on_init", "lock_on_init");
-    hookThrowLike("WPN_Throw.OnGenerateFromOwner", RVA.WPN_Throw_OnGenerateFromOwner, "generate_hits", "lock_on_generate_from_owner", "lock_on_generate_from_owner");
-    hookThrowLike("WPN_Throw.OnAnimationEnd", RVA.WPN_Throw_OnAnimationEnd, "animationEnd_hits", "lock_on_animation_end", "lock_on_animation_end");
-    hookThrowLike("WPN_Throw.OnFireAnimEnd", RVA.WPN_Throw_OnFireAnimEnd, "onFireAnimEnd_hits", "lock_on_animation_end", "lock_on_animation_end");
-    installRemoveGuard();
-    installBotGrenadeRecordControls();
-    installBotThrowDriveControls();
-    installVirtualBotControlControls();
-    installBotAIProbeControls();
-    installVirtualGrenadeObserverHooks();
-    installBotAttackObserverHooks();
-
-    addHook("WPN_Throw.<Throw>b__10_0", RVA.WPN_Throw_Throw_b__10_0, { onEnter(args) { Runtime.stats.hook_hits += 1; Runtime.stats.capture_hits += 1; Runtime.stats.last_hook = "WPN_Throw.<Throw>b__10_0"; if (!Runtime.enabled || !Runtime.config.runtime_tuner_enabled) return; try { const throwPtr = args[0]; const missile = args[1]; if (markGrenadeMissile(missile, throwPtr, "WPN_Throw.<Throw>b__10_0") && Runtime.config.tune_on_capture) tuneMissileOnlyFields(missile, "capture"); } catch (e) { recordError("WPN_Throw.<Throw>b__10_0", e); } } });
-    addHook("CFAnimator.PlayWeaponAnimWithSameTag", RVA.CFAnimator_PlayWeaponAnimWithSameTag, { onEnter(args){ Runtime.stats.hook_hits += 1; Runtime.stats.playWeaponAnim_hits += 1; Runtime.stats.last_hook = "CFAnimator.PlayWeaponAnimWithSameTag"; if (Runtime.enabled && hasThrowAnimContext()) { try { setCFAnimatorSpeed(args[0], "CFAnimator.PlayWeaponAnimWithSameTag.onEnter"); } catch(e){ recordError("PlayWeaponAnimWithSameTag.onEnter", e); } } } });
-    addHook("UnityEngine.Animator.PlayInFixedTime_279610832", RVA.UnityEngine_Animator_PlayInFixedTime_279610832, { onEnter(args){ Runtime.stats.hook_hits += 1; Runtime.stats.playInFixedTime_hits += 1; Runtime.stats.last_hook = "UnityEngine.Animator.PlayInFixedTime"; if (Runtime.enabled && hasThrowAnimContext()) { try { setAnimatorSpeed(args[0], Runtime.config.throw_anim_speed_value, "Animator.PlayInFixedTime.onEnter"); } catch(e){ recordError("PlayInFixedTime.onEnter", e); } } } });
-    addHook("WPN_GRENADE.SetMissileData", RVA.WPN_GRENADE_SetMissileData, { onEnter(args){ Runtime.stats.hook_hits += 1; Runtime.stats.setMissileData_hits += 1; Runtime.stats.last_hook = "WPN_GRENADE.SetMissileData"; this.self = args[0]; }, onLeave(retval){ if (Runtime.enabled && Runtime.config.tune_on_set_missile_data) { try { tuneGrenadeRuntimeFields(this.self, "WPN_GRENADE.SetMissileData.onLeave"); } catch(e){ recordError("SetMissileData.onLeave", e); } } } });
-    addHook("WPN_GRENADE.CreateExplosion", RVA.WPN_GRENADE_CreateExplosion, { onEnter(args){ Runtime.stats.hook_hits += 1; Runtime.stats.createExplosion_hits += 1; Runtime.stats.last_hook = "WPN_GRENADE.CreateExplosion"; if (Runtime.enabled && Runtime.config.runtime_tuner_enabled) { try { writeCreateExplosionArgs(this.context, "WPN_GRENADE.CreateExplosion.onEnter"); } catch(e){ recordError("CreateExplosion.onEnter", e); } } } });
-    addHook("WPN_GRENADE.TryExplosion", RVA.WPN_GRENADE_TryExplosion, { onEnter(args){ Runtime.stats.hook_hits += 1; Runtime.stats.tryExplosion_hits += 1; Runtime.stats.last_hook = "WPN_GRENADE.TryExplosion"; this.pushedExplosionCtx = false; if (Runtime.enabled && Runtime.config.tune_on_try_explosion) { try { tuneGrenadeRuntimeFields(args[0], "WPN_GRENADE.TryExplosion.onEnter"); this.pushedExplosionCtx = pushExplosionContext(args[0], "WPN_GRENADE.TryExplosion"); } catch(e){ recordError("TryExplosion.onEnter", e); } } }, onLeave(retval){ if (this.pushedExplosionCtx) popExplosionContext(); } });
-    addHook("WPN_GRENADE.Damage", RVA.WPN_GRENADE_Damage, { onEnter(args){ Runtime.stats.hook_hits += 1; Runtime.stats.damage_hits += 1; Runtime.stats.last_hook = "WPN_GRENADE.Damage"; if (Runtime.enabled && Runtime.config.tune_on_damage) { try { tuneGrenadeRuntimeFields(args[0], "WPN_GRENADE.Damage.onEnter"); } catch(e){ recordError("Damage.onEnter", e); } } } });
-    addHook("WPN_GRENADE.OnLifeTimerEnd", RVA.WPN_GRENADE_OnLifeTimerEnd, { onEnter(args){ Runtime.stats.hook_hits += 1; Runtime.stats.lifeTimer_hits += 1; Runtime.stats.last_hook = "WPN_GRENADE.OnLifeTimerEnd"; this.pushedExplosionCtx = false; if (Runtime.enabled && Runtime.config.tune_on_life_timer_end) { try { tuneGrenadeRuntimeFields(args[0], "WPN_GRENADE.OnLifeTimerEnd.onEnter"); this.pushedExplosionCtx = pushExplosionContext(args[0], "WPN_GRENADE.OnLifeTimerEnd"); } catch(e){ recordError("LifeTimer.onEnter", e); } } }, onLeave(retval){ if (this.pushedExplosionCtx) popExplosionContext(); } });
-    addHook("WPN_GRENADE.Work", RVA.WPN_GRENADE_Work, { onEnter(args){ Runtime.stats.hook_hits += 1; Runtime.stats.grenadeWork_hits += 1; Runtime.stats.last_hook = "WPN_GRENADE.Work"; if (Runtime.enabled && Runtime.config.tune_on_work) { try { tuneGrenadeRuntimeFields(args[0], "WPN_GRENADE.Work.onEnter", false); } catch(e){ recordError("GrenadeWork.onEnter", e); } } } });
-    addHook("WPN_Missile.Work", RVA.WPN_Missile_Work, { onEnter(args){ Runtime.stats.hook_hits += 1; Runtime.stats.missileWork_hits += 1; Runtime.stats.last_hook = "WPN_Missile.Work"; if (Runtime.enabled && Runtime.config.tune_on_work) { try { tuneMissileOnlyFields(args[0], "WPN_Missile.Work.onEnter"); } catch(e){ recordError("MissileWork.onEnter", e); } } } });
-    addHook("WPN_Missile.FixedUpdate", RVA.WPN_Missile_FixedUpdate, { onEnter(args){ Runtime.stats.hook_hits += 1; Runtime.stats.fixedUpdate_hits += 1; Runtime.stats.last_hook = "WPN_Missile.FixedUpdate"; if (Runtime.enabled && Runtime.config.tune_on_fixed_update) { try { tuneMissileOnlyFields(args[0], "WPN_Missile.FixedUpdate.onEnter"); } catch(e){ recordError("FixedUpdate.onEnter", e); } } } });
-    addHook("WPN_Missile.SetOwner", RVA.WPN_Missile_SetOwner, { onEnter(args){ Runtime.stats.hook_hits += 1; Runtime.stats.setOwner_hits += 1; Runtime.stats.last_hook = "WPN_Missile.SetOwner"; this.self = args[0]; }, onLeave(retval){ if (Runtime.enabled && isTrackedMissile(this.self)) { try { tuneMissileOnlyFields(this.self, "WPN_Missile.SetOwner.onLeave"); } catch(e){ recordError("SetOwner.onLeave", e); } } } });
-    addHook("WPN_Missile.SetWeaponData", RVA.WPN_Missile_SetWeaponData, { onEnter(args){ Runtime.stats.hook_hits += 1; Runtime.stats.setWeaponData_hits += 1; Runtime.stats.last_hook = "WPN_Missile.SetWeaponData"; if (Runtime.enabled && isTrackedMissile(args[0])) { try { tuneMissileOnlyFields(args[0], "WPN_Missile.SetWeaponData.onEnter"); } catch(e){ recordError("SetWeaponData.onEnter", e); } } } });
-    addHook("WPN_Missile.Recycle", RVA.WPN_Missile_Recycle, { onEnter(args){ Runtime.stats.hook_hits += 1; Runtime.stats.recycle_hits += 1; Runtime.stats.last_hook = "WPN_Missile.Recycle"; try { const k = ptrStr(args[0]); if (Runtime.trackedMissiles[k]) { delete Runtime.trackedMissiles[k]; Runtime.stats.tracked_count = Object.keys(Runtime.trackedMissiles).length; log("手雷 missile 已回收，移除跟踪记录", { missile: k, tracked_count: Runtime.stats.tracked_count }); } } catch(e){ recordError("Recycle.onEnter", e); } } });
-
-    addHook("PlayerWeapons.SetCurrentWeapon", RVA.PlayerWeapons_SetCurrentWeapon, {
-    onEnter(args) {
-        Runtime.stats.hook_hits += 1;
-        Runtime.stats.setCurrent_hits += 1;
-        Runtime.stats.observer_setCurrent_hits += 1;
-        Runtime.stats.last_hook = "PlayerWeapons.SetCurrentWeapon";
-        this.self = args[0];
-        this.methodInfo = args[3] || ptr(0);
-        let slot = null;
-        try { slot = args[1].toInt32(); } catch(e) { slot = "read_failed"; }
-        this.slot = slot;
-        if (slot === 3 && args[2].isNull()) Runtime.stats.setCurrent_slot3_clear += 1;
-        let weaponInfo = readWeaponInfo(args[2]);
-        const pwInfo = readPlayerWeaponsInfo(args[0]);
-        this.weaponInfo = weaponInfo;
-        this.pwInfo = pwInfo;
-        observeWeaponClass(weaponInfo);
-        recordBotGrenadeWeapon(args[0], pwInfo, weaponInfo, "PlayerWeapons.SetCurrentWeapon.onEnter");
-        if (!Runtime.enabled || !Runtime.config.observe_set_current_weapon) return;
-        if (Runtime.config.virtual_grenade_observer_enabled) {
-            logWeaponObserver("PlayerWeapons.SetCurrentWeapon.onEnter", {
-                playerWeapons: pwInfo,
-                slot: slot,
-                weaponInfo: weaponInfo,
-                slot3_clear_count: Runtime.stats.setCurrent_slot3_clear,
-            }, false);
-        } else {
-            logOnce("SetCurrentWeapon", "观察：PlayerWeapons.SetCurrentWeapon", Runtime.config.log_interval_ms, { slot: slot, weapon: ptrStr(args[2]), slot3_clear_count: Runtime.stats.setCurrent_slot3_clear });
-        }
+// ============================================================================
+// 分组安装器（v2.13）：每个函数只安装"该功能真正需要"的 Hook / Replace。
+// 需要哪些分组由 computeGroupNeeds() 依据当前配置计算，setConfig 后会自动重新同步。
+// ============================================================================
+const GROUP_INSTALLERS = {
+    // --- 无限手雷 / 手雷模式：WPN_Throw 入口 + ammo 锁定 ---
+    throwLock() {
+        hookThrowLike("WPN_Throw.Throw", RVA.WPN_Throw_Throw, "throw_hits", "lock_on_throw_enter", "lock_on_throw_leave");
+        hookThrowLike("WPN_Throw.Deploy", RVA.WPN_Throw_Deploy, "deploy_hits", "lock_on_deploy", "lock_on_deploy");
+        hookThrowLike("WPN_Throw.UnDeploy", RVA.WPN_Throw_UnDeploy, "unDeploy_hits", "lock_on_unDeploy", "lock_on_unDeploy");
+        hookThrowLike("WPN_Throw.Init", RVA.WPN_Throw_Init, "init_hits", "lock_on_init", "lock_on_init");
+        hookThrowLike("WPN_Throw.OnGenerateFromOwner", RVA.WPN_Throw_OnGenerateFromOwner, "generate_hits", "lock_on_generate_from_owner", "lock_on_generate_from_owner");
+        hookThrowLike("WPN_Throw.OnAnimationEnd", RVA.WPN_Throw_OnAnimationEnd, "animationEnd_hits", "lock_on_animation_end", "lock_on_animation_end");
+        hookThrowLike("WPN_Throw.OnFireAnimEnd", RVA.WPN_Throw_OnFireAnimEnd, "onFireAnimEnd_hits", "lock_on_animation_end", "lock_on_animation_end");
     },
-    onLeave(retval) {
-        // v2.12终版：不再在SetCurrentWeapon.onLeave后自动纠正非手雷。
-    }
-});
 
-    Runtime.initialized = true;
-    log("全部 Hook/Replace 已安装", { hooks: Runtime.hooks.length, replacements: Runtime.replacements.length, config: Runtime.config });
-    return true;
+    // --- 手雷强化（伤害/范围/速度）：捕获 WPN_Throw 生成的 missile 进表 ---
+    capture() {
+        addHook("WPN_Throw.<Throw>b__10_0", RVA.WPN_Throw_Throw_b__10_0, { onEnter(args) { Runtime.stats.hook_hits += 1; Runtime.stats.capture_hits += 1; Runtime.stats.last_hook = "WPN_Throw.<Throw>b__10_0"; if (!Runtime.enabled || !Runtime.config.runtime_tuner_enabled) return; try { const throwPtr = args[0]; const missile = args[1]; if (markGrenadeMissile(missile, throwPtr, "WPN_Throw.<Throw>b__10_0") && Runtime.config.tune_on_capture) tuneMissileOnlyFields(missile, "capture"); } catch (e) { recordError("WPN_Throw.<Throw>b__10_0", e); } } });
+    },
+
+    // --- 手雷强化（数值改写）：只挂在手雷/missile 自己的方法上 ---
+    tuner() {
+        addHook("WPN_GRENADE.SetMissileData", RVA.WPN_GRENADE_SetMissileData, { onEnter(args){ Runtime.stats.hook_hits += 1; Runtime.stats.setMissileData_hits += 1; Runtime.stats.last_hook = "WPN_GRENADE.SetMissileData"; this.self = args[0]; }, onLeave(retval){ if (Runtime.enabled && Runtime.config.tune_on_set_missile_data) { try { tuneGrenadeRuntimeFields(this.self, "WPN_GRENADE.SetMissileData.onLeave"); } catch(e){ recordError("SetMissileData.onLeave", e); } } } });
+        addHook("WPN_GRENADE.CreateExplosion", RVA.WPN_GRENADE_CreateExplosion, { onEnter(args){ Runtime.stats.hook_hits += 1; Runtime.stats.createExplosion_hits += 1; Runtime.stats.last_hook = "WPN_GRENADE.CreateExplosion"; if (Runtime.enabled && Runtime.config.runtime_tuner_enabled) { try { writeCreateExplosionArgs(this.context, "WPN_GRENADE.CreateExplosion.onEnter"); } catch(e){ recordError("CreateExplosion.onEnter", e); } } } });
+        addHook("WPN_GRENADE.TryExplosion", RVA.WPN_GRENADE_TryExplosion, { onEnter(args){ Runtime.stats.hook_hits += 1; Runtime.stats.tryExplosion_hits += 1; Runtime.stats.last_hook = "WPN_GRENADE.TryExplosion"; this.pushedExplosionCtx = false; if (Runtime.enabled && Runtime.config.tune_on_try_explosion) { try { tuneGrenadeRuntimeFields(args[0], "WPN_GRENADE.TryExplosion.onEnter"); this.pushedExplosionCtx = pushExplosionContext(args[0], "WPN_GRENADE.TryExplosion"); } catch(e){ recordError("TryExplosion.onEnter", e); } } }, onLeave(retval){ if (this.pushedExplosionCtx) popExplosionContext(); } });
+        addHook("WPN_GRENADE.Damage", RVA.WPN_GRENADE_Damage, { onEnter(args){ Runtime.stats.hook_hits += 1; Runtime.stats.damage_hits += 1; Runtime.stats.last_hook = "WPN_GRENADE.Damage"; if (Runtime.enabled && Runtime.config.tune_on_damage) { try { tuneGrenadeRuntimeFields(args[0], "WPN_GRENADE.Damage.onEnter"); } catch(e){ recordError("Damage.onEnter", e); } } } });
+        addHook("WPN_GRENADE.OnLifeTimerEnd", RVA.WPN_GRENADE_OnLifeTimerEnd, { onEnter(args){ Runtime.stats.hook_hits += 1; Runtime.stats.lifeTimer_hits += 1; Runtime.stats.last_hook = "WPN_GRENADE.OnLifeTimerEnd"; this.pushedExplosionCtx = false; if (Runtime.enabled && Runtime.config.tune_on_life_timer_end) { try { tuneGrenadeRuntimeFields(args[0], "WPN_GRENADE.OnLifeTimerEnd.onEnter"); this.pushedExplosionCtx = pushExplosionContext(args[0], "WPN_GRENADE.OnLifeTimerEnd"); } catch(e){ recordError("LifeTimer.onEnter", e); } } }, onLeave(retval){ if (this.pushedExplosionCtx) popExplosionContext(); } });
+        addHook("WPN_GRENADE.Work", RVA.WPN_GRENADE_Work, { onEnter(args){ Runtime.stats.hook_hits += 1; Runtime.stats.grenadeWork_hits += 1; Runtime.stats.last_hook = "WPN_GRENADE.Work"; if (Runtime.enabled && Runtime.config.tune_on_work) { try { tuneGrenadeRuntimeFields(args[0], "WPN_GRENADE.Work.onEnter", false); } catch(e){ recordError("GrenadeWork.onEnter", e); } } } });
+        addHook("WPN_Missile.Work", RVA.WPN_Missile_Work, { onEnter(args){ Runtime.stats.hook_hits += 1; Runtime.stats.missileWork_hits += 1; Runtime.stats.last_hook = "WPN_Missile.Work"; if (Runtime.enabled && Runtime.config.tune_on_work) { try { tuneMissileOnlyFields(args[0], "WPN_Missile.Work.onEnter"); } catch(e){ recordError("MissileWork.onEnter", e); } } } });
+        addHook("WPN_Missile.FixedUpdate", RVA.WPN_Missile_FixedUpdate, { onEnter(args){ Runtime.stats.hook_hits += 1; Runtime.stats.fixedUpdate_hits += 1; Runtime.stats.last_hook = "WPN_Missile.FixedUpdate"; if (Runtime.enabled && Runtime.config.tune_on_fixed_update) { try { tuneMissileOnlyFields(args[0], "WPN_Missile.FixedUpdate.onEnter"); } catch(e){ recordError("FixedUpdate.onEnter", e); } } } });
+        addHook("WPN_Missile.SetOwner", RVA.WPN_Missile_SetOwner, { onEnter(args){ Runtime.stats.hook_hits += 1; Runtime.stats.setOwner_hits += 1; Runtime.stats.last_hook = "WPN_Missile.SetOwner"; this.self = args[0]; }, onLeave(retval){ if (Runtime.enabled && isTrackedMissile(this.self)) { try { tuneMissileOnlyFields(this.self, "WPN_Missile.SetOwner.onLeave"); } catch(e){ recordError("SetOwner.onLeave", e); } } } });
+        addHook("WPN_Missile.SetWeaponData", RVA.WPN_Missile_SetWeaponData, { onEnter(args){ Runtime.stats.hook_hits += 1; Runtime.stats.setWeaponData_hits += 1; Runtime.stats.last_hook = "WPN_Missile.SetWeaponData"; if (Runtime.enabled && isTrackedMissile(args[0])) { try { tuneMissileOnlyFields(args[0], "WPN_Missile.SetWeaponData.onEnter"); } catch(e){ recordError("SetWeaponData.onEnter", e); } } } });
+        addHook("WPN_Missile.Recycle", RVA.WPN_Missile_Recycle, { onEnter(args){ Runtime.stats.hook_hits += 1; Runtime.stats.recycle_hits += 1; Runtime.stats.last_hook = "WPN_Missile.Recycle"; try { const k = ptrStr(args[0]); if (Runtime.trackedMissiles[k]) { delete Runtime.trackedMissiles[k]; Runtime.stats.tracked_count = Object.keys(Runtime.trackedMissiles).length; log("手雷 missile 已回收，移除跟踪记录", { missile: k, tracked_count: Runtime.stats.tracked_count }); } } catch(e){ recordError("Recycle.onEnter", e); } } });
+    },
+
+    // --- 投掷动作加速（默认关闭）：才会碰 CFAnimator / Animator ---
+    animSpeed() {
+        addHook("CFAnimator.PlayWeaponAnimWithSameTag", RVA.CFAnimator_PlayWeaponAnimWithSameTag, { onEnter(args){ Runtime.stats.hook_hits += 1; Runtime.stats.playWeaponAnim_hits += 1; Runtime.stats.last_hook = "CFAnimator.PlayWeaponAnimWithSameTag"; if (Runtime.enabled && hasThrowAnimContext()) { try { setCFAnimatorSpeed(args[0], "CFAnimator.PlayWeaponAnimWithSameTag.onEnter"); } catch(e){ recordError("PlayWeaponAnimWithSameTag.onEnter", e); } } } });
+        addHook("UnityEngine.Animator.PlayInFixedTime_279610832", RVA.UnityEngine_Animator_PlayInFixedTime_279610832, { onEnter(args){ Runtime.stats.hook_hits += 1; Runtime.stats.playInFixedTime_hits += 1; Runtime.stats.last_hook = "UnityEngine.Animator.PlayInFixedTime"; if (Runtime.enabled && hasThrowAnimContext()) { try { setAnimatorSpeed(args[0], Runtime.config.throw_anim_speed_value, "Animator.PlayInFixedTime.onEnter"); } catch(e){ recordError("PlayInFixedTime.onEnter", e); } } } });
+    },
+
+    // --- 纯观察（不含任何 Replace）：PlayerWeapons / BotControl / GunShoot ---
+    observers() {
+        installVirtualGrenadeObserverHooks();
+        installBotAttackObserverHooks();
+
+        addHook("PlayerWeapons.SetCurrentWeapon", RVA.PlayerWeapons_SetCurrentWeapon, {
+            onEnter(args) {
+                Runtime.stats.hook_hits += 1;
+                Runtime.stats.setCurrent_hits += 1;
+                Runtime.stats.observer_setCurrent_hits += 1;
+                Runtime.stats.last_hook = "PlayerWeapons.SetCurrentWeapon";
+                this.self = args[0];
+                this.methodInfo = args[3] || ptr(0);
+                let slot = null;
+                try { slot = args[1].toInt32(); } catch(e) { slot = "read_failed"; }
+                this.slot = slot;
+                try { if (slot === 3 && args[2].isNull()) Runtime.stats.setCurrent_slot3_clear += 1; } catch (e) {}
+                let weaponInfo = readWeaponInfo(args[2]);
+                const pwInfo = readPlayerWeaponsInfo(args[0]);
+                this.weaponInfo = weaponInfo;
+                this.pwInfo = pwInfo;
+                observeWeaponClass(weaponInfo);
+                recordBotGrenadeWeapon(args[0], pwInfo, weaponInfo, "PlayerWeapons.SetCurrentWeapon.onEnter");
+                if (!Runtime.enabled || !Runtime.config.observe_set_current_weapon) return;
+                if (Runtime.config.virtual_grenade_observer_enabled) {
+                    logWeaponObserver("PlayerWeapons.SetCurrentWeapon.onEnter", {
+                        playerWeapons: pwInfo,
+                        slot: slot,
+                        weaponInfo: weaponInfo,
+                        slot3_clear_count: Runtime.stats.setCurrent_slot3_clear,
+                    }, false);
+                } else {
+                    logOnce("SetCurrentWeapon", "观察：PlayerWeapons.SetCurrentWeapon", Runtime.config.log_interval_ms, { slot: slot, weapon: ptrStr(args[2]), slot3_clear_count: Runtime.stats.setCurrent_slot3_clear });
+                }
+            },
+            onLeave(retval) {
+                // v2.12终版：不再在SetCurrentWeapon.onLeave后自动纠正非手雷。
+            }
+        });
+    },
+
+    removeGuard() { installRemoveGuard(); },
+    botRecord() { installBotGrenadeRecordControls(); },
+    botDrive() { installBotThrowDriveControls(); },
+    vbc() { installVirtualBotControlControls(); },
+    botAI() { installBotAIProbeControls(); }
+};
+
+function installHooks() {
+    // v2.13：不再"一次性全装"。只按当前配置安装需要的分组；
+    // setConfig 改变开关时会再次同步，自动装上/卸下对应 Hook 与 Replace。
+    return syncInstalledGroups("installHooks");
 }
 
 function cleanupHooks() {
@@ -3046,6 +3267,7 @@ function cleanupHooks() {
     Runtime.hooks = [];
     for (const item of Runtime.replacements) { try { if (item && item.address) Interceptor.revert(item.address); } catch(e){ recordError("cleanupReplace:" + (item ? item.name : "unknown"), e); } }
     Runtime.replacements = [];
+    for (const name of GROUP_NAMES) Runtime.groups[name] = { hooks: [], replacements: [], installed: false };
     Runtime.initialized = false;
     try { Interceptor.flush(); } catch(e) {}
 }
@@ -3074,15 +3296,35 @@ function resetVolatileRuntimeState(reason, options) {
 }
 function resetRuntime(reason) { resetVolatileRuntimeState(reason); }
 function recoverRuntimeAfterErrorThreshold(reason) { const count = Runtime.stats.error_count; resetVolatileRuntimeState("error_threshold:" + reason, { keepKnownGrenadeIndexes: true }); Runtime.stats.error_count = 0; Runtime.stats.last_error = ""; warn("错误过多，已清理本局运行缓存并继续保持功能开启", { reason: reason, error_count: count, enabled: Runtime.enabled }); }
-function enableFeature(config) { setConfig(config); installHooks(); Runtime.enabled = true; Runtime.stats.error_count = 0; Runtime.stats.last_error = ""; resetRuntime("enable"); log("手雷模式v2.12.8 final-clean-ui版已开启", { config: Runtime.config }); return true; }
-function disableFeature() { Runtime.enabled = false; resetRuntime("disable"); log("功能已关闭"); return true; }
+function enableFeature(config) { setConfig(config); installHooks(); Runtime.enabled = true; Runtime.stats.error_count = 0; Runtime.stats.last_error = ""; resetRuntime("enable"); log("手雷模式v2.13.0 分组安装版已开启（只装当前配置需要的 Hook/Replace）", { config: Runtime.config, installed_groups: Object.keys(Runtime.groups).filter(function (n) { return groupInstalled(n); }), replacements: Runtime.replacements.map(function (i) { return i.name; }) }); return true; }
+function disableFeature() { Runtime.enabled = false; resetRuntime("disable"); cleanupHooks(); log("功能已关闭"); return true; }
 function cleanupFeature() { Runtime.enabled = false; Runtime.stats.cleanup_count += 1; resetRuntime("cleanup"); cleanupHooks(); Runtime.moduleBase = ptr(0); log("cleanup 完成", { cleanup_count: Runtime.stats.cleanup_count }); return true; }
-function setConfig(config) { try { if (!config) return true; for (const k in config) { if (Object.prototype.hasOwnProperty.call(DefaultConfig, k)) Runtime.config[k] = config[k]; } log("配置已更新", { config: Runtime.config }); return true; } catch(e){ recordError("setConfig", e); return false; } }
+function setConfig(config) {
+    try {
+        if (!config) return true;
+        let changed = false;
+        for (const k in config) {
+            if (Object.prototype.hasOwnProperty.call(DefaultConfig, k)) {
+                if (Runtime.config[k] !== config[k]) changed = true;
+                Runtime.config[k] = config[k];
+            }
+        }
+        log("配置已更新", { config: Runtime.config, changed: changed });
+        // v2.13：开关变化会改变"需要安装哪些 Hook/Replace"，这里立即重新同步，
+        // 避免"关了功能但替换还在"或"开了功能但没装 Hook"。
+        if (changed && Runtime.initialized) syncInstalledGroups("setConfig");
+        return true;
+    } catch(e){ recordError("setConfig", e); return false; }
+}
 function getStatus() {
     cleanupProtectedWeapons("status"); cleanupTrackedMissiles("status");
     return {
         feature_id: FEATURE_ID, version: VERSION, enabled: Runtime.enabled, initialized: Runtime.initialized, generation: Runtime.generation, config: Runtime.config,
         hook_count: Runtime.hooks.length, replacement_count: Runtime.replacements.length,
+        installed_groups: Object.keys(Runtime.groups).filter(function (n) { return groupInstalled(n); }),
+        group_needs: Runtime.groupNeeds,
+        replacement_names: Runtime.replacements.map(function (i) { return i.name; }),
+        replace_auto_reverted: Runtime.stats.replace_auto_reverted, remove_original_error: Runtime.stats.remove_original_error,
         hook_hits: Runtime.stats.hook_hits,
         lock_attempts: Runtime.stats.lock_attempts, lock_writes: Runtime.stats.lock_writes, lock_skipped_same: Runtime.stats.lock_skipped_same,
         remove_hits: Runtime.stats.remove_hits, remove_blocked: Runtime.stats.remove_blocked, remove_allowed: Runtime.stats.remove_allowed,
@@ -3111,4 +3353,4 @@ function getStatus() {
 }
 
 rpc.exports = { enable(config){ return enableFeature(config); }, disable(){ return disableFeature(); }, status(){ return getStatus(); }, cleanup(){ return cleanupFeature(); }, setConfig(config){ return setConfig(config); }, set_config(config){ return setConfig(config); }, debugDump(){ return getStatus(); }, debug_dump(){ return getStatus(); } };
-log("锁999+保护武器+手雷伤害范围速度+动作加速脚本已加载", { version: VERSION });
+log("锁999+保护武器+手雷伤害范围速度+动作加速脚本已加载（v2.13 分组安装）", { version: VERSION });

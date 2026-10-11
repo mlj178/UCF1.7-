@@ -22,12 +22,36 @@
     var module = Process.findModuleByName(MODULE_NAME);
 
     function sendLog(level, message, extra) {
+        var detail = '';
+
+        if (extra !== undefined) {
+            try {
+                detail = typeof extra === 'string'
+                    ? extra
+                    : JSON.stringify(extra);
+            } catch (_) {
+                detail = String(extra);
+            }
+        }
+
         var payload = {
             type: 'log',
             level: level,
             module: 'TP-MIN',
-            message: message
+            message: message,
+
+            /*
+             * P0 诊断修复（2026-10-11）：
+             * 整合包的消息管道只认 audience + dev_detail
+             * （core/frida_manager.py:239-247），
+             * 原来把诊断放在 extra 里会被整包静默丢弃，
+             * 所以 [TPSStatus] / Hook 日志一直是裸行。
+             * 同时保留 extra，兼容独立版工具。
+             */
+            audience: 'dev',
+            dev_detail: detail
         };
+
         if (extra !== undefined) payload.extra = extra;
         send(payload);
     }
@@ -186,6 +210,13 @@
         cameraCacheHealthCheckMs: 1000,
 
         statusLogIntervalMs: 20000,
+
+        /*
+         * P0 诊断：性能采样日志间隔。
+         * 测试期 5 秒一条；定完因后设为 0 即可关闭 [TPSPerf]。
+         */
+        perfLogIntervalMs: 5000,
+
         maxCameraPitchDegrees: 75.0,
         cameraPitchFollowSpeed: 20.0,
         maxCameraPitchStepDegrees: 10.0
@@ -335,6 +366,480 @@
         errors: 0
     };
 
+    /*
+     * ========== P0 诊断：只观测，不改任何相机行为 ==========
+     *
+     * 目的：把“第三人称卡顿”从猜测变成数字。
+     *
+     * 1) 微秒级时钟：优先 QueryPerformanceCounter；
+     *    解析不到时降级 Date.now（毫秒级，日志 clock 字段会标明）。
+     * 2) 统计每个热路径回调的 calls / avg / p99 / max（微秒）。
+     * 3) 统计 CameraManager.Update 相邻两次之间
+     *    PushStateToUnityCamera 被调了几次：
+     *    pushPerUpdateFrameMax >= 2 就说明“游戏一帧刷新了多次相机”。
+     *
+     * 采样本身有约 0.2~1us 开销，读数会略偏大，
+     * 但足够区分“几十微秒”和“几百微秒”。
+     *
+     * 说明：avg / max 覆盖整个统计窗口（默认 5 秒）；
+     *      p99 只覆盖最近 128 个样本（环形缓冲，
+     *      避免热路径里分配内存）。
+     */
+    var PERF_SAMPLES = 128;
+
+    function makePerfMetric() {
+        var samples = new Array(PERF_SAMPLES);
+
+        for (var sampleIndex = 0;
+             sampleIndex < PERF_SAMPLES;
+             sampleIndex++) {
+            samples[sampleIndex] = 0.0;
+        }
+
+        return {
+            count: 0,
+            totalUs: 0.0,
+            maxUs: 0.0,
+            cursor: 0,
+            filled: 0,
+            samples: samples
+        };
+    }
+
+    function resetPerfMetric(metric) {
+        metric.count = 0;
+        metric.totalUs = 0.0;
+        metric.maxUs = 0.0;
+        metric.cursor = 0;
+        metric.filled = 0;
+
+        for (var sampleIndex = 0;
+             sampleIndex < PERF_SAMPLES;
+             sampleIndex++) {
+            metric.samples[sampleIndex] = 0.0;
+        }
+    }
+
+    function recordPerfMetric(metric, elapsedUs) {
+        metric.count++;
+        metric.totalUs += elapsedUs;
+
+        if (elapsedUs > metric.maxUs) {
+            metric.maxUs = elapsedUs;
+        }
+
+        metric.samples[metric.cursor] = elapsedUs;
+        metric.cursor++;
+
+        if (metric.cursor >= PERF_SAMPLES) {
+            metric.cursor = 0;
+        }
+
+        if (metric.filled < PERF_SAMPLES) {
+            metric.filled++;
+        }
+    }
+
+    function summarizePerfMetric(metric) {
+        if (metric.count === 0) {
+            return {
+                calls: 0,
+                avgUs: 0.0,
+                p99Us: 0.0,
+                maxUs: 0.0
+            };
+        }
+
+        var sorted = metric.samples.slice(
+            0,
+            metric.filled
+        );
+
+        sorted.sort(function (left, right) {
+            return left - right;
+        });
+
+        var p99Index = sorted.length - 1;
+
+        if (sorted.length > 1) {
+            p99Index = Math.floor(
+                (sorted.length - 1) * 0.99
+            );
+        }
+
+        return {
+            calls: metric.count,
+            avgUs: Math.round(
+                metric.totalUs / metric.count * 10.0
+            ) / 10.0,
+            p99Us: Math.round(
+                sorted[p99Index] * 10.0
+            ) / 10.0,
+            maxUs: Math.round(
+                metric.maxUs * 10.0
+            ) / 10.0
+        };
+    }
+
+    function resolveProcExport(moduleNames, exportName) {
+        try {
+            if (typeof Module.getGlobalExportByName ===
+                'function') {
+                var global = Module.getGlobalExportByName(
+                    exportName
+                );
+
+                if (!isNull(global)) return global;
+            }
+        } catch (_) {
+        }
+
+        try {
+            if (typeof Module.findGlobalExportByName ===
+                'function') {
+                var found = Module.findGlobalExportByName(
+                    exportName
+                );
+
+                if (!isNull(found)) return found;
+            }
+        } catch (_) {
+        }
+
+        for (var index = 0;
+             index < moduleNames.length;
+             index++) {
+            try {
+                if (typeof Module.getExportByName ===
+                    'function') {
+                    return Module.getExportByName(
+                        moduleNames[index],
+                        exportName
+                    );
+                }
+            } catch (_) {
+            }
+
+            try {
+                if (typeof Module.findExportByName ===
+                    'function') {
+                    return Module.findExportByName(
+                        moduleNames[index],
+                        exportName
+                    );
+                }
+            } catch (_) {
+            }
+
+            try {
+                var owner = Process.findModuleByName(
+                    moduleNames[index]
+                );
+
+                if (owner &&
+                    typeof owner.getExportByName ===
+                        'function') {
+                    return owner.getExportByName(exportName);
+                }
+
+                if (owner &&
+                    typeof owner.findExportByName ===
+                        'function') {
+                    return owner.findExportByName(exportName);
+                }
+            } catch (_) {
+            }
+        }
+
+        return null;
+    }
+
+    function makeWinApiProbe(address) {
+        try {
+            return new NativeFunction(
+                address,
+                'int',
+                ['pointer'],
+                'stdcall'
+            );
+        } catch (_) {
+        }
+
+        try {
+            return new NativeFunction(
+                address,
+                'int',
+                ['pointer']
+            );
+        } catch (_) {
+            return null;
+        }
+    }
+
+    var perfClock = (function () {
+        try {
+            if (typeof performance !== 'undefined' &&
+                performance !== null &&
+                typeof performance.now === 'function') {
+                return {
+                    name: 'performance.now',
+                    now: function () {
+                        return performance.now() * 1000.0;
+                    }
+                };
+            }
+        } catch (_) {
+        }
+
+        try {
+            var counterBuffer = Memory.alloc(8);
+            var frequencyBuffer = Memory.alloc(8);
+            var systemModules = [
+                'kernel32.dll',
+                'KernelBase.dll',
+                'ntdll.dll'
+            ];
+
+            var counterAddress = resolveProcExport(
+                systemModules,
+                'QueryPerformanceCounter'
+            );
+
+            var frequencyAddress = resolveProcExport(
+                systemModules,
+                'QueryPerformanceFrequency'
+            );
+
+            if (!isNull(counterAddress) &&
+                !isNull(frequencyAddress)) {
+                var queryCounter = makeWinApiProbe(
+                    counterAddress
+                );
+                var queryFrequency = makeWinApiProbe(
+                    frequencyAddress
+                );
+
+                if (queryCounter !== null &&
+                    queryFrequency !== null) {
+                    queryFrequency(frequencyBuffer);
+
+                    var frequency =
+                        frequencyBuffer.readU32() +
+                        frequencyBuffer.add(4).readU32() *
+                        4294967296.0;
+
+                    if (frequency > 0.0) {
+                        var toMicros =
+                            1000000.0 / frequency;
+
+                        return {
+                            name: 'qpc',
+                            now: function () {
+                                queryCounter(counterBuffer);
+
+                                return (
+                                    counterBuffer.readU32() +
+                                    counterBuffer.add(4)
+                                        .readU32() *
+                                        4294967296.0
+                                ) * toMicros;
+                            }
+                        };
+                    }
+                }
+            }
+        } catch (_) {
+        }
+
+        return {
+            name: 'date_now_ms',
+            now: function () {
+                return Date.now() * 1000.0;
+            }
+        };
+    })();
+
+    var perf = {
+        clock: perfClock.name,
+
+        frames: 0,
+        pushStateCalls: 0,
+        pushStreak: 0,
+        pushPerUpdateFrameMax: 0,
+
+        windowFrames: 0,
+        windowPushStateCalls: 0,
+        windowPushPerUpdateFrameMax: 0,
+
+        windowFrameGapTotalMs: 0.0,
+        windowFrameGapMaxMs: 0.0,
+        windowFrameGapSamples: 0,
+        lastFrameTimeMs: 0,
+        lastLogTime: 0,
+
+        metrics: {
+            cmUpdate: makePerfMetric(),
+            finalCamera: makePerfMetric(),
+            healthCheck: makePerfMetric(),
+            cameraInput: makePerfMetric(),
+            walkVelocity: makePerfMetric()
+        }
+    };
+
+    function resetPerfWindow() {
+        perf.windowFrames = 0;
+        perf.windowPushStateCalls = 0;
+        perf.windowPushPerUpdateFrameMax = 0;
+
+        perf.windowFrameGapTotalMs = 0.0;
+        perf.windowFrameGapMaxMs = 0.0;
+        perf.windowFrameGapSamples = 0;
+
+        resetPerfMetric(perf.metrics.cmUpdate);
+        resetPerfMetric(perf.metrics.finalCamera);
+        resetPerfMetric(perf.metrics.healthCheck);
+        resetPerfMetric(perf.metrics.cameraInput);
+        resetPerfMetric(perf.metrics.walkVelocity);
+
+        readableProbe.windowCalls = 0;
+        readableProbe.windowTotalUs = 0.0;
+        readableProbe.windowMaxUs = 0.0;
+        readableProbe.slowSites = {};
+        readableProbe.slowSiteKeys = [];
+    }
+
+    function resetPerf() {
+        perf.frames = 0;
+        perf.pushStateCalls = 0;
+        perf.pushStreak = 0;
+        perf.pushPerUpdateFrameMax = 0;
+        perf.lastFrameTimeMs = 0;
+        perf.lastLogTime = 0;
+
+        readableProbe.calls = 0;
+        readableProbe.totalUs = 0.0;
+        readableProbe.maxUs = 0.0;
+
+        resetPerfWindow();
+    }
+
+    /*
+     * 每经过一次 CameraManager.Update 记一个“游戏帧”，
+     * 并用两次之间的间隔估算帧时间（只用于观察）。
+     */
+    function noteGameFrame() {
+        var now = Date.now();
+
+        if (perf.lastFrameTimeMs > 0) {
+            var gapMs = now - perf.lastFrameTimeMs;
+
+            if (gapMs >= 0 && gapMs < 2000) {
+                perf.windowFrameGapTotalMs += gapMs;
+                perf.windowFrameGapSamples++;
+
+                if (gapMs > perf.windowFrameGapMaxMs) {
+                    perf.windowFrameGapMaxMs = gapMs;
+                }
+            }
+        }
+
+        perf.lastFrameTimeMs = now;
+        perf.frames++;
+        perf.windowFrames++;
+
+        if (perf.pushStreak >
+            perf.windowPushPerUpdateFrameMax) {
+            perf.windowPushPerUpdateFrameMax =
+                perf.pushStreak;
+        }
+
+        if (perf.pushStreak >
+            perf.pushPerUpdateFrameMax) {
+            perf.pushPerUpdateFrameMax =
+                perf.pushStreak;
+        }
+
+        perf.pushStreak = 0;
+    }
+
+    function emitPerfStatus() {
+        if (!enabled) return;
+
+        if (LIMITS.perfLogIntervalMs <= 0) return;
+
+        var now = Date.now();
+
+        if (now - perf.lastLogTime <
+            LIMITS.perfLogIntervalMs) {
+            return;
+        }
+
+        perf.lastLogTime = now;
+
+        var gapAvgMs = perf.windowFrameGapSamples > 0
+            ? Math.round(
+                perf.windowFrameGapTotalMs /
+                perf.windowFrameGapSamples * 100.0
+            ) / 100.0
+            : 0.0;
+
+        var pushPerFrameAvg = perf.windowFrames > 0
+            ? Math.round(
+                perf.windowPushStateCalls /
+                perf.windowFrames * 100.0
+            ) / 100.0
+            : 0.0;
+
+        sendLog('info', '[TPSPerf]', {
+            clock: perf.clock,
+
+            frames: perf.windowFrames,
+            pushStateCalls: perf.windowPushStateCalls,
+            pushPerFrameAvg: pushPerFrameAvg,
+            pushPerUpdateFrameMax:
+                perf.windowPushPerUpdateFrameMax,
+            pushPerUpdateFrameMaxTotal:
+                perf.pushPerUpdateFrameMax,
+
+            frameGapAvgMs: gapAvgMs,
+            frameGapMaxMs: perf.windowFrameGapMaxMs,
+
+            camWrites: stats.cameraFrames,
+            camFails: stats.cameraFailures,
+
+            finalCameraUs: summarizePerfMetric(
+                perf.metrics.finalCamera
+            ),
+            healthCheckUs: summarizePerfMetric(
+                perf.metrics.healthCheck
+            ),
+            isReadableUs: {
+                calls: readableProbe.windowCalls,
+                totalUs: Math.round(
+                    readableProbe.windowTotalUs * 10.0
+                ) / 10.0,
+                maxUs: Math.round(
+                    readableProbe.windowMaxUs * 10.0
+                ) / 10.0,
+                maxUsTotal: Math.round(
+                    readableProbe.maxUs * 10.0
+                ) / 10.0
+            },
+            isReadableSlowSites: summarizeReadableSites(),
+            cmUpdateUs: summarizePerfMetric(
+                perf.metrics.cmUpdate
+            ),
+            cameraInputUs: summarizePerfMetric(
+                perf.metrics.cameraInput
+            ),
+            walkVelocityUs: summarizePerfMetric(
+                perf.metrics.walkVelocity
+            )
+        });
+
+        resetPerfWindow();
+    }
+
     var saved = {
         cameraCaptured: false,
         modelCaptured: false,
@@ -380,6 +885,17 @@
             return pointer.isNull();
         } catch (_) {
             return true;
+        }
+    }
+
+    // P1：UnityEngine.Object 活体校验（m_CachedPtr 在 +0x8，为 0 表示 native 对象已销毁）
+    function isAliveUnityObject(pointer) {
+        try {
+            if (isNull(pointer)) return false;
+            var cached = pointer.add(0x8).readPointer();
+            return !!(cached && !cached.isNull());
+        } catch (_) {
+            return false;
         }
     }
 
@@ -465,15 +981,129 @@
         }
     }
 
+    /*
+     * P0 诊断：累计 isReadable 的调用次数与耗时；
+     * 出现慢调用时记录调用栈，用于归因。
+     */
+    var readableProbe = {
+        calls: 0,
+        totalUs: 0.0,
+        maxUs: 0.0,
+        windowCalls: 0,
+        windowTotalUs: 0.0,
+        windowMaxUs: 0.0,
+        slowSites: {},
+        slowSiteKeys: []
+    };
+
+    var READABLE_SLOW_THRESHOLD_US = 2000.0;
+
+    function noteReadableSlowSite() {
+        var key = 'unknown';
+
+        try {
+            var stack = new Error().stack;
+
+            if (stack) {
+                var lines = String(stack).split('\n');
+                var picked = [];
+
+                for (var index = 0;
+                     index < lines.length &&
+                     picked.length < 3;
+                     index++) {
+                    var frame = lines[index].trim();
+
+                    if (frame.length === 0 ||
+                        frame.indexOf('noteReadableSlowSite') !== -1 ||
+                        frame.indexOf('isReadable') !== -1) {
+                        continue;
+                    }
+
+                    picked.push(frame);
+                }
+
+                if (picked.length > 0) {
+                    key = picked.join(' <- ').slice(0, 200);
+                }
+            }
+        } catch (_) {
+        }
+
+        if (readableProbe.slowSites[key] === undefined) {
+            if (readableProbe.slowSiteKeys.length >= 6) {
+                return;
+            }
+
+            readableProbe.slowSites[key] = 0;
+            readableProbe.slowSiteKeys.push(key);
+        }
+
+        readableProbe.slowSites[key]++;
+    }
+
+    function summarizeReadableSites() {
+        var output = [];
+
+        for (var index = 0;
+             index < readableProbe.slowSiteKeys.length;
+             index++) {
+            var key = readableProbe.slowSiteKeys[index];
+
+            output.push(
+                readableProbe.slowSites[key] + 'x ' + key
+            );
+        }
+
+        return output;
+    }
+
+    /*
+     * P0 修复（根因）：
+     * 原先用 Process.findRangeByAddress 判断地址可读性，
+     * 它在 Windows 上会枚举整个地址空间，
+     * 实测单次 7~13ms，是每秒/每发枪卡顿的根因。
+     *
+     * 改为受保护的单字节读取：
+     *   地址可读     -> 读成功 -> true；
+     *   未映射/不可读/仅执行 -> 抛异常 -> false。
+     * Windows 上 Frida 用 ReadProcessMemory 实现读取，
+     * 非法地址只会失败，不会让进程崩溃。
+     * 单次约 1us，与“存在可读内存段”语义等价。
+     */
     function isReadable(pointer) {
         if (isNull(pointer)) return false;
+
+        var probeStart = perfClock.now();
+        var readable = false;
+
         try {
-            var range = Process.findRangeByAddress(pointer);
-            return range !== null &&
-                range.protection.indexOf('r') !== -1;
+            pointer.readU8();
+            readable = true;
         } catch (_) {
-            return false;
+            readable = false;
         }
+
+        var probeUs = perfClock.now() - probeStart;
+
+        readableProbe.calls++;
+        readableProbe.totalUs += probeUs;
+        readableProbe.windowCalls++;
+        readableProbe.windowTotalUs += probeUs;
+
+        if (probeUs > readableProbe.maxUs) {
+            readableProbe.maxUs = probeUs;
+        }
+
+        if (probeUs > readableProbe.windowMaxUs) {
+            readableProbe.windowMaxUs = probeUs;
+        }
+
+        if (probeUs >= READABLE_SLOW_THRESHOLD_US) {
+            noteReadableSlowSite();
+        }
+
+        return readable;
     }
 
     function isExecutable(address) {
@@ -1524,9 +2154,19 @@
 
         /*
          * 低频执行旧指针验证，避免每帧执行高成本检查。
+         *
+         * P0 修复：
+         * 原先这里用 isReadable -> Process.findRangeByAddress，
+         * 实测单次 7~13ms（开的功能越多越慢），
+         * 每秒 3 次正好造成“每秒掉一帧”的卡顿。
+         * 根因已在 isReadable 内部修掉（受保护单字节读取），
+         * 这里再叠一层只读 m_CachedPtr 的活体校验：
+         *   - native 对象已销毁 -> m_CachedPtr 为 0 -> 判失效；
+         *   - 指针本身已不可访问 -> 读取抛异常被捕获 -> 判失效。
+         * 成本由毫秒级降到亚微秒级，判定语义不变。
          */
         if (!isNull(cameraState.transform) &&
-            !isReadable(cameraState.transform)) {
+            !isAliveUnityObject(cameraState.transform)) {
             cameraState.transform = null;
             cameraState.camera = null;
             cameraState.valid = false;
@@ -1535,7 +2175,7 @@
         }
 
         if (!isNull(cameraState.characterContainer) &&
-            !isReadable(cameraState.characterContainer)) {
+            !isAliveUnityObject(cameraState.characterContainer)) {
             cameraState.characterContainer = null;
             cameraState.valid = false;
             stats.staleCameraResets++;
@@ -1543,7 +2183,7 @@
         }
 
         if (!isNull(localPlayer) &&
-            !isReadable(localPlayer)) {
+            !isAliveUnityObject(localPlayer)) {
             localPlayer = null;
             cameraState.characterContainer = null;
             cameraState.valid = false;
@@ -1596,7 +2236,18 @@
 
             var now = Date.now();
 
+            /*
+             * P0 诊断：把低频健康检查（含 isReadable）单独计时，
+             * 与 finalCameraUs 的其余部分区分开。
+             */
+            var healthCheckStart = perfClock.now();
+
             maybeValidateCameraCache(now);
+
+            recordPerfMetric(
+                perf.metrics.healthCheck,
+                perfClock.now() - healthCheckStart
+            );
 
             if (isNull(cameraState.transform)) {
                 var camera = brainGetOutputCamera(brain, ptr(0));
@@ -1732,16 +2383,21 @@
             cameraWriteRotationBuffer.add(8).writeFloat(-sy * sx);
             cameraWriteRotationBuffer.add(12).writeFloat(cy * cx);
 
-            transformSetPosition(
-                cameraState.transform,
-                cameraWritePositionBuffer,
-                ptr(0)
-            );
-            transformSetRotation(
-                cameraState.transform,
-                cameraWriteRotationBuffer,
-                ptr(0)
-            );
+            // P1：热路径只判 null 不够——Transform 可能已随相机销毁，写前验活
+            if (isAliveUnityObject(cameraState.transform)) {
+                transformSetPosition(
+                    cameraState.transform,
+                    cameraWritePositionBuffer,
+                    ptr(0)
+                );
+                transformSetRotation(
+                    cameraState.transform,
+                    cameraWriteRotationBuffer,
+                    ptr(0)
+                );
+            } else {
+                cameraState.valid = false;
+            }
 
             cameraState.valid = true;
             cameraState.position.x = cameraX;
@@ -2454,6 +3110,7 @@
 
         processRefreshQueue();
         emitBasicStatus();
+        emitPerfStatus();
     }
 
     function emitBasicStatus() {
@@ -2575,6 +3232,8 @@
         runtime.physicsDisabled = false;
         runtime.physicsFailures = 0;
         runtime.lastStatusLogTime = 0;
+
+        resetPerf();
     }
 
     function performEnable() {
@@ -2897,8 +3556,19 @@
                 RVA.CameraManager_Update,
                 {
                     onLeave: function () {
-                        processCommands();
-                        updateRuntimeMainThread();
+                        var perfStart = perfClock.now();
+
+                        try {
+                            processCommands();
+                            updateRuntimeMainThread();
+                        } finally {
+                            recordPerfMetric(
+                                perf.metrics.cmUpdate,
+                                perfClock.now() - perfStart
+                            );
+
+                            noteGameFrame();
+                        }
                     }
                 }
             );
@@ -2911,6 +3581,10 @@
                         this.brain = args[0];
                     },
                     onLeave: function () {
+                        perf.pushStateCalls++;
+                        perf.windowPushStateCalls++;
+                        perf.pushStreak++;
+
                         if (!enabled) return;
 
                         /*
@@ -2918,7 +3592,16 @@
                          * 先应用独立俯仰，再采样最终 Camera，
                          * 射击和 WASD 才会使用真正的镜头方向。
                          */
-                        updateFinalCamera(this.brain);
+                        var perfStart = perfClock.now();
+
+                        try {
+                            updateFinalCamera(this.brain);
+                        } finally {
+                            recordPerfMetric(
+                                perf.metrics.finalCamera,
+                                perfClock.now() - perfStart
+                            );
+                        }
                     }
                 }
             );
@@ -2938,11 +3621,20 @@
                         this.displayClass = args[2];
                     },
                     onLeave: function () {
-                        rotateWalkVelocityToCamera(
-                            this.returnBuffer,
-                            this.player,
-                            this.displayClass
-                        );
+                        var perfStart = perfClock.now();
+
+                        try {
+                            rotateWalkVelocityToCamera(
+                                this.returnBuffer,
+                                this.player,
+                                this.displayClass
+                            );
+                        } finally {
+                            recordPerfMetric(
+                                perf.metrics.walkVelocity,
+                                perfClock.now() - perfStart
+                            );
+                        }
                     }
                 }
             );
@@ -2962,9 +3654,18 @@
                         this.player = args[0];
                     },
                     onLeave: function () {
-                        handleCameraInputAndBodyYaw(
-                            this.player
-                        );
+                        var perfStart = perfClock.now();
+
+                        try {
+                            handleCameraInputAndBodyYaw(
+                                this.player
+                            );
+                        } finally {
+                            recordPerfMetric(
+                                perf.metrics.cameraInput,
+                                perfClock.now() - perfStart
+                            );
+                        }
                     }
                 }
             );
@@ -3274,6 +3975,13 @@
                 'error',
                 'Hook 安装失败: ' + error
             );
+
+            // P1：部分安装失败时把已挂的 listener 回滚，避免再次 enable 时重复 attach
+            for (var index = 0; index < listeners.length; index++) {
+                try { listeners[index].detach(); } catch (_) {}
+            }
+            listeners = [];
+            installed = false;
 
             return {
                 ok: false,

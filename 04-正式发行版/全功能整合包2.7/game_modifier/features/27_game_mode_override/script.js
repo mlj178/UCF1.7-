@@ -2522,7 +2522,8 @@
       Runtime.hooks.push(Interceptor.attach(base.add(RVA.MapManager_GetSpawnPoint), {
         onEnter: function (args) {
           if (!Runtime.enabled) return;
-          Runtime.mapManager = args[0];
+          // P0：这是静态方法且返回 16 字节结构体，args[0] 是隐藏的 sret 返回缓冲（调用者栈地址），
+          // 绝对不能当作 MapManager。MapManager 由 MapManager.Awake 钩子（args[0]=this）维护。
           var team = args[1].toInt32();
           if (team === 2) ensureNeutralSpawnFallbackFromTeam('GetSpawnPoint');
           else ensureTeamSpawnFallbackFromNeutral(team, 'GetSpawnPoint');
@@ -2735,6 +2736,8 @@
         if (configResult && configResult.ok === false) return configResult;
       }
       Runtime.enabled = true;
+      // P1：installHooks 原来只在脚本加载时调用一次；若当时 GameAssembly 还没映射，功能会永远装不上
+      if (!Runtime.hookInstalled) installHooks();
       sendStatus('27_game_mode_override', true);
       Runtime.lastError = null;
       return statusObject();

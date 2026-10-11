@@ -5,8 +5,14 @@ import time
 
 import keyboard
 
-from core.config import WEAPON_HOTKEYS_FILE, WEAPON_HOTKEY_POSITIONS, WEAPON_HOTKEY_DISPLAY_NAMES
+from core.config import (
+    WEAPON_HOTKEYS_FILE,
+    WEAPON_HOTKEY_POSITIONS,
+    WEAPON_HOTKEY_DISPLAY_NAMES,
+    write_json_atomic,
+)
 from core.event_bus import EventBus
+from core.log_manager import get_logger
 
 
 class WeaponHotkeyManager:
@@ -56,8 +62,7 @@ class WeaponHotkeyManager:
             for hotkey in WEAPON_HOTKEY_POSITIONS:
                 data[hotkey] = self._weapon_hotkeys.get(hotkey)
             
-            with open(WEAPON_HOTKEYS_FILE, 'w', encoding='utf-8') as f:
-                json.dump(data, f, ensure_ascii=False, indent=2)
+            write_json_atomic(WEAPON_HOTKEYS_FILE, data)
         except Exception as e:
             bus = EventBus.get_instance()
             bus.emit('log_message', level='error', module='武器快捷键',
@@ -188,8 +193,8 @@ class WeaponHotkeyManager:
         for handle in self._hotkey_handles:
             try:
                 keyboard.remove_hotkey(handle)
-            except:
-                pass
+            except Exception as exc:
+                get_logger("WeaponHotkeyManager").warning("注销快捷键失败: %s", exc)
         self._hotkey_handles = []
         
         # 注册新的监听
@@ -222,17 +227,32 @@ class WeaponHotkeyManager:
         
         if self._give_weapon_callback:
             try:
-                # 方案1：如果有app引用，使用after调度到主线程（线程安全）
-                if self._app and hasattr(self._app, 'after'):
-                    self._app.after(0, lambda: self._safe_give_weapon(weapon_id, state_version))
-                else:
-                    # 降级方案：直接调用（可能不安全，但至少有防抖）
-                    self._safe_give_weapon(weapon_id, state_version)
+                self._dispatch_to_ui(
+                    lambda: self._safe_give_weapon(weapon_id, state_version)
+                )
             except Exception as e:
                 bus = EventBus.get_instance()
                 bus.emit('log_message', level='error', module='武器快捷键',
                          message=f'调度武器赋予失败: {e}')
     
+    def _dispatch_to_ui(self, callback):
+        """把回调投递到 Tk 主线程（keyboard 回调运行在后台线程）。
+
+        优先使用 App 的 _safe_after：它会在未进入 mainloop 时排队、
+        窗口销毁后丢弃，避免后台线程直接操作 Tk 抛
+        "main thread is not in main loop"。
+        """
+        app = self._app
+        if app is not None:
+            safe_after = getattr(app, "_safe_after", None)
+            if callable(safe_after):
+                safe_after(0, callback)
+                return
+            if hasattr(app, "after"):
+                app.after(0, callback)
+                return
+        callback()
+
     def _safe_give_weapon(self, weapon_id, state_version=None):
         """安全地执行赋予武器操作（在主线程中执行）"""
         if not self._enabled:

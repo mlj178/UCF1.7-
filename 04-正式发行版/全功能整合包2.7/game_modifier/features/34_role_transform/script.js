@@ -330,6 +330,13 @@
             reject('not in multiplayer-nano mode');
             return;
         }
+        if (action === 'bot_hero' || action === 'bot_terminator') {
+            // P0：bot 变身调用的是 Mode_Nano4_Terminator 的私有方法，只有 gameMode==6 时单例才是该类型实例
+            if (getGameMode() !== 6) {
+                reject('bot transform requires Mode_Nano4_Terminator (gameMode 6)');
+                return;
+            }
+        }
         var mode = Native.getModeNano4(ptr(0));
         if (!readable(mode)) {
             reject('Mode_Nano4.instance3 is unavailable');

@@ -1,0 +1,51 @@
+{
+    "feature_id":  "skillcd",
+    "canonical_id":  "skill_no_cooldown",
+    "display_name":  "技能无冷却",
+    "category":  "special",
+    "tab":  "nano4t_tab",
+    "order":  50,
+    "desc":  "生化模式，所有技能无冷却",
+    "script":  "script.js",
+    "layout":  {
+                   "card_type":  "simple",
+                   "columnspan":  1,
+                   "title_color":  "#A855F7"
+               },
+    "controls":  [
+                     {
+                         "type":  "switch",
+                         "action":  "enable"
+                     }
+                 ],
+    "config":  {
+
+               },
+    "rpc":  [
+                "enable",
+                "disable",
+                "setConfig",
+                "status",
+                "cleanup"
+            ],
+    "lifecycle":  {
+                      "cleanup":  true
+                  },
+    "source":  {
+                   "runtime_script_js":  "features/17_skillcd/script.js"
+               },
+    "ui_handles":  {
+                       "switch":  "skillcd_switch"
+                   },
+    "runtime":  {
+                    "type":  "plugin_script"
+                },
+    "ui":  {
+                "mode":  "special_inline_card"
+            },
+    "tab_title":  "多人生化",
+    "tab_order":  40,
+    "state":  {
+                  "sync_enabled_from_config":  true
+              }
+}

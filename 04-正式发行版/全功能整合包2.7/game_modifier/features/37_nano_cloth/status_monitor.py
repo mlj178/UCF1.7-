@@ -54,6 +54,13 @@ class NanoClothStatusMonitor:
     def stop(self):
         self._running = False
         if self._timer is not None:
+            # P2：原来只丢弃句柄而不取消定时器。停止时若有排程中的轮询，
+            # 重新 start() 后旧回调仍会执行并再排一条链（双倍 status RPC），
+            # 同时把新链的 _timer 句柄覆盖成 None，导致之后无法再取消。
+            try:
+                self._context.after_cancel(self._timer)
+            except Exception:
+                pass
             self._timer = None
 
     def _schedule_poll(self, delay_ms):

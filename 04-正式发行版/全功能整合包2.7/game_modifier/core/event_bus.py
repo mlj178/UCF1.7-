@@ -1,4 +1,7 @@
+import queue
 import threading
+import time
+import traceback
 import weakref
 from collections import defaultdict
 
@@ -7,9 +10,18 @@ class EventBus:
     _instance = None
     _lock = threading.Lock()
 
+    MAX_QUEUE = 2000
+    WORKERS = 2
+
     def __init__(self):
         self._subscribers = defaultdict(list)
         self._lock = threading.Lock()
+        self._event_queue = queue.Queue(maxsize=self.MAX_QUEUE)
+        self._workers = []
+        self._dropped_events = 0
+        self._stopping = False
+        self._error_log_at = {}
+        self._error_log_throttle_seconds = 3.0
 
     @classmethod
     def get_instance(cls):
@@ -35,15 +47,52 @@ class EventBus:
     def emit(self, event_type, **kwargs):
         with self._lock:
             subscribers = list(self._subscribers.get(event_type, []))
+        if not subscribers:
+            return
 
+        # P1：原来每条事件对每个订阅者都新建一个线程，日志量大时会造成线程风暴。
+        # 改为固定 2 个工作线程 + 有界队列；队列满时丢弃并计数，保证不拖垮 UI。
+        self._ensure_workers()
         for ref in subscribers:
             callback = self._resolve_ref(ref)
             if callback is None:
                 continue
             try:
-                threading.Thread(target=callback, kwargs=kwargs, daemon=True).start()
+                self._event_queue.put_nowait((callback, kwargs))
+            except queue.Full:
+                self._dropped_events += 1
+
+    def _ensure_workers(self):
+        with self._lock:
+            if self._stopping:
+                return
+            self._workers = [w for w in self._workers if w.is_alive()]
+            while len(self._workers) < self.WORKERS:
+                worker = threading.Thread(
+                    target=self._worker_loop,
+                    name=f"event-bus-{len(self._workers) + 1}",
+                    daemon=True,
+                )
+                worker.start()
+                self._workers.append(worker)
+
+    def _worker_loop(self):
+        while True:
+            try:
+                item = self._event_queue.get()
             except Exception:
-                pass
+                continue
+            if item is None:
+                return
+            callback, kwargs = item
+            try:
+                callback(**kwargs)
+            except Exception:
+                self._report_subscriber_error(callback)
+
+    @property
+    def dropped_events(self):
+        return self._dropped_events
 
     def emit_sync(self, event_type, **kwargs):
         with self._lock:
@@ -56,11 +105,49 @@ class EventBus:
             try:
                 callback(**kwargs)
             except Exception:
-                pass
+                self._report_subscriber_error(callback)
 
     def clear(self):
         with self._lock:
             self._subscribers.clear()
+
+    def shutdown(self, timeout=2.0):
+        """Stop the worker threads explicitly; safe to call more than once."""
+        with self._lock:
+            if self._stopping:
+                return
+            self._stopping = True
+            workers = list(self._workers)
+            self._workers = []
+        self.clear()
+        for _ in workers:
+            try:
+                self._event_queue.put_nowait(None)
+            except queue.Full:
+                break
+        for worker in workers:
+            if worker.is_alive():
+                worker.join(timeout)
+
+    def _report_subscriber_error(self, callback):
+        """Isolate subscriber failures; report them throttled instead of swallowing."""
+        try:
+            key = id(callback)
+            now = time.monotonic()
+            last = self._error_log_at.get(key)
+            if last is not None and now - last < self._error_log_throttle_seconds:
+                return
+            self._error_log_at[key] = now
+            from core.log_manager import log_to_file
+            name = (
+                getattr(callback, "__qualname__", None)
+                or getattr(callback, "__name__", None)
+                or repr(callback)
+            )
+            detail = traceback.format_exc(limit=3).strip().replace("\n", " | ")
+            log_to_file("error", "EventBus", f"事件订阅者异常 {name}: {detail}")
+        except Exception:
+            pass
 
     @staticmethod
     def _is_same_callback(ref, callback):

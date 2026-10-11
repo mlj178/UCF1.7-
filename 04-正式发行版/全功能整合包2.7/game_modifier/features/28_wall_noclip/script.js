@@ -308,7 +308,15 @@
 
     function isLocalPlayer(player) {
         if (isNull(player) || !native.ready) return false;
-        if (!isNull(Runtime.cache.localPlayer) && player.equals(Runtime.cache.localPlayer)) return true;
+        if (!isNull(Runtime.cache.localPlayer) && player.equals(Runtime.cache.localPlayer)) {
+            // P1：地址相同不代表还是同一实体（重生/换图后地址会被复用）；用游戏自己的判定复核
+            try {
+                if (native.isMyPlayer(player, ptr(0))) return true;
+            } catch (error) {}
+            Runtime.cache.localPlayer = ptr(0);
+            Runtime.cache.localController = ptr(0);
+            return false;
+        }
         try {
             if (native.isMyPlayer(player, ptr(0))) {
                 Runtime.cache.localPlayer = player;
@@ -456,7 +464,10 @@
     function isCurrentLocalController(controller) {
         if (isNull(controller) || isNull(Runtime.cache.localController)) return false;
         try {
-            return controller.equals(Runtime.cache.localController);
+            if (!controller.equals(Runtime.cache.localController)) return false;
+            // P1：地址相同不代表对象还活着；用 m_CachedPtr(+0x8) 验活，避免把位移写到已销毁的 controller
+            var cached = controller.add(0x8).readPointer();
+            return !!(cached && !cached.isNull());
         } catch (_) {
             return false;
         }

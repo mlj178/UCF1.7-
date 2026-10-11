@@ -2,7 +2,7 @@ import json
 import os
 import winsound
 
-from core.config import SETTINGS_FILE, RESOURCE_DIR
+from core.config import SETTINGS_FILE, RESOURCE_DIR, write_json_atomic
 from core.event_bus import EventBus
 
 os.environ.setdefault("PYGAME_HIDE_SUPPORT_PROMPT", "1")
@@ -50,12 +50,18 @@ class SoundManager:
         return 0.5
 
     def _save_sound_settings(self):
+        # 读取-合并-写回：settings.json 里可能还有其它模块写入的键，
+        # 直接 dump 只含音效键的字典会把它们整体抹掉。
         try:
-            with open(SETTINGS_FILE, 'w', encoding='utf-8') as f:
-                json.dump({
-                    'sound_enabled': self._sound_enabled,
-                    'sound_volume': self._sound_volume
-                }, f, ensure_ascii=False, indent=2)
+            data = {}
+            if os.path.exists(SETTINGS_FILE):
+                with open(SETTINGS_FILE, 'r', encoding='utf-8') as f:
+                    loaded = json.load(f)
+                if isinstance(loaded, dict):
+                    data = loaded
+            data['sound_enabled'] = self._sound_enabled
+            data['sound_volume'] = self._sound_volume
+            write_json_atomic(SETTINGS_FILE, data)
         except Exception:
             pass
 

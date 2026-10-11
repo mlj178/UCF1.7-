@@ -1,4 +1,4 @@
-﻿// Local helpers for this feature only.
+// Local helpers for this feature only.
 var modules = {};
 var __localMaxLogsPerModule = 10;
 var __localModuleLogCounts = {};
@@ -193,6 +193,9 @@ modules.aim = (function() {
   var lastVisibilityHitDistance = null;
   var lastVisibilityColliderInstanceId = 0;
   var aimCamera = { valid: false, position: null, forward: null, transform: null, lastUpdateMs: 0 };
+  // P0：热点路径复用缓冲。Frida 的 Memory.alloc 只在脚本卸载时回收，原来的每次调用都会泄漏。
+  var aimPosBuf = Memory.alloc(12);
+  var aimForwardBuf = Memory.alloc(12);
 
   function resetAimState(reason) {
     cachedTarget = null;
@@ -330,6 +333,7 @@ modules.aim = (function() {
       var items = listPtr.add(OFF_AIM.List_items).readPointer();
       if (!items || items.isNull()) return result;
       var count = listPtr.add(OFF_AIM.List_size).readS32();
+      if (count < 0 || count > 64) return result; // P1：上限，避免悬垂 gm 读到垃圾长度后长时间遍历
       for (var i = 0; i < count; i++) {
         var elem = items.add(OFF_AIM.Arr_data + i * OFF_AIM.ptrSize).readPointer();
         if (elem && !elem.isNull()) result.push(elem);
@@ -343,6 +347,7 @@ modules.aim = (function() {
     if (!arrPtr || arrPtr.isNull()) return result;
     try {
       var len = arrPtr.add(OFF_AIM.Arr_len).readU32();
+      if (len > 256) return result; // P1：上限
       for (var i = 0; i < len; i++) {
         var elem = arrPtr.add(OFF_AIM.Arr_data + i * OFF_AIM.ptrSize).readPointer();
         if (elem && !elem.isNull()) result.push(elem);
@@ -393,7 +398,7 @@ modules.aim = (function() {
   function readTransformPosition(transform) {
     if (!transform || transform.isNull()) return null;
     try {
-      var posBuf = Memory.alloc(12);
+      var posBuf = aimPosBuf;
       transformGetPos(transform, posBuf, ptr(0));
       var pos = {
         x: posBuf.readFloat(),
@@ -409,7 +414,7 @@ modules.aim = (function() {
   function readTransformForward(transform) {
     if (!transform || transform.isNull() || !transformGetForward) return null;
     try {
-      var forwardBuf = Memory.alloc(12);
+      var forwardBuf = aimForwardBuf;
       transformGetForward(forwardBuf, transform, ptr(0));
       var x = forwardBuf.readFloat();
       var y = forwardBuf.add(4).readFloat();
@@ -1072,14 +1077,17 @@ modules.aim = (function() {
     return getAimPoint(player, boneIndex);
   }
 
+  var physicsScratchCache = null;
   function createPhysicsScratch() {
+    if (physicsScratchCache) return physicsScratchCache;
     if (!physicsGetDefaultSceneInjected || !physicsInternalRaycastInjected) return null;
     try {
-      return {
+      physicsScratchCache = {
         scene: Memory.alloc(4),
         ray: Memory.alloc(24),
         hit: Memory.alloc(0x2C),
       };
+      return physicsScratchCache;
     } catch(e) {
       return null;
     }
@@ -1632,8 +1640,13 @@ modules.aim = (function() {
     }
   }
 
+  var aimTickLastAtMs = 0;
+  // P0：aimLoop 现在由主线程钩子 Brain.PushStateToUnityCamera.onLeave 驱动（不再用 setInterval 在 JS 线程写游戏状态）
   function aimLoop() {
     if (!enabled) return;
+    var _nowMs = Date.now();
+    if (_nowMs - aimTickLastAtMs < 16) return;
+    aimTickLastAtMs = _nowMs;
 
     if (!getMouseBtnFn) return;
     try {
@@ -1677,6 +1690,7 @@ modules.aim = (function() {
         onLeave: function() {
           cacheAimCamera(this.brain);
           runTargetScannerOnMainThread();
+          aimLoop();
         }
       });
       roomHooks.push(cameraHook);
@@ -1717,7 +1731,7 @@ modules.aim = (function() {
         return;
       }
       installRoomHooks(mod.base);
-      aimTimer = setInterval(aimLoop, 16);
+      // P0：不再用 setInterval(16ms) 在 Frida JS 线程写相机/后座；改为主线程钩子内按 16ms 节流
       enabled = true;
       sendLog('success', '自瞄', '已启用');
       sendStatus('aim', true);
@@ -1734,7 +1748,21 @@ modules.aim = (function() {
       sendStatus('aim', false);
     },
     isEnabled: function() { return enabled; },
-    setConfig: function(cfg) {},
+    setConfig: function(cfg) {
+      // 隐藏固定项（骨骼 / 平滑 / 距离 / FOV / 眼高）不接受运行时改写：
+      // manifest 只暴露一个开关，改这些值会直接改变命中判定与瞄准点，
+      // 由 test_aim_static.py 的隐藏项契约测试守住。这里只处理非隐藏项。
+      try {
+        if (!cfg) return { ok: false, reason: 'empty' };
+        var n;
+        function num(v) { var x = Number(v); return isFinite(x) ? x : null; }
+        if ((n = num(cfg.nearestDistanceBand)) !== null && n >= 0) CONFIG.nearestDistanceBand = n;
+        if (cfg.visibilityCheck !== undefined) CONFIG.visibilityCheck = !!cfg.visibilityCheck;
+        if ((n = num(cfg.aimKey)) !== null) CONFIG.aimKey = n | 0;
+        if ((n = num(cfg.targetScanIntervalMs)) !== null && n >= 0) CONFIG.targetScanIntervalMs = n;
+        return { ok: true, config: CONFIG };
+      } catch (e) { return { ok: false, reason: String(e) }; }
+    },
     getConfig: function() {
       return {
         aimOriginSource: aimCamera.valid ? 'camera' : 'player_eye',

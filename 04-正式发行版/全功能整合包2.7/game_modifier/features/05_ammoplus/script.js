@@ -1,4 +1,4 @@
-﻿// Local helpers for this feature only.
+// Local helpers for this feature only.
 var modules = {};
 var __localMaxLogsPerModule = 10;
 var __localModuleLogCounts = {};
@@ -95,8 +95,9 @@ modules.ammoplus = (function() {
       if (!mod) { sendBothLog('error', '快速换弹', '快速换弹暂未就绪，请重新连接游戏后重试', 'FastReload GameAssembly.dll not found'); return; }
 
       var base = mod.base;
-      getReloadSpeedAddr = base.add(0xB170E0);
-      isMyPlayer = new NativeFunction(base.add(0xB55FD0), 'bool', ['pointer']);
+      getReloadSpeedAddr = base.add(0xB170E0); // PlayerWeapons.get_ReloadSpeed（IDA 已确认）
+      originalGetReloadSpeed = new NativeFunction(getReloadSpeedAddr, 'float', ['pointer', 'pointer']);
+      isMyPlayer = new NativeFunction(base.add(0xB55FD0), 'bool', ['pointer', 'pointer']);
       reloadLogCount = 0;
 
       sendLog('info', '快速换弹', 'get_ReloadSpeed @ ' + getReloadSpeedAddr);
@@ -104,19 +105,20 @@ modules.ammoplus = (function() {
       Interceptor.replace(getReloadSpeedAddr, new NativeCallback(function(self) {
         try {
           var owner = self.add(0x8).readPointer();
-          if (!owner || owner.isNull()) return 4.0;
-          if (isMyPlayer(owner)) {
+          // P1：非本地玩家（BOT/其他玩家）回退游戏原实现，不再硬编码 1.0（会丢掉游戏自身加成）
+          if (!owner || owner.isNull()) return originalGetReloadSpeed(self, ptr(0));
+          if (isMyPlayer(owner, ptr(0))) {
             reloadLogCount++;
             if (reloadLogCount <= 5) {
               sendLog('info', '快速换弹', '本地玩家换弹加速 4.0x (#' + reloadLogCount + ')');
             }
             return 4.0;
           }
-          return 1.0;
+          return originalGetReloadSpeed(self, ptr(0));
         } catch(e) {
-          return 4.0;
+          try { return originalGetReloadSpeed(self, ptr(0)); } catch (e2) { return 1.0; }
         }
-      }, 'float', ['pointer']));
+      }, 'float', ['pointer', 'pointer']));
 
       enabled = true;
       sendLog('success', '快速换弹', '已启用 — 2x快速换弹');
@@ -126,6 +128,7 @@ modules.ammoplus = (function() {
       if (!enabled) return;
       if (getReloadSpeedAddr) { try { Interceptor.revert(getReloadSpeedAddr); } catch(e) {} }
       getReloadSpeedAddr = null;
+      originalGetReloadSpeed = null;
       isMyPlayer = null;
       enabled = false;
       sendLog('info', '快速换弹', '已禁用');

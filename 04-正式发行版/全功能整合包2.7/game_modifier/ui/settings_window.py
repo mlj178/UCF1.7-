@@ -276,8 +276,9 @@ class SettingsWindow(ctk.CTkToplevel):
         if os.path.exists(donate_image_path):
             try:
                 from PIL import Image
-                donate_image = Image.open(donate_image_path)
-                donate_image = donate_image.resize((225, 225), Image.LANCZOS)
+                # with 确保原图文件句柄在缩放完成后立即关闭（PIL 默认延迟打开文件）
+                with Image.open(donate_image_path) as source:
+                    donate_image = source.resize((225, 225), Image.LANCZOS)
                 donate_photo = ctk.CTkImage(light_image=donate_image, dark_image=donate_image,
                                              size=(225, 225))
                 donate_label = ctk.CTkLabel(about_frame, image=donate_photo, text="")

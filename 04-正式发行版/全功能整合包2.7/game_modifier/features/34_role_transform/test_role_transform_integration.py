@@ -203,6 +203,21 @@ class RoleTransformIntegrationTests(unittest.TestCase):
             : actionOrPayload && actionOrPayload.action;
         if (!VALID_ACTIONS[action]) {""",
         )
+        # P0：bot 变身调用的是 Mode_Nano4_Terminator 的私有方法，
+        # 只有 gameMode==6 时单例才是该类型实例，否则必须明确拒绝。
+        bot_gate = (
+            "        if (action === 'bot_hero' || action === 'bot_terminator') {\n"
+            "            // P0：bot 变身调用的是 Mode_Nano4_Terminator 的私有方法，"
+            "只有 gameMode==6 时单例才是该类型实例\n"
+            "            if (getGameMode() !== 6) {\n"
+            "                reject('bot transform requires Mode_Nano4_Terminator (gameMode 6)');\n"
+            "                return;\n"
+            "            }\n"
+            "        }\n"
+        )
+        anchor = "        var mode = Native.getModeNano4(ptr(0));\n"
+        self.assertEqual(1, expected.count(anchor))
+        expected = expected.replace(anchor, bot_gate + anchor)
 
         self.assertEqual(expected, SCRIPT.read_text(encoding="utf-8"))
 

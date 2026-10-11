@@ -11,27 +11,5 @@ class MoveSpeedFeature(PluginFeatureBase):
     slider_value = 3.0
     desc = '提升移动速度'
 
-    def __init__(self):
-        super().__init__()
-        self._current_speed = 3.0
-
-    def enable(self):
-        from core.frida_manager import FridaManager
-        fm = FridaManager.get_instance()
-        if fm.is_connected:
-            fm.send_toggle('movespeed', True)
-            fm.send_toggle('movespeed_speed', self._current_speed)
-
-    def disable(self):
-        from core.frida_manager import FridaManager
-        fm = FridaManager.get_instance()
-        if fm.is_connected:
-            fm.send_toggle('movespeed', False)
-
-    def on_slider_change(self, value):
-        self._current_speed = round(float(value), 1)
-        self.slider_value = self._current_speed
-        from core.frida_manager import FridaManager
-        fm = FridaManager.get_instance()
-        if fm.is_connected and self._enabled:
-            fm.send_toggle('movespeed_speed', self._current_speed)
+    # enable / disable / setConfig 走基类的插件 RPC（与 04_knife 同）。不要覆写成
+    # FridaManager.send_toggle：2.7 已无该方法，覆写会让开关静默失效。

@@ -96,6 +96,11 @@ class FridaManager:
         return None
 
     def connect(self, pid):
+        # P1：已连接时重复 connect 会覆盖 self._session，旧 session 泄漏
+        if self.is_connected:
+            if self._pid == pid:
+                return True, "already_connected"
+            self.disconnect()
         with self._lock:
             if self._connecting:
                 return False, "already_connecting"
@@ -141,11 +146,19 @@ class FridaManager:
             return True, "success"
 
         except Exception as e:
+            # P2：self._session/_ready 等状态在 emit 之前就已赋值；emit 抛异常时原实现
+            # 只 detach 而不清状态，会留下 is_connected 仍为 True 的半初始化僵尸连接。
+            with self._lock:
+                self._session = None
+                self._ready = False
+                self._pid = None
+                self._script_manager = None
+                self._rpc_client = None
             if session:
                 try:
                     session.detach()
-                except Exception:
-                    pass
+                except Exception as detach_error:
+                    log_to_file("warning", "系统", f"Frida session detach failed during connect rollback: {detach_error}")
             error_msg = str(e)
             if "0xc000010a" in error_msg or "STATUS_PROCESS_IS_TERMINATING" in error_msg:
                 return False, "process_terminating"

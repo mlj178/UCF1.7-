@@ -1,3 +1,4 @@
+import threading
 import tkinter as tk
 
 import customtkinter as ctk
@@ -117,12 +118,18 @@ def build_card(parent, manifest, row, col, colspan, callbacks, card_builder):
             return
         original = button.cget("text")
         button.configure(state="disabled", text=busy_text)
-        try:
-            callbacks["action"](feature_id, "trigger", {"action": payload_action})
-        except Exception as exc:
-            callbacks["log"](f"变身异常: {exc}")
-        finally:
-            button.after(400, lambda: button.configure(state="normal", text=original))
+
+        def worker():
+            # P2：callbacks["action"] 走 Frida exports_sync 同步 RPC，原先在 Tk 主线程
+            # 直接调用会阻塞事件循环；改为后台线程执行，恢复按钮的回调与原来一致。
+            try:
+                callbacks["action"](feature_id, "trigger", {"action": payload_action})
+            except Exception as exc:
+                callbacks["log"](f"变身异常: {exc}")
+            finally:
+                button.after(400, lambda: button.configure(state="normal", text=original))
+
+        threading.Thread(target=worker, daemon=True).start()
 
     local_button = ctk.CTkButton(
         frame,

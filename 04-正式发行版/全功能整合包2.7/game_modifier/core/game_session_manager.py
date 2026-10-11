@@ -188,8 +188,8 @@ class GameSessionManager:
             scope = config.get("esp_target_scope", "enemy_only")
             with self._lock:
                 self._esp_target_scope = "all_players" if scope == "all_players" else "enemy_only"
-        except Exception:
-            pass
+        except Exception as e:
+            log_to_file("debug", "系统", f"ESP target scope config read failed: {e}")
 
     def set_esp_target_scope(self, scope: str):
         """Apply the ESP target filter immediately when the DLL is connected."""
@@ -574,12 +574,12 @@ class GameSessionManager:
         """Persist desired states to file"""
         try:
             self._persistence_service.save_desired_states(self._desired_states)
-        except Exception:
-            pass
+        except Exception as e:
+            log_to_file("warning", "系统", f"Persist desired states failed: {e}")
     
     def _load_desired_states(self):
         """Load persisted desired states"""
         try:
             self._desired_states = self._persistence_service.load_desired_states()
-        except Exception:
-            pass
+        except Exception as e:
+            log_to_file("warning", "系统", f"Load desired states failed: {e}")

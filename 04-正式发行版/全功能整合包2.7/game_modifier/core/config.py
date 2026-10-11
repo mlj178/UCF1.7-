@@ -27,6 +27,24 @@ HOTKEYS_FILE = os.path.join(DATA_DIR, "hotkeys.json")
 SETTINGS_FILE = os.path.join(DATA_DIR, "settings.json")
 NANO4T_FILE = os.path.join(DATA_DIR, "Nano-4T-selector.json")
 
+
+def write_json_atomic(path, data, indent=2):
+    """原子写入 JSON 文件。
+
+    先写同目录下的临时文件并 fsync，再用 os.replace 覆盖目标文件。
+    这样即使写入过程中进程被强杀/断电，也不会留下被截断的半个 JSON
+    （原先直接 open(path, "w") 会先把文件清空，中断即丢失全部配置）。
+    """
+    directory = os.path.dirname(os.path.abspath(path))
+    if directory and not os.path.isdir(directory):
+        os.makedirs(directory, exist_ok=True)
+    tmp_path = f"{path}.tmp"
+    with open(tmp_path, "w", encoding="utf-8") as handle:
+        json.dump(data, handle, ensure_ascii=False, indent=indent)
+        handle.flush()
+        os.fsync(handle.fileno())
+    os.replace(tmp_path, path)
+
 HOTKEY_POSITIONS = ['ctrl+1', 'ctrl+2', 'ctrl+3', 'ctrl+4', 'ctrl+5', 'f1', 'f2', 'alt+1', 'alt+2']
 
 HOTKEY_DISPLAY_NAMES = {
@@ -138,7 +156,15 @@ def _load_feature_manifests():
             continue
         try:
             manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-        except Exception:
+        except Exception as exc:
+            # core.log_manager 依赖本模块，只能延迟导入以避免循环导入。
+            try:
+                from core.log_manager import get_logger
+                get_logger("FeatureManifests").warning(
+                    "读取功能清单失败，该功能不会出现在界面中 %s: %s", manifest_path, exc
+                )
+            except Exception:
+                pass
             continue
         feature_id = manifest.get("feature_id")
         if feature_id:

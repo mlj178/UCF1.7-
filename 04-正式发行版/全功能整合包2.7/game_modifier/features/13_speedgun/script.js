@@ -336,6 +336,8 @@ modules.speedgun = (function() {
   // ===== ScopeSettleProbe（只读开镜稳定探测） =====
   // 该探测不写入候选字段；它仅在本地枪械第一次开火时，对可能承载开镜收束状态的
   // 武器、武器数据和 Recoil 对象做短时间序列采样，以便用实测结果确定后续修改目标。
+  var scopeSettleProbeEnabled = false; // P1：调试探针默认关闭（历史上会在定时器里持有裸指针、每发写日志）
+  var scopeRayLogLastAt = 0;
   var scopeSettleProbeRunId = 0;
   var scopeSettleProbeLastStartAt = 0;
   var scopeSettleProbeLastRecoil = null;
@@ -437,6 +439,7 @@ modules.speedgun = (function() {
   }
 
   function scheduleScopeSettleProbe(weapon, source, recoil) {
+    if (!scopeSettleProbeEnabled) return;
     var now = Date.now();
     if (!weapon || weapon.isNull() || (now - scopeSettleProbeLastStartAt) < 3000) return;
     scopeSettleProbeLastStartAt = now;
@@ -478,6 +481,7 @@ modules.speedgun = (function() {
   }
 
   function installScopeSettleZoomMethodHooks(mod) {
+    if (!scopeSettleProbeEnabled) return;
     try {
       var domainGetAddr = mod.findExportByName('il2cpp_domain_get');
       var assembliesGetAddr = mod.findExportByName('il2cpp_domain_get_assemblies');
@@ -553,6 +557,7 @@ modules.speedgun = (function() {
   // 计时字段，而是在本地玩家开火的最后一步将方向同步为当前镜头前向量。
   function cacheScopeCamera(brain) {
     try {
+      if (!enabled) return false;
       if (!brain || brain.isNull() || !brainGetOutputCameraFn || !componentGetTransformFn) return false;
       var camera = brainGetOutputCameraFn(brain, ptr(0));
       if (!camera || camera.isNull()) return false;
@@ -568,6 +573,11 @@ modules.speedgun = (function() {
   function readScopeCameraForward() {
     try {
       if (!scopeCameraTransform || scopeCameraTransform.isNull() || !transformGetForwardFn || !scopeRayDirectionBuffer) return null;
+      // P1：Transform 可能随相机销毁而失效，用 m_CachedPtr(+0x8) 验活，避免对已销毁对象调 native
+      try {
+        var _cached = scopeCameraTransform.add(0x8).readPointer();
+        if (!_cached || _cached.isNull()) { scopeCameraTransform = null; return null; }
+      } catch (_) { scopeCameraTransform = null; return null; }
       transformGetForwardFn(scopeRayDirectionBuffer, scopeCameraTransform, ptr(0));
       var x = scopeRayDirectionBuffer.readFloat();
       var y = scopeRayDirectionBuffer.add(4).readFloat();
@@ -930,6 +940,9 @@ modules.speedgun = (function() {
             var corrected = applyInstantScopeStability(this.retBuffer);
             var direction = readScopeRayDirection(this.retBuffer);
             if (!direction) return;
+            var _logNow = Date.now();
+            if (_logNow - scopeRayLogLastAt < 2000) return; // P1：每发日志限频
+            scopeRayLogLastAt = _logNow;
             sendLogFile('info', '射速', 'ScopeSettleProbe final_ray corrected=' + corrected + ' original=' + (originalDirection ? originalDirection.x.toFixed(6) + ',' + originalDirection.y.toFixed(6) + ',' + originalDirection.z.toFixed(6) : 'unavailable') + ' final=' + direction.x.toFixed(6) + ',' + direction.y.toFixed(6) + ',' + direction.z.toFixed(6));
           }
         }));

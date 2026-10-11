@@ -1,4 +1,5 @@
 import json
+import re
 import tempfile
 import unittest
 from pathlib import Path
@@ -81,6 +82,23 @@ class Feature3233IntegrationTests(unittest.TestCase):
         app_text = (PROJECT_DIR / "ui" / "app.py").read_text(encoding="utf-8")
         self.assertIn('control_type == "switch"', app_text)
         self.assertIn("handle.set(bool(config.get(key", app_text)
+
+    def test_feature_plugins_do_not_call_the_removed_frida_send_toggle(self):
+        """2.7 已删除 FridaManager.send_toggle：任何 feature.py 调用它都会变成静默空操作。"""
+        offenders = []
+        for path in sorted(FEATURES_DIR.glob("*/feature.py")):
+            text = path.read_text(encoding="utf-8")
+            if re.search(r"\.send_toggle\s*\(", text):
+                offenders.append(path.parent.name)
+        self.assertEqual(offenders, [], "开关必须走基类插件 RPC（plugin_call）")
+
+    def test_slider_features_use_base_toggle_rpc_without_overrides(self):
+        """开关/参数一律由 ActionRouter -> FeatureCommandService -> plugin_call 下发。"""
+        for feature_dir in ("04_knife", "06_movespeed", "07_range", "09_gravity", "20_timescale"):
+            text = (FEATURES_DIR / feature_dir / "feature.py").read_text(encoding="utf-8")
+            self.assertNotIn("def enable(", text, feature_dir)
+            self.assertNotIn("def disable(", text, feature_dir)
+            self.assertNotIn("def on_slider_change(", text, feature_dir)
 
     def test_action_router_forwards_local_payload_without_feature_service(self):
         profile_manifest = json.loads(
