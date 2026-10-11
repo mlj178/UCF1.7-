@@ -442,12 +442,29 @@
         }
     }
 
+    /*
+     * P0 修复（根因，务必保留）：
+     * 原先用 Process.findRangeByAddress 判断地址是否可读。
+     * 它在 Windows 上会枚举整个地址空间，实测单次 7~13ms，
+     * 被每秒一次的健康检查、每发枪的枪口校验、相机重解析
+     * 高频调用，吃掉主线程 8%~17%，
+     * 表现就是“每秒卡一下 / 每发枪卡一下”，
+     * 而且开的功能越多越慢（内存段越多，枚举越久）。
+     *
+     * 改为受保护的单字节读取：
+     *   地址可读             -> 读成功 -> true；
+     *   未映射/不可读/仅执行 -> 抛异常 -> false。
+     * Windows 上 Frida 用 ReadProcessMemory 实现读取，
+     * 非法地址只会失败，不会让进程崩溃
+     * （已实测 0x1 与 PAGE_NOACCESS 两种情况都只是可捕获异常）。
+     * 单次约 1us，与“存在可读内存段”语义等价。
+     */
     function isReadable(pointer) {
         if (isNull(pointer)) return false;
+
         try {
-            var range = Process.findRangeByAddress(pointer);
-            return range !== null &&
-                range.protection.indexOf('r') !== -1;
+            pointer.readU8();
+            return true;
         } catch (_) {
             return false;
         }
