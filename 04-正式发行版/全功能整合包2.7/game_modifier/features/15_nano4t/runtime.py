@@ -7,6 +7,14 @@ from ui.views.shell_view import apply_status_dot_style
 from .state import state
 
 
+def _attr_name(attr_id):
+    """P1：NANO4T_ATTRS 只有 0..19；下标越界时返回安全占位，避免 KeyError 打断事件处理。"""
+    try:
+        return NANO4T_ATTRS[int(attr_id)][0]
+    except Exception:
+        return "未知(%s)" % (attr_id,)
+
+
 class Nano4tRuntime:
     def __init__(self, context, selector):
         self._context = context
@@ -92,18 +100,17 @@ class Nano4tRuntime:
 
     def on_error(self, payload):
         state.ready = False
-        if state.log_errors:
-            state.log_errors = False
-            message = payload.get("msg", "")
-            if "未检测到游戏" in message:
-                self._context.log("⚠ [多人生化] 未检测到游戏进程")
-            elif "未进入多人生化模式" in message:
-                self._context.log("⚠ [多人生化] 检测到游戏，但尚未进入「多人生化模式」")
-                self._context.log("  请选择多人生化模式并进入房间")
-            elif "房间" in message:
-                self._context.log("⚠ [多人生化] 已在多人生化模式菜单，但尚未进入房间")
-            else:
-                self._context.log(f"❌ [多人生化] {message}")
+        # P1：原来用 state.log_errors 做开关，而它永远是 False → 所有错误提示都被丢弃
+        message = payload.get("msg", "")
+        if "未检测到游戏" in message:
+            self._context.log("⚠ [多人生化] 未检测到游戏进程")
+        elif "未进入多人生化模式" in message:
+            self._context.log("⚠ [多人生化] 检测到游戏，但尚未进入「多人生化模式」")
+            self._context.log("  请选择多人生化模式并进入房间")
+        elif "房间" in message:
+            self._context.log("⚠ [多人生化] 已在多人生化模式菜单，但尚未进入房间")
+        else:
+            self._context.log(f"❌ [多人生化] {message}")
         self._context.after(0, lambda: self.set_status("yellow", "未就绪"))
 
     def on_set(self, ghost_id, human_id):
@@ -111,8 +118,8 @@ class Nano4tRuntime:
         state.wanted_human = human_id
         state.activated = True
         self._context.log(
-            f"✅ [多人生化] 已锁定: {NANO4T_ATTRS[ghost_id][0]} + "
-            f"{NANO4T_ATTRS[human_id][0]}，下一回合生效"
+            f"✅ [多人生化] 已锁定: {_attr_name(ghost_id)} + "
+            f"{_attr_name(human_id)}，下一回合生效"
         )
         self._context.after(0, self.refresh_next_label)
         self._context.after(0, lambda: self.handles.nano4t_ghost_status_label.configure(text="[已激活]", text_color="#88ff88"))
@@ -122,7 +129,7 @@ class Nano4tRuntime:
         state.current_ghost = ghost_id
         state.current_human = human_id
         if ghost_id >= 0 and human_id >= 0:
-            text = f"当前回合: 👻 {NANO4T_ATTRS[ghost_id][0]}  |  🛡️ {NANO4T_ATTRS[human_id][0]}"
+            text = f"当前回合: 👻 {_attr_name(ghost_id)}  |  🛡️ {_attr_name(human_id)}"
         elif state.ready:
             text = "当前回合: 等待回合开始..."
         else:

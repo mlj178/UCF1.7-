@@ -1,3 +1,4 @@
+import inspect
 from pathlib import Path
 
 from core.config import FEATURES_DIR
@@ -6,6 +7,34 @@ from core.plugin.manifest_loader import ManifestLoader
 from core.plugin.module_loader import load_plugin_module
 from core.plugin.plugin_base import PluginFeatureBase
 from core.plugin.plugin_contract import PluginContract
+
+
+def _accepts_binding_args(feature_cls):
+    """判断插件类的 __init__ 是否接受 (manifest, rpc_client, config_manager)。"""
+    try:
+        signature = inspect.signature(feature_cls.__init__)
+    except (TypeError, ValueError):
+        return True
+    positional = 0
+    for name, parameter in signature.parameters.items():
+        if name == "self":
+            continue
+        if parameter.kind is inspect.Parameter.VAR_POSITIONAL:
+            return True
+        if parameter.kind in (
+            inspect.Parameter.POSITIONAL_ONLY,
+            inspect.Parameter.POSITIONAL_OR_KEYWORD,
+        ):
+            positional += 1
+    return positional >= 3
+
+
+def _manifest_order(feature):
+    """order 字段缺失或不是数字时退化为 0，避免 sorted() 抛 TypeError 中断启动。"""
+    try:
+        return float(feature.manifest.get("order", 0))
+    except (TypeError, ValueError):
+        return 0.0
 
 
 class PluginRegistry:
@@ -68,20 +97,21 @@ class PluginRegistry:
                 ),
                 PluginFeatureBase,
             )
-        try:
+        if _accepts_binding_args(feature_cls):
             return feature_cls(manifest, self.rpc_client, self.config_manager)
-        except TypeError:
-            feature = feature_cls()
-            feature.manifest = manifest
-            feature.rpc_client = self.rpc_client
-            feature.config_manager = self.config_manager
-            return feature
+        # 少数插件类只写 __init__(self)（内部再调 super().__init__()）。
+        # 这里补跑一次基类初始化，让 manifest / _config / rpc_client /
+        # config_manager 都被正确填上（原先只赋 manifest 等三个属性，
+        # 基类的 _config 与 feature_id 仍然是空的）。
+        feature = feature_cls()
+        PluginFeatureBase.__init__(feature, manifest, self.rpc_client, self.config_manager)
+        return feature
 
     def get(self, feature_id):
         return self._features.get(feature_id)
 
     def all(self):
-        return sorted(self._features.values(), key=lambda item: item.manifest.get("order", 0))
+        return sorted(self._features.values(), key=_manifest_order)
 
     def by_tab(self, tab_id):
         features = [
@@ -89,7 +119,7 @@ class PluginRegistry:
             for feature in self._features.values()
             if feature.manifest.get("tab") == tab_id
         ]
-        return sorted(features, key=lambda item: item.manifest.get("order", 0))
+        return sorted(features, key=_manifest_order)
 
     def enabled_features(self):
         return [feature for feature in self._features.values() if feature.enabled]

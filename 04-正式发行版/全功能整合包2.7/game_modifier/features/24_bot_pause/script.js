@@ -108,6 +108,170 @@
     }
   }
 
+  // ===== 卡死看门狗（2026-10 临时诊断，务必常开）=====
+  // 为什么需要它：游戏"停止响应"时进程里什么都不写了，日志上只留下"某一行之后突然没有下文"，
+  // 完全看不出卡在哪；Windows 的 AppHang 事件不带调用栈，WER/CrashDumps 里也没有 dump（已确认）。
+  //
+  // 做法（只用 Interceptor + JS 线程，实测可靠）：
+  //   1) ModeBase.Update 当每帧心跳 —— 主线程活着就一定会跑；
+  //   2) 在一批"可疑函数"上留面包屑（环形缓冲，最近 64 次：时间/函数/线程号）；
+  //   3) Frida JS 线程每秒巡检：超过 HANG_IDLE_MS 没有心跳 => 判定卡死，把面包屑倒进日志。
+  //      （JS 线程是独立的，主线程卡死它照样跑；这一点已用 probe_hang_watchdog.py 实测。）
+  // 为什么不用 Process.enumerateThreads().context 抓栈：实测在 32 位目标上拿到的是**别的线程
+  //   （或当前线程）的栈**，会把死循环线程漏掉 —— 宁可不给，也不给错的数据。
+  var HANG_IDLE_MS = 6000;
+
+  var watch = {
+    lastPulseAt: 0, pulses: 0, dumped: false, busy: false, timer: null,
+    hook: null, hooks: [], buf: [], seq: 0, lastAt: {}, inRoom: false
+  };
+
+  // 同一观测点的留痕限频（毫秒）。
+  // 上一轮实测踩过坑：WPN_Knife.Update 每帧都会被所有玩家的武器调用，限频 10ms 时它一个点
+  // 就把 64 条缓冲占满（窗口只剩 ~1s），别的信号全被挤掉。50ms（20 次/秒）足够看清"卡死前最后
+  // 一串动作"，缓冲窗口也放宽到 ~3s。
+  var WATCH_MIN_INTERVAL_MS = 50;
+
+  // 面包屑盯的函数（RVA = 地址 - GameAssembly 基址）：
+  //   il2cpp_resolve_icall 0x107960 ← 取自 时间加速 的实测日志 0x6c078960 - 0x6bf70000
+  //   PlayerWeapons.Remove/RemoveAll、GameManager.GiveWeapon ← 变身换武器（手雷模式也 replace 了它们）
+  //   Player.set_nanoRole ← 变身；CFAnimator.SetFloat / WPN_Knife.* ← 近战连招
+  var WATCH_TARGETS = [
+    ['il2cpp_resolve_icall', 0x107960],
+    ['PlayerWeapons.RemoveAll', 0xB15EB0],
+    ['PlayerWeapons.Remove', 0xB15FD0],
+    ['GameManager.GiveWeapon', 0xAFB390],
+    ['Player.set_nanoRole', 0xB56880],
+    ['CFAnimator.SetFloat', 0xB34E40],
+    ['WPN_Knife.OnKnifeAttackAnimEnd', 0xB64150],
+    ['WPN_Knife.PlayKnifeAttackAnim', 0xB642B0],
+    ['WPN_Knife.Update', 0xB64610],
+    ['Weapon.OnFireBtnPressed', 0xB6CDA0]
+  ];
+
+  function watchPulse() {
+    watch.lastPulseAt = Date.now();
+    watch.pulses++;
+  }
+
+  function sendWatchLog(message) {
+    try {
+      send({ type: 'log_file', level: 'warn', module: '卡死看门狗', message: message, audience: 'dev' });
+    } catch (_) {}
+  }
+
+  function noteBreadcrumb(name) {
+    try {
+      var now = Date.now();
+      if (now - (watch.lastAt[name] || 0) < WATCH_MIN_INTERVAL_MS) return;   // 限频
+      watch.lastAt[name] = now;
+      watch.buf.push({ t: now, n: name, tid: Process.getCurrentThreadId(), s: ++watch.seq });
+      if (watch.buf.length > 64) watch.buf.shift();
+    } catch (_) {}
+  }
+
+  function flushBreadcrumbs(idleMs) {
+    try {
+      if (!watch.buf.length) {
+        sendWatchLog('卡死前没有任何面包屑（可疑函数一个都没被调用过）');
+        return;
+      }
+      var first = watch.buf[0].t;
+      var last = watch.buf[watch.buf.length - 1];
+      var lines = [];
+      for (var i = 0; i < watch.buf.length; i++) {
+        var e = watch.buf[i];
+        lines.push('#' + e.s + ' +' + (e.t - first) + 'ms ' + e.n + ' tid' + e.tid);
+      }
+      for (var j = 0; j < lines.length; j += 4) {
+        sendWatchLog('面包屑[' + (Math.floor(j / 4) + 1) + ']: ' + lines.slice(j, j + 4).join(' | '));
+      }
+      sendWatchLog('最后一次面包屑 = ' + last.n + '，距今 ' + (Date.now() - last.t) + 'ms；主线程已静默 ' + idleMs + 'ms');
+    } catch (e) {
+      sendWatchLog('倒面包屑失败: ' + (e && e.message ? e.message : e));
+    }
+  }
+
+  function startHangWatchdog() {
+    if (watch.timer) return;
+    watch.timer = setInterval(function () {
+      try {
+        // 脚本加载时 GameAssembly 可能还没就绪：前几次巡检顺手补装（最多 5 次）
+        if ((!watch.hooks.length || !watch.hook) && (watch.hookAttempts || 0) < 5) {
+          watch.hookAttempts = (watch.hookAttempts || 0) + 1;
+          installWatchdogPulseHook();
+          installBreadcrumbHooks();
+        }
+        if (watch.busy || watch.dumped || !watch.lastPulseAt) return;
+        // ⚠ 只在"房间里"判定卡死：ModeBase.Update 只在**对局内**跑，回到大厅/结算时它天然不跑。
+        //   上一轮实测就吃过这个假警报：13:57:02 报了"静默 6981ms"，其实是 13:56:56 房间已销毁。
+        if (!watch.inRoom) return;
+        var idle = Date.now() - watch.lastPulseAt;
+        if (idle < HANG_IDLE_MS) return;
+        watch.busy = true;
+        watch.dumped = true;
+        sendWatchLog('!!! 主线程已经 ' + idle + 'ms 没跑过 ModeBase.Update（累计心跳 ' + watch.pulses
+          + ' 次）—— 判定卡死/死锁，倒出卡死前的面包屑');
+        flushBreadcrumbs(idle);
+        watch.busy = false;
+      } catch (_) {}
+    }, 1000);
+  }
+
+  // 面包屑钩子：与功能开关解耦，脚本加载即安装（关掉 bot_pause 也照样留痕）
+  function installBreadcrumbHooks() {
+    try {
+      var mod = getGameAssembly();
+      if (!mod) return 0;
+      var count = 0;
+      for (var i = 0; i < WATCH_TARGETS.length; i++) {
+        var name = WATCH_TARGETS[i][0];
+        var addr = mod.base.add(WATCH_TARGETS[i][1]);
+        try {
+          var range = Process.findRangeByAddress(addr);
+          if (!range || range.protection.indexOf('x') === -1) {
+            sendWatchLog('面包屑跳过（地址不可执行）: ' + name);
+            continue;
+          }
+          // 用工厂函数包一层，避免闭包捕获循环变量导致所有面包屑都变成最后一个名字
+          (function (label, target) {
+            watch.hooks.push(Interceptor.attach(target, {
+              onEnter: function () { noteBreadcrumb(label); }
+            }));
+          })(name, addr);
+          count += 1;
+        } catch (e) {
+          sendWatchLog('面包屑安装失败 ' + name + ': ' + (e && e.message ? e.message : e));
+        }
+      }
+      sendWatchLog('面包屑已安装 ' + count + '/' + WATCH_TARGETS.length + ' 个观测点');
+      return count;
+    } catch (e) {
+      sendWatchLog('面包屑安装整体失败: ' + (e && e.message ? e.message : e));
+      return 0;
+    }
+  }
+
+  // 看门狗自己的心跳钩子：**与功能开关解耦**（bot_pause 关掉、hooks 被 detach 之后也要能抓到卡死）
+  function installWatchdogPulseHook() {
+    if (watch.hook) return true;
+    try {
+      var mod = getGameAssembly();
+      if (!mod) {
+        sendWatchLog('看门狗心跳钩子暂时装不上（GameAssembly 未就绪），巡检时会重试');
+        return false;
+      }
+      watch.hook = Interceptor.attach(mod.base.add(RVA.ModeBase_Update), {
+        onEnter: function () { watchPulse(); }
+      });
+      sendWatchLog('看门狗已就绪：心跳=ModeBase.Update，超时阈值=' + HANG_IDLE_MS + 'ms');
+      return true;
+    } catch (e) {
+      sendWatchLog('看门狗心跳钩子安装失败: ' + (e && e.message ? e.message : e));
+      return false;
+    }
+  }
+
   function attachRoomHook(mod, name, rva, callbacks) {
     var addr = mod.base.add(rva);
     if (!isExecutable(addr)) {
@@ -125,9 +289,16 @@
   }
 
   function triggerRoomReadyApply(reason, force) {
+    // 对局内：ModeBase.Update 只在房间/对局内跑，所以只要它还在被调用，就说明在看门狗的有效区间内
+    if (!watch.inRoom) {
+      watch.inRoom = true;
+      watch.dumped = false;        // 新的一局允许再报一次卡死
+    }
     if (!state.enabled) return;
     var now = Date.now();
-    if (!force && state.applied && !state.pendingApply && now - state.lastRoomReadyApplyAt < 1000) return;
+    // P1：失败态（pendingApply=true）原来会绕过限频，导致 ModeBase.Update / Bot.Update 每帧都跑完整解析链；统一最小间隔
+    var minInterval = (state.applied && !state.pendingApply) ? 1000 : 500;
+    if (!force && now - state.lastRoomReadyApplyAt < minInterval) return;
     state.lastRoomReadyApplyAt = now;
     var result = applyEnabledState(reason || 'room_ready_hook');
     if (result.ok) {
@@ -145,6 +316,9 @@
     state.pendingApply = !!state.enabled;
     state.lastApplyReason = reason || 'room_destroyed';
     state.lastRoomReadyApplyAt = 0;
+    watch.inRoom = false;          // 离开对局后不要再判定"主线程卡死"（ModeBase.Update 本来就不跑）
+    watch.lastPulseAt = 0;
+    watch.dumped = false;
     if (state.enabled) startRoomReadyRetry(reason || 'room_destroyed');
   }
 
@@ -217,6 +391,12 @@
         return;
       }
       state.retryCount += 1;
+      // P1：重试上限（约 5 分钟），避免无休止重试
+      if (state.retryCount > 600) {
+        sendLog('warn', 'room-ready retry 次数超限，已停止重试');
+        clearRoomReadyRetry();
+        return;
+      }
       var result = applyEnabledState('room_ready_retry');
       if (result.ok) {
         sendLog('info', 'room-ready retry applied Bot.stopAllBot = true');
@@ -497,10 +677,16 @@
       return result;
     },
 
-    dispose: function () {
-      return this.cleanup();
+    dispose: function (payload) {
+      // P1：原来依赖 this=exports，直接调用时 this 是 undefined 会 TypeError
+      return rpc.exports.cleanup(payload);
     }
   };
 
   sendLog('info', 'script loaded; no runtime metadata API; pointerSize=' + Process.pointerSize);
+
+  // 脚本一加载就启动看门狗（不依赖功能是否开启），游戏卡死时它会倒出面包屑
+  startHangWatchdog();
+  installWatchdogPulseHook();
+  installBreadcrumbHooks();
 })();

@@ -1,4 +1,5 @@
 import json
+import threading
 import time
 from pathlib import Path
 
@@ -23,6 +24,7 @@ class ScriptManager:
         self._logger = logger or get_logger("PluginScript")
         self._message_handler = message_handler
         self._scripts = {}
+        self._lock = threading.RLock()
         self._last_rpc_missing_log_at = {}
         self._log_throttle_seconds = 3.0
 
@@ -36,23 +38,27 @@ class ScriptManager:
         return plugin_dir / script_name
 
     def load(self, feature_id):
-        if feature_id in self._scripts:
-            return self._scripts[feature_id]
-        if not self.session_manager or not self.session_manager.session:
-            raise RuntimeError("frida session is not attached")
+        # P2：同一 feature_id 可能被 UI 线程与功能后台线程同时 load，原实现无同步，
+        # 会重复 create_script/load（重复 Hook，且先创建的句柄失去引用泄漏）。这里串行化加载。
+        with self._lock:
+            if feature_id in self._scripts:
+                return self._scripts[feature_id]
+            if not self.session_manager or not self.session_manager.session:
+                raise RuntimeError("frida session is not attached")
 
-        script_path = self._script_path(feature_id)
-        with script_path.open("r", encoding="utf-8") as handle:
-            js_code = handle.read()
-        script = self.session_manager.session.create_script(js_code)
-        if self._message_handler:
-            script.on("message", self._message_handler)
-        script.load()
-        self._scripts[feature_id] = script
-        return script
+            script_path = self._script_path(feature_id)
+            with script_path.open("r", encoding="utf-8") as handle:
+                js_code = handle.read()
+            script = self.session_manager.session.create_script(js_code)
+            if self._message_handler:
+                script.on("message", self._message_handler)
+            script.load()
+            self._scripts[feature_id] = script
+            return script
 
     def unload(self, feature_id):
-        script = self._scripts.pop(feature_id, None)
+        with self._lock:
+            script = self._scripts.pop(feature_id, None)
         if not script:
             return
         try:
@@ -84,6 +90,10 @@ class ScriptManager:
                 if self._is_missing_rpc_method_error(exc):
                     missing_errors.append(f"{candidate}: {exc}")
                     continue
+                if self._is_script_destroyed_error(exc):
+                    # P1：脚本已被销毁时原实现仍把旧句柄留在 _scripts 里，之后每次调用都失败。
+                    # 这里丢弃句柄，下次 call() 会自动 load() 重建。
+                    self._invalidate(feature_id, script)
                 raise
             if isinstance(result, str):
                 try:
@@ -100,6 +110,17 @@ class ScriptManager:
             message = f"{message}, missing_errors={missing_errors}"
         self._log_missing_rpc(feature_id, action, message)
         raise AttributeError(message)
+
+    def _invalidate(self, feature_id, script):
+        with self._lock:
+            self._scripts.pop(feature_id, None)
+        try:
+            script.unload()
+        except Exception as exc:
+            self._logger.debug(f"failed to unload destroyed plugin script {feature_id}: {exc}")
+        self._logger.warning(
+            f"plugin script {feature_id} was destroyed; handle dropped, will reload on next call"
+        )
 
     def cleanup_all(self, reason):
         for feature_id in list(self._scripts.keys()):

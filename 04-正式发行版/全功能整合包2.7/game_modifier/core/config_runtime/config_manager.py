@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from core.config import DATA_DIR
+from core.config import DATA_DIR, write_json_atomic
 from core.log_manager import get_logger
 
 
@@ -35,8 +35,7 @@ class ConfigManager:
             return {}
 
     def _write_user(self):
-        with self.user_path.open("w", encoding="utf-8") as handle:
-            json.dump(self._user, handle, ensure_ascii=False, indent=2)
+        write_json_atomic(self.user_path, self._user)
 
     def get(self, feature_id, default=None):
         merged = {}

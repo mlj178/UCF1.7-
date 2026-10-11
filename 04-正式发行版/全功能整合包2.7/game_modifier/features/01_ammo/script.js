@@ -140,7 +140,8 @@ modules.ammo = (function() {
     // 路径2：兜底尝试 Weapon/PlayerWeapons 常见 owner 字段。
     try {
       if (!isMyPlayer || !isReadablePtr(weaponPtr)) return false;
-      var owner = weaponPtr.add(0x8).readPointer();
+      // Weapon : CFAnimator : Model；owner 是 Model.owner(+0x30)。Weapon 自身字段从 0x68 开始，+0x8 不是 owner
+      var owner = weaponPtr.add(0x30).readPointer();
       if (owner && !owner.isNull() && isReadablePtr(owner)) {
         return !!isMyPlayer(owner, ptr(0));
       }

@@ -443,7 +443,7 @@
                 onLeave: function (retval) {
                     if (!this.track) return;
                     Runtime.stats.checkWallHits += 1;
-                    Runtime.stats.lastCheckWallResult = retval.toInt32() !== 0;
+                    Runtime.stats.lastCheckWallResult = (retval.toInt32() & 0xFF) !== 0; // P1：bool 只看 AL
                 }
             });
 

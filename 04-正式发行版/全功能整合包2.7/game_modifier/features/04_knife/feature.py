@@ -11,27 +11,6 @@ class KnifeFeature(PluginFeatureBase):
     slider_value = 5.0
     desc = '提升挥刀速度（人类+幽灵通用）'
 
-    def __init__(self):
-        super().__init__()
-        self._current_speed = 5.0
-
-    def enable(self):
-        from core.frida_manager import FridaManager
-        fm = FridaManager.get_instance()
-        if fm.is_connected:
-            fm.send_toggle('knife', True)
-            fm.send_toggle('knife_speed', self._current_speed)
-
-    def disable(self):
-        from core.frida_manager import FridaManager
-        fm = FridaManager.get_instance()
-        if fm.is_connected:
-            fm.send_toggle('knife', False)
-
-    def on_slider_change(self, value):
-        self._current_speed = round(float(value), 1)
-        self.slider_value = self._current_speed
-        from core.frida_manager import FridaManager
-        fm = FridaManager.get_instance()
-        if fm.is_connected and self._enabled:
-            fm.send_toggle('knife_speed', self._current_speed)
+    # enable / disable / setConfig 一律走基类的插件 RPC（ActionRouter -> FeatureCommandService
+    # -> plugin_call -> script.js 的 rpc.exports）。这里不要再用 FridaManager.send_toggle：
+    # 该方法在 2.7 已不存在，覆写后开关会抛 AttributeError，导致 UI 状态与游戏实际不一致。

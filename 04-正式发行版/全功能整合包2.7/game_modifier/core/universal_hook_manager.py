@@ -135,8 +135,8 @@ class UniversalHookManager:
                 with open(self._revision_file, 'r', encoding='utf-8') as f:
                     data = json.load(f)
                     return data.get('revision', 0)
-        except Exception:
-            pass
+        except Exception as e:
+            self._log("warning", f"Universal revision read failed: {e}")
         return 0
 
     def _save_revision(self):
@@ -145,8 +145,8 @@ class UniversalHookManager:
             os.makedirs(os.path.dirname(self._revision_file), exist_ok=True)
             with open(self._revision_file, 'w', encoding='utf-8') as f:
                 json.dump({'revision': self._revision}, f, ensure_ascii=False)
-        except Exception:
-            pass
+        except Exception as e:
+            self._log("warning", f"Universal revision write failed: {e}")
 
     @property
     def injected(self):
@@ -430,13 +430,26 @@ class UniversalHookManager:
             return False
 
         self._log("info", "正在注入 Universal Hook...")
-        result = subprocess.run(
-            [inject_exe, str(pid), self._dll_path],
-            capture_output=True,
-            text=True,
-            timeout=15,
-            creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0x08000000
-        )
+        try:
+            # inject.exe 是 .NET 控制台程序，按系统控制台代码页（中文 Windows 为 cp936/GBK）
+            # 输出中文标记；此处保持 text=True 的原生解码，只加 errors="replace" 兜底，
+            # 避免异常字节序列抛 UnicodeDecodeError（不能改成 utf-8，否则中文标记会乱码）。
+            result = subprocess.run(
+                [inject_exe, str(pid), self._dll_path],
+                capture_output=True,
+                text=True,
+                errors="replace",
+                timeout=15,
+                creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0x08000000
+            )
+        except subprocess.TimeoutExpired:
+            # P2：注入挂起时 subprocess.run 会抛 TimeoutExpired；原实现未捕获，
+            # 会冒泡到会话状态机并被记成笼统的 "State machine error"（子进程已由 subprocess.run 终止）。
+            self._log("error", "Universal Hook 注入超时")
+            return False
+        except OSError as e:
+            self._log("error", f"Universal Hook 注入进程启动失败: {e}")
+            return False
 
         # Check return code first
         if result.returncode != 0:
@@ -502,11 +515,13 @@ class UniversalHookManager:
             timeout_ms,
         )
 
-        buffer = ctypes.create_string_buffer(4096)
+        # P1：原来固定 4096 字节，状态/诊断响应更长时会截断或报 ERROR_MORE_DATA
+        read_size = 65536
+        buffer = ctypes.create_string_buffer(read_size)
         read_bytes = self._overlapped_io(
             kernel32.ReadFile,
             buffer,
-            4096,
+            read_size,
             "read",
             timeout_ms,
         )

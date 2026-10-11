@@ -19,7 +19,11 @@ class PluginFeature(PluginFeatureBase):
     def load_profile(self, payload=None):
         payload = payload or {}
         path = Path(payload.get("path") or get_default_player_data_path())
-        profile = load_profile(path)
+        # P1：原来没有任何异常保护，PlayerData.dat 编码异常/字段非整数会直接抛到 Tk 界面构建流程
+        try:
+            profile = load_profile(path)
+        except Exception as exc:
+            return {"ok": False, "path": str(path), "profile": None, "message": f"读取失败: {exc}"}
         if profile is None:
             return {"ok": True, "path": str(path), "profile": None, "message": "没有读取到 [Player]"}
         return {

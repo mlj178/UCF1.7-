@@ -1,3 +1,5 @@
+import threading
+
 from .state import state
 
 
@@ -10,10 +12,17 @@ class BattleRoundController:
         return state.handles
 
     def sync_to_game_on_connect(self):
-        self._context.feature_service.call_action("battle_round", "battleRoundGetStatus", {})
-        if state.enabled:
-            self._context.feature_service.enable("battle_round")
+        # P2：Frida exports_sync 是同步 RPC（首次 enable 还可能触发脚本注入 /
+        # script.load），原先在 Tk 主线程执行会卡住事件循环。这里只把 RPC 放后台，
+        # UI 刷新仍留在主线程，对外行为不变。
         self.update_button_state()
+
+        def worker():
+            self._context.feature_service.call_action("battle_round", "battleRoundGetStatus", {})
+            if state.enabled:
+                self._context.feature_service.enable("battle_round")
+
+        threading.Thread(target=worker, daemon=True).start()
 
     def on_disconnected(self):
         state.active = False
@@ -27,10 +36,14 @@ class BattleRoundController:
         self._context.config_manager.set("battle_round", {"enabled": state.enabled})
 
         if self._context.is_connected():
-            if current:
-                self._context.feature_service.enable("battle_round")
-            else:
-                self._context.feature_service.disable("battle_round")
+            # P2：enable/disable 是同步 RPC，放后台线程执行，避免卡住 UI 线程。
+            def worker():
+                if current:
+                    self._context.feature_service.enable("battle_round")
+                else:
+                    self._context.feature_service.disable("battle_round")
+
+            threading.Thread(target=worker, daemon=True).start()
 
         if current:
             if not self._context.is_connected():

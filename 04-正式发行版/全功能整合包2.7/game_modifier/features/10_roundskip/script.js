@@ -1,4 +1,4 @@
-﻿// Local helpers for this feature only.
+// Local helpers for this feature only.
 var modules = {};
 var __localMaxLogsPerModule = 10;
 var __localModuleLogCounts = {};

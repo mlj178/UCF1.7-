@@ -212,7 +212,13 @@
   function isLocalPlayer(player) {
     try {
       if (!player || player.isNull()) return false;
-      if (!state.cachedMyPlayer || state.cachedMyPlayer.isNull()) {
+      // P1：每次都用 GameManager.myPlayer 静态字段重取，避免缓存跨回合/换人后指向旧 Player
+      var current = getMyPlayer();
+      if (current && !current.isNull()) {
+        if (!state.cachedMyPlayer || state.cachedMyPlayer.isNull() || !state.cachedMyPlayer.equals(current)) {
+          refreshLocalPlayerCache();
+        }
+      } else if (!state.cachedMyPlayer || state.cachedMyPlayer.isNull()) {
         refreshLocalPlayerCache();
       }
       return !!(state.cachedMyPlayer && !state.cachedMyPlayer.isNull() && player.equals(state.cachedMyPlayer));
@@ -224,7 +230,11 @@
   function isLocalPlayerNanoGhost() {
     if (!initNativeFunctions()) return false;
 
-    if (!state.cachedMyPlayer || state.cachedMyPlayer.isNull()) {
+    // P1：先按静态字段刷新，避免对已销毁的旧 Player 调 get_isNanoGhost
+    var current = getMyPlayer();
+    if (current && !current.isNull() && (!state.cachedMyPlayer || state.cachedMyPlayer.isNull() || !state.cachedMyPlayer.equals(current))) {
+      refreshLocalPlayerCache();
+    } else if (!state.cachedMyPlayer || state.cachedMyPlayer.isNull()) {
       refreshLocalPlayerCache();
     }
 
@@ -242,15 +252,28 @@
   function rememberLocalWeaponBag(weaponBag) {
     try {
       if (!weaponBag || weaponBag.isNull()) return;
-      state.localWeaponBagKeys[weaponBag.toString()] = true;
+      state.cachedWeaponBag = weaponBag;
     } catch(e) {}
+  }
+
+  function resolveLocalWeaponBag() {
+    // 每帧用 GameManager.myPlayer 现取本地背包指针，保证"随时可用"，不依赖历史缓存
+    try {
+      var my = getMyPlayer();
+      if (my && !my.isNull()) {
+        state.cachedMyPlayer = my;
+        var bag = readPtr(my.add(OFF.Player_weaponBag));
+        if (bag && !bag.isNull()) { state.cachedWeaponBag = bag; return bag; }
+      }
+    } catch (e) {}
+    return state.cachedWeaponBag;
   }
 
   function isKnownLocalWeaponBag(weaponBag) {
     try {
       if (!weaponBag || weaponBag.isNull()) return false;
-      if (state.cachedWeaponBag && !state.cachedWeaponBag.isNull() && weaponBag.equals(state.cachedWeaponBag)) return true;
-      return !!state.localWeaponBagKeys[weaponBag.toString()];
+      // P1：只与当前本地背包指针比较；原来的"地址字符串集合"在地址被复用后会误判并写坏无关对象
+      return !!(state.cachedWeaponBag && !state.cachedWeaponBag.isNull() && weaponBag.equals(state.cachedWeaponBag));
     } catch(e) {
       return false;
     }
@@ -313,35 +336,38 @@
       state.selectHook = Interceptor.attach(hookAddr, {
         onEnter: function(args) {
           if (!state.enabled) return;
+          try {
+            state.selectHits++;
+            this._ubPlayer = args[0];
+            this._ubIndex = args[1].toInt32();
+            this._ubHandled = false;
 
-          state.selectHits++;
-          this._ubPlayer = args[0];
-          this._ubIndex = args[1].toInt32();
-          this._ubHandled = false;
-
-          if (!isLocalPlayer(this._ubPlayer)) {
-            return;
-          }
-
-          if (isLocalPlayerNanoGhost()) {
-            state.ghostSkips++;
-            if (state.ghostSkips <= 3) {
-              log('info', 'IDENTITY', '本地玩家为生化幽灵，无限背包不生效');
+            if (!isLocalPlayer(this._ubPlayer)) {
+              return;
             }
-            return;
+
+            if (isLocalPlayerNanoGhost()) {
+              state.ghostSkips++;
+              if (state.ghostSkips <= 3) {
+                log('info', 'IDENTITY', '本地玩家为生化幽灵，无限背包不生效');
+              }
+              return;
+            }
+
+            this._ubBag = readPtr(this._ubPlayer.add(OFF.Player_weaponBag));
+
+            if (!this._ubBag) {
+              log('warn', 'BAG', 'SelectWeaponBag player=' + this._ubPlayer + ' weaponBag=null');
+              return;
+            }
+
+            this._ubHandled = true;
+            rememberLocalWeaponBag(this._ubBag);
+            var verbose = state.selectHits <= 20 || state.selectHits % 50 === 0;
+            clearWeaponBagLimits(this._ubBag, 'SelectWeaponBag index=' + this._ubIndex, verbose);
+          } catch(e) {
+            state.lastError = 'SelectWeaponBag onEnter 异常: ' + (e && e.message ? e.message : e);
           }
-
-          this._ubBag = readPtr(this._ubPlayer.add(OFF.Player_weaponBag));
-
-          if (!this._ubBag) {
-            log('warn', 'BAG', 'SelectWeaponBag player=' + this._ubPlayer + ' weaponBag=null');
-            return;
-          }
-
-          this._ubHandled = true;
-          rememberLocalWeaponBag(this._ubBag);
-          var verbose = state.selectHits <= 20 || state.selectHits % 50 === 0;
-          clearWeaponBagLimits(this._ubBag, 'SelectWeaponBag index=' + this._ubIndex, verbose);
         },
         onLeave: function(retval) {
           if (!state.enabled) return;
@@ -397,20 +423,25 @@
       state.hudUpdateHook = Interceptor.attach(hookAddr, {
         onEnter: function(args) {
           if (!state.enabled) return;
+          try {
+            if (isLocalPlayerNanoGhost()) {
+              state.ghostSkips++;
+              return;
+            }
 
-          if (isLocalPlayerNanoGhost()) {
-            state.ghostSkips++;
-            return;
+            state.hudHits++;
+            var hudBag = args[0];
+            var weaponBag = readPtr(hudBag.add(OFF.HudBag_bag));
+            if (!weaponBag) return;
+            // 恢复每帧补丁（否则超过范围会一闪一闪）；用现取的本地背包指针比对
+            var myBag = resolveLocalWeaponBag();
+            if (!myBag || !weaponBag.equals(myBag)) return;
+
+            var verbose = state.hudHits <= 5 || state.hudHits % 600 === 0;
+            clearWeaponBagLimits(weaponBag, 'HUD_Bag.Update', verbose);
+          } catch(e) {
+            state.lastError = 'HUD_Bag.Update onEnter 异常: ' + (e && e.message ? e.message : e);
           }
-
-          state.hudHits++;
-          var hudBag = args[0];
-          var weaponBag = readPtr(hudBag.add(OFF.HudBag_bag));
-          if (!weaponBag) return;
-          if (!isKnownLocalWeaponBag(weaponBag)) return;
-
-          var verbose = state.hudHits <= 5 || state.hudHits % 600 === 0;
-          clearWeaponBagLimits(weaponBag, 'HUD_Bag.Update', verbose);
         }
       });
 

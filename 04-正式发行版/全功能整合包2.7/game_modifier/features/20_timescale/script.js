@@ -1,4 +1,4 @@
-﻿// Local helpers for this feature only.
+// Local helpers for this feature only.
 var modules = {};
 var __localMaxLogsPerModule = 10;
 var __localModuleLogCounts = {};
@@ -617,14 +617,10 @@ modules.timescale = (function() {
   }
 
   function restoreNormalTimeScaleNow() {
+    // P0：RPC 线程不得调用 UnityPlayer 引擎函数；只置待恢复值，由 ModeBase.Update 主线程钩子执行
     _pendingSpeed = 1.0;
     _nextRetryAt = 0;
-    if (!initTimeScale() || !safeWriteTimeScale(1.0)) {
-      sendDevLog('warn', '时间加速', '立即恢复1.0x失败，将继续等待主线程恢复');
-      return false;
-    }
-    markApplySuccess(Date.now(), 1.0);
-    sendDevLog('success', '时间加速', '已立即恢复1.0x');
+    sendDevLog('info', '时间加速', '已请求恢复1.0x（等待主线程执行）');
     return true;
   }
 

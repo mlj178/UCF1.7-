@@ -56,16 +56,23 @@ class PlayerProfileServiceTests(unittest.TestCase):
         self.assertIn("VipLevel=9\n", updated)
         self.assertIn("[Inven]\nDefaultBag=4\nBag1=915,1761\n", updated)
 
-    def test_save_profile_does_not_write_backup(self):
+    def test_save_profile_writes_incremental_backup(self):
+        # P1 起保存前会做递增备份（独立版有、整合版曾丢失），
+        # 本用例随之更新为校验备份契约：.bak 保存旧内容，重复保存递增为 .bak.1。
         with tempfile.TemporaryDirectory() as temp_dir:
             path = Path(temp_dir) / "PlayerData.dat"
             path.write_text("[Inven]\nDefaultBag=4\n", encoding="utf-8")
 
             result = save_profile(path, PlayerProfile(nickname="内個", level=30, vip_level=2))
 
-            self.assertFalse(path.with_suffix(path.suffix + ".bak").exists())
-            self.assertFalse(path.with_name(path.name + ".bak.1").exists())
+            self.assertFalse(result.created_file)
+            backup = path.with_suffix(path.suffix + ".bak")
+            self.assertTrue(backup.exists())
+            self.assertEqual("[Inven]\nDefaultBag=4\n", backup.read_text(encoding="utf-8"))
             self.assertIn("[Player]\nNickName=内個\nLevel=30\nVipLevel=2\n", path.read_text(encoding="utf-8"))
+
+            save_profile(path, PlayerProfile(nickname="再改", level=31, vip_level=3))
+            self.assertTrue(path.with_name(path.name + ".bak.1").exists())
 
 
 if __name__ == "__main__":

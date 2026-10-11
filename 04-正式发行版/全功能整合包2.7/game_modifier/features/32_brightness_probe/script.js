@@ -44,6 +44,7 @@
     var CALL_CONV = "mscdecl";
 
     var RVA = {
+        ModeBase_Update: 0x00AF6A00,
         Camera_get_main: 0x00328310,
         CameraExtensions_GetUniversalAdditionalCameraData: 0x00490500,
         CameraExtensions_UpdateVolumeStack: 0x00490820,
@@ -251,10 +252,19 @@
                 ["pointer", "pointer"],
                 CALL_CONV
             );
-            native.methodInfoColorAdjustments = mod.base.add(RVA.MethodInfo_VolumeStack_GetComponent_ColorAdjustments);
-            native.methodInfoLiftGammaGain = mod.base.add(RVA.MethodInfo_VolumeStack_GetComponent_LiftGammaGain);
+            native.methodInfoColorAdjustments = mod.base.add(RVA.MethodInfo_VolumeStack_GetComponent_ColorAdjustments).readPointer();
+            native.methodInfoLiftGammaGain = mod.base.add(RVA.MethodInfo_VolumeStack_GetComponent_LiftGammaGain).readPointer();
+            if (isNull(native.methodInfoColorAdjustments) || isNull(native.methodInfoLiftGammaGain)) {
+                throw new Error('VolumeStack.GetComponent MethodInfo slot is null');
+            }
             native.ready = true;
             Runtime.initialized = true;
+            // P0：Unity Volume/相机相关的读写必须在游戏主线程执行，这里挂一次主线程排水钩子
+            if (!mainThreadHook) {
+                mainThreadHook = Interceptor.attach(mod.base.add(RVA.ModeBase_Update), {
+                    onEnter: function () { drainMainThreadOp(); }
+                });
+            }
             log("info", "native functions ready");
             return true;
         } catch (error) {
@@ -671,7 +681,48 @@
         }
     }
 
+    var pendingMainThreadOp = null;
+    var mainThreadHook = null;
+
+    function enqueueMainThreadOp(op) {
+        // 同一时刻只保留最后一个请求，避免连点堆积
+        pendingMainThreadOp = op;
+        log("info", "已排入主线程: " + op.kind);
+        return true;
+    }
+
+    function drainMainThreadOp() {
+        var op = pendingMainThreadOp;
+        if (!op) return;
+        pendingMainThreadOp = null;
+        try {
+            if (op.kind === 'apply') {
+                applyBrightnessNow(op.value);
+            } else {
+                resetBrightnessNow();
+                if (op.thenResetRuntime) resetRuntime('main_thread_reset');
+                if (op.thenCleanup) {
+                    Runtime.initialized = false;
+                    native.ready = false;
+                    try { if (mainThreadHook) mainThreadHook.detach(); } catch (e) {}
+                    mainThreadHook = null;
+                }
+            }
+        } catch (e) {
+            setError('main-thread brightness op failed', e);
+        }
+    }
+
     function applyBrightness(value) {
+        // P0：RPC 线程不直接调用 Unity API/写 VolumeParameter，改为排队给主线程钩子
+        return enqueueMainThreadOp({ kind: 'apply', value: value }) ? buildStatus(Runtime.lastStatus || {}) : buildStatus({ ok: false, reason: 'enqueue failed' });
+    }
+
+    function resetBrightness() {
+        return enqueueMainThreadOp({ kind: 'reset' }) ? buildStatus(Runtime.lastStatus || {}) : buildStatus({ ok: false, reason: 'enqueue failed' });
+    }
+
+    function applyBrightnessNow(value) {
         Runtime.stats.applyCount += 1;
         var exposure = Number(value);
         if (!isFinite(exposure)) exposure = Number(Runtime.config.exposure);
@@ -713,7 +764,7 @@
         }
     }
 
-    function resetBrightness() {
+    function resetBrightnessNow() {
         Runtime.stats.resetCount += 1;
         var restored = [];
 
@@ -756,12 +807,14 @@
     function cleanupFeature() {
         Runtime.enabled = false;
         Runtime.stats.cleanupCount += 1;
-        try {
-            resetBrightness();
-        } catch (e) {}
-        resetRuntime("cleanup");
-        Runtime.initialized = false;
-        native.ready = false;
+        if (mainThreadHook) {
+            enqueueMainThreadOp({ kind: 'reset', thenCleanup: true });
+        } else {
+            try { resetBrightnessNow(); } catch (e) {}
+            resetRuntime("cleanup");
+            Runtime.initialized = false;
+            native.ready = false;
+        }
         log("info", "cleanup done");
         return buildStatus(Runtime.lastStatus || {});
     }
@@ -796,9 +849,9 @@
 
         disable() {
             Runtime.enabled = false;
-            resetBrightness();
-            resetRuntime("disable");
-            log("info", "disabled");
+            // P0：恢复也走主线程；resetRuntime 由排水钩子在恢复完成后调用，避免提前清掉 originals
+            enqueueMainThreadOp({ kind: 'reset', thenResetRuntime: true });
+            log("info", "disabled（恢复已排入主线程）");
             return buildStatus(Runtime.lastStatus || {});
         },
 

@@ -1,4 +1,4 @@
-﻿// Local helpers for this feature only.
+// Local helpers for this feature only.
 var modules = {};
 var __localMaxLogsPerModule = 10;
 var __localModuleLogCounts = {};
@@ -102,7 +102,7 @@ modules.range = (function() {
       if (!mod) { sendBothLog('error', '剑气化丝', '剑气化丝暂未就绪，请重新连接游戏后重试', 'KnifeRange GameAssembly.dll not found'); return; }
 
       var base = mod.base;
-      isMyPlayerFn = new NativeFunction(base.add(0xB55FD0), 'bool', ['pointer']);
+      isMyPlayerFn = new NativeFunction(base.add(0xB55FD0), 'bool', ['pointer', 'pointer']);
       myPlayer = null;
       myPlayerFound = false;
       callCount = 0;
@@ -117,7 +117,7 @@ modules.range = (function() {
             if (myPlayerFound) return;
             try {
               var owner = this._self.add(0x8).readPointer();
-              if (owner && !owner.isNull() && isMyPlayerFn(owner)) {
+              if (owner && !owner.isNull() && isMyPlayerFn(owner, ptr(0))) {
                 myPlayer = owner;
                 myPlayerFound = true;
                 sendLog('info', '剑气化丝', '捕获本地玩家 @ ' + myPlayer);

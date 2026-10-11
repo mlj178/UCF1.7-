@@ -1,0 +1,82 @@
+{
+  "feature_id": "27_game_mode_override",
+  "canonical_id": "game_mode_override",
+  "display_name": "游戏模式切换",
+  "category": "other",
+  "tab": "other_tab",
+  "tab_title": "其他",
+  "tab_order": 30,
+  "order": 80,
+  "desc": "切换游戏模式，请在游戏房间创建前应用。",
+  "script": "script.js",
+  "runtime": {
+    "type": "plugin_script"
+  },
+  "layout": {
+    "card_type": "simple",
+    "columnspan": 1,
+    "title_color": "#fbbf24"
+  },
+  "controls": [
+    {
+      "type": "switch",
+      "action": "enable"
+    },
+    {
+      "type": "select",
+      "action": "setConfig",
+      "key": "mode_key",
+      "label": "目标模式",
+      "default": "team_death",
+      "values": [
+        "team_death",
+        "special",
+        "nano4",
+        "nano6",
+        "nano4_terminator",
+        "sniper",
+        "handgun"
+      ],
+      "display_values": {
+        "team_death": "团队竞技",
+        "special": "刀战",
+        "nano4": "生化4（普通生化）",
+        "nano6": "生化6（剑客模式）",
+        "nano4_terminator": "生化4终结者（多人生化）",
+        "sniper": "狙击战",
+        "handgun": "手枪战"
+      }
+    }
+  ],
+  "config": {
+    "enabled": false,
+    "mode_key": "team_death"
+  },
+  "rpc": [
+    "enable",
+    "disable",
+    "setConfig",
+    "set_config",
+    "setconfig",
+    "status",
+    "cleanup",
+    "dispose"
+  ],
+  "lifecycle": {
+    "cleanup": true,
+    "restore": false,
+    "requires_room_ready_reapply": false,
+    "room_ready_retry": false,
+    "room_ready_reapply_exempt_reason": "功能安装固定流程 Hook，模式覆盖发生在游戏开始流程命中时；不依赖当前房间内对象立即写入。"
+  },
+  "source": {
+    "runtime_script_js": "features/27_game_mode_override/script.js"
+  },
+  "ui_handles": {
+    "switch": "game_mode_override_switch",
+    "mode_key_select": "game_mode_override_mode_select"
+  },
+  "state": {
+    "sync_enabled_from_config": false
+  }
+}

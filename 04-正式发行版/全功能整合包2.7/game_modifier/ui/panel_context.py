@@ -15,6 +15,7 @@ class PanelContext:
         }
         self._log = app._log
         self._after = getattr(app, "_safe_after", app.after)
+        self._after_cancel = getattr(app, "after_cancel", lambda _timer_id: None)
         self._bind_target = app
         self._is_connected = lambda: bool(app._ready)
         self._is_enabled = lambda feature_id: bool(app._features.get(feature_id, False))
@@ -27,6 +28,13 @@ class PanelContext:
 
     def after(self, delay_ms, callback):
         return self._after(delay_ms, callback)
+
+    def after_cancel(self, timer_id):
+        # after() 在 mainloop 未就绪或应用已停止时返回 None（App._safe_after），
+        # 而 tkinter 的 after_cancel(None) 会抛 ValueError，这里直接短路
+        if not timer_id:
+            return None
+        return self._after_cancel(timer_id)
 
     def bind_handles(self, handles):
         bind_view_handles(self._bind_target, handles)
@@ -72,6 +80,9 @@ class FeaturePanelContext:
     def after(self, delay_ms, callback):
         return self._safe_context.after(delay_ms, callback)
 
+    def after_cancel(self, timer_id):
+        return self._safe_context.after_cancel(timer_id)
+
     def bind_handles(self, handles):
         return self._safe_context.bind_handles(handles)
 
@@ -86,9 +97,6 @@ class FeaturePanelContext:
 
     def is_enabled(self, feature_id=None):
         return self._safe_context.is_enabled(feature_id or self.feature_id)
-
-    def after(self, delay_ms, callback):
-        return self._safe_context.after(delay_ms, callback)
 
     def emit(self, event_name, **payload):
         return self._safe_context.emit(event_name, **payload)

@@ -1,4 +1,4 @@
-﻿// Local helpers for this special feature only.
+// Local helpers for this special feature only.
 var modules = {};
 var __localMaxLogsPerModule = 80;
 var __localModuleLogCounts = {};
@@ -435,7 +435,8 @@ modules.weapon_giver = (function() {
       // GiveWeapon(player, weaponId, false, autoSelect, NULL)
       var nativeStart = Date.now();
       sendDevLog('info', '武器赋予', 'GiveWeapon即将执行: weaponId=' + wpnId + ' select=' + selectInt);
-      var weapon = _giveWeaponFunc(myPlayer, wpnId, 0, selectInt, ptr(0));
+      // P1：原来第 3 个参数写死 0，UI 的"自动丢弃当前武器"选项被吞掉
+      var weapon = _giveWeaponFunc(myPlayer, wpnId, giveUpInt ? 1 : 0, selectInt, ptr(0));
       var nativeElapsed = Date.now() - nativeStart;
       _lastGiveWeaponCallAt = Date.now();
       if (nativeElapsed >= 30) {

@@ -1,4 +1,4 @@
-﻿// Local helpers for this feature only.
+// Local helpers for this feature only.
 var modules = {};
 var __localMaxLogsPerModule = 10;
 var __localModuleLogCounts = {};
@@ -109,20 +109,24 @@ modules.movespeed = (function() {
 
       var base = mod.base;
       hookAddr = base.add(0xB17590);
-      isMyPlayerFn = new NativeFunction(base.add(0xB55FD0), 'bool', ['pointer']);
-      originalFn = new NativeFunction(hookAddr, 'float', ['pointer', 'pointer']);
+      isMyPlayerFn = new NativeFunction(base.add(0xB55FD0), 'bool', ['pointer', 'pointer']);
+      originalFn = new NativeFunction(hookAddr, 'float', ['pointer', 'pointer', 'pointer']);
       logCount = 0;
 
       Interceptor.replace(hookAddr, new NativeCallback(function(self, player) {
-        var result = originalFn(self, player);
-        if (player && !player.isNull() && isMyPlayerFn(player)) {
-          var moveMod = player.add(0x8C).readPointer();
-          if (moveMod && !moveMod.isNull() && self.equals(moveMod)) {
-            logCount++;
-            if (logCount <= 10)
-              sendLog('info', '滑板鞋', '原值=' + result.toFixed(3) + ' 修改后=' + currentSpeed.toFixed(1) + 'x');
-            return currentSpeed;
+        var result = originalFn(self, player, ptr(0));
+        try {
+          if (player && !player.isNull() && isMyPlayerFn(player, ptr(0))) {
+            var moveMod = player.add(0x8C).readPointer();
+            if (moveMod && !moveMod.isNull() && self.equals(moveMod)) {
+              logCount++;
+              if (logCount <= 10)
+                sendLog('info', '滑板鞋', '原值=' + result.toFixed(3) + ' 修改后=' + currentSpeed.toFixed(1) + 'x');
+              return currentSpeed;
+            }
           }
+        } catch (err) {
+          sendDevLog('warn', '滑板鞋', 'PropertyModifier.Get 回调异常已忽略: ' + (err && err.message ? err.message : err));
         }
         return result;
       }, 'float', ['pointer', 'pointer']));

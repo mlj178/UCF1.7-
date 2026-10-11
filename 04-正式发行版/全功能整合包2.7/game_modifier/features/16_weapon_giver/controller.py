@@ -34,7 +34,9 @@ class WeaponInteractionController:
                     else:
                         self._context.log("✅ 武器赋予成功！")
                 else:
-                    self._context.log(f"❌ 武器赋予失败: {result.get('msg', '未知错误')}")
+                    # P2：plugin_call 在未连接/断连时返回 None，直接 .get 会抛
+                    # AttributeError 并被外层 except 吞成"武器赋予异常"，掩盖真实原因。
+                    self._context.log(f"❌ 武器赋予失败: {(result or {}).get('msg', '未知错误')}")
             except Exception as e:
                 self._context.log(f"❌ 武器赋予异常: {e}")
 
@@ -68,7 +70,7 @@ class WeaponInteractionController:
                     else:
                         self._context.log(f"✅ 武器赋予成功: {weapon_name}")
                 else:
-                    self._context.log(f"❌ 武器赋予失败: {weapon_name} - {result.get('msg', '未知错误')}")
+                    self._context.log(f"❌ 武器赋予失败: {weapon_name} - {(result or {}).get('msg', '未知错误')}")
             except Exception as e:
                 self._context.log(f"❌ 武器赋予异常: {e}")
 

@@ -19,6 +19,10 @@ class RoundSkipMonitor:
     def stop(self):
         self._running = False
         if self._timer is not None:
+            try:
+                self._context.after_cancel(self._timer)
+            except Exception:
+                pass
             self._timer = None
 
     def _schedule_poll(self, delay_ms):
@@ -31,21 +35,25 @@ class RoundSkipMonitor:
         if not self._should_poll():
             self.stop()
             return
+        # P1：在主线程（after 回调里）排下一次，避免工作线程调 Tk after 的跨线程问题
+        self._schedule_poll(self._interval_ms)
         if self._polling:
-            self._schedule_poll(self._interval_ms)
             return
         self._polling = True
         self._run_async(self._poll_status)
 
     def _poll_status(self):
+        result = None
         try:
-            self._context.feature_service.status("roundskip")
+            result = self._context.feature_service.status("roundskip")
         except Exception:
-            pass
+            result = None
         finally:
             self._polling = False
+        if result is None:
+            # P1：脚本已销毁/连接断开 → 停止轮询，避免持续刷 "script has been destroyed"
             try:
-                self._context.after(0, lambda: self._schedule_poll(self._interval_ms))
+                self._context.after(0, self.stop)
             except Exception:
                 self.stop()
 

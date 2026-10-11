@@ -1,4 +1,4 @@
-﻿// Local helpers for this feature only.
+// Local helpers for this feature only.
 var modules = {};
 var __localMaxLogsPerModule = 10;
 var __localModuleLogCounts = {};
@@ -262,7 +262,7 @@ modules.gather = (function() {
           var limit = Math.min(total, MAX_PLAYERS_PER_GATHER);
           for (var i = 0; i < limit; i++) {
             try {
-              var pp = ap.add(0x10 + i * 8).readPointer();
+              var pp = ap.add(0x10 + i * Process.pointerSize).readPointer();
               appendBotDiagnostic(result, seen, pp, 'allPlayers', now);
             } catch (_) { result.invalid++; }
           }
@@ -304,10 +304,13 @@ modules.gather = (function() {
     );
   }
 
+  var diagPending = false;
   function startGatherDiagnostics() {
     if (diagnosticsTimer) return;
+    // P0：诊断内部有 Component.get_transform 等游戏原生调用，不能跑在 Frida JS 线程；
+    // 定时器只置标志，真正执行放到主线程钩子（ModeBase.UpdateTimeUI）里。
     dumpGatherDiagnostics();
-    diagnosticsTimer = setInterval(dumpGatherDiagnostics, GATHER_DIAG_INTERVAL_MS);
+    diagnosticsTimer = setInterval(function () { diagPending = true; }, GATHER_DIAG_INTERVAL_MS);
   }
 
   function stopGatherDiagnostics() {
@@ -397,7 +400,7 @@ modules.gather = (function() {
             sendDevLog('warn', '聚怪', '聚怪本帧预算已用尽，已停止继续扫描玩家列表', 'GatherEnemies scan budget exhausted');
             break;
           }
-          try { var pp = ap.add(0x10 + i * 8).readPointer(); if (isValid(pp)) playersToMove[pp.toString()] = pp; } catch(e) {}
+          try { var pp = ap.add(0x10 + i * Process.pointerSize).readPointer(); if (isValid(pp)) playersToMove[pp.toString()] = pp; } catch(e) {}
         }
       }
     } catch(e) {}
@@ -473,7 +476,7 @@ modules.gather = (function() {
       try { var h2 = Interceptor.attach(base.add(R.GM_AddP), { onEnter: function(a) { if (!gm) { gm = a[0]; } } }); hooks.push(h2); } catch(e) {}
       try { var h3 = Interceptor.attach(base.add(R.MM_MapGun), { onEnter: function(a) { if (mm) return; mm = a[0]; } }); hooks.push(h3); } catch(e) {}
       try { var h4 = Interceptor.attach(base.add(R.P_Update), { onEnter: function(a) { if (!ntp) return; ntp = false; if (!gm || !mm) return; executeTeleport(); } }); hooks.push(h4); } catch(e) {}
-      try { var h5 = Interceptor.attach(base.add(R.ModeBase_UpdateTimeUI), { onEnter: function(args) { handleModeBaseSeen(args[0]); } }); hooks.push(h5); } catch(e) {}
+      try { var h5 = Interceptor.attach(base.add(R.ModeBase_UpdateTimeUI), { onEnter: function(args) { handleModeBaseSeen(args[0]); if (diagPending) { diagPending = false; try { dumpGatherDiagnostics(); } catch (e) {} } } }); hooks.push(h5); } catch(e) {}
       try { var h6 = Interceptor.attach(base.add(R.ModeBase_ExitGame), { onEnter: function() { clearRoomState('ModeBase.ExitGame'); } }); hooks.push(h6); } catch(e) {}
       try { var h7 = Interceptor.attach(base.add(R.GameManager_GameRoundEnd), { onEnter: function() { clearRoomState('GameManager.GameRoundEnd'); } }); hooks.push(h7); } catch(e) {}
       try { var h8 = Interceptor.attach(base.add(R.GameManager_NewGameRoundStart), { onEnter: function() { clearRoomState('GameManager.NewGameRoundStart'); } }); hooks.push(h8); } catch(e) {}

@@ -1,4 +1,4 @@
-﻿// Local helpers for this special feature only.
+// Local helpers for this special feature only.
 var modules = {};
 var __localMaxLogsPerModule = 80;
 var __localModuleLogCounts = {};
@@ -274,6 +274,11 @@ modules.nano4t = (function() {
       if (!n4) {
         sendDevLog('warn', 'Nano4T', '未进入多人生化模式', 'Nano4T getInstance returned null');
         sendNano4tEvent('nano4t_error', { msg: '未进入多人生化模式' }, 'both');
+      } else if (!isNano4tModeInstance(n4)) {
+        // P1：+0xD8(attributeAsset) 是 Mode_Nano4_Terminator 专有字段；对基类/nano6 实例读它会越界，
+        // 越界读到的垃圾指针会被当成特性表，用户点"应用"后交给游戏 → 野指针解引用。
+        sendDevLog('warn', 'Nano4T', '当前实例不是 Mode_Nano4_Terminator，跳过初始化', 'Nano4T instance type mismatch');
+        sendNano4tEvent('nano4t_error', { msg: '当前不是多人生化（终结者）模式' }, 'both');
       } else if (!loadAttrs()) {
         sendDevLog('warn', 'Nano4T', '未进入多人生化模式房间', 'Nano4T loadAttrs failed');
         sendNano4tEvent('nano4t_error', { msg: '未进入多人生化模式房间' }, 'both');

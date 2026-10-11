@@ -11,27 +11,5 @@ class KnifeRangeFeature(PluginFeatureBase):
     slider_value = 50.0
     desc = '扩大近战攻击距离（人类+幽灵通用）'
 
-    def __init__(self):
-        super().__init__()
-        self._range_mult = 50.0
-
-    def enable(self):
-        from core.frida_manager import FridaManager
-        fm = FridaManager.get_instance()
-        if fm.is_connected:
-            fm.send_toggle('range', True)
-            fm.send_toggle('range_config', self._range_mult)
-
-    def disable(self):
-        from core.frida_manager import FridaManager
-        fm = FridaManager.get_instance()
-        if fm.is_connected:
-            fm.send_toggle('range', False)
-
-    def on_slider_change(self, value):
-        self._range_mult = round(float(value), 0)
-        self.slider_value = self._range_mult
-        from core.frida_manager import FridaManager
-        fm = FridaManager.get_instance()
-        if fm.is_connected and self._enabled:
-            fm.send_toggle('range_config', self._range_mult)
+    # enable / disable / setConfig 走基类的插件 RPC（与 04_knife 同）。不要覆写成
+    # FridaManager.send_toggle：2.7 已无该方法，覆写会让开关静默失效。
