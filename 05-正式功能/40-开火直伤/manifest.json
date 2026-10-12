@@ -1,0 +1,115 @@
+{
+  "feature_id": "direct_damage",
+  "canonical_id": "direct_damage",
+  "display_name": "开火直伤",
+  "category": "weapon",
+  "tab": "weapon_tab",
+  "tab_title": "武器",
+  "tab_order": 10,
+  "order": 89,
+  "desc": "开火时不走子弹射线，直接把伤害结算到准星方向距离最近的敌人身上。榴弹/手雷/RPG 与特殊技能弹为两个独立开关。",
+  "script": "script.js",
+  "runtime": {
+    "type": "plugin_script"
+  },
+  "layout": {
+    "card_type": "simple",
+    "columnspan": 1,
+    "title_color": "#f472b6"
+  },
+  "controls": [
+    {
+      "type": "switch",
+      "action": "enable"
+    },
+    {
+      "type": "switch",
+      "action": "setConfig",
+      "key": "enable_guns",
+      "label": "常规枪械直伤",
+      "default": true
+    },
+    {
+      "type": "switch",
+      "action": "setConfig",
+      "key": "enable_explosives",
+      "label": "榴弹/手雷/RPG 直伤",
+      "default": true
+    },
+    {
+      "type": "switch",
+      "action": "setConfig",
+      "key": "enable_skill_projectiles",
+      "label": "特殊技能弹直伤",
+      "default": true
+    },
+    {
+      "type": "slider",
+      "action": "setConfig",
+      "key": "max_angle_deg",
+      "label": "准星锥角度",
+      "min": 5,
+      "max": 120,
+      "step": 1,
+      "default": 30
+    },
+    {
+      "type": "slider",
+      "action": "setConfig",
+      "key": "max_distance",
+      "label": "最大距离(米)",
+      "min": 0,
+      "max": 200,
+      "step": 5,
+      "default": 80
+    }
+  ],
+  "config": {
+    "enable_guns": true,
+    "enable_explosives": true,
+    "enable_skill_projectiles": true,
+    "target_mode": "angle_then_distance",
+    "max_angle_deg": 30,
+    "max_distance": 80,
+    "angle_weight": 1,
+    "distance_weight": 0.5,
+    "damage_entry": "gamemanager",
+    "damage_multiplier": 1,
+    "damage_override": 0,
+    "fallback_to_original": false,
+    "diagnostic_log": true
+  },
+  "rpc": [
+    "enable",
+    "disable",
+    "setConfig",
+    "set_config",
+    "setconfig",
+    "status",
+    "cleanup"
+  ],
+  "lifecycle": {
+    "cleanup": true,
+    "restore": true,
+    "requires_room_ready_reapply": false,
+    "room_ready_retry": false,
+    "room_ready_reapply_exempt_reason": "功能安装固定 RVA Hook（替换 WPN_Gun.Damage + attach 投射物入口），每次开火时按 enabled/config 实时读取房间内玩家列表，不依赖进房时立即写入运行态对象。"
+  },
+  "source": {
+    "single_feature_js": "05-正式功能/40-开火直伤/script.js",
+    "runtime_script_js": "features/40_direct_damage/script.js"
+  },
+  "ui_handles": {
+    "switch": "direct_damage_switch",
+    "guns_switch": "direct_damage_guns_switch",
+    "explosives_switch": "direct_damage_explosives_switch",
+    "skills_switch": "direct_damage_skills_switch",
+    "angle_slider": "direct_damage_angle_slider",
+    "angle_label": "direct_damage_angle_label",
+    "distance_slider": "direct_damage_distance_slider",
+    "distance_label": "direct_damage_distance_label"
+  },
+  "state": {
+    "sync_enabled_from_config": true
+  }
+}
