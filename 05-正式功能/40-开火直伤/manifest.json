@@ -7,7 +7,7 @@
   "tab_title": "武器",
   "tab_order": 10,
   "order": 89,
-  "desc": "开火时不走子弹射线，直接把伤害结算到准星方向距离最近的敌人身上。榴弹/手雷/RPG 与特殊技能弹为两个独立开关。",
+  "desc": "常规枪械：开火不走子弹射线，直接把伤害结算到全场最近的敌人（不看准星、可隔墙）。榴弹/手雷/RPG 与特殊技能弹：不做直伤，改为弹体追踪——弹体会拐弯追着敌人飞，伤害仍由原版爆炸结算。弹体追谁由「准星锥内距离最近的敌人」决定（锥角可调，0=回到全场最近；锥内没人可回退全场最近）。三类各有独立开关。",
   "script": "script.js",
   "runtime": {
     "type": "plugin_script"
@@ -32,15 +32,56 @@
     {
       "type": "switch",
       "action": "setConfig",
+      "key": "enable_homing",
+      "label": "弹体追踪(拐弯) 总开关",
+      "default": true
+    },
+    {
+      "type": "switch",
+      "action": "setConfig",
       "key": "enable_explosives",
-      "label": "榴弹/手雷/RPG 直伤",
+      "label": "榴弹/手雷/RPG 追踪",
       "default": true
     },
     {
       "type": "switch",
       "action": "setConfig",
       "key": "enable_skill_projectiles",
-      "label": "特殊技能弹直伤",
+      "label": "特殊技能弹 追踪",
+      "default": true
+    },
+    {
+      "type": "slider",
+      "action": "setConfig",
+      "key": "homing_turn",
+      "label": "追踪锁定强度",
+      "min": 0.05,
+      "max": 1,
+      "step": 0.05,
+      "default": 1
+    },
+    {
+      "type": "slider",
+      "action": "setConfig",
+      "key": "homing_cone_deg",
+      "label": "追踪·准星锥角度(0=不看准星)",
+      "min": 0,
+      "max": 120,
+      "step": 5,
+      "default": 30
+    },
+    {
+      "type": "switch",
+      "action": "setConfig",
+      "key": "homing_cone_fallback",
+      "label": "锥内没人时回退全场最近",
+      "default": true
+    },
+    {
+      "type": "switch",
+      "action": "setConfig",
+      "key": "use_event_template",
+      "label": "真实事件底板(校准wpnIndex)",
       "default": true
     },
     {
@@ -68,15 +109,25 @@
     "enable_guns": true,
     "enable_explosives": true,
     "enable_skill_projectiles": true,
-    "target_mode": "angle_then_distance",
+    "target_mode": "nearest",
     "max_angle_deg": 30,
-    "max_distance": 80,
+    "max_distance": 0,
     "angle_weight": 1,
     "distance_weight": 0.5,
     "damage_entry": "gamemanager",
-    "damage_multiplier": 1,
+    "entry_fallback": true,
+    "use_event_template": true,
     "damage_override": 0,
-    "fallback_to_original": false,
+    "fallback_to_original": true,
+    "enable_homing": true,
+    "homing_speed": 0,
+    "homing_turn": 1,
+    "homing_retarget": true,
+    "homing_max_ms": 20000,
+    "homing_pending_ms": 800,
+    "homing_cone_deg": 30,
+    "homing_cone_fallback": true,
+    "verbose_probe": true,
     "diagnostic_log": true
   },
   "rpc": [
@@ -104,6 +155,13 @@
     "guns_switch": "direct_damage_guns_switch",
     "explosives_switch": "direct_damage_explosives_switch",
     "skills_switch": "direct_damage_skills_switch",
+    "template_switch": "direct_damage_template_switch",
+    "homing_switch": "direct_damage_homing_switch",
+    "homing_turn_slider": "direct_damage_homing_turn_slider",
+    "homing_turn_label": "direct_damage_homing_turn_label",
+    "homing_cone_slider": "direct_damage_homing_cone_slider",
+    "homing_cone_label": "direct_damage_homing_cone_label",
+    "homing_cone_fallback_switch": "direct_damage_homing_cone_fallback_switch",
     "angle_slider": "direct_damage_angle_slider",
     "angle_label": "direct_damage_angle_label",
     "distance_slider": "direct_damage_distance_slider",

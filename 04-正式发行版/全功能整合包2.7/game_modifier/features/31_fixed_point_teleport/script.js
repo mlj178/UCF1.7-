@@ -5,17 +5,22 @@
 // 功能目标：本地玩家保存一个定点，然后通过按钮瞬移回保存点。
 //
 // 实现原理：
-//   1. Hook Player.Update，短期捕获当前本地 Player。
-//   2. savePoint 读取本地 Player 的 Transform.position 并保存为单个点。
-//   3. teleportToPoint 调用原游戏 Player.SetPos(Vector3)，由原游戏处理碰撞器禁用/恢复。
+//   1. 本地玩家主来源：直读 GameManager.myPlayer 静态字段（GameManager_TypeInfo + 0x5C + 0x0），
+//      由 ModeBase.UpdateTimeUI 每帧刷新一次，不再逐个扫描 Player。
+//   2. Player.Update 只做“快速通道”：args[0] 就是已缓存的本地玩家时才消费 pending，
+//      其他人机/玩家在两次指针比较内直接返回（不进 isReadablePtr / isMyPlayer）。
+//      仅在静态字段暂不可用时，才回退到 isMyPlayer 捕获。
+//   3. savePoint 读取本地 Player 的 Transform.position 并保存为单个点。
+//   4. teleportToPoint 调用原游戏 Player.SetPos(Vector3)，由原游戏处理碰撞器禁用/恢复。
 //
 // RVA / 字段来源：
-//   Player_Update:                    0x00B551D0  dump.cs + IDA 汇编索引
-//   Player_get_isMyPlayer:            0x00B55FD0  dump.cs + 常用本地玩家判断点
+//   Player_Update:                    0x00B551D0  dump.cs + IDA 汇编索引（快速通道 + 兜底捕获）
+//   Player_get_isMyPlayer:            0x00B55FD0  dump.cs + 常用本地玩家判断点（仅兜底）
 //   Player_SetPos:                    0x00B534C0  dump.cs + IDA 汇编确认会处理 Collider.enabled
 //   Component_get_transform:          0x0032CF40  已有自由视角/穿墙功能验证
 //   Transform_get_position_Injected:  0x003F4280  已有自由视角/穿墙功能验证
-//   ModeBase_UpdateTimeUI:            0x00AF6930  全模式通用模式实例触发点
+//   ModeBase_UpdateTimeUI:            0x00AF6930  全模式通用模式实例触发点（每帧刷新本地玩家 + 消费 pending）
+//   GameManager_TypeInfo:             0x00E2933C  GameManager 静态字段区：static_fields@0x5C, myPlayer@0x0
 //   GameManager_GameRoundEnd:         0x00AFAA40  任意模式回合结束
 //   GameManager_NewGameRoundStart:    0x00AEBCB0  新回合开始
 //   GameManager_OnDestroy:            0x00AEBD40  房间对象销毁/离开房间
@@ -35,13 +40,16 @@
         Component_get_transform: 0x0032CF40,
         Transform_get_position_Injected: 0x003F4280,
         ModeBase_UpdateTimeUI: 0x00AF6930,
+        GameManager_TypeInfo: 0x00E2933C,
         GameManager_GameRoundEnd: 0x00AFAA40,
         GameManager_NewGameRoundStart: 0x00AEBCB0,
         GameManager_OnDestroy: 0x00AEBD40
     };
 
     var OFF = {
-        Player_characterController: 0x2C
+        Player_characterController: 0x2C,
+        Il2CppClass_static_fields: 0x5C,
+        GameManager_myPlayer: 0x00
     };
 
     var MAX_POINT_SLOTS = 2;
@@ -65,6 +73,7 @@
         cache: {
             localPlayer: ptr(0),
             localPlayerSeenAt: 0,
+            staticSource: false,
             modeBase: ptr(0)
         },
         savedPoints: {
@@ -78,6 +87,8 @@
         stats: {
             hookHits: 0,
             localPlayerHits: 0,
+            staticPlayerHits: 0,
+            staticPlayerMiss: 0,
             modeBaseHits: 0,
             roundBoundaryCount: 0,
             saveCount: 0,
@@ -252,6 +263,7 @@
         Runtime.generation += 1;
         Runtime.cache.localPlayer = ptr(0);
         Runtime.cache.localPlayerSeenAt = 0;
+        Runtime.cache.staticSource = false;
         Runtime.cache.modeBase = ptr(0);
         resetSavedPointSlots();
         Runtime.pending.saveSlot = 0;
@@ -294,6 +306,51 @@
         }
     }
 
+    // 直读 GameManager.myPlayer（public static Player，静态字段区偏移 0x0）。
+    // 链路：base + GameManager_TypeInfo -> klass -> +0x5C static_fields -> +0x0 myPlayer。
+    // 同一地址已在 16/22/23/27/39 等功能验证。
+    function readStaticLocalPlayer() {
+        try {
+            if (isNull(Runtime.base)) return ptr(0);
+
+            var klass = Runtime.base.add(RVA.GameManager_TypeInfo).readPointer();
+            if (isNull(klass)) return ptr(0);
+
+            var staticFields = klass.add(OFF.Il2CppClass_static_fields).readPointer();
+            if (isNull(staticFields)) return ptr(0);
+
+            var player = staticFields.add(OFF.GameManager_myPlayer).readPointer();
+            if (isNull(player)) return ptr(0);
+
+            return player;
+        } catch (error) {
+            return ptr(0);
+        }
+    }
+
+    // 每帧一次（由 ModeBase.UpdateTimeUI 驱动）：刷新本地玩家缓存并标记来源为静态字段。
+    function refreshLocalPlayerFromStatic(reason) {
+        var player = readStaticLocalPlayer();
+        if (isNull(player)) {
+            Runtime.stats.staticPlayerMiss += 1;
+            Runtime.cache.staticSource = false;
+            return ptr(0);
+        }
+
+        if (isNull(Runtime.cache.localPlayer) || !player.equals(Runtime.cache.localPlayer)) {
+            Runtime.stats.localPlayerHits += 1;
+        }
+
+        Runtime.cache.localPlayer = player;
+        Runtime.cache.localPlayerSeenAt = Date.now();
+        Runtime.cache.staticSource = true;
+        Runtime.applied = true;
+        Runtime.pendingApply = false;
+        Runtime.lastApplyReason = reason || "gamemanager_static";
+        Runtime.stats.staticPlayerHits += 1;
+        return player;
+    }
+
     function captureLocalPlayer(player, reason) {
         if (isNull(player) || !native.ready) return false;
 
@@ -332,11 +389,30 @@
         try {
             attachHook("Player.Update", RVA.Player_Update, {
                 onEnter: function (args) {
-                    Runtime.stats.hookHits += 1;
                     if (!Runtime.enabled) return;
 
+                    var local = Runtime.cache.localPlayer;
+                    if (!isNull(local) && Runtime.cache.staticSource) {
+                        // 快速通道：静态字段已在刷新缓存，这里只做一次指针相等比较；
+                        // 人机/其他玩家到这里直接返回，不做任何内存读取或原生调用。
+                        if (args[0].equals(local)) {
+                            Runtime.stats.hookHits += 1;
+                            performPendingActions(args[0]);
+                        }
+                        return;
+                    }
+
+                    // 兜底通道：静态字段暂不可用（进房瞬间）或缓存过期时，才用 isMyPlayer 重新捕获。
                     try {
-                        if (captureLocalPlayer(args[0], "Player.Update")) {
+                        if (isNull(local) || Date.now() - Runtime.cache.localPlayerSeenAt > Runtime.config.max_cached_player_age_ms) {
+                            if (captureLocalPlayer(args[0], "Player.Update")) {
+                                Runtime.stats.hookHits += 1;
+                                performPendingActions(args[0]);
+                            }
+                            return;
+                        }
+                        if (args[0].equals(local)) {
+                            Runtime.stats.hookHits += 1;
                             performPendingActions(args[0]);
                         }
                     } catch (error) {
@@ -348,6 +424,13 @@
                 onEnter: function (args) {
                     try {
                         handleModeBaseSeen(args[0]);
+                        if (!Runtime.enabled) return;
+
+                        // 每帧只跑一次：刷新本地玩家 + 消费 pending。
+                        var player = refreshLocalPlayerFromStatic("ModeBase.UpdateTimeUI");
+                        if (isNull(player)) return;
+
+                        performPendingActions(player);
                     } catch (error) {
                         setError("ModeBase.UpdateTimeUI hook failed", error);
                     }
@@ -387,29 +470,6 @@
             cleanupHooks();
             return false;
         }
-    }
-
-    function getRecentLocalPlayer() {
-        var player = Runtime.cache.localPlayer;
-        if (isNull(player)) {
-            Runtime.pendingApply = Runtime.enabled;
-            Runtime.stats.skippedNull += 1;
-            return ptr(0);
-        }
-
-        if (Date.now() - Runtime.cache.localPlayerSeenAt > Runtime.config.max_cached_player_age_ms) {
-            resetRuntime("local_player_cache_expired");
-            Runtime.stats.skippedInvalid += 1;
-            return ptr(0);
-        }
-
-        if (!isReadablePtr(player)) {
-            resetRuntime("local_player_invalid");
-            Runtime.stats.skippedInvalid += 1;
-            return ptr(0);
-        }
-
-        return player;
     }
 
     function readPlayerPosition(player) {
@@ -459,7 +519,7 @@
 
         Runtime.pending.saveSlot = slot;
         Runtime.stats.lastSaveResult = "save_pending slot " + slot;
-        log("info", "save point " + slot + " pending until next Player.Update");
+        log("info", "save point " + slot + " pending until next Update pump");
         return true;
     }
 
@@ -513,7 +573,7 @@
 
         Runtime.pending.teleportSlot = slot;
         Runtime.stats.lastTeleportResult = "teleport_pending slot " + slot;
-        log("info", "teleport point " + slot + " pending until next Player.Update");
+        log("info", "teleport point " + slot + " pending until next Update pump");
         return true;
     }
 
@@ -568,6 +628,7 @@
         if (!installHooks()) return false;
         Runtime.enabled = true;
         sendStatus('fixed_point_teleport', true);
+        refreshLocalPlayerFromStatic("enable");
         Runtime.pendingApply = isNull(Runtime.cache.localPlayer);
         Runtime.lastApplyReason = Runtime.pendingApply ? "enable_waiting_for_local_player" : "enable_cached_local_player";
         Runtime.stats.errorCount = 0;
@@ -641,6 +702,9 @@
             last_save_result: Runtime.stats.lastSaveResult,
             last_teleport_result: Runtime.stats.lastTeleportResult,
             player_cached: !isNull(Runtime.cache.localPlayer),
+            player_static_source: Runtime.cache.staticSource,
+            static_player_hits: Runtime.stats.staticPlayerHits,
+            static_player_miss: Runtime.stats.staticPlayerMiss,
             pending_save: Runtime.pending.saveSlot !== 0,
             pending_teleport: Runtime.pending.teleportSlot !== 0,
             pending_save_slot: Runtime.pending.saveSlot,
