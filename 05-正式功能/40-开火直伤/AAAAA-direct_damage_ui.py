@@ -27,21 +27,31 @@ PANEL = "#1d2430"
 PANEL_DARK = "#161c26"
 
 # 目标选择模式：与 script.js 的 config.target_mode 保持一致
+#   第一项是默认值：**全场最近的敌人，完全不看准星方向**。
+#   这是按需求定的默认：要求"打空气、不瞄准、看不到人、隔着墙，开火就要有伤害"，
+#   所以不能再用准星锥去筛目标。
 TARGET_MODES = {
+    "全场最近敌人(不看准星)": "nearest",
     "准星方向 + 距离最近": "angle_then_distance",
     "角度/距离加权": "weighted",
-    "仅取最近(调试)": "nearest",
 }
 
 # 伤害注入入口：与 script.js 的 config.damage_entry 保持一致
-#   hurt 排第一是因为它是唯一被验证过的入口：
-#     IDA 反汇编确认 Entity.OnEntityHurt 内部就是
-#       HealthData.Hurt(this.healthData, (int)eventData.damage)
-#     且整合包 2.7 的"增加伤害倍率"功能就挂在这两个入口上工作。
+#   gamemanager 必须是第一项（默认值）。IDA 反汇编证据：
+#     1) DamageEventData.TakePlace()（游戏自己的结算函数）=
+#          if (victim && victim.healthData && !victim.healthData.isDead)
+#              GameManager.TakeDamage(this);
+#     2) GameManager.TakeDamage 内部依次调用
+#          DamageEvent$$Invoke ×6 -> PlayHitFxAndSnd
+#          -> HealthData.get_isDead -> DeathEventBroadcast（真正打死）
+#     3) 而 Player.OnEntityHurt / HealthData.Hurt 只做 HP 相减，
+#        不碰 DeathEventBroadcast。
+#   ==> 用 hurt/health 的结果是"敌人 HP 归零、isDead=true 但永远不死"，
+#       画面上就是敌人站着打不死（"无敌"）。所以只能默认 gamemanager。
 DAMAGE_ENTRIES = {
-    "实体受伤入口(推荐)": "hurt",
-    "统一伤害入口": "gamemanager",
-    "仅扣血(兜底)": "health",
+    "统一伤害入口(推荐)": "gamemanager",
+    "实体受伤入口(只扣血不死)": "hurt",
+    "仅扣血(只扣血不死)": "health",
     "空跑不伤害(调试)": "dry_run",
 }
 
@@ -94,7 +104,7 @@ class DirectDamageApp(ctk.CTk):
 
         ctk.CTkLabel(
             self,
-            text="开火不走子弹射线，直接把伤害结算到准星方向距离最近的敌人",
+            text="枪械：开火不走子弹射线，直接把伤害结算到全场最近的敌人；榴弹/手雷/RPG：弹体拐弯追踪",
             text_color="#8f98a8", font=ctk.CTkFont(size=12),
         ).grid(row=1, column=0, padx=18, pady=(0, 8), sticky="ew")
 
@@ -121,55 +131,111 @@ class DirectDamageApp(ctk.CTk):
         )
         self.enable_switch.grid(row=0, column=1, padx=12, pady=12, sticky="e")
 
-        # 三个独立开关
+        # 四个独立开关（枪械走直伤，投射物走追踪）
         self.guns_switch = self._add_config_switch(controls, 1, "常规枪械直伤", "enable_guns", True)
+        self.homing_switch = self._add_config_switch(
+            controls, 2, "弹体追踪(拐弯) 总开关", "enable_homing", True)
         self.explosives_switch = self._add_config_switch(
-            controls, 2, "榴弹/手雷/RPG 直伤", "enable_explosives", True)
+            controls, 3, "榴弹/手雷/RPG 追踪", "enable_explosives", True)
         self.skills_switch = self._add_config_switch(
-            controls, 3, "特殊技能弹直伤", "enable_skill_projectiles", True)
+            controls, 4, "特殊技能弹 追踪", "enable_skill_projectiles", True)
 
-        ctk.CTkLabel(controls, text="伤害入口", text_color="#8f98a8").grid(
-            row=4, column=0, padx=12, pady=(8, 4), sticky="w")
+        # 追踪锁定强度：每个物理步把弹体方向掰向目标的力度。
+        #   1.00 = 直接锁定（立刻拐弯，命中率最高，默认）
+        #   0.40 = 慢慢拐（保留抛物弧线，更像原版手感）
+        self.turn_slider, self.turn_label = self._add_slider(
+            controls, 5, "追踪锁定强度(1=立刻拐弯)", "homing_turn", 0.05, 1.0, 0.05, 1.0,
+            decimals=2)
+
+        ctk.CTkLabel(controls, text="伤害入口（只影响枪械直伤）", text_color="#8f98a8").grid(
+            row=6, column=0, padx=12, pady=(8, 4), sticky="w")
         self.entry_menu = ctk.CTkOptionMenu(
             controls, values=list(DAMAGE_ENTRIES.keys()), command=self._on_entry_changed,
             fg_color="#1f2937", button_color="#374151", width=220,
         )
-        self.entry_menu.grid(row=4, column=1, padx=12, pady=(8, 4), sticky="e")
+        self.entry_menu.grid(row=6, column=1, padx=12, pady=(8, 4), sticky="e")
 
         ctk.CTkLabel(controls, text="打谁策略", text_color="#8f98a8").grid(
-            row=5, column=0, padx=12, pady=(4, 12), sticky="w")
+            row=7, column=0, padx=12, pady=(4, 12), sticky="w")
         self.mode_menu = ctk.CTkOptionMenu(
             controls, values=list(TARGET_MODES.keys()), command=self._on_mode_changed,
             fg_color="#1f2937", button_color="#374151", width=220,
         )
-        self.mode_menu.grid(row=5, column=1, padx=12, pady=(4, 4), sticky="e")
+        self.mode_menu.grid(row=7, column=1, padx=12, pady=(4, 4), sticky="e")
 
         # 探针模式：只选目标 + 记日志，绝不注入任何伤害，原版弹道照常走。
         # 用来安全地回答"钩子有没有命中 / 能不能选到敌人"这两个问题。
         ctk.CTkLabel(controls, text="探针模式（不改玩法，只记录）", text_color="#c8d0dc").grid(
-            row=6, column=0, padx=12, pady=(0, 12), sticky="w")
+            row=8, column=0, padx=12, pady=(0, 12), sticky="w")
         self.probe_only_switch = ctk.CTkSwitch(
             controls, text="", progress_color="#f0a020", switch_width=50, switch_height=24,
         )
-        self.probe_only_switch.grid(row=6, column=1, padx=12, pady=(0, 12), sticky="e")
+        self.probe_only_switch.grid(row=8, column=1, padx=12, pady=(0, 12), sticky="e")
         self.probe_only_switch.configure(command=self._on_probe_only_changed)
+
+        # 无目标时是否保留原版弹道。默认开：打完所有敌人后开火仍然有弹孔/着弹特效，
+        # 不会出现"子弹凭空消失、看起来功能完全没生效"的错觉。
+        ctk.CTkLabel(controls, text="无目标时保留原版弹道", text_color="#c8d0dc").grid(
+            row=9, column=0, padx=12, pady=(0, 12), sticky="w")
+        self.fallback_switch = ctk.CTkSwitch(
+            controls, text="", progress_color=GREEN, switch_width=50, switch_height=24,
+        )
+        self.fallback_switch.grid(row=9, column=1, padx=12, pady=(0, 12), sticky="e")
+        self.fallback_switch.select()
+        self.fallback_switch.configure(
+            command=lambda: self._on_config_changed(
+                "fallback_to_original", bool(self.fallback_switch.get())))
+
+        # 真实事件底板（校准 wpnIndex）：枪械直伤默认必须开。
+        # 关了就会退回"手工合成事件 + wpnIndex=0"，而 wpnIndex=0 会让
+        # GameManager.WpnDataDictionary[0] 抛 KeyNotFoundException，
+        # 异常打断死亡广播 -> 敌人死了不复活 / 多人生化模式闪退。
+        # 只在做 A/B 对照（复现旧 bug）时才需要关掉。
+        # （爆炸物/技能弹现在不做直伤了，用不到这块底板。）
+        ctk.CTkLabel(controls, text="真实事件底板(校准 wpnIndex, 枪械必须开)", text_color="#c8d0dc").grid(
+            row=10, column=0, padx=12, pady=(0, 12), sticky="w")
+        self.template_switch = ctk.CTkSwitch(
+            controls, text="", progress_color=GREEN, switch_width=50, switch_height=24,
+        )
+        self.template_switch.grid(row=10, column=1, padx=12, pady=(0, 12), sticky="e")
+        self.template_switch.select()
+        self.template_switch.configure(
+            command=lambda: self._on_config_changed(
+                "use_event_template", bool(self.template_switch.get())))
+
+        # ---- 弹体追踪的"打谁"策略：准星锥内距离最近的敌人 ----
+        # 这一段只影响**弹体追踪**（RPG/手雷/榴弹枪/奥术手雷/火球），不影响枪械直伤：
+        #   枪械直伤走 config.target_mode（默认"全场最近，不看准星"）；
+        #   弹体追踪不读 target_mode，只认 homing_cone_deg / homing_cone_fallback。
+        ctk.CTkLabel(controls, text="弹体追踪·打谁策略（只影响追踪）", text_color="#8f98a8").grid(
+            row=11, column=0, padx=12, pady=(10, 2), sticky="w")
+
+        # 准星锥角度：0 = 关闭锥，回到旧的"全场最近"。
+        # >0 时先只保留与准星夹角 <= 该值的敌人，锥内再取最近的。
+        self.cone_slider, self.cone_label = self._add_slider(
+            controls, 12, "追踪·准星锥角度(0=不看准星)", "homing_cone_deg", 0, 120, 5, 30)
+
+        # 锥内一个敌人都没有时：回退成"全场最近"（默认开，保住"对着空气扔雷也能追到人"）。
+        # 关掉 = 严格"只追我瞄的人"，锥内没人这颗弹就不追踪、按原弹道直飞。
+        self.cone_fallback_switch = self._add_config_switch(
+            controls, 13, "锥内没人时回退全场最近", "homing_cone_fallback", True)
 
         # 参数滑块
         params = ctk.CTkFrame(self, corner_radius=8, fg_color=PANEL)
         params.grid(row=4, column=0, padx=18, pady=5, sticky="ew")
         params.grid_columnconfigure(1, weight=1)
 
+        # 角度/距离只在"准星方向"类策略下才起作用；默认策略是全场最近，两个都不看
         self.angle_slider, self.angle_label = self._add_slider(
-            params, 0, "准星锥角度(度)", "max_angle_deg", 5, 120, 1, 30)
+            params, 0, "准星锥角度(仅准星策略)", "max_angle_deg", 5, 120, 1, 30)
         self.distance_slider, self.distance_label = self._add_slider(
-            params, 1, "最大距离(米, 0=不限)", "max_distance", 0, 200, 5, 80)
-        self.multiplier_slider, self.multiplier_label = self._add_slider(
-            params, 2, "直伤倍率", "damage_multiplier", 1, 20, 1, 1)
+            params, 1, "最大距离(米, 0=不限)", "max_distance", 0, 200, 5, 0)
+        # 伤害倍率已按需求移除：本功能固定使用武器基础伤害，不提供倍率调节。
 
         # 统计
         metrics = ctk.CTkFrame(self, corner_radius=8, fg_color=PANEL)
         metrics.grid(row=5, column=0, padx=18, pady=5, sticky="ew")
-        metrics.grid_columnconfigure((0, 1, 2, 3, 4, 5, 6, 7), weight=1)
+        metrics.grid_columnconfigure((0, 1, 2, 3, 4, 5, 6, 7, 8, 9), weight=1)
 
         self.enabled_label = self._add_metric(metrics, 0, "功能状态", "关闭")
         self.selected_label = self._add_metric(metrics, 1, "选中目标", "0")
@@ -180,6 +246,9 @@ class DirectDamageApp(ctk.CTk):
         # 探针指标：这两个是"功能到底成不成"的直接证据
         self.hook_label = self._add_metric(metrics, 6, "钩子命中", "0")
         self.hp_label = self._add_metric(metrics, 7, "HP对照(降)", "-")
+        self.tpl_label = self._add_metric(metrics, 8, "底板/拒绝", "-")
+        # 弹体追踪：登记(arm)/拐弯(steer)。这是"追踪到底有没有生效"的直接证据。
+        self.missile_label = self._add_metric(metrics, 9, "追踪 登记/拐弯", "0/0")
 
         # ---- 诊断探针面板 ----
         probe = ctk.CTkFrame(self, corner_radius=8, fg_color=PANEL)
@@ -196,14 +265,21 @@ class DirectDamageApp(ctk.CTk):
         )
         self.probe_label.grid(row=1, column=0, padx=12, pady=(0, 6), sticky="ew")
 
+        self.missile_probe_label = ctk.CTkLabel(
+            probe, text="追踪: 待开启", text_color="#8f98a8",
+            font=ctk.CTkFont(size=11), anchor="w", justify="left",
+            wraplength=700,
+        )
+        self.missile_probe_label.grid(row=2, column=0, padx=12, pady=(0, 6), sticky="ew")
+
         self.log_file_label = ctk.CTkLabel(
             probe, text="脚本日志: -", text_color="#6b7280",
             font=ctk.CTkFont(size=10), anchor="w", justify="left", wraplength=700,
         )
-        self.log_file_label.grid(row=2, column=0, padx=12, pady=(0, 8), sticky="ew")
+        self.log_file_label.grid(row=3, column=0, padx=12, pady=(0, 8), sticky="ew")
 
         buttons = ctk.CTkFrame(probe, fg_color="transparent")
-        buttons.grid(row=3, column=0, padx=12, pady=(0, 12), sticky="w")
+        buttons.grid(row=4, column=0, padx=12, pady=(0, 12), sticky="w")
         ctk.CTkButton(buttons, text="拉取脚本日志", command=self._pull_script_logs, width=120).pack(
             side="left", padx=(0, 8))
         ctk.CTkButton(
@@ -223,8 +299,19 @@ class DirectDamageApp(ctk.CTk):
 
         self.hint_label = ctk.CTkLabel(
             self,
-            text=("排查顺序：① 开「探针模式」开枪 —— 看「钩子命中」是否 >0；"
-                  "② 再看「HP对照(降)」是否 >0；③ 都不动就点「拉取脚本日志」把日志发我。"),
+            text=("常规枪械：默认已是「全场最近敌人(不看准星)」+ 不限距离，对着空气/墙开火也会打到人。"
+                  "榴弹/手雷/RPG 与特殊技能弹：**不做直伤**，改成弹体追踪（拐弯追敌人），"
+                  "「追踪·准星锥角度」控制弹体追谁：默认 30 度 = 优先追准星锥内最近的敌人；"
+                  "锥内没人时按「回退全场最近」决定是改追全场最近的（默认开）还是干脆不追。"
+                  "填 0 就是彻底关掉准星锥，回到旧的「全场最近」。看「追踪3」那一行判断有没有生效。"
+                  "伤害仍由原版爆炸/命中结算 —— 所以「造成伤害」不涨是正常的，看「追踪 登记/拐弯」即可。"
+                  "「追踪锁定强度」1.0=立刻拐弯，调小则先保留一段原弹道再拐。"
+                  "「真实事件底板」是枪械直伤用的：它保证合成事件里的 wpnIndex 是字典里真实存在的 key；"
+                  "填 0 会让死亡广播里的 WpnDataDictionary[0] 抛异常，敌人就会「死了不复活」，"
+                  "多人生化模式下还会闪退。排查顺序：① 看「钩子命中」；② 看「HP对照(降)」；"
+                  "③ 看「死亡广播」两个数字是否相等（不等=死亡链被打断）；"
+                  "④ 追踪没生效就看下面「追踪:」那一行，卡在哪一步会直接写出来；"
+                  "⑤ 都不对就点「拉取脚本日志」把日志发我。"),
             text_color="#f0a020", font=ctk.CTkFont(size=11), wraplength=700,
             justify="left", anchor="w",
         )
@@ -250,10 +337,11 @@ class DirectDamageApp(ctk.CTk):
         )
         return switch
 
-    def _add_slider(self, parent, row, title, config_key, minimum, maximum, step, default):
+    def _add_slider(self, parent, row, title, config_key, minimum, maximum, step, default,
+                    decimals=0):
         ctk.CTkLabel(parent, text=title, text_color="#c8d0dc").grid(
             row=row, column=0, padx=12, pady=(10, 2), sticky="w")
-        label = ctk.CTkLabel(parent, text=str(default), text_color=GREEN)
+        label = ctk.CTkLabel(parent, text=f"{float(default):.{decimals}f}", text_color=GREEN)
         label.grid(row=row, column=2, padx=12, pady=(10, 2), sticky="e")
         slider = ctk.CTkSlider(
             parent, from_=minimum, to=maximum,
@@ -262,12 +350,12 @@ class DirectDamageApp(ctk.CTk):
         )
         slider.set(default)
         slider.grid(row=row, column=1, padx=12, pady=(10, 2), sticky="ew")
-        slider.configure(command=lambda value, key=config_key, lbl=label: self._on_slider_changed(
-            key, value, lbl))
+        slider.configure(command=lambda value, key=config_key, lbl=label, dec=decimals:
+                         self._on_slider_changed(key, value, lbl, dec))
         return slider, label
 
-    def _on_slider_changed(self, key, value, label):
-        label.configure(text=f"{float(value):.0f}")
+    def _on_slider_changed(self, key, value, label, decimals=0):
+        label.configure(text=f"{float(value):.{decimals}f}")
         self._on_config_changed(key, float(value))
 
     def _add_metric(self, parent, column, title, value):
@@ -516,14 +604,28 @@ class DirectDamageApp(ctk.CTk):
             "enable_guns": bool(self.guns_switch.get()),
             "enable_explosives": bool(self.explosives_switch.get()),
             "enable_skill_projectiles": bool(self.skills_switch.get()),
-            "target_mode": TARGET_MODES.get(self.mode_menu.get(), "angle_then_distance"),
+            "target_mode": TARGET_MODES.get(self.mode_menu.get(), "nearest"),
             "max_angle_deg": float(self.angle_slider.get()),
             "max_distance": float(self.distance_slider.get()),
-            "damage_multiplier": float(self.multiplier_slider.get()),
             # 探针模式 = 空跑 + 原版弹道照常走，保证"只观察、不改玩法"
             "damage_entry": "dry_run" if probe_only
-            else DAMAGE_ENTRIES.get(self.entry_menu.get(), "hurt"),
-            "fallback_to_original": probe_only,
+            else DAMAGE_ENTRIES.get(self.entry_menu.get(), "gamemanager"),
+            # 探针模式必须回退原版（只观察、不改玩法），其余情况看开关
+            "fallback_to_original": probe_only or bool(self.fallback_switch.get()),
+            # 弹体追踪：榴弹/手雷/RPG/榴弹枪/奥术手雷/火球的弹体朝敌人拐弯。
+            # **只拐弯，不注入伤害**——伤害仍由原版爆炸/命中结算。
+            "enable_homing": bool(self.homing_switch.get()),
+            "homing_turn": float(self.turn_slider.get()),
+            "homing_retarget": True,
+            # 弹体追踪的"打谁"策略：准星锥内距离最近的敌人。
+            #   0        = 关闭准星锥，回到旧的"全场最近"
+            #   >0       = 锥内（与准星夹角 <= 该值）取最近；锥轴/锥心见 script.js 设计说明四
+            #   fallback = 锥内没人时是否回退成"全场最近"
+            "homing_cone_deg": float(self.cone_slider.get()),
+            "homing_cone_fallback": bool(self.cone_fallback_switch.get()),
+            # 真实事件底板：默认开（只对枪械直伤有用）。关掉会退回 wpnIndex=0，
+            # 触发 WpnDataDictionary[0] 的 KeyNotFoundException（敌人不复活/闪退）。
+            "use_event_template": bool(self.template_switch.get()),
             # 持久化日志与探针（默认开）
             "verbose_probe": True,
             "diagnostic_log": True,
@@ -687,6 +789,21 @@ class DirectDamageApp(ctk.CTk):
             text=f"{dropped}/{checks}",
             text_color=GREEN if dropped else ("#f0a020" if checks else "#ddd"))
 
+        # 底板/拒绝：底板=抄到的原版事件数，拒绝=因为读不到合法 wpnIndex 而放弃注入的次数。
+        # 拒绝 > 0 且一直涨，说明 Weapon.data.wpnIndex 读不出来，需要看日志里的 [probe:tpl]。
+        tpl = status.get("template_captured", 0)
+        refused = status.get("template_rejected", 0)
+        self.tpl_label.configure(
+            text=f"{tpl}/{refused}",
+            text_color=RED if refused else (GREEN if tpl else "#ddd"))
+
+        # 弹体追踪：登记/拐弯，以及没登记上的原因（notMine/noPending/off/noTarget）。
+        arm = status.get("homing_armed", 0)
+        steer = status.get("homing_steered", 0)
+        self.missile_label.configure(
+            text=f"{arm}/{steer}",
+            text_color=GREEN if steer else ("#f0a020" if arm else "#ddd"))
+
         entry = (status.get("config") or {}).get("damage_entry", "-")
         self.probe_label.configure(text=(
             f"入口={entry}  本地玩家来源={status.get('own_player_source') or '-'}  "
@@ -697,7 +814,54 @@ class DirectDamageApp(ctk.CTk):
             f"/玩家{status.get('pipeline_player_hurt', 0)}"
             f"/扣血{status.get('pipeline_health_hurt', 0)}  "
             f"HP {status.get('last_hp_before', -1)}→{status.get('last_hp_after', -1)}  "
+            f"死亡广播 {status.get('death_in', 0)}→{status.get('death_out', 0)}  "
+            f"wpnIndex底板={status.get('event_template_wpn_index', -1)}  "
+            f"清无敌={status.get('invincible_cleared', 0)}  "
             f"内存日志={status.get('log_lines', 0)}行"
+        ))
+        # 弹体追踪两行：追踪没生效时，这两行直接指出卡在哪一步。
+        #   第 1 行 = 流程走到哪一步（开火/生成/发射/登记/拐弯/写入）
+        #   第 2 行 = 拐弯为什么没写进去 + 记录被谁清掉的
+        # 「每帧跑」= WPN_Missile.FixedUpdate 被调用次数。如果它不涨，说明弹体根本没有
+        # 每帧回调，拐弯无从谈起；如果它涨而「写入」不涨，看第 2 行的跳过原因。
+        # 弹体追踪的打谁策略：准星锥角度 + 回退开关 + 各类命中/空锥计数。
+        # 「锥内命中」一直不涨而「锥内空」一直涨 -> 锥角开太小（或压根没瞄敌人）；
+        # 「回退全场最近」一直涨 -> 现在实际行为还是"全场最近"，锥没起作用。
+        _hcfg = status.get("config") or {}
+        _cone = float(_hcfg.get("homing_cone_deg", 30) or 0)
+        _cone_fb = bool(_hcfg.get("homing_cone_fallback", True))
+        self.missile_probe_label.configure(text=(
+            f"追踪: 开火={status.get('explosive_triggers', 0)}爆炸/"
+            f"{status.get('skill_triggers', 0)}技能  弹生成={status.get('missile_spawns', 0)}  "
+            f"发射={status.get('missile_launch_seen', 0)}  登记={arm}  拐弯={steer}  "
+            f"每帧跑={status.get('missile_fixed_update_calls', 0)}  "
+            f"写入={status.get('steer_wrote', 0)}  跟踪中={status.get('homing_tracked', 0)}  "
+            f"清理={status.get('homing_forgotten', 0)}"
+            "\n"
+            f"追踪2: 跳过[无记录={status.get('steer_no_entry', 0)} "
+            f"无位置={status.get('steer_no_pos', 0)} "
+            f"无瞄点={status.get('steer_no_aim', 0)} "
+            f"贴脸={status.get('steer_too_close', 0)} "
+            f"写失败={status.get('steer_write_skip', 0)} "
+            f"开关关={status.get('steer_off', 0)} "
+            f"丢目标={status.get('steer_lost_target', 0)}]  "
+            f"清理原因[复用={status.get('forget_reuse', 0)} "
+            f"回池={status.get('forget_recycle', 0)} "
+            f"超时={status.get('forget_timeout', 0)} "
+            f"身份不符={status.get('forget_identity', 0)}]  "
+            f"未登记[非自己={status.get('missile_not_mine', 0)} "
+            f"无开火记录={status.get('missile_no_pending', 0)} "
+            f"开关关={status.get('missile_switch_off', 0)} "
+            f"无目标={status.get('missile_no_target', 0)}]"
+            "\n"
+            f"追踪3: 打谁[准星锥={_cone:.0f}deg 回退={'开' if _cone_fb else '关'}]  "
+            f"锥内命中={status.get('cone_hit', 0)}  "
+            f"锥内空={status.get('cone_empty', 0)}  "
+            f"回退全场最近={status.get('cone_fallback', 0)}  "
+            f"严格放弃={status.get('cone_empty_strict', 0)}  "
+            f"换目标命中={status.get('cone_retarget', 0)}  "
+            f"锥关闭={status.get('cone_off', 0)}  "
+            f"轴读不到={status.get('cone_axis_fail', 0)}"
         ))
         log_file = status.get("log_file") or "(未下发)"
         failed = status.get("log_file_failed") or ""

@@ -7,7 +7,7 @@
   "tab_title": "人物属性",
   "tab_order": 20,
   "order": 40,
-  "desc": "开启后，每触发一次（按钮或快捷键）增加滑块设定的防化服数量，可无限累计（多人生化模式）。",
+  "desc": "开启后，每触发一次（按钮或快捷键）增加滑块设定的防化服数量，可无限累计（多人生化模式）。应用对象可选：仅本地玩家 / 全体人类。回合结束时不是游戏原生拥有的防化服会清零，避免跨回合叠加。",
   "script": "script.js",
   "runtime": {
     "type": "plugin_script"
@@ -37,13 +37,29 @@
       "suffix": "件"
     },
     {
+      "type": "combo",
+      "action": "setConfig",
+      "key": "cloth_target",
+      "label": "应用对象:",
+      "values": [
+        "local_player",
+        "all_humans"
+      ],
+      "display_values": {
+        "local_player": "仅本地玩家",
+        "all_humans": "全体人类"
+      },
+      "default": "local_player"
+    },
+    {
       "type": "button",
       "action": "apply",
       "label": "应用防化服"
     }
   ],
   "config": {
-    "cloth_count": 10
+    "cloth_count": 10,
+    "cloth_target": "local_player"
   },
   "rpc": [
     "enable",
@@ -76,6 +92,8 @@
     "cloth_count_slider": "nano_cloth_cloth_count_slider",
     "cloth_count_var": "nano_cloth_cloth_count_var",
     "cloth_count_label": "nano_cloth_cloth_count_label",
+    "cloth_target_var": "nano_cloth_cloth_target_var",
+    "cloth_target_combo": "nano_cloth_cloth_target_combo",
     "current_label": "nano_cloth_current_label",
     "button": "nano_cloth_apply_btn"
   },

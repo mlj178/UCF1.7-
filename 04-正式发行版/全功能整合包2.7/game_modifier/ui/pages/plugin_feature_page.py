@@ -4,6 +4,7 @@ import customtkinter as ctk
 
 from core.plugin.module_loader import load_plugin_module
 from ui.components.feature_card import FeatureCardBuilder
+from ui.components.text_fit import bind_text_wrap_tree
 
 
 class PluginFeaturePage:
@@ -49,6 +50,10 @@ class PluginFeaturePage:
             if col >= 2:
                 row += 1
                 col = 0
+
+        # 卡片说明文字按真实宽度折行（高 DPI 下 wraplength 会被乘缩放系数，
+        # 不校正会出现"字被裁掉一半"）。统一在这里收尾，插件面板不必各自处理。
+        bind_text_wrap_tree(scroll)
         return handles
 
     @staticmethod

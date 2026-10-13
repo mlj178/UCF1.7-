@@ -1,0 +1,119 @@
+{
+  "feature_id": "direct_damage",
+  "canonical_id": "direct_damage",
+  "display_name": "开火直伤/弹体追踪",
+  "category": "weapon",
+  "tab": "weapon_tab",
+  "tab_title": "武器",
+  "tab_order": 10,
+  "order": 89,
+  "desc": "常规枪械：开火不走子弹射线，把伤害直接结算给准星方向最近的敌人（命中判定不做视线检查，隔墙也能结算）。\n榴弹 / 手雷 / RPG / 榴弹枪：不做直伤，改为弹体拐弯追踪，伤害仍由原版爆炸结算，可单独关闭。\n　手雷：普通手雷、诅咒娃娃手雷、幽灵宝宝手雷、生化手雷、震撼弹、震荡弹\n　榴弹枪：FN FAL 榴弹版\n　火箭筒：Nano AT4（含地图补给 RPG / AT4）\n特殊技能弹：不做直伤，改为弹体拐弯追踪，伤害仍由原版爆炸结算，可单独关闭。\n　奥术手榴弹（奥术手雷）\n　地狱终结者火球",
+  "ui_text": {
+    "lines": [
+      "常规枪械：开火不走子弹射线，把伤害直接结算给准星方向最近的敌人（命中判定不做视线检查，隔墙也能结算）。",
+      "榴弹 / 手雷 / RPG / 榴弹枪：不做直伤，改为弹体拐弯追踪，伤害仍由原版爆炸结算，可单独关闭。",
+      "　手雷：普通手雷、诅咒娃娃手雷、幽灵宝宝手雷、生化手雷、震撼弹、震荡弹",
+      "　榴弹枪：FN FAL 榴弹版",
+      "　火箭筒：Nano AT4（含地图补给 RPG / AT4）",
+      "特殊技能弹：不做直伤，改为弹体拐弯追踪，伤害仍由原版爆炸结算，可单独关闭。",
+      "　奥术手榴弹（奥术手雷）",
+      "　地狱终结者火球"
+    ]
+  },
+  "script": "script.js",
+  "runtime": {
+    "type": "plugin_script"
+  },
+  "layout": {
+    "card_type": "simple",
+    "columnspan": 1,
+    "title_color": "#f472b6"
+  },
+  "controls": [
+    {
+      "type": "switch",
+      "action": "enable"
+    },
+    {
+      "type": "switch",
+      "action": "setConfig",
+      "key": "enable_guns",
+      "label": "常规枪械直伤",
+      "default": true
+    },
+    {
+      "type": "switch",
+      "action": "setConfig",
+      "key": "enable_explosives",
+      "label": "榴弹/手雷/RPG 追踪",
+      "default": true
+    },
+    {
+      "type": "switch",
+      "action": "setConfig",
+      "key": "enable_skill_projectiles",
+      "label": "特殊技能弹 追踪",
+      "default": true
+    }
+  ],
+  "config": {
+    "enable_guns": true,
+    "enable_homing": true,
+    "enable_explosives": true,
+    "enable_skill_projectiles": true,
+    "target_mode": "angle_then_distance",
+    "max_angle_deg": 30,
+    "max_distance": 0,
+    "angle_weight": 1,
+    "distance_weight": 0.5,
+    "damage_entry": "gamemanager",
+    "entry_fallback": true,
+    "damage_override": 0,
+    "use_event_template": true,
+    "fallback_to_original": true,
+    "local_eye_height": 1.55,
+    "chest_fallback_height": 1.1,
+    "target_cache_ms": 25,
+    "homing_speed": 0,
+    "homing_turn": 1,
+    "homing_retarget": true,
+    "homing_max_ms": 20000,
+    "homing_pending_ms": 800,
+    "homing_cone_deg": 30,
+    "homing_cone_fallback": true,
+    "diagnostic_log": false,
+    "log_every": 20,
+    "verbose_probe": false,
+    "log_to_file": false,
+    "log_file": ""
+  },
+  "rpc": [
+    "enable",
+    "disable",
+    "setConfig",
+    "set_config",
+    "setconfig",
+    "status",
+    "cleanup"
+  ],
+  "lifecycle": {
+    "cleanup": true,
+    "restore": true,
+    "requires_room_ready_reapply": false,
+    "room_ready_retry": false,
+    "room_ready_reapply_exempt_reason": "功能安装固定 RVA Hook（替换 WPN_Gun.Damage + attach 投射物入口），每次开火时按 enabled/config 实时读取房间内玩家列表，不依赖进房时立即写入运行态对象。"
+  },
+  "source": {
+    "single_feature_js": "05-正式功能/40-开火直伤/script.js",
+    "runtime_script_js": "features/40_direct_damage/script.js"
+  },
+  "ui_handles": {
+    "switch": "direct_damage_switch",
+    "enable_guns_var": "direct_damage_enable_guns_var",
+    "enable_explosives_var": "direct_damage_enable_explosives_var",
+    "enable_skill_projectiles_var": "direct_damage_enable_skill_projectiles_var"
+  },
+  "state": {
+    "sync_enabled_from_config": true
+  }
+}

@@ -26,6 +26,9 @@ class FixedPointTeleportStaticTests(unittest.TestCase):
             "Component_get_transform: 0x0032CF40",
             "Transform_get_position_Injected: 0x003F4280",
             "ModeBase_UpdateTimeUI: 0x00AF6930",
+            "GameManager_TypeInfo: 0x00E2933C",
+            "Il2CppClass_static_fields: 0x5C",
+            "GameManager_myPlayer: 0x00",
             "GameManager_GameRoundEnd: 0x00AFAA40",
             "GameManager_NewGameRoundStart: 0x00AEBCB0",
             "GameManager_OnDestroy: 0x00AEBD40",
@@ -194,6 +197,43 @@ class FixedPointTeleportStaticTests(unittest.TestCase):
             "teleport_count",
         ]:
             self.assertIn(status_key, text)
+
+    def test_js_reads_local_player_from_gamemanager_static_field(self):
+        text = read_text(JS_FILE)
+
+        self.assertIn("function readStaticLocalPlayer()", text)
+        self.assertIn("function refreshLocalPlayerFromStatic(reason)", text)
+
+        read_fn = text.split("function readStaticLocalPlayer()", 1)[1].split(
+            "function refreshLocalPlayerFromStatic", 1
+        )[0]
+        self.assertIn("RVA.GameManager_TypeInfo", read_fn)
+        self.assertIn("OFF.Il2CppClass_static_fields", read_fn)
+        self.assertIn("OFF.GameManager_myPlayer", read_fn)
+        self.assertLess(
+            read_fn.index("OFF.Il2CppClass_static_fields"),
+            read_fn.index("OFF.GameManager_myPlayer"),
+        )
+
+    def test_js_player_update_hook_uses_pointer_fast_path_without_bot_validation(self):
+        text = read_text(JS_FILE)
+        player_update_hook = text.split('attachHook("Player.Update"', 1)[1].split("});", 1)[0]
+
+        self.assertIn("Runtime.cache.localPlayer", player_update_hook)
+        self.assertIn("args[0].equals(", player_update_hook)
+        self.assertIn("performPendingActions(args[0])", player_update_hook)
+        self.assertNotIn("native.isMyPlayer", player_update_hook)
+        self.assertNotIn("isReadablePtr", player_update_hook)
+
+    def test_js_mode_base_pump_refreshes_local_player_and_consumes_pending(self):
+        text = read_text(JS_FILE)
+        pump = text.split('attachHook("ModeBase.UpdateTimeUI"', 1)[1].split(
+            'attachHook("GameManager.GameRoundEnd"', 1
+        )[0]
+
+        self.assertIn("handleModeBaseSeen(args[0])", pump)
+        self.assertIn('refreshLocalPlayerFromStatic("ModeBase.UpdateTimeUI")', pump)
+        self.assertIn("performPendingActions(player)", pump)
 
     def test_panel_exposes_standard_plugin_callbacks(self):
         text = read_text(UI_FILE)

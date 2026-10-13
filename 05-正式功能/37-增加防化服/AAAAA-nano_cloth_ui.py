@@ -36,6 +36,10 @@ MIN_CLOTH = 1
 DEFAULT_CLOTH = 10
 MAX_CLOTH = 10
 
+TARGET_VALUES = ("local_player", "all_humans")
+TARGET_LABELS = ("仅本地玩家", "全体人类")
+TARGET_BY_LABEL = dict(zip(TARGET_LABELS, TARGET_VALUES))
+
 
 def _clamp_cloth(value):
     try:
@@ -152,6 +156,30 @@ class NanoClothApp(ctk.CTk):
         )
         self.cloth_slider.grid(row=0, column=1, sticky="ew")
         self.cloth_slider.bind("<ButtonRelease-1>", lambda _e: self._sync_config(), add=True)
+
+        # 应用对象：仅本地玩家 / 全体人类
+        target_row = ctk.CTkFrame(controls, fg_color="transparent")
+        target_row.grid(row=2, column=0, columnspan=2, padx=12, pady=(0, 12), sticky="ew")
+        target_row.grid_columnconfigure(1, weight=1)
+
+        ctk.CTkLabel(
+            target_row,
+            text="应用对象",
+            font=ctk.CTkFont(size=12),
+        ).grid(row=0, column=0, padx=(0, 8), sticky="w")
+
+        self.target_var = ctk.StringVar(value=TARGET_LABELS[0])
+        self.target_combo = ctk.CTkComboBox(
+            target_row,
+            values=list(TARGET_LABELS),
+            variable=self.target_var,
+            font=ctk.CTkFont(size=12),
+            dropdown_font=("Microsoft YaHei", 12),
+            state="readonly",
+            width=150,
+            command=self._on_target_changed,
+        )
+        self.target_combo.grid(row=0, column=1, sticky="w")
 
         actions = ctk.CTkFrame(self, corner_radius=8, fg_color=PANEL)
         actions.grid(row=4, column=0, padx=18, pady=5, sticky="ew")
@@ -271,8 +299,9 @@ class NanoClothApp(ctk.CTk):
         state = "normal" if enabled and not self.rpc_busy else "disabled"
         self.enable_switch.configure(state=state)
         self.apply_button.configure(state=state)
-        # 滑块允许随时调整（离线也能选好值，连接后同步）
+        # 滑块和下拉框允许随时调整（离线也能选好值，连接后同步）
         self.cloth_slider.configure(state="normal" if not self.rpc_busy else "disabled")
+        self.target_combo.configure(state="readonly" if not self.rpc_busy else "disabled")
 
     @staticmethod
     def _find_game_pid():
@@ -393,8 +422,14 @@ class NanoClothApp(ctk.CTk):
         self.cloth_var.set(numeric)
         self.cloth_value_label.configure(text=f"{numeric} 件")
 
+    def _on_target_changed(self, _value=None):
+        self._sync_config()
+
     def _current_config(self):
-        return {"cloth_count": _clamp_cloth(self.cloth_var.get())}
+        return {
+            "cloth_count": _clamp_cloth(self.cloth_var.get()),
+            "cloth_target": TARGET_BY_LABEL.get(self.target_var.get(), TARGET_VALUES[0]),
+        }
 
     def _sync_desired_state(self):
         if not self.connected or not self.script or self.rpc_busy:

@@ -17,6 +17,29 @@ class _CountLabel(ctk.CTkLabel):
         return super().configure(require_redraw=require_redraw, **kwargs)
 
 
+DEFAULT_TARGET_VALUES = ("local_player", "all_humans")
+DEFAULT_TARGET_LABELS = {
+    "local_player": "仅本地玩家",
+    "all_humans": "全体人类",
+}
+
+
+def _target_options(control):
+    """从 manifest 的 combo 控件解析 (值列表, 值->显示文案映射, 显示文案列表,
+    显示文案->值, 默认显示文案)。
+
+    控件缺失时退回默认的两项，保证下拉框始终可用。
+    """
+    values = list(control.get("values") or DEFAULT_TARGET_VALUES)
+    mapping = dict(DEFAULT_TARGET_LABELS)
+    mapping.update(control.get("display_values") or {})
+    labels = [mapping.get(value, value) for value in values]
+    by_label = {label: value for value, label in zip(values, labels)}
+    default_value = control.get("default", values[0])
+    default_label = mapping.get(default_value, default_value)
+    return values, mapping, labels, by_label, default_label
+
+
 def _control(manifest, control_type=None, key=None):
     for item in manifest.get("controls", []):
         if control_type and item.get("type") != control_type:
@@ -34,6 +57,7 @@ def build_card(parent, manifest, row, col, colspan, callbacks, card_builder):
 
     switch_control = _control(manifest, "switch")
     slider_control = _control(manifest, "slider", "cloth_count")
+    target_control = _control(manifest, "combo", "cloth_target")
     button_control = _control(manifest, "button")
 
     frame = ctk.CTkFrame(
@@ -117,6 +141,38 @@ def build_card(parent, manifest, row, col, colspan, callbacks, card_builder):
     )
     slider.grid(row=0, column=1, sticky="ew", padx=4)
 
+    # 应用对象下拉框：仅本地玩家 / 全体人类
+    _, _, target_labels, target_by_label, target_default_label = _target_options(target_control)
+
+    target_row = ctk.CTkFrame(frame, fg_color="transparent")
+    target_row.pack(fill="x", padx=12, pady=(2, 6))
+    target_row.grid_columnconfigure(1, weight=1)
+
+    ctk.CTkLabel(
+        target_row,
+        text=target_control.get("label", "应用对象"),
+        font=("Microsoft YaHei", 12),
+        text_color="#e0e0e0",
+    ).grid(row=0, column=0, sticky="w", padx=(0, 8))
+
+    target_var = ctk.StringVar(value=target_default_label)
+    target_combo = ctk.CTkComboBox(
+        target_row,
+        values=target_labels,
+        variable=target_var,
+        font=("Microsoft YaHei", 12),
+        dropdown_font=("Microsoft YaHei", 12),
+        height=28,
+        width=150,
+        state="readonly",
+        command=lambda value: callbacks["set_config"](
+            feature_id,
+            target_control.get("key", "cloth_target"),
+            target_by_label.get(value, value),
+        ),
+    )
+    target_combo.grid(row=0, column=1, sticky="w", padx=4)
+
     # 当前防化服数量（绿色）：status_monitor 连接游戏后每秒刷新
     current_label = ctk.CTkLabel(
         frame,
@@ -163,11 +219,19 @@ def build_card(parent, manifest, row, col, colspan, callbacks, card_builder):
         def worker():
             try:
                 result = callbacks["action"](feature_id, button_control.get("action", "apply"))
-                if isinstance(result, dict) and result.get("pending_apply") is False and \
-                        result.get("last_apply_result", "").startswith("added"):
-                    detail = result.get("last_apply_result", "")
+                detail = result.get("last_apply_result", "") if isinstance(result, dict) else ""
+                if detail == "feature_disabled":
+                    log("⚠ 请先打开「增加防化服」开关再应用")
+                elif detail == "native_not_ready":
+                    log("⚠ 尚未连接到游戏，请先连接游戏")
+                elif isinstance(result, dict) and result.get("pending_apply") is False and \
+                        detail.startswith("added"):
                     change_text = f"（{detail.split('（', 1)[1]}" if "（" in detail else ""
                     log(f"✅ 防化服已增加 {int(var.get())} 件 {change_text}".rstrip())
+                elif detail == "no_human_found":
+                    log("⚠ 未找到可增加防化服的人类目标（请在房间内重试）")
+                elif detail == "all_players_unavailable":
+                    log("⚠ 未取到玩家列表，请在房间内重试")
                 else:
                     log("🛡 已触发防化服增加，等待生效")
             except Exception as exc:
@@ -193,6 +257,8 @@ def build_card(parent, manifest, row, col, colspan, callbacks, card_builder):
         handles.get("cloth_count_var", "nano_cloth_cloth_count_var"): var,
         handles.get("cloth_count_slider", "nano_cloth_cloth_count_slider"): slider,
         handles.get("cloth_count_label", "nano_cloth_cloth_count_label"): value_label,
+        handles.get("cloth_target_var", "nano_cloth_cloth_target_var"): target_var,
+        handles.get("cloth_target_combo", "nano_cloth_cloth_target_combo"): target_combo,
         handles.get("current_label", "nano_cloth_current_label"): current_label,
         handles.get("button", "nano_cloth_apply_btn"): button,
     }

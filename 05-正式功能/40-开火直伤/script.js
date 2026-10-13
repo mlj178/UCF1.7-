@@ -54,14 +54,89 @@
 //     "dry_run"           ：不造成任何伤害，只选目标并记录日志（安全验证用）
 //
 // ------------------------------------------------------------------
-// 设计说明三：三个独立开关
+// 设计说明三：开关划分（枪械走直伤，投射物走追踪）
 // ------------------------------------------------------------------
-//   enable_guns              : 常规枪械直伤（主开关，替换 WPN_Gun.Damage）
-//   enable_explosives        : 榴弹 / 手雷 / RPG 直伤（触发时追加直伤）
-//   enable_skill_projectiles : 特殊技能弹直伤（奥术手雷 / 地狱终结者火球）
+//   enable_guns              : 常规枪械 **直伤**（替换 WPN_Gun.Damage）
+//   enable_homing            : 投射物 **追踪（制导）总开关**
+//   enable_explosives        : 榴弹 / 手雷 / RPG / 榴弹枪 弹体追踪（子开关）
+//   enable_skill_projectiles : 特殊技能弹体追踪（奥术手雷 / 地狱终结者火球）（子开关）
+//
+//   为什么爆炸物 / 技能弹不做直伤：
+//     它们的原版逻辑本来就是"弹体飞到 -> 命中判定 -> WPN_GRENADE.CreateExplosion
+//     做范围伤害"。也就是说 **只要弹体能飞到敌人身上，原版自己就会把伤害算对**
+//     （含爆炸范围、距离衰减、wpnIndex、死亡广播、击杀归属）。再额外注入一份
+//     直伤等于"打两遍"，而且绕过了爆炸范围判定，手感很怪。
+//     所以这两类的正确做法是：**不注入任何伤害，只把弹体掰向敌人**（追踪/拐弯），
+//     伤害 100% 交给原版。枪械才走直伤。
 //
 // ------------------------------------------------------------------
-// 设计说明四：持久化日志与探针（排查"没有任何效果"用）
+// 设计说明四：弹体追踪（制导）挂在哪、怎么拐
+// ------------------------------------------------------------------
+//   反汇编（GameAssembly.dll 0x10B6D080 = Weapon.ProjectMissile）确认了投射物
+//   的完整生成链路：
+//
+//     missile = EffectManager.GetEffect(prefab)        // 从对象池取一颗
+//     missile->owner          = weapon->owner          // +0x30  **直接写字段**
+//     missile->ownerInitalTeam = owner->team           // +0x34
+//     ... 位置 / 朝向 ...
+//     callback.Invoke(missile)
+//         -> WPN_Missile.SetWeaponData(missile, weapon.data, sprIndex)   // +0x38/+0x3C
+//     RecyclableObject.Active(missile) -> Work()
+//         -> Rigidbody.velocity = transform.forward * shootSpeed         // +0x4C
+//
+//   两个关键结论：
+//     1) owner **不经过 WPN_Missile.SetOwner**：全二进制里对 SetOwner 的直接
+//        call 有 0 处，所以"在 SetOwner 里登记制导"永远不会触发 —— 这正是
+//        旧版追踪完全不生效的根因（homingArmed 永远是 0）。
+//     2) 弹体是标准物理刚体：Work() 用 Rigidbody.velocity 发射，FixedUpdate()
+//        （0x10B660C0）只做 Rigidbody.AddForce(extraGravity)，所以"改写
+//        velocity"就能拐弯，不需要碰任何游戏逻辑。
+//
+//   因此新的登记挂点是 WPN_Missile.SetWeaponData（0x00B663C0）：
+//     - 它由 ProjectMissile 的回调调用，5 种投射物（RPG / 手雷 / 榴弹枪 /
+//       奥术手雷 / 地狱终结者火球）**全部**会走到；
+//     - 进入时 owner 已经写好 -> 用 Player.get_isMyPlayer 判断"是不是自己发射的"；
+//     - 进入时还没 Active()，属于"发射前登记"，随后 FixedUpdate 才开始拐。
+//     - 对象池会复用弹体指针，所以每次 SetWeaponData **先无条件清掉旧记录**，
+//       再决定要不要登记，避免"敌人的手雷被掰到我们的目标上"。
+//
+//   拐弯算法（挂在 WPN_Missile.FixedUpdate 的 onLeave，物理步末尾）：
+//     1) 读弹体自身速度 shootSpeed(+0x4C)，读 Rigidbody.get_velocity 拿当前方向；
+//     2) 目标方向 = normalize(敌人瞄准点 - 弹体位置)；
+//     3) 新方向 = 当前方向与目标方向按 homing_turn 插值
+//        （1.0 = 每个物理步直接锁定，弹体立刻拐向敌人；
+//          <1 = 保留一部分原弹道，抛物弧线更自然）；
+//     4) Rigidbody.set_velocity(新方向 * 速度)，同时把 transform 朝向也掰过去
+//        （视觉上弹头朝前，也兼容"用 transform.forward 推位移"的写法）。
+//
+//   **"打谁"策略（scanEnemies + 准星锥）**：
+//     与枪械直伤不同，弹体追踪**不读 config.target_mode**，它只认两个键：
+//       homing_cone_deg      = 0 -> 关闭准星锥，退回旧的"全场最近"
+//                            > 0 -> 先只保留「锥轴 与 参考点->目标 夹角 <= 该值」的敌人，
+//                                   锥内再比距离取最近的那个
+//       homing_cone_fallback = true （默认）锥内没人 -> 回退成"全场最近"
+//                            = false          锥内没人 -> 这颗弹不追踪、按原弹道直飞
+//     锥轴 / 锥心：
+//       发射时（SetWeaponData -> armMissileHoming -> pickEnemyForLaunch）
+//         锥轴 = 本地玩家相机朝向 Player.cameraRotation(+0x4C/+0x50)
+//         锥心 = 眼睛位置 getLocalEyePos = 玩家坐标 + local_eye_height(1.55)
+//                （准星锥必须从眼睛量，用脚底量在几何上不成立）
+//       飞行途中换目标（目标死亡/读不到 -> pickEnemyForMissileRetarget）
+//         锥轴 = 弹体当前速度方向，锥心 = 弹体当前位置
+//                用速度而不是玩家准星：弹体已经飞出去了，玩家可能早就看别处；
+//                用速度还能避免弹体在半空 180° 掉头，飞行观感更自然。
+//     排序依据 = 到参考点的 3D 直线距离，量到**胸口**（getAimPoint，取不到才退到脚底）。
+//     硬过滤永远只有两条：**敌对阵营 + 存活**，永远不打自己人。
+//     夹角算法与枪械直伤完全一致（calculateTargetAngles + angleDistanceDeg），
+//     所以"准星锥"在两条路径上的含义不会漂移。
+//
+//   注意：追踪**没有寻路**。弹体只会沿直线朝敌人飞，中间隔墙就会打在墙上爆炸
+//   （原版行为）。这是刻意保留的——不改变原版的命中判定规则。
+//   "绕墙"的可行性评估（含 Physics.Raycast/SphereCast/NavMesh 的可用地址）见
+//   同目录《开火直伤-简要说明.md》的 §8。
+//
+// ------------------------------------------------------------------
+// 设计说明五：持久化日志与探针（排查"没有任何效果"用）
 // ------------------------------------------------------------------
 //   三路日志同时输出，任一路挂掉不影响其余：
 //     1) 内存环形缓冲 Runtime.logRing  -> RPC logs() 拉取，不依赖文件权限
@@ -87,6 +162,13 @@
 //     [probe:gunShoot]    [probe:gmTakeDamage] [probe:entityHurt]
 //     [probe:playerHurt]  [probe:healthHurt]  游戏自身伤害管线的观察点
 //                                            （[ours]=我们调的，[game]=游戏自己的）
+//     [probe:trig]        爆炸物/技能弹开火（只记录，不再注入伤害）
+//     [probe:missileArm]  **弹体追踪的最终判据**：这颗弹被登记为"要制导"
+//     [probe:missileNotMine] 弹体是别人发射的（不制导）
+//     [probe:missileNoPending] 没抓到对应的开火记录（开火钩子没命中）
+//     [probe:missileForget]   弹体爆炸/回收，清掉制导记录
+//     [probe:homingSteer] 实际改写弹体速度（拐弯）的次数
+//     [probe:homingCone]  准星锥的目标选择：锥内候选数/夹角，锥空时是回退还是放弃
 //
 //   排查顺序建议：
 //     先看 [probe:load]    -> 脚本没注入，后面全免谈
@@ -97,6 +179,13 @@
 //       gunCalls>0 但 selected=0      -> 目标选择问题（看 [probe:cand*]）
 //       selected>0 但 hpDrop=0        -> 伤害入口不被接受（看 [probe:hp] / [probe:apply]）
 //       hpDrop>0                      -> 功能本身是通的
+//     扔手雷/RPG 后看 [probe:beat] 的 missile：
+//       trig=0                        -> 开火钩子没命中（RVA 不匹配）
+//       spawn=0                       -> SetWeaponData 钩子没命中
+//       spawn>0 但 arm=0              -> 看是 notMine（不是自己发射）还是
+//                                        noPending（开火记录没接上）
+//       arm>0 但 steer=0              -> 弹体没有 FixedUpdate（被回收/未激活）
+//       steer>0                       -> 弹体正在拐弯
 // ------------------------------------------------------------------
 // RVA / 字段来源：dump.cs + IDA 交叉验证 + 整合包 2.7 既有功能实测
 // ------------------------------------------------------------------
@@ -119,6 +208,29 @@
 //   GameManager_TypeInfo:              0x00E2933C
 //   Component_get_transform:           0x0032CF40
 //   Transform_get_position_Injected:   0x003F4280   (this, out, method)
+//
+//   ---- 弹体追踪（制导）----
+//   Weapon_ProjectMissile:             0x00B6D080   **投射物统一生成入口**
+//                                                  (missile = GetEffect(prefab);
+//                                                   missile.owner = weapon.owner;
+//                                                   callback.Invoke(missile);
+//                                                   missile.Active() -> Work())
+//   WPN_Missile_SetWeaponData:         0x00B663C0   **制导登记点**（回调里被调用）
+//   WPN_Missile_FixedUpdate:           0x00B660C0   只做 AddForce(extraGravity)
+//   WPN_Missile_Work:                  0x00B664D0   velocity = forward * shootSpeed
+//   WPN_GRENADE_Work:                  0x00B5D6C0   （手雷重写了 Work，逻辑同上）
+//   WPN_Missile_Recycle:               0x00B66240   velocity = zero（回池）
+//   WPN_Missile_OnCollisionEnter:      0x00B66100   （基类；手雷重写了它）
+//   WPN_GRENADE_OnCollisionEnter:      0x00B5D0F0
+//   WPN_GRENADE_OnTriggerEnter:        0x00B5D270
+//   Rigidbody_get_velocity_Injected:   0x00ABBDC0   (this, out Vector3, method)
+//   Rigidbody_set_velocity:            0x00ABC060   (this, x, y, z, method)
+//   Quaternion_LookRotation:           0x004F1710   (out, x, y, z, method)
+//   Transform_set_rotation:            0x003F48A0   (this, x, y, z, w, method)
+//
+//   注意：WPN_Missile.SetOwner(0x00B66390) 在这份二进制里**没有任何直接调用点**
+//   （全 il2cpp 段扫描 0 处），owner 是 ProjectMissile 直接写字段的。
+//   所以不要再把制导登记挂在 SetOwner 上 —— 那是旧版追踪不生效的根因。
 //
 //   Il2CppClass.static_fields:         0x5C
 //   GameManager.myPlayer:              0x00
@@ -176,6 +288,11 @@
         WPN_EvilTerminator_ThrowFireBall: 0x00B5C600,
 
         GameManager_TakeDamage: 0x00AFC1C0,
+        // 用游戏自己的武器表查询来"验证" wpnIndex 是不是合法 key。
+        // 反汇编（0x10AFB130）确认它内部是 Dictionary.TryGetValue：
+        //   key 不存在 -> *data = 0 且 return false，不会抛异常。
+        // 有了它就能在注入之前把不合法的 wpnIndex 挡掉，而不是等死亡广播里炸。
+        GameManager_GetWpnData: 0x00AFB130,
         Entity_OnEntityHurt: 0x00B3F470,
         Player_OnEntityHurt: 0x00B516B0,
         HealthData_Hurt: 0x00AE45B0,
@@ -197,7 +314,53 @@
         WPN_Gun_GunShootFunction: 0x00B62110,
         // HP 百分比 / 死亡判定：用来验证"伤害到底有没有落到血量上"
         HealthData_get_rate: 0x00AE4950,
-        HealthData_get_isDead: 0x00AE4830
+        HealthData_get_isDead: 0x00AE4830,
+        // ---- 真实伤害事件底板（修"敌人死了不复活 / 多人生化闪退"的核心）----
+        //   DamageEventData.TakePlace() 是值类型实例方法，this 就是结构体指针，
+        //   原版每次开火（哪怕打空、打墙）都会走到它 —— 在这里把整份 0x48 字节的
+        //   原版事件抄下来当"底板"，合成事件时只改 victim/damage/origin/hitPos。
+        //   原因：GameManager.DeathEventBroadcast -> HUD_KillMark -> 
+        //         DeathEventData.get_wpnName()/get_killMsgIcon() 内部是
+        //         GameManager.WpnDataDictionary[wpnIndex] 字典查找，
+        //         我们自己填的 wpnIndex=0 不在字典里 -> KeyNotFoundException ->
+        //         异常打断死亡广播 -> 敌人 isDead=true 但永远不复活；
+        //         多人生化模式下同一条异常直接把游戏带崩。
+        DamageEventData_TakePlace: 0x00B3D0D0,
+        // 死亡广播 / 命中特效音效：只挂 onEnter+onLeave 探针，
+        // 用来确认"异常到底停在哪一步"（onEnter 有、onLeave 没有 = 抛在这里）。
+        GameManager_DeathEventBroadcast: 0x00AFA400,
+        GameManager_PlayHitFxAndSnd: 0x00AFB970,
+
+        // ---- 弹体追踪（制导）----
+        //   WPN_Missile 是手雷/RPG/榴弹枪/奥术手雷/火球共用的投射物基类，
+        //   WPN_GRENADE 继承它。FixedUpdate 只有基类定义（手雷没重写），
+        //   所以挂基类这一个就覆盖全部弹体。
+        //
+        //   登记点选 WPN_Missile.SetWeaponData 而不是 SetOwner：
+        //     SetOwner 在这份二进制里 0 个直接调用点（owner 由 ProjectMissile
+        //     直接写字段），挂它等于永远不触发。
+        //   ProjectMissile 的调用顺序是：
+        //     owner 赋值 -> 回调(SetWeaponData) -> Active()->Work() 发射
+        //   所以 SetWeaponData 里 owner 已经可用，且早于发射，正好用来登记。
+        WPN_Missile_SetWeaponData: 0x00B663C0,
+        WPN_Missile_FixedUpdate: 0x00B660C0,
+        WPN_Missile_Work: 0x00B664D0,
+        WPN_GRENADE_Work: 0x00B5D6C0,
+        WPN_Missile_Recycle: 0x00B66240,
+        WPN_Missile_OnCollisionEnter: 0x00B66100,
+        // 手雷重写了 OnCollisionEnter / 另有 OnTriggerEnter，必须单独挂。
+        WPN_GRENADE_OnCollisionEnter: 0x00B5D0F0,
+        WPN_GRENADE_OnTriggerEnter: 0x00B5D270,
+        // 基类回收：WPN_Missile.Recycle 是重写，但有些路径会直接调基类那一份，
+        // 两边都挂才能保证「弹体回池一定清记录」。
+        RecyclableObject_Recycle: 0x00B1A5A0,
+        // 投射物统一生成入口（只进 RVA 审计 + 探针，不挂功能钩子）
+        Weapon_ProjectMissile: 0x00B6D080,
+        // 读写速度/朝向用（Vector3 与 Quaternion 都是按值压栈的 struct）
+        Rigidbody_get_velocity_Injected: 0x00ABBDC0,
+        Rigidbody_set_velocity: 0x00ABC060,
+        Quaternion_LookRotation: 0x004F1710,
+        Transform_set_rotation: 0x003F48A0
     };
 
     var OFF = {
@@ -210,6 +373,13 @@
 
         Entity_team: 0x20,
         Entity_healthData: 0x1C,
+        // Entity 字段（dump.cs 确认）：
+        //   damageRate   +0x14  减伤倍率（SetDamageRate 的产物；复活无敌会把它压到 0）
+        //   isInvincible +0x18  无敌标记（InvincibleBuff 通过 RefBool 写它）
+        Entity_damageRate: 0x14,
+        Entity_isInvincible: 0x18,
+        // HealthData.invinsibleEndTime（dump.cs: 0x44）复活无敌的结束时间戳
+        HealthData_invinsibleEndTime: 0x44,
 
         Player_cameraRotation: 0x4C,
         Player_characterContainer: 0x58,
@@ -219,6 +389,10 @@
         ClientData_nickname: 0x10,
 
         Weapon_data: 0x68,
+        // WeaponData.wpnIndex（dump.cs: 0xC）= WpnDataDictionary 的合法 key
+        WeaponData_wpnIndex: 0x0C,
+        // WeaponData.hitEffectName（dump.cs: 0xA8）= 原版命中特效名（合法字符串）
+        WeaponData_hitEffectName: 0xA8,
         WPN_Gun_realData: 0xEC,
         WeaponData_Gun_ammoDamage: 0x14C,
 
@@ -228,6 +402,20 @@
         WD_Missile_missileData: 0xB8,
         WD_GrenadeGun_missileData: 0x20C,
         WD_EvilTerminator_missileData: 0xF8,
+
+        // WPN_Missile 字段（dump.cs + 反汇编双重确认）
+        //   owner            0x30  Entity/Player（ProjectMissile 直接写字段）
+        //   ownerInitalTeam  0x34  Team 快照
+        //   weaponData       0x38  SetWeaponData 写入
+        //   sprIndex         0x3C  SetWeaponData 写入
+        //   rigidBody        0x44  Unity Rigidbody（物理驱动）
+        //   shootSpeed       0x4C  = MissileData.velocity（Work 用它发射）
+        Missile_owner: 0x30,
+        Missile_ownerInitalTeam: 0x34,
+        Missile_weaponData: 0x38,
+        Missile_sprIndex: 0x3C,
+        Missile_rigidBody: 0x44,
+        Missile_shootSpeed: 0x4C,
 
         CharacterModel_spine: 0x5C,
         CharacterModel_spine1: 0x60,
@@ -264,6 +452,17 @@
         Other: 5
     };
 
+    // 投射物类别：决定"追踪"归哪个子开关管。
+    // 由 5 个开火钩子写入 Runtime.pendingMissile，再由 SetWeaponData 消费。
+    // 之所以要这个中间状态：SetWeaponData 只知道"哪颗弹 + 哪份 WeaponData"，
+    // 分不清这颗弹是榴弹还是技能弹；而开火钩子知道自己在哪个武器类里。
+    // 两者在同一次调用栈内先后发生（ProjectMissile 里同步回调），所以用
+    // 一个"待消费"记录最稳，不依赖任何猜测。
+    var CATEGORY = {
+        EXPLOSIVE: 'explosive',
+        SKILL: 'skill'
+    };
+
     var Runtime = {
         feature_id: 'direct_damage',
         enabled: false,
@@ -281,38 +480,111 @@
         heartbeat: null,
         heartbeatTicks: 0,
 
+        // ---- 弹体追踪状态 ----
+        //   missileTargets: missile 指针字符串 -> { target, at, category, label }
+        //     at = 这颗弹被登记的时间（= 出生时间），用于 homing_max_ms 总时限与心跳清理；
+        //          换目标时**不**刷新它。
+        //   pendingMissile: 开火钩子写、SetWeaponData 读的"这颗弹是什么类别"
+        missileTargets: {},
+        pendingMissile: null,
+
         module: null,
         base: ptr(0),
         attachHooks: [],
         replacedAddresses: [],
         config: {
-            // 三个独立开关（默认全开，可在 UI/整合包面板里单独关闭）
+            // 开关（默认全开，可在 UI/整合包面板里单独关闭）
+            //   enable_guns              : 常规枪械直伤
+            //   enable_homing            : 投射物追踪总开关
+            //   enable_explosives        : 榴弹/手雷/RPG/榴弹枪 弹体追踪
+            //   enable_skill_projectiles : 奥术手雷/地狱终结者火球 弹体追踪
             enable_guns: true,
+            enable_homing: true,
             enable_explosives: true,
             enable_skill_projectiles: true,
 
             // 目标选择
-            target_mode: TARGET_MODE.ANGLE_THEN_DISTANCE,
-            max_angle_deg: 30.0,
-            max_distance: 80.0,
+            // 默认 nearest = **全场最近的敌人，完全不看准星方向**。
+            // 这是按需求改的默认值：要求"打空气、不瞄准、看不到人、隔着墙，
+            // 只要开火就要有伤害"，所以不能再拿准星锥去筛。
+            // 想回到"只打准星方向的人"就把 target_mode 改成 angle_then_distance。
+            target_mode: TARGET_MODE.NEAREST,
+            max_angle_deg: 30.0,        // 仅 angle_then_distance / weighted 模式使用
+            max_distance: 0.0,          // 0 = 不限距离（配合"隔着墙也要打到"）
             angle_weight: 1.0,
             distance_weight: 0.5,
 
             // 伤害注入
-            // 默认走 "hurt"（Entity/Player.OnEntityHurt）：
-            //   IDA 反汇编确认 Entity.OnEntityHurt 内部就是
-            //     HealthData.Hurt(this.healthData, (int)eventData.damage)
-            //   而且整合包 2.7 的"增加伤害倍率"功能就是挂在这个入口上工作的，
-            //   是唯一被生产环境验证过的伤害入口，所以作为默认值。
-            damage_entry: DAMAGE_ENTRY.HURT,
-            damage_multiplier: 1.0,
+            // 默认必须走 "gamemanager"（GameManager.TakeDamage）。证据链（IDA 反汇编）：
+            //   1) DamageEventData.TakePlace()（游戏自己的"结算这个伤害事件"）反汇编就是：
+            //        if (victim == null) return;
+            //        if (victim.healthData == null) return;
+            //        if (victim.healthData.isDead) return;
+            //        GameManager.TakeDamage(this);
+            //   2) GameManager.TakeDamage 内部依次调用：
+            //        GameManager.DamageEvent$$Invoke ×6  (InvalidCheck/PreCal/PostCal/Post/...)
+            //        GameManager.PlayHitFxAndSnd         (命中特效/音效)
+            //        HealthData.get_isDead               (判定是否死亡)
+            //        GameManager.DeathEventBroadcast     (**真正把敌人打死**)
+            //   3) 而 Player.OnEntityHurt / HealthData.Hurt 只做 HP 相减：
+            //        Entity.OnEntityHurt = if (type != Infect) HealthData.Hurt(healthData, (int)damage)
+            //      完全不碰 DeathEventBroadcast。
+            //   ==> 用 hurt/health 的结果是"敌人 HP 归零、isDead=true，但永远不会死"，
+            //       画面上就是敌人站着不动、打不死 —— 即"敌人无敌"。
+            damage_entry: DAMAGE_ENTRY.GAME_MANAGER,
+            // 统一入口万一被 InvalidCheck 观察者否决（HP 完全没变），是否自动降级补一次 hurt。
+            // 只是"至少掉血"的保险，日志会明确写出来。
+            entry_fallback: true,
+            // 注意：本功能**不提供**伤害倍率/伤害覆盖给用户调节（已按需求移除倍率）。
+            // damage_override 仅作为内部调试手段保留，默认 0 = 关闭。
             damage_override: 0.0,
-            fallback_to_original: false,
+            // 用"原版真实事件底板"合成伤害事件（默认开，强烈建议保持开启）。
+            //   true  = 抄一份原版 DamageEventData，只改 victim/damage/origin/hitPos；
+            //           wpnIndex/wpnSprIndex/damageTag/hitTag/hitSndName/hitEffect 全部是
+            //           原版值 -> 死亡广播能跑完 -> 敌人正常复活、多人模式不闪退。
+            //   false = 退回旧的手工合成（wpnIndex=0），只用于 A/B 对照，
+            //           实测会抛 KeyNotFoundException 并导致"死了不复活"。
+            use_event_template: true,
+            // 没有可选目标时是否回退原版射线（实测后改的默认值）：
+            //   true（默认）= 无目标时原版弹道照常走 -> 墙上照常有弹孔/着弹特效，手感自然；
+            //                 false 时打完所有敌人后每次开火都是"子弹凭空消失"，
+            //                 玩家会以为功能完全没生效（就是这么被误判的）。
+            //   false       = 无目标时什么都不做（纯直伤，子弹彻底不飞）。
+            fallback_to_original: true,
 
             // 其它
             local_eye_height: 1.55,
             chest_fallback_height: 1.1,
             target_cache_ms: 25,
+
+            // ---- 弹体追踪（制导）：让手雷/RPG/榴弹枪/奥术手雷/火球朝敌人拐弯 ----
+            // 注意：这一组只控制"拐弯"，**不注入任何伤害**。
+            // 伤害完全交给原版：弹体撞到人/墙 -> WPN_GRENADE.CreateExplosion 结算。
+            homing_speed: 0.0,          // 0 = 用弹体自身的 shootSpeed（MissileData.velocity）
+            homing_turn: 1.0,           // 0.05~1.0，每个物理步把方向掰向目标的力度
+                                        //   1.0 = 直接锁定（立刻拐弯，命中率最高）
+                                        //   0.4 = 慢慢拐（保留抛物弧线，更像原版手感）
+            homing_retarget: true,      // 原目标死了自动改追最近的敌人
+            homing_max_ms: 20000,       // 超过这个时间放弃制导（防指针复用/泄漏）
+            homing_pending_ms: 800,     // "开火记录 -> 弹体生成"的最大时间差（配对窗口）
+
+            // ---- 弹体追踪的"打谁"策略：**准星锥内距离最近的敌人** ----
+            //   弹体追踪**不读** config.target_mode（那是枪械直伤用的），只认下面两个键。
+            //
+            //   homing_cone_deg = 0  -> 关闭准星锥，回到旧的"全场最近"
+            //   homing_cone_deg > 0  -> 先只保留「锥轴 与 参考点->目标 夹角 <= 该值」的敌人，
+            //                          锥内再比距离取最近的那个。
+            //
+            //   锥轴（发射时）  = 本地玩家相机朝向，锥心 = 眼睛位置
+            //                     （准星锥必须从眼睛量；用脚底量在几何上不成立）
+            //   锥轴（中途换目标）= 弹体当前速度方向，锥心 = 弹体位置
+            //                     用速度而不是玩家准星：弹体已经飞出去了，玩家可能早就看别处；
+            //                     用速度还能避免弹体在半空 180° 掉头，观感更自然。
+            homing_cone_deg: 30.0,
+            // 锥内一个敌人都没有时怎么办：
+            //   true （默认）= 回退成"全场最近"，保住"对着空气扔雷也能追到人"
+            //   false        = 这颗弹不追踪，按原弹道直飞（严格"只追我瞄的人"）
+            homing_cone_fallback: true,
 
             // 调试
             diagnostic_log: true,
@@ -324,6 +596,13 @@
         cache: {
             eventBuf: null,
             posBuf: null,
+            // 原版 DamageEventData 底板（0x48 字节），由 DamageEventData.TakePlace 钩子写入
+            eventTemplate: null,
+            eventTemplateValid: false,
+            eventTemplateAt: 0,
+            eventTemplateWpnIndex: -1,
+            outDataBuf: null,
+            wpnIndexWarned: false,
             emptyString: null,
             ownPlayer: ptr(0),
             hitTag: ptr(0),
@@ -359,7 +638,56 @@
             lastHpAfter: -1,
             lastHpRawBefore: '',
             lastHpRawAfter: '',
-            ownPlayerSource: '',    // 本地玩家是从哪条路径取到的
+            ownPlayerSource: '',
+            // ---- 弹体追踪计数器（日志里搜 [probe:beat] 的 missile= 段） ----
+            missileSpawns: 0,      // SetWeaponData 被调用次数 = 观察到几颗弹生成
+            missileNotMine: 0,     // 弹体是别人发射的（不制导）
+            missileNoPending: 0,   // 弹体生成了但没抓到开火记录（配对失败）
+            missileSwitchOff: 0,   // 类别子开关关掉了
+            missileNoTarget: 0,    // 没有可选目标（场上没敌人）
+            homingArmed: 0,        // 有多少颗自己的弹体被登记为"要制导"
+            homingSteered: 0,      // 实际改写速度/朝向的次数
+            homingDropped: 0,      // 目标死亡/超时后放弃的次数
+            homingForgotten: 0,    // 弹体爆炸/回收/被复用，清掉记录次数
+            missileLaunchSeen: 0,  // Work() 被调用次数（弹体真的发射了）
+            missileHitSeen: 0,     // 弹体 OnCollisionEnter 次数（只记账，不再清记录）
+            missileTriggerSeen: 0, // 弹体 OnTriggerEnter 次数（只记账）
+            // ---- 追踪排查：steer 为什么没写进去 / 记录被什么清掉 ----
+            fixedUpdateCalls: 0,   // WPN_Missile.FixedUpdate 被调用总次数
+            steerOff: 0,           // 总开关/类别开关关掉而跳过的帧数
+            steerNoEntry: 0,       // 没有制导记录（记录已被清掉 / 不是我们的弹）
+            steerNoPos: 0,         // 读不到弹体位置
+            steerNoAim: 0,         // 读不到目标命中点
+            steerTooClose: 0,      // 已贴脸，交给原版碰撞判定
+            steerWrote: 0,         // 真的写进了 Rigidbody.velocity
+            steerWriteSkip: 0,     // rb 不可读 / native 不可用
+            steerLostTarget: 0,    // 目标死了但暂时没有新目标（保留记录继续飞）
+            forgetReuse: 0,        // 记录被清掉的原因分布
+            forgetRecycle: 0,
+            forgetHit: 0,
+            forgetHitGrenade: 0,
+            forgetTrigger: 0,
+            forgetTimeout: 0,
+            forgetLost: 0,
+            forgetNoNext: 0,
+            forgetIdentity: 0,
+            // ---- 弹体追踪的"打谁"策略计数（准星锥） ----
+            coneHit: 0,            // 锥内选到目标（发射时 + 中途换目标都算）
+            coneEmpty: 0,          // 锥内一个敌人都没有
+            coneFallback: 0,       // 锥内没人 -> 回退成全场最近
+            coneEmptyStrict: 0,    // 锥内没人且关掉了回退 -> 放弃追踪
+            coneOff: 0,            // homing_cone_deg = 0，没启用锥
+            coneAxisFail: 0,       // 读不到相机朝向/弹体速度 -> 退回全场最近
+            coneRetarget: 0,       // 中途换目标时用了锥并选中
+            entryFallback: 0,      // 统一入口没生效、自动降级用 hurt 的次数
+            templateCaptured: 0,   // 抄到原版事件底板的次数
+            templateUsed: 0,       // 用底板合成事件的次数
+            templateRejected: 0,   // 底板不可用 / wpnIndex 非法而拒绝注入的次数
+            invincibleCleared: 0,  // 注入前清掉目标无敌/减伤状态的次数
+            deathIn: 0,            // DeathEventBroadcast 进入次数
+            deathOut: 0,           // DeathEventBroadcast 正常返回次数（<deathIn 就是抛异常了）
+            hitFxIn: 0,            // PlayHitFxAndSnd 进入次数
+            hitFxOut: 0,           // PlayHitFxAndSnd 正常返回次数
 
             errorCount: 0,
             cleanupCount: 0,
@@ -382,6 +710,11 @@
         getGameManager: null,
         healthRate: null,
         healthIsDead: null,
+        getWpnData: null,
+        getVelocity: null,
+        setVelocity: null,
+        lookRotation: null,
+        setRotation: null,
         gunDamageOriginal: null,
         gmTakeDamage: null,
         entityHurt: null,
@@ -667,6 +1000,31 @@
             // 诊断用：只读 HP 百分比 / 死亡标记，用来验证伤害是否真的落到血量上
             native.healthRate = new NativeFunction(base.add(RVA.HealthData_get_rate), 'float', ['pointer', 'pointer'], CALL_CONV);
             native.healthIsDead = new NativeFunction(base.add(RVA.HealthData_get_isDead), 'bool', ['pointer', 'pointer'], CALL_CONV);
+            // GameManager.GetWpnData(int weaponIndex, out WeaponData data)
+            //   -> bool，内部是 Dictionary.TryGetValue，查不到只返回 false
+            native.getWpnData = new NativeFunction(
+                base.add(RVA.GameManager_GetWpnData), 'bool', ['int32', 'pointer', 'pointer'], CALL_CONV
+            );
+
+            // 弹体追踪：Rigidbody.velocity / Quaternion.LookRotation / Transform.rotation
+            // Vector3(12B)、Quaternion(16B) 都是按值压栈的 struct，同样拆成 4 字节标量。
+            // get_velocity 走 Injected 版本（out Vector3*），避免按值返回 struct。
+            native.getVelocity = new NativeFunction(
+                base.add(RVA.Rigidbody_get_velocity_Injected), 'void',
+                ['pointer', 'pointer', 'pointer'], CALL_CONV
+            );
+            native.setVelocity = new NativeFunction(
+                base.add(RVA.Rigidbody_set_velocity), 'void',
+                ['pointer', 'uint', 'uint', 'uint', 'pointer'], CALL_CONV
+            );
+            native.lookRotation = new NativeFunction(
+                base.add(RVA.Quaternion_LookRotation), 'void',
+                ['pointer', 'uint', 'uint', 'uint', 'pointer'], CALL_CONV
+            );
+            native.setRotation = new NativeFunction(
+                base.add(RVA.Transform_set_rotation), 'void',
+                ['pointer', 'uint', 'uint', 'uint', 'uint', 'pointer'], CALL_CONV
+            );
 
             // DamageEventData 按值压栈：18 个 4 字节 + method
             native.gmTakeDamage = new NativeFunction(
@@ -709,6 +1067,7 @@
         try {
             if (!Runtime.cache.eventBuf) Runtime.cache.eventBuf = Memory.alloc(OFF.Dmg_size + 16);
             if (!Runtime.cache.posBuf) Runtime.cache.posBuf = Memory.alloc(16);
+            if (!Runtime.cache.quatBuf) Runtime.cache.quatBuf = Memory.alloc(16);   // Quaternion 回传缓冲
             return true;
         } catch (error) {
             fail('ensureBuffers', error);
@@ -1173,10 +1532,181 @@
         };
     }
 
+    // ------------------------------------------------------------------
+    // 合成事件里"必须合法"的字段 —— 本轮真正的修复点
+    // ------------------------------------------------------------------
+    //   事故（日志 + IDA 反汇编共同定位）：手工合成事件时 wpnIndex 填了 0，于是
+    //     GameManager.DeathEventBroadcast -> GameManager_DeathEvent$$Invoke
+    //       -> HUD_KillMark -> DeathEventData.get_wpnName()/get_killMsgIcon()
+    //   内部做的是字典查找 GameManager.WpnDataDictionary[wpnIndex]
+    //   （Dictionary<int, WeaponData>），反汇编就是
+    //     if (!dict || get_Item(dict, wpnIndex) == 0) il2cpp_raise_exception();
+    //   key 不在字典里 -> KeyNotFoundException；这条异常从 HUD 订阅者冒出来，
+    //   直接打断整条死亡广播链，后果：
+    //     a) 敌人 HP 归零、isDead=true，但复活调度没跑 -> 敌人死了不复活；
+    //     b) 多人生化模式下同一条异常把游戏带崩 -> 闪退。
+    //   ==> wpnIndex 必须填 WeaponData.wpnIndex（字典里真实存在的 key）；
+    //       wpnSprIndex 可以留 0（WeaponData.GetKillMsgIcon 反汇编直接
+    //       return spriteAsset.killMsgIcon，没用这个参数）；
+    //       hitTag / hitSndName 留 null 也安全（原版 WPN_Gun.Damage 自己就是先
+    //       memset(event, 0, 0x48) 再按需填，null 正是原版默认值）。
+    function readWeaponWpnIndex(weapon) {
+        try {
+            if (isNull(weapon)) return -1;
+            var data = weapon.add(OFF.Weapon_data).readPointer();
+            if (!readable(data)) return -1;
+            return data.add(OFF.WeaponData_wpnIndex).readS32();
+        } catch (_) { return -1; }
+    }
+
+    function readWeaponHitEffectName(weapon) {
+        try {
+            if (isNull(weapon)) return ptr(0);
+            var data = weapon.add(OFF.Weapon_data).readPointer();
+            if (!readable(data)) return ptr(0);
+            // hitEffectName 挂在 WeaponData(ScriptableObject) 上，是常驻资源对象，
+            // 生命周期远长于一次伤害事件，不会 use-after-free。
+            var name = data.add(OFF.WeaponData_hitEffectName).readPointer();
+            return readable(name) ? name : ptr(0);
+        } catch (_) { return ptr(0); }
+    }
+
+    // 原版事件底板：**只抄标量 wpnIndex**。
+    // 不抄结构体里的字符串指针 —— 那些指针的生命周期不由我们掌握，
+    // 缓存下来当长期值用有 use-after-free 风险。
+    //   来源 1：DamageEventData.TakePlace(this) —— 原版每次开火都会走到（this 就是结构体指针）
+    //   来源 2：GameManager.TakeDamage 入口（[esp+4] 就是按值传入的结构体本体）
+    function captureEventTemplate(eventPtr, from) {
+        try {
+            if (!Runtime.config.use_event_template) return false;
+            if (Runtime.inDirectDamage) return false;   // 我们自己合成的事件不算原版
+            if (!readable(eventPtr)) return false;
+            var attacker = eventPtr.add(OFF.Dmg_attacker).readPointer();
+            if (isNull(attacker)) return false;
+            var wpnIndex = eventPtr.add(OFF.Dmg_wpnIndex).readS32();
+            if (wpnIndex <= 0 || wpnIndex > 0xFFFF) return false;
+            Runtime.cache.eventTemplateValid = true;
+            Runtime.cache.eventTemplateAt = Date.now();
+            Runtime.cache.eventTemplateWpnIndex = wpnIndex;
+            Runtime.stats.templateCaptured += 1;
+            if (Runtime.stats.templateCaptured <= 3) {
+                probe('tpl', '原版事件 wpnIndex=' + wpnIndex + ' from ' + from +
+                    ' (wpnSprIndex=' + eventPtr.add(OFF.Dmg_wpnSprIndex).readS32() +
+                    ' damageTag=0x' + hex32(eventPtr.add(OFF.Dmg_damageTag).readU32()) +
+                    ' type=' + eventPtr.add(OFF.Dmg_type).readS32() +
+                    ' hitTag=' + fmtPtr(eventPtr.add(OFF.Dmg_hitTag).readPointer()) +
+                    ' hitEffect=' + fmtPtr(eventPtr.add(OFF.Dmg_hitEffect).readPointer()) + ')');
+            }
+            return true;
+        } catch (error) {
+            fail('captureEventTemplate', error);
+            return false;
+        }
+    }
+
+    // 取一个"字典里一定存在"的 wpnIndex：
+    //   1) 首选当前武器的 Weapon.data.wpnIndex（谁开的枪就用谁的武器）
+    //   2) 读不到就用 5 秒内抄到的原版事件底板里的 wpnIndex
+    //   3) 都拿不到 -> -1，调用方放弃这次注入
+    // 用游戏自己的武器表验证 wpnIndex 是不是合法 key（见 RVA.GameManager_GetWpnData 注释）。
+    //   true  = 字典里存在这个 key，可以安全注入
+    //   false = 不存在，必须丢掉这个候选
+    //   null  = 校验不可用（拿不到原生函数 / 调用异常），此时不拦截
+    function checkWpnIndex(index) {
+        try {
+            if (!native.getWpnData) return null;
+            if (!Runtime.cache.outDataBuf) Runtime.cache.outDataBuf = Memory.alloc(8);
+            Runtime.cache.outDataBuf.writePointer(ptr(0));
+            var raw = native.getWpnData(index | 0, Runtime.cache.outDataBuf, ptr(0));
+            return toFlag(raw) ? true : false;
+        } catch (error) {
+            if (!Runtime.cache.wpnIndexWarned) {
+                Runtime.cache.wpnIndexWarned = true;
+                log('warn', '[probe:tpl] GameManager.GetWpnData 调用失败，本次跳过 wpnIndex 校验：' +
+                    (error && error.message ? error.message : String(error)));
+            }
+            return null;
+        }
+    }
+
+    // 选一个"游戏武器表里确实存在"的 wpnIndex：
+    //   候选 1：当前武器的 Weapon.data(0x68) -> WeaponData.wpnIndex(0x0C)
+    //           （Weapon.data 是游戏自己在用的：WPN_Gun.Damage 第一句就是 if (this->fields.data)）
+    //   候选 2：5 秒内抄到的原版伤害事件里的 wpnIndex（原版自己填的，一定是合法 key）
+    //   两个候选都会被 GameManager.GetWpnData 实查一遍，查不到就丢；全丢光就返回 -1，
+    //   调用方放弃这次注入（宁可不打，也绝不让死亡广播里 WpnDataDictionary[wpnIndex] 抛异常）。
+    function resolveWpnIndex(weapon) {
+        var candidates = [];
+        var fromWeapon = readWeaponWpnIndex(weapon);
+        if (fromWeapon > 0 && fromWeapon <= 0xFFFF) {
+            candidates.push({ value: fromWeapon, from: 'Weapon.data' });
+        }
+        if (Runtime.cache.eventTemplateValid &&
+            Runtime.cache.eventTemplateWpnIndex > 0 &&
+            (Date.now() - Runtime.cache.eventTemplateAt) <= 5000) {
+            candidates.push({ value: Runtime.cache.eventTemplateWpnIndex, from: '原版事件' });
+        }
+        for (var i = 0; i < candidates.length; i += 1) {
+            var valid = checkWpnIndex(candidates[i].value);
+            if (valid === false) {
+                probe('tpl', 'wpnIndex=' + candidates[i].value + '（来源 ' + candidates[i].from +
+                    '）不在 GameManager.WpnDataDictionary 里 -> 丢弃这个候选');
+                continue;
+            }
+            return candidates[i].value;
+        }
+        return -1;
+    }
+
+    // ------------------------------------------------------------------
+    // 复活无敌（本轮修复：复活后打不动 / 掉血却不死）
+    // ------------------------------------------------------------------
+    //   实测日志（09:27:32 复活之后那一段）：
+    //     [probe:gmTakeDamage] damage=105.00 type=1 [ours]   <- 我们传进去的是 105
+    //     [probe:playerHurt]   damage=0.00   type=1 [ours]   <- 观察者链把它改成了 0
+    //     [probe:healthHurt]   value=0                       <- Hurt(health, 0) 自然不掉血
+    //   即：游戏自己的 DamageEvent 观察者链把伤害抹成了 0。dump.cs 里对应三样东西：
+    //     Entity.damageRate(+0x14)             SetDamageRate() 产生的减伤倍率
+    //     Entity.isInvincible(+0x18)           InvincibleBuff 通过 RefBool 写的无敌标记
+    //     HealthData.invinsibleEndTime(+0x44)  复活无敌的结束时间戳
+    //   而 DamageEventData 里游戏自己留了一个开关 ignoreDmgRate(+0x44)，
+    //   语义就是"这次伤害忽略目标的减伤"—— 我们直接用它。
+    //   同时在注入前把目标的无敌状态清掉，保证第一次走完整入口就能把人打死。
+    function readTargetDefense(victim) {
+        var info = { isInvincible: -1, invEnd: -1, damageRate: -1, err: '' };
+        try {
+            info.isInvincible = victim.add(OFF.Entity_isInvincible).readU8();
+            info.damageRate = victim.add(OFF.Entity_damageRate).readFloat();
+            var hp = victim.add(OFF.Entity_healthData).readPointer();
+            if (readable(hp)) info.invEnd = hp.add(OFF.HealthData_invinsibleEndTime).readFloat();
+        } catch (error) {
+            info.err = (error && error.message) ? error.message : String(error);
+        }
+        return info;
+    }
+
+    // 清掉目标的无敌状态（复活无敌）。返回清除前的值，日志里能直接看到是不是它在挡。
+    function clearTargetInvincibility(victim) {
+        var before = readTargetDefense(victim);
+        try { victim.add(OFF.Entity_isInvincible).writeU8(0); } catch (_) {}
+        try {
+            var hp = victim.add(OFF.Entity_healthData).readPointer();
+            if (readable(hp)) hp.add(OFF.HealthData_invinsibleEndTime).writeFloat(0);
+        } catch (_) {}
+        return before;
+    }
+
     // 把 DamageEventData 写进缓冲区，再拆成 18 个 4 字节标量（cdecl 压栈布局）。
-    function buildEventDwords(attacker, victim, damage, dmgType, origin, hitPos) {
+    // 返回 null = 合成不出安全事件，调用方必须放弃注入走原版弹道。
+    function buildEventDwords(attacker, victim, damage, dmgType, origin, hitPos, weapon) {
         var buf = Runtime.cache.eventBuf;
-        var strings = resolveStringPointers();
+
+        var wpnIndex = resolveWpnIndex(weapon);
+        if (wpnIndex <= 0) {
+            Runtime.stats.templateRejected += 1;
+            probe('tpl', 'refuse to inject: no valid wpnIndex, weapon=' + fmtPtr(weapon));
+            return null;
+        }
 
         buf.add(OFF.Dmg_attacker).writePointer(attacker);
         buf.add(OFF.Dmg_victim).writePointer(victim);
@@ -1190,17 +1720,23 @@
         buf.add(OFF.Dmg_hitPos + 4).writeFloat(hitPos.y);
         buf.add(OFF.Dmg_hitPos + 8).writeFloat(hitPos.z);
 
-        buf.add(OFF.Dmg_hitTag).writePointer(strings.tag);
-        buf.add(OFF.Dmg_hitSndName).writePointer(strings.snd);
-        buf.add(OFF.Dmg_hitEffect).writePointer(strings.fx);
+        // hitTag/hitSndName 用 null（原版 memset 之后的默认值）；
+        // hitEffect 用武器自己的常驻特效名（WeaponData.hitEffectName）。
+        buf.add(OFF.Dmg_hitTag).writePointer(ptr(0));
+        buf.add(OFF.Dmg_hitSndName).writePointer(ptr(0));
+        buf.add(OFF.Dmg_hitEffect).writePointer(readWeaponHitEffectName(weapon));
 
         buf.add(OFF.Dmg_wallThrough).writeU8(0);
         buf.add(OFF.Dmg_type).writeS32(dmgType);
         buf.add(OFF.Dmg_damageTag).writeS32(0);
-        buf.add(OFF.Dmg_wpnIndex).writeS32(0);
+        buf.add(OFF.Dmg_wpnIndex).writeS32(wpnIndex);   // <-- 本轮修复核心
         buf.add(OFF.Dmg_wpnSprIndex).writeS32(0);
-        buf.add(OFF.Dmg_ignoreDmgRate).writeU8(0);
+        // <-- 本轮修复：让这次伤害忽略目标的减伤/复活无敌（Entity.damageRate）。
+        //     复活后游戏会把目标的 damageRate 压到 0，观察者链随即把 data.damage 抹成 0，
+        //     表现就是"打中了但不掉血"。ignoreDmgRate 是游戏自己留的开关。
+        buf.add(OFF.Dmg_ignoreDmgRate).writeU8(1);
 
+        Runtime.stats.templateUsed += 1;
         var dwords = new Array(OFF.Dmg_dwordCount);
         for (var i = 0; i < OFF.Dmg_dwordCount; i += 1) {
             dwords[i] = buf.add(i * 4).readU32();
@@ -1257,7 +1793,15 @@
         return snap;
     }
 
-    function applyDamage(target, damage, dmgType, sourceLabel) {
+    // 判定"这次伤害有没有让目标掉血/死亡"
+    function hpDroppedBetween(before, after) {
+        if (before.rate >= 0 && after.rate >= 0) {
+            return (after.rate < before.rate) || toFlag(after.dead);
+        }
+        return before.raw !== after.raw;
+    }
+
+    function applyDamage(target, damage, dmgType, sourceLabel, weapon) {
         if (!target || damage <= 0) return false;
         var entry = Runtime.config.damage_entry;
 
@@ -1278,8 +1822,23 @@
 
         var eyePos = getLocalEyePos(myPlayer) || target.rootPos || target.pos;
         var before = readHealthSnapshot(target.player);
+        var defense = null;
 
         try {
+            // 只有走完整入口（GameManager.TakeDamage）时才需要处理复活无敌：
+            // 观察者链会按目标的 damageRate / isInvincible 把 data.damage 抹成 0。
+            if (entry === DAMAGE_ENTRY.GAME_MANAGER) {
+                defense = clearTargetInvincibility(target.player);
+                // 计数只在"确实清掉了东西"时 +1，这样 UI 上的「清无敌」才有意义
+                if (defense.isInvincible === 1 || defense.invEnd > 0 ||
+                    (defense.damageRate >= 0 && defense.damageRate < 0.999)) {
+                    Runtime.stats.invincibleCleared += 1;
+                    probe('inv', '目标处于减伤/无敌状态，已清除: isInvincible=' + defense.isInvincible +
+                        ' invinsibleEndTime=' + defense.invEnd.toFixed(2) +
+                        ' damageRate=' + defense.damageRate.toFixed(3) +
+                        ' victim=' + fmtPtr(target.player));
+                }
+            }
             if (entry === DAMAGE_ENTRY.HEALTH) {
                 var health = target.player.add(OFF.Entity_healthData).readPointer();
                 if (!readable(health)) {
@@ -1290,8 +1849,16 @@
                 native.healthHurt(health, damage | 0, ptr(0));
             } else {
                 var dwords = buildEventDwords(
-                    myPlayer, target.player, damage, dmgType, eyePos, target.pos
+                    myPlayer, target.player, damage, dmgType, eyePos, target.pos, weapon
                 );
+                // 合成不出安全事件（读不到合法的 wpnIndex）时宁可不打这一枪：
+                // 把 wpnIndex=0 丢进死亡广播会抛 KeyNotFoundException，
+                // 后果就是敌人死了不复活 / 多人生化闪退。
+                if (!dwords) {
+                    Runtime.stats.lastResult = 'refused: no valid wpnIndex (' + sourceLabel + ')';
+                    probe('apply', 'ABORT: buildEventDwords returned null (no valid wpnIndex)');
+                    return false;
+                }
                 if (entry === DAMAGE_ENTRY.HURT) {
                     probe('apply', 'call Player.OnEntityHurt(victim=' + fmtPtr(target.player) +
                         ', damage=' + damage.toFixed(2) + ', type=' + dmgType + ')');
@@ -1304,18 +1871,31 @@
             }
 
             var after = readHealthSnapshot(target.player);
+            var dropped = hpDroppedBetween(before, after);
+
+            // 保险：统一入口被观察者否决时（HP 完全没变）**用完整入口再试一次**。
+            //   ★ 绝对不要再退回 Player.OnEntityHurt / HealthData.Hurt：那条路只扣血、
+            //     不走 DeathEventBroadcast，会把敌人打成"HP=0、isDead=true，但永远不死、
+            //     也永远不复活"的幽灵；之后选目标逻辑把它当死人跳过，
+            //     表现就是用户报的"敌人复活之后打不到、也不掉血"。
+            //   重试前再清一次无敌状态，避免在两次调用之间 Buff 又把 isInvincible 写回去。
+            if (!dropped && entry === DAMAGE_ENTRY.GAME_MANAGER &&
+                Runtime.config.entry_fallback && dwords) {
+                Runtime.stats.entryFallback += 1;
+                var retryDefense = clearTargetInvincibility(target.player);
+                log('warn', '[probe:hp] GameManager.TakeDamage 未生效（HP 没变），' +
+                    '清一次无敌状态后用完整入口重试（不会再产生半死敌人）: isInvincible=' +
+                    retryDefense.isInvincible + ' damageRate=' + retryDefense.damageRate.toFixed(3));
+                callGameManagerTakeDamage(dwords);
+                after = readHealthSnapshot(target.player);
+                dropped = hpDroppedBetween(before, after);
+            }
+
             Runtime.stats.hpChecks += 1;
             Runtime.stats.lastHpBefore = before.rate;
             Runtime.stats.lastHpAfter = after.rate;
             Runtime.stats.lastHpRawBefore = before.raw;
             Runtime.stats.lastHpRawAfter = after.raw;
-
-            var dropped;
-            if (before.rate >= 0 && after.rate >= 0) {
-                dropped = (after.rate < before.rate) || toFlag(after.dead);
-            } else {
-                dropped = before.raw !== after.raw;
-            }
             if (dropped) Runtime.stats.hpDropped += 1;
 
             // 最终判据：这一行直接告诉我们是"成了"还是"没效果"
@@ -1383,9 +1963,9 @@
     }
 
     function resolveDamage(baseDamage) {
+        // 不做任何倍率放大：直接用武器的基础伤害（damage_override 仅调试用）。
         var damage = baseDamage;
         if (Runtime.config.damage_override > 0) damage = Runtime.config.damage_override;
-        damage = damage * Runtime.config.damage_multiplier;
         if (!isFinite(damage) || damage <= 0) damage = 0;
         if (damage > 999999) damage = 999999;
         return damage;
@@ -1427,7 +2007,7 @@
         probe('direct', 'target=' + fmtPtr(target.player) + ' angle=' + target.angleDeg.toFixed(1) +
             ' dist=' + target.dist.toFixed(1) + ' damage=' + damage.toFixed(2) +
             ' entry=' + Runtime.config.damage_entry + ' (' + sourceLabel + ')');
-        return applyDamage(target, damage, dmgType, sourceLabel);
+        return applyDamage(target, damage, dmgType, sourceLabel, weapon);
     }
 
     // ------------------------------------------------------------------
@@ -1525,21 +2105,33 @@
         log('info', 'WPN_Gun.Damage replaced @ 0x' + RVA.WPN_Gun_Damage.toString(16));
     }
 
-    // 爆炸物：RPG / 手雷投掷 / 榴弹枪（榴弹模式）
+    // ------------------------------------------------------------------
+    // 爆炸物 / 技能弹的开火钩子：**只登记"要追踪"，绝不注入伤害**
+    // ------------------------------------------------------------------
+    //   这 5 个函数都是"本地武器开火"的那一步，args[0] 就是武器对象，
+    //   所以能用 Weapon.get_isMyWeapon 过滤掉别人的开火。
+    //   它们内部会同步调用 Weapon.ProjectMissile -> 回调 -> SetWeaponData，
+    //   所以在 onEnter 里写一条 Runtime.pendingMissile，SetWeaponData 立刻就能读到。
+    //
+    //   为什么不做直伤（重要）：
+    //     原版投射物本来就会在命中时用 WPN_GRENADE.CreateExplosion 结算范围伤害，
+    //     伤害数值、爆炸半径、距离衰减、wpnIndex、击杀归属全都是对的。
+    //     再注入一份直伤 = 打两遍 + 绕过爆炸范围判定，既多余又破坏手感。
+    //     需求是"弹体能追着敌人拐弯"，那就只做追踪，伤害交给原版。
     function installExplosiveHooks() {
         registerAttach('WPN_RPG.Fire', RVA.WPN_RPG_Fire, {
             onEnter: function (args) {
-                handleTrigger(args[0], DAMAGE_TYPE.Grenade, 'rpg', OFF.WD_RPG_missileData);
+                handleTrigger(args[0], CATEGORY.EXPLOSIVE, 'rpg', OFF.WD_RPG_missileData);
             }
         });
         registerAttach('WPN_Throw.Throw', RVA.WPN_Throw_Throw, {
             onEnter: function (args) {
-                handleTrigger(args[0], DAMAGE_TYPE.Grenade, 'throw', OFF.WD_Missile_missileData);
+                handleTrigger(args[0], CATEGORY.EXPLOSIVE, 'throw', OFF.WD_Missile_missileData);
             }
         });
         registerAttach('WPN_GrenadeGun.b__19_0', RVA.WPN_GrenadeGun_GunShootFunction_Lambda, {
             onEnter: function (args) {
-                handleTrigger(args[0], DAMAGE_TYPE.Grenade, 'grenade_gun', OFF.WD_GrenadeGun_missileData);
+                handleTrigger(args[0], CATEGORY.EXPLOSIVE, 'grenade_gun', OFF.WD_GrenadeGun_missileData);
             }
         });
     }
@@ -1548,23 +2140,28 @@
     function installSkillHooks() {
         registerAttach('WPN_Arcane.Throw', RVA.WPN_Arcane_Throw, {
             onEnter: function (args) {
-                handleTrigger(args[0], DAMAGE_TYPE.Other, 'arcane', OFF.WD_Missile_missileData);
+                handleTrigger(args[0], CATEGORY.SKILL, 'arcane', OFF.WD_Missile_missileData);
             }
         });
         registerAttach('WPN_EvilTerminator.ThrowFireBall', RVA.WPN_EvilTerminator_ThrowFireBall, {
             onEnter: function (args) {
-                handleTrigger(args[0], DAMAGE_TYPE.Other, 'evil_terminator', OFF.WD_EvilTerminator_missileData);
+                handleTrigger(args[0], CATEGORY.SKILL, 'evil_terminator', OFF.WD_EvilTerminator_missileData);
             }
         });
     }
 
-    function handleTrigger(weapon, dmgType, sourceLabel, missileDataOffset) {
+    // 类别子开关：爆炸物 / 技能弹各自独立，都还要过 enable_homing 总开关。
+    function isCategoryHomingOn(category) {
+        if (!Runtime.config.enable_homing) return false;
+        if (category === CATEGORY.SKILL) return Runtime.config.enable_skill_projectiles;
+        return Runtime.config.enable_explosives;
+    }
+
+    // 注意：这里**故意不检查开关**。开关只在登记时（armMissileHoming）判定，
+    // 这样 [probe:trig] / trig 计数永远代表"开火钩子有没有命中"，
+    // 不会因为开关关着就变成 0 而让人误判成 RVA 不匹配。
+    function handleTrigger(weapon, category, sourceLabel, missileDataOffset) {
         if (!Runtime.enabled) return;
-        if (sourceLabel === 'arcane' || sourceLabel === 'evil_terminator') {
-            if (!Runtime.config.enable_skill_projectiles) return;
-        } else if (!Runtime.config.enable_explosives) {
-            return;
-        }
         try {
             if (!isLocalWeapon(weapon)) {
                 if (probeBudget('trigRemote', 3)) {
@@ -1572,25 +2169,23 @@
                 }
                 return;
             }
-            if (sourceLabel === 'arcane' || sourceLabel === 'evil_terminator') {
+            if (category === CATEGORY.SKILL) {
                 Runtime.stats.skillTriggers += 1;
             } else {
                 Runtime.stats.explosiveTriggers += 1;
             }
-            if (Runtime.inDirectDamage) {
-                probe('trigReentry', sourceLabel + ': re-entry, skipped');
-                return;
-            }
+            // 只记录"这颗弹属于哪个类别"，真正的制导登记在 SetWeaponData 里做。
+            // missileDataOffset 只用于日志（原生弹体伤害，纯参考，**不注入**）。
+            Runtime.pendingMissile = {
+                category: category,
+                label: sourceLabel,
+                weapon: weapon,
+                at: Date.now()
+            };
             var damage = readMissileDamage(weapon, missileDataOffset);
             probe('trig', sourceLabel + ' weapon=' + fmtPtr(weapon) +
-                ' missileDamage=' + damage.toFixed(2) + ' offset=0x' + missileDataOffset.toString(16));
-            // 直伤是"追加"结算：原版投射物仍会正常发射并爆炸。
-            Runtime.inDirectDamage = true;
-            try {
-                directDamage(weapon, dmgType, sourceLabel, damage);
-            } finally {
-                Runtime.inDirectDamage = false;
-            }
+                ' 原生弹体伤害=' + damage.toFixed(2) + '（只记录，不注入）' +
+                ' category=' + category);
         } catch (error) {
             fail('handleTrigger:' + sourceLabel, error);
         }
@@ -1601,6 +2196,9 @@
     function installStringCaptureHooks() {
         var capture = function () {
             try {
+                // 我们自己合成的事件不算"原版"，否则会把空的 hitTag/hitEffect
+                // 当成真实值缓存起来，自我污染。
+                if (Runtime.inDirectDamage) return;
                 if (Runtime.cache.capturedTag) return;
                 var eventPtr = this.context.esp.add(8);
                 var tag = eventPtr.add(OFF.Dmg_hitTag).readPointer();
@@ -1618,6 +2216,17 @@
         };
         registerAttach('Entity.OnEntityHurt(capture)', RVA.Entity_OnEntityHurt, { onEnter: capture });
         registerAttach('Player.OnEntityHurt(capture)', RVA.Player_OnEntityHurt, { onEnter: capture });
+    }
+
+    // 原版事件底板采集：DamageEventData.TakePlace 是值类型实例方法，
+    // 进入时 args[0] 就是结构体指针；原版每次开火（含打空、打墙）都会走到它，
+    // 所以这里能稳定抄到 wpnIndex / wpnSprIndex / damageTag 这些标量字段。
+    function installEventTemplateCapture() {
+        registerProbeAttach('DamageEventData.TakePlace(template)', RVA.DamageEventData_TakePlace, {
+            onEnter: function (args) {
+                captureEventTemplate(args[0], 'TakePlace');
+            }
+        });
     }
 
     // ------------------------------------------------------------------
@@ -1646,7 +2255,25 @@
                 ['Entity.OnEntityHurt', RVA.Entity_OnEntityHurt],
                 ['Player.OnEntityHurt', RVA.Player_OnEntityHurt],
                 ['HealthData.Hurt', RVA.HealthData_Hurt],
-                ['HealthData.get_rate', RVA.HealthData_get_rate]
+                ['HealthData.get_rate', RVA.HealthData_get_rate],
+                ['DamageEventData.TakePlace', RVA.DamageEventData_TakePlace],
+                ['GameManager.DeathEventBroadcast', RVA.GameManager_DeathEventBroadcast],
+                ['GameManager.PlayHitFxAndSnd', RVA.GameManager_PlayHitFxAndSnd],
+                // ---- 弹体追踪（制导）----
+                // 这一组只要出现 NOT EXECUTABLE，追踪就一定不生效，
+                // 所以全部列进审计，方便一眼区分"版本不匹配"和"逻辑没走到"。
+                ['Weapon.ProjectMissile', RVA.Weapon_ProjectMissile],
+                ['WPN_Missile.SetWeaponData', RVA.WPN_Missile_SetWeaponData],
+                ['WPN_Missile.FixedUpdate', RVA.WPN_Missile_FixedUpdate],
+                ['WPN_Missile.Work', RVA.WPN_Missile_Work],
+                ['WPN_GRENADE.Work', RVA.WPN_GRENADE_Work],
+                ['WPN_Missile.Recycle', RVA.WPN_Missile_Recycle],
+                ['WPN_Missile.OnCollisionEnter', RVA.WPN_Missile_OnCollisionEnter],
+                ['WPN_GRENADE.OnCollisionEnter', RVA.WPN_GRENADE_OnCollisionEnter],
+                ['WPN_GRENADE.OnTriggerEnter', RVA.WPN_GRENADE_OnTriggerEnter],
+                ['RecyclableObject.Recycle', RVA.RecyclableObject_Recycle],
+                ['Rigidbody.get_velocity', RVA.Rigidbody_get_velocity_Injected],
+                ['Rigidbody.set_velocity', RVA.Rigidbody_set_velocity]
             ];
             for (var i = 0; i < list.length; i += 1) {
                 var address = Runtime.base.add(list[i][1]);
@@ -1746,7 +2373,55 @@
                     ' pipeShoot=' + s.pipelineGunShoot + ' pipeTake=' + s.pipelineTakeDamage +
                     ' pipeEntity=' + s.pipelineEntityHurt + ' pipePlayer=' + s.pipelinePlayerHurt +
                     ' pipeHP=' + s.pipelineHealthHurt +
+                    ' tpl=' + s.templateCaptured + '/' + s.templateUsed +
+                    ' refused=' + s.templateRejected + ' inv=' + s.invincibleCleared +
+                    ' death=' + s.deathIn + '->' + s.deathOut +
+                    ' hitFx=' + s.hitFxIn + '->' + s.hitFxOut +
                     ' errors=' + s.errorCount + ' lastError=' + (s.lastError || '-'));
+                // 弹体追踪单独一行，方便一眼判断"追踪到底卡在哪一步"：
+                //   trig     = 开火钩子命中（爆炸物+技能弹）
+                //   spawn    = SetWeaponData 命中（= 观察到几颗弹生成）
+                //   launch   = Work() 命中（弹体真的被激活发射）
+                //   arm      = 自己的弹登记成功（**追踪是否生效看这个**）
+                //   steer    = 实际改写了速度（拐弯次数）
+                //   notMine / noPending / off / noTarget = arm 没涨的原因
+                log('info', '[probe:beat] missile: trig=' + (s.explosiveTriggers + s.skillTriggers) +
+                    '(爆炸=' + s.explosiveTriggers + '/技能=' + s.skillTriggers + ')' +
+                    ' spawn=' + s.missileSpawns + ' launch=' + s.missileLaunchSeen +
+                    ' arm=' + s.homingArmed + ' steer=' + s.homingSteered +
+                    ' tracked=' + Object.keys(Runtime.missileTargets).length +
+                    ' | notMine=' + s.missileNotMine + ' noPending=' + s.missileNoPending +
+                    ' off=' + s.missileSwitchOff + ' noTarget=' + s.missileNoTarget +
+                    ' fu=' + s.fixedUpdateCalls + ' wrote=' + s.steerWrote +
+                    ' drop=' + s.homingDropped + ' forget=' + s.homingForgotten);
+                // 第二行：steer 为什么没写进去 / 记录是被谁清掉的 / 弹体撞了什么
+                log('info', '[probe:beat] missile2: skip[off=' + s.steerOff +
+                    ' noEntry=' + s.steerNoEntry + ' noPos=' + s.steerNoPos +
+                    ' noAim=' + s.steerNoAim + ' close=' + s.steerTooClose +
+                    ' writeSkip=' + s.steerWriteSkip + ' lostTarget=' + s.steerLostTarget + ']' +
+                    ' forget[reuse=' + s.forgetReuse + ' recycle=' + s.forgetRecycle +
+                    ' hit=' + s.forgetHit + ' hitG=' + s.forgetHitGrenade +
+                    ' trig=' + s.forgetTrigger + ' timeout=' + s.forgetTimeout +
+                    ' lost=' + s.forgetLost + ' noNext=' + s.forgetNoNext +
+                    ' ident=' + s.forgetIdentity + ']' +
+                    ' touch[hit=' + s.missileHitSeen + ' trig=' + s.missileTriggerSeen + ']' +
+                    ' cone[命中=' + s.coneHit + ' 锥内空=' + s.coneEmpty +
+                    ' 回退=' + s.coneFallback + ' 严格放弃=' + s.coneEmptyStrict +
+                    ' 关=' + s.coneOff + ' 轴失败=' + s.coneAxisFail +
+                    ' 换目标=' + s.coneRetarget + ']');
+                // 顺手清理超时的弹体追踪记录：万一某颗弹没触发 Recycle/碰撞就消失，
+                // 记录会一直留着；指针被复用后可能"打错人"。
+                try {
+                    var nowMs = Date.now();
+                    var keys = Object.keys(Runtime.missileTargets);
+                    for (var i = 0; i < keys.length; i += 1) {
+                        if (nowMs - Runtime.missileTargets[keys[i]].at > Runtime.config.homing_max_ms) {
+                            delete Runtime.missileTargets[keys[i]];
+                            Runtime.stats.homingDropped += 1;
+                        }
+                    }
+                } catch (_) {}
+
                 if (Runtime.heartbeatTicks % 3 === 1) diagnosticSnapshot('beat');
             } catch (_) {}
         }, 5000);
@@ -1785,6 +2460,8 @@
         registerProbeAttach('GameManager.TakeDamage(probe)', RVA.GameManager_TakeDamage, {
             onEnter: function () {
                 Runtime.stats.pipelineTakeDamage += 1;
+                // 底板来源 2：TakeDamage 入口的 [esp+4] 就是按值传入的结构体本体
+                captureEventTemplate(this.context.esp.add(4), 'TakeDamage');
                 if (probeBudget('gmTakeDamage', 20)) {
                     try {
                         var b = this.context.esp.add(4);
@@ -1817,11 +2494,47 @@
                 }
             };
         };
-        registerProbeAttach('Entity.OnEntityHurt(probe)', RVA.Entity_OnEntityHurt, { onEnter: hurtProbe('entityHurt', false) });
-        registerProbeAttach('Player.OnEntityHurt(probe)', RVA.Player_OnEntityHurt, { onEnter: hurtProbe('playerHurt', true) });
+        // onLeave 探针：本轮定位"异常到底停在哪一步"的关键工具。
+        // 某函数 onEnter 有日志、onLeave 没有 => 异常就是在它内部抛出来的。
+        var leaveProbe = function (tag) {
+            return function () {
+                if (probeBudget(tag, 30)) probe(tag, 'returned normally');
+            };
+        };
+        registerProbeAttach('Entity.OnEntityHurt(probe)', RVA.Entity_OnEntityHurt, {
+            onEnter: hurtProbe('entityHurt', false),
+            onLeave: leaveProbe('entityHurtLeave')
+        });
+        registerProbeAttach('Player.OnEntityHurt(probe)', RVA.Player_OnEntityHurt, {
+            onEnter: hurtProbe('playerHurt', true),
+            onLeave: leaveProbe('playerHurtLeave')
+        });
+
+        // 死亡广播：onEnter 有、onLeave 没有 = 死亡链被异常打断（敌人不复活/闪退的现场）
+        registerProbeAttach('GameManager.DeathEventBroadcast(probe)', RVA.GameManager_DeathEventBroadcast, {
+            onEnter: function () {
+                Runtime.stats.deathIn += 1;
+                if (probeBudget('deathIn', 20)) probe('deathIn', 'enter (真正的死亡广播)');
+            },
+            onLeave: function () {
+                Runtime.stats.deathOut += 1;
+                if (probeBudget('deathOut', 20)) probe('deathOut', 'returned normally (死亡广播完整跑完)');
+            }
+        });
+        registerProbeAttach('GameManager.PlayHitFxAndSnd(probe)', RVA.GameManager_PlayHitFxAndSnd, {
+            onEnter: function () {
+                Runtime.stats.hitFxIn += 1;
+                if (probeBudget('hitFxIn', 10)) probe('hitFxIn', 'enter');
+            },
+            onLeave: function () {
+                Runtime.stats.hitFxOut += 1;
+                if (probeBudget('hitFxOut', 10)) probe('hitFxOut', 'returned normally');
+            }
+        });
 
         // 最底层扣血：Entity.OnEntityHurt 内部就是 "HealthData.Hurt(healthData, (int)damage)"
         registerProbeAttach('HealthData.Hurt(probe)', RVA.HealthData_Hurt, {
+            onLeave: leaveProbe('healthHurtLeave'),
             onEnter: function (args) {
                 Runtime.stats.pipelineHealthHurt += 1;
                 if (probeBudget('healthHurt', 20)) {
@@ -1835,16 +2548,530 @@
         });
     }
 
+    // ------------------------------------------------------------------
+    // 敌人扫描（弹体追踪的"打谁"基础）
+    // ------------------------------------------------------------------
+    //   与 selectTarget（枪械直伤）的区别：**不做任何视线判定**，
+    //   敌我判定只保留两条硬规则：**敌对阵营 + 存活**，永远不打自己人。
+    //
+    //   scanEnemies(from, cone) 一次扫完，同时给出两个结果：
+    //     bestCone = 锥内最近的敌人（cone 为 null 时 = bestAny）
+    //     bestAny  = 全场最近的敌人
+    //   这样"锥内没人就回退全场最近"不用扫两遍。
+    //
+    //   cone = { yawDeg, pitchDeg, deg } 就是"准星锥"：
+    //     先只保留「参考点 -> 目标」方向与锥轴夹角 <= deg 的敌人，锥内再比距离。
+    //     夹角算法与枪械直伤用的完全一致（calculateTargetAngles + angleDistanceDeg），
+    //     所以"准星锥"在两条路径上的含义不会漂移。
+    //
+    //   排序依据 = 到参考点的 3D 直线距离，量到**胸口**（getAimPoint，取不到才退到脚底）。
+    //   早期版本量的是"脚底到脚底"，已改成胸口：命中点在胸口，排序和拐弯用同一个点更一致。
+    function scanEnemies(from, cone) {
+        var result = {
+            bestCone: null, bestAny: null,
+            enemies: 0,          // 通过硬过滤的敌人总数
+            inCone: 0,           // 其中落在准星锥内的数量
+            nearestAngle: -1,    // 全场最近的那个敌人与锥轴的夹角（锥空时看它，判断是"背对"还是"锥太小"）
+            usedCone: !!(cone && cone.deg > 0)
+        };
+        if (!from) return result;
+        var me = getMyPlayer();
+        if (isNull(me)) return result;
+        var gm = getGameManager();
+        if (isNull(gm)) return result;
+        var players = getAllPlayers(gm);
+        var myTeam = readTeam(me);
+        for (var i = 0; i < players.length; i += 1) {
+            var candidate = players[i];
+            try {
+                if (samePointer(candidate, me)) continue;
+                if (!isEnemyTeam(myTeam, readTeam(candidate))) continue;
+                if (isDeadEntity(candidate)) continue;
+                var pos = getPlayerPos(candidate);
+                if (!pos) continue;
+                var aim = getAimPoint(candidate, pos) || pos;
+                var dx = aim.x - from.x, dy = aim.y - from.y, dz = aim.z - from.z;
+                var dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+                result.enemies += 1;
+                // 夹角只在启用锥时才算（关锥时这个数没有意义，省一次三角运算）
+                var ang = -1;
+                if (result.usedCone) {
+                    var angles = calculateTargetAngles(from, aim);
+                    if (angles) {
+                        var a = angleDistanceDeg(angles.targetYawDeg, angles.targetPitchDeg,
+                            cone.yawDeg, cone.pitchDeg);
+                        if (isFinite(a)) ang = a;
+                    }
+                }
+                if (result.bestAny === null || dist < result.bestAny.dist) {
+                    result.bestAny = { player: candidate, dist: dist, angleDeg: ang };
+                    // nearestAngle = **全场最近的那个敌人**的夹角（不是"最小夹角"）。
+                    // 锥空时看它：若在 90° 以上，说明你是背对着最近的人，不是锥开小了。
+                    if (result.usedCone) result.nearestAngle = ang;
+                }
+                if (!result.usedCone) { result.inCone += 1; continue; }
+                if (ang < 0 || ang > cone.deg) continue;   // 锥外 / 夹角读不到：淘汰
+                result.inCone += 1;
+                if (result.bestCone === null || dist < result.bestCone.dist) {
+                    result.bestCone = { player: candidate, dist: dist, angleDeg: ang };
+                }
+            } catch (_) {}
+        }
+        if (!result.usedCone) result.bestCone = result.bestAny;
+        return result;
+    }
+
+    // 纯"全场最近"（不启用准星锥）。
+    function pickNearestEnemyFrom(from) {
+        return scanEnemies(from, null).bestCone;
+    }
+
+    // ------------------------------------------------------------------
+    // 弹体追踪的"打谁"策略：**准星锥内距离最近的敌人**
+    // ------------------------------------------------------------------
+    //   发射时（armMissileHoming 调用）：
+    //     锥轴 = 本地玩家相机朝向（readCameraRotation）
+    //     锥心 = 眼睛位置（getLocalEyePos）—— 准星锥必须从眼睛量
+    //   锥内有人 -> 取锥内最近的那个
+    //   锥内没人 -> homing_cone_fallback：
+    //       true （默认）= 回退成"全场最近"，保住"对着空气扔雷也能追到人"
+    //       false        = 返回 null，这颗弹不追踪、按原弹道直飞
+    //   homing_cone_deg = 0 -> 完全关闭锥，等于旧行为（全场最近）
+    function pickEnemyForLaunch() {
+        var me = getMyPlayer();
+        if (isNull(me)) return null;
+        var eye = getLocalEyePos(me);
+        if (!eye) return null;
+
+        var coneDeg = Runtime.config.homing_cone_deg;
+        if (!(coneDeg > 0)) {
+            Runtime.stats.coneOff += 1;
+            return scanEnemies(eye, null).bestCone;
+        }
+        var rot = readCameraRotation(me);
+        if (!rot) {
+            // 读不到相机朝向：宁可"追最近的"也不要完全不追
+            Runtime.stats.coneAxisFail += 1;
+            return scanEnemies(eye, null).bestCone;
+        }
+        var scan = scanEnemies(eye, { yawDeg: rot.yawDeg, pitchDeg: rot.pitchDeg, deg: coneDeg });
+        if (scan.bestCone) {
+            Runtime.stats.coneHit += 1;
+            if (probeBudget('homingCone', 20)) {
+                probe('homingCone', 'LAUNCH 锥内命中 target=' + fmtPtr(scan.bestCone.player) +
+                    ' angle=' + scan.bestCone.angleDeg.toFixed(1) + '/' + coneDeg.toFixed(0) + 'deg' +
+                    ' dist=' + scan.bestCone.dist.toFixed(1) +
+                    ' 锥内候选=' + scan.inCone + '/' + scan.enemies);
+            }
+            return scan.bestCone;
+        }
+        Runtime.stats.coneEmpty += 1;
+        if (!Runtime.config.homing_cone_fallback) {
+            Runtime.stats.coneEmptyStrict += 1;
+            probe('homingCone', 'LAUNCH 锥内无敌人 + 已关闭回退 -> 这颗弹不追踪' +
+                ' 全场敌人=' + scan.enemies +
+                ' 最近夹角=' + (scan.nearestAngle < 0 ? '-' : scan.nearestAngle.toFixed(1)) +
+                ' (锥=' + coneDeg.toFixed(0) + 'deg)');
+            return null;
+        }
+        Runtime.stats.coneFallback += 1;
+        probe('homingCone', 'LAUNCH 锥内无敌人 -> 回退全场最近' +
+            ' 全场敌人=' + scan.enemies +
+            ' 最近夹角=' + (scan.nearestAngle < 0 ? '-' : scan.nearestAngle.toFixed(1)) +
+            ' (锥=' + coneDeg.toFixed(0) + 'deg，调大锥角或关掉回退可改行为)');
+        return scan.bestAny;
+    }
+
+    // 弹体飞行途中换目标（原目标死亡/读不到时）：
+    //   锥轴 = 弹体当前速度方向（"继续朝前找"），锥心 = 弹体当前位置。
+    //   用速度而不是玩家准星的理由：
+    //     1) 弹体已经飞出去了，玩家可能早就看别处，用玩家准星会让弹体突然大幅掉头；
+    //     2) 用速度天然避免弹体在半空 180° 掉头，飞行观感更自然。
+    //   回退规则与发射时一致（homing_cone_fallback）。
+    function pickEnemyForMissileRetarget(mpos, rb) {
+        if (!mpos) return null;
+        var coneDeg = Runtime.config.homing_cone_deg;
+        if (!(coneDeg > 0)) {
+            Runtime.stats.coneOff += 1;
+            return scanEnemies(mpos, null).bestCone;
+        }
+        var v = readRigidbodyVelocity(rb);
+        var vlen = v ? Math.sqrt(v.x * v.x + v.y * v.y + v.z * v.z) : 0;
+        if (!(vlen > 0.01)) {
+            // 读不到速度（刚出膛/已停住）：退回全场最近
+            Runtime.stats.coneAxisFail += 1;
+            return scanEnemies(mpos, null).bestCone;
+        }
+        var hDist = Math.sqrt(v.x * v.x + v.z * v.z);
+        if (hDist < 0.01) hDist = 0.01;
+        var scan = scanEnemies(mpos, {
+            yawDeg: Math.atan2(v.x, v.z) * 180.0 / Math.PI,
+            pitchDeg: Math.atan2(v.y, hDist) * 180.0 / Math.PI,
+            deg: coneDeg
+        });
+        if (scan.bestCone) {
+            Runtime.stats.coneHit += 1;
+            Runtime.stats.coneRetarget += 1;
+            if (probeBudget('homingCone', 30)) {
+                probe('homingCone', 'RETARGET 锥内命中 target=' + fmtPtr(scan.bestCone.player) +
+                    ' angle=' + scan.bestCone.angleDeg.toFixed(1) + '/' + coneDeg.toFixed(0) + 'deg' +
+                    ' dist=' + scan.bestCone.dist.toFixed(1) +
+                    ' 锥内候选=' + scan.inCone + '/' + scan.enemies);
+            }
+            return scan.bestCone;
+        }
+        Runtime.stats.coneEmpty += 1;
+        if (!Runtime.config.homing_cone_fallback) {
+            Runtime.stats.coneEmptyStrict += 1;
+            return null;
+        }
+        Runtime.stats.coneFallback += 1;
+        Runtime.stats.coneRetarget += 1;
+        return scan.bestAny;
+    }
+
+    // float -> u32 位模式（按值 struct 压栈时用）
+    function floatToU32(value) {
+        try {
+            if (!Runtime.cache.floatBuf) Runtime.cache.floatBuf = Memory.alloc(4);
+            Runtime.cache.floatBuf.writeFloat(value);
+            return Runtime.cache.floatBuf.readU32();
+        } catch (_) { return 0; }
+    }
+
+    // ------------------------------------------------------------------
+    // 弹体追踪（制导）：让弹体朝敌人拐弯
+    // ------------------------------------------------------------------
+    //   完整设计见文件头"设计说明四"。实现要点：
+    //     1) 登记（arm）：WPN_Missile.SetWeaponData 是 ProjectMissile 回调里
+    //        被调用的那一步 —— owner 已经写好、弹体还没 Active() 发射。
+    //        用 owner 判定"是不是自己发射的"，用 Runtime.pendingMissile 判定类别。
+    //        **每次进入都先无条件清掉该指针的旧记录**（对象池复用防串味：
+    //        否则敌人捡到同一颗弹，会被我们掰到自己的目标上）。
+    //     2) 拐弯（steer）：WPN_Missile.FixedUpdate 的 onLeave —— 物理步末尾，
+    //        游戏自己刚 AddForce(extraGravity) 完，此时改写 velocity 立刻生效。
+    //     3) 清理：Recycle / OnCollisionEnter（基类 + 手雷重写的那个）/
+    //        OnTriggerEnter 都要清，防止指针被复用后"打错人"。
+    //     4) 兜底：心跳里按 homing_max_ms 清超时记录。
+
+    // 读 Rigidbody.velocity（Injected 版本，out Vector3*，避免按值返回 struct）
+    function readRigidbodyVelocity(rb) {
+        if (!readable(rb) || !native.getVelocity || !Runtime.cache.posBuf) return null;
+        try {
+            var buffer = Runtime.cache.posBuf;
+            native.getVelocity(rb, buffer, ptr(0));
+            var v = { x: buffer.readFloat(), y: buffer.add(4).readFloat(), z: buffer.add(8).readFloat() };
+            if (!isFinite(v.x) || !isFinite(v.y) || !isFinite(v.z)) return null;
+            return v;
+        } catch (_) { return null; }
+    }
+
+    // 记录被清掉的原因分布。排查「只拐了 1 次就不拐了」时看这一组计数：
+    // 哪个字段大，就说明记录是被哪条路径清掉的。
+    function countForgetReason(why) {
+        var s = Runtime.stats;
+        if (why === 'reused') s.forgetReuse += 1;
+        else if (why === 'recycle') s.forgetRecycle += 1;
+        else if (why === 'hit') s.forgetHit += 1;
+        else if (why === 'hit(grenade)') s.forgetHitGrenade += 1;
+        else if (why === 'trigger') s.forgetTrigger += 1;
+        else if (why === 'timeout') s.forgetTimeout += 1;
+        else if (why === 'target-lost') s.forgetLost += 1;
+        else if (why === 'no-new-target') s.forgetNoNext += 1;
+        else if (why === 'identity') s.forgetIdentity += 1;
+    }
+
+    // 清掉某颗弹的制导记录（回池 / 被复用 / 超时 / 身份不符都走这里）
+    function forgetMissile(missile, why) {
+        try {
+            if (!missile || isNull(missile)) return false;
+            var key = missile.toString();
+            if (!Runtime.missileTargets[key]) return false;
+            delete Runtime.missileTargets[key];
+            Runtime.stats.homingForgotten += 1;
+            countForgetReason(why);
+            if (why && probeBudget('missileForget', 12)) {
+                probe('missileForget', fmtPtr(missile) + ' ' + why);
+            }
+            return true;
+        } catch (_) { return false; }
+    }
+
+    // 登记：这颗弹是不是"我们发射的 + 该类别追踪开着"
+    function armMissileHoming(missile) {
+        try {
+            if (isNull(missile)) return;
+            // 对象池会复用指针：先无条件清掉旧记录，再决定要不要重新登记
+            forgetMissile(missile, 'reused');
+            if (!Runtime.enabled) return;
+            // 计数放在开关判定之前："弹生成"是事实，和开关无关，
+            // 这样排查时 spawn=0 就一定代表 SetWeaponData 钩子没命中。
+            Runtime.stats.missileSpawns += 1;
+
+            var owner = missile.add(OFF.Missile_owner).readPointer();
+            if (!isLocalPlayer(owner)) {
+                Runtime.stats.missileNotMine += 1;
+                if (probeBudget('missileNotMine', 6)) {
+                    probe('missileNotMine', 'missile=' + fmtPtr(missile) + ' owner=' + fmtPtr(owner) +
+                        '（别人发射的，不制导）');
+                }
+                return;
+            }
+            // 配对：开火钩子（同一次调用栈里）刚写的类别记录
+            var pending = Runtime.pendingMissile;
+            Runtime.pendingMissile = null;
+            if (!pending || (Date.now() - pending.at) > Runtime.config.homing_pending_ms) {
+                Runtime.stats.missileNoPending += 1;
+                if (probeBudget('missileNoPending', 6)) {
+                    probe('missileNoPending', 'missile=' + fmtPtr(missile) + ' owner=' + fmtPtr(owner) +
+                        ' pending=' + (pending ? pending.label : 'null') +
+                        ' | 开火钩子没命中（查 [probe:trig] / [probe:rva]）');
+                }
+                return;
+            }
+            if (!isCategoryHomingOn(pending.category)) {
+                Runtime.stats.missileSwitchOff += 1;
+                return;
+            }
+            var best = pickEnemyForLaunch();
+            if (!best) {
+                Runtime.stats.missileNoTarget += 1;
+                if (probeBudget('missileNoTarget', 6)) {
+                    probe('missileNoTarget', 'missile=' + fmtPtr(missile) + ' 场上没有可选敌人');
+                }
+                return;
+            }
+            Runtime.missileTargets[missile.toString()] = {
+                target: best.player,
+                at: Date.now(),
+                category: pending.category,
+                label: pending.label,
+                // 身份指纹：对象池会把同一个指针发给下一颗弹，指针相同不代表还是同一颗。
+                // 每次拐弯前重新读一遍 owner + rigidBody，不一致就说明槽位换人了，
+                // 立刻丢掉记录，避免「上一颗弹的记录把别人发射的弹拐走」。
+                owner: owner,
+                rb: missile.add(OFF.Missile_rigidBody).readPointer(),
+                steers: 0
+            };
+            Runtime.stats.homingArmed += 1;
+            probe('missileArm', 'ARM missile=' + fmtPtr(missile) + ' owner=' + fmtPtr(owner) +
+                ' target=' + fmtPtr(best.player) + ' dist=' + best.dist.toFixed(1) +
+                ' angle=' + (best.angleDeg >= 0 ? best.angleDeg.toFixed(1) : '-') +
+                ' cone=' + Runtime.config.homing_cone_deg.toFixed(0) + 'deg' +
+                ' category=' + pending.category + ' via=' + pending.label +
+                ' wpnData=' + fmtPtr(missile.add(OFF.Missile_weaponData).readPointer()));
+        } catch (error) { fail('armMissileHoming', error); }
+    }
+    function steerMissile(missile) {
+        // 每一次提前返回都记一个计数。排查「弹体不拐弯」时先看 [probe:beat] missile2 那行：
+        //   noEntry 大  -> 记录被清掉了（看 forget[...] 是谁清的）
+        //   noPos/noAim -> 读不到位置，属于数据取用问题
+        //   wrote 不涨  -> 写速度那一步被跳过了（rb 不可读 / native 缺失）
+        if (!Runtime.enabled || !Runtime.config.enable_homing) {
+            Runtime.stats.steerOff += 1;
+            return;
+        }
+        if (isNull(missile)) return;
+        var key = missile.toString();
+        var entry = Runtime.missileTargets[key];
+        if (!entry) {
+            Runtime.stats.steerNoEntry += 1;
+            return;
+        }
+        // 身份校验：对象池复用会让同一个指针变成另一颗弹，必须先验 owner + rigidBody。
+        try {
+            if (entry.owner !== undefined) {
+                var nowOwner = missile.add(OFF.Missile_owner).readPointer();
+                var nowRb = missile.add(OFF.Missile_rigidBody).readPointer();
+                if (!samePointer(nowOwner, entry.owner) || !samePointer(nowRb, entry.rb)) {
+                    forgetMissile(missile, 'identity');
+                    return;
+                }
+            }
+        } catch (_) {}
+        var nowMs = Date.now();
+        if (nowMs - entry.at > Runtime.config.homing_max_ms) {
+            forgetMissile(missile, 'timeout');
+            Runtime.stats.homingDropped += 1;
+            return;
+        }
+        // 先拿弹体位置：换目标时以"弹体当前位置"为参考点才算真的就近
+        var transform = native.getTransform(missile, ptr(0));
+        var mpos = readTransformPosition(transform);
+        if (!mpos) { Runtime.stats.steerNoPos += 1; return; }
+
+        var target = entry.target;
+        if (!readable(target) || isDeadEntity(target)) {
+            if (!Runtime.config.homing_retarget) {
+                forgetMissile(missile, 'target-lost');
+                Runtime.stats.homingDropped += 1;
+                return;
+            }
+            var next = pickEnemyForMissileRetarget(
+                mpos, missile.add(OFF.Missile_rigidBody).readPointer());
+            if (!next) {
+                // 这一刻没有可选目标：不清记录，让它先按原弹道飞。
+                // 清掉的话这颗弹就永远直飞了；留着还有机会等到新目标，
+                // 真正的兜底是 homing_max_ms 超时 + 回池时的 Recycle。
+                Runtime.stats.steerLostTarget += 1;
+                return;
+            }
+            entry.target = next.player;
+            // 注意：不改 entry.at —— 它代表"这颗弹的出生时间"，
+            // 用来算 homing_max_ms 总时限（换目标不应该续命）。
+            target = next.player;
+            if (probeBudget('homingRetarget', 10)) {
+                probe('homingRetarget', 'missile=' + fmtPtr(missile) + ' -> ' + fmtPtr(target) +
+                    ' dist=' + next.dist.toFixed(1));
+            }
+        }
+        var aim = getAimPoint(target, getPlayerPos(target));
+        if (!aim) { Runtime.stats.steerNoAim += 1; return; }
+        var dx = aim.x - mpos.x, dy = aim.y - mpos.y, dz = aim.z - mpos.z;
+        var len = Math.sqrt(dx * dx + dy * dy + dz * dz);
+        if (len < 0.25) { Runtime.stats.steerTooClose += 1; return; }   // 已经贴脸：交给原版碰撞判定
+        var speed = Runtime.config.homing_speed > 0
+            ? Runtime.config.homing_speed
+            : readFloatSafe(missile.add(OFF.Missile_shootSpeed));
+        if (!(speed > 0) || speed > 500) speed = 30;
+        var ux = dx / len, uy = dy / len, uz = dz / len;
+
+        // 方向插值：homing_turn = 1 时就是"直接锁定目标方向"（命中率最高）。
+        // 留这个旋钮是为了手感可选：调小一点，弹体会先保留一段原弹道再慢慢拐，
+        // 视觉上更接近"会拐弯的抛物线"。
+        var turn = clampFloat(Runtime.config.homing_turn, 0.05, 1);
+        if (turn < 1) {
+            var v = readRigidbodyVelocity(missile.add(OFF.Missile_rigidBody).readPointer());
+            if (v) {
+                var vlen = Math.sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
+                if (vlen > 0.01) {
+                    var bx = (v.x / vlen) * (1 - turn) + ux * turn;
+                    var by = (v.y / vlen) * (1 - turn) + uy * turn;
+                    var bz = (v.z / vlen) * (1 - turn) + uz * turn;
+                    var blen = Math.sqrt(bx * bx + by * by + bz * bz);
+                    if (blen > 0.0001) { ux = bx / blen; uy = by / blen; uz = bz / blen; }
+                }
+            }
+        }
+
+        var rb = missile.add(OFF.Missile_rigidBody).readPointer();
+        if (readable(rb) && native.setVelocity) {
+            native.setVelocity(rb,
+                floatToU32(ux * speed), floatToU32(uy * speed), floatToU32(uz * speed), ptr(0));
+            Runtime.stats.steerWrote += 1;
+        } else {
+            Runtime.stats.steerWriteSkip += 1;
+        }
+        // 朝向也掰过去：弹头视觉朝前，同时兼容"用 transform.forward 推位移"的写法
+        if (readable(transform) && native.lookRotation && native.setRotation && Runtime.cache.quatBuf) {
+            native.lookRotation(Runtime.cache.quatBuf,
+                floatToU32(ux), floatToU32(uy), floatToU32(uz), ptr(0));
+            native.setRotation(transform,
+                Runtime.cache.quatBuf.readU32(),
+                Runtime.cache.quatBuf.add(4).readU32(),
+                Runtime.cache.quatBuf.add(8).readU32(),
+                Runtime.cache.quatBuf.add(12).readU32(),
+                ptr(0));
+        }
+        Runtime.stats.homingSteered += 1;
+        entry.steers = (entry.steers || 0) + 1;
+        // 每颗弹的前 3 次拐弯把「弹体位置 + 写进去的速度 + 立刻读回来的速度」一起打出来。
+        //   vReadBack 约等于 vWritten -> 速度写进去了，游戏也认（还是直飞就要看别处）
+        //   vReadBack 和 vWritten 差很远 -> 游戏在覆盖我们的速度（说明弹体有别的驱动）
+        if (entry.steers <= 3) {
+            var vRead = readRigidbodyVelocity(rb);
+            probe('homingSteer#' + entry.steers, 'missile=' + fmtPtr(missile) +
+                ' mpos=' + fmtVec(mpos) + ' -> target=' + fmtPtr(target) +
+                ' dist=' + len.toFixed(1) + ' speed=' + speed.toFixed(1) +
+                ' turn=' + turn.toFixed(2) + ' cat=' + entry.category + ' rb=' + fmtPtr(rb) +
+                ' vWritten=' + fmtVec({ x: ux * speed, y: uy * speed, z: uz * speed }) +
+                ' vReadBack=' + (vRead ? fmtVec(vRead) : 'null'));
+        }
+    }
+
+    function installHomingHooks() {
+        // 登记点：ProjectMissile 的回调。5 种投射物（RPG / 手雷 / 榴弹枪 /
+        // 奥术手雷 / 地狱终结者火球）全部会走到这里，所以一个钩子就够。
+        registerProbeAttach('WPN_Missile.SetWeaponData(homing)', RVA.WPN_Missile_SetWeaponData, {
+            onEnter: function (args) { armMissileHoming(args[0]); }
+        });
+
+        // FixedUpdate 的 onLeave：确保在游戏自己算完速度（AddForce extraGravity）之后再改写
+        registerProbeAttach('WPN_Missile.FixedUpdate(homing)', RVA.WPN_Missile_FixedUpdate, {
+            onEnter: function (args) {
+                Runtime.stats.fixedUpdateCalls += 1;
+                this.missile = args[0];
+            },
+            onLeave: function () {
+                try { steerMissile(this.missile); } catch (error) { fail('homing.FixedUpdate', error); }
+            }
+        });
+
+        // 发射（Work）：游戏在这里设初速 velocity = transform.forward * shootSpeed。
+        // 调用顺序是 SetWeaponData（我们登记）-> Active() -> Work()，
+        // 也就是说游戏会在我们之后把速度覆盖掉。
+        // 所以 onLeave（游戏写完初速之后）立刻补一次制导，保证第一帧就朝目标。
+        var workEnter = function (args) {
+            Runtime.stats.missileLaunchSeen += 1;
+            this.missile = args[0];
+        };
+        var workLeave = function () {
+            try { steerMissile(this.missile); } catch (error) { fail('homing.Work', error); }
+        };
+        registerProbeAttach('WPN_Missile.Work(homing)', RVA.WPN_Missile_Work, {
+            onEnter: workEnter, onLeave: workLeave
+        });
+        registerProbeAttach('WPN_GRENADE.Work(homing)', RVA.WPN_GRENADE_Work, {
+            onEnter: workEnter, onLeave: workLeave
+        });
+
+        // 清理：只在「这颗弹真的回对象池了」的时候删记录。
+        //
+        // 早期版本把 OnCollisionEnter / OnTriggerEnter 也当成清理点，结果弹体一碰到
+        // 任何东西（包括刚出膛时重叠到的碰撞体）记录就被删掉，制导只生效了 1 帧，
+        // 之后整段飞行都是原版直线 —— 表现就是「完全不拐弯」。
+        // 爆炸 / 命中本来就会走到 Recycle，所以只挂 Recycle 就够了；
+        // 万一有漏网的，armMissileHoming 里的 reused 和 steerMissile 里的身份校验
+        // 都会把过期记录清掉，不会拐错弹。
+        registerProbeAttach('WPN_Missile.Recycle(homing)', RVA.WPN_Missile_Recycle, {
+            onEnter: function (args) { forgetMissile(args[0], 'recycle'); }
+        });
+        registerProbeAttach('RecyclableObject.Recycle(homing)', RVA.RecyclableObject_Recycle, {
+            onEnter: function (args) { forgetMissile(args[0], 'recycle'); }
+        });
+        // 碰撞 / 触发只记账，不再删记录（保留探针，方便确认弹体到底撞了什么）。
+        registerProbeAttach('WPN_Missile.OnCollisionEnter(homing)', RVA.WPN_Missile_OnCollisionEnter, {
+            onEnter: function (args) {
+                Runtime.stats.missileHitSeen += 1;
+                if (probeBudget('missileHit', 6)) probe('missileHit', fmtPtr(args[0]) + ' WPN_Missile.OnCollisionEnter');
+            }
+        });
+        registerProbeAttach('WPN_GRENADE.OnCollisionEnter(homing)', RVA.WPN_GRENADE_OnCollisionEnter, {
+            onEnter: function (args) {
+                Runtime.stats.missileHitSeen += 1;
+                if (probeBudget('missileHit', 6)) probe('missileHit', fmtPtr(args[0]) + ' WPN_GRENADE.OnCollisionEnter');
+            }
+        });
+        registerProbeAttach('WPN_GRENADE.OnTriggerEnter(homing)', RVA.WPN_GRENADE_OnTriggerEnter, {
+            onEnter: function (args) {
+                Runtime.stats.missileTriggerSeen += 1;
+                if (probeBudget('missileTrig', 6)) probe('missileTrig', fmtPtr(args[0]) + ' WPN_GRENADE.OnTriggerEnter');
+            }
+        });
+    }
+
     function installHooks() {
         if (Runtime.initialized) return true;
         if (!ensureNative()) return false;
         if (!ensureBuffers()) return false;
         try {
             installPipelineProbes();
+            installHomingHooks();
             installGunHook();
             installExplosiveHooks();
             installSkillHooks();
             installStringCaptureHooks();
+            installEventTemplateCapture();
             Runtime.initialized = true;
             log('info', 'all hooks installed');
             return true;
@@ -1876,6 +3103,8 @@
         stopHeartbeat();
         cleanupHooks();
         Runtime.inDirectDamage = false;
+        Runtime.missileTargets = {};
+        Runtime.pendingMissile = null;
         Runtime.cache.ownPlayer = ptr(0);
         Runtime.cache.selectedTarget = null;
         Runtime.cache.selectedAtMs = 0;
@@ -1884,8 +3113,9 @@
         Runtime.cache.hitSnd = ptr(0);
         Runtime.cache.hitFx = ptr(0);
         Runtime.cache.capturedTag = false;
-        Runtime.cache.eventBuf = null;
-        Runtime.cache.posBuf = null;
+        Runtime.cache.eventTemplateValid = false;
+        Runtime.cache.eventTemplateWpnIndex = -1;
+        Runtime.cache.eventBuf = null;        Runtime.cache.posBuf = null;
         Runtime.generation += 1;
         Runtime.enabled = false;
         Runtime.module = null;
@@ -1902,6 +3132,7 @@
         var c = Runtime.config;
 
         if (input.enable_guns !== undefined) c.enable_guns = input.enable_guns !== false;
+        if (input.enable_homing !== undefined) c.enable_homing = input.enable_homing !== false;
         if (input.enable_explosives !== undefined) c.enable_explosives = input.enable_explosives !== false;
         if (input.enable_skill_projectiles !== undefined) {
             c.enable_skill_projectiles = input.enable_skill_projectiles !== false;
@@ -1927,14 +3158,23 @@
                 c.damage_entry = entry;
             }
         }
-        if (input.damage_multiplier !== undefined) c.damage_multiplier = clampFloat(toNumber(input.damage_multiplier, c.damage_multiplier), 0, 100);
         if (input.damage_override !== undefined) c.damage_override = clampFloat(toNumber(input.damage_override, c.damage_override), 0, 999999);
         if (input.fallback_to_original !== undefined) c.fallback_to_original = input.fallback_to_original === true;
+        if (input.entry_fallback !== undefined) c.entry_fallback = input.entry_fallback !== false;
+        if (input.use_event_template !== undefined) c.use_event_template = input.use_event_template !== false;
         if (input.local_eye_height !== undefined) c.local_eye_height = clampFloat(toNumber(input.local_eye_height, c.local_eye_height), 0, 5);
         if (input.target_cache_ms !== undefined) c.target_cache_ms = clampFloat(toNumber(input.target_cache_ms, c.target_cache_ms), 0, 1000);
 
         if (input.diagnostic_log !== undefined) c.diagnostic_log = input.diagnostic_log !== false;
         if (input.log_every !== undefined) c.log_every = Math.max(1, Math.floor(toNumber(input.log_every, c.log_every)));
+        if (input.homing_speed !== undefined) c.homing_speed = clampFloat(toNumber(input.homing_speed, c.homing_speed), 0, 500);
+        if (input.homing_turn !== undefined) c.homing_turn = clampFloat(toNumber(input.homing_turn, c.homing_turn), 0.05, 1);
+        if (input.homing_retarget !== undefined) c.homing_retarget = input.homing_retarget !== false;
+        if (input.homing_max_ms !== undefined) c.homing_max_ms = clampFloat(toNumber(input.homing_max_ms, c.homing_max_ms), 500, 120000);
+        if (input.homing_pending_ms !== undefined) c.homing_pending_ms = clampFloat(toNumber(input.homing_pending_ms, c.homing_pending_ms), 50, 5000);
+        // 弹体追踪的"打谁"策略：准星锥角度（0=关闭，回到全场最近）+ 锥内没人是否回退
+        if (input.homing_cone_deg !== undefined) c.homing_cone_deg = clampFloat(toNumber(input.homing_cone_deg, c.homing_cone_deg), 0, 180);
+        if (input.homing_cone_fallback !== undefined) c.homing_cone_fallback = input.homing_cone_fallback !== false;
         if (input.verbose_probe !== undefined) c.verbose_probe = input.verbose_probe !== false;
         if (input.log_to_file !== undefined) c.log_to_file = input.log_to_file !== false;
         if (input.log_file !== undefined && String(input.log_file) !== c.log_file) {
@@ -1951,12 +3191,15 @@
         Runtime.cache.selectedAtMs = 0;
 
         log('info', '[probe:config] guns=' + c.enable_guns +
+            ' homing=' + c.enable_homing +
             ' explosives=' + c.enable_explosives +
             ' skills=' + c.enable_skill_projectiles +
+            ' homingSpeed=' + c.homing_speed + ' homingTurn=' + c.homing_turn +
+            ' retarget=' + c.homing_retarget + ' maxMs=' + c.homing_max_ms +
+            ' homingCone=' + c.homing_cone_deg + 'deg coneFallback=' + c.homing_cone_fallback +
             ' mode=' + c.target_mode +
             ' cone=' + c.max_angle_deg + ' maxDist=' + c.max_distance +
             ' entry=' + c.damage_entry +
-            ' mult=' + c.damage_multiplier +
             ' fallbackToOriginal=' + c.fallback_to_original +
             ' verboseProbe=' + c.verbose_probe +
             ' logFile=' + (c.log_file || '(none)'));
@@ -1978,8 +3221,11 @@
 
         log('info', '[probe:enable] enable() called | entry=' + Runtime.config.damage_entry +
             ' guns=' + Runtime.config.enable_guns +
+            ' homing=' + Runtime.config.enable_homing +
             ' explosives=' + Runtime.config.enable_explosives +
             ' skills=' + Runtime.config.enable_skill_projectiles +
+            ' homingTurn=' + Runtime.config.homing_turn +
+            ' homingCone=' + Runtime.config.homing_cone_deg + 'deg fallback=' + Runtime.config.homing_cone_fallback +
             ' cone=' + Runtime.config.max_angle_deg + ' maxDist=' + Runtime.config.max_distance +
             ' | logFile=' + (Runtime.logFilePath || '(none: ' + (Runtime.logFileFailed || 'not set') + ')'));
 
@@ -2031,13 +3277,56 @@
             skipped_remote_weapon: Runtime.stats.skippedRemote,
             fallback_original: Runtime.stats.fallbackOriginal,
             string_captured: Runtime.stats.stringCaptured,
-            last_damage: Runtime.stats.lastDamage,
+            template_captured: Runtime.stats.templateCaptured,
+            template_used: Runtime.stats.templateUsed,
+            template_rejected: Runtime.stats.templateRejected,
+            invincible_cleared: Runtime.stats.invincibleCleared,
+            event_template_wpn_index: Runtime.cache.eventTemplateWpnIndex,
+            death_in: Runtime.stats.deathIn,
+            death_out: Runtime.stats.deathOut,
+            hit_fx_in: Runtime.stats.hitFxIn,
+            hit_fx_out: Runtime.stats.hitFxOut,            last_damage: Runtime.stats.lastDamage,
             last_target_angle: Runtime.stats.lastTargetAngle,
             last_target_distance: Runtime.stats.lastTargetDistance,
             error_count: Runtime.stats.errorCount,
             last_error: Runtime.stats.lastError,
             // ---- 探针字段 ----
             own_player_source: Runtime.stats.ownPlayerSource,
+            // ---- 弹体追踪 ----
+            missile_spawns: Runtime.stats.missileSpawns,
+            missile_launch_seen: Runtime.stats.missileLaunchSeen,
+            missile_not_mine: Runtime.stats.missileNotMine,
+            missile_no_pending: Runtime.stats.missileNoPending,
+            missile_switch_off: Runtime.stats.missileSwitchOff,
+            missile_no_target: Runtime.stats.missileNoTarget,
+            homing_armed: Runtime.stats.homingArmed,
+            homing_steered: Runtime.stats.homingSteered,
+            homing_dropped: Runtime.stats.homingDropped,
+            homing_forgotten: Runtime.stats.homingForgotten,
+            homing_tracked: Object.keys(Runtime.missileTargets).length,
+            missile_fixed_update_calls: Runtime.stats.fixedUpdateCalls,
+            steer_wrote: Runtime.stats.steerWrote,
+            steer_off: Runtime.stats.steerOff,
+            steer_no_entry: Runtime.stats.steerNoEntry,
+            steer_no_pos: Runtime.stats.steerNoPos,
+            steer_no_aim: Runtime.stats.steerNoAim,
+            steer_too_close: Runtime.stats.steerTooClose,
+            steer_write_skip: Runtime.stats.steerWriteSkip,
+            steer_lost_target: Runtime.stats.steerLostTarget,
+            missile_hit_seen: Runtime.stats.missileHitSeen,
+            missile_trigger_seen: Runtime.stats.missileTriggerSeen,
+            forget_reuse: Runtime.stats.forgetReuse,
+            forget_recycle: Runtime.stats.forgetRecycle,
+            forget_timeout: Runtime.stats.forgetTimeout,
+            forget_identity: Runtime.stats.forgetIdentity,
+            cone_hit: Runtime.stats.coneHit,
+            cone_empty: Runtime.stats.coneEmpty,
+            cone_fallback: Runtime.stats.coneFallback,
+            cone_empty_strict: Runtime.stats.coneEmptyStrict,
+            cone_off: Runtime.stats.coneOff,
+            cone_axis_fail: Runtime.stats.coneAxisFail,
+            cone_retarget: Runtime.stats.coneRetarget,
+            entry_fallback_count: Runtime.stats.entryFallback,
             gun_hook_disabled: Runtime.stats.gunHookDisabled,
             gun_hook_reentry: Runtime.stats.gunHookReentry,
             pipeline_gun_shoot: Runtime.stats.pipelineGunShoot,

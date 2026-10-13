@@ -162,7 +162,10 @@ modules.gravity = (function() {
       isMyPlayer = new NativeFunction(base.add(0xB55FD0), 'bool', ['pointer', 'pointer']);
       singletonGetter = new NativeFunction(base.add(0x4A8170), 'pointer', ['pointer']);
       try { gmHook = Interceptor.attach(base.add(0xAF9A90), { onEnter: function(args) { var newGm = args[0]; if (newGm && !newGm.isNull()) { roomShuttingDown = false; gm = newGm; playerState = {}; } } }); } catch(e) {}
-      try { jumpHook = Interceptor.attach(base.add(0xB51780), { onEnter: function(args) { if (roomShuttingDown || !state.airJump || !state.enabled) return; try { var pp = args[0]; if (pp && !pp.isNull()) { var grounded = pp.add(0x70).readU8(); if (!grounded) pp.add(0x70).writeU8(1); } } catch(_) {} } }); } catch(e) {}
+      // 生效范围修正：airJump 的「空中假接地」此前对所有 Player 生效（含 Bot），
+      // 会让 Bot 在半空也能被 Player.OnJumpBtnDown 反复起跳 -> velData.y 恒为 Player.JumpPower(10.5) 飞天。
+      // 按 mode 语义收口：player_only 只作用于自己，all 才作用于所有人。
+      try { jumpHook = Interceptor.attach(base.add(0xB51780), { onEnter: function(args) { if (roomShuttingDown || !state.airJump || !state.enabled) return; try { var pp = args[0]; if (pp && !pp.isNull()) { if (state.mode !== 'all' && isMyPlayer && !isMyPlayer(pp, ptr(0))) return; var grounded = pp.add(0x70).readU8(); if (!grounded) pp.add(0x70).writeU8(1); } } catch(_) {} } }); } catch(e) {}
       try { lifecycleHooks.push(Interceptor.attach(base.add(0xAF6A00), { onEnter: function() { roomShuttingDown = false; loop(); } })); } catch(e) {}
       try { lifecycleHooks.push(Interceptor.attach(base.add(0xAEE850), { onEnter: beginRoomShutdown })); } catch(e) {}
       try { lifecycleHooks.push(Interceptor.attach(base.add(0xAFB6F0), { onEnter: beginRoomShutdown })); } catch(e) {}
