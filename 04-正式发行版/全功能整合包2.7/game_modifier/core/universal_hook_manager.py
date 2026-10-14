@@ -99,7 +99,10 @@ class UniversalHookManager:
     _singleton_lock = threading.Lock()
     PIPE_READMODE_MESSAGE = 0x02
     PIPE_TIMEOUT_MS = 3000  # 3 seconds timeout for pipe operations
-    PROTOCOL_VERSION = 2  # Must match DLL
+    # 3 = 增加 esp_health_mode / esp_health_display（血量显示格式与内容）。
+    # 必须与 DLL 一致；不匹配时拒绝复用进程内的旧 DLL（旧版带双引擎重复挂钩风险）。
+    # v4：血量数值模式只显示剩余值（不再 "当前/上限"）；旧 DLL 必须重启游戏后重新注入。
+    PROTOCOL_VERSION = 4  # Must match DLL
     FILE_FLAG_OVERLAPPED = 0x40000000
     ERROR_IO_PENDING = 997
     WAIT_OBJECT_0 = 0
@@ -124,6 +127,9 @@ class UniversalHookManager:
         self._revision = self._load_revision()  # Load revision from file
         self._esp_box_enabled = False
         self._esp_target_scope = "enemy_only"
+        # 血量显示：percent=百分比 / value=具体数值；bar=仅血条 / text=仅数值 / both=血条+数值
+        self._esp_health_mode = "percent"
+        self._esp_health_display = "both"
         self.last_injection_attempted = False
         self._last_ping_time = 0.0
         self._ping_interval = 15.0  # minimum seconds between pings
@@ -296,6 +302,17 @@ class UniversalHookManager:
         except OSError:
             return False
 
+    HEALTH_MODE_CODES = {"percent": 0, "value": 1}
+    HEALTH_DISPLAY_CODES = {"bar": 0, "text": 1, "both": 2}
+
+    @classmethod
+    def _normalize_health_mode(cls, mode):
+        return mode if mode in cls.HEALTH_MODE_CODES else "percent"
+
+    @classmethod
+    def _normalize_health_display(cls, display):
+        return display if display in cls.HEALTH_DISPLAY_CODES else "both"
+
     def set_esp_box(self, enabled):
         """Set ESP box state"""
         return self.set_esp_state(enabled, self._esp_target_scope)
@@ -306,15 +323,32 @@ class UniversalHookManager:
         self._esp_target_scope = normalized
         return self.set_esp_state(self._esp_box_enabled, normalized)
 
-    def set_esp_state(self, enabled, scope):
-        """Set ESP enabled state and target scope in one atomic protocol update."""
-        normalized = "all_players" if scope == "all_players" else "enemy_only"
-        return self._set_esp_state(bool(enabled), normalized)
+    def set_esp_health_options(self, health_mode=None, health_display=None):
+        """Set native ESP health readout format/content and push it immediately."""
+        if health_mode is not None:
+            self._esp_health_mode = self._normalize_health_mode(health_mode)
+        if health_display is not None:
+            self._esp_health_display = self._normalize_health_display(health_display)
+        return self.set_esp_state(self._esp_box_enabled, self._esp_target_scope)
 
-    def _set_esp_state(self, enabled, scope):
+    def set_esp_state(self, enabled, scope, health_mode=None, health_display=None):
+        """Set ESP enabled state, target scope and health options in one atomic update."""
+        normalized = "all_players" if scope == "all_players" else "enemy_only"
+        mode = self._normalize_health_mode(health_mode) if health_mode is not None else self._esp_health_mode
+        display = (
+            self._normalize_health_display(health_display)
+            if health_display is not None
+            else self._esp_health_display
+        )
+        return self._set_esp_state(bool(enabled), normalized, mode, display)
+
+    def _set_esp_state(self, enabled, scope, health_mode, health_display):
         if not self._pipe:
             return False
-        
+
+        mode_code = self.HEALTH_MODE_CODES[health_mode]
+        display_code = self.HEALTH_DISPLAY_CODES[health_display]
+
         with self._lock:
             try:
                 # Use set_state with revision for conflict prevention
@@ -325,17 +359,23 @@ class UniversalHookManager:
                     "revision": self._revision,
                     "esp_box": bool(enabled),
                     "esp_all_players": scope == "all_players",
+                    "esp_health_mode": mode_code,
+                    "esp_health_display": display_code,
                 })
-                
+
                 ok = (
                     bool(response.get("ok"))
                     and bool(response.get("esp_box")) == bool(enabled)
                     and bool(response.get("esp_all_players")) == (scope == "all_players")
+                    and response.get("esp_health_mode") == mode_code
+                    and response.get("esp_health_display") == display_code
                     and response.get("revision", -1) >= self._revision
                 )
                 if ok:
                     self._esp_box_enabled = bool(enabled)
                     self._esp_target_scope = scope
+                    self._esp_health_mode = health_mode
+                    self._esp_health_display = health_display
                     self._log("success", "方框透视已开启" if enabled else "方框透视已关闭")
                 else:
                     self._log("error", response.get("error", "方框透视设置失败"))
@@ -406,6 +446,12 @@ class UniversalHookManager:
             self._revision = max(self._revision, int(state.get("revision", 0)))
             self._esp_box_enabled = bool(state.get("esp_box", False))
             self._esp_target_scope = "all_players" if state.get("esp_all_players", False) else "enemy_only"
+            self._esp_health_mode = {0: "percent", 1: "value"}.get(
+                state.get("esp_health_mode"), self._esp_health_mode
+            )
+            self._esp_health_display = {0: "bar", 1: "text", 2: "both"}.get(
+                state.get("esp_health_display"), self._esp_health_display
+            )
             self._save_revision()
 
     def _inject(self, pid):

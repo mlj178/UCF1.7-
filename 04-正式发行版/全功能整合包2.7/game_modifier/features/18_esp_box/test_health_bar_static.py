@@ -18,7 +18,7 @@ class HealthBarStaticTests(unittest.TestCase):
         source = RENDERER.read_text(encoding="utf-8")
 
         self.assertIn("GetPlayerHealth", source)
-        self.assertIn("DrawHealthBar", source)
+        self.assertIn("DrawHealthOverlay", source)
         self.assertIn("GetPlayerColor(player, localPlayer)", source)
         self.assertIn("isEnemy", source)
 
@@ -48,7 +48,8 @@ class HealthBarStaticTests(unittest.TestCase):
     def test_both_teams_get_health_bar_and_numeric_percentage(self):
         source = RENDERER.read_text(encoding="utf-8")
 
-        self.assertGreaterEqual(source.count("DrawHealthBar(center"), 2)
+        # 主方案（Bounds）与后备方案（固定身高）都要画血量覆盖层。
+        self.assertGreaterEqual(source.count("DrawHealthOverlay(center"), 2)
         self.assertIn("AddText", source)
         self.assertIn("%d%%", source)
         self.assertNotIn("if (isEnemy && GameManager::GetPlayerHealth", source)
@@ -56,7 +57,39 @@ class HealthBarStaticTests(unittest.TestCase):
     def test_health_percentage_uses_explicit_17px_font(self):
         source = RENDERER.read_text(encoding="utf-8")
 
-        self.assertIn("ImGui::GetFont(), 17.0f", source)
+        self.assertIn("const float textHeight = 17.0f;", source)
+        self.assertIn("ImGui::GetFont(), textHeight", source)
+
+    def test_health_mode_and_display_are_selectable(self):
+        source = RENDERER.read_text(encoding="utf-8")
+        state = (SOURCE_ROOT / "esp" / "esp_state.h").read_text(encoding="utf-8")
+
+        # 两个下拉框的枚举分支都要有对应实现：
+        # 数值/仅血条/仅数值/两者在渲染器里分支，百分比是数值分支的 else 路径。
+        for token in (
+            "esphealth::MODE_VALUE",
+            "esphealth::DISPLAY_BAR",
+            "esphealth::DISPLAY_TEXT",
+            "esphealth::DISPLAY_BOTH",
+        ):
+            self.assertIn(token, source)
+        self.assertIn("esphealth::MODE_PERCENT", state)
+        self.assertIn('sprintf_s(text, sizeof(text), "%d", health.current);', source)  # 只显示剩余血量
+        self.assertNotIn("%d/%d", source)  # 不显示 "当前/上限"
+        self.assertIn("GetHealthMode", state)
+        self.assertIn("GetHealthDisplay", state)
+
+    def test_health_value_is_decoded_from_obscured_int(self):
+        manager = GAME_MANAGER.read_text(encoding="utf-8")
+        bridge = BRIDGE.read_text(encoding="utf-8")
+
+        # 具体数值来自 HealthData 的三个 ObscuredInt，只读解密，不写回。
+        self.assertIn("ReadObscuredInt", manager)
+        self.assertIn("ObscuredInt_hidden", manager)
+        self.assertIn("HD_currentHealth", bridge)
+        self.assertIn("HD_maxHealth", bridge)
+        self.assertIn("HD_tempHealth", bridge)
+        self.assertNotIn("SafeWriteValue", manager)
 
 
 if __name__ == "__main__":

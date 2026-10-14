@@ -12,8 +12,11 @@ static std::atomic<bool> s_running{false};
 static std::atomic<bool> s_unload_requested{false};
 
 // Protocol version
-static const int PROTOCOL_VERSION = 2;
-static const char* DLL_VERSION = "1.7";
+// 3 = 增加 esp_health_mode / esp_health_display（血量显示格式与内容）。
+// 版本不一致时 Python 侧会拒绝复用进程内旧 DLL，避免继续使用带双引擎
+// 重复挂钩闪退风险的旧版本。
+static const int PROTOCOL_VERSION = 3;
+static const char* DLL_VERSION = "1.8";
 
 // Pipe name will be dynamically generated based on PID
 static std::string s_pipe_name;
@@ -78,6 +81,23 @@ static bool GetJsonBool(const std::string& json, const std::string& key) {
     return val == "true";
 }
 
+// 血量显示格式：0 = 百分比，1 = 剩余数值（只显示当前血量）
+static int ParseHealthMode(const std::string& raw, int fallback) {
+    if (raw.empty()) return fallback;
+    if (raw == "value" || raw == "1") return 1;
+    if (raw == "percent" || raw == "percentage" || raw == "0") return 0;
+    return fallback;
+}
+
+// 血量显示内容：0 = 仅血条，1 = 仅数值，2 = 血条 + 数值
+static int ParseHealthDisplay(const std::string& raw, int fallback) {
+    if (raw.empty()) return fallback;
+    if (raw == "text" || raw == "value_only" || raw == "1") return 1;
+    if (raw == "both" || raw == "all" || raw == "2") return 2;
+    if (raw == "bar" || raw == "bar_only" || raw == "0") return 0;
+    return fallback;
+}
+
 // Build JSON response
 static std::string BuildResponse(bool ok, const std::string& error = "") {
     std::ostringstream oss;
@@ -99,7 +119,8 @@ static std::string BuildHelloResponse() {
         << ",\"dll_version\":\"" << DLL_VERSION << "\""
         << ",\"esp_box\":" << (ESPState::Instance().IsBoxEnabled() ? "true" : "false")
         << ",\"esp_all_players\":" << (ESPState::Instance().IsAllPlayersEnabled() ? "true" : "false")
-        << ",\"esp_all_players\":" << (ESPState::Instance().IsAllPlayersEnabled() ? "true" : "false")
+        << ",\"esp_health_mode\":" << ESPState::Instance().GetHealthMode()
+        << ",\"esp_health_display\":" << ESPState::Instance().GetHealthDisplay()
         << "}";
     return oss.str();
 }
@@ -110,6 +131,9 @@ static std::string BuildStateResponse() {
     oss << "{"
         << "\"ok\":true"
         << ",\"esp_box\":" << (ESPState::Instance().IsBoxEnabled() ? "true" : "false")
+        << ",\"esp_all_players\":" << (ESPState::Instance().IsAllPlayersEnabled() ? "true" : "false")
+        << ",\"esp_health_mode\":" << ESPState::Instance().GetHealthMode()
+        << ",\"esp_health_display\":" << ESPState::Instance().GetHealthDisplay()
         << ",\"revision\":" << ESPState::Instance().GetRevision()
         << "}";
     return oss.str();
@@ -141,12 +165,18 @@ static std::string ProcessCommand(const std::string& cmd) {
 
         bool esp_box = GetJsonBool(cmd, "esp_box");
         bool esp_all_players = GetJsonBool(cmd, "esp_all_players");
+        const int health_mode = ParseHealthMode(
+            GetJsonString(cmd, "esp_health_mode"), ESPState::Instance().GetHealthMode());
+        const int health_display = ParseHealthDisplay(
+            GetJsonString(cmd, "esp_health_display"), ESPState::Instance().GetHealthDisplay());
 
         // Only apply if revision is newer
         if (revision > ESPState::Instance().GetRevision()) {
-            ESPState::Instance().SetState(esp_box, esp_all_players, revision);
-            PipeLog("State updated: esp_box=%s, esp_all_players=%s, revision=%d",
-                     esp_box ? "true" : "false", esp_all_players ? "true" : "false", revision);
+            ESPState::Instance().SetState(esp_box, esp_all_players,
+                                          health_mode, health_display, revision);
+            PipeLog("State updated: esp_box=%s, esp_all_players=%s, health_mode=%d, health_display=%d, revision=%d",
+                     esp_box ? "true" : "false", esp_all_players ? "true" : "false",
+                     health_mode, health_display, revision);
         } else {
             PipeLog("State update ignored: old revision %d <= current %d", revision, ESPState::Instance().GetRevision());
         }

@@ -1,6 +1,5 @@
 #pragma once
 #include <vector>
-#include <unordered_map>
 #include <cstdint>
 #include <windows.h>
 #include "esp_common.h"  // 需要 IsValidPointer, SafeReadValue
@@ -8,13 +7,6 @@
 #include "player_policy.h"
 
 namespace esp {
-
-// Bot player entry with timestamp and epoch for cross-round protection
-struct BotPlayerEntry {
-    void* player;
-    DWORD timestamp;  // GetTickCount() timestamp
-    DWORD epoch;      // Session epoch for cross-round protection
-};
 
 enum class ContainerReadState {
     Invalid,
@@ -41,15 +33,27 @@ struct PlayerSnapshot {
     std::vector<PlayerCandidate> candidates;
 };
 
+// 血量信息：rate 为 0~1 的比例（方框图内血条用），current 为解密后的剩余血量
+// （ObscuredInt 只读解密），max 仅用于在缺失 rate 时推算比例，界面不显示。
+// hasRate / hasValue 表示该来源是否有效。
+struct PlayerHealthInfo {
+    bool valid = false;
+    bool hasRate = false;
+    bool hasValue = false;
+    float rate = 0.0f;
+    int current = 0;
+    int max = 0;
+};
+
 class GameManager {
 public:
     static bool Initialize();
     static bool IsInitialized();
     static void ResetSessionState();
-    static void Cleanup();  // Cleanup resources including critical section
+    static void Cleanup();  // 清理会话缓存（已无 MinHook / 临界区资源）
     static bool RefreshSession();
     static bool HasActiveSession();
-    
+
     static void* GetInstance();
     static void* GetLocalPlayer();
     static std::vector<void*> GetAllPlayers();
@@ -62,37 +66,17 @@ public:
         void* localPlayer,
         DWORD now);
     static bool IsEnemy(void* player, void* localPlayer);
-    
+
     static bool IsValidPlayer(void* player);
     static bool IsPlayerDead(void* player);
-    static bool GetPlayerHealth(void* player, float* outRate);
+    // 读取玩家血量（比例 + 可选的具体数值）。
+    static bool GetPlayerHealth(void* player, PlayerHealthInfo* outHealth);
     static int GetPlayerTeam(void* player);
-    
-    // Bot Hook相关
-    static void InitializeBotHook();
-    static void InitializeRoomHooks();  // Room change detection hooks
-    static std::vector<void*> GetBotPlayers();
-    static void OnBotUpdate(void* botInstance);
-    static void OnRoomChanged();  // Called when room changes
-    static void OnRoundStart();   // Called when new game round starts
-    static void OnGameDestroy();  // Called when GameManager is destroyed
-    
-private:
-    // Bot Hook相关成员
-    static void ClearRuntimeCaches(const char* reason);
-    static bool IsPlayerInCurrentRoom(void* player);  // Check if player is in current GM.allPlayers
-    static std::unordered_map<void*, BotPlayerEntry> s_BotPlayers;  // 改为带时间戳的map
-    static bool s_BotHookInitialized;
-    static CRITICAL_SECTION s_BotPlayersCS;  // 线程同步临界区
-    static bool s_CritSecInitialized;
-    
-    // Session epoch for cross-round protection
-    static DWORD s_SessionEpoch;
-    static DWORD s_LastRoundChangeTime;
-    
-    // 时间戳过期配置
-    static constexpr DWORD BOT_ENTRY_TIMEOUT_MS = 5000;  // 5秒过期
-    static constexpr DWORD ROUND_CHANGE_COOLDOWN_MS = 2000;  // 2秒冷却期
+
+    // 与旧内置菜单（menu.cpp）兼容的入口。
+    // 旧实现由 MinHook 回调驱动；现在只做一次同步轮询重扫，不再改写游戏代码。
+    static void OnRoundStart();
+    static void OnRoomChanged();
 };
 
 }

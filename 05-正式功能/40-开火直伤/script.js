@@ -597,6 +597,26 @@
             //   ==> 用 hurt/health 的结果是"敌人 HP 归零、isDead=true，但永远不会死"，
             //       画面上就是敌人站着不动、打不死 —— 即"敌人无敌"。
             damage_entry: DAMAGE_ENTRY.GAME_MANAGER,
+            // ★2026-10-14 修复：WPN_Gun.Damage 的挂法（attach / replace）★
+            //   实证链（测试会话 7da632fc，日志一一对应）：
+            //     Bot 打死终结者时，游戏自己的"伤害->死亡广播"链内部会抛一个托管异常
+            //     （il2cpp 的 C++ EH，0xE06D7363）。这种异常游戏日常一直在抛、也一直是
+            //     游戏自己的异常帧收掉的（19:21 会话 raises=14，全部被游戏消化）。
+            //     但只要 WPN_Gun.Damage 被我们 Interceptor.replace、原函数又是从 JS 用
+            //     NativeFunction 回call 的，这个异常就会在"跨回 JS"的边界上被 Frida 抢先
+            //     捕获（JS 只看到 "system error"），游戏自己的异常帧再也收不到 ->
+            //     死亡广播进入后不返回 -> ModeBase_Nano.RespawnPlayer 一次都没被调用 ->
+            //     终结者躺尸，只能等 death_fix_respawn 兜底（延迟约 7 秒）。
+            //   日志指纹：每个 [deathDiag:abort] 之前 0~40ms 必有一条
+            //     [fail:WPN_Gun.Damage replacement] ... system error (x1..x9)，9 对 9 全部对应。
+            //   修法（与 26_grenade_mode v2.13 同一条硬规则：能 attach 就不 replace）：
+            //     'attach'  = 只挂 onEnter。不是本地武器的开火（Bot 开火）直接放行，
+            //                 原函数完全原生执行、Frida 不留帧在调用链上 -> 托管异常照常
+            //                 交给游戏自己处理；是本地武器时我们自己结算直伤，再用
+            //                 "模拟 ret"（弹掉返回地址 + 跳回调用方）跳过原函数。
+            //     'replace' = 旧行为（replace + 回call），仅用于 A/B 对照或回退排障。
+            //   注意：改这个键需要重新 enable（钩子在 enable 时安装）。
+            gun_hook_mode: 'attach',
             // 统一入口万一被 InvalidCheck 观察者否决（HP 完全没变），是否自动降级补一次 hurt。
             // 只是"至少掉血"的保险，日志会明确写出来。
             entry_fallback: true,
@@ -724,6 +744,8 @@
             // ---- 探针计数：用于定位"卡在哪一步" ----
             gunHookDisabled: 0,     // 进钩子但功能/枪械开关关闭
             gunHookReentry: 0,      // 进钩子但重入保护命中
+            gunSkipped: 0,          // attach 模式：成功"模拟 ret"跳过原函数（= 我们接管了这发）
+            gunSkipFailed: 0,       // attach 模式：返回地址校验失败没跳过（原函数照跑，最多多打一遍，不冒险跳栈）
             pipelineGunShoot: 0,    // 游戏开火入口命中次数
             pipelineTakeDamage: 0,  // GameManager.TakeDamage 被调用次数
             pipelineEntityHurt: 0,  // Entity.OnEntityHurt 被调用次数
@@ -2172,9 +2194,136 @@
         return handle;
     }
 
+    // ------------------------------------------------------------------
+    // WPN_Gun.Damage 挂法（config.gun_hook_mode）
+    // ------------------------------------------------------------------
+    //   attach（默认）：JS 只在 onEnter 里出现一次；别人的开火（Bot）完全不经过 JS。
+    //     这是"托管异常被 Frida 抢走 -> 死亡广播不返回 -> 终结者不复活"的根因修复，
+    //     详见 config.gun_hook_mode 上方的注释。
+    //   replace（旧）：保留原实现，仅用于对照/回退。
     function installGunHook() {
         var address = Runtime.base.add(RVA.WPN_Gun_Damage);
         if (!isExecutable(address)) throw new Error('WPN_Gun.Damage address not executable: ' + address);
+        if (Runtime.config.gun_hook_mode === 'replace') {
+            installGunHookReplace(address);
+            return;
+        }
+        installGunHookAttach(address);
+    }
+
+    // attach 版：把 JS 从游戏的伤害链里摘出去
+    //   本地武器（我开火）→ 我们自己结算直伤，然后跳过原函数；
+    //   其它武器（Bot 开火）→ 一句 return，原函数原生跑完，Frida 不留帧。
+    //   跳过原函数的手法（x86 mscdecl）：
+    //     参数由调用方清理，所以"跳过"= 弹出返回地址 + 跳回调用方，
+    //     等价于让这个函数什么都没做就返回。
+    //     返回地址先做"必须落在 GameAssembly 可执行区间"的校验；校验不过就不跳过
+    //     （宁可这一发多打一遍，也绝不乱跳栈）。
+    function installGunHookAttach(address) {
+        var handle = Interceptor.attach(address, {
+            onEnter: function (args) {
+                try {
+                    Runtime.stats.gunDamageCalls += 1;
+                    if (!Runtime.enabled || !Runtime.config.enable_guns) {
+                        Runtime.stats.gunHookDisabled += 1;
+                        return;                                   // 原版照常执行
+                    }
+                    if (Runtime.inDirectDamage) {
+                        Runtime.stats.gunHookReentry += 1;
+                        return;                                   // 结算过程中又回到 Damage -> 原版照常执行
+                    }
+                    var weapon = args[0];
+                    if (!isLocalWeapon(weapon)) {
+                        Runtime.stats.skippedRemote += 1;
+                        if (probeBudget('gunRemote', 5)) {
+                            probe('gunRemote', 'passthrough(native): not my weapon ' + fmtPtr(weapon) +
+                                ' readable=' + readable(weapon) + ' isMyWeapon=' + safeBool(native.isMyWeapon, weapon));
+                        }
+                        return;                                   // ★ Bot 开火：JS 完全不介入
+                    }
+
+                    Runtime.stats.localGunFires += 1;
+                    if (probeBudget('gunLocal', 5)) {
+                        probe('gunLocal', 'taking over fire #' + Runtime.stats.localGunFires +
+                            ' weapon=' + fmtPtr(weapon) + ' ammoDamage=' + readGunDamage(weapon).toFixed(2));
+                    }
+                    Runtime.inDirectDamage = true;
+                    var handled;
+                    try {
+                        handled = directDamage(weapon, DAMAGE_TYPE.Gun, 'gun', readGunDamage(weapon));
+                    } finally {
+                        Runtime.inDirectDamage = false;
+                    }
+                    if (!handled) {
+                        probe('gunNoTarget', 'no direct-damage target; original ray ' +
+                            (Runtime.config.fallback_to_original ? 'RESTORED' : 'SUPPRESSED (fallback off)'));
+                        if (Runtime.config.fallback_to_original) {
+                            Runtime.stats.fallbackOriginal += 1;
+                            return;                               // 原版射线照常走
+                        }
+                    }
+                    skipOriginalFromOnEnter(this);
+                } catch (error) {
+                    fail('WPN_Gun.Damage onEnter', error);
+                }
+            }
+        });
+        Runtime.attachHooks.push({ name: 'WPN_Gun.Damage(attach)', handle: handle });
+        log('info', 'WPN_Gun.Damage attached @ 0x' + RVA.WPN_Gun_Damage.toString(16) +
+            '（attach 模式：Bot 开火完全原生，不再经过 JS）');
+    }
+
+    // 模拟 ret：弹出返回地址并跳回"调用方"（mscdecl 由调用方清栈，所以不用动参数）
+    //   要点：入口 [esp] 里那个值不一定就是游戏调用方 —— 如果同一个地址上还有别的
+    //   Interceptor.attach 监听者带 onLeave，Frida 会把返回地址换成它自己的返回 thunk。
+    //   我们要跳到"当前 [esp] 里的那个值"（不管是谁的），Frida 的 onLeave 链才照常会跑；
+    //   同时 esp 前进 4，语义上完全等价于一次 ret。
+    //   放行条件只有一个：目标必须在可执行页（游戏调用方 / Frida thunk 都满足）。
+    //   不可执行就拒绝跳过（原函数照跑，最多这一发多打一遍，绝不乱跳栈）。
+    function skipOriginalFromOnEnter(ctx) {
+        try {
+            var sp = ctx.context.esp;
+            var retAddr = null;
+            try { retAddr = sp.readPointer(); } catch (_) { retAddr = null; }
+            if (!retAddr || isNull(retAddr)) {
+                try { retAddr = ctx.returnAddress; } catch (_) { retAddr = null; }
+            }
+            var mod = null;
+            try { mod = Process.findModuleByAddress(retAddr); } catch (_) { mod = null; }
+            var modName = mod ? String(mod.name) : 'null';
+            var inGameAssembly = modName.toLowerCase().indexOf('gameassembly') >= 0;
+            if (!retAddr || isNull(retAddr) || !isExecutable(retAddr)) {
+                Runtime.stats.gunSkipFailed += 1;
+                fail('gunHook:skip', new Error('return address not executable: ' + retAddr +
+                    ' (mod=' + modName + ', esp=' + sp + ')'));
+                return;
+            }
+            if (!inGameAssembly && Runtime.stats.gunSkipped === 0) {
+                // 不是游戏模块 -> 这个地址上还有别的钩子（Frida 返回 thunk），跳过手势照样生效
+                log('info', '[gunHook:skip] 返回地址指向 ' + modName +
+                    '（Frida 返回 thunk，说明 WPN_Gun.Damage 上还有别的 attach/onLeave 监听者）；模拟 ret 照常执行');
+            }
+            ctx.context.esp = sp.add(4);
+            ctx.context.pc = retAddr;
+            // 读回校验：万一某个 Frida 版本不接受 context.pc 写入，我们要能在日志里立刻看到，
+            // 而不是"以为跳过了、其实原函数又打了一遍"（表现为同一发双倍伤害）。
+            var backPc = null;
+            try { backPc = ctx.context.pc; } catch (_) { backPc = null; }
+            if (backPc && !isNull(backPc) && !samePointer(backPc, retAddr)) {
+                Runtime.stats.gunSkipFailed += 1;
+                fail('gunHook:skip', new Error('Frida refused context.pc write: want ' +
+                    retAddr + ' got ' + backPc));
+                return;
+            }
+            Runtime.stats.gunSkipped += 1;
+        } catch (error) {
+            Runtime.stats.gunSkipFailed += 1;
+            fail('gunHook:skip', error);
+        }
+    }
+
+    // 旧实现（gun_hook_mode='replace'）：replace + NativeFunction 回call
+    function installGunHookReplace(address) {
 
         // 必须在 replace 之前创建，之后才能调用原函数。
         native.gunDamageOriginal = new NativeFunction(
@@ -2255,7 +2404,8 @@
 
         Interceptor.replace(address, replacement);
         Runtime.replacedAddresses.push({ name: 'WPN_Gun.Damage', address: address });
-        log('info', 'WPN_Gun.Damage replaced @ 0x' + RVA.WPN_Gun_Damage.toString(16));
+        log('warn', 'WPN_Gun.Damage replaced @ 0x' + RVA.WPN_Gun_Damage.toString(16) +
+            '（旧模式：Bot 开火会经 JS 回call，原函数内部的托管异常会被 Frida 抢走 -> 终结者可能不复活）');
     }
 
     // ------------------------------------------------------------------
@@ -3822,6 +3972,12 @@
                 c.damage_entry = entry;
             }
         }
+        if (input.gun_hook_mode !== undefined) {
+            // WPN_Gun.Damage 的挂法：attach(默认，推荐) / replace(旧行为)。
+            // 钩子是 enable 时装的，改完要重新 enable 才生效。
+            var hookMode = String(input.gun_hook_mode);
+            if (hookMode === 'attach' || hookMode === 'replace') c.gun_hook_mode = hookMode;
+        }
         if (input.damage_override !== undefined) c.damage_override = clampFloat(toNumber(input.damage_override, c.damage_override), 0, 999999);
         if (input.fallback_to_original !== undefined) c.fallback_to_original = input.fallback_to_original === true;
         if (input.entry_fallback !== undefined) c.entry_fallback = input.entry_fallback !== false;
@@ -3872,6 +4028,7 @@
             ' mode=' + c.target_mode +
             ' cone=' + c.max_angle_deg + ' maxDist=' + c.max_distance +
             ' entry=' + c.damage_entry +
+            ' gunHookMode=' + c.gun_hook_mode +
             ' fallbackToOriginal=' + c.fallback_to_original +
             ' verboseProbe=' + c.verbose_probe +
             ' logFile=' + (c.log_file || '(none)'));
@@ -3892,6 +4049,7 @@
         Runtime.stats.ownPlayerSource = '';
 
         log('info', '[probe:enable] enable() called | entry=' + Runtime.config.damage_entry +
+            ' gunHookMode=' + Runtime.config.gun_hook_mode +
             ' guns=' + Runtime.config.enable_guns +
             ' homing=' + Runtime.config.enable_homing +
             ' explosives=' + Runtime.config.enable_explosives +
@@ -4012,6 +4170,8 @@
             cone_retarget: Runtime.stats.coneRetarget,
             entry_fallback_count: Runtime.stats.entryFallback,
             gun_hook_disabled: Runtime.stats.gunHookDisabled,
+            gun_skipped: Runtime.stats.gunSkipped,
+            gun_skip_failed: Runtime.stats.gunSkipFailed,
             gun_hook_reentry: Runtime.stats.gunHookReentry,
             pipeline_gun_shoot: Runtime.stats.pipelineGunShoot,
             pipeline_take_damage: Runtime.stats.pipelineTakeDamage,

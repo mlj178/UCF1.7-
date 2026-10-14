@@ -58,9 +58,16 @@ class EspPlayerCollectionStaticTests(unittest.TestCase):
             source,
         )
 
-    def test_bot_supplement_is_epoch_bound_and_fresh(self):
+    def test_session_polling_replaces_game_hooks(self):
+        # 2026-10-15：不再用 MinHook 挂钩 Bot.Update / *OnStartNewGameRound /
+        # GameManager.OnDestroy（与 Frida 双引擎重复挂钩会闪退），改为渲染帧轮询会话。
         source = MANAGER_CPP.read_text(encoding="utf-8")
-        self.assertIn("entry.epoch == s_SessionEpoch", source)
+        self.assertIn("s_SessionEpoch++", source)
+        self.assertIn("GetGameManagerInstance", source)
+        self.assertIn("RefreshSession", source)
+        self.assertNotIn("MH_CreateHook", source)
+        self.assertNotIn("MH_EnableHook", source)
+        # 兼容层仍保留：候选来源/新鲜度判定框架不删（只是不再有 Bot.Update 数据源）。
         self.assertIn("policy::IsBotFresh", source)
         self.assertIn("SourceBotUpdate", source)
 

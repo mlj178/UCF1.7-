@@ -98,6 +98,17 @@ struct OffsetConstants {
     // IL2CPP List
     static constexpr uintptr_t List_items = 0x08;          // T[] _items
     static constexpr uintptr_t List_size = 0x0C;           // int _size
+
+    // HealthData 字段（都是 CodeStage AntiCheat 的 ObscuredInt）
+    static constexpr uintptr_t HD_currentHealth = 0x08;
+    static constexpr uintptr_t HD_maxHealth = 0x1C;
+    static constexpr uintptr_t HD_tempHealth = 0x30;
+
+    // ObscuredInt 布局（相对字段起点）：明文 = hiddenValue ^ currentCryptoKey
+    static constexpr uintptr_t ObscuredInt_key = 0x00;     // int currentCryptoKey
+    static constexpr uintptr_t ObscuredInt_hidden = 0x04;  // int hiddenValue
+    // currentCryptoKey 为 0 时游戏内部使用的静态密钥（实测 0x6C81C）
+    static constexpr int OBSCURED_INT_STATIC_KEY = 0x6C81C;
 };
 
 // Simplified IL2CPP bridge class

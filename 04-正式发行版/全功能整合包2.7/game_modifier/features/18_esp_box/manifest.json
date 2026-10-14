@@ -19,7 +19,9 @@
                      }
                  ],
     "config":  {
-                    "esp_target_scope":  "enemy_only"
+                    "esp_target_scope":  "enemy_only",
+                    "esp_health_mode":  "percent",
+                    "esp_health_display":  "both"
                 },
     "rpc":  [
                 "enable",
