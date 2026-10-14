@@ -74,6 +74,8 @@ function createWorld() {
         arch: 'ia32', pointerSize: 4,
         findModuleByName: function () { return moduleObj; },
         findRangeByAddress: function () { return { base: new NP(MODULE_BASE), size: new NP(MODULE_SIZE), protection: 'r-x' }; },
+        findModuleByAddress: function () { return moduleObj; },
+        getModuleByAddress: function () { return moduleObj; },
         enumerateModules: function () { return [moduleObj]; },
         getModuleByName: function () { return moduleObj; }
     };
@@ -189,9 +191,14 @@ async function runSmoke(scriptPath) {
     const respawn = findA(RVA.ModeBase_Nano_RespawnPlayer);
     const raiseHook = findA(RVA.Il2Cpp_Exception_Raise);
     const deathEvent = findA(RVA.ModeBase_Nano_DeathEvent);
-    const gun = W.replaces.filter(function (r) { return W.num(r.addr) === MODULE_BASE + RVA.WPN_Gun_Damage; })[0];
-    log('hooks: broadcast=' + !!broadcast + ' respawn=' + !!respawn + ' raise=' + !!raiseHook + ' deathEvent=' + !!deathEvent + ' gun=' + !!gun);
-    if (!broadcast || !respawn || raiseHook || !gun) return { ok: false, out: out, reason: 'raise hook installed although death_diag_raise was absent: ' + !!raiseHook };
+    // 2026-10-14：WPN_Gun.Damage 改为 attach（config.gun_hook_mode='attach'），所以从 attaches 里找
+    const gun = findA(RVA.WPN_Gun_Damage);
+    const gunReplaced = W.replaces.filter(function (r) { return W.num(r.addr) === MODULE_BASE + RVA.WPN_Gun_Damage; })[0];
+    log('hooks: broadcast=' + !!broadcast + ' respawn=' + !!respawn + ' raise=' + !!raiseHook + ' deathEvent=' + !!deathEvent +
+        ' gun=' + !!gun + ' gunReplaced=' + !!gunReplaced);
+    if (!broadcast || !respawn || raiseHook || !gun || gunReplaced) {
+        return { ok: false, out: out, reason: 'hook layout unexpected: raise=' + !!raiseHook + ' gun=' + !!gun + ' gunReplaced=' + !!gunReplaced };
+    }
 
     // ---- 抓 mode 实例 ----
     const mode = W.alloc(64), modeDead = mkPlayer(0x1000);
@@ -233,12 +240,15 @@ async function runSmoke(scriptPath) {
     if (raiseHook) fire(raiseHook.callbacks.onEnter, { context: { esp: new W.NP(0) } }, [[new W.NP(W.num(exc)), new W.NP(0)]]);
     fire(broadcast.callbacks.onLeave, { context: { esp: new W.NP(W.num(evD) - 4) } }, []);
 
-    // ---- 5) 复活兜底：IS_DEAD 返回 true，超过 grace 后从开火钩子触发 ----
+    // ---- 5) 复活兜底：IS_DEAD 返回 true，超过 grace 后由死亡广播 onLeave 触发 ----
+    //    2026-10-14 起 WPN_Gun.Damage 改为 attach（不再是 replace），兜底心跳不再挂在开火钩子上。
     const isDeadEntry = W.natives.get(MODULE_BASE + RVA.Entity_get_isDead);
     if (isDeadEntry) isDeadEntry.set(function () { return 1; });
+    const deadE = mkPlayer(0xE1);
+    const evE = mkEvent(killer, deadE, 100, 0, 0, 0, 1);
+    fire(broadcast.callbacks.onEnter, { context: { esp: new W.NP(W.num(evE) - 4) } }, []);
     await sleep(1200);
-    const weapon = W.alloc(64);
-    gun.cb(new W.NP(W.num(weapon)), 0, 0, 0, 0, 0, 0, new W.NP(0));
+    fire(broadcast.callbacks.onLeave, { context: { esp: new W.NP(W.num(evE) - 4) } }, []);
 
     const st1 = rpcObj.exports.status();
     const allLogs = W.sent.map(function (s) {
@@ -257,7 +267,7 @@ async function runSmoke(scriptPath) {
     function check(name, cond, detail) { checks.push({ name: name, ok: !!cond, detail: detail || '' }); }
 
     const inLines = pick('[deathDiag:deathIn]');
-    check('deathIn 逐条打印(4 条)', inLines.length === 4, 'got ' + inLines.length);
+    check('deathIn 逐条打印(5 条)', inLines.length === 5, 'got ' + inLines.length);
     check('deathIn 打全 12 个字段', inLines[0] && ['killer', 'dead', 'headShot', 'wallThrough', 'dmgType', 'origin', 'specialKill', 'nanoKill', 'revenge', 'dmgTag', 'wpn', 'wpnSpr'].every(function (k) { return inLines[0].indexOf(k + '=') >= 0; }), inLines[0]);
     check('字典实查: wpn=100 -> :OK', inLines[0] && inLines[0].indexOf('wpn=100:OK') >= 0, inLines[0]);
     check('字典实查: wpn=341 -> :MISS', inLines[1] && inLines[1].indexOf('wpn=341:MISS') >= 0, inLines[1]);
@@ -272,7 +282,8 @@ async function runSmoke(scriptPath) {
     check('兜底走 ModeBase_Nano.RespawnPlayer', rescues[0] && rescues[0].indexOf('ModeBase_Nano.RespawnPlayer') >= 0, rescues[0]);
     check('status.death_aborted=1', st1.death_aborted === 1, String(st1.death_aborted));
     check('status.death_rescued>=1', st1.death_rescued >= 1, String(st1.death_rescued));
-    check('status.death_in=4 / death_out=3', st1.death_in === 4 && st1.death_out === 3, st1.death_in + '/' + st1.death_out);
+    check('status.death_in=5 / death_out=4', st1.death_in === 5 && st1.death_out === 4, st1.death_in + '/' + st1.death_out);
+    check('WPN_Gun.Damage 走 attach（replace 数=0）', !!gun && W.replaces.length === 0, 'replaces=' + W.replaces.length);
 
     out.push('');
     out.push('=== 命中日志 ===');

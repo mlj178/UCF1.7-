@@ -73,7 +73,15 @@ function createWorld() {
     const ProcessStub = {
         arch: 'ia32', pointerSize: 4,
         findModuleByName: function () { return moduleObj; },
-        findRangeByAddress: function () { return { base: new NP(MODULE_BASE), size: new NP(MODULE_SIZE), protection: 'r-x' }; },
+        findRangeByAddress: function (a) {
+            const addr = num(a);
+            if (addr >= MODULE_BASE && addr < MODULE_BASE + MODULE_SIZE) {
+                return { base: new NP(MODULE_BASE), size: new NP(MODULE_SIZE), protection: 'r-x' };
+            }
+            return null;   // 模块外一律"不可执行"，用来验证跳过手势的安全阀
+        },
+        findModuleByAddress: function (a) { const n = num(a); return (n >= MODULE_BASE && n < MODULE_BASE + MODULE_SIZE) ? moduleObj : null; },
+        getModuleByAddress: function () { return moduleObj; },
         enumerateModules: function () { return [moduleObj]; },
         getModuleByName: function () { return moduleObj; }
     };
@@ -138,7 +146,8 @@ async function runSmoke(scriptPath) {
         ModeBase_Nano_DeathEvent: 0x00AEF9E0,
         Il2Cpp_Exception_Raise: 0x0013FF10,
         WPN_Gun_Damage: 0x00B613D0,
-        Entity_get_isDead: 0x00B400E0
+        Entity_get_isDead: 0x00B400E0,
+        Weapon_get_isMyWeapon: 0x00B6E1D0
     };
 
     // ---- 假 WpnDataDictionary：keys {100,200,300}（验证字典读取 + 存在性判定）----
@@ -191,9 +200,12 @@ async function runSmoke(scriptPath) {
     const respawn = findA(RVA.ModeBase_Nano_RespawnPlayer);
     const raiseHook = findA(RVA.Il2Cpp_Exception_Raise);
     const deathEvent = findA(RVA.ModeBase_Nano_DeathEvent);
-    const gun = W.replaces.filter(function (r) { return W.num(r.addr) === MODULE_BASE + RVA.WPN_Gun_Damage; })[0];
-    log('hooks: broadcast=' + !!broadcast + ' respawn=' + !!respawn + ' raise=' + !!raiseHook + ' deathEvent=' + !!deathEvent + ' gun=' + !!gun);
-    if (!broadcast || !respawn || !raiseHook || !gun) return { ok: false, out: out, reason: 'hooks missing' };
+    // 2026-10-14：WPN_Gun.Damage 改为 attach（config.gun_hook_mode='attach'），所以从 attaches 里找
+    const gun = findA(RVA.WPN_Gun_Damage);
+    const gunReplaced = W.replaces.filter(function (r) { return W.num(r.addr) === MODULE_BASE + RVA.WPN_Gun_Damage; })[0];
+    log('hooks: broadcast=' + !!broadcast + ' respawn=' + !!respawn + ' raise=' + !!raiseHook + ' deathEvent=' + !!deathEvent +
+        ' gun=' + !!gun + ' gunReplaced=' + !!gunReplaced);
+    if (!broadcast || !respawn || !raiseHook || !gun || gunReplaced) return { ok: false, out: out, reason: 'hook layout unexpected (gun must be attach, not replace)' };
 
     // ---- 抓 mode 实例 ----
     const mode = W.alloc(64), modeDead = mkPlayer(0x1000);
@@ -235,12 +247,39 @@ async function runSmoke(scriptPath) {
     fire(raiseHook.callbacks.onEnter, { context: { esp: new W.NP(0) } }, [[new W.NP(W.num(exc)), new W.NP(0)]]);
     fire(broadcast.callbacks.onLeave, { context: { esp: new W.NP(W.num(evD) - 4) } }, []);
 
-    // ---- 5) 复活兜底：IS_DEAD 返回 true，超过 grace 后从开火钩子触发 ----
+    // ---- 5) 复活兜底：IS_DEAD 返回 true，超过 grace 后由死亡广播 onLeave 触发 ----
+    //    2026-10-14 起 WPN_Gun.Damage 改为 attach（不再是 replace），兜底心跳不再挂在开火钩子上，
+    //    正式环境里由"每次死亡广播 onLeave + 5 秒一次的心跳 checkDeathWatch"驱动。
     const isDeadEntry = W.natives.get(MODULE_BASE + RVA.Entity_get_isDead);
     if (isDeadEntry) isDeadEntry.set(function () { return 1; });
+    const deadE = mkPlayer(0xE1);
+    const evE = mkEvent(killer, deadE, 100, 0, 0, 0, 1);
+    fire(broadcast.callbacks.onEnter, { context: { esp: new W.NP(W.num(evE) - 4) } }, []);
     await sleep(1200);
+    fire(broadcast.callbacks.onLeave, { context: { esp: new W.NP(W.num(evE) - 4) } }, []);
+
+    // ---- 6) attach 模式"跳过原函数"手势：伪造一次本地武器开火 ----
+    //   把 Weapon.get_isMyWeapon 拨成 1（= 这发是我的），并关掉 fallback_to_original：
+    //   没有目标时也要压掉原版 -> 必须走 skipOriginalFromOnEnter（模拟 ret）。
+    const myWpnNative = W.natives.get(MODULE_BASE + RVA.Weapon_get_isMyWeapon);
+    if (myWpnNative) myWpnNative.set(function () { return 1; });
+    rpcObj.exports.setConfig({ fallback_to_original: false });
     const weapon = W.alloc(64);
-    gun.cb(new W.NP(W.num(weapon)), 0, 0, 0, 0, 0, 0, new W.NP(0));
+    const fakeRet = new W.NP(MODULE_BASE + 0x1234);            // 模块内（可执行）的假返回地址
+    const fakeSp = W.alloc(16);
+    W.wr(W.num(fakeSp), 4, W.num(fakeRet));
+    const skipCtx = { context: { esp: new W.NP(W.num(fakeSp)), pc: new W.NP(MODULE_BASE) }, returnAddress: fakeRet };
+    //  Frida onEnter 只收一个参数：args 数组（桩里其它钩子也是 [[...]] 这个形状）
+    fire(gun.callbacks.onEnter, skipCtx, [[new W.NP(W.num(weapon)), 0, 0, 0, 0, 0, 0, new W.NP(0)]]);
+    const stSkip = rpcObj.exports.status();
+
+    // ---- 7) 反向用例：返回地址不在 GameAssembly 里 -> 必须拒绝跳过（不许乱跳栈）----
+    const bogusRet = new W.NP(0x7f000000);
+    const fakeSp2 = W.alloc(16);
+    W.wr(W.num(fakeSp2), 4, W.num(bogusRet));
+    const noSkipCtx = { context: { esp: new W.NP(W.num(fakeSp2)), pc: new W.NP(0) }, returnAddress: bogusRet };
+    fire(gun.callbacks.onEnter, noSkipCtx, [[new W.NP(W.num(weapon)), 0, 0, 0, 0, 0, 0, new W.NP(0)]]);
+    const stNoSkip = rpcObj.exports.status();
 
     const st1 = rpcObj.exports.status();
     const allLogs = W.sent.map(function (s) {
@@ -259,7 +298,7 @@ async function runSmoke(scriptPath) {
     function check(name, cond, detail) { checks.push({ name: name, ok: !!cond, detail: detail || '' }); }
 
     const inLines = pick('[deathDiag:deathIn]');
-    check('deathIn 逐条打印(4 条)', inLines.length === 4, 'got ' + inLines.length);
+    check('deathIn 逐条打印(5 条)', inLines.length === 5, 'got ' + inLines.length);
     check('deathIn 打全 12 个字段', inLines[0] && ['killer', 'dead', 'headShot', 'wallThrough', 'dmgType', 'origin', 'specialKill', 'nanoKill', 'revenge', 'dmgTag', 'wpn', 'wpnSpr'].every(function (k) { return inLines[0].indexOf(k + '=') >= 0; }), inLines[0]);
     check('字典实查: wpn=100 -> :OK', inLines[0] && inLines[0].indexOf('wpn=100:OK') >= 0, inLines[0]);
     check('字典实查: wpn=341 -> :MISS', inLines[1] && inLines[1].indexOf('wpn=341:MISS') >= 0, inLines[1]);
@@ -275,7 +314,16 @@ async function runSmoke(scriptPath) {
     check('兜底走 ModeBase_Nano.RespawnPlayer', rescues[0] && rescues[0].indexOf('ModeBase_Nano.RespawnPlayer') >= 0, rescues[0]);
     check('status.death_aborted=1', st1.death_aborted === 1, String(st1.death_aborted));
     check('status.death_rescued>=1', st1.death_rescued >= 1, String(st1.death_rescued));
-    check('status.death_in=4 / death_out=3', st1.death_in === 4 && st1.death_out === 3, st1.death_in + '/' + st1.death_out);
+    check('status.death_in=5 / death_out=4', st1.death_in === 5 && st1.death_out === 4, st1.death_in + '/' + st1.death_out);
+    check('WPN_Gun.Damage 走 attach（replace 数=0）', !!gun && W.replaces.length === 0, 'replaces=' + W.replaces.length);
+    check('attach 模式下 gunSkipped/gunSkipFailed 已计数', st1.gun_skipped !== undefined && st1.gun_skip_failed !== undefined, JSON.stringify({ skipped: st1.gun_skipped, failed: st1.gun_skip_failed }));
+    check('跳过原函数：pc 指回调用方 + esp 前进 4（模拟 ret）',
+        W.num(skipCtx.context.pc) === W.num(fakeRet) && W.num(skipCtx.context.esp) === W.num(fakeSp) + 4,
+        JSON.stringify({ pc: String(skipCtx.context.pc), wantPc: String(fakeRet), esp: String(skipCtx.context.esp), wantEsp: '0x' + (W.num(fakeSp) + 4).toString(16) }));
+    check('跳过原函数：gun_skipped=1', stSkip.gun_skipped === 1, String(stSkip.gun_skipped));
+    check('返回地址不在模块内 -> 拒绝跳过（pc 不变 / gun_skip_failed=1）',
+        W.num(noSkipCtx.context.pc) === 0 && stNoSkip.gun_skip_failed === 1,
+        JSON.stringify({ pc: String(noSkipCtx.context.pc), failed: stNoSkip.gun_skip_failed }));
 
     out.push('');
     out.push('=== 命中日志 ===');

@@ -99,4 +99,23 @@
 | `intermediate/`、已有 `Universal-ImGui-Hook.dll` | 编译中间产物和旧 DLL 成品 |
 | `imgui/misc/` | ImGui 示例、字体和辅助工具，当前工程没有加入编译 |
 
-本次未编译 DLL。重新编译后，需要把生成的 `Universal-ImGui-Hook.dll` 更新到 1.7 修复版的 `game_modifier/plugins/universal_hook/` 目录。
+本次未编译 DLL。重新编译后，需要把生成的 `Universal-ImGui-Hook.dll` 更新到对应整合包的 `game_modifier/plugins/universal_hook/` 目录。
+
+---
+
+## 2026-10-15 更新：游戏函数 Hook 全部移除（闪退修复 P0）
+
+本文档上面「保留的内容」里列的 **Bot Hook / 房间回合 Hook 已被删除**。原因与处理见
+`闪退修复-双引擎重复挂钩.md`：DLL 与 Frida 修改器在同一批 GameAssembly 函数上重复内联挂钩，
+被定性为 10-11 多人生化闪退根因。现在：
+
+- 删除内容：`GameManager::InitializeBotHook()` / `InitializeRoomHooks()`、`HookedBotUpdate` /
+  `HookedRoundStart` / `HookedNanoRoundStart` / `HookedGameDestroy`、`s_BotPlayers` 缓存、
+  `s_BlockSessionRefresh` 封锁位。
+- 保留内容：D3D11 `Present`/`ResizeBuffers` Hook、kernel32 `LoadLibraryA/W` Hook、命名管道控制、
+  ESP 开关空跑优化、GameManager/玩家列表/坐标/碰撞体只读读取。
+- 会话刷新：`GameManager::RefreshSession()` 每帧轮询单例并按结构校验，实例变化即换 epoch。
+- 新增：血量显示格式（百分比/剩余数值）与显示内容（仅血条/仅数值/两者）两个下拉框，协议版本升到 3。
+- 调整：数值模式只显示剩余血量（`85`），不再显示 `85/100`；maxHealth 只用于反推百分比。
+
+编译产物交付到 `04-正式发行版/全功能整合包2.7/game_modifier/plugins/universal_hook/Universal-ImGui-Hook.dll`。

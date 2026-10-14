@@ -36,14 +36,13 @@ static bool SafeDrawPlayer(void* player, void* localPlayer) {
 bool ESPRenderer::Initialize() {
     if (s_Initialized) return true;
 
-    // Install Bot hook and Room change hooks
-    GameManager::InitializeBotHook();
-    GameManager::InitializeRoomHooks();
+    // 说明（2026-10-15 闪退修复）：
+    // 旧实现在这里调用 GameManager::InitializeBotHook() / InitializeRoomHooks()，
+    // 用 MinHook 改写 GameAssembly.dll 的 Bot.Update / *OnStartNewGameRound /
+    // GameManager.OnDestroy 函数头，与 Frida 脚本在同一地址重复挂钩，被定性为
+    // 10-11 闪退（双引擎重复挂钩 + 内存损坏）的来源。现在 DLL 不再改写任何游戏
+    // 代码字节，会话刷新完全由渲染帧轮询完成，因此这里不再安装任何游戏钩子。
 
-    // Wait a bit for hooks to capture instances
-    Sleep(100);
-
-    // Priority 2: Initialize GameManager (will use hooked instance if available)
     if (!GameManager::Initialize()) {
         DebugLog("[ESPRenderer] GameManager init failed\n");
         return false;
@@ -60,7 +59,7 @@ bool ESPRenderer::Initialize() {
     }
 
     s_Initialized = true;
-    DebugLog("[ESPRenderer] Initialized successfully\n");
+    DebugLog("[ESPRenderer] Initialized successfully (no GameAssembly hooks)\n");
     return true;
 }
 
@@ -149,9 +148,10 @@ void ESPRenderer::DrawPlayerESP(void* player, void* localPlayer) {
 
         ImVec4 color = GetPlayerColor(player, localPlayer);
         DrawBox(center, hitbox.width, hitbox.height, color, config::BOX_THICKNESS);
-        float healthRate = 0.0f;
-        if (GameManager::GetPlayerHealth(player, &healthRate)) {
-            DrawHealthBar(center, hitbox.width, hitbox.height, healthRate);
+
+        PlayerHealthInfo health;
+        if (GameManager::GetPlayerHealth(player, &health)) {
+            DrawHealthOverlay(center, hitbox.width, hitbox.height, health);
         }
         return;
     }
@@ -194,9 +194,10 @@ void ESPRenderer::DrawPlayerESPFallback(void* player, void* localPlayer, bool sh
 
     ImVec4 color = GetPlayerColor(player, localPlayer);
     DrawBox(center, boxWidth, boxHeight, color, config::BOX_THICKNESS);
-    float healthRate = 0.0f;
-    if (GameManager::GetPlayerHealth(player, &healthRate)) {
-        DrawHealthBar(center, boxWidth, boxHeight, healthRate);
+
+    PlayerHealthInfo health;
+    if (GameManager::GetPlayerHealth(player, &health)) {
+        DrawHealthOverlay(center, boxWidth, boxHeight, health);
     }
 }
 
@@ -211,25 +212,66 @@ void ESPRenderer::DrawBox(const Vector2& center, float w, float h,
     drawList->AddRect(p1, p2, col, 0.0f, 0, thickness);
 }
 
-void ESPRenderer::DrawHealthBar(const Vector2& center, float w, float h, float rate) {
-    if (!std::isfinite(rate) || rate <= 0.0f || rate > 1.0f) return;
+// 血量覆盖层：
+//   HealthDisplay = 仅血条 / 仅数值 / 血条 + 数值
+//   HealthMode    = 百分比 / 剩余数值（只显示当前血量，不显示上限）
+void ESPRenderer::DrawHealthOverlay(const Vector2& center, float w, float h,
+                                    const PlayerHealthInfo& health) {
+    if (!health.valid || (!health.hasRate && !health.hasValue)) return;
+
+    const int display = ESPState::Instance().GetHealthDisplay();
+    const int mode = ESPState::Instance().GetHealthMode();
+
+    const bool drawBar = (display == esphealth::DISPLAY_BAR || display == esphealth::DISPLAY_BOTH);
+    const bool drawText = (display == esphealth::DISPLAY_TEXT || display == esphealth::DISPLAY_BOTH);
+    if (!drawBar && !drawText) return;
 
     ImDrawList* drawList = ImGui::GetBackgroundDrawList();
+    if (!drawList) return;
+
     const float barHeight = 3.0f;
     const float gap = 3.0f;
-    const float left = center.x - w / 2.0f;
-    const float top = center.y - h / 2.0f - gap - barHeight;
-    const float right = left + w;
-    const float fillWidth = w * rate;
-    const int percent = (std::max)(0, (std::min)(100, static_cast<int>(rate * 100.0f + 0.5f)));
-    char hpText[16] = {};
-    sprintf_s(hpText, sizeof(hpText), "%d%%", percent);
+    const float textHeight = 17.0f;
 
-    drawList->AddText(ImGui::GetFont(), 17.0f,
-                      ImVec2(left, top - 17.0f),
-                      IM_COL32(255, 255, 255, 240), hpText);
-    drawList->AddRectFilled(ImVec2(left, top), ImVec2(right, top + barHeight), IM_COL32(20, 20, 20, 190));
-    drawList->AddRectFilled(ImVec2(left, top), ImVec2(left + fillWidth, top + barHeight), IM_COL32(70, 220, 90, 235));
+    const float left = center.x - w / 2.0f;
+    const float right = left + w;
+    const float top = center.y - h / 2.0f;
+
+    const float barTop = top - gap - barHeight;
+    // 数值默认画在血条上方；只画数值时紧贴方框上沿。
+    const float textY = (drawBar || !drawText)
+        ? (barTop - textHeight)
+        : (top - textHeight - 1.0f);
+
+    if (drawBar && health.hasRate) {
+        float rate = health.rate;
+        if (!std::isfinite(rate)) rate = 0.0f;
+        if (rate < 0.0f) rate = 0.0f;
+        if (rate > 1.0f) rate = 1.0f;
+
+        const float fillWidth = w * rate;
+        drawList->AddRectFilled(ImVec2(left, barTop), ImVec2(right, barTop + barHeight),
+                                IM_COL32(20, 20, 20, 190));
+        drawList->AddRectFilled(ImVec2(left, barTop), ImVec2(left + fillWidth, barTop + barHeight),
+                                IM_COL32(70, 220, 90, 235));
+    }
+
+    if (drawText) {
+        char text[32] = {};
+        if (mode == esphealth::MODE_VALUE && health.hasValue) {
+            // 只显示剩余血量本身，不显示 "当前/上限"。
+            sprintf_s(text, sizeof(text), "%d", health.current);
+        } else {
+            float rate = health.hasRate ? health.rate : 0.0f;
+            if (!std::isfinite(rate)) rate = 0.0f;
+            int percent = static_cast<int>(rate * 100.0f + 0.5f);
+            if (percent < 0) percent = 0;
+            if (percent > 100) percent = 100;
+            sprintf_s(text, sizeof(text), "%d%%", percent);
+        }
+        drawList->AddText(ImGui::GetFont(), textHeight, ImVec2(left, textY),
+                          IM_COL32(255, 255, 255, 240), text);
+    }
 }
 
 ImVec4 ESPRenderer::GetPlayerColor(void* player, void* localPlayer) {

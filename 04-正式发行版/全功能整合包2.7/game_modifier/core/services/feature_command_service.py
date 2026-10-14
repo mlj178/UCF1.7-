@@ -16,9 +16,19 @@ class FeatureCommandService:
 
     def set_config(self, feature_id, config):
         current = self._config.set(feature_id, config)
-        if feature_id == "esp_box" and "esp_target_scope" in current:
-            from core.game_session_manager import GameSessionManager
-            GameSessionManager.get_instance().set_esp_target_scope(current["esp_target_scope"])
+        if feature_id == "esp_box":
+            # 方框透视的三个下拉框都要实时下发到已注入的 DLL：
+            # esp_target_scope（显示对象）、esp_health_mode（百分比/具体数值）、
+            # esp_health_display（仅血条/仅数值/两者）。
+            if "esp_target_scope" in current:
+                from core.game_session_manager import GameSessionManager
+                GameSessionManager.get_instance().set_esp_target_scope(current["esp_target_scope"])
+            if "esp_health_mode" in current or "esp_health_display" in current:
+                from core.game_session_manager import GameSessionManager
+                GameSessionManager.get_instance().set_esp_health_options(
+                    current.get("esp_health_mode"),
+                    current.get("esp_health_display"),
+                )
         return self._frida.plugin_call(feature_id, "setConfig", current)
 
     def set_config_runtime(self, feature_id, config):
