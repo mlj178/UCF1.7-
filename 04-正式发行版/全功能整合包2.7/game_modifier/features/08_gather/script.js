@@ -3,6 +3,17 @@ var modules = {};
 var __localMaxLogsPerModule = 10;
 var __localModuleLogCounts = {};
 
+// ═══════════════════════ 聚怪诊断日志总开关 ═══════════════════════
+// true  = 打开「人机飞天」全套诊断：TRACE / WATCH / ALERT / PATH_GUARD / GAME_JUMP /
+//         GAME_SETPOS / BOT_JUMP / GAME_SPAWN / GAME_RESPAWN / NANO_RESPAWN /
+//         NANO_INFECT / CLIMB_CLEAR / PATH_RESET / [GATHER_DIAG_TEMP]，
+//         并挂上对应的只读观测 Hook（日志量约 3000 条 / 5 分钟）。
+// false = 全部关闭：不挂观测 Hook、不做快照采样、不写任何「聚怪诊断」日志，
+//         性能与日志都回到干净状态。
+//         聚怪自身的功能日志（传送 #n / 追踪 / 自己=… Bot活=…）与全部修复逻辑不受影响。
+// 以后若再出现异常，把这里改成 true 即可恢复完整证据链。
+var GATHER_DIAG_ENABLED = false;
+
 function sendRoutedLog(level, module, message, audience, devDetail) {
   try {
     if (!__localModuleLogCounts[module]) __localModuleLogCounts[module] = 0;
@@ -34,6 +45,8 @@ function sendLog(level, module, message) {
 }
 
 function sendLogFile(level, module, message) {
+  // 唯一出口：诊断总开关关闭时，任何路径都写不出「聚怪诊断」日志。
+  if (!GATHER_DIAG_ENABLED) return;
   try { send({ type: 'log_file', level: level, module: module, message: message, audience: 'dev' }); } catch (_) {}
 }
 
@@ -41,6 +54,7 @@ function sendLogFile(level, module, message) {
 // 全部落到 logs/game_modifier.log，便于离线分析“多人生化下 Bot 飞天”。
 var GATHER_DIAG_MODULE = '聚怪诊断';
 function sendGatherDiag(message) {
+  if (!GATHER_DIAG_ENABLED) return;
   sendLogFile('debug', GATHER_DIAG_MODULE, message);
 }
 
@@ -124,6 +138,7 @@ modules.gather = (function() {
     getPosInj: 0x3F4280,             // Transform.get_position_Injected(out Vector3, this)
     Bot_Jump: 0xB2FBC0,              // Bot.Jump(float delay)
     Bot_PathSetting: 0xB31E90,       // Bot.PathSetting()（路径起点=当前 transform 位置）
+    P_isClimbing: 0xB55D80,          // Player.get_isClimbing()（Bot.Move 里爬绳/爬梯分支的判据）
     P_OnJumpBtnDown: 0xB51780,       // Player.OnJumpBtnDown()（Bot.Update/JumpCheck 命中 grounded 分支时把 velData.y 写成 JumpPower）
     ModeNano_RespawnPlayer: 0xAF2670,// ModeBase_Nano.RespawnPlayer(Player,int,bool,bool)
     ModeNano_InfectEvent: 0xAF07A0,  // ModeBase_Nano.InfectEvent(Player ghost, Player soldier)
@@ -145,12 +160,13 @@ modules.gather = (function() {
     // ── 诊断用字段偏移（dump.cs 核对）──
     Entity_team: 0x20, Entity_cc: 0x2C, Entity_isGhost: 0x30,
     P_isGrounded: 0x70, P_velData: 0x90, P_isRespawning: 0xD8, P_spawnPos: 0xBC,
-    P_autonomousJump: 0x68, Bot_nextJumpTime: 0xE8, Bot_nextJumpStartNode: 0xC8, Bot_nextJumpLink: 0xCC,
+    P_autonomousJump: 0x68, Bot_nextJumpTime: 0xE8,
+    P_climbStair: 0x114,             // Player+0x114 = 当前挂着的 ClimbStair 对象（Player.get_isClimbing 的判据）
     GM_staticFields: 0x5C, GM_myPlayer: 0x00, GM_gameMode: 0x04,
   };
 
   var isMy = null, isDead = null, getCC = null, cSE = null, gt = null, spi = null, playerSetPos = null;
-  var getPosInj = null, nanoRoleFn = null, worldPosBuf = null, botPathSettingFn = null;
+  var getPosInj = null, nanoRoleFn = null, worldPosBuf = null, botPathSettingFn = null, isClimbFn = null;
   var posBuf = null, singletonGetter = null, hooks = [];
   var diagnosticsTimer = null;
 
@@ -162,12 +178,12 @@ modules.gather = (function() {
   //   ③ Bot 的 A*/NanoGuard/JumpLink 旧路径把它往高处带 —— Bot.path 字段 + Bot.Jump 计数
   //   ④ 游戏自身在聚怪后重新置位           —— Player.SetPos / Spawn / Respawn / ModeBase_Nano.RespawnPlayer / InfectEvent
   var diag = {
-    traceBudget: 16, setPosBudget: 20, jumpBudget: 12, lifeBudget: 20, headerBudget: 12, jumpProbeBudget: 20,
+    traceBudget: 16, setPosBudget: 20, jumpBudget: 12, lifeBudget: 20, headerBudget: 12, jumpProbeBudget: 8, climbLogBudget: 20,
     summaryBudget: 40, alertBudget: 30, watchLimit: 40, resetLogBudget: 30, guardBudget: 30,
     sampleIntervalMs: 250, sampleWindowMs: 3000, samplesPerBot: 8,
     watched: {}, watchKeys: [], watchActive: false, watchCount: 0,
     observeUntil: 0, selfSetPos: false, periodicBudget: 0,
-    stats: { gathers: 0, traced: 0, watched: 0, gameSetPos: 0, jumps: 0, spawnCalls: 0, respawnCalls: 0, infectCalls: 0, alerts: 0, pathResets: 0, pathGuards: 0, holdResets: 0, holdDrops: 0, gameJumps: 0 }
+    stats: { gathers: 0, traced: 0, watched: 0, gameSetPos: 0, jumps: 0, spawnCalls: 0, respawnCalls: 0, infectCalls: 0, alerts: 0, pathResets: 0, pathGuards: 0, gameJumps: 0, climbClears: 0 }
   };
 
   function ptrText(p) {
@@ -220,7 +236,7 @@ modules.gather = (function() {
   }
 
   function readSnapshot(pp) {
-    var s = { world: null, raw: null, grounded: null, vy: null, cc: null, ghost: null, team: null, role: null, spawn: null, respawning: null };
+    var s = { world: null, raw: null, grounded: null, vy: null, cc: null, ghost: null, team: null, role: null, spawn: null, respawning: null, climb: null };
     try { var tr = readPlayerTransform(pp); s.world = readWorldPosition(tr); s.raw = readRawNativePosition(tr); } catch (e) {}
     try { s.grounded = readGrounded(pp); } catch (e) {}
     try { s.vy = readVelocityY(pp); } catch (e) {}
@@ -230,6 +246,7 @@ modules.gather = (function() {
     try { s.role = readNanoRole(pp); } catch (e) {}
     try { s.spawn = readPlayerSpawnPos(pp); } catch (e) {}
     try { s.respawning = readU8(pp.add(O.P_isRespawning)); } catch (e) {}
+    try { s.climb = isClimbFn ? (isClimbFn(pp, ptr(0)) ? 1 : 0) : null; } catch (e) {}
     return s;
   }
 
@@ -237,7 +254,7 @@ modules.gather = (function() {
     if (!s) return 'null';
     return 'world=' + fmtVec(s.world) + ' raw=' + fmtVec(s.raw) + ' spawnPos=' + fmtVec(s.spawn) +
       ' role=' + s.role + '(human=' + isHumanRole(s.role) + ') ghost=' + s.ghost + ' team=' + s.team +
-      ' grounded=' + s.grounded + ' vy=' + diagNum(s.vy) + ' resp=' + s.respawning + ' cc=' + (s.cc || 'null');
+      ' grounded=' + s.grounded + ' vy=' + diagNum(s.vy) + ' resp=' + s.respawning + ' climb=' + s.climb + ' cc=' + (s.cc || 'null');
   }
 
   function botPathText(botPtr) {
@@ -309,7 +326,7 @@ modules.gather = (function() {
   }
 
   function dumpGatherHeader(reason) {
-    if (diag.headerBudget <= 0) return;
+    if (!GATHER_DIAG_ENABLED || diag.headerBudget <= 0) return;
     diag.headerBudget--;
     var spBl = null, spGr = null, spNu = null;
     try {
@@ -333,6 +350,7 @@ modules.gather = (function() {
   }
 
   function registerWatch(pp, src, before, after, botPtr) {
+    if (!GATHER_DIAG_ENABLED) return;   // 总开关关闭：不采样、不建看门狗队列
     try {
       var key = pp.toString();
       if (diag.watched[key] || diag.watchCount >= diag.watchLimit) return;
@@ -356,7 +374,7 @@ modules.gather = (function() {
     for (var i = 0; i < rec.samples.length; i++) {
       var s = rec.samples[i].s;
       var w = s && s.world;
-      tl.push(rec.samples[i].t + 'ms:y=' + (w ? diagNum(w.y) : 'na') + '/vy=' + (s ? diagNum(s.vy) : 'na') + '/g=' + (s ? s.grounded : 'na'));
+      tl.push(rec.samples[i].t + 'ms:y=' + (w ? diagNum(w.y) : 'na') + '/vy=' + (s ? diagNum(s.vy) : 'na') + '/g=' + (s ? s.grounded : 'na') + '/cl=' + (s ? s.climb : 'na'));
     }
     var last = rec.samples.length ? rec.samples[rec.samples.length - 1].s : null;
     sendLogFile('debug', GATHER_DIAG_MODULE,
@@ -367,7 +385,7 @@ modules.gather = (function() {
   }
 
   function pumpWatchQueue() {
-    if (!diag.watchActive) return;
+    if (!GATHER_DIAG_ENABLED || !diag.watchActive) return;
     var now = Date.now();
     var keep = [];
     for (var i = 0; i < diag.watchKeys.length; i++) {
@@ -392,13 +410,13 @@ modules.gather = (function() {
             diag.stats.pathGuards++;
             sendLogFile('debug', GATHER_DIAG_MODULE,
               'PATH_GUARD #' + rec.idx + ' dy=' + diagNum(dy) + ' grounded=' + snap.grounded +
-              ' y=' + diagNum(snap.world.y) + ' -> ' + resetBotPathAfterTeleport(rec.player, rec.bot));
+              ' y=' + diagNum(snap.world.y) + ' -> ' + resetBotPathAfterTeleport(rec.player, rec.bot, 'guard'));
           }
           if (dy > 3 && diag.alertBudget > 0) {
             diag.alertBudget--; diag.stats.alerts++;
             sendLogFile('debug', GATHER_DIAG_MODULE,
               'ALERT #' + rec.idx + ' dy=' + diagNum(dy) + ' grounded=' + snap.grounded + ' vy=' + diagNum(snap.vy) +
-              ' role=' + snap.role + ' ghost=' + snap.ghost + ' resp=' + snap.respawning +
+              ' role=' + snap.role + ' ghost=' + snap.ghost + ' resp=' + snap.respawning + ' climb=' + snap.climb +
               ' world=' + fmtVec(snap.world) + ' raw=' + fmtVec(snap.raw) + ' p=' + ptrText(rec.player) +
               ' | botPath ' + botPathText(rec.bot) + ' | botGuard ' + botGuardText(rec.bot));
           }
@@ -411,7 +429,16 @@ modules.gather = (function() {
   }
 
   function resetDiagWindows() {
-    diag.traceBudget = 16; diag.setPosBudget = 20; diag.jumpBudget = 12; diag.lifeBudget = 20; diag.jumpProbeBudget = 20;
+    if (!GATHER_DIAG_ENABLED) {
+      // 总开关关闭：预算全部清零，快照采样与看门狗都不再进入
+      diag.traceBudget = 0; diag.setPosBudget = 0; diag.jumpBudget = 0; diag.lifeBudget = 0;
+      diag.jumpProbeBudget = 0; diag.climbLogBudget = 0; diag.summaryBudget = 0; diag.alertBudget = 0;
+      diag.resetLogBudget = 0; diag.guardBudget = 0; diag.periodicBudget = 0;
+      diag.watched = {}; diag.watchKeys = []; diag.watchActive = false; diag.watchCount = 0;
+      diag.observeUntil = 0;
+      return;
+    }
+    diag.traceBudget = 16; diag.setPosBudget = 20; diag.jumpBudget = 12; diag.lifeBudget = 20; diag.jumpProbeBudget = 8; diag.climbLogBudget = 20;
     diag.summaryBudget = 40; diag.alertBudget = 30; diag.resetLogBudget = 30; diag.guardBudget = 30;
     diag.watched = {}; diag.watchKeys = []; diag.watchActive = false; diag.watchCount = 0;
     diag.observeUntil = Date.now() + 5000;
@@ -419,7 +446,7 @@ modules.gather = (function() {
   }
 
   function diagObserving() {
-    return enabled && Date.now() <= diag.observeUntil;
+    return GATHER_DIAG_ENABLED && enabled && Date.now() <= diag.observeUntil;
   }
 
   function diagLifeEnter(a) {
@@ -484,7 +511,6 @@ modules.gather = (function() {
 
   function clearRoomState(reason) {
     gm = null; mm = null; modeBase = null; recentBotPlayers = {}; ntp = false;
-    clearHold();
     resetDiagWindows();
     diag.watchActive = false; diag.watched = {}; diag.watchKeys = []; diag.observeUntil = 0;
     sendDevLog('info', 'Gather', 'Room cache cleared: ' + reason, 'GatherEnemies cleared cached room pointers');
@@ -539,19 +565,11 @@ modules.gather = (function() {
     } catch (_) { return 'na'; }
   }
 
+  // 周期诊断用的坐标：必须走官方 Transform.get_position(0x3F4280)。
+  // 那套 native transform(+0x10)+0x38/0x3C/0x40 在本版本读出来恒为 (0,0,0)（日志里 raw= 那一列就是它），
+  // 于是 [GATHER_DIAG_TEMP] 的 pos= 一直是 0，看不到「越飞越高」的连续轨迹。
   function readPlayerPosition(pp) {
-    try {
-      var tr = gt(pp, ptr(0));
-      if (!tr || tr.isNull()) tr = rp(pp, O.P_charContainer);
-      if (!tr || tr.isNull()) return null;
-      var np = tr.add(0x10).readPointer();
-      if (!np || np.isNull()) return null;
-      return {
-        x: np.add(0x38).readFloat(),
-        y: np.add(0x3C).readFloat(),
-        z: np.add(0x40).readFloat()
-      };
-    } catch (_) { return null; }
+    return readWorldPosition(readPlayerTransform(pp));
   }
 
   function readVelocityY(pp) {
@@ -639,7 +657,7 @@ modules.gather = (function() {
   }
 
   function dumpGatherDiagnostics() {
-    if (!enabled) return;
+    if (!GATHER_DIAG_ENABLED || !enabled) return;
     // 限流：每秒一条的周期诊断最多打 periodicBudget 条，避免长时间挂机把日志刷满、
     // 把一次聚怪前后的 TRACE/WATCH 冲掉；每次聚怪会重置预算（每轮 40 条 ≈ 40 秒）。
     if (diag.periodicBudget <= 0) return;
@@ -667,7 +685,7 @@ modules.gather = (function() {
 
   var diagPending = false;
   function startGatherDiagnostics() {
-    if (diagnosticsTimer) return;
+    if (!GATHER_DIAG_ENABLED || diagnosticsTimer) return;   // 总开关关闭：连 1 秒周期定时器都不建
     // P0：诊断内部有 Component.get_transform 等游戏原生调用，不能跑在 Frida JS 线程；
     // 定时器只置标志，真正执行放到主线程钩子（ModeBase.UpdateTimeUI）里。
     dumpGatherDiagnostics();
@@ -697,145 +715,86 @@ modules.gather = (function() {
   //     于是「vy 恒为 10.50、y 线性升高、grounded=false」——正是日志里看到的飞天签名。
   var TIME_INF_BITS = 0x7f800000;
 
-  // ① 把跳跃计时器写回 +Inf（绝不能写 0）；② 清掉残余竖直速度；③ 清掉 autonomousJump。
-  function killJumpState(playerPtr, botPtr) {
-    var vel = 0, disarm = 0, auton = 0;
-    try {
-      var vd = rp(playerPtr, O.P_velData);
-      if (vd && !vd.isNull()) { vd.add(0x10).writeFloat(0); vel = 1; }
-    } catch (e) {}
-    try {
-      if (readU8(playerPtr.add(O.P_autonomousJump))) { playerPtr.add(O.P_autonomousJump).writeU8(0); auton = 1; }
-    } catch (e) {}
+  // 只把 Bot 的跳跃计时器写回 +Inf（游戏自己的"空闲"态）。**不再写 velData / autonomousJump**：
+  // velData.y 是游戏每帧按重力演进的状态，外部每 100ms 清零会让 Bot 悬停、掉落变慢、表现成"不受重力影响 + 卡顿"。
+  function disarmBotJump(playerPtr, botPtr) {
+    var disarm = 0;
     try {
       if (botPtr && !botPtr.isNull() && isValid(botPtr)) { botPtr.add(O.Bot_nextJumpTime).writeU32(TIME_INF_BITS); disarm = 1; }
     } catch (e) {}
-    return 'vel=' + vel + ',disarm=' + disarm + ',auton=' + auton;
+    return 'disarm=' + disarm;
   }
 
-  // ═════════ 聚怪保持窗口（飞天兜底，与根因无关也能压住）═════════
-  // 聚怪后数秒内，被传送的 Bot 只要又高过堆点：① 再杀一次竖直速度/跳跃闸门；② 仍然明显偏高时，
-  // 用游戏自己的 Player.SetPos 把它压回堆点高度（只改 y，x/z 用当前值，不动阵营/感染/落点分配）。
-  var hold = {
-    active: false, until: 0, tickAt: 0, bots: {}, target: null,
-    windowMs: 6000, tickMs: 100, softDy: 1.5, hardDy: 3.0, dropCooldownMs: 250,
-    logBudget: 24, dropBudget: 60, drops: 0, resets: 0
-  };
-
-  function beginGatherHold() {
-    hold.active = true;
-    hold.until = Date.now() + hold.windowMs;
-    hold.tickAt = 0;
-    hold.logBudget = 24;
-    hold.dropBudget = 60;
-    hold.drops = 0;
-    hold.resets = 0;
-    hold.target = spawn;
-    // 保证本轮聚怪期间 OnJumpBtnDown 探针处于观测窗口（probes 受 diagObserving() 门控）
-    diag.observeUntil = Date.now() + 8000;
-    diag.jumpProbeBudget = 20;
-  }
-
-  function clearHold() {
-    hold.active = false; hold.bots = {}; hold.target = null; hold.until = 0; hold.tickAt = 0;
-  }
-
-  function registerHold(pp, botPtr) {
+  // ═════════ 爬梯/爬绳状态复位：治「聚怪后人机斜着飞上天」 ═════════
+  // 依据（IDA 反编译 + capstone 反汇编）：
+  //   · Player.get_isClimbing(0x10B55D80) 的全部实现就是 return [Player+0x114] != null ——
+  //     这个字段不是布尔量，而是 Player.climbStair 这个 Transform（全局元数据：get_climbStair/set_climbStair，
+  //     MoveType 枚举里的 ClimbStair 就是它）。
+  //   · 游戏自己「下梯子」的动作就是 Player.set_climbStair(0x10B56700) 里的 `mov [ecx+114h], eax`（再跟一个 GC 写屏障），
+  //     所以这里写 0 与游戏自身的清除语义完全一致（写 NULL 的写屏障是空操作）。
+  //   · Player.MoveByLocalDirection(0x10B50A00)：!grounded 且 get_isClimbing() 为真时走 0x10B50BDD 的爬升分支：
+  //     读 [Player+0x114] 的 transform.position 与玩家自身 y 比较，决定 moveState（ebx=2/3），
+  //     再在 jump table(0x10B50F3C) 里用 Transform.get_right()/get_up() 合成速度 ——
+  //     函数在 0x10B50B98 直接把输入 x 覆盖成 0x40F00000 = 7.5f，于是水平 7.5 m/s + 竖直 4.25 m/s 的斜向直线，
+  //     与日志里「vy 恒为 4.25、水平 8~9 m/s、越飞越高」完全吻合。
+  //   · Player.FixedUpdate(0x10B50680) / Player.UpdateFallTime(0x10B54910)：!grounded && !isClimbing 才走坠落计时，
+  //     所以爬升态「不受重力」。
+  //   · 触发链：Bot 传送前就挂在梯子上（TRACE 的 before 快照 climb=1 / vy=4.25），聚怪用 SetPos 把它瞬移到出生点，
+  //     但瞬移不会补发 OnTriggerExit —— [Player+0x114] 仍指向旧梯子，于是它继续沿梯子的方向飞。
+  //     日志实证：12:43 那局 4 轮聚怪，每轮唯一 climb=1 的人机就是唯一飞天的那只（p=0x433b95c0）。
+  // 修法：传送后把 [Player+0x114] 清 0 = 「你已经不在梯子上了」，爬升分支立刻失效，回到正常的路径行走 + 重力。
+  function clearClimbState(playerPtr, tag) {
     try {
-      if (!pp || pp.isNull() || !isValid(pp)) return;
-      var key = pp.toString();
-      var rec = hold.bots[key];
-      if (!rec) { rec = { player: pp, bot: botPtr || null, logged: 0, lastDropAt: 0, drops: 0 }; hold.bots[key] = rec; }
-      else if (botPtr && !botPtr.isNull()) rec.bot = botPtr;
-      hold.active = true;
-    } catch (e) {}
+      if (!playerPtr || playerPtr.isNull() || !isValid(playerPtr)) return 'climb=na';
+      var before = 0;
+      try { before = (isClimbFn && isClimbFn(playerPtr, ptr(0))) ? 1 : 0; } catch (e) {}
+      if (!before) return 'climb=0';
+      var stair = null;
+      try { stair = playerPtr.add(O.P_climbStair).readPointer(); } catch (e) {}
+      playerPtr.add(O.P_climbStair).writeU32(0);
+      var after = 0;
+      try { after = (isClimbFn && isClimbFn(playerPtr, ptr(0))) ? 1 : 0; } catch (e) {}
+      diag.stats.climbClears++;
+      if (diag.climbLogBudget > 0) {
+        diag.climbLogBudget--;
+        sendLogFile('debug', GATHER_DIAG_MODULE,
+          'CLIMB_CLEAR ' + (tag || '') + ' p=' + ptrText(playerPtr) + ' stair=' + ptrText(stair) +
+          ' climb=' + before + '->' + after);
+      }
+      return 'climb=' + before + '->' + after;
+    } catch (e) { return 'climb=ERR:' + e.message; }
   }
 
-  function pumpHold() {
-    if (!hold.active) return;
-    var now = Date.now();
-    if (now > hold.until) {
-      sendLogFile('debug', GATHER_DIAG_MODULE, 'HOLD_END drops=' + hold.drops + ' resets=' + hold.resets + ' watched=' + Object.keys(hold.bots).length);
-      clearHold();
-      return;
-    }
-    if (now < hold.tickAt) return;
-    hold.tickAt = now + hold.tickMs;
-    var ty = hold.target ? hold.target.y : spawn.y;
-    var keys = Object.keys(hold.bots);
-    for (var i = 0; i < keys.length; i++) {
-      var key = keys[i];
-      var rec = hold.bots[key];
-      if (!rec || !rec.player) { delete hold.bots[key]; continue; }
-      var pp = rec.player;
-      try {
-        if (!isValid(pp)) { delete hold.bots[key]; continue; }
-        if (isDead(pp, ptr(0))) continue;
-        var world = readWorldPosition(readPlayerTransform(pp));
-        if (!world) continue;
-        var dy = world.y - ty;
-        if (dy <= hold.softDy) continue;
-        var st = killJumpState(pp, rec.bot);
-        hold.resets++; diag.stats.holdResets++;
-        if (hold.logBudget > 0) {
-          hold.logBudget--;
-          sendLogFile('debug', GATHER_DIAG_MODULE, 'HOLD key=' + key + ' p=' + ptrText(pp) + ' dy=' + diagNum(dy) +
-            ' y=' + diagNum(world.y) + ' vy=' + diagNum(readVelocityY(pp)) + ' grounded=' + readGrounded(pp) + ' ' + st +
-            ' | botPath ' + botPathText(rec.bot));
-        }
-        if (dy > hold.hardDy && now - rec.lastDropAt >= hold.dropCooldownMs && hold.dropBudget > 0) {
-          hold.dropBudget--; hold.drops++; rec.drops++; rec.lastDropAt = now; diag.stats.holdDrops++;
-          var r = teleportPlayerBySetPos(pp, { x: world.x, y: ty, z: world.z });
-          if (hold.logBudget > 0) {
-            hold.logBudget--;
-            sendLogFile('debug', GATHER_DIAG_MODULE, 'HOLD_DOWN p=' + ptrText(pp) + ' dy=' + diagNum(dy) + ' y=' + diagNum(world.y) + ' -> ' + r + ' drops=' + rec.drops);
-          }
-        }
-      } catch (e) {}
-    }
-  }
-
-  // ═════════ 寻路复位：治「传送后被 A* 旧路径拖着飞/越飞越高」 ═════════
-  // 依据（IDA 0x10B2FBE0 Bot.Move / 0x10B31E90 Bot.PathSetting / 0x10B31950 Bot.OnPathComplete / dump.cs）：
-  //   · Bot.Move 沿 path(+0x80)->vectorPath[nextPathVectorID(+0x90)] 取 nextPathPos(+0xA0)，朝它直线移动；
-  //     这条 path 是按"传送前"的位置算出来的，传送后 Bot 会沿旧航点直线穿空跑过去 —— 观察到的"恒定 vy、匀速升高、飞出地图"。
-  //   · Bot.Move 对 path == NULL 有安全分支：只把当前位置写回 nextPathPos/dirToNextNode 后返回，不会空指针
-  //     （而且每个 Bot 出生后、第一条路径返回前本来就是 path == NULL，属正常状态）。
-  //   · Bot.PathSetting 的路径起点 = 当前 transform.position，受 nextFindPathTime(+0xB8) 节流（0.25~0.5s）。
-  // 所以传送后做三件事：① 断开旧路径（Bot.Move 立即停止沿旧航点移动）；
-  // ② 把进度/起点/计时全部复位到当前位置；③ 清节流并立刻让游戏自己重新寻路（OnPathComplete 会重挂新路径）。
-  function resetBotPathAfterTeleport(playerPtr, botPtr) {
+  // ═════════ 传送后复位：只「重算路径 + 复位跳跃闸门」，不碰任何路径进度字段 ═════════
+  // 依据（capstone 反汇编 0x10B2FBE0 Bot.Move）：
+  //   · path != null：edi = path->vectorPath(+0x2C) -> nextPathPos(+0xA0) = vectorPath[nextPathVectorID(+0x90)]，
+  //     再算方向 -> Bot.GetMoveStateByDir(0x10B2E8A0) -> Player.MoveByLocalDirection(0x10B50A00)。
+  //   · **path == null（0x10B2FC8F 起）**：只把当前位置写回 nextPathPos(+0xA0)/dirToNextNode(+0xAC)，
+  //     然后 jmp 0x10B2FFC9；那条尾链传给 Player.MoveByLocalDirection 的方向仍是函数开头
+  //     UnityEngine.Vector2Int.get_zero() 的 (0,0) —— 也就是「Bot 完全没有移动输入」，
+  //     只能带着传送前的残余速度漂移。日志里异常人机 pathLen 恒为 0.00 正是这个状态。
+  //   · Bot.PathSetting(0x10B31E90) 的起点 = 当前 transform.position，受 nextFindPathTime(+0xB8) 节流。
+  // 因此这里**不再把 Bot.path 置空，也不再改 nextPathVectorID / nextPathPos / dirToNextNode / pathLength**，
+  // 只做两件事：① 清节流并立刻让游戏从「当前位置」重算新路径（OnPathComplete 会自己替换旧 path）；
+  //             ② nextJumpTime 写回 +Inf（写 0 = 立刻可跳 -> velData.y=JumpPower(10.5) 恒速飞天，是上一轮的坑）。
+  function resetBotPathAfterTeleport(playerPtr, botPtr, tag) {
     try {
-      if (!botPtr || botPtr.isNull() || !isValid(botPtr)) return 'no_bot';
+      var climbState = clearClimbState(playerPtr, tag || 'teleport');
+      if (!botPtr || botPtr.isNull() || !isValid(botPtr)) return 'no_bot ' + climbState;
       var cur = readWorldPosition(readPlayerTransform(playerPtr)) || spawn;
       var oldLen = readF32(botPtr.add(0x84));
       var oldId = readI32(botPtr.add(0x90));
-      botPtr.add(0x80).writePointer(ptr(0));    // Bot.path = null -> Bot.Move 走无路径安全分支
-      botPtr.add(0x84).writeFloat(0);           // pathLength = 0
-      botPtr.add(0x90).writeS32(0);             // nextPathVectorID = 0
-      botPtr.add(0x94).writeFloat(cur.x);       // lastStartPoint = 当前位置
-      botPtr.add(0x98).writeFloat(cur.y);
-      botPtr.add(0x9C).writeFloat(cur.z);
-      botPtr.add(0xA0).writeFloat(cur.x);       // nextPathPos = 当前位置（本帧也不会朝旧航点跑）
-      botPtr.add(0xA4).writeFloat(cur.y);
-      botPtr.add(0xA8).writeFloat(cur.z);
-      botPtr.add(0xAC).writeFloat(0);           // dirToNextNode = 0
-      botPtr.add(0xB0).writeFloat(0);
-      botPtr.add(0xB4).writeFloat(0);
-      botPtr.add(0xB8).writeFloat(0);           // nextFindPathTime = 0（清掉"0.25~0.5s 才重算"的节流）
-      botPtr.add(0xEC).writeFloat(0);           // blockedTime = 0
-      // 关键：nextJumpTime 必须写回 +Inf（空闲态），写 0 = 立刻触发 Bot 起跳 -> velData.y=JumpPower(10.5) 恒速飞天。
-      // 同时清残余竖直速度与 autonomousJump，打断「跳起来下不来」的状态。
-      var jumpState = killJumpState(playerPtr, botPtr);
-      if (botPathSettingFn) botPathSettingFn(botPtr, ptr(0));   // 立刻从"当前位置"重新寻路
+      var jumpState = disarmBotJump(playerPtr, botPtr);          // Bot.nextJumpTime = +Inf
+      botPtr.add(0xB8).writeFloat(0);                            // nextFindPathTime = 0 -> 允许立刻重算
+      if (botPathSettingFn) botPathSettingFn(botPtr, ptr(0));    // 起点 = 当前 transform.position
       diag.stats.pathResets++;
       if (diag.resetLogBudget > 0) {
         diag.resetLogBudget--;
         sendLogFile('debug', GATHER_DIAG_MODULE,
           'PATH_RESET p=' + ptrText(playerPtr) + ' bot=' + ptrText(botPtr) +
-          ' from=' + fmtVec(cur) + ' oldPathLen=' + diagNum(oldLen) + ' oldNextId=' + oldId + ' jump[' + jumpState + '] -> ok');
+          ' from=' + fmtVec(cur) + ' oldPathLen=' + diagNum(oldLen) + ' oldNextId=' + oldId + ' jump[' + jumpState + '] ' + climbState + ' -> ok');
       }
-      return 'ok';
+      return 'ok ' + climbState;
     } catch (e) { return 'ERR:' + e.message; }
   }
 
@@ -952,7 +911,6 @@ modules.gather = (function() {
     }
 
     sendLog('info', '聚怪', '追踪: ' + Object.keys(playersToMove).length + ' Player + ' + botAdded + ' (Bot补充)');
-    beginGatherHold();
     var self = 0, real = 0, dead = 0, botOk = 0, botFail = 0;
     var pKeys = Object.keys(playersToMove);
     for (var pi = 0; pi < pKeys.length; pi++) {
@@ -967,7 +925,7 @@ modules.gather = (function() {
         if (isDead(pp, ptr(0))) { dead++; continue; }
         var meta = playerMeta[pKeys[pi]] || { src: 'unknown', bot: null };
         // 观测快照：TRACE 明细有预算限制，但只要还在 watch 名额内就照常采样（ALERT 依赖它）。
-        var wantSnapshot = (diag.traceBudget > 0) || (diag.watchCount < diag.watchLimit);
+        var wantSnapshot = GATHER_DIAG_ENABLED && ((diag.traceBudget > 0) || (diag.watchCount < diag.watchLimit));
         var beforeSnap = wantSnapshot ? readSnapshot(pp) : null;
         var r = teleportEntity(pp, false);
         var afterSnap = wantSnapshot ? readSnapshot(pp) : null;
@@ -977,7 +935,6 @@ modules.gather = (function() {
           botOk++;
           // 关键修复：传送后必须重新寻路，否则 Bot 会沿传送前的旧路径飞走
           resetBotPathAfterTeleport(pp, meta.bot);
-          registerHold(pp, meta.bot);
         } else botFail++;
       } catch(e) { botFail++; }
     }
@@ -1012,6 +969,7 @@ modules.gather = (function() {
       playerSetPos = new NativeFunction(base.add(R.P_SetPos), 'void', ['pointer','float','float','float','pointer'], 'mscdecl');
       getPosInj = new NativeFunction(base.add(R.getPosInj), 'void', ['pointer','pointer','pointer'], 'mscdecl');
       nanoRoleFn = new NativeFunction(base.add(R.P_getNanoRole), 'int', ['pointer','pointer'], 'mscdecl');
+      isClimbFn = new NativeFunction(base.add(R.P_isClimbing), 'bool', ['pointer','pointer'], 'mscdecl');
       botPathSettingFn = new NativeFunction(base.add(R.Bot_PathSetting), 'void', ['pointer','pointer'], 'mscdecl');
       worldPosBuf = Memory.alloc(16);
       posBuf = Memory.alloc(16);
@@ -1026,7 +984,6 @@ modules.gather = (function() {
         handleModeBaseSeen(args[0]);
         if (diagPending) { diagPending = false; try { dumpGatherDiagnostics(); } catch (e) {} }
         if (diag.watchActive) { try { pumpWatchQueue(); } catch (e) {} }
-        if (hold.active) { try { pumpHold(); } catch (e) {} }
       } }); hooks.push(h5); } catch(e) {}
       try { var h6 = Interceptor.attach(base.add(R.ModeBase_ExitGame), { onEnter: function() { clearRoomState('ModeBase.ExitGame'); } }); hooks.push(h6); } catch(e) {}
       try { var h7 = Interceptor.attach(base.add(R.GameManager_GameRoundEnd), { onEnter: function() { clearRoomState('GameManager.GameRoundEnd'); } }); hooks.push(h7); } catch(e) {}
@@ -1035,7 +992,13 @@ modules.gather = (function() {
 
       // ── 观测型 Hook（只读，不改变游戏行为；预算用尽或不在观测窗口时直接返回）──
       // 目的：抓“聚怪之后，到底是谁把 Bot 又挪走了”。
-      try { var h10 = Interceptor.attach(base.add(R.P_SetPos), { onEnter: function(a) {
+      // 诊断总开关关闭时，attachDiag 直接跳过 —— 这 7 个 Hook 一个都不挂。
+      function attachDiag(rva, spec) {
+        if (!GATHER_DIAG_ENABLED) return;
+        try { hooks.push(Interceptor.attach(base.add(rva), spec)); } catch (e) {}
+      }
+
+      attachDiag(R.P_SetPos, { onEnter: function(a) {
         try {
           if (!diagObserving() || diag.selfSetPos || diag.setPosBudget <= 0) return;
           diag.setPosBudget--; diag.stats.gameSetPos++;
@@ -1045,9 +1008,9 @@ modules.gather = (function() {
             ' new=(' + diagNum(ptr(esp).add(8).readFloat()) + ',' + diagNum(ptr(esp).add(12).readFloat()) + ',' + diagNum(ptr(esp).add(16).readFloat()) + ')' +
             ' caller=' + this.returnAddress);
         } catch (e) {}
-      } }); hooks.push(h10); } catch(e) {}
+      } });
 
-      try { var h11 = Interceptor.attach(base.add(R.Bot_Jump), { onEnter: function(a) {
+      attachDiag(R.Bot_Jump, { onEnter: function(a) {
         try {
           if (!diagObserving() || diag.jumpBudget <= 0) return;
           diag.jumpBudget--; diag.stats.jumps++;
@@ -1057,16 +1020,16 @@ modules.gather = (function() {
             ' pos=' + fmtVec(pl ? readWorldPosition(readPlayerTransform(pl)) : null) +
             ' delay=' + diagNum(ptr(this.context.esp).add(8).readFloat()) + ' pathLen=' + diagNum(readF32(bot.add(0x84))));
         } catch (e) {}
-      } }); hooks.push(h11); } catch(e) {}
+      } });
 
-      try { var h12 = Interceptor.attach(base.add(R.P_Spawn), { onEnter: diagLifeEnter, onLeave: function() { diagLifeLeave.call(this, 'GAME_SPAWN'); } }); hooks.push(h12); } catch(e) {}
-      try { var h13 = Interceptor.attach(base.add(R.P_Respawn), { onEnter: diagLifeEnter, onLeave: function() { diagLifeLeave.call(this, 'GAME_RESPAWN'); } }); hooks.push(h13); } catch(e) {}
-      try { var h14 = Interceptor.attach(base.add(R.ModeNano_RespawnPlayer), { onEnter: diagNanoRespawnEnter, onLeave: diagNanoRespawnLeave }); hooks.push(h14); } catch(e) {}
-      try { var h15 = Interceptor.attach(base.add(R.ModeNano_InfectEvent), { onEnter: diagInfectEnter }); hooks.push(h15); } catch(e) {}
+      attachDiag(R.P_Spawn, { onEnter: diagLifeEnter, onLeave: function() { diagLifeLeave.call(this, 'GAME_SPAWN'); } });
+      attachDiag(R.P_Respawn, { onEnter: diagLifeEnter, onLeave: function() { diagLifeLeave.call(this, 'GAME_RESPAWN'); } });
+      attachDiag(R.ModeNano_RespawnPlayer, { onEnter: diagNanoRespawnEnter, onLeave: diagNanoRespawnLeave });
+      attachDiag(R.ModeNano_InfectEvent, { onEnter: diagInfectEnter });
 
       // 观测型：Bot.Update / Bot.JumpCheck 会直接调 Player.OnJumpBtnDown 让 Bot 起跳；
       // 只对本轮聚怪相关对象记录「进/出的 vy 与 grounded」，用来确认「恒速 10.5 飞天 = 反复起跳」这条链。
-      try { var h16 = Interceptor.attach(base.add(R.P_OnJumpBtnDown), {
+      attachDiag(R.P_OnJumpBtnDown, {
         onEnter: function(a) {
           try {
             this.probePlayer = null;
@@ -1074,7 +1037,7 @@ modules.gather = (function() {
             var pp = a[0];
             if (!pp || pp.isNull() || !isValid(pp)) return;
             var key = pp.toString();
-            if (!hold.bots[key] && !diag.watched[key]) return;
+            if (!diag.watched[key] && !recentBotPlayers[key]) return;   // 只关心本轮聚怪相关对象
             diag.jumpProbeBudget--; diag.stats.gameJumps++;
             this.probePlayer = pp;
             this.probeGrounded = readGrounded(pp);
@@ -1093,7 +1056,7 @@ modules.gather = (function() {
               ' grounded=' + readGrounded(pp));
           } catch (e) {}
         }
-      }); hooks.push(h16); } catch(e) {}
+      });
 
       enabled = true;
       diag.periodicBudget = 10;
@@ -1106,7 +1069,6 @@ modules.gather = (function() {
       stopGatherDiagnostics();
       for (var i = 0; i < hooks.length; i++) { try { hooks[i].detach(); } catch(e) {} }
       hooks = []; gm = null; mm = null; modeBase = null; recentBotPlayers = {}; ntp = false;
-      clearHold();
       resetDiagWindows(); diag.watchActive = false; diag.watched = {}; diag.watchKeys = []; diag.observeUntil = 0;
       enabled = false;
       sendLog('info', '聚怪', '已禁用');

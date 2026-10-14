@@ -337,6 +337,21 @@
         // 用来确认"异常到底停在哪一步"（onEnter 有、onLeave 没有 = 抛在这里）。
         GameManager_DeathEventBroadcast: 0x00AFA400,
         GameManager_PlayHitFxAndSnd: 0x00AFB970,
+        // ---- 死亡→复活链诊断（death_diag；只读观察，不改变游戏行为）----
+        // ModeBase_Nano.RespawnPlayer(Player,int,bool,bool)：生化模式“复活调度”的唯一入口，
+        //   普通幽灵与终结者（含 Mode_Nano4_Terminator 的墓碑复活，最后都会调基类）都会走到。
+        // Player.Respawn(float,float)：真正把玩家排进复活协程。
+        // Player.get_nanoRole()：读复活时的纳米角色，用来区分普通幽灵/终结者/高阶终结者。
+        ModeBase_Nano_RespawnPlayer: 0x00AF2670,
+        Player_Respawn: 0x00B527A0,
+        Player_get_nanoRole: 0x00B56200,
+        // 托管异常的"唯一漏斗"：il2cpp_raise_exception 以及所有托管 throw 最终都会进
+        //   sub_1013FF10(Il2CppException* ex, MethodInfo*, ...) -> _CxxThrowException。
+        //   钩它就能在"死亡广播被打断"的那一毫秒拿到异常类型 + 调用栈 RVA。
+        Il2Cpp_Exception_Raise: 0x0013FF10,
+        // ModeBase_Nano.DeathEvent(this, DeathEventData, MethodInfo)：抓死亡链上的 mode 实例，
+        //   复活兜底要用它当 this。
+        ModeBase_Nano_DeathEvent: 0x00AEF9E0,
 
         // ---- 弹体追踪（制导）----
         //   WPN_Missile 是手雷/RPG/榴弹枪/奥术手雷/火球共用的投射物基类，
@@ -448,7 +463,41 @@
         Dmg_wpnSprIndex: 0x40,
         Dmg_ignoreDmgRate: 0x44,
         Dmg_size: 0x48,
-        Dmg_dwordCount: 18
+        Dmg_dwordCount: 18,
+
+        // ---- DeathEventData（0x38 字节，按值传播；死亡广播的参数）----
+        Death_killer: 0x00,
+        Death_dead: 0x04,
+        Death_headShot: 0x08,
+        Death_wallThrough: 0x0C,
+        Death_damageType: 0x10,
+        Death_damageOrigin: 0x14,
+        Death_specialKill: 0x20,
+        Death_nanoKill: 0x24,
+        Death_revenge: 0x28,
+        Death_damageTag: 0x2C,
+        Death_wpnIndex: 0x30,
+        Death_wpnSprIndex: 0x34,
+        Death_size: 0x38,
+
+        // ---- Player 复活状态（dump.cs 确认）----
+        Player_nano4TData: 0xAC,
+        Player_respawnType: 0xD0,
+        Player_isRespawning: 0xD8,
+        Nano4TData_canUseGrave: 0x14,
+        Nano4TData_graveCount: 0x18,
+
+        // ---- GameManager 武器表 & Dictionary/Entry/Array 内部布局 ----
+        //   死亡广播里的 get_wpnName/get_killMsgIcon/get_isVVIP 查的是
+        //   GameManager.WpnDataDictionary（static +0x1C）；下面这些偏移由 dump.cs + IDA 类型双重确认。
+        GM_WpnDataDictionary: 0x1C,   // Dictionary<int, WeaponData>
+        Dict_entries: 0x0C,           // Dictionary.entries 数组
+        Dict_count: 0x10,             // Dictionary.count（已用条目数）
+        Dict_version: 0x14,           // Dictionary.version（变化 = 需要重建 key 缓存）
+        Arr_maxLength: 0x0C,          // Il2CppArray.max_length
+        Arr_items: 0x10,              // Il2CppArray 数据区起点
+        Entry_size: 0x10,             // Entry{hashCode,next,key,value} = 16 字节
+        Entry_key: 0x08               // Entry.key
     };
 
     var DAMAGE_TYPE = {
@@ -494,6 +543,22 @@
         //   pendingMissile: 开火钩子写、SetWeaponData 读的"这颗弹是什么类别"
         missileTargets: {},
         pendingMissile: null,
+
+        // death_diag：击杀后观察窗口
+        //   key = 目标指针字符串 -> { victim, at, label, note, scheduled }
+        deathWatch: {},
+
+        // death_fix_wpn：最近一次确认「在 WpnDataDictionary 里存在」的 wpnIndex，
+        // 作为坏 key 的兜底（没有就退化成字典里最小的合法 key）。
+        lastValidWpnIndex: -1,
+
+        // death_diag：当前"进了还没出"的那次死亡广播。
+        //   下一次死亡广播进入时它还在 = 上一次被托管异常打断（目标不会复活）。
+        pendingDeath: null,
+        // death_fix_respawn：复活兜底用的生化模式实例（从 RespawnPlayer / DeathEvent 钩子里抓）
+        modeBase: null,
+        lastRescueTick: 0,
+        lastRaiseLogAt: 0,
 
         module: null,
         base: ptr(0),
@@ -592,6 +657,38 @@
             //   true （默认）= 回退成"全场最近"，保住"对着空气扔雷也能追到人"
             //   false        = 这颗弹不追踪，按原弹道直飞（严格"只追我瞄的人"）
             homing_cone_fallback: true,
+
+            // ---- death_diag：击杀之后“到底有没有复活” ----
+            //   2.7 实测日志指纹：[fail:applyDamage:gun] system error
+            //   —— 我们合成的 GameManager.TakeDamage 在被击杀那一刻抛托管异常，
+            //      按 §3.2 的结论会打断 DeathEventBroadcast -> 目标 isDead=true 但
+            //      “复活调度”没跑 -> 死了不复活、模型卡在原地。
+            //   所以默认开启这一组只读诊断：死亡广播进出 / RespawnPlayer / Player.Respawn
+            //   + 击杀后观察窗口。全部只读，不改变任何游戏行为。
+            death_diag: true,          // 总开关（关掉后连诊断钩子都不装）
+            death_diag_ms: 20000,      // 击杀后观察窗口：超过这个时间还没复活就报“不复活”
+            death_diag_detail: false,  // true = 每次死亡广播/复活调度都逐条打印（很吵）
+            // ★2026-10-14 闪退修复：托管异常漏斗探针默认关闭。
+            //   true = 在 il2cpp::vm::Exception::Raise(+0x13FF10) 上装 Frida 钩子（取证用），
+            //   会让本该 unwind 的托管异常直接返回 -> int 3 -> 0x80000003 秒退。
+            //   详见 installRaiseProbe() 上方注释与 06-测试/_crash18_26/。
+            death_diag_raise: false,
+            // ---- death_fix_wpn：已被 20261014 日志证伪，默认关闭 ----
+            //   IDA 实测 DeathEventData.get_wpnName(+0xB3D6C0)：查的就是
+            //     GameManager.WpnDataDictionary[eventData.wpnIndex]。
+            //   但 20261014 13:29:53.235 的 wpnIndex=341 炸了，13:29:54.231 的同一个
+            //   341 却正常返回；而且 wpnFix=0（341 在字典里查得到）——
+            //   说明"wpnIndex 非法"不是这次广播被打断的原因。改它只会污染击杀提示，
+            //   所以代码保留、默认关掉，要复现旧实验时手动打开。
+            death_fix_wpn: false,
+            // ---- death_fix_respawn：复活兜底（默认开）----
+            //   死亡广播一旦被异常打断，ModeBase_Nano.RespawnPlayer 根本不会被调用，
+            //   目标会一直 isDead=true 躺在原地直到本局结束（20261014 实测 4 次）。
+            //   这里在"目标死亡超过 death_respawn_grace_ms 还没排进复活"时，
+            //   由我们补一次 ModeBase_Nano.RespawnPlayer，把它拉回战场。
+            //   只在游戏主线程（开火钩子 / 死亡广播 onLeave）里跑，每次都会写 [deathFix] 日志。
+            death_fix_respawn: true,
+            death_respawn_grace_ms: 6000,  // 等多久还没复活才兜底（毫秒）
 
             // 调试（2.7 正式版默认全部关闭；出问题时用 setConfig 临时打开取证）
             diagnostic_log: false,
@@ -694,6 +791,18 @@
             invincibleCleared: 0,  // 注入前清掉目标无敌/减伤状态的次数
             deathIn: 0,            // DeathEventBroadcast 进入次数
             deathOut: 0,           // DeathEventBroadcast 正常返回次数（<deathIn 就是抛异常了）
+            respawnScheduled: 0,   // ModeBase_Nano.RespawnPlayer 命中次数（复活调度有没有被调用）
+            playerRespawnCalls: 0, // Player.Respawn 命中次数（真正排进复活协程）
+            halfDeadWatched: 0,    // 击杀后进入观察窗口的目标数
+            halfDeadRecovered: 0,  // 观察窗口内确认复活的目标数
+            halfDeadConfirmed: 0,  // 观察窗口结束仍未复活的目标数（=“不复活”的直接证据）
+            halfDeadActive: 0,     // 当前仍在观察的目标数
+            lastFailPhase: '',     // 最近一次 applyDamage 异常发生在哪一步
+            deathWpnFixed: 0,      // 死亡广播里被修正掉的非法 wpnIndex 次数（旧假设，默认关闭）
+            deathAborted: 0,       // 死亡广播「进了没出」的次数（= 被托管异常打断，目标不会复活）
+            deathRescued: 0,       // 复活兜底真正补发 RespawnPlayer 的次数
+            deathRescueFailed: 0,  // 复活兜底调用抛异常的次数
+            raiseCount: 0,         // 托管异常抛出次数（Il2Cpp_Exception_Raise 命中）
             hitFxIn: 0,            // PlayHitFxAndSnd 进入次数
             hitFxOut: 0,           // PlayHitFxAndSnd 正常返回次数
 
@@ -718,6 +827,7 @@
         getGameManager: null,
         healthRate: null,
         healthIsDead: null,
+        getNanoRole: null,
         getWpnData: null,
         getVelocity: null,
         setVelocity: null,
@@ -1008,6 +1118,8 @@
             // 诊断用：只读 HP 百分比 / 死亡标记，用来验证伤害是否真的落到血量上
             native.healthRate = new NativeFunction(base.add(RVA.HealthData_get_rate), 'float', ['pointer', 'pointer'], CALL_CONV);
             native.healthIsDead = new NativeFunction(base.add(RVA.HealthData_get_isDead), 'bool', ['pointer', 'pointer'], CALL_CONV);
+            // 诊断用：Player.get_nanoRole()，复活时区分幽灵/终结者
+            native.getNanoRole = new NativeFunction(base.add(RVA.Player_get_nanoRole), 'int32', ['pointer', 'pointer'], CALL_CONV);
             // GameManager.GetWpnData(int weaponIndex, out WeaponData data)
             //   -> bool，内部是 Dictionary.TryGetValue，查不到只返回 false
             native.getWpnData = new NativeFunction(
@@ -1054,6 +1166,18 @@
                 CALL_CONV
             );
             native.healthHurt = new NativeFunction(base.add(RVA.HealthData_Hurt), 'void', ['pointer', 'int32', 'pointer'], CALL_CONV);
+
+            // 复活兜底用的两个入口（只在 death_fix_respawn 打开时才会被调用）
+            //   ModeBase_Nano.RespawnPlayer(ModeBase_Nano*, Player*, int respawnTime, bool isNormal, bool clearExp)
+            native.respawnPlayer = new NativeFunction(
+                base.add(RVA.ModeBase_Nano_RespawnPlayer), 'void',
+                ['pointer', 'pointer', 'int32', 'uint', 'uint', 'pointer'], CALL_CONV
+            );
+            //   Player.Respawn(Player*, float respawnTime, float invisibleTime)
+            native.playerRespawn = new NativeFunction(
+                base.add(RVA.Player_Respawn), 'void',
+                ['pointer', 'float', 'float', 'pointer'], CALL_CONV
+            );
 
             native.ready = true;
             logHookAudit();
@@ -1831,11 +1955,14 @@
         var eyePos = getLocalEyePos(myPlayer) || target.rootPos || target.pos;
         var before = readHealthSnapshot(target.player);
         var defense = null;
+        // 异常定位用：记录最近一次进入的子步骤，catch 时写进 [fail:...] 名字里。
+        var phase = 'init';
 
         try {
             // 只有走完整入口（GameManager.TakeDamage）时才需要处理复活无敌：
             // 观察者链会按目标的 damageRate / isInvincible 把 data.damage 抹成 0。
             if (entry === DAMAGE_ENTRY.GAME_MANAGER) {
+                phase = 'clearInvincible';
                 defense = clearTargetInvincibility(target.player);
                 // 计数只在"确实清掉了东西"时 +1，这样 UI 上的「清无敌」才有意义
                 if (defense.isInvincible === 1 || defense.invEnd > 0 ||
@@ -1856,6 +1983,7 @@
                 probe('apply', 'call HealthData.Hurt(hp=' + fmtPtr(health) + ', value=' + (damage | 0) + ')');
                 native.healthHurt(health, damage | 0, ptr(0));
             } else {
+                phase = 'buildEvent';
                 var dwords = buildEventDwords(
                     myPlayer, target.player, damage, dmgType, eyePos, target.pos, weapon
                 );
@@ -1868,16 +1996,19 @@
                     return false;
                 }
                 if (entry === DAMAGE_ENTRY.HURT) {
+                    phase = 'callPlayerHurt';
                     probe('apply', 'call Player.OnEntityHurt(victim=' + fmtPtr(target.player) +
                         ', damage=' + damage.toFixed(2) + ', type=' + dmgType + ')');
                     callPlayerHurt(target.player, dwords);
                 } else {
+                    phase = 'takeDamage';
                     probe('apply', 'call GameManager.TakeDamage(damage=' + damage.toFixed(2) +
                         ', type=' + dmgType + ')');
                     callGameManagerTakeDamage(dwords);
                 }
             }
 
+            phase = 'snapshot';
             var after = readHealthSnapshot(target.player);
             var dropped = hpDroppedBetween(before, after);
 
@@ -1890,11 +2021,14 @@
             if (!dropped && entry === DAMAGE_ENTRY.GAME_MANAGER &&
                 Runtime.config.entry_fallback && dwords) {
                 Runtime.stats.entryFallback += 1;
+                phase = 'retryClearInvincible';
                 var retryDefense = clearTargetInvincibility(target.player);
                 log('warn', '[probe:hp] GameManager.TakeDamage 未生效（HP 没变），' +
                     '清一次无敌状态后用完整入口重试（不会再产生半死敌人）: isInvincible=' +
                     retryDefense.isInvincible + ' damageRate=' + retryDefense.damageRate.toFixed(3));
+                phase = 'retryTakeDamage';
                 callGameManagerTakeDamage(dwords);
+                phase = 'retrySnapshot';
                 after = readHealthSnapshot(target.player);
                 dropped = hpDroppedBetween(before, after);
             }
@@ -1905,6 +2039,10 @@
             Runtime.stats.lastHpRawBefore = before.raw;
             Runtime.stats.lastHpRawAfter = after.raw;
             if (dropped) Runtime.stats.hpDropped += 1;
+            // 这一击把目标打成“死亡” -> 纳入观察窗口，心跳里确认到底有没有复活。
+            if (!toFlag(before.dead) && toFlag(after.dead)) {
+                watchDeath(target.player, before, after, sourceLabel, 'killed');
+            }
 
             // 最终判据：这一行直接告诉我们是"成了"还是"没效果"
             if (Runtime.stats.hpChecks <= 25 || Runtime.stats.hpChecks % 25 === 0) {
@@ -1930,9 +2068,21 @@
             }
             return true;
         } catch (error) {
-            fail('applyDamage:' + sourceLabel, error);
-            probe('apply', 'EXCEPTION entry=' + entry + ': ' +
+            Runtime.stats.lastFailPhase = phase;
+            // 名字里带上 phase：下次一眼就能看出异常是 clearInvincible / buildEvent /
+            // takeDamage / snapshot / retry... 里哪一步抛的。
+            fail('applyDamage:' + sourceLabel + '@' + phase, error);
+            probe('apply', 'EXCEPTION entry=' + entry + ' phase=' + phase + ': ' +
                 (error && error.message ? error.message : String(error)));
+            // 异常可能发生在“血已经扣到 0、但死亡广播没跑完”之后 -> 目标会变成
+            // isDead=true 却永不复活的“半死幽灵”。这里主动补一次快照并纳入观察，
+            // 让日志明确抓出这种情况（而不是只有一句 system error）。
+            try {
+                var crashedSnap = readHealthSnapshot(target.player);
+                if (toFlag(crashedSnap.dead)) {
+                    watchDeath(target.player, before, crashedSnap, sourceLabel, 'exception@' + phase);
+                }
+            } catch (_) {}
             return false;
         }
     }
@@ -2044,6 +2194,9 @@
         var replacement = new NativeCallback(function (weapon, r0, r1, r2, r3, r4, r5, method) {
             try {
                 Runtime.stats.gunDamageCalls += 1;
+                // 复活兜底的心跳：这里是游戏主线程，而且每一发枪（含 Bot）都会进来，
+                // 内部 1 秒只真正跑一次 -> 死亡广播被打断的目标能在 1 秒内被发现。
+                try { deathRescueTick(); } catch (_) {}
 
                 // 第一次命中必须留下铁证：证明"钩子确实装上了、确实被开火走到了"
                 if (Runtime.stats.gunDamageCalls <= 3) {
@@ -2417,6 +2570,16 @@
                     ' 回退=' + s.coneFallback + ' 严格放弃=' + s.coneEmptyStrict +
                     ' 关=' + s.coneOff + ' 轴失败=' + s.coneAxisFail +
                     ' 换目标=' + s.coneRetarget + ']');
+                // 死亡/复活链：death=in->out（不相等=死亡广播抛异常）；
+                //   respawnPlayer / playerRespawn 有没有涨 = 复活调度到底有没有被调用；
+                //   watch[...] = 击杀后观察窗口的结果（noRevive>0 就是“死了不复活”）。
+                log('info', '[probe:beat] deathDiag: death=' + s.deathIn + '->' + s.deathOut +
+                    ' aborted=' + s.deathAborted + ' rescued=' + s.deathRescued +
+                    ' respawnPlayer=' + s.respawnScheduled + ' playerRespawn=' + s.playerRespawnCalls +
+                    ' wpnFix=' + s.deathWpnFixed + ' raises=' + s.raiseCount +
+                    ' watch[active=' + s.halfDeadActive + ' recovered=' + s.halfDeadRecovered +
+                    ' noRevive=' + s.halfDeadConfirmed + ']');
+                try { checkDeathWatch(); } catch (errWatch) {}
                 // 顺手清理超时的弹体追踪记录：万一某颗弹没触发 Recycle/碰撞就消失，
                 // 记录会一直留着；指针被复用后可能"打错人"。
                 try {
@@ -2447,6 +2610,525 @@
     //   B. 只看到 [game]            -> 游戏自己在结算伤害，我们合成的没进去
     //   C. 看到 [ours] 但 HP 不变   -> 调用被接受了但没有实际扣血（入口选错）
     //   D. 什么都没有                -> 钩子没装上（对照 rva / attach 日志）
+
+    // ------------------------------------------------------------------
+    // death_diag：击杀之后“到底有没有复活”
+    // ------------------------------------------------------------------
+    //   背景（2.7 实测日志指纹）：
+    //     [fail:applyDamage:gun] applyDamage:gun: system error
+    //   即我们合成的 GameManager.TakeDamage 在被击杀那一刻抛出了托管异常。
+    //   按 §3.2 的结论，这条异常会打断 GameManager.DeathEventBroadcast，
+    //   结果 victim 已经是 isDead=true，但“复活调度”根本没跑 ——
+    //   画面上就是“死了不复活、模型卡在原地”。
+    //
+    //   这一组诊断全部只读（不改参数、不改控制流），默认开启：
+    //     1) DeathEventBroadcast 进出 —— deathIn 有、deathOut 没有 = 异常现场；
+    //     2) ModeBase_Nano.RespawnPlayer —— 复活调度有没有被调用；
+    //     3) Player.Respawn —— 真正排进复活协程；
+    //     4) 击杀后观察窗口 —— 目标 N 秒内没活过来就报 *** 击杀后未复活 ***。
+    // ------------------------------------------------------------------
+    function readU8Safe(addr) {
+        try { return addr.readU8(); } catch (_) { return -1; }
+    }
+
+    function readI32Safe(addr) {
+        try { return addr.readS32(); } catch (_) { return -1; }
+    }
+
+    function readNanoRoleDiag(player) {
+        try {
+            if (isNull(player) || !native.getNanoRole) return -1;
+            return toNumber(native.getNanoRole(player, ptr(0)), -1);
+        } catch (_) { return -1; }
+    }
+
+    // 把一个玩家的复活相关状态打包，日志里一行能看全
+    function playerRespawnState(player) {
+        var info = { role: -1, respawnType: -1, isRespawning: -1, graveCount: -1, canUseGrave: -1, dead: null };
+        try {
+            if (isNull(player)) return info;
+            info.role = readNanoRoleDiag(player);
+            info.respawnType = readI32Safe(player.add(OFF.Player_respawnType));
+            info.isRespawning = readU8Safe(player.add(OFF.Player_isRespawning));
+            info.dead = toFlag(native.isDead(player, ptr(0)));
+            var data = player.add(OFF.Player_nano4TData).readPointer();
+            if (readable(data)) {
+                info.canUseGrave = data.add(OFF.Nano4TData_canUseGrave).readU8();
+                info.graveCount = data.add(OFF.Nano4TData_graveCount).readS32();
+            }
+        } catch (_) {}
+        return info;
+    }
+
+    function fmtRespawnState(info) {
+        return 'role=' + info.role + ' respawnType=' + info.respawnType +
+            ' isRespawning=' + info.isRespawning + ' grave=' + info.graveCount +
+            '/canUseGrave=' + info.canUseGrave + ' isDead=' + String(info.dead);
+    }
+
+    // 这一击把目标打死了 -> 登记进观察窗口，心跳里再确认它有没有复活。
+    function watchDeath(victim, before, after, sourceLabel, note) {
+        try {
+            if (!Runtime.config.death_diag) return;
+            if (isNull(victim) || !after || !toFlag(after.dead)) return;
+            registerDeathWatch(victim, sourceLabel, note);
+        } catch (_) {}
+    }
+
+    // 心跳（5 秒一次）里跑：目标活过来 = 复活成功；超时仍 isDead = 不复活（直接证据）。
+    function checkDeathWatch() {
+        if (!Runtime.config.death_diag) return;
+        var keys = Object.keys(Runtime.deathWatch);
+        for (var i = 0; i < keys.length; i += 1) {
+            var key = keys[i];
+            var entry = Runtime.deathWatch[key];
+            if (!entry) continue;
+            var elapsed = Date.now() - entry.at;
+            var deadNow = null;
+            try { deadNow = toFlag(native.isDead(entry.victim, ptr(0))); } catch (_) { deadNow = null; }
+            if (deadNow === false) {
+                Runtime.stats.halfDeadRecovered += 1;
+                Runtime.stats.halfDeadActive = Math.max(0, Runtime.stats.halfDeadActive - 1);
+                // 每次死亡都登记 -> 正常复活太多，只前 60 条逐条打；兜底过的必打
+                if (entry.rescued || probeBudget('deathWatchOk', 60)) {
+                    log('info', '[deathDiag] 目标已复活: victim=' + key + ' elapsed=' + elapsed + 'ms' +
+                        ' 复活调度=' + (entry.scheduled ? '已命中' : '未观察到') +
+                        (entry.rescued ? ' 兜底=已补发' : '') +
+                        ' [' + fmtRespawnState(playerRespawnState(entry.victim)) + ']' +
+                        ' source=' + entry.label + ' note=' + entry.note);
+                }
+                delete Runtime.deathWatch[key];
+            } else if (deadNow === null || elapsed > Runtime.config.death_diag_ms) {
+                Runtime.stats.halfDeadConfirmed += 1;
+                Runtime.stats.halfDeadActive = Math.max(0, Runtime.stats.halfDeadActive - 1);
+                log('error', '[deathDiag] *** 击杀后未复活（半死/幽灵）*** victim=' + key +
+                    ' elapsed=' + elapsed + 'ms 复活调度=' + (entry.scheduled ? '已命中' : '未命中') +
+                    ' 兜底=' + (entry.rescued ? '已补发但没活' : '未触发') + ' tries=' + entry.tries +
+                    ' [' + fmtRespawnState(playerRespawnState(entry.victim)) + ']' +
+                    ' source=' + entry.label + ' note=' + entry.note);
+                delete Runtime.deathWatch[key];
+            }
+        }
+    }
+
+
+    // ------------------------------------------------------------------
+    // 死亡事件全字段 dump + 死亡观察登记（death_diag）
+    // ------------------------------------------------------------------
+    //   DeathEventData 一共 12 个字段（0x38 字节，按值压栈，[esp+4] 起）。
+    //   20261014 的日志已经证明"wpIndex 非法"这条旧假设不成立（同一个 341 一炸一好），
+    //   所以这里把整份结构体打平成一行：配合 [deathDiag:abort] / [deathDiag:raise]
+    //   就能直接对比"被打断的那一次"和正常死亡到底哪个字段不一样。
+    // ------------------------------------------------------------------
+    function deathEventFields(b) {
+        var f = [];
+        function add(name, fn) {
+            try { f.push(name + '=' + fn()); } catch (_) { f.push(name + '=?'); }
+        }
+        add('killer', function () { return fmtPtr(b.add(OFF.Death_killer).readPointer()); });
+        add('dead', function () { return fmtPtr(b.add(OFF.Death_dead).readPointer()); });
+        add('headShot', function () { return b.add(OFF.Death_headShot).readS32(); });
+        add('wallThrough', function () { return b.add(OFF.Death_wallThrough).readU8(); });
+        add('dmgType', function () { return b.add(OFF.Death_damageType).readS32(); });
+        add('origin', function () {
+            return b.add(OFF.Death_damageOrigin).readFloat().toFixed(1) + ',' +
+                b.add(OFF.Death_damageOrigin + 4).readFloat().toFixed(1) + ',' +
+                b.add(OFF.Death_damageOrigin + 8).readFloat().toFixed(1);
+        });
+        add('specialKill', function () { return b.add(OFF.Death_specialKill).readS32(); });
+        add('nanoKill', function () { return b.add(OFF.Death_nanoKill).readS32(); });
+        add('revenge', function () { return b.add(OFF.Death_revenge).readU8(); });
+        add('dmgTag', function () { return hex32(b.add(OFF.Death_damageTag).readU32()); });
+        add('wpn', function () { return b.add(OFF.Death_wpnIndex).readS32(); });
+        add('wpnSpr', function () { return b.add(OFF.Death_wpnSprIndex).readS32(); });
+        return f.join(' ');
+    }
+
+    // 死亡事件里所有"看着像索引"的字段，逐个拿 WpnDataDictionary 实查一遍。
+    //   :MISS = 这个值不在武器字典里。get_wpnName/get_killMsgIcon/get_isVVIP 查的
+    //   就是 wpn，所以 wpn:OK 而广播仍然炸 -> 异常来自别的字段/别的字典。
+    function deathIndexPresence(b) {
+        var out = [];
+        try {
+            var cand = [
+                ['wpn', b.add(OFF.Death_wpnIndex).readS32()],
+                ['wpnSpr', b.add(OFF.Death_wpnSprIndex).readS32()],
+                ['specialKill', b.add(OFF.Death_specialKill).readS32()],
+                ['nanoKill', b.add(OFF.Death_nanoKill).readS32()],
+                ['dmgTag', b.add(OFF.Death_damageTag).readU32()]
+            ];
+            for (var i = 0; i < cand.length; i += 1) {
+                out.push(cand[i][0] + '=' + cand[i][1] + (isValidWpnKey(cand[i][1]) ? ':OK' : ':MISS'));
+            }
+        } catch (_) {}
+        return out.join(' ');
+    }
+
+    // 登记"这个人死了，盯它有没有复活"（deathIn 和 applyDamage 共用）
+    function registerDeathWatch(victim, label, note) {
+        try {
+            if (!Runtime.config.death_diag) return;
+            if (isNull(victim)) return;
+            var key = victim.toString();
+            if (Runtime.deathWatch[key]) {
+                // 同一个人再次死亡：重置窗口（上一轮要么已经复活、要么还在观察）
+                Runtime.deathWatch[key].at = Date.now();
+                Runtime.deathWatch[key].label = label;
+                return;
+            }
+            Runtime.deathWatch[key] = {
+                victim: victim, at: Date.now(), label: label,
+                note: note || '', scheduled: false, rescued: false, tries: 0
+            };
+            Runtime.stats.halfDeadWatched += 1;
+            Runtime.stats.halfDeadActive += 1;
+            if (probeBudget('deathWatchReg', 60)) {
+                log('info', '[deathDiag] 死亡登记: victim=' + key + ' (' + label + ' ' + (note || '') + ') [' +
+                    fmtRespawnState(playerRespawnState(victim)) + ']');
+            }
+        } catch (_) {}
+    }
+
+    // ------------------------------------------------------------------
+    // 复活兜底（death_fix_respawn）
+    // ------------------------------------------------------------------
+    //   20261014 未修复的现象：死亡广播被托管异常打断 -> ModeBase_Nano.RespawnPlayer
+    //   一次都没被调用 -> 目标 isDead=true 卡在原地直到本局结束（日志里 4 次）。
+    //   兜底逻辑：死亡登记超过 death_respawn_grace_ms、没有观察到复活调度、
+    //   并且现在仍然 isDead=true，就由我们替游戏补一次复活调度。
+    //   只在游戏主线程调用（开火钩子 / 死亡广播 onLeave），每次都会写 [deathFix] 日志。
+    // ------------------------------------------------------------------
+    function deathRescueTick() {
+        try {
+            if (!Runtime.config.death_fix_respawn || !Runtime.config.death_diag) return 0;
+            if (!Runtime.enabled || !Runtime.initialized) return 0;
+            var now = Date.now();
+            if (now - Runtime.lastRescueTick < 1000) return 0;
+            Runtime.lastRescueTick = now;
+            var keys = Object.keys(Runtime.deathWatch);
+            if (!keys.length) return 0;
+            var grace = Runtime.config.death_respawn_grace_ms;
+            var mode = Runtime.modeBase;
+            var rescued = 0;
+            for (var i = 0; i < keys.length; i += 1) {
+                var key = keys[i];
+                var entry = Runtime.deathWatch[key];
+                if (!entry || entry.scheduled || entry.rescued) continue;
+                if (now - entry.at < grace) continue;
+                if (entry.tries >= 3) continue;
+                if (!isValidPlayer(entry.victim)) continue;
+                var deadNow = null;
+                try { deadNow = toFlag(native.isDead(entry.victim, ptr(0))); } catch (_) { deadNow = null; }
+                if (deadNow !== true) continue;   // 活着 / 读不到 -> 不动手，交给观察窗口
+                entry.tries += 1;
+                var via = '';
+                var ok = false;
+                try {
+                    if (!isNull(mode)) {
+                        via = 'ModeBase_Nano.RespawnPlayer';
+                        native.respawnPlayer(mode, entry.victim, 1, 1, 0, ptr(0));
+                        ok = true;
+                    } else {
+                        via = 'Player.Respawn';
+                        native.playerRespawn(entry.victim, 1.0, 0.0, ptr(0));
+                        ok = true;
+                    }
+                } catch (error) {
+                    Runtime.stats.deathRescueFailed += 1;
+                    fail('deathFix:respawn', error);
+                }
+                if (ok) {
+                    entry.rescued = true;
+                    rescued += 1;
+                    Runtime.stats.deathRescued += 1;
+                    log('warn', '[deathFix] 复活兜底：目标 ' + key + ' 死亡 ' + (now - entry.at) +
+                        'ms 后仍未排复活（死亡广播被打断），已手动调用 ' + via +
+                        '（source=' + entry.label + ' note=' + entry.note + '）[' +
+                        fmtRespawnState(playerRespawnState(entry.victim)) + ']');
+                }
+            }
+            return rescued;
+        } catch (error) {
+            fail('deathRescueTick', error);
+            return 0;
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // 托管异常漏斗探针（Il2Cpp_Exception_Raise）
+    // ------------------------------------------------------------------
+    //   IDA 实测：il2cpp_raise_exception 和所有托管 throw 最终都走
+    //     sub_1013FF10(Il2CppException* ex, MethodInfo*, ...) -> _CxxThrowException。
+    //   ex 是 Il2CppException*（+0x00 = klass），klass+0x08 = 类名 char*。
+    //   这里只关心"死亡广播正在飞的时候"那一下：异常类型 + 调用栈 RVA。
+    //   拿到 RVA 后用 IDA 对函数名就能定位是哪一个 observer 抛的。
+    // ------------------------------------------------------------------
+    //   ★★ 2026-10-14 闪退修复：本探针默认关闭（death_diag_raise=false）★★
+    //   为什么必须关：这个钩子打在 il2cpp::vm::Exception::Raise(+0x13FF10) 上，而它是
+    //   noreturn 的 C++ throw 漏斗（内部 -> __CxxThrowException@8）。Frida 内联钩子一旦
+    //   挂在抛出点上，Frida 自己的异常处理器会先把 0xE06D7363 抓走（同 26_grenade_mode
+    //   v2.13 注释里的同一条根因），游戏自己的异常帧收不到 -> RaiseException 直接返回 ->
+    //   控制流落回调用点 sub_10140190 后面编译器填的 int 3(0xCC) ->
+    //   进程 0x80000003 @ GameAssembly+0x1401A6 秒退。
+    //   实证：2026-10-14 18:26:12.720 多人生化(终结者)模式，探针 [deathDiag:raise]
+    //   与崩溃同一毫秒（见 06-测试/_crash18_26/崩溃分析-2026-10-14-1826.md）。
+    //   → "死亡广播有没有被打断"仍可判：deathIn/deathOut 计数 + [deathDiag:abort]
+    //     现场字段，都不需要碰异常漏斗。
+    // ------------------------------------------------------------------
+    function installRaiseProbe() {
+        if (!Runtime.config.death_diag) return;
+        if (!Runtime.config.death_diag_raise) return;   // ★默认关闭：取证专用，会闪退
+        try {
+            var handle = Interceptor.attach(Runtime.base.add(RVA.Il2Cpp_Exception_Raise), {
+                onEnter: function (args) {
+                    try {
+                        Runtime.stats.raiseCount += 1;
+                        var inFlight = Runtime.pendingDeath;
+                        if (!inFlight && !probeBudget('raise', 10)) return;
+                        var now = Date.now();
+                        // 同一次异常可能被多层包装各抛一次，5ms 内只记第一条
+                        if (Runtime.lastRaiseLogAt && now - Runtime.lastRaiseLogAt < 5) return;
+                        Runtime.lastRaiseLogAt = now;
+                        var excName = '?';
+                        try {
+                            var klass = args[0].readPointer();
+                            if (readable(klass)) {
+                                var namePtr = klass.add(0x08).readPointer();
+                                if (readable(namePtr)) excName = namePtr.readUtf8String(96);
+                            }
+                        } catch (_) {}
+                        var bt = [];
+                        try {
+                            var frames = Thread.backtrace(this.context, Backtracer.FUZZY);
+                            for (var i = 0; i < frames.length && i < 12; i += 1) {
+                                var off = frames[i].sub(Runtime.base);
+                                if (off.compare(0) >= 0 && off.compare(Runtime.module.size) < 0) {
+                                    bt.push('+' + off.toString(16));
+                                }
+                            }
+                        } catch (_) {}
+                        log('error', '[deathDiag:raise] ' + excName +
+                            ' inBroadcast=' + (inFlight ? 'YES' : 'no') +
+                            (inFlight ? ' event={' + inFlight.fields + '}' : '') +
+                            ' bt=' + bt.join(','));
+                    } catch (_) {}
+                }
+            });
+            Runtime.attachHooks.push({ name: 'Il2Cpp.Exception.Raise(deathDiag)', handle: handle });
+            log('info', '[deathDiag] 托管异常探针已安装 @+0x' + RVA.Il2Cpp_Exception_Raise.toString(16));
+        } catch (error) {
+            log('warn', '[deathDiag] 托管异常探针安装失败: ' +
+                (error && error.message ? error.message : String(error)));
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // 死亡广播 wpnIndex 兜底（death_fix_wpn，默认关闭）
+    // ------------------------------------------------------------------
+    //   2026-10-14 实测（logs/game_modifier.log）：
+    //     41 次死亡广播里有 3 次「onEnter 之后没有 onLeave」，且这 3 次都没有
+    //     ModeBase_Nano.RespawnPlayer -> 目标永远不复活。3 次的 wpnIndex =
+    //     938 / 183 / 2759，其余 38 次全部正常；同一毫秒还伴随
+    //     [fail:WPN_Gun.Damage replacement] system error。
+    //   反汇编确认死亡广播里 HUD_KillMark 会调
+    //     DeathEventData.get_wpnName()/get_killMsgIcon()/get_isVVIP()，
+    //   三个都是 GameManager.WpnDataDictionary[wpnIndex]；key 不存在 ->
+    //   il2cpp_raise_exception -> 整条死亡广播（含复活调度）被打断。
+    //   所以这里在广播入口把查不到的 key 换成一个存在的 key，让广播能跑完。
+    //
+    //   布局（IDA 类型确认，32 位 IL2CPP）：
+    //     Dictionary: +0x0C entries / +0x10 count / +0x14 version
+    //     Il2CppArray: +0x0C max_length / +0x10 items
+    //     Entry: 16 字节，key 在 +0x08
+    // ------------------------------------------------------------------
+    var wpnKeyCache = { version: -2, keys: null };
+
+    function getWpnDataDictionary() {
+        try {
+            var typeInfo = Runtime.base.add(RVA.GameManager_TypeInfo).readPointer();
+            if (!readable(typeInfo)) return null;
+            var staticFields = typeInfo.add(OFF.Klass_staticFields).readPointer();
+            if (!readable(staticFields)) return null;
+            var dict = staticFields.add(OFF.GM_WpnDataDictionary).readPointer();
+            return readable(dict) ? dict : null;
+        } catch (_) { return null; }
+    }
+
+    // 把 WpnDataDictionary 的所有 key 抄进 JS 对象；Dictionary.version 没变就不重扫。
+    function refreshWpnKeyCache() {
+        try {
+            var dict = getWpnDataDictionary();
+            if (!dict) return false;
+            var version = dict.add(OFF.Dict_version).readS32();
+            if (version === wpnKeyCache.version && wpnKeyCache.keys) return true;
+            var entries = dict.add(OFF.Dict_entries).readPointer();
+            var count = dict.add(OFF.Dict_count).readS32();
+            if (!readable(entries) || count <= 0 || count > 20000) {
+                wpnKeyCache = { version: version, keys: null };
+                return false;   // 读不到 -> 不拦截，别把正常死亡也改了
+            }
+            var keys = {};
+            var items = entries.add(OFF.Arr_items);
+            for (var i = 0; i < count; i += 1) {
+                var key = items.add(i * OFF.Entry_size + OFF.Entry_key).readS32();
+                if (key > 0) keys[key] = true;
+            }
+            wpnKeyCache = { version: version, keys: keys };
+            return true;
+        } catch (error) {
+            fail('refreshWpnKeyCache', error);
+            return false;
+        }
+    }
+
+    // true = 字典里存在（或读不到字典、无法判断 -> 不拦截）；false = 确实不存在
+    function isValidWpnKey(index) {
+        if (!(index > 0)) return false;
+        if (!refreshWpnKeyCache()) return true;
+        return wpnKeyCache.keys[index] === true;
+    }
+
+    function firstValidWpnKey() {
+        var keys = wpnKeyCache.keys;
+        var best = -1;
+        for (var k in keys) {
+            var n = parseInt(k, 10);
+            if (isFinite(n) && n > 0 && (best < 0 || n < best)) best = n;
+        }
+        return best;
+    }
+
+    function installDeathDiagnostics() {
+        if (!Runtime.config.death_diag) return;
+
+        // 1) 死亡广播：onEnter 有、onLeave 没有 = 死亡链被异常打断（不复活/闪退的现场）
+        registerProbeAttach('GameManager.DeathEventBroadcast(deathDiag)', RVA.GameManager_DeathEventBroadcast, {
+            onEnter: function () {
+                Runtime.stats.deathIn += 1;
+                // DeathEventData 是 0x38 字节「按值」压在栈上的：
+                //   [esp]=返回地址，[esp+4] 起才是结构体本体（与 GameManager.TakeDamage 同一约定）。
+                // 注意不能拿 args[0] —— 那只是结构体前 4 字节（killer），不是结构体地址。
+                var b = this.context.esp.add(4);
+                var fields = '';
+                var presence = '';
+                var dead = null;
+                var wpnIndex = -1;
+                var fixNote = '';
+                try {
+                    fields = deathEventFields(b);
+                    presence = deathIndexPresence(b);
+                    dead = b.add(OFF.Death_dead).readPointer();
+                    wpnIndex = b.add(OFF.Death_wpnIndex).readS32();
+                } catch (error) {
+                    fields = 'read failed: ' + (error && error.message ? error.message : String(error));
+                }
+                // 上一次死亡广播"进了没出" = 上一次被托管异常打断（那一次的目标不会复活）。
+                // 这条日志一定会打在"下一次死亡"上，也就是异常现场本身。
+                if (Runtime.pendingDeath) {
+                    Runtime.stats.deathAborted += 1;
+                    log('error', '[deathDiag:abort] 上一次死亡广播进入后没有返回（被异常打断 -> 目标不会复活）: ' +
+                        Runtime.pendingDeath.fields);
+                }
+                Runtime.pendingDeath = { at: Date.now(), fields: fields, dead: dead };
+                // 每一笔死亡都登记观察窗口：谁没复活，心跳里会报 *** 击杀后未复活 ***
+                registerDeathWatch(dead, Runtime.inDirectDamage ? '[ours]' : '[game]', 'deathIn');
+                // ---- death_fix_wpn（旧假设，默认关闭，见 config 注释）----
+                if (Runtime.config.death_fix_wpn && wpnIndex > 0) {
+                    if (isValidWpnKey(wpnIndex)) {
+                        Runtime.lastValidWpnIndex = wpnIndex;
+                    } else {
+                        var fallback = Runtime.lastValidWpnIndex > 0
+                            ? Runtime.lastValidWpnIndex
+                            : firstValidWpnKey();
+                        if (fallback > 0 && fallback !== wpnIndex) {
+                            // 结构体是「按值」传进来的：写 [esp+4+0x30] 就是改这次广播看到的值。
+                            b.add(OFF.Death_wpnIndex).writeS32(fallback);
+                            fixNote = ' ->fix:' + fallback;
+                            Runtime.stats.deathWpnFixed += 1;
+                            log('warn', '[deathFix] 死亡广播 wpnIndex=' + wpnIndex +
+                                ' 不在 WpnDataDictionary，已改为 ' + fallback + '；dead=' + fmtPtr(dead));
+                        } else {
+                            fixNote = ' (无可用兜底 key)';
+                        }
+                    }
+                }
+                if (Runtime.config.death_diag_detail || probeBudget('deathDiagIn', 150)) {
+                    log('info', '[deathDiag:deathIn] ' + fields +
+                        (presence ? ' | dict: ' + presence : '') + fixNote);
+                }
+            },
+            onLeave: function () {
+                Runtime.stats.deathOut += 1;
+                Runtime.pendingDeath = null;
+                if (Runtime.config.death_diag_detail || probeBudget('deathDiagOut', 40)) {
+                    log('info', '[deathDiag:deathOut] 死亡广播完整返回');
+                }
+                // 主线程里顺手跑一次复活兜底
+                try { deathRescueTick(); } catch (_) {}
+            }
+        });
+
+        // 2) 复活调度入口：ModeBase_Nano.RespawnPlayer(this, dead, respawnTime, isNormalRespawn, clearExp)
+        //    （终结者的墓碑复活也走这里：Mode_Nano4_Terminator.RespawnPlayer 最后会调基类）
+        registerProbeAttach('ModeBase_Nano.RespawnPlayer(deathDiag)', RVA.ModeBase_Nano_RespawnPlayer, {
+            onEnter: function () {
+                Runtime.stats.respawnScheduled += 1;
+                try {
+                    var sp = this.context.esp;
+                    // this = mode 实例（复活兜底要拿它当 this 调 RespawnPlayer）
+                    Runtime.modeBase = sp.add(4).readPointer();
+                    var dead = sp.add(8).readPointer();
+                    var respawnTime = sp.add(12).readS32();
+                    var isNormal = sp.add(16).readU8();
+                    var clearExp = sp.add(20).readU8();
+                    var key = dead.toString();
+                    if (Runtime.deathWatch[key]) Runtime.deathWatch[key].scheduled = true;
+                    log('info', '[deathDiag:respawnPlayer] dead=' + key +
+                        ' respawnTime=' + respawnTime + ' isNormalRespawn=' + isNormal +
+                        ' clearExp=' + clearExp + ' [' + fmtRespawnState(playerRespawnState(dead)) + ']');
+                } catch (error) {
+                    log('warn', '[deathDiag:respawnPlayer] read failed: ' +
+                        (error && error.message ? error.message : String(error)));
+                }
+            }
+        });
+
+        // 3) Player.Respawn(float respawnTime, float invisibleTime)：this=[esp+4]
+        registerProbeAttach('Player.Respawn(deathDiag)', RVA.Player_Respawn, {
+            onEnter: function () {
+                Runtime.stats.playerRespawnCalls += 1;
+                try {
+                    var sp = this.context.esp;
+                    var player = sp.add(4).readPointer();
+                    var key = player.toString();
+                    if (Runtime.deathWatch[key]) Runtime.deathWatch[key].scheduled = true;
+                    log('info', '[deathDiag:playerRespawn] player=' + key +
+                        ' respawnTime=' + sp.add(8).readFloat().toFixed(2) +
+                        ' invisibleTime=' + sp.add(12).readFloat().toFixed(2));
+                } catch (_) {}
+            }
+        });
+
+        // 4) 受击特效/音效：判断异常是在“命中处理”还是“死亡广播”那一段抛的
+        registerProbeAttach('GameManager.PlayHitFxAndSnd(deathDiag)', RVA.GameManager_PlayHitFxAndSnd, {
+            onEnter: function () { Runtime.stats.hitFxIn += 1; },
+            onLeave: function () { Runtime.stats.hitFxOut += 1; }
+        });
+
+        // 5) mode 实例（复活兜底的 this）：死亡链上任意一次调用都能抓到
+        registerProbeAttach('ModeBase_Nano.DeathEvent(deathDiag)', RVA.ModeBase_Nano_DeathEvent, {
+            onEnter: function () {
+                try { Runtime.modeBase = this.context.esp.add(4).readPointer(); } catch (_) {}
+            }
+        });
+
+        // 6) 托管异常漏斗：默认不装（只有显式 death_diag_raise=true 才装，见上方长注释）
+        installRaiseProbe();
+
+        log('info', '[deathDiag] 死亡/复活链诊断已安装（death_diag=true，全部只读；含全字段 dump' +
+            (Runtime.config.death_diag_raise ? ' + 托管异常探针(已显式开启，危险)' : '；托管异常探针已禁用(防闪退)') + '）');
+    }
+
     function installPipelineProbes() {
         if (!Runtime.config.verbose_probe) return;
 
@@ -2518,28 +3200,9 @@
             onLeave: leaveProbe('playerHurtLeave')
         });
 
-        // 死亡广播：onEnter 有、onLeave 没有 = 死亡链被异常打断（敌人不复活/闪退的现场）
-        registerProbeAttach('GameManager.DeathEventBroadcast(probe)', RVA.GameManager_DeathEventBroadcast, {
-            onEnter: function () {
-                Runtime.stats.deathIn += 1;
-                if (probeBudget('deathIn', 20)) probe('deathIn', 'enter (真正的死亡广播)');
-            },
-            onLeave: function () {
-                Runtime.stats.deathOut += 1;
-                if (probeBudget('deathOut', 20)) probe('deathOut', 'returned normally (死亡广播完整跑完)');
-            }
-        });
-        registerProbeAttach('GameManager.PlayHitFxAndSnd(probe)', RVA.GameManager_PlayHitFxAndSnd, {
-            onEnter: function () {
-                Runtime.stats.hitFxIn += 1;
-                if (probeBudget('hitFxIn', 10)) probe('hitFxIn', 'enter');
-            },
-            onLeave: function () {
-                Runtime.stats.hitFxOut += 1;
-                if (probeBudget('hitFxOut', 10)) probe('hitFxOut', 'returned normally');
-            }
-        });
-
+        // 死亡广播 / PlayHitFxAndSnd 的探针已统一搬到 installDeathDiagnostics()
+        // （death_diag 默认开启，无论 verbose_probe 开关都会装），这里不再重复安装，
+        // 否则 deathIn/deathOut 会被两个钩子各加一次。
         // 最底层扣血：Entity.OnEntityHurt 内部就是 "HealthData.Hurt(healthData, (int)damage)"
         registerProbeAttach('HealthData.Hurt(probe)', RVA.HealthData_Hurt, {
             onLeave: leaveProbe('healthHurtLeave'),
@@ -3074,6 +3737,7 @@
         if (!ensureBuffers()) return false;
         try {
             installPipelineProbes();
+            installDeathDiagnostics();
             installHomingHooks();
             installGunHook();
             installExplosiveHooks();
@@ -3183,6 +3847,14 @@
         // 弹体追踪的"打谁"策略：准星锥角度（0=关闭，回到全场最近）+ 锥内没人是否回退
         if (input.homing_cone_deg !== undefined) c.homing_cone_deg = clampFloat(toNumber(input.homing_cone_deg, c.homing_cone_deg), 0, 180);
         if (input.homing_cone_fallback !== undefined) c.homing_cone_fallback = input.homing_cone_fallback !== false;
+        if (input.death_diag !== undefined) c.death_diag = input.death_diag !== false;
+        if (input.death_diag_ms !== undefined) c.death_diag_ms = clampFloat(toNumber(input.death_diag_ms, c.death_diag_ms), 3000, 120000);
+        if (input.death_diag_detail !== undefined) c.death_diag_detail = input.death_diag_detail === true;
+        // ★默认关闭的"托管异常漏斗探针"；改完要重新 enable 才会重装钩子
+        if (input.death_diag_raise !== undefined) c.death_diag_raise = input.death_diag_raise === true;
+        if (input.death_fix_wpn !== undefined) c.death_fix_wpn = input.death_fix_wpn === true;
+        if (input.death_fix_respawn !== undefined) c.death_fix_respawn = input.death_fix_respawn !== false;
+        if (input.death_respawn_grace_ms !== undefined) c.death_respawn_grace_ms = clampFloat(toNumber(input.death_respawn_grace_ms, c.death_respawn_grace_ms), 1000, 120000);
         if (input.verbose_probe !== undefined) c.verbose_probe = input.verbose_probe !== false;
         if (input.log_to_file !== undefined) c.log_to_file = input.log_to_file !== false;
         if (input.log_file !== undefined && String(input.log_file) !== c.log_file) {
@@ -3292,8 +3964,20 @@
             event_template_wpn_index: Runtime.cache.eventTemplateWpnIndex,
             death_in: Runtime.stats.deathIn,
             death_out: Runtime.stats.deathOut,
+            death_aborted: Runtime.stats.deathAborted,
+            death_rescued: Runtime.stats.deathRescued,
+            death_rescue_failed: Runtime.stats.deathRescueFailed,
+            death_raise_calls: Runtime.stats.raiseCount,
+            respawn_scheduled: Runtime.stats.respawnScheduled,
+            player_respawn_calls: Runtime.stats.playerRespawnCalls,
+            half_dead_watched: Runtime.stats.halfDeadWatched,
+            half_dead_recovered: Runtime.stats.halfDeadRecovered,
+            half_dead_no_revive: Runtime.stats.halfDeadConfirmed,
+            last_fail_phase: Runtime.stats.lastFailPhase,
+            death_wpn_fixed: Runtime.stats.deathWpnFixed,
             hit_fx_in: Runtime.stats.hitFxIn,
-            hit_fx_out: Runtime.stats.hitFxOut,            last_damage: Runtime.stats.lastDamage,
+            hit_fx_out: Runtime.stats.hitFxOut,
+            last_damage: Runtime.stats.lastDamage,
             last_target_angle: Runtime.stats.lastTargetAngle,
             last_target_distance: Runtime.stats.lastTargetDistance,
             error_count: Runtime.stats.errorCount,
