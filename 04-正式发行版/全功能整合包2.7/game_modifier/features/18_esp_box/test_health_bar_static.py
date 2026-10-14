@@ -75,7 +75,8 @@ class HealthBarStaticTests(unittest.TestCase):
             self.assertIn(token, source)
         self.assertIn("esphealth::MODE_PERCENT", state)
         self.assertIn('sprintf_s(text, sizeof(text), "%d", health.current);', source)  # 只显示剩余血量
-        self.assertNotIn("%d/%d", source)  # 不显示 "当前/上限"
+        # 不显示 "当前/上限"（调试日志里的 "%d/%d/%d..." 与血量文本无关）
+        self.assertNotIn('sprintf_s(text, sizeof(text), "%d/%d"', source)
         self.assertIn("GetHealthMode", state)
         self.assertIn("GetHealthDisplay", state)
 

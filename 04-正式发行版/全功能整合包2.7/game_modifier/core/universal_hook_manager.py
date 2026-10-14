@@ -127,7 +127,7 @@ class UniversalHookManager:
         self._revision = self._load_revision()  # Load revision from file
         self._esp_box_enabled = False
         self._esp_target_scope = "enemy_only"
-        # 血量显示：percent=百分比 / value=具体数值；bar=仅血条 / text=仅数值 / both=血条+数值
+        # 血量显示：percent=百分比 / value=剩余数值（只显示当前血量）；bar=仅血条 / text=仅数值 / both=血条+数值
         self._esp_health_mode = "percent"
         self._esp_health_display = "both"
         self.last_injection_attempted = False
@@ -212,7 +212,11 @@ class UniversalHookManager:
                 
                 # Verify protocol version
                 if response.get("protocol") != self.PROTOCOL_VERSION:
-                    self._log("error", f"Protocol mismatch: expected {self.PROTOCOL_VERSION}, got {response.get('protocol')}")
+                    self._log(
+                        "error",
+                        f"Protocol mismatch: expected {self.PROTOCOL_VERSION}, got {response.get('protocol')}；"
+                        "游戏中是旧版 DLL，请重启游戏后重新注入",
+                    )
                     self._close_pipe()
                     return False
                 
@@ -266,7 +270,11 @@ class UniversalHookManager:
                 
                 # Verify protocol version
                 if response.get("protocol") != self.PROTOCOL_VERSION:
-                    self._log("error", f"Protocol mismatch: expected {self.PROTOCOL_VERSION}, got {response.get('protocol')}")
+                    self._log(
+                        "error",
+                        f"Protocol mismatch: expected {self.PROTOCOL_VERSION}, got {response.get('protocol')}；"
+                        "游戏中是旧版 DLL，请重启游戏后重新注入",
+                    )
                     self._close_pipe()
                     return False
                 

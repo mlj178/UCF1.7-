@@ -15,8 +15,8 @@ static std::atomic<bool> s_unload_requested{false};
 // 3 = 增加 esp_health_mode / esp_health_display（血量显示格式与内容）。
 // 版本不一致时 Python 侧会拒绝复用进程内旧 DLL，避免继续使用带双引擎
 // 重复挂钩闪退风险的旧版本。
-static const int PROTOCOL_VERSION = 3;
-static const char* DLL_VERSION = "1.8";
+static const int PROTOCOL_VERSION = 4;
+static const char* DLL_VERSION = "1.8.1";
 
 // Pipe name will be dynamically generated based on PID
 static std::string s_pipe_name;

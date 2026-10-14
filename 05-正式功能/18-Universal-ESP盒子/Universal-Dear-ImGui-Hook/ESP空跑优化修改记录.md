@@ -117,5 +117,6 @@
 - 会话刷新：`GameManager::RefreshSession()` 每帧轮询单例并按结构校验，实例变化即换 epoch。
 - 新增：血量显示格式（百分比/剩余数值）与显示内容（仅血条/仅数值/两者）两个下拉框，协议版本升到 3。
 - 调整：数值模式只显示剩余血量（`85`），不再显示 `85/100`；maxHealth 只用于反推百分比。
+  协议版本 3 → 4、DLL 版本 1.8 → 1.8.1，旧 DLL 需重启游戏后重新注入。
 
 编译产物交付到 `04-正式发行版/全功能整合包2.7/game_modifier/plugins/universal_hook/Universal-ImGui-Hook.dll`。
