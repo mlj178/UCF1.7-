@@ -89,10 +89,12 @@ class EspHealthProtocolTests(unittest.TestCase):
         self.manager._save_revision = lambda: None
         return sent
 
-    def test_protocol_version_is_three(self):
-        self.assertEqual(self.manager.PROTOCOL_VERSION, 3)
+    def test_protocol_version_is_four(self):
+        self.assertEqual(self.manager.PROTOCOL_VERSION, 4)
         pipe = (SOURCE_ROOT / "esp" / "named_pipe_server.cpp").read_text(encoding="utf-8")
-        self.assertIn("PROTOCOL_VERSION = 3", pipe)
+        self.assertIn("PROTOCOL_VERSION = 4", pipe)
+        for part in ('PROTOCOL_VERSION = 4', 'DLL_VERSION = "1.8.1"'):
+            self.assertIn(part, pipe)
 
     def test_set_state_sends_health_codes(self):
         sent = self._install_fake_pipe()
