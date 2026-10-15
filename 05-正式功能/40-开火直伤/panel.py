@@ -13,7 +13,7 @@ C 路线边界（2026-10-16 起）：
     联动提示行（A 方案）：提示追踪弹体是否会被墙挡住，可一键开启「子弹穿墙/弹体穿墙」
 
 为什么不用默认卡片（PluginFeaturePage._build_default_card）：
-    默认卡片只渲染"第一个 slider"加一个总开关，而本功能需要 3 个
+    默认卡片只渲染"第一个 slider"加一个总开关，而本功能需要 4 个
     action=setConfig 的子开关，所以这里自己画卡片。
 
 子开关句柄为什么要包一层 _SyncedSwitchVar：

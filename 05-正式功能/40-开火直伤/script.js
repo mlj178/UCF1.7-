@@ -184,7 +184,6 @@
     var RVA = {
         // ---- 常规枪械（射线接管）----
         WPN_Gun_Damage: 0x00B613D0,
-        WPN_Gun_GunShootFunction: 0x00B62110,
 
         // ---- 弹体发射入口（只登记"这颗弹是谁的、什么类别"，不注入伤害）----
         WPN_RPG_Fire: 0x00B670A0,
@@ -247,12 +246,9 @@
         Player_cameraRotation: 0x4C,
         Player_characterContainer: 0x58,
         Player_currentCharacter: 0x5C,
-        Player_clientData: 0x94,
-        ClientData_nickname: 0x10,
 
         // ---- Weapon / WeaponData ----
         Weapon_data: 0x68,
-        WeaponData_wpnIndex: 0x0C,
         WPN_Gun_realData: 0xEC,
         WeaponData_Gun_ammoDamage: 0x14C,
 
@@ -265,9 +261,7 @@
 
         // ---- 弹体实例 ----
         Missile_owner: 0x30,
-        Missile_ownerInitalTeam: 0x34,
         Missile_weaponData: 0x38,
-        Missile_sprIndex: 0x3C,
         Missile_rigidBody: 0x44,
         Missile_shootSpeed: 0x4C,
 
@@ -386,12 +380,8 @@
             steerLostTarget: 0,    // 目标死了但暂时没有新目标（保留记录继续飞）
             forgetReuse: 0,        // 记录被清掉的原因分布
             forgetRecycle: 0,
-            forgetHit: 0,
-            forgetHitGrenade: 0,
-            forgetTrigger: 0,
             forgetTimeout: 0,
             forgetLost: 0,
-            forgetNoNext: 0,
             forgetIdentity: 0,
             // ---- 弹体追踪的"打谁"策略计数（准星锥） ----
             coneHit: 0,            // 锥内选到目标
@@ -406,7 +396,6 @@
             skillTriggers: 0,
             ownPlayerSource: '',
             errorCount: 0,
-            cleanupCount: 0,
             lastTargetAngle: -1,
             lastTargetDistance: -1,
             lastError: '',
@@ -1426,7 +1415,6 @@
             Runtime.pendingMissile = {
                 category: category,
                 label: sourceLabel,
-                weapon: weapon,
                 at: Date.now()
             };
             var damage = readMissileDamage(weapon, missileDataOffset);
@@ -1441,7 +1429,6 @@
         try {
             var list = [
                 ['WPN_Gun.Damage', RVA.WPN_Gun_Damage],
-                ['WPN_Gun.GunShootFunction', RVA.WPN_Gun_GunShootFunction],
                 ['WPN_RPG.Fire', RVA.WPN_RPG_Fire],
                 ['WPN_Throw.Throw', RVA.WPN_Throw_Throw],
                 ['WPN_GrenadeGun.lambda', RVA.WPN_GrenadeGun_GunShootFunction_Lambda],
@@ -1585,9 +1572,8 @@
                     ' noAim=' + s.steerNoAim + ' close=' + s.steerTooClose +
                     ' writeSkip=' + s.steerWriteSkip + ' lostTarget=' + s.steerLostTarget + ']' +
                     ' forget[reuse=' + s.forgetReuse + ' recycle=' + s.forgetRecycle +
-                    ' hit=' + s.forgetHit + ' hitG=' + s.forgetHitGrenade +
-                    ' trig=' + s.forgetTrigger + ' timeout=' + s.forgetTimeout +
-                    ' lost=' + s.forgetLost + ' noNext=' + s.forgetNoNext +
+                    ' timeout=' + s.forgetTimeout +
+                    ' lost=' + s.forgetLost +
                     ' ident=' + s.forgetIdentity + ']' +
                     ' touch[hit=' + s.missileHitSeen + ' trig=' + s.missileTriggerSeen + ']' +
                     ' cone[命中=' + s.coneHit + ' 锥内空=' + s.coneEmpty +
@@ -1620,26 +1606,6 @@
             Runtime.heartbeat = null;
         }
     }
-
-    // ------------------------------------------------------------------
-    // 死亡广播 wpnIndex 兜底（death_fix_wpn，默认关闭）
-    // ------------------------------------------------------------------
-    //   2026-10-14 实测（logs/game_modifier.log）：
-    //     41 次死亡广播里有 3 次「onEnter 之后没有 onLeave」，且这 3 次都没有
-    //     ModeBase_Nano.RespawnPlayer -> 目标永远不复活。3 次的 wpnIndex =
-    //     938 / 183 / 2759，其余 38 次全部正常；同一毫秒还伴随
-    //     [fail:WPN_Gun.Damage replacement] system error。
-    //   反汇编确认死亡广播里 HUD_KillMark 会调
-    //     DeathEventData.get_wpnName()/get_killMsgIcon()/get_isVVIP()，
-    //   三个都是 GameManager.WpnDataDictionary[wpnIndex]；key 不存在 ->
-    //   il2cpp_raise_exception -> 整条死亡广播（含复活调度）被打断。
-    //   所以这里在广播入口把查不到的 key 换成一个存在的 key，让广播能跑完。
-    //
-    //   布局（IDA 类型确认，32 位 IL2CPP）：
-    //     Dictionary: +0x0C entries / +0x10 count / +0x14 version
-    //     Il2CppArray: +0x0C max_length / +0x10 items
-    //     Entry: 16 字节，key 在 +0x08
-    // ------------------------------------------------------------------
 
     // ------------------------------------------------------------------
     // 敌人扫描（弹体追踪的"打谁"基础）
@@ -1865,12 +1831,8 @@
         var s = Runtime.stats;
         if (why === 'reused') s.forgetReuse += 1;
         else if (why === 'recycle') s.forgetRecycle += 1;
-        else if (why === 'hit') s.forgetHit += 1;
-        else if (why === 'hit(grenade)') s.forgetHitGrenade += 1;
-        else if (why === 'trigger') s.forgetTrigger += 1;
         else if (why === 'timeout') s.forgetTimeout += 1;
         else if (why === 'target-lost') s.forgetLost += 1;
-        else if (why === 'no-new-target') s.forgetNoNext += 1;
         else if (why === 'identity') s.forgetIdentity += 1;
     }
 
@@ -2339,7 +2301,6 @@
     }
 
     function cleanupFeature() {
-        Runtime.stats.cleanupCount += 1;
         resetRuntime('cleanup');
         return getStatus();
     }
@@ -2432,11 +2393,8 @@
         // dump()         返回全量缓冲（并把文件打开，触发补写）
         // snapshot(tag)  强制打一份世界快照
         logs: function (count) { return dumpLogs(count); },
-        get_logs: function (count) { return dumpLogs(count); },
         clearLogs: function () { Runtime.logRing = []; resetProbes(); return true; },
-        clear_logs: function () { Runtime.logRing = []; resetProbes(); return true; },
         setLogFile: function (path) { return updateConfig({ log_file: path }); },
-        set_log_file: function (path) { return updateConfig({ log_file: path }); },
         dump: function () { openLogFile(); return dumpLogs(0); },
         snapshot: function (tag) { diagnosticSnapshot(tag || 'rpc'); return getStatus(); }
     };
