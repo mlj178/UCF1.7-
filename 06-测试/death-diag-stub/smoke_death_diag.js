@@ -520,6 +520,10 @@ async function runSmoke(scriptPath, opts) {
             returnAddress: new W.NP(MODULE_BASE + 0x3000), dd_target: null } };
     }
     const rayHit = mkRayCtx();
+    // ★2026-10-15：目标处于复活无敌/减伤时，原版射线会被吃成 0 伤害 -> 我们必须放弃原版、
+    //   退回注入（注入才是幽灵来源）。这里把目标设成"无敌 + 减伤"，验证接管前会先清掉它们。
+    W.wr(W.num(enemy) + 0x18, 1, 1);                                  // Entity.isInvincible = 1
+    new W.NP(W.num(enemy) + 0x14).writeFloat(0.25);                    // Entity.damageRate = 0.25
     const raySkippedBefore = rpcObj.exports.status().gun_skipped;
     fire(gun.callbacks.onEnter, rayHit.ctx, [[new W.NP(W.num(weapon)), 0, 0, 0, 0, 0, 0, new W.NP(0)]]);
     const rayDirAfter = { x: new W.NP(W.num(rayHit.sp) + 20).readFloat(), y: new W.NP(W.num(rayHit.sp) + 24).readFloat(), z: new W.NP(W.num(rayHit.sp) + 28).readFloat() };
@@ -615,6 +619,12 @@ async function runSmoke(scriptPath, opts) {
     check('原生射线接管：不跳过原函数（游戏自己的伤害/死亡流程照跑）',
         stRayHit.gun_skipped === raySkippedBefore, 'skipped=' + stRayHit.gun_skipped + ' before=' + raySkippedBefore);
     check('原生射线接管：原版打掉了血 -> ray_redirect_hits>=1', stRayHit.ray_redirect_hits >= 1, String(stRayHit.ray_redirect_hits));
+    check('原生射线接管：放行原版前清掉目标的复活无敌/减伤（否则原版打出 0 伤害）',
+        stRayHit.invincible_cleared >= 1 &&
+        W.rd(W.num(enemy) + 0x18, 1) === 0 &&
+        Math.abs(new W.NP(W.num(enemy) + 0x14).readFloat() - 1) < 1e-6,
+        'cleared=' + stRayHit.invincible_cleared + ' isInvincible=' + W.rd(W.num(enemy) + 0x18, 1) +
+        ' damageRate=' + new W.NP(W.num(enemy) + 0x14).readFloat());
     check('原生射线接管：原版没打掉血 -> 退回注入（miss>=1）',
         stRayMiss.ray_redirect_miss >= 1 && stRayMiss.ray_redirect_shots >= 2,
         'miss=' + stRayMiss.ray_redirect_miss + ' shots=' + stRayMiss.ray_redirect_shots);

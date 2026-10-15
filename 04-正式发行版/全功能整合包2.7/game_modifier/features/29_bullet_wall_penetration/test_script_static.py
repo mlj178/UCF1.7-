@@ -251,6 +251,87 @@ class ProjectileWallPenetrationStaticTests(unittest.TestCase):
             "40 面板按可见标题反查本卡开关，改名后必须同步 WALL_CARD_TITLE",
         )
 
+    def test_self_collider_comes_from_the_collision_contact_point(self):
+        """反查弹体自身 collider 会间歇性失败（实测约占反应式穿透的 45%），
+        失败的那次墙就没被忽略 -> 弹体反复撞墙 -> 每次 velocity *= 0.6。
+
+        正解是碰撞接触点里引擎写死的实例 ID：
+          ContactPoint: m_Point(0x0) m_Normal(0xC)
+                        m_ThisColliderInstanceID(0x18) m_OtherColliderInstanceID(0x1C)
+        """
+        text = script_text()
+        self.assertIn("ContactPoint_thisColliderID: 0x18", text)
+        self.assertIn("ContactPoint_otherColliderID: 0x1C", text)
+        self.assertIn("function contactCollider(collision, wantThis)", text)
+        self.assertIn("function selfColliderFromCollision(collision, rb)", text)
+        # 反应式路径必须把接触点 collider 传下去
+        penet_fn = text.split("function completeWallPenetration(missile, collision)", 1)[1].split("function attachHook", 1)[0]
+        self.assertIn("selfColliderFromCollision(collision, rb)", penet_fn)
+        # collider 对可能反着给（thisCollider=墙），两个都要试，用 attachedRigidbody 验证
+        self.assertIn("function isValidSelfCollider(collider, rb)", text)
+        self.assertIn("contactCollider(collision, false)", text)
+        # 三级来源：接触点 > 缓存 > OverlapSphere 反查
+        ignore_fn = text.split("function ignoreWallForMissile(", 1)[1].split("function releaseIgnore", 1)[0]
+        self.assertIn("collectMissileColliders(rb, pos, hintCollider)", ignore_fn)
+        self.assertIn("st.selfColliders", ignore_fn)
+        collect_fn = text.split("function collectMissileColliders(rb, pos, hint)", 1)[1].split("function ignoreWallForMissile", 1)[0]
+        self.assertIn("native.getAttachedRigidbody(hint, ptr(0))", collect_fn)
+        self.assertIn("native.overlapSphere", collect_fn)
+
+    def test_collider_resolution_failure_prints_a_full_snapshot(self):
+        """反查失败是"卡墙减速"的入口。失败时必须一次把现场打全，
+        免得"再测一轮才知道"是 contacts 读不到、还是 thisCollider 对不上。"""
+        text = script_text()
+        self.assertIn("function diagnoseColliderMiss(collision, rb, missile, wall)", text)
+        for token in ["'contacts=' + len", "'thisID='", "otherID=", "thisRB=", "overlap=", "反查失败现场"]:
+            self.assertIn(token, text)
+        penet_fn = text.split("function completeWallPenetration(missile, collision)", 1)[1].split("function attachHook", 1)[0]
+        self.assertIn("diagnoseColliderMiss(collision, rb, missile, wall)", penet_fn)
+        # beat 里"排队"是累计值，"未决"才是当前还压着没补上的
+        self.assertIn("'/未决' + livePending", text)
+
+    def test_failed_ignore_is_retried_before_the_next_physics_step(self):
+        """忽略失败不能"算了"：弹体会继续反复撞同一面墙，每撞一次游戏 velocity *= 0.6。"""
+        text = script_text()
+        self.assertIn("function tickPendingWalls(st, missile, rb, pos)", text)
+        self.assertIn("projectilePendingRetryMs", text)
+        self.assertIn("projectilePendingFixed", text)
+        self.assertIn("projectilePendingExpired", text)
+        penet_fn = text.split("function completeWallPenetration(missile, collision)", 1)[1].split("function attachHook", 1)[0]
+        self.assertIn("st.pendingWalls.push({ wall: wall, at: Date.now() })", penet_fn)
+        # 每个物理步最多补一次，避免"永远补不上的墙"每步刷一堆物理查询
+        pending_fn = text.split("function tickPendingWalls(st, missile, rb, pos)", 1)[1].split("// ---------------- 主动穿墙", 1)[0]
+        self.assertIn("var attempts = 0;", pending_fn)
+        self.assertIn("if (attempts >= 1) { keep.push(p); continue; }", pending_fn)
+        # 补忽略必须在 FixedUpdate 里、并且早于本次物理步的判定
+        fixed_update = text.split("attachHook('WPN_Missile.FixedUpdate'", 1)[1].split("// 基类碰撞", 1)[0]
+        self.assertIn("tickPendingWalls(st, missile, rb, pos)", fixed_update)
+        self.assertLess(
+            fixed_update.index("tickPendingWalls(st, missile, rb, pos)"),
+            fixed_update.index("tickMissileGhost(st, missile, rb, pos, v)"),
+            "补忽略必须排在探路之前",
+        )
+        # 回池/复用/清理时 pendingWalls 随 state 一起消失（state 被整个删掉）
+        drop_fn = text.split("function dropMissileState(missile, reason, releaseIgnores)", 1)[1].split("function readRigidbodyVelocity", 1)[0]
+        self.assertIn("delete Runtime.missiles[key]", drop_fn)
+
+    def test_probe_skips_non_penetrable_layers_to_reach_the_wall_behind(self):
+        """敌人/命中盒/尸体经常正好挡在墙前面：只打一发射线就会被吃掉，
+        敌人背后的墙永远探不到（实测占探路的 29%）。
+        """
+        text = script_text()
+        self.assertIn("projectileProbeMaxSkips", text)
+        self.assertIn("function raycastOnce(ox, oy, oz, dx, dy, dz, maxDistance)", text)
+        probe_fn = text.split("function probeAhead(pos, v, maxDistance)", 1)[1].split("// ---------------- 主动穿墙", 1)[0]
+        self.assertIn("raycastOnce(ox, oy, oz, dx, dy, dz, remaining)", probe_fn)
+        self.assertIn("attempt <= maxSkips", probe_fn)
+        self.assertIn("Runtime.stats.projectileRayOtherLayers += 1;", probe_fn)
+        # 只有"可穿透层的墙"才允许返回给调用方
+        self.assertIn("if (hit.penetrable) {", probe_fn)
+        # 探路次数统计移到 probeAhead 内部，不能和 tickMissileGhost 重复计数
+        ghost_fn = text.split("function tickMissileGhost(st, missile, rb, pos, v)", 1)[1].split("function restoreGhost", 1)[0]
+        self.assertNotIn("projectileRayHits += 1", ghost_fn)
+
 
 if __name__ == "__main__":
     unittest.main()

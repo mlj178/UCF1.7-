@@ -1,23 +1,34 @@
 // ============================================================
-// AAAAA-damage_multiplier_min.js
+// damage_multiplier / script.js
 //
 // feature_id: "damage_multiplier"
-// 功能目标：提高本地玩家造成的最终生命伤害。
+// 功能目标：分别调整「敌人 / 自己 / 队友」造成的最终生命伤害，
+//           倍率可调高（>1.0x）也可调低（<1.0x，最低 0.1x，不允许 0）。
 //
 // 实现原理：
 //   1. Hook Entity.OnEntityHurt / Player.OnEntityHurt。
 //   2. 在 x86 cdecl 栈上定位按值传入的 DamageEventData。
-//   3. 只在 attacker 或其 owner 为本地玩家、victim 非本地玩家时，
-//      修改 DamageEventData.damage。
-//   4. 记录 WPN_Missile.SetOwner / SentryGun.SetData，用于导弹、RPG、
+//   3. 解析真正的伤害来源（attacker 本体，或导弹/炮台的 owner），
+//      再按阵营把来源分成 self（本地玩家）/ mate（队友）/ enemy（敌人）。
+//   4. 用对应阵营的倍率改写 DamageEventData.damage。
+//   5. 记录 WPN_Missile.SetOwner / SentryGun.SetData，用于导弹、RPG、
 //      榴弹和炮台这类特殊来源的归属判断。
+//
+// 阵营判定来源（IDA 反编译核对）：
+//   Entity.get_team()            -> Entity.team（+0x20）
+//   ExpandUtil.IsEnemy(a, b)     -> a.team==2 || b.team==2 || a.team!=b.team
+//   ExpandUtil.IsSameTeam(a, b)  -> a!=2 && b!=2 && a==b
+//   即 team==2（Neutral）永远算敌对，同队同阵营才叫队友。
 //
 // RVA / 字段来源：dump.cs + script.json + 现有功能脚本交叉验证
 //   Entity_OnEntityHurt:        0x00B3F470
 //   Player_OnEntityHurt:        0x00B516B0
 //   Player_get_isMyPlayer:      0x00B55FD0
+//   Entity_get_team:            0x001E0070
 //   SentryGun_SetData:          0x00B1E030
 //   WPN_Missile_SetOwner:       0x00B66390
+//   Singleton_get_instance:     0x004A8170
+//   GameManager_Singleton_MI:   0x00E1CE64
 //   GameManager_GameRoundEnd:   0x00AFAA40
 //   GameManager_NewGameRoundStart: 0x00AEBCB0
 //   GameManager_OnDestroy:      0x00AEBD40
@@ -29,6 +40,10 @@
 //   DamageEventData.wpnIndex:   0x3C
 //   DamageEventData.wpnSprIndex:0x40
 //   DamageEventData.ignoreDmgRate: 0x44
+//   Entity.team:                0x20
+//   GameManager.allPlayers:     0x1C (Il2Cpp array)
+//   GameManager.playersBL:      0x20 (List<Player>)
+//   GameManager.playersGR:      0x28 (List<Player>)
 // ============================================================
 
 (function () {
@@ -46,10 +61,21 @@
         Other: 5
     };
 
+    // 阵营分类：自己 / 队友 / 敌人 / 无法判断
+    var Category = {
+        SELF: 'self',
+        MATE: 'mate',
+        ENEMY: 'enemy',
+        UNKNOWN: 'unknown'
+    };
+
     var RVA = {
         Entity_OnEntityHurt: 0x00B3F470,
         Player_OnEntityHurt: 0x00B516B0,
         Player_get_isMyPlayer: 0x00B55FD0,
+        Entity_get_team: 0x001E0070,
+        SingletonGet: 0x004A8170,
+        GM_Singleton_MethodInfo: 0x00E1CE64,
         SentryGun_SetData: 0x00B1E030,
         WPN_Missile_SetOwner: 0x00B66390,
         GameManager_GameRoundEnd: 0x00AFAA40,
@@ -65,7 +91,15 @@
         Dmg_damageTag: 0x38,
         Dmg_wpnIndex: 0x3C,
         Dmg_wpnSprIndex: 0x40,
-        Dmg_ignoreDmgRate: 0x44
+        Dmg_ignoreDmgRate: 0x44,
+        Entity_team: 0x20,
+        GM_allPlayers: 0x1C,
+        GM_playersBL: 0x20,
+        GM_playersGR: 0x28,
+        Array_len: 0x0C,
+        Array_data: 0x10,
+        List_items: 0x08,
+        List_size: 0x0C
     };
 
     var Runtime = {
@@ -79,10 +113,22 @@
         missileOwners: {},
         sentryOwners: {},
         ownerTtlMs: 15000,
+        // 玩家缓存：用于把 attacker 归到 self / mate / enemy
+        playerCache: {},
+        playerCacheAt: 0,
+        playerCacheMissAt: 0,
+        playerCacheTtlMs: 2000,
+        localPlayer: ptr(0),
+        localTeam: -1,
         config: {
-            multiplier: 2.0,
-            min_multiplier: 1.0,
-            max_multiplier: 20.0,
+            enemy_multiplier: 1.0,
+            self_multiplier: 2.0,
+            mate_multiplier: 1.0,
+            enemy_enabled: true,
+            self_enabled: true,
+            mate_enabled: true,
+            min_multiplier: 0.1,
+            max_multiplier: 10.0,
             max_damage: 999999.0,
             skip_local_victim: true,
             include_infect: false,
@@ -95,18 +141,24 @@
             entityHurtEvents: 0,
             playerHurtEvents: 0,
             multipliedEvents: 0,
+            multipliedEnemy: 0,
+            multipliedSelf: 0,
+            multipliedMate: 0,
             skippedDisabled: 0,
             skippedPlayerBaseDepth: 0,
             skippedInvalidEvent: 0,
             skippedInvalidDamage: 0,
             skippedDamageType: 0,
             skippedInfect: 0,
-            skippedNotLocalAttacker: 0,
+            skippedUnknownAttacker: 0,
+            skippedCategoryDisabled: 0,
             skippedLocalVictim: 0,
             missileOwnerHits: 0,
             sentryOwnerHits: 0,
             missileOwnerRecords: 0,
             sentryOwnerRecords: 0,
+            playerCacheRefreshes: 0,
+            playerCacheMisses: 0,
             errorCount: 0,
             cleanupCount: 0,
             lastOriginalDamage: 0.0,
@@ -116,6 +168,8 @@
             lastWpnIndex: -1,
             lastWpnSprIndex: -1,
             lastIgnoreDmgRate: false,
+            lastCategory: "",
+            lastMultiplier: 0.0,
             lastSource: "",
             lastDecision: "",
             lastError: ""
@@ -124,7 +178,8 @@
 
     var native = {
         ready: false,
-        isMyPlayer: null
+        isMyPlayer: null,
+        singletonGetter: null
     };
 
     var LogLimiter = {};
@@ -210,13 +265,27 @@
                 ['pointer', 'pointer'],
                 CALL_CONV
             );
-            native.ready = true;
-            return true;
         } catch (error) {
             setError('initNativeFunctions failed', error);
             native.ready = false;
             return false;
         }
+
+        // 单人实例 getter 是可选的：拿不到 GameManager 时，阵营判定退回直接读 team 字段。
+        try {
+            native.singletonGetter = new NativeFunction(
+                Runtime.base.add(RVA.SingletonGet),
+                'pointer',
+                ['pointer'],
+                CALL_CONV
+            );
+        } catch (error) {
+            native.singletonGetter = null;
+            setError('init singletonGetter failed', error);
+        }
+
+        native.ready = true;
+        return true;
     }
 
     function isLocalPlayer(entityPtr) {
@@ -227,6 +296,19 @@
         } catch (error) {
             setError('Player.get_isMyPlayer failed', error);
             return false;
+        }
+    }
+
+    // Entity.get_team() 只是返回 +0x20 的字段；直接读内存比调 NativeFunction 安全，
+    // Frida 的非法内存访问会抛 JS 异常，而 NativeFunction 调坏指针会直接崩进程。
+    function readEntityTeam(entityPtr) {
+        if (isNull(entityPtr) || !isReadablePtr(entityPtr)) return -1;
+        try {
+            var team = entityPtr.add(OFF.Entity_team).readS32();
+            if (team < 0 || team > 2) return -1;
+            return team;
+        } catch (error) {
+            return -1;
         }
     }
 
@@ -275,23 +357,177 @@
         logLimited('owner_clear:' + reason, 'info', 'owner maps cleared: ' + reason, 1000);
     }
 
+    function clearPlayerCache(reason) {
+        Runtime.playerCache = {};
+        Runtime.playerCacheAt = 0;
+        Runtime.localPlayer = ptr(0);
+        Runtime.localTeam = -1;
+        logLimited('player_cache_clear:' + reason, 'info', 'player cache cleared: ' + reason, 1000);
+    }
+
+    // ------------------------------------------------------------------
+    // GameManager / 玩家列表
+    // ------------------------------------------------------------------
+    function getGameManager() {
+        if (!native.ready && !initNativeFunctions()) return null;
+        if (!native.singletonGetter) return null;
+        try {
+            var methodInfo = Runtime.base.add(RVA.GM_Singleton_MethodInfo).readPointer();
+            if (!isReadablePtr(methodInfo)) return null;
+            var gm = native.singletonGetter(methodInfo);
+            if (isNull(gm)) return null;
+            return gm;
+        } catch (error) {
+            return null;
+        }
+    }
+
+    function readArrayList(arrPtr) {
+        var result = [];
+        if (!isReadablePtr(arrPtr)) return result;
+        try {
+            var length = arrPtr.add(OFF.Array_len).readU32();
+            if (length < 0 || length > 256) return result;
+            for (var i = 0; i < length; i++) {
+                var elem = arrPtr.add(OFF.Array_data + i * Process.pointerSize).readPointer();
+                if (isReadablePtr(elem)) result.push(elem);
+            }
+        } catch (error) {
+            setError('readArrayList failed', error);
+        }
+        return result;
+    }
+
+    function readPlayerList(listPtr) {
+        var result = [];
+        if (!isReadablePtr(listPtr)) return result;
+        try {
+            var items = listPtr.add(OFF.List_items).readPointer();
+            if (!isReadablePtr(items)) return result;
+            var count = listPtr.add(OFF.List_size).readS32();
+            if (count < 0 || count > 256) return result;
+            for (var i = 0; i < count; i++) {
+                var elem = items.add(OFF.Array_data + i * Process.pointerSize).readPointer();
+                if (isReadablePtr(elem)) result.push(elem);
+            }
+        } catch (error) {
+            setError('readPlayerList failed', error);
+        }
+        return result;
+    }
+
+    function collectPlayers(gm) {
+        var map = {};
+        var all = readArrayList(gm.add(OFF.GM_allPlayers).readPointer());
+        var bl = readPlayerList(gm.add(OFF.GM_playersBL).readPointer());
+        var gr = readPlayerList(gm.add(OFF.GM_playersGR).readPointer());
+        [all, bl, gr].forEach(function (list) {
+            for (var i = 0; i < list.length; i++) {
+                map[ptrKey(list[i])] = list[i];
+            }
+        });
+        return Object.keys(map).map(function (key) { return map[key]; });
+    }
+
+    // 刷新玩家缓存：谁是自己、每个人属于哪个队伍。
+    // 只在缓存过期或遇到没见过的 attacker 时刷新，不在每次伤害里遍历。
+    function refreshPlayerCache(force) {
+        var now = Date.now();
+        if (!force && Runtime.playerCacheAt && now - Runtime.playerCacheAt < Runtime.playerCacheTtlMs) {
+            return;
+        }
+        Runtime.playerCacheAt = now;
+        Runtime.stats.playerCacheRefreshes += 1;
+        try {
+            var gm = getGameManager();
+            if (!gm) return;
+            var players = collectPlayers(gm);
+            var cache = {};
+            var localPtr = ptr(0);
+            var localTeam = -1;
+            for (var i = 0; i < players.length; i++) {
+                var p = players[i];
+                var team = readEntityTeam(p);
+                if (team < 0) continue;
+                var mine = isLocalPlayer(p);
+                cache[ptrKey(p)] = { ptr: p, team: team, isLocal: mine };
+                if (mine) {
+                    localPtr = p;
+                    localTeam = team;
+                }
+            }
+            Runtime.playerCache = cache;
+            if (!isNull(localPtr)) {
+                Runtime.localPlayer = localPtr;
+                Runtime.localTeam = localTeam;
+            }
+        } catch (error) {
+            setError('refreshPlayerCache failed', error);
+        }
+    }
+
+    // 把伤害来源（已解析 owner 之后）归到 self / mate / enemy。
+    function classifyAttacker(attacker) {
+        if (isNull(attacker) || !isReadablePtr(attacker)) return Category.UNKNOWN;
+
+        if (isLocalPlayer(attacker)) {
+            Runtime.localPlayer = attacker;
+            return Category.SELF;
+        }
+
+        if (isNull(Runtime.localPlayer) || !isLocalPlayer(Runtime.localPlayer)) {
+            refreshPlayerCache(true);
+        } else if (!Runtime.playerCacheAt || Date.now() - Runtime.playerCacheAt >= Runtime.playerCacheTtlMs) {
+            refreshPlayerCache(false);
+        }
+        if (isNull(Runtime.localPlayer)) return Category.UNKNOWN;
+
+        var key = ptrKey(attacker);
+        var entry = Runtime.playerCache[key];
+        if (!entry) {
+            Runtime.stats.playerCacheMisses += 1;
+            var now = Date.now();
+            if (!Runtime.playerCacheMissAt || now - Runtime.playerCacheMissAt > 1000) {
+                Runtime.playerCacheMissAt = now;
+                refreshPlayerCache(true);
+                entry = Runtime.playerCache[key];
+            }
+        }
+
+        var team = entry ? entry.team : readEntityTeam(attacker);
+        if (team < 0) return Category.UNKNOWN;
+
+        // 与 ExpandUtil.IsSameTeam 一致：Neutral(2) 不算同队。
+        if (team !== 2 && Runtime.localTeam !== 2 && team === Runtime.localTeam) {
+            return Category.MATE;
+        }
+        return Category.ENEMY;
+    }
+
+    function categoryMultiplierKey(category) {
+        return category + '_multiplier';
+    }
+
+    function categoryEnabledKey(category) {
+        return category + '_enabled';
+    }
+
     function resolveEffectiveAttacker(attacker) {
         if (isNull(attacker)) return ptr(0);
-        if (isLocalPlayer(attacker)) return attacker;
 
         var missileOwner = getRememberedOwner(Runtime.missileOwners, attacker);
-        if (!isNull(missileOwner) && isLocalPlayer(missileOwner)) {
+        if (!isNull(missileOwner)) {
             Runtime.stats.missileOwnerHits += 1;
             return missileOwner;
         }
 
         var sentryOwner = getRememberedOwner(Runtime.sentryOwners, attacker);
-        if (!isNull(sentryOwner) && isLocalPlayer(sentryOwner)) {
+        if (!isNull(sentryOwner)) {
             Runtime.stats.sentryOwnerHits += 1;
             return sentryOwner;
         }
 
-        return ptr(0);
+        return attacker;
     }
 
     function isSupportedDamageType(type) {
@@ -319,7 +555,7 @@
         }
     }
 
-    function recordLast(data, source, decision, newDamage) {
+    function recordLast(data, source, decision, newDamage, category, multiplier) {
         Runtime.stats.lastOriginalDamage = data ? data.damage : 0.0;
         Runtime.stats.lastNewDamage = newDamage === undefined ? 0.0 : newDamage;
         Runtime.stats.lastDamageType = data ? data.type : 0;
@@ -327,6 +563,8 @@
         Runtime.stats.lastWpnIndex = data ? data.wpnIndex : -1;
         Runtime.stats.lastWpnSprIndex = data ? data.wpnSprIndex : -1;
         Runtime.stats.lastIgnoreDmgRate = data ? data.ignoreDmgRate : false;
+        Runtime.stats.lastCategory = category || "";
+        Runtime.stats.lastMultiplier = multiplier === undefined ? 0.0 : multiplier;
         Runtime.stats.lastSource = source || "";
         Runtime.stats.lastDecision = decision || "";
     }
@@ -336,11 +574,12 @@
         return value.toFixed(3);
     }
 
-    function logDamageDiagnostic(data, source, multiplier, newDamage, effectiveAttacker, victim, victimIsLocal) {
+    function logDamageDiagnostic(data, source, category, multiplier, newDamage, effectiveAttacker, victim, victimIsLocal) {
         if (!Runtime.config.diagnostic_log) return;
 
         var truncDamage = newDamage < 0 ? Math.ceil(newDamage) : Math.floor(newDamage);
         var message = 'damage_diag source=' + source +
+            ' category=' + category +
             ' raw_damage=' + formatFloat(data.damage) +
             ' multiplier=' + formatFloat(multiplier) +
             ' new_damage=' + formatFloat(newDamage) +
@@ -395,40 +634,52 @@
         }
 
         var effectiveAttacker = resolveEffectiveAttacker(data.attacker);
-        if (isNull(effectiveAttacker)) {
-            Runtime.stats.skippedNotLocalAttacker += 1;
-            recordLast(data, source, 'skip_not_local_attacker');
+        var category = classifyAttacker(effectiveAttacker);
+        if (category === Category.UNKNOWN) {
+            Runtime.stats.skippedUnknownAttacker += 1;
+            recordLast(data, source, 'skip_unknown_attacker');
             return false;
         }
 
         var victim = data.victim;
         var victimIsLocal = isLocalPlayer(victim);
-        if (Runtime.config.skip_local_victim && victimIsLocal) {
+
+        // 只拦"自己打自己"（自己的手雷炸自己），不拦敌人/队友打本地玩家。
+        if (category === Category.SELF && Runtime.config.skip_local_victim && victimIsLocal) {
             Runtime.stats.skippedLocalVictim += 1;
-            recordLast(data, source, 'skip_local_victim');
+            recordLast(data, source, 'skip_self_victim', undefined, category);
+            return false;
+        }
+
+        if (!Runtime.config[categoryEnabledKey(category)]) {
+            Runtime.stats.skippedCategoryDisabled += 1;
+            recordLast(data, source, 'skip_' + category + '_disabled', undefined, category);
             return false;
         }
 
         var multiplier = clampFloat(
-            Runtime.config.multiplier,
+            Runtime.config[categoryMultiplierKey(category)],
             Runtime.config.min_multiplier,
             Runtime.config.max_multiplier
         );
         var newDamage = data.damage * multiplier;
         if (newDamage > Runtime.config.max_damage) newDamage = Runtime.config.max_damage;
         if (newDamage < 0) newDamage = 0;
-        logDamageDiagnostic(data, source, multiplier, newDamage, effectiveAttacker, victim, victimIsLocal);
+        logDamageDiagnostic(data, source, category, multiplier, newDamage, effectiveAttacker, victim, victimIsLocal);
 
         try {
             var damageAddr = eventPtr.add(OFF.Dmg_damage);
             damageAddr.writeFloat(newDamage);
             Runtime.stats.multipliedEvents += 1;
-            recordLast(data, source, 'multiplied', newDamage);
+            if (category === Category.SELF) Runtime.stats.multipliedSelf += 1;
+            else if (category === Category.MATE) Runtime.stats.multipliedMate += 1;
+            else if (category === Category.ENEMY) Runtime.stats.multipliedEnemy += 1;
+            recordLast(data, source, 'multiplied', newDamage, category, multiplier);
             if (Runtime.config.diagnostic_log) {
                 logLimited(
                     'multiplied',
                     'info',
-                    source + ' damage ' + data.damage.toFixed(2) + ' -> ' + newDamage.toFixed(2) +
+                    source + ' [' + category + '] damage ' + data.damage.toFixed(2) + ' -> ' + newDamage.toFixed(2) +
                     ', type=' + data.type + ', wpn=' + data.wpnIndex,
                     500
                 );
@@ -436,7 +687,7 @@
             return true;
         } catch (error) {
             setError('write damage failed', error);
-            recordLast(data, source, 'write_failed');
+            recordLast(data, source, 'write_failed', undefined, category);
             return false;
         }
     }
@@ -509,6 +760,7 @@
             onEnter: function () {
                 try {
                     clearOwnerMaps("game_round_end");
+                    clearPlayerCache("game_round_end");
                 } catch (error) {
                     setError('GameManager.GameRoundEnd failed', error);
                 }
@@ -519,6 +771,7 @@
             onEnter: function () {
                 try {
                     clearOwnerMaps("new_game_round_start");
+                    clearPlayerCache("new_game_round_start");
                 } catch (error) {
                     setError('GameManager.NewGameRoundStart failed', error);
                 }
@@ -529,6 +782,7 @@
             onEnter: function () {
                 try {
                     clearOwnerMaps("game_manager_destroy");
+                    clearPlayerCache("game_manager_destroy");
                 } catch (error) {
                     setError('GameManager.OnDestroy failed', error);
                 }
@@ -572,7 +826,8 @@
         if (!initializeFeature()) return getStatus();
         Runtime.enabled = true;
         sendStatus('damage_multiplier', true);
-        log('success', 'damage multiplier enabled, multiplier=' + Runtime.config.multiplier);
+        log('success', 'damage multiplier enabled, enemy=' + Runtime.config.enemy_multiplier +
+            ' self=' + Runtime.config.self_multiplier + ' mate=' + Runtime.config.mate_multiplier);
         return getStatus();
     }
 
@@ -588,6 +843,7 @@
         cleanupHooks();
         Runtime.initialized = false;
         clearOwnerMaps("cleanup");
+        clearPlayerCache("cleanup");
         Runtime.stats.cleanupCount += 1;
         log('info', 'cleanup complete');
         return getStatus();
@@ -595,14 +851,30 @@
 
     function updateConfig(config) {
         config = config || {};
-        if (config.multiplier !== undefined) {
-            Runtime.config.multiplier = clampFloat(
+
+        // 兼容旧配置：老的单倍率 key「multiplier」等同「自己」倍率。
+        if (config.self_multiplier === undefined && config.multiplier !== undefined) {
+            Runtime.config.self_multiplier = clampFloat(
                 config.multiplier,
                 Runtime.config.min_multiplier,
                 Runtime.config.max_multiplier
             );
         }
+
+        ['enemy_multiplier', 'self_multiplier', 'mate_multiplier'].forEach(function (key) {
+            if (config[key] !== undefined) {
+                Runtime.config[key] = clampFloat(
+                    config[key],
+                    Runtime.config.min_multiplier,
+                    Runtime.config.max_multiplier
+                );
+            }
+        });
+
         [
+            'enemy_enabled',
+            'self_enabled',
+            'mate_enabled',
             'skip_local_victim',
             'include_infect',
             'allow_other_damage_type',
@@ -611,6 +883,7 @@
         ].forEach(function (key) {
             if (config[key] !== undefined) Runtime.config[key] = !!config[key];
         });
+
         if (config.max_damage !== undefined) {
             Runtime.config.max_damage = clampFloat(config.max_damage, 1.0, 99999999.0);
         }
@@ -623,7 +896,18 @@
             enabled: Runtime.enabled,
             initialized: Runtime.initialized,
             module_found: Runtime.module !== null,
-            multiplier: Runtime.config.multiplier,
+            enemy_multiplier: Runtime.config.enemy_multiplier,
+            self_multiplier: Runtime.config.self_multiplier,
+            mate_multiplier: Runtime.config.mate_multiplier,
+            enemy_enabled: Runtime.config.enemy_enabled,
+            self_enabled: Runtime.config.self_enabled,
+            mate_enabled: Runtime.config.mate_enabled,
+            multiplier: Runtime.config.self_multiplier,
+            min_multiplier: Runtime.config.min_multiplier,
+            max_multiplier: Runtime.config.max_multiplier,
+            local_player_ready: !isNull(Runtime.localPlayer),
+            local_team: Runtime.localTeam,
+            cached_player_count: Object.keys(Runtime.playerCache).length,
             skip_local_victim: Runtime.config.skip_local_victim,
             include_infect: Runtime.config.include_infect,
             allow_other_damage_type: Runtime.config.allow_other_damage_type,
@@ -633,18 +917,24 @@
             entity_hurt_events: Runtime.stats.entityHurtEvents,
             player_hurt_events: Runtime.stats.playerHurtEvents,
             multiplied_events: Runtime.stats.multipliedEvents,
+            multiplied_enemy: Runtime.stats.multipliedEnemy,
+            multiplied_self: Runtime.stats.multipliedSelf,
+            multiplied_mate: Runtime.stats.multipliedMate,
             skipped_disabled: Runtime.stats.skippedDisabled,
             skipped_player_base_depth: Runtime.stats.skippedPlayerBaseDepth,
             skipped_invalid_event: Runtime.stats.skippedInvalidEvent,
             skipped_invalid_damage: Runtime.stats.skippedInvalidDamage,
             skipped_damage_type: Runtime.stats.skippedDamageType,
             skipped_infect: Runtime.stats.skippedInfect,
-            skipped_not_local_attacker: Runtime.stats.skippedNotLocalAttacker,
+            skipped_unknown_attacker: Runtime.stats.skippedUnknownAttacker,
+            skipped_category_disabled: Runtime.stats.skippedCategoryDisabled,
             skipped_local_victim: Runtime.stats.skippedLocalVictim,
             missile_owner_hits: Runtime.stats.missileOwnerHits,
             sentry_owner_hits: Runtime.stats.sentryOwnerHits,
             missile_owner_records: Runtime.stats.missileOwnerRecords,
             sentry_owner_records: Runtime.stats.sentryOwnerRecords,
+            player_cache_refreshes: Runtime.stats.playerCacheRefreshes,
+            player_cache_misses: Runtime.stats.playerCacheMisses,
             error_count: Runtime.stats.errorCount,
             cleanup_count: Runtime.stats.cleanupCount,
             last_original_damage: Runtime.stats.lastOriginalDamage,
@@ -654,6 +944,8 @@
             last_wpn_index: Runtime.stats.lastWpnIndex,
             last_wpn_spr_index: Runtime.stats.lastWpnSprIndex,
             last_ignore_dmg_rate: Runtime.stats.lastIgnoreDmgRate,
+            last_category: Runtime.stats.lastCategory,
+            last_multiplier: Runtime.stats.lastMultiplier,
             last_source: Runtime.stats.lastSource,
             last_decision: Runtime.stats.lastDecision,
             last_error: Runtime.stats.lastError

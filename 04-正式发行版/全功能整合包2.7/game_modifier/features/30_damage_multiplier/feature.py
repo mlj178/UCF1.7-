@@ -6,4 +6,4 @@ class PluginFeature(PluginFeatureBase):
     js_filename = "script.js"
     name = "调整伤害倍率"
     category = "weapon"
-    desc = "放大玩家造成的输出伤害。"
+    desc = "分开调整敌人 / 自己 / 队友造成的伤害，可调高也可调低。"

@@ -87,15 +87,19 @@ def build_card(parent, manifest, row, col, colspan, callbacks, card_builder):
 
     def on_scope_changed(label):
         callbacks["set_config"](feature_id, "esp_target_scope", scope_to_value[label])
+        schedule_sync()
 
     def on_mode_changed(label):
         callbacks["set_config"](feature_id, "esp_health_mode", mode_to_value[label])
+        schedule_sync()
 
     def on_display_changed(label):
         callbacks["set_config"](feature_id, "esp_health_display", display_to_value[label])
+        schedule_sync()
 
     def on_outline_toggled():
         callbacks["set_config"](feature_id, "esp_box_outline", bool(outline_switch.get()))
+        schedule_sync()
 
     scope_menu = add_row(0, "显示对象", scope_values, selected_scope, on_scope_changed)
     mode_menu = add_row(1, "血量显示", mode_values, selected_mode, on_mode_changed)
@@ -123,6 +127,53 @@ def build_card(parent, manifest, row, col, colspan, callbacks, card_builder):
     else:
         outline_switch.deselect()
     outline_switch.grid(row=3, column=1, padx=(0, 8), pady=3, sticky="w")
+
+    # --- 所选即所得 ---------------------------------------------------------
+    # 配置是唯一权威来源：改动失败时后端会把配置回退成 DLL 当前生效值，
+    # 这里负责把控件重新对齐到配置，避免"界面选 A、游戏里是 B"。
+    def sync_from_config():
+        try:
+            latest = callbacks.get("get_config", lambda _feature_id: {})(feature_id) or {}
+        except Exception:
+            return
+
+        scope_now = latest.get("esp_target_scope", defaults.get("esp_target_scope", "enemy_only"))
+        label = next(
+            (item for item, value in scope_to_value.items() if value == scope_now), scope_values[0]
+        )
+        if scope_menu.get() != label:
+            scope_menu.set(label)
+
+        mode_now = latest.get("esp_health_mode", defaults.get("esp_health_mode", "percent"))
+        label = next(
+            (item for item, value in mode_to_value.items() if value == mode_now), mode_values[0]
+        )
+        if mode_menu.get() != label:
+            mode_menu.set(label)
+
+        display_now = latest.get(
+            "esp_health_display", defaults.get("esp_health_display", "both")
+        )
+        label = next(
+            (item for item, value in display_to_value.items() if value == display_now),
+            display_values[2],
+        )
+        if display_menu.get() != label:
+            display_menu.set(label)
+
+        outline_now = latest.get("esp_box_outline", defaults.get("esp_box_outline", True))
+        if isinstance(outline_now, str):
+            outline_now = outline_now.strip().lower() not in ("false", "0", "no", "off")
+        if bool(outline_now) != bool(outline_switch.get()):
+            outline_switch.select() if outline_now else outline_switch.deselect()
+
+    def schedule_sync():
+        # 下发在后台线程，失败回退可能晚一点到；多补几次确保界面最终对齐。
+        for delay in (800, 2000, 4000):
+            try:
+                outline_switch.after(delay, sync_from_config)
+            except Exception:
+                pass
 
     return {
         manifest.get("ui_handles", {}).get("switch", "esp_box_switch"): switch,

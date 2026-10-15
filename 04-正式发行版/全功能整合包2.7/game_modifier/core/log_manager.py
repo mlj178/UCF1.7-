@@ -1,9 +1,12 @@
 """
 Unified logging module based on Python standard logging.
 
-- Runtime log messages go to disk (logs/game_modifier.log)
+- **开发版**（python 直接运行）：日志写盘到 logs/game_modifier.log，5MB 轮转保留 3 份，
+  便于离线排查。
+- **发行版**（PyInstaller 打包成 exe，sys.frozen=True）：**绝不落盘**，
+  不创建 logs 目录、不打开任何 .log 文件；只挂一个 NullHandler。
+  界面日志面板走 EventBus（app._log），不受影响，仍会显示。
 - trace_id is auto-generated per session for correlation
-- Log files rotate to avoid unbounded growth
 """
 
 import logging
@@ -35,8 +38,17 @@ _LEVEL_MAP = {
 _initialized = False
 
 
+def file_logging_enabled():
+    """是否允许把日志持久化成文件。
+
+    唯一判据：**打包成 exe 后一律禁止**（发行版不产生任何 .log 文件）。
+    开发版保持写盘，供离线排查。任何新增的日志落盘点都必须先过这个函数。
+    """
+    return not getattr(sys, "frozen", False)
+
+
 def _ensure_log_dir():
-    """Create logs directory if not exists"""
+    """Create logs directory if not exists（仅开发版会走到这里）"""
     log_dir = os.path.join(APP_DIR, 'logs')
     if not os.path.exists(log_dir):
         os.makedirs(log_dir, exist_ok=True)
@@ -54,7 +66,9 @@ def setup_logging():
     root = logging.getLogger('game_modifier')
     root.setLevel(logging.DEBUG)
 
-    if getattr(sys, "frozen", False):
+    if not file_logging_enabled():
+        # 发行版（exe）：不建 logs 目录、不打开 .log 文件，只丢弃日志。
+        # 界面日志面板不受影响（它读的是 EventBus 消息，不是 logging handler）。
         root.addHandler(logging.NullHandler())
         return
 

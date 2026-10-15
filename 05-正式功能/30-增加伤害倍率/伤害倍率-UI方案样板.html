@@ -1,0 +1,451 @@
+<!doctype html>
+<html lang="zh-CN" data-dir="attacker">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>UI 方案样板：调整伤害倍率（敌人 / 自己 / 队友）</title>
+<style>
+:root{
+  --win:#0f1115; --bar:#171a20; --card:#1e222a; --inner:#262b34; --hover:#2f3540;
+  --line:#2e343e; --line2:#3a424e;
+  --fg:#f3f5f8; --txt:#b8c0cc; --muted:#7d8694; --dis:#5a626e;
+  --accent:#4c8dff; --ok:#34d399; --warn:#fbbf24; --err:#f87171;
+  --enemy:#f87171; --self:#4c8dff; --mate:#34d399;
+  --up:#ff9a6b; --down:#6cc7ff;
+}
+*{box-sizing:border-box}
+body{margin:0;background:#0b0d10;color:var(--txt);font-size:14px;line-height:1.7;
+  font-family:"Microsoft YaHei UI","Microsoft YaHei","PingFang SC",sans-serif}
+.page{max-width:1180px;margin:0 auto;padding:26px 22px 70px}
+h1{font-size:21px;margin:0 0 6px;color:var(--fg)}
+h2{font-size:16.5px;margin:40px 0 10px;color:var(--fg);border-left:3px solid var(--accent);padding-left:9px}
+h3{font-size:14px;margin:16px 0 6px;color:#e5e7eb}
+.sub{color:var(--muted);font-size:12.5px;margin:0 0 10px}
+code{font-family:Consolas,monospace;background:#171a20;border:1px solid var(--line);border-radius:4px;
+  padding:0 4px;color:#cbd5e1;font-size:12px}
+.tag{display:inline-block;font-size:11px;padding:1px 8px;border-radius:999px;margin-left:8px;vertical-align:middle;font-weight:400}
+.tag.rec{background:rgba(52,211,153,.14);color:#6ee7b7;border:1px solid rgba(52,211,153,.45)}
+.tag.alt{background:rgba(148,163,184,.12);color:#cbd5e1;border:1px solid var(--line2)}
+.tag.warn{background:rgba(251,191,36,.12);color:#fcd34d;border:1px solid rgba(251,191,36,.45)}
+
+/* ── 需求条 ── */
+.reqs{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:14px 0 4px}
+.req{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 13px}
+.req b{display:block;font-size:13.5px;color:var(--fg);margin-bottom:3px}
+.req p{margin:0;font-size:12.5px;color:var(--muted)}
+
+/* ── 作用方向切换 ── */
+.dirs{display:flex;gap:8px;margin:12px 0 10px}
+.dirbtn{border:1px solid var(--line2);background:var(--card);color:var(--txt);border-radius:8px;
+  padding:6px 14px;font-size:13px;cursor:pointer;font-family:inherit}
+.dirbtn.on{background:rgba(76,141,255,.16);border-color:var(--accent);color:#cfe0ff}
+html[data-dir="attacker"] .only-victim{display:none}
+html[data-dir="victim"] .only-attacker{display:none}
+.dirbox{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 14px}
+.dirbox p{margin:0 0 8px;font-size:13px}
+table.matrix{border-collapse:collapse;width:100%;max-width:760px;font-size:12.5px;margin:4px 0 8px}
+table.matrix th,table.matrix td{border:1px solid var(--line);padding:6px 10px;text-align:left}
+table.matrix th{background:rgba(148,163,184,.08);color:var(--fg);font-weight:600}
+.c-enemy{color:var(--enemy)}.c-self{color:var(--self)}.c-mate{color:var(--mate)}
+.example{font-size:12.5px;color:#cbd5e1;background:rgba(76,141,255,.09);border-left:3px solid var(--accent);
+  border-radius:4px;padding:6px 10px;margin-top:4px}
+
+/* ── 模拟 APP 窗口 ── */
+.demo{width:610px;max-width:100%;background:var(--win);border:1px solid #22262e;border-radius:10px;
+  padding:10px 10px 12px;box-shadow:0 14px 34px rgba(0,0,0,.45)}
+.demo-head{display:flex;justify-content:space-between;align-items:center;margin:2px 2px 8px}
+.demo-name{font-size:12px;color:var(--muted)}
+.dtabs{display:flex;gap:4px;margin:0 0 10px}
+.dtab{font-size:11.5px;padding:2px 10px;border-radius:6px;color:var(--muted);border:1px solid transparent}
+.dtab.on{background:var(--inner);color:var(--fg);border-color:var(--line2)}
+
+/* ── 卡片 ── */
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:9px 12px 11px}
+.card-head{display:flex;align-items:flex-start;gap:8px}
+.card-head .grow{flex:1;min-width:0}
+.card-title{font-size:15px;font-weight:700;color:#fb923c}
+.card-title.enemy{color:var(--enemy)}.card-title.self{color:var(--self)}.card-title.mate{color:var(--mate)}
+.desc{font-size:12px;color:var(--muted);margin-top:2px}
+.card.off .slider,.card.off .rctl,.card.off .card-foot{opacity:.4;pointer-events:none}
+
+/* ── 阵营行 ── */
+.mrow{display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--line);margin-top:6px}
+.mrow.dim{opacity:.45}
+.mname{flex:0 0 46px;font-size:12.5px;font-weight:600}
+.slider{flex:1;min-width:90px;--pct:50%}
+input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:20px;background:transparent;cursor:pointer;display:block}
+input[type=range]::-webkit-slider-runnable-track{height:4px;border-radius:2px;
+  background:linear-gradient(90deg,var(--c,var(--accent)) var(--pct,50%),#2f3540 var(--pct,50%))}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;border-radius:50%;
+  background:#e5e7eb;border:none;margin-top:-5px;box-shadow:0 0 0 2px rgba(0,0,0,.35)}
+input[type=range]::-moz-range-track{height:4px;border-radius:2px;background:#2f3540}
+input[type=range]::-moz-range-progress{height:4px;border-radius:2px;background:var(--c,var(--accent))}
+input[type=range]::-moz-range-thumb{width:14px;height:14px;border:none;border-radius:50%;background:#e5e7eb}
+.rctl{display:flex;align-items:center;gap:5px;flex:0 0 auto}
+.val{flex:0 0 44px;text-align:right;font-size:12.5px;font-variant-numeric:tabular-nums;color:var(--txt)}
+.val.up{color:var(--up)}.val.down{color:var(--down)}.val.one{color:var(--txt)}
+.mini{width:22px;height:22px;line-height:1;border:1px solid var(--line2);background:var(--inner);color:var(--txt);
+  border-radius:5px;cursor:pointer;font-size:13px;font-family:inherit;padding:0}
+.mini:hover{background:var(--hover)}
+.presets{display:flex;gap:4px;flex:0 0 auto}
+.pbtn{border:1px solid var(--line2);background:var(--inner);color:var(--txt);border-radius:5px;
+  padding:1px 7px;font-size:11.5px;cursor:pointer;font-family:inherit;font-variant-numeric:tabular-nums}
+.pbtn:hover{background:var(--hover);border-color:var(--accent)}
+
+/* ── 开关（近似 CTkSwitch）── */
+.sw{width:40px;height:20px;border-radius:10px;background:#3f4247;position:relative;cursor:pointer;
+  transition:background .18s;flex:0 0 auto;display:inline-block;margin-top:2px}
+.sw::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;
+  background:#e5e7eb;transition:left .18s,background .18s}
+.sw.on{background:var(--accent)}
+.sw.on::after{left:22px;background:#fff}
+
+/* ── 卡片底部状态行 ── */
+.card-foot{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:9px;
+  padding-top:8px;border-top:1px solid var(--line)}
+.summary{font-size:12px;color:var(--muted)}
+.summary b{color:var(--fg);font-variant-numeric:tabular-nums;font-weight:600}
+.acts{display:flex;gap:6px}
+.chipbtn{border:1px solid var(--line2);background:transparent;color:var(--txt);border-radius:6px;
+  padding:3px 9px;font-size:11.5px;cursor:pointer;font-family:inherit}
+.chipbtn:hover{background:var(--hover);border-color:var(--accent)}
+
+/* ── 方案 B 三卡网格 ── */
+.bgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.bcard .card-head{margin-bottom:4px}
+.bslider{margin-top:6px}
+
+/* ── 刻度说明 ── */
+.scale{margin:10px 0 0;font-size:11.5px;color:var(--muted)}
+.scale .bar{position:relative;height:6px;border-radius:3px;margin:6px 0 4px;
+  background:linear-gradient(90deg,#6cc7ff 0%,#6cc7ff 9%,#3a424e 9%,#3a424e 11%,#ff9a6b 11%,#ff9a6b 100%)}
+.scale .bar i{position:absolute;top:-3px;bottom:-3px;left:9%;width:1px;background:#e5e7eb;opacity:.5}
+.scale .lbl{display:flex;justify-content:space-between}
+.scale .down{color:var(--down)}.scale .up{color:var(--up)}
+
+/* ── 备注 / 优缺点 ── */
+.notes{margin-top:12px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+.note{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:9px 12px}
+.note b{display:block;font-size:12.5px;color:var(--fg);margin-bottom:3px}
+.note ul{margin:0;padding-left:16px;font-size:12.5px;color:var(--muted)}
+.note li{margin:2px 0}
+.note.good{border-left:3px solid var(--ok)}
+.note.bad{border-left:3px solid var(--err)}
+.note.impl{border-left:3px solid var(--accent)}
+.foot{margin-top:34px;padding-top:12px;border-top:1px solid #22262e;color:#6b7280;font-size:12px}
+.qs{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 16px}
+.qs ol{margin:0;padding-left:20px}
+.qs li{margin:5px 0;font-size:13px;color:var(--txt)}
+.qs b{color:var(--fg)}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <h1>「调整伤害倍率」UI 方案样板</h1>
+  <p class="sub">纯 HTML 模拟（不是真实 APP 界面）。本页只定 UI 长什么样，<b>不写任何真实逻辑</b>；开关、滑块、档位按钮都可以随便点着玩。确认方案后再改 <code>30_damage_multiplier</code> 的 panel.py 与 manifest.json。</p>
+
+  <h2>一、这次要满足的三件事</h2>
+  <div class="reqs">
+    <div class="req"><b>三个阵营分开调</b><p><span class="c-enemy">敌人</span> / <span class="c-self">自己</span> / <span class="c-mate">队友</span>，各有一条独立倍率，互不影响。</p></div>
+    <div class="req"><b>能调高，也能调低</b><p>范围 <code>0.1x ~ 10.0x</code>，步进 0.1。1.0x 是原版，低于 1.0x 就是削弱。</p></div>
+    <div class="req"><b>每个阵营可单独开关</b><p>不想动的阵营单独关掉，保持游戏原样。</p></div>
+  </div>
+
+  <h2>二、先确认一个关键歧义：倍率是"谁打出的"还是"谁挨的"？</h2>
+  <p class="sub">两个都做得到（伤害事件里同时有 attacker 和 victim），但 UI 文案和用户预期完全不同，必须先定一个。点下面切换看差别。</p>
+  <div class="dirs">
+    <button class="dirbtn on" data-dir-btn="attacker">按攻击者 · 谁打出的伤害</button>
+    <button class="dirbtn" data-dir-btn="victim">按承受者 · 谁挨的伤害</button>
+  </div>
+  <div class="dirbox">
+    <div class="only-attacker">
+      <p><b>倍率乘在"伤害来源"上：</b>即某一方<b>打出去</b>的伤害。</p>
+      <table class="matrix">
+        <tr><th>滑块</th><th>含义</th><th>例子</th></tr>
+        <tr><td class="c-enemy">敌人</td><td>敌人（含 Bot）打出的伤害</td><td>调 0.2x → 敌人几乎打不动你</td></tr>
+        <tr><td class="c-self">自己</td><td>你打出的伤害</td><td>调 3.0x → 你一枪一个</td></tr>
+        <tr><td class="c-mate">队友</td><td>队友打出的伤害</td><td>调 0.5x → 队友别抢你人头</td></tr>
+      </table>
+      <div class="example">例：敌人 0.2x ＋ 自己 3.0x ＝ 敌人挠痒痒，你输出爆炸。</div>
+    </div>
+    <div class="only-victim">
+      <p><b>倍率乘在"伤害承受者"上：</b>即某一方<b>挨打时</b>受到的总伤害。</p>
+      <table class="matrix">
+        <tr><th>滑块</th><th>含义</th><th>例子</th></tr>
+        <tr><td class="c-enemy">敌人</td><td>敌人挨打时受到的伤害</td><td>调 5.0x → 敌人秒死</td></tr>
+        <tr><td class="c-self">自己</td><td>你挨打时受到的伤害</td><td>调 0.2x → 你几乎不掉血</td></tr>
+        <tr><td class="c-mate">队友</td><td>队友挨打时受到的伤害</td><td>调 0.5x → 队友更耐打</td></tr>
+      </table>
+      <div class="example">例：敌人 5.0x ＋ 自己 0.2x ＝ 敌人脆如纸，你硬如铁。</div>
+    </div>
+  </div>
+
+  <h2>方案 A：单卡片 · 三行独立控制<span class="tag rec">推荐</span></h2>
+  <p class="sub">「调整伤害倍率」还是一张卡（占半行），卡里三行：<b>阵营名 + 滑块 + 数值微调 + 独立开关</b>。底部一行实时汇总当前设置。</p>
+  <div class="demo">
+    <div class="demo-head"><span class="demo-name">主窗口 610×700 · 武器 Tab（模拟）</span><span class="demo-name">方案 A</span></div>
+    <div class="dtabs"><span class="dtab">人物属性</span><span class="dtab on">武器</span><span class="dtab">其他</span></div>
+    <div class="card" data-summary>
+      <div class="card-head">
+        <div class="grow">
+          <div class="card-title">💥 调整伤害倍率</div>
+          <div class="desc">敌人 / 自己 / 队友 分开调；1.0x 为原版，低于 1.0x 是削弱。</div>
+        </div>
+        <label class="sw on" data-master></label>
+      </div>
+
+      <div class="mrow" data-cat="enemy">
+        <span class="mname c-enemy">敌人</span>
+        <div class="slider" data-slider style="--c:var(--enemy)"><input type="range" min="0.1" max="10" step="0.1" value="0.5" /></div>
+        <div class="rctl">
+          <span class="val" data-out>0.5x</span>
+          <button class="mini" data-step="-0.1" title="-0.1">−</button>
+          <button class="mini" data-step="0.1" title="+0.1">+</button>
+          <label class="sw on"></label>
+        </div>
+      </div>
+
+      <div class="mrow" data-cat="self">
+        <span class="mname c-self">自己</span>
+        <div class="slider" data-slider style="--c:var(--self)"><input type="range" min="0.1" max="10" step="0.1" value="3.0" /></div>
+        <div class="rctl">
+          <span class="val" data-out>3.0x</span>
+          <button class="mini" data-step="-0.1" title="-0.1">−</button>
+          <button class="mini" data-step="0.1" title="+0.1">+</button>
+          <label class="sw on"></label>
+        </div>
+      </div>
+
+      <div class="mrow" data-cat="mate">
+        <span class="mname c-mate">队友</span>
+        <div class="slider" data-slider style="--c:var(--mate)"><input type="range" min="0.1" max="10" step="0.1" value="1.0" /></div>
+        <div class="rctl">
+          <span class="val" data-out>1.0x</span>
+          <button class="mini" data-step="-0.1" title="-0.1">−</button>
+          <button class="mini" data-step="0.1" title="+0.1">+</button>
+          <label class="sw on"></label>
+        </div>
+      </div>
+
+      <div class="card-foot">
+        <div class="summary">当前 · 敌人 <b data-sum="enemy">0.5x</b> ｜ 自己 <b data-sum="self">3.0x</b> ｜ 队友 <b data-sum="mate">1.0x</b></div>
+        <div class="acts">
+          <button class="chipbtn" data-reset="1.0">全部 1.0x</button>
+          <button class="chipbtn">恢复上次</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="scale">
+    <div class="bar"><i></i></div>
+    <div class="lbl"><span class="down">0.1x · 削弱</span><span>1.0x · 原版</span><span class="up">10.0x · 增强</span></div>
+  </div>
+  <div class="notes">
+    <div class="note good"><b>优点</b><ul><li>只占半行，三阵营一眼看全，整体感强</li><li>每行独立开关，可冻结不想动的阵营</li><li>带 ± 步进，能精确到 0.1x</li></ul></div>
+    <div class="note bad"><b>缺点</b><ul><li>比现有卡片高，右侧邻居卡会留空白</li><li>卡片内信息密度较高</li></ul></div>
+    <div class="note impl"><b>接入改动</b><ul><li>现有 panel.py 只支持「1 个 switch + 1 个 slider」，需给该功能走自定义面板或扩展通用卡片</li><li>manifest 增加 3 组 config 键</li></ul></div>
+  </div>
+
+  <h2>方案 B：三张独立卡片<span class="tag alt">最贴合现有卡片体系</span></h2>
+  <p class="sub">每个阵营一张独立的 <code>simple_feature_card</code>，各自带开关和滑块。改动最小，但占 1.5 行，且没有"一键全关"。</p>
+  <div class="demo">
+    <div class="demo-head"><span class="demo-name">主窗口 610×700 · 武器 Tab（模拟）</span><span class="demo-name">方案 B</span></div>
+    <div class="dtabs"><span class="dtab">人物属性</span><span class="dtab on">武器</span><span class="dtab">其他</span></div>
+    <div class="bgrid">
+      <div class="card bcard">
+        <div class="card-head"><div class="grow"><div class="card-title enemy">敌人伤害倍率</div><div class="desc">敌方打出的伤害</div></div><label class="sw on"></label></div>
+        <div class="mrow bslider" data-cat="enemy" style="border-top:none;padding-top:2px">
+          <div class="slider" data-slider style="--c:var(--enemy)"><input type="range" min="0.1" max="10" step="0.1" value="0.5" /></div>
+          <div class="rctl"><span class="val" data-out>0.5x</span><button class="mini" data-step="-0.1">−</button><button class="mini" data-step="0.1">+</button></div>
+        </div>
+      </div>
+      <div class="card bcard">
+        <div class="card-head"><div class="grow"><div class="card-title self">自己伤害倍率</div><div class="desc">你打出的伤害</div></div><label class="sw on"></label></div>
+        <div class="mrow bslider" data-cat="self" style="border-top:none;padding-top:2px">
+          <div class="slider" data-slider style="--c:var(--self)"><input type="range" min="0.1" max="10" step="0.1" value="3.0" /></div>
+          <div class="rctl"><span class="val" data-out>3.0x</span><button class="mini" data-step="-0.1">−</button><button class="mini" data-step="0.1">+</button></div>
+        </div>
+      </div>
+      <div class="card bcard">
+        <div class="card-head"><div class="grow"><div class="card-title mate">队友伤害倍率</div><div class="desc">队友打出的伤害</div></div><label class="sw on"></label></div>
+        <div class="mrow bslider" data-cat="mate" style="border-top:none;padding-top:2px">
+          <div class="slider" data-slider style="--c:var(--mate)"><input type="range" min="0.1" max="10" step="0.1" value="1.0" /></div>
+          <div class="rctl"><span class="val" data-out>1.0x</span><button class="mini" data-step="-0.1">−</button><button class="mini" data-step="0.1">+</button></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="notes">
+    <div class="note good"><b>优点</b><ul><li>直接复用现有卡片渲染，改动最小</li><li>每张卡一个开关，语义最直白</li><li>半行两卡，和现有页面风格一致</li></ul></div>
+    <div class="note bad"><b>缺点</b><ul><li>占 1.5 行，第三张卡单独一行留空</li><li>没有统一总开关，需要额外"全部关闭"</li><li>三张卡分散，"倍率"整体感弱</li></ul></div>
+    <div class="note impl"><b>接入改动</b><ul><li>manifest 从单 feature 变多卡片，或拆成 3 个 feature_id</li><li>持久化从 1 个倍率键变 3 个</li></ul></div>
+  </div>
+
+  <h2>方案 C：档位优先 + 微调<span class="tag warn">适合不想拖滑块的人</span></h2>
+  <p class="sub">每行先给常用档位按钮（一点即到），右边保留滑块做微调。削弱档和增强档都直接可见，不用猜滑块位置。</p>
+  <div class="demo">
+    <div class="demo-head"><span class="demo-name">主窗口 610×700 · 武器 Tab（模拟）</span><span class="demo-name">方案 C</span></div>
+    <div class="dtabs"><span class="dtab">人物属性</span><span class="dtab on">武器</span><span class="dtab">其他</span></div>
+    <div class="card" data-summary>
+      <div class="card-head">
+        <div class="grow">
+          <div class="card-title">💥 调整伤害倍率</div>
+          <div class="desc">点档位快速设置，拖滑块精调；1.0x 为原版。</div>
+        </div>
+        <label class="sw on" data-master></label>
+      </div>
+
+      <div class="mrow" data-cat="enemy">
+        <span class="mname c-enemy">敌人</span>
+        <div class="presets"><button class="pbtn" data-set="0.2">0.2x</button><button class="pbtn" data-set="0.5">0.5x</button><button class="pbtn" data-set="1">1x</button><button class="pbtn" data-set="5">5x</button></div>
+        <div class="slider" data-slider style="--c:var(--enemy)"><input type="range" min="0.1" max="10" step="0.1" value="0.5" /></div>
+        <div class="rctl"><span class="val" data-out>0.5x</span></div>
+      </div>
+
+      <div class="mrow" data-cat="self">
+        <span class="mname c-self">自己</span>
+        <div class="presets"><button class="pbtn" data-set="0.5">0.5x</button><button class="pbtn" data-set="1">1x</button><button class="pbtn" data-set="3">3x</button><button class="pbtn" data-set="10">10x</button></div>
+        <div class="slider" data-slider style="--c:var(--self)"><input type="range" min="0.1" max="10" step="0.1" value="3.0" /></div>
+        <div class="rctl"><span class="val" data-out>3.0x</span></div>
+      </div>
+
+      <div class="mrow" data-cat="mate">
+        <span class="mname c-mate">队友</span>
+        <div class="presets"><button class="pbtn" data-set="0.2">0.2x</button><button class="pbtn" data-set="1">1x</button><button class="pbtn" data-set="2">2x</button><button class="pbtn" data-set="5">5x</button></div>
+        <div class="slider" data-slider style="--c:var(--mate)"><input type="range" min="0.1" max="10" step="0.1" value="1.0" /></div>
+        <div class="rctl"><span class="val" data-out>1.0x</span></div>
+      </div>
+
+      <div class="card-foot">
+        <div class="summary">当前 · 敌人 <b data-sum="enemy">0.5x</b> ｜ 自己 <b data-sum="self">3.0x</b> ｜ 队友 <b data-sum="mate">1.0x</b></div>
+        <div class="acts"><button class="chipbtn" data-reset="1.0">全部 1.0x</button></div>
+      </div>
+    </div>
+  </div>
+  <div class="notes">
+    <div class="note good"><b>优点</b><ul><li>常用档位一点即到，操作最快</li><li>削弱 / 增强档位都显式列出，不易误操作</li><li>仍保留滑块微调，不牺牲自由度</li></ul></div>
+    <div class="note bad"><b>缺点</b><ul><li>档位按钮占宽，滑块变短</li><li>档位与滑块联动逻辑要额外处理</li></ul></div>
+    <div class="note impl"><b>接入改动</b><ul><li>同方案 A，需要自定义面板</li><li>档位按钮是新控件，规范里要补一条</li></ul></div>
+  </div>
+
+  <h2>三、三个方案都要定的共同细节</h2>
+  <div class="reqs" style="grid-template-columns:1fr 1fr">
+    <div class="req"><b>范围与步进</b><p>上限已定 10.0x，下限 0.1x（不允许 0）。最小要不要允许 <code>0</code>（0 = 完全不造成 / 不承受伤害，等于另一种无敌）。目前按 0.1x 下限。</p></div>
+    <div class="req"><b>低于 1.0x 的视觉提示</b><p>削弱时数值转蓝并显示"削弱"，增强转橙，1.0x 为灰白原版，避免用户以为只有调高。</p></div>
+    <div class="req"><b>和"金刚不坏"重叠</b><p>把敌人调到很低 ≈ 变相无敌。是否需要在 UI 上提示，或与金刚不坏互斥。</p></div>
+    <div class="req"><b>生效状态行</b><p>参考"天机傀儡"，卡片底部可加状态行：未连接 / 等待进游戏 / 已生效，让用户知道调了到底有没有生效。</p></div>
+    <div class="req"><b>持久化</b><p>三个倍率分别写入 <code>user_config.json</code>，开关是否进 <code>feature_state.json</code> 按现有持久化规范决定。</p></div>
+    <div class="req"><b>"队友"怎么判定</b><p>真人队友、人机队友、生化模式下的阵营关系不同，需要明确口径后再写逻辑。</p></div>
+  </div>
+
+  <h2>四、需要你先拍板的几个问题</h2>
+  <div class="qs">
+    <ol>
+      <li><b>作用方向</b>：倍率是"谁打出的伤害"，还是"谁挨的伤害"？（第二节可直接切换对比）</li>
+      <li><b>选哪个方案</b>：A 单卡片三行 / B 三张独立卡 / C 档位优先。</li>
+      <li><b>开关粒度</b>：统一一个总开关，还是每个阵营各一个开关，还是两者都要？</li>
+      <li><b>范围</b>：0.1x ~ 10.0x 是否合适？要不要允许 0x？上限要不要更高？</li>
+      <li><b>队友口径</b>：只算真人队友，还是人机队友也算？</li>
+    </ol>
+  </div>
+
+  <div class="foot">纯 UI 样板 · 未接任何真实逻辑 · 确认方案后再改 30_damage_multiplier 的 panel.py / manifest.json</div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  function clampRound(v, min, max){
+    v = Number(v);
+    if(!isFinite(v)) v = min;
+    v = Math.round(v * 10) / 10;
+    if(v < min) v = min;
+    if(v > max) v = max;
+    return v;
+  }
+
+  // 滑块 + 数值 + 步进 + 档位
+  document.querySelectorAll("[data-slider]").forEach(function(wrap){
+    var range = wrap.querySelector("input[type=range]");
+    var row = wrap.closest(".mrow");
+    var out = row ? row.querySelector("[data-out]") : null;
+    var min = Number(range.min), max = Number(range.max);
+
+    function render(v){
+      v = clampRound(v, min, max);
+      range.value = v;
+      if(out){
+        out.textContent = v.toFixed(1) + "x";
+        out.className = "val " + (v < 1 ? "down" : (v > 1 ? "up" : "one"));
+      }
+      var pct = ((v - min) / (max - min)) * 100;
+      wrap.style.setProperty("--pct", pct.toFixed(2) + "%");
+    }
+    wrap.__render = render;
+
+    range.addEventListener("input", function(){ render(range.value); });
+    if(row){
+      row.querySelectorAll("[data-step]").forEach(function(b){
+        b.addEventListener("click", function(){ render(Number(range.value) + Number(b.getAttribute("data-step"))); });
+      });
+      row.querySelectorAll("[data-set]").forEach(function(b){
+        b.addEventListener("click", function(){ render(b.getAttribute("data-set")); });
+      });
+    }
+    render(range.value);
+  });
+
+  // 卡片汇总行
+  document.querySelectorAll(".card[data-summary]").forEach(function(card){
+    var sums = {};
+    card.querySelectorAll("[data-sum]").forEach(function(el){ sums[el.getAttribute("data-sum")] = el; });
+    function update(){
+      card.querySelectorAll(".mrow[data-cat]").forEach(function(r){
+        var cat = r.getAttribute("data-cat");
+        var rg = r.querySelector("input[type=range]");
+        if(sums[cat] && rg) sums[cat].textContent = Number(rg.value).toFixed(1) + "x";
+      });
+    }
+    card.addEventListener("input", update);
+    card.addEventListener("click", update);
+    update();
+  });
+
+  // 开关
+  document.querySelectorAll(".sw").forEach(function(sw){
+    sw.addEventListener("click", function(){
+      sw.classList.toggle("on");
+      var on = sw.classList.contains("on");
+      if(sw.hasAttribute("data-master")){
+        var c = sw.closest(".card");
+        if(c) c.classList.toggle("off", !on);
+      }
+      var row = sw.closest(".mrow");
+      if(row && !sw.hasAttribute("data-master")) row.classList.toggle("dim", !on);
+    });
+  });
+
+  // 全部复位
+  document.querySelectorAll("[data-reset]").forEach(function(btn){
+    btn.addEventListener("click", function(){
+      var v = Number(btn.getAttribute("data-reset"));
+      var c = btn.closest(".card");
+      if(!c) return;
+      c.querySelectorAll("[data-slider]").forEach(function(w){ if(w.__render) w.__render(v); });
+    });
+  });
+
+  // 作用方向切换
+  document.querySelectorAll("[data-dir-btn]").forEach(function(btn){
+    btn.addEventListener("click", function(){
+      var d = btn.getAttribute("data-dir-btn");
+      document.documentElement.setAttribute("data-dir", d);
+      document.querySelectorAll("[data-dir-btn]").forEach(function(x){ x.classList.toggle("on", x === btn); });
+    });
+  });
+})();
+</script>
+</body>
+</html>

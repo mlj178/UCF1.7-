@@ -181,12 +181,26 @@ class GameSessionManager:
             self._save_desired_states()
 
         if feature_id == 'esp_box' and self._universal_manager:
-            if self._universal_manager.set_esp_box(enabled):
+            with self._lock:
+                scope = self._esp_target_scope
+                health_mode = self._esp_health_mode
+                health_display = self._esp_health_display
+                box_outline = self._esp_box_outline
+            # 必须带上会话里（= 持久化配置）的完整选项：只调 set_esp_box() 会用到
+            # UniversalHookManager 内部可能过期的缓存，导致「界面选的和游戏实际生效的不一致」。
+            if self._universal_manager.set_esp_state(
+                enabled, scope, health_mode, health_display, box_outline
+            ):
                 with self._lock:
                     self._applied_states[feature_id] = enabled
         self._wake_event.set()
 
     def _refresh_esp_target_scope_from_config(self):
+        """以持久化配置为准校准会话内的 ESP 选项。
+
+        所有下发路径（开关、连接、四个选项改动）都必须先调用它，避免用启动时的
+        旧缓存下发，出现「UI 显示 A、游戏里生效 B」。配置是唯一权威来源。
+        """
         try:
             from .config_runtime.config_manager import ConfigManager
             config = ConfigManager().get("esp_box") or {}
@@ -209,6 +223,7 @@ class GameSessionManager:
     def set_esp_target_scope(self, scope: str):
         """Apply the ESP target filter immediately when the DLL is connected."""
         normalized = "all_players" if scope == "all_players" else "enemy_only"
+        self._refresh_esp_target_scope_from_config()
         with self._lock:
             self._esp_target_scope = normalized
         if self._universal_manager:
@@ -225,6 +240,7 @@ class GameSessionManager:
 
     def set_esp_health_options(self, health_mode=None, health_display=None):
         """Apply the ESP health readout options immediately when the DLL is connected."""
+        self._refresh_esp_target_scope_from_config()
         with self._lock:
             if health_mode is not None:
                 self._esp_health_mode = "value" if health_mode == "value" else "percent"
@@ -246,6 +262,7 @@ class GameSessionManager:
 
     def set_esp_box_outline(self, enabled):
         """Apply the ESP box outline switch immediately when the DLL is connected."""
+        self._refresh_esp_target_scope_from_config()
         with self._lock:
             self._esp_box_outline = bool(enabled)
             esp_wanted = bool(self._desired_states.get("esp_box", False))
@@ -260,6 +277,21 @@ class GameSessionManager:
         self._wake_event.set()
         return False
     
+    def get_applied_esp_options(self):
+        """返回 DLL 当前实际生效的 ESP 选项；未连接时返回 None（没有“已生效”状态）。
+
+        用于「所选即所得」：若某次改动被 DLL 拒绝，调用方可据此把配置回退到生效值。
+        """
+        manager = self._universal_manager
+        if manager is None:
+            return None
+        try:
+            if not manager.injected:
+                return None
+            return manager.get_esp_options()
+        except Exception:
+            return None
+
     def get_desired_state(self, feature_id: str) -> bool:
         """Get desired feature state"""
         with self._lock:
@@ -289,7 +321,7 @@ class GameSessionManager:
                 self._state_machine_step()
             except Exception as e:
                 self._bus.emit('log_message', level='error', module='SessionManager',
-                              message=f'State machine error: {e}')
+                              message=f'State machine error: {e}', audience='both')
             with self._lock:
                 after = self._state
 
@@ -334,7 +366,7 @@ class GameSessionManager:
             self._state = SessionState.WAITING_GAME_READY
         
         self._bus.emit('log_message', level='info', module='SessionManager',
-                      message=f'检测到游戏进程 PID:{pid}')
+                      message=f'检测到游戏进程 PID:{pid}', audience='both')
     
     def _step_waiting_game_ready(self):
         """Step: Wait for game process to stabilize"""
@@ -352,7 +384,7 @@ class GameSessionManager:
                 self._pid_create_time = create_time
                 self._process_detected_at = time.monotonic()
             self._bus.emit('log_message', level='info', module='SessionManager',
-                          message=f'游戏进程变化 PID:{pid}')
+                          message=f'游戏进程变化 PID:{pid}', audience='both')
             return
         
         # Check if process is terminating
@@ -362,7 +394,7 @@ class GameSessionManager:
                 self._pid = None
                 self._pid_create_time = None
             self._bus.emit('log_message', level='warning', module='SessionManager',
-                          message='游戏进程不稳定，重新检测')
+                          message='游戏进程不稳定，重新检测', audience='both')
             return
         
         # Non-blocking stability window; the worker wakes again after the short poll interval.
@@ -408,13 +440,13 @@ class GameSessionManager:
                     pid=pid,
                 )
                 self._bus.emit('log_message', level='success', module='SessionManager',
-                              message='Frida 连接成功')
+                              message='Frida 连接成功', audience='both')
             else:
                 # Handle specific error reasons
                 reason_code = reason.code if isinstance(reason, FridaConnectDiagnostic) else reason
                 if reason_code == 'process_terminating':
                     self._bus.emit('log_message', level='warning', module='SessionManager',
-                                  message='游戏进程正在终止，重新检测')
+                                  message='游戏进程正在终止，重新检测', audience='both')
                     with self._lock:
                         self._state = SessionState.NO_GAME
                         self._pid = None
@@ -431,7 +463,7 @@ class GameSessionManager:
             # Check for specific error codes
             if '0xc000010a' in error_msg or 'STATUS_PROCESS_IS_TERMINATING' in error_msg:
                 self._bus.emit('log_message', level='warning', module='SessionManager',
-                              message='游戏进程正在终止，重新检测')
+                              message='游戏进程正在终止，重新检测', audience='both')
                 with self._lock:
                     self._state = SessionState.NO_GAME
                     self._pid = None
@@ -452,14 +484,14 @@ class GameSessionManager:
         if current_pid != pid or current_create_time != old_create_time:
             # Game process changed
             self._bus.emit('log_message', level='info', module='SessionManager',
-                          message='游戏进程变化，重新连接')
+                          message='游戏进程变化，重新连接', audience='both')
             self._reset_session()
             return
         
         # Check Frida connection
         if self._frida_manager and not self._frida_manager.is_ready():
             self._bus.emit('log_message', level='warning', module='SessionManager',
-                          message='Frida 连接断开')
+                          message='Frida 连接断开', audience='both')
             self._reset_session()
             return
         
@@ -496,7 +528,7 @@ class GameSessionManager:
     def _handle_connection_failure(self, reason: str):
         """Handle connection failure with retry"""
         self._bus.emit('log_message', level='error', module='SessionManager',
-                      message=reason)
+                      message=reason, audience='both')
         
         delay = self._retry_delays[min(self._retry_index, len(self._retry_delays) - 1)]
         self._retry_index = min(self._retry_index + 1, len(self._retry_delays) - 1)
@@ -523,6 +555,10 @@ class GameSessionManager:
         """Connect or inject Universal DLL only after Frida is ready and ESP is desired."""
         from .universal_hook_manager import UniversalHookManager
 
+        # 注入/复用前先按持久化配置校准选项：用户可能在游戏没开时改过下拉框，
+        # 那时只落了盘、没有下发，这里必须让配置赢，否则游戏里还是旧效果。
+        self._refresh_esp_target_scope_from_config()
+
         universal = UniversalHookManager.get_instance()
         if universal.try_connect_existing(pid):
             self._universal_manager = universal
@@ -538,7 +574,7 @@ class GameSessionManager:
                 with self._lock:
                     self._applied_states['esp_box'] = esp_wanted
             self._bus.emit('log_message', level='success', module='SessionManager',
-                          message='ESP DLL 已连接')
+                          message='ESP DLL 已连接', audience='both')
             return
 
         identity = (pid, self._pid_create_time)
@@ -562,7 +598,7 @@ class GameSessionManager:
             with self._lock:
                 self._applied_states['esp_box'] = esp_wanted
         self._bus.emit('log_message', level='success', module='SessionManager',
-                      message='ESP DLL 已在后台就绪')
+                      message='ESP DLL 已在后台就绪', audience='both')
 
     def _mark_universal_unavailable(self, reason: str):
         """Continue with Frida while keeping ESP unavailable for this process."""
@@ -571,6 +607,7 @@ class GameSessionManager:
             level='warning',
             module='SessionManager',
             message=f'{reason}，普通功能保持可用，方框模块稍后重试',
+            audience='both',
         )
         self._bus.emit(
             'universal_status',

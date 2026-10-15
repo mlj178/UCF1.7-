@@ -669,6 +669,10 @@
             //   安全：写栈之前先校验参数"像不像 (weapon, origin, dir)"，不像就自动退回注入。
             //   false = 回到旧行为（自己注入 + 跳过原函数）。
             gun_ray_redirect: true,
+            // wpnIndex 兜底：连"字典里最小的 weapon key"都拿来用，避免因为拿不到
+            // 合法 wpnIndex 而放弃注入（放弃 = 这一枪没伤害）。字典里查得到 -> HUD 不会再抛
+            // KeyNotFoundException。false 时宁可这一枪不打。
+            wpn_key_fallback: true,
 
             // ---- 复活兜底的重试策略（2026-10-15：不再"调用成功就算成功"）----
             //   实测 bug：兜底调用没抛异常就置 rescued=true，目标其实还死着也不再补 ->
@@ -889,6 +893,8 @@
             rayRedirectHits: 0,    // 接管后原版真的打掉了血 = 这一发走的是完整游戏流程
             rayRedirectMiss: 0,    // 接管后原版没打掉血 -> 退回我们自己的注入
             rayRedirectBadArgs: 0, // 参数不像一条射线 -> 不写栈，直接退回注入
+            lastDeathWpn: -1,      // 最近一次补发广播用的 wpnIndex（排查补发抛异常用）
+            lastDeathWpnOk: true,  // 该 wpnIndex 是否在 WpnDataDictionary 里
             // ---- 2026-10-15 复活兜底重试 ----
             deathRescueAttempts: 0, // 兜底实际调用次数（含重试；旧版只调用一次就不再管）
             // ---- 2026-10-15 补发广播队列 ----
@@ -1887,13 +1893,35 @@
             candidates.push({ value: Runtime.cache.eventTemplateWpnIndex, from: '原版事件' });
         }
         for (var i = 0; i < candidates.length; i += 1) {
-            var valid = checkWpnIndex(candidates[i].value);
-            if (valid === false) {
-                probe('tpl', 'wpnIndex=' + candidates[i].value + '（来源 ' + candidates[i].from +
-                    '）不在 GameManager.WpnDataDictionary 里 -> 丢弃这个候选');
-                continue;
+            var value = candidates[i].value;
+            // ★2026-10-15：以**字典原始扫描**（isValidWpnKey）为准。
+            //   HUD 的 get_wpnName / get_killMsgIcon / get_isVVIP 查的就是 GameManager.WpnDataDictionary，
+            //   查不到 -> KeyNotFoundException -> 死亡流程被异常打断（§3.5）。
+            //   而 GameManager.GetWpnData 有可能与字典不一致（c34d455f 实测：8 次注入在 TakeDamage
+            //   里抛 system error、10 次补发广播 100% 抛在"调用游戏函数"那一步）。
+            //   字典读不到时 isValidWpnKey 会放行（fail-open），所以这里不会比旧版更糟。
+            if (isValidWpnKey(value)) {
+                if (checkWpnIndex(value) === false) {
+                    probe('tpl', 'wpnIndex=' + value +
+                        ' 字典里有、GetWpnData 说没有 -> 以字典为准（HUD 查得到就不会抛）');
+                }
+                return value;
             }
-            return candidates[i].value;
+            probe('tpl', 'wpnIndex=' + value + '（来源 ' + candidates[i].from +
+                '）不在 WpnDataDictionary 里 -> 丢弃这个候选');
+        }
+        // 候选全废：退一步用字典里确实存在的 key —— 好过放弃这次注入（放弃 = 这一枪没伤害）。
+        //   代价只是击杀提示里的武器名不对；不这么做就可能让死亡流程抛 KeyNotFoundException。
+        if (Runtime.config.wpn_key_fallback) {
+            var firstKey = firstValidWpnKey();
+            if (firstKey > 0) {
+                Runtime.stats.deathWpnFixed += 1;
+                if (probeBudget('wpnFallback', 5)) {
+                    log('warn', '[probe:tpl] 武器 wpnIndex 候选都不可用，本次注入改用字典里存在的 key=' +
+                        firstKey + '（击杀提示的武器名会不对，但死亡流程不会再抛 KeyNotFoundException）');
+                }
+                return firstKey;
+            }
         }
         return -1;
     }
@@ -1925,13 +1953,24 @@
         return info;
     }
 
-    // 清掉目标的无敌状态（复活无敌）。返回清除前的值，日志里能直接看到是不是它在挡。
+    // 清掉目标的无敌状态（复活无敌 + 减伤）。返回清除前的值，日志里能直接看到是不是它在挡。
+    //   ★2026-10-15：加了 damageRate 复位。
+    //   实测（session c34d455f）"原版射线没打掉血"的次数与"目标处于无敌/减伤"的次数
+    //   **完全相等**（ray miss=547 / inv=547）—— 说明原版射线不是打不中，而是伤害被目标的
+    //   复活无敌/减伤吃成了 0，我们才被迫退回注入。注入路径有 ignoreDmgRate 可以不管减伤，
+    //   但**原版射线没有这个开关**，所以要让原版真的掉血，必须把减伤也复位。
     function clearTargetInvincibility(victim) {
         var before = readTargetDefense(victim);
         try { victim.add(OFF.Entity_isInvincible).writeU8(0); } catch (_) {}
         try {
             var hp = victim.add(OFF.Entity_healthData).readPointer();
             if (readable(hp)) hp.add(OFF.HealthData_invinsibleEndTime).writeFloat(0);
+        } catch (_) {}
+        try {
+            if (before.damageRate >= 0 && before.damageRate < 0.999) {
+                victim.add(OFF.Entity_damageRate).writeFloat(1.0);
+                before.damageRateCleared = true;
+            }
         } catch (_) {}
         return before;
     }
@@ -2023,6 +2062,9 @@
         var buf = Runtime.cache.deathBuf;
         var wpnIndex = resolveWpnIndex(weapon);
         if (wpnIndex <= 0) return null;
+        // 记下来：补发广播一旦抛异常，日志里能直接看到这次用的 key 与它的字典存在性。
+        Runtime.stats.lastDeathWpn = wpnIndex;
+        Runtime.stats.lastDeathWpnOk = isValidWpnKey(wpnIndex);
         var o = origin || { x: 0, y: 0, z: 0 };
         buf.add(OFF.Death_killer).writePointer(attacker);
         buf.add(OFF.Death_dead).writePointer(victim);
@@ -2080,6 +2122,13 @@
                 fmtPtr(rec.victim) + '（击杀提示/模式记账/复活调度走游戏原流程）');
             return true;
         } catch (error) {
+            if (step === 'call' && probeBudget('deathFixCallFail', 10)) {
+                log('warn', '[deathFix] 补发广播抛在"调用游戏函数"这一步：step=' + step +
+                    ' wpnIndex=' + Runtime.stats.lastDeathWpn +
+                    '(WpnDataDictionary=' + (Runtime.stats.lastDeathWpnOk ? 'OK' : 'MISS') + ')' +
+                    ' method=' + fmtPtr(Runtime.cache.deathMethodInfo || ptr(0)) +
+                    ' victim=' + fmtPtr(rec.victim));
+            }
             fail('deathFix:broadcast@' + step, error);
             return false;
         }
@@ -2521,6 +2570,21 @@
 
             var damage = resolveDamage(readGunDamage(weapon));
             if (!(damage > 0)) damage = resolveDamage(0) || 10;
+            // ★关键：放行原函数之前先清掉目标的复活无敌/减伤。
+            //   否则游戏自己的射线打出 0 伤害 -> 我们又得退回注入，而"注入击杀"才是
+            //   "幽灵/不复活"的唯一来源（c34d455f 实测 miss=547 / inv=547 完全相等）。
+            try {
+                var defense = clearTargetInvincibility(target.player);
+                if (defense.isInvincible === 1 || defense.invEnd > 0 || defense.damageRateCleared) {
+                    Runtime.stats.invincibleCleared += 1;
+                    if (probeBudget('rayInv', 20)) {
+                        probe('rayInv', '目标处于复活无敌/减伤，已在放行原版射线前清掉: isInvincible=' +
+                            defense.isInvincible + ' invEnd=' + Number(defense.invEnd).toFixed(2) +
+                            ' damageRate=' + Number(defense.damageRate).toFixed(3) +
+                            ' victim=' + fmtPtr(target.player));
+                    }
+                }
+            } catch (_) {}
             ctx.dd_target = {
                 player: target.player,
                 target: target,
@@ -3265,9 +3329,18 @@
                         ' source=' + entry.label + ' note=' + entry.note);
                 }
                 delete Runtime.deathWatch[key];
-            } else if (deadNow === null || nowWatch - entry.windowAt > Runtime.config.death_diag_ms) {
-                var keepRetrying = (deadNow !== null &&
-                    !entry.rescued &&
+            } else if (deadNow === null) {
+                // isDead 读不到 = 状态未知（多半是正在复活/被回收重建的那一瞬）。
+                //   ★2026-10-15 修：旧版把这种情况并入"确认没复活" -> 报假警 + 直接删记录，
+                //   兜底也跟着停（c34d455f 的假警现场：elapsed=725ms 就报"击杀后未复活"）。
+                //   现在保留记录，交给兜底 tick 用 isPlausibleVictim() 判死活；
+                //   只有超过 120s 硬上限才丢弃（防指针泄漏）。
+                if (nowWatch - entry.at > 120000) {
+                    Runtime.stats.halfDeadActive = Math.max(0, Runtime.stats.halfDeadActive - 1);
+                    delete Runtime.deathWatch[key];
+                }
+            } else if (nowWatch - entry.windowAt > Runtime.config.death_diag_ms) {
+                var keepRetrying = (!entry.rescued &&
                     Runtime.config.death_fix_respawn &&
                     entry.tries < Runtime.config.death_rescue_max_tries);
                 if (!entry.reported) {
@@ -3352,12 +3425,25 @@
             if (!Runtime.config.death_diag) return;
             if (isNull(victim)) return;
             var key = victim.toString();
-            if (Runtime.deathWatch[key]) {
-                // 同一个人再次死亡：重置窗口（上一轮要么已经复活、要么还在观察）
-                Runtime.deathWatch[key].at = Date.now();
-                Runtime.deathWatch[key].label = label;
+            var prev = Runtime.deathWatch[key];
+            if (prev) {
+                // 同一次死亡的重复登记（广播 onEnter + 我们的 watchDeath，间隔 < 1.5s）只更新标签；
+                // 但"这个人又死了一次"（间隔 >= 1.5s）必须把观察窗口和兜底计数全部重置。
+                //   ★2026-10-15 修：旧版不重置 windowAt/reported，同一个人再次死亡时会拿上一次的
+                //   窗口去比 -> 立刻判成"超时" -> 假警报 + 提前放弃兜底。
+                if (Date.now() - prev.at >= 1500) {
+                    prev.windowAt = Date.now();
+                    prev.reported = false;
+                    prev.rescued = false;
+                    prev.tries = 0;
+                    prev.lastTryAt = 0;
+                    prev.respawnTimeMs = 0;
+                    prev.scheduled = false;
+                }
+                prev.at = Date.now();
+                prev.label = label;
                 if (fromBroadcast) {
-                    Runtime.deathWatch[key].bcDone = false;
+                    prev.bcDone = false;
                     Runtime.currentDeathKey = key;
                 }
                 return;
@@ -4555,6 +4641,7 @@
         if (input.damage_override !== undefined) c.damage_override = clampFloat(toNumber(input.damage_override, c.damage_override), 0, 999999);
         if (input.fallback_to_original !== undefined) c.fallback_to_original = input.fallback_to_original === true;
         if (input.gun_ray_redirect !== undefined) c.gun_ray_redirect = input.gun_ray_redirect !== false;
+        if (input.wpn_key_fallback !== undefined) c.wpn_key_fallback = input.wpn_key_fallback !== false;
         if (input.death_rescue_max_tries !== undefined) {
             c.death_rescue_max_tries = Math.max(1, Math.floor(toNumber(input.death_rescue_max_tries, c.death_rescue_max_tries)));
         }

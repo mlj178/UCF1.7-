@@ -6,6 +6,7 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 from core.config import APP_DIR
+from core.log_manager import file_logging_enabled
 
 
 AIM_DEBUG_LOG_ENABLED = False
@@ -22,6 +23,10 @@ def _get_debug_logger():
         logger = logging.getLogger(_LOGGER_NAME)
         logger.setLevel(logging.INFO)
         logger.propagate = False
+
+        if not file_logging_enabled():
+            # 发行版：不建 logs 目录、不加 handler，等价空操作。
+            return logger
 
         if (
             _debug_handler is not None
@@ -75,7 +80,8 @@ def close_debug_log():
 
 
 def handle_event(context, event, payload):
-    if not AIM_DEBUG_LOG_ENABLED:
+    # 发行版（exe）禁止落盘：即便显式打开调试也只在开发版写文件。
+    if not AIM_DEBUG_LOG_ENABLED or not file_logging_enabled():
         return
     if event != "aim_debug_sample" or not isinstance(payload, dict) or not payload:
         return

@@ -47,9 +47,17 @@
 //        onLeave 里按保存的原始字节原样写回。原版本体在这次调用里读到的就是 0，
 //        于是 vtable._11_TryExplosion 不会被调用（不替换函数、不动控制流）。
 //     3) 摘掉物理阻挡：Physics.IgnoreCollision(弹体自身 collider, 墙 collider, true)。
-//        弹体的 collider 用 Physics.OverlapSphere(接触点附近) + Collider.attachedRigidbody
-//        == 弹体 Rigidbody 反查得到（不依赖泛型 GetComponent<Collider>，它在本
-//        二进制里没有独立函数体）。
+//        "弹体自己的 collider"按可靠性取三级（这一环原来会间歇性失败，
+//        实测约占反应式穿透的 45%，失败的那一次弹体就会继续反复撞墙）：
+//          a) Collision.contacts[0].m_ThisColliderInstanceID(+0x18)
+//             -> Object.FindObjectFromInstanceID（碰撞那一刻引擎写死的实例 ID，
+//                不受"物理步中途做物理查询"的时序影响）
+//          b) 本发弹之前验证过的 collider 缓存 st.selfColliders
+//          c) Physics.OverlapSphere + Collider.attachedRigidbody 反查（主动探路路径
+//             没有 Collision 可用，只能靠它）
+//        a/b/c 全失败 -> 把这一面墙排进 st.pendingWalls，下一个物理步
+//        （tickPendingWalls，早于 Physics.Simulate）补忽略，绝不"算了"。
+//        （不依赖泛型 GetComponent<Collider>，它在本二进制里没有独立函数体。）
 //     4) 速度写回：碰撞已经被物理求解器削弱/清零，onLeave 里把碰撞前缓存的速度
 //        写回 Rigidbody.set_velocity；缓存来自 WPN_Missile.FixedUpdate（物理步开始，
 //        一定早于碰撞回调）。拿不到缓存时退化用 Collision.relativeVelocity（+0x14），
@@ -69,8 +77,10 @@
 //     于是永远返回 true、永远不还原。
 //     薄墙（<1m）通常 1~2 个物理步就穿过，还原窗口只有几十毫秒。
 //
-//   **只处理 Environment 层**：AirWall（layer 2）不穿，避免弹体飞出地图边界。
+//   **可穿透层由 projectilePenetrableLayers 决定**（默认 0xFFFFFA77 = 除角色/命中盒层
+//   外全部），不再只认 Environment(layer 0) —— 实测这张图的物理阻挡大量落在 layer 2。
 //   只处理本地玩家弹体：人机/远程玩家的弹体保持原版（撞墙即爆）。
+//   探路射线会跳过"不可穿透层"的物体继续往后找墙（敌人/命中盒经常正好挡在墙前面）。
 //
 // RVA / 字段来源：dump.cs + IDA 汇编交叉验证
 //   Weapon_get_isMyWeapon:                 0x00B6E1D0
@@ -167,6 +177,13 @@
         Collision_collider: 0x24,
         Collision_relativeVelocity: 0x14,
         ContactPoint_normal: 0x0C,
+        // ContactPoint: m_Point(0x0) m_Normal(0xC) m_ThisColliderInstanceID(0x18)
+        //               m_OtherColliderInstanceID(0x1C) m_Separation(0x20)
+        // 碰撞那一刻引擎写在接触点里的"自己/对方 collider 实例 ID"：
+        // 反查弹体自身 collider 失败（实测占反应式穿透 ~45%）时的正解，
+        // 不受"物理步中途做 OverlapSphere 查询"的时序影响。
+        ContactPoint_thisColliderID: 0x18,
+        ContactPoint_otherColliderID: 0x1C,
         RaycastHit_point: 0x00,
         RaycastHit_normal: 0x0C,
         RaycastHit_distance: 0x1C,
@@ -216,7 +233,13 @@
             projectileGhostExtra: 0.8,       // 需要再往前走多少米才算穿过这面墙
 
             projectileIgnoreMinMs: 80,
-            projectileIgnoreMaxMs: 1200
+            projectileIgnoreMaxMs: 1200,
+            // 一次探路允许"跳过"几个不可穿透层的物体继续往后找墙。
+            // 敌人(7)/命中盒(3)/尸体(8)/幽灵(10) 经常正好挡在墙前面，只打一发会把墙漏掉
+            // （实测这类"被吃掉"的探路占 29%）。
+            projectileProbeMaxSkips: 3,
+            // 反应式路径没忽略掉的墙：记下来在下一个物理步补忽略；超过这个时间就放弃。
+            projectilePendingRetryMs: 400
         },
         stats: {
             damageHits: 0,
@@ -245,7 +268,12 @@
             projectileTriedExplosion: 0, // 原版本来会撞墙爆炸（expWhenTouchSth=1）的次数
             projectileIgnoredPairs: 0,
             projectileReleasedPairs: 0,
-            projectileOverlapMiss: 0,    // 没反查到弹体自身 collider 的次数
+            projectileOverlapMiss: 0,    // 三条路都没拿到弹体自身 collider 的次数
+            projectileContactHint: 0,    // 从 Collision 接触点直接拿到"自己 collider"的次数
+            projectileSelfColliderCache: 0, // 用缓存 collider 顶住反查失败的次数
+            projectilePendingQueued: 0,  // 反应式忽略失败 -> 排队等下一物理步补忽略的次数
+            projectilePendingFixed: 0,   // 补忽略成功的次数
+            projectilePendingExpired: 0, // 补忽略超时放弃的次数
             projectileVelFallback: 0,    // 用 relativeVelocity / forward 兜底的次数
             projectileSweepRemoved: 0,   // 心跳清理掉的僵尸记录
             projectileRayHits: 0,         // 主动探路射线命中总次数
@@ -727,6 +755,11 @@
                 v: null,
                 pos: null,
                 ignores: [],
+                // 本发弹验证过"确实挂在自己的 Rigidbody 上"的 collider（含接触点拿到的那个），
+                // OverlapSphere 反查失败时用它兜底；回池/复用时随 state 一起清掉。
+                selfColliders: null,
+                // 反应式路径没忽略掉的墙：下一个物理步（FixedUpdate 早于物理 Simulate）补一次。
+                pendingWalls: [],
                 tries: 0,
                 ghost: false,
                 ghostAt: 0,
@@ -816,6 +849,89 @@
         }
     }
 
+    // 从 Collision 的接触点里直接取出"弹体自己 / 撞到的那一方"的 collider 指针。
+    // 为什么可靠：m_ThisColliderInstanceID / m_OtherColliderInstanceID 是碰撞发生那一刻
+    // 引擎写在接触点里的实例 ID，不依赖"物理步中途做物理查询"的时序，也不依赖
+    // Collider.attachedRigidbody 反查 —— 这正是原来"反查弹体自身 collider 失败"的正解。
+    function contactCollider(collision, wantThis) {
+        if (!isReadablePtr(collision) || !native.getContacts || !native.findObjectFromInstanceID) return null;
+        try {
+            var contacts = native.getContacts(collision, ptr(0));
+            if (!isReadablePtr(contacts)) return null;
+            var len = contacts.add(OFF.Il2CppArray_length).readS32();
+            if (len <= 0 || len > 64) return null;
+            var items = contacts.add(OFF.Il2CppArray_items);
+            var offset = wantThis ? OFF.ContactPoint_thisColliderID : OFF.ContactPoint_otherColliderID;
+            var id = items.add(offset).readS32();
+            if (id === 0) return null;
+            var col = native.findObjectFromInstanceID(id, ptr(0));
+            return isReadablePtr(col) ? col : null;
+        } catch (_) {
+            return null;
+        }
+    }
+
+    // 这个 collider 是不是"挂在这颗弹的 Rigidbody 上"？
+    function isValidSelfCollider(collider, rb) {
+        if (!isReadablePtr(collider) || !isReadablePtr(rb)) return false;
+        try { return samePointer(native.getAttachedRigidbody(collider, ptr(0)), rb); } catch (_) { return false; }
+    }
+
+    // 弹体自己的 collider（接触点里的 thisCollider / otherCollider）
+    // 实测有约 0.5% 的碰撞**这一对是反的**：thisCollider 给的是墙（attachedRigidbody=0），
+    // 而 OverlapSphere 恰好也没返回弹体自己的 collider。所以两个都试，谁挂在弹体 Rigidbody 上就用谁。
+    function selfColliderFromCollision(collision, rb) {
+        var mine = contactCollider(collision, true);
+        if (isValidSelfCollider(mine, rb)) return mine;
+        var other = contactCollider(collision, false);
+        if (isValidSelfCollider(other, rb)) return other;
+        return null;
+    }
+
+    // 三条路都失败的"现场"一次性打全（实测约 2% 的墙碰撞会走到这里）。
+    // 目的是一轮定死因：到底是 contacts 读不到、thisCollider 实例 ID=0、
+    // FindObjectFromInstanceID 拿不到对象、还是对象拿得到但 attachedRigidbody 对不上，
+    // 又或者是 OverlapSphere 本身返回空。
+    function diagnoseColliderMiss(collision, rb, missile, wall) {
+        if (!Runtime.enabled) return;
+        var parts = [];
+        try {
+            var contacts = native.getContacts ? native.getContacts(collision, ptr(0)) : null;
+            if (isReadablePtr(contacts)) {
+                var len = contacts.add(OFF.Il2CppArray_length).readS32();
+                parts.push('contacts=' + len);
+                if (len > 0) {
+                    var items = contacts.add(OFF.Il2CppArray_items);
+                    var thisId = items.add(OFF.ContactPoint_thisColliderID).readS32();
+                    var otherId = items.add(OFF.ContactPoint_otherColliderID).readS32();
+                    var self = native.findObjectFromInstanceID ? native.findObjectFromInstanceID(thisId, ptr(0)) : null;
+                    var selfRb = isReadablePtr(self) ? native.getAttachedRigidbody(self, ptr(0)) : ptr(0);
+                    parts.push('thisID=' + thisId + ' otherID=' + otherId +
+                        ' this=' + self + ' thisRB=' + selfRb + ' rb=' + rb);
+                }
+            } else {
+                parts.push('contacts=不可读');
+            }
+        } catch (e) {
+            parts.push('contacts异常');
+        }
+        try {
+            var pos = readMissilePosition(missile);
+            if (pos && native.overlapSphere) {
+                var arr = native.overlapSphere(
+                    floatToU32(pos.x), floatToU32(pos.y), floatToU32(pos.z),
+                    floatToU32(1.2), 0xFFFFFFFF, 2, ptr(0));
+                parts.push('overlap=' + (isReadablePtr(arr) ? arr.add(OFF.Il2CppArray_length).readS32() : 'null'));
+            } else {
+                parts.push('overlap=跳过');
+            }
+        } catch (_) {
+            parts.push('overlap异常');
+        }
+        logLimited('collider-miss-diag', 'warn',
+            '反查失败现场：弹体=' + missile + ' 墙=' + wall + ' ' + parts.join(' '), 1000);
+    }
+
     // 可穿透的层：默认只有 Environment(layer 0，关卡几何)；
     // AirWall(layer 2，地图边界隐形墙) 默认不穿，否则弹体会飞出地图
     // （可用 config.projectilePenetrateAirWall 打开）。
@@ -875,12 +991,26 @@
         }
     }
 
-    // Physics.OverlapSphere(接触点, 1.2m) + Collider.attachedRigidbody == 弹体 Rigidbody，
-    // 反查弹体自身的 collider（含子物体上的 collider）。不依赖 GetComponent<Collider>：
-    // 这个泛型实例在本二进制里没有独立函数体，只能从 MethodInfo 走，风险更高。
-    function collectMissileColliders(rb, pos) {
+    // 找"弹体自己的 collider"（含子物体上的 collider），三级来源：
+    //   1) hint：碰撞接触点里的 thisCollider（最可靠，见 selfColliderFromCollision）
+    //   2) Physics.OverlapSphere(弹体位置, 1.2m) + Collider.attachedRigidbody == 弹体 Rigidbody
+    //   3) 调用方再用 st.selfColliders 缓存兜底（见 ignoreWallForMissile）
+    // 不依赖 GetComponent<Collider>：该泛型实例在本二进制里没有独立函数体，
+    // 只能从 MethodInfo 走，风险更高。
+    function collectMissileColliders(rb, pos, hint) {
         var found = [];
-        if (!native.overlapSphere || !native.getAttachedRigidbody || !pos || !isReadablePtr(rb)) return found;
+        if (!isReadablePtr(rb) || !native.getAttachedRigidbody) return found;
+        // 首选：碰撞回调直接给的"自己的 collider"（由接触点实例 ID 反查而来）。
+        // 只要它还挂在这颗弹的 Rigidbody 上就直接采用，不再依赖任何物理查询。
+        if (isReadablePtr(hint)) {
+            try {
+                if (samePointer(native.getAttachedRigidbody(hint, ptr(0)), rb)) {
+                    found.push(hint);
+                    Runtime.stats.projectileContactHint += 1;
+                }
+            } catch (_) {}
+        }
+        if (!native.overlapSphere || !pos) return found;
         try {
             var arr = native.overlapSphere(
                 floatToU32(pos.x), floatToU32(pos.y), floatToU32(pos.z),
@@ -893,7 +1023,12 @@
                 var c = items.add(i * 4).readPointer();
                 if (!isReadablePtr(c)) continue;
                 var crb = native.getAttachedRigidbody(c, ptr(0));
-                if (samePointer(crb, rb)) found.push(c);
+                if (!samePointer(crb, rb)) continue;
+                var dup = false;
+                for (var j = 0; j < found.length; j++) {
+                    if (samePointer(found[j], c)) { dup = true; break; }
+                }
+                if (!dup) found.push(c);
             }
         } catch (error) {
             setError('collectMissileColliders failed', error);
@@ -901,7 +1036,7 @@
         return found;
     }
 
-    function ignoreWallForMissile(missile, rb, pos, wall, st, plane) {
+    function ignoreWallForMissile(missile, rb, pos, wall, st, plane, hintCollider) {
         if (!st) return 0;
         if (!isReadablePtr(wall)) return 0;
         // 同一面墙不要重复忽略（每物理步都会探到它）。
@@ -910,13 +1045,28 @@
         for (var k = 0; k < st.ignores.length; k++) {
             if (samePointer(st.ignores[k].wall, wall)) return -1;
         }
-        var mine = collectMissileColliders(rb, pos);
+        // 找"弹体自己的 collider"，从可靠到兜底：
+        //   1) hintCollider：碰撞接触点里的 m_ThisColliderInstanceID（最可靠）
+        //   2) st.selfColliders：本发弹之前验证过的 collider（OverlapSphere 挂了也能用）
+        //   3) Physics.OverlapSphere 反查（主动探路路径没有 Collision，只能用这条）
+        var mine = collectMissileColliders(rb, pos, hintCollider);
+        if (!mine.length && st.selfColliders && st.selfColliders.length) {
+            for (var c = 0; c < st.selfColliders.length; c++) {
+                var cached = st.selfColliders[c];
+                if (!isReadablePtr(cached)) continue;
+                try {
+                    if (samePointer(native.getAttachedRigidbody(cached, ptr(0)), rb)) mine.push(cached);
+                } catch (_) {}
+            }
+            if (mine.length) Runtime.stats.projectileSelfColliderCache += 1;
+        }
         if (!mine.length) {
             Runtime.stats.projectileOverlapMiss += 1;
             logLimited('overlap-miss', 'warn',
                 '反查弹体自身 collider 失败（弹体=' + missile + ' 墙=' + wall + '），本次不忽略', 2000);
             return 0;
         }
+        st.selfColliders = mine;
         var applied = [];
         for (var i = 0; i < mine.length; i++) {
             try {
@@ -1048,15 +1198,10 @@
         }
     }
 
-    // 沿飞行方向往前探路。返回 {distance, normalY} / null。
-    // 起点前移 0.35m：即使弹体自己的 collider 也在 Environment 层，射线起点在
-    // 自身体内时不会命中背面，前移再保险一点。
-    function probeAhead(pos, v, maxDistance) {
-        if (!pos || !v || !native.raycast) return null;
-        var speed = velocityLength(v);
-        if (!(speed > 0.05)) return null;
-        var dx = v.x / speed, dy = v.y / speed, dz = v.z / speed;
-        var ox = pos.x + dx * 0.35, oy = pos.y + dy * 0.35, oz = pos.z + dz * 0.35;
+    // 单次 Raycast：从 (ox,oy,oz) 沿单位方向打一发，命中就解码成结构返回。
+    // 只做"投一次 + 解码"，多段跳过逻辑在 probeAhead 里。
+    function raycastOnce(ox, oy, oz, dx, dy, dz, maxDistance) {
+        if (!native.raycast) return null;
         try {
             ensureCache();
             var hit = Runtime.cache.hitBuf;
@@ -1082,9 +1227,10 @@
             // 不用靠猜 mask。命中物的 collider 在 RaycastHit 里存的是 instanceID，
             // 必须走 Object.FindObjectFromInstanceID 才能变成对象指针。
             var layer = -1;
+            var obj = null;
             try {
                 var id = hit.add(OFF.RaycastHit_collider).readS32();
-                var obj = native.findObjectFromInstanceID ? native.findObjectFromInstanceID(id, ptr(0)) : null;
+                obj = native.findObjectFromInstanceID ? native.findObjectFromInstanceID(id, ptr(0)) : null;
                 if (isReadablePtr(obj)) {
                     var go = native.getGameObject(obj, ptr(0));
                     if (isReadablePtr(go)) layer = native.getLayer(go, ptr(0));
@@ -1103,7 +1249,7 @@
                 }
             } catch (_) {}
             return {
-                distance: dist + 0.35,
+                distance: dist,
                 normalY: ny,
                 layer: layer,
                 objectName: probeObjectName,
@@ -1115,6 +1261,84 @@
             setError('Physics.Raycast failed', error);
             return null;
         }
+    }
+
+    // 沿飞行方向往前探路，返回"第一面可穿透层的墙"。返回 {distance, normalY, ...} / null。
+    // 起点前移 0.35m：即使弹体自己的 collider 也在可穿透层，射线起点落在自身体内时
+    // 不会命中背面，前移再保险一点。
+    //
+    // 为什么一次探路要连续打多段：敌人(Entity 7) / 命中盒(HitBox 3) / 尸体(Dead 8) /
+    // 幽灵(Ghost 10) 都不在可穿透层里，而它们经常正好挡在墙前面。只打一发的话射线会被
+    // 这些物体吃掉，"敌人背后的墙"永远探不到 -> 不忽略 -> 弹体撞上去被砍 40% 速度
+    // （实测这类"被吃掉"的探路占 29%）。命中不可穿透层就跳过它继续往后探（最多
+    // projectileProbeMaxSkips 次），这样既保住层分布诊断，又能找到墙后的墙。
+    function probeAhead(pos, v, maxDistance) {
+        if (!pos || !v || !native.raycast) return null;
+        var speed = velocityLength(v);
+        if (!(speed > 0.05)) return null;
+        var dx = v.x / speed, dy = v.y / speed, dz = v.z / speed;
+        var offset = 0.35;
+        var ox = pos.x + dx * offset, oy = pos.y + dy * offset, oz = pos.z + dz * offset;
+        var remaining = maxDistance;
+        var travelled = 0;
+        // 老版本的存档配置里没有这个键 -> undefined 会让 for 循环一次都不跑，
+        // 所以这里必须兜一个默认值。
+        var maxSkips = Runtime.config.projectileProbeMaxSkips;
+        if (!(maxSkips >= 0)) maxSkips = 3;
+        Runtime.stats.projectileRayHits += 1;
+        for (var attempt = 0; attempt <= maxSkips; attempt++) {
+            if (!(remaining > 0.05)) return null;
+            var hit = raycastOnce(ox, oy, oz, dx, dy, dz, remaining);
+            if (!hit) return null;
+            if (hit.penetrable) {
+                hit.distance = travelled + hit.distance + offset;
+                return hit;
+            }
+            // 不可穿透层：跳过它继续往后探（统计保留，日志里能看出探路被什么挡了）
+            Runtime.stats.projectileRayOtherLayers += 1;
+            var step = hit.distance + 0.05;
+            travelled += step;
+            remaining -= step;
+            ox += dx * step;
+            oy += dy * step;
+            oz += dz * step;
+        }
+        return null;
+    }
+
+    // 反应式路径"没忽略掉这面墙"的补救：把墙记下来，在下一个物理步补一次忽略。
+    // 为什么放在 FixedUpdate：它一定早于本次物理步的 Physics.Simulate，
+    // 所以补上的 IgnoreCollision 下一帧就生效，能立刻止住
+    // "反复撞同一面墙 -> 每撞一次 velocity *= 0.6"（弹体卡在墙里/悬空/减速的根因）。
+    function tickPendingWalls(st, missile, rb, pos) {
+        if (!st || !st.pendingWalls || !st.pendingWalls.length) return;
+        var now = Date.now();
+        var keep = [];
+        var retryMs = Runtime.config.projectilePendingRetryMs;
+        if (!(retryMs > 0)) retryMs = 400;   // 老存档没有这个键时的兜底
+        var attempts = 0;                    // 每一物理步最多补一次，避免"补不上的墙"刷查询
+        for (var i = 0; i < st.pendingWalls.length; i++) {
+            var p = st.pendingWalls[i];
+            if (now - p.at > retryMs) {
+                Runtime.stats.projectilePendingExpired += 1;
+                logLimited('pending-expire', 'warn',
+                    '未忽略的墙补忽略超时（弹体=' + missile + ' 墙=' + p.wall + '）', 2000);
+                continue;
+            }
+            if (attempts >= 1) { keep.push(p); continue; }
+            attempts += 1;
+            var applied = ignoreWallForMissile(missile, rb, pos, p.wall, st);
+            if (applied !== 0) {
+                Runtime.stats.projectilePendingFixed += 1;
+                if (applied > 0) {
+                    logLimited('pending-fixed', 'info',
+                        '补忽略未忽略的墙成功（弹体=' + missile + ' 墙=' + p.wall + '）', 500);
+                }
+                continue;   // 补上了就丢掉这条
+            }
+            keep.push(p);
+        }
+        st.pendingWalls = keep;
     }
 
     // ---------------- 主动穿墙（主路径）----------------
@@ -1133,7 +1357,8 @@
             if (!pos || !v) return;
             var hit = probeAhead(pos, v, Runtime.config.projectileProbeLookahead);
             if (!hit) return;
-            Runtime.stats.projectileRayHits += 1;
+            // probeAhead 只会返回"可穿透层的墙"：不可穿透层已经在函数内部跳过，
+            // 这里的 penetrable 分支只是防御性兜底。
             if (!hit.penetrable) {
                 Runtime.stats.projectileRayOtherLayers += 1;
                 return;
@@ -1231,11 +1456,14 @@
             Runtime.stats.lastReject = 'noCollider';
             return null;
         }
+        // 先读接触法线（不管是不是可穿透层都读）：这样"被判成不可穿透层"的碰撞
+        // 日志里也能看到当时的法线，排查"墙被误判成 floorLike"时才有依据。
+        var ny = readContactNormalY(collision);
+        Runtime.stats.lastWallNormalY = (ny === null ? -2.0 : ny);
+
         Runtime.stats.lastReject = 'layer';
         if (!isEnvironmentCollider(wall)) return null;
 
-        var ny = readContactNormalY(collision);
-        Runtime.stats.lastWallNormalY = (ny === null ? -2.0 : ny);
         if (ny === null) {
             // 读不到接触点：保守按地板处理，不穿透（保证滚雷/落地行为不被误伤）。
             Runtime.stats.lastReject = 'noNormal';
@@ -1260,7 +1488,9 @@
                 '弹体碰撞：missile=' + missile +
                 ' 层=' + layer + '(' + layerName(layer) + ')' +
                 (who ? ' 对象=' + who : '') +
-                ' normalY=' + (hit ? ny.toFixed(2) : 'n/a') +
+                // 法线永远打出来（-2.00 是"没读到"的哨兵值）：排查"明明是墙却被判
+                // floorLike"时，原来的 'n/a' 会把唯一有用的数值藏掉。
+                ' normalY=' + (isFinite(ny) && ny > -1.5 ? ny.toFixed(2) : 'n/a') +
                 ' 判定=' + (hit ? '墙面→穿墙' : ('不穿墙/' + Runtime.stats.lastReject)), 200);
         } catch (_) {}
     }
@@ -1302,9 +1532,21 @@
                 if (source !== 'cache') Runtime.stats.projectileVelFallback += 1;
             }
 
-            // 2) 忽略这一面墙（弹体自己的 collider 由 OverlapSphere 反查）
+            // 2) 忽略这一面墙。弹体自己的 collider 首选"碰撞接触点里的 thisCollider 实例 ID"
+            //    （不依赖物理查询，这正是"反查弹体自身 collider 失败"的正解），
+            //    OverlapSphere 反查只作兜底。
             var pos = st.pos || readMissilePosition(missile);
-            var applied = ignoreWallForMissile(missile, rb, pos, wall, st);
+            var applied = ignoreWallForMissile(missile, rb, pos, wall, st, undefined,
+                selfColliderFromCollision(collision, rb));
+            if (applied === 0) {
+                // 三条路都没拿到自己的 collider：把这一面墙排进队列，下一个物理步补忽略。
+                // 绝不能就这样算了 —— 弹体会继续反复撞它，每撞一次游戏自己 velocity *= 0.6。
+                if (!st.pendingWalls) st.pendingWalls = [];
+                st.pendingWalls.push({ wall: wall, at: Date.now() });
+                if (st.pendingWalls.length > 8) st.pendingWalls.shift();
+                Runtime.stats.projectilePendingQueued += 1;
+                try { diagnoseColliderMiss(collision, rb, missile, wall); } catch (_) {}
+            }
 
             Runtime.stats.projectilePenetrated += 1;
             st.tries += 1;
@@ -1433,6 +1675,8 @@
                         if (pos) st.pos = pos;
                         if (v && velocityLength(v) >= 0.05) st.v = v;
                         tickMissileIgnores(st, pos);
+                        // 反应式没忽略掉的墙：在这里（物理步之前）补忽略
+                        tickPendingWalls(st, missile, rb, pos);
                         tickMissileGhost(st, missile, rb, pos, v);
                     } catch (error) {
                         setError('WPN_Missile.FixedUpdate onEnter failed', error);
@@ -1563,8 +1807,12 @@
     function logProjectileBeat() {
         var keys = Object.keys(Runtime.missiles);
         var liveGhosts = 0;
+        var livePending = 0;
         for (var i = 0; i < keys.length; i++) {
-            if (Runtime.missiles[keys[i]] && Runtime.missiles[keys[i]].ghost) liveGhosts += 1;
+            var st = Runtime.missiles[keys[i]];
+            if (!st) continue;
+            if (st.ghost) liveGhosts += 1;
+            if (st.pendingWalls && st.pendingWalls.length) livePending += st.pendingWalls.length;
         }
         var s = Runtime.stats;
         log('info', '[beat] 弹体穿墙 碰撞=' + s.projectileCollisions + '(本地' + s.projectileLocalCollisions + ')' +
@@ -1577,6 +1825,11 @@
             ' | FixedUpdate=' + s.projectileFixedSeen + '(本地' + s.projectileFixedLocal + '/非我' + s.projectileFixedNotMine + ')' +
             ' 追踪弹=' + keys.length + ' 穿墙中=' + liveGhosts +
             ' 还原失败=' + s.projectileGhostFail +
+            ' 反查失败=' + s.projectileOverlapMiss +
+            ' 接触点collider=' + s.projectileContactHint +
+            ' 缓存兜底=' + s.projectileSelfColliderCache +
+            ' 补忽略=' + s.projectilePendingFixed +
+            '(排队' + s.projectilePendingQueued + '/超时' + s.projectilePendingExpired + '/未决' + livePending + ')' +
             ' isMy原始=' + (s.lastIsMyRaw || '-') +
             ' 探路层分布=' + probeHistogramText() +
             ' lastReject=' + s.lastReject + ' layer=' + s.lastWallLayer +
@@ -1649,6 +1902,8 @@
             ' 掩码=0x' + environmentMask().toString(16) +
             ' 探路=' + Runtime.config.projectileProbeLookahead + 'm 法线阈值=' + Runtime.config.projectileWallMaxNormalY +
             ' 窗口=' + Runtime.config.projectileIgnoreMinMs + '~' + Runtime.config.projectileIgnoreMaxMs + 'ms' +
+            ' 探路跳过=' + Runtime.config.projectileProbeMaxSkips +
+            ' 补忽略窗口=' + Runtime.config.projectilePendingRetryMs + 'ms' +
             ' AirWall穿透=' + Runtime.config.projectilePenetrateAirWall +
             ' | raycast=' + (native.raycast ? 'OK' : 'MISSING') +
             ' findObject=' + (native.findObjectFromInstanceID ? 'OK' : 'MISSING') +
@@ -1745,6 +2000,14 @@
         if (Runtime.config.projectileIgnoreMaxMs < Runtime.config.projectileIgnoreMinMs) {
             Runtime.config.projectileIgnoreMaxMs = Runtime.config.projectileIgnoreMinMs;
         }
+        if (input.projectileProbeMaxSkips !== undefined) {
+            Runtime.config.projectileProbeMaxSkips =
+                Math.round(toBoundedNumber(input.projectileProbeMaxSkips, 0, 8, Runtime.config.projectileProbeMaxSkips));
+        }
+        if (input.projectilePendingRetryMs !== undefined) {
+            Runtime.config.projectilePendingRetryMs =
+                Math.round(toBoundedNumber(input.projectilePendingRetryMs, 50, 3000, Runtime.config.projectilePendingRetryMs));
+        }
         log('info', 'config changed: forceHitboxOnlyDuringLocalDamage=' +
             Runtime.config.forceHitboxOnlyDuringLocalDamage +
             ', projectileWallPenetration=' + Runtime.config.projectileWallPenetration +
@@ -1755,7 +2018,9 @@
             ', projectileProbeLookahead=' + Runtime.config.projectileProbeLookahead +
             ', projectileGhostExtra=' + Runtime.config.projectileGhostExtra +
             ', projectileIgnoreMinMs=' + Runtime.config.projectileIgnoreMinMs +
-            ', projectileIgnoreMaxMs=' + Runtime.config.projectileIgnoreMaxMs);
+            ', projectileIgnoreMaxMs=' + Runtime.config.projectileIgnoreMaxMs +
+            ', projectileProbeMaxSkips=' + Runtime.config.projectileProbeMaxSkips +
+            ', projectilePendingRetryMs=' + Runtime.config.projectilePendingRetryMs);
         return getStatus();
     }
 
@@ -1798,6 +2063,11 @@
             projectile_ignored_pairs: Runtime.stats.projectileIgnoredPairs,
             projectile_released_pairs: Runtime.stats.projectileReleasedPairs,
             projectile_overlap_miss: Runtime.stats.projectileOverlapMiss,
+            projectile_contact_hint: Runtime.stats.projectileContactHint,
+            projectile_self_collider_cache: Runtime.stats.projectileSelfColliderCache,
+            projectile_pending_queued: Runtime.stats.projectilePendingQueued,
+            projectile_pending_fixed: Runtime.stats.projectilePendingFixed,
+            projectile_pending_expired: Runtime.stats.projectilePendingExpired,
             projectile_vel_fallback: Runtime.stats.projectileVelFallback,
             projectile_sweep_removed: Runtime.stats.projectileSweepRemoved,
             projectile_ray_hits: Runtime.stats.projectileRayHits,
