@@ -66,6 +66,11 @@ class EspTargetScopeStaticTests(unittest.TestCase):
         self.assertIn("血条和数值", panel)
         self.assertIn("esp_health_mode", panel)
         self.assertIn("esp_health_display", panel)
+        # 方框轮廓独立开关：只想要血条/数值的用户可以关掉方框。
+        self.assertTrue(manifest["config"]["esp_box_outline"])
+        self.assertIn("方框轮廓", panel)
+        self.assertIn("esp_box_outline", panel)
+        self.assertIn("CTkSwitch", panel)
 
     def test_python_live_sync_path_has_health_options(self):
         manager = (PACKAGE_ROOT / "core" / "universal_hook_manager.py").read_text(encoding="utf-8")
@@ -76,6 +81,12 @@ class EspTargetScopeStaticTests(unittest.TestCase):
         self.assertIn("esp_health_display", manager)
         self.assertIn("set_esp_health_options", session)
         self.assertIn("set_esp_health_options", service)
+        self.assertIn("set_esp_box_outline", manager)
+        self.assertIn("esp_box_outline", manager)
+        self.assertIn("set_esp_box_outline", session)
+        self.assertIn("esp_box_outline", session)
+        self.assertIn("set_esp_box_outline", service)
+        self.assertIn("esp_box_outline", service)
 
     def test_native_state_and_pipe_support_health_options(self):
         state = (SOURCE_ROOT / "esp" / "esp_state.h").read_text(encoding="utf-8")
@@ -89,6 +100,10 @@ class EspTargetScopeStaticTests(unittest.TestCase):
         self.assertIn("DrawHealthOverlay", renderer)
         self.assertIn("MODE_VALUE", renderer)
         self.assertIn("ObscuredInt_hidden", game_manager)
+        # 方框轮廓开关：状态 + 管道字段 + 渲染器门控
+        self.assertIn("IsBoxOutlineEnabled", state)
+        self.assertIn("esp_box_outline", pipe)
+        self.assertIn("IsBoxOutlineEnabled", renderer)
 
     def test_gameassembly_minhook_hooks_are_removed(self):
         """DLL 不得再对 GameAssembly 函数打 MinHook（双引擎重复挂钩闪退修复）。"""

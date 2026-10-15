@@ -39,6 +39,11 @@ public:
         return m_allPlayers.load(std::memory_order_acquire);
     }
 
+    // 方框轮廓开关：关闭后仍按血量选项画血条/数值，只是不画四周方框。
+    bool IsBoxOutlineEnabled() const {
+        return m_boxOutline.load(std::memory_order_acquire);
+    }
+
     int GetHealthMode() const {
         return m_healthMode.load(std::memory_order_acquire);
     }
@@ -47,13 +52,20 @@ public:
         return m_healthDisplay.load(std::memory_order_acquire);
     }
 
-    // 兼容旧调用：只改开关/范围，血量选项沿用当前值。
+    // 兼容旧调用：只改开关/范围，其余选项沿用当前值。
     void SetState(bool enabled, bool allPlayers, int revision = 0) {
-        SetState(enabled, allPlayers, GetHealthMode(), GetHealthDisplay(), revision);
+        SetState(enabled, allPlayers, IsBoxOutlineEnabled(),
+                 GetHealthMode(), GetHealthDisplay(), revision);
     }
 
     void SetState(bool enabled, bool allPlayers, int healthMode, int healthDisplay,
                   int revision = 0) {
+        SetState(enabled, allPlayers, IsBoxOutlineEnabled(),
+                 healthMode, healthDisplay, revision);
+    }
+
+    void SetState(bool enabled, bool allPlayers, bool boxOutline,
+                  int healthMode, int healthDisplay, int revision = 0) {
         if (revision == 0) {
             revision = m_revision.load(std::memory_order_acquire) + 1;
         }
@@ -61,6 +73,7 @@ public:
         if (revision > current_rev) {
             m_boxEnabled.store(enabled, std::memory_order_release);
             m_allPlayers.store(allPlayers, std::memory_order_release);
+            m_boxOutline.store(boxOutline, std::memory_order_release);
             m_healthMode.store(esphealth::NormalizeMode(healthMode), std::memory_order_release);
             m_healthDisplay.store(esphealth::NormalizeDisplay(healthDisplay),
                                   std::memory_order_release);
@@ -69,7 +82,8 @@ public:
     }
 
     void SetBoxEnabled(bool enabled, int revision = 0) {
-        SetState(enabled, IsAllPlayersEnabled(), GetHealthMode(), GetHealthDisplay(), revision);
+        SetState(enabled, IsAllPlayersEnabled(), IsBoxOutlineEnabled(),
+                 GetHealthMode(), GetHealthDisplay(), revision);
     }
 
     int GetRevision() const {
@@ -79,6 +93,7 @@ public:
     void Reset() {
         m_boxEnabled.store(false, std::memory_order_release);
         m_allPlayers.store(false, std::memory_order_release);
+        m_boxOutline.store(true, std::memory_order_release);
         m_healthMode.store(esphealth::MODE_PERCENT, std::memory_order_release);
         m_healthDisplay.store(esphealth::DISPLAY_BOTH, std::memory_order_release);
         m_revision.store(0, std::memory_order_release);
@@ -88,6 +103,7 @@ private:
     ESPState()
         : m_boxEnabled(false),
           m_allPlayers(false),
+          m_boxOutline(true),
           m_healthMode(esphealth::MODE_PERCENT),
           m_healthDisplay(esphealth::DISPLAY_BOTH),
           m_revision(0) {}
@@ -96,6 +112,7 @@ private:
 
     std::atomic<bool> m_boxEnabled;
     std::atomic<bool> m_allPlayers;
+    std::atomic<bool> m_boxOutline;
     std::atomic<int> m_healthMode;
     std::atomic<int> m_healthDisplay;
     std::atomic<int> m_revision;

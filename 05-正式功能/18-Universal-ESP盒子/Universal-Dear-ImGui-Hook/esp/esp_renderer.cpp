@@ -147,7 +147,10 @@ void ESPRenderer::DrawPlayerESP(void* player, void* localPlayer) {
         }
 
         ImVec4 color = GetPlayerColor(player, localPlayer);
-        DrawBox(center, hitbox.width, hitbox.height, color, config::BOX_THICKNESS);
+        // 方框轮廓可单独关闭：关闭后仍按血量选项画血条/数值。
+        if (ESPState::Instance().IsBoxOutlineEnabled()) {
+            DrawBox(center, hitbox.width, hitbox.height, color, config::BOX_THICKNESS);
+        }
 
         PlayerHealthInfo health;
         if (GameManager::GetPlayerHealth(player, &health)) {
@@ -193,7 +196,9 @@ void ESPRenderer::DrawPlayerESPFallback(void* player, void* localPlayer, bool sh
     }
 
     ImVec4 color = GetPlayerColor(player, localPlayer);
-    DrawBox(center, boxWidth, boxHeight, color, config::BOX_THICKNESS);
+    if (ESPState::Instance().IsBoxOutlineEnabled()) {
+        DrawBox(center, boxWidth, boxHeight, color, config::BOX_THICKNESS);
+    }
 
     PlayerHealthInfo health;
     if (GameManager::GetPlayerHealth(player, &health)) {

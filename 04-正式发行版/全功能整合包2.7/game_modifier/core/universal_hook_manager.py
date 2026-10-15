@@ -101,8 +101,10 @@ class UniversalHookManager:
     PIPE_TIMEOUT_MS = 3000  # 3 seconds timeout for pipe operations
     # 3 = 增加 esp_health_mode / esp_health_display（血量显示格式与内容）。
     # 必须与 DLL 一致；不匹配时拒绝复用进程内的旧 DLL（旧版带双引擎重复挂钩风险）。
-    # v4：血量数值模式只显示剩余值（不再 "当前/上限"）；旧 DLL 必须重启游戏后重新注入。
-    PROTOCOL_VERSION = 4  # Must match DLL
+    # v4：血量数值模式只显示剩余值（不再 "当前/上限"）。
+    # v5：新增 esp_box_outline（方框轮廓开关，关闭后仍画血条/数值）。
+    # 旧 DLL 必须重启游戏后重新注入。
+    PROTOCOL_VERSION = 5  # Must match DLL
     FILE_FLAG_OVERLAPPED = 0x40000000
     ERROR_IO_PENDING = 997
     WAIT_OBJECT_0 = 0
@@ -130,6 +132,7 @@ class UniversalHookManager:
         # 血量显示：percent=百分比 / value=剩余数值（只显示当前血量）；bar=仅血条 / text=仅数值 / both=血条+数值
         self._esp_health_mode = "percent"
         self._esp_health_display = "both"
+        self._esp_box_outline = True  # 方框轮廓开关
         self.last_injection_attempted = False
         self._last_ping_time = 0.0
         self._ping_interval = 15.0  # minimum seconds between pings
@@ -339,8 +342,14 @@ class UniversalHookManager:
             self._esp_health_display = self._normalize_health_display(health_display)
         return self.set_esp_state(self._esp_box_enabled, self._esp_target_scope)
 
-    def set_esp_state(self, enabled, scope, health_mode=None, health_display=None):
-        """Set ESP enabled state, target scope and health options in one atomic update."""
+    def set_esp_box_outline(self, enabled):
+        """Turn the ESP box outline on/off and push it immediately."""
+        self._esp_box_outline = bool(enabled)
+        return self.set_esp_state(self._esp_box_enabled, self._esp_target_scope)
+
+    def set_esp_state(self, enabled, scope, health_mode=None, health_display=None,
+                      box_outline=None):
+        """Set ESP enabled state, target scope, box outline and health options at once."""
         normalized = "all_players" if scope == "all_players" else "enemy_only"
         mode = self._normalize_health_mode(health_mode) if health_mode is not None else self._esp_health_mode
         display = (
@@ -348,9 +357,10 @@ class UniversalHookManager:
             if health_display is not None
             else self._esp_health_display
         )
-        return self._set_esp_state(bool(enabled), normalized, mode, display)
+        outline = bool(box_outline) if box_outline is not None else self._esp_box_outline
+        return self._set_esp_state(bool(enabled), normalized, mode, display, outline)
 
-    def _set_esp_state(self, enabled, scope, health_mode, health_display):
+    def _set_esp_state(self, enabled, scope, health_mode, health_display, box_outline):
         if not self._pipe:
             return False
 
@@ -369,12 +379,16 @@ class UniversalHookManager:
                     "esp_all_players": scope == "all_players",
                     "esp_health_mode": mode_code,
                     "esp_health_display": display_code,
+                    "esp_box_outline": bool(box_outline),
                 })
 
                 ok = (
                     bool(response.get("ok"))
                     and bool(response.get("esp_box")) == bool(enabled)
                     and bool(response.get("esp_all_players")) == (scope == "all_players")
+                    # 必须显式回读布尔值：旧 DLL 不认识该字段（None）时必须判失败，
+                    # 否则方框开关会静默失效。
+                    and response.get("esp_box_outline") == bool(box_outline)
                     and response.get("esp_health_mode") == mode_code
                     and response.get("esp_health_display") == display_code
                     and response.get("revision", -1) >= self._revision
@@ -384,6 +398,7 @@ class UniversalHookManager:
                     self._esp_target_scope = scope
                     self._esp_health_mode = health_mode
                     self._esp_health_display = health_display
+                    self._esp_box_outline = bool(box_outline)
                     self._log("success", "方框透视已开启" if enabled else "方框透视已关闭")
                 else:
                     self._log("error", response.get("error", "方框透视设置失败"))
@@ -460,6 +475,7 @@ class UniversalHookManager:
             self._esp_health_display = {0: "bar", 1: "text", 2: "both"}.get(
                 state.get("esp_health_display"), self._esp_health_display
             )
+            self._esp_box_outline = bool(state.get("esp_box_outline", self._esp_box_outline))
             self._save_revision()
 
     def _inject(self, pid):

@@ -683,6 +683,48 @@ NativeFunction 就像 “遥控器”。
 NativeCallback 就像 “接线员”。
 你（JS）坐在电话机旁，把自己的号码留给客户（Native）。客户有事了（函数被调用），就会打电话给你，让你处理。是它控制你。
 
+---
+
+## 九、⚠️ 最大的隐形坑：原生 bool 返回值不要用 `=== true` 判定
+
+**现象**：功能显示"已启用"、Hook 日志也显示"hook installed"，但**所有判定全部失败** ——
+身份判定恒 false（日志里一堆 `notMine`）、`Physics.Raycast` 恒"没命中"，看起来像
+"Hook 没生效 / RVA 不对"，实际是**返回值类型**问题。
+
+**原因**：`NativeFunction` 声明返回 `'bool'` 时，Frida 给回来的**不保证是 JS 的 `true`**，
+可能是 `1`（数字）或其它真值。于是：
+
+```javascript
+// ❌ 错：原生 bool 用严格相等
+if (native.isMyPlayer(owner, ptr(0)) === true) { ... }   // 实际拿到 1 -> 永远 false
+if (native.raycast(...) !== true) return null;           // 实际拿到 1 -> 永远"没命中"
+
+// ✅ 对：按真值判定
+function toFlag(value) {
+    if (value === true) return true;
+    if (value === false) return false;
+    var n = Number(value);
+    if (isFinite(n)) return n !== 0;
+    return Boolean(value);
+}
+if (toFlag(native.isMyPlayer(owner, ptr(0)))) { ... }
+```
+
+**排查手法**：把原始返回值连类型一起打出来，一眼就能看出：
+
+```javascript
+var raw = native.isMyPlayer(owner, ptr(0));
+log('原始=' + typeof raw + ':' + String(raw) + ' -> toFlag=' + toFlag(raw));
+// 输出示例：原始=number:1 -> toFlag=true     ← 立刻知道是类型问题
+```
+
+**静态护栏**（避免回归）：在静态测试里禁止"含 `native.` 的行出现 `=== true` / `!== true`"。
+
+**同类坑**：`Interceptor.attach` 回调里 `args[i]` 一律是 `NativePointer`，不要当数字；
+`NativeFunction` 的浮点参数建议统一传 `floatToU32` 的位模式（`'uint'`），
+避免不同 Frida 版本对 `'float'` 的 ABI 处理差异。
+
+
 
 
 
