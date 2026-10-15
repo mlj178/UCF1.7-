@@ -70,6 +70,9 @@ class GameSessionManager:
         self._esp_health_display = "both"
         # 方框轮廓开关：关闭后仍画血条/数值
         self._esp_box_outline = True
+        # 方框透视渲染诊断（DLL 侧每帧落一份，这里按间隔读取并写入日志）
+        self._last_esp_diag_log = 0.0
+        self._esp_diag_interval = 10.0
         
         # Applied feature states (runtime, from DLL)
         self._applied_states = {}
@@ -277,6 +280,34 @@ class GameSessionManager:
         self._wake_event.set()
         return False
     
+    def _log_esp_diagnostics(self):
+        """按间隔把 DLL 侧渲染诊断写进日志（界面 + 开发版日志文件）。
+
+        方框"失效"时这几行能直接说明原因：候选=0 说明会话/容器不对，
+        来源拒=全部说明模式策略把候选都拒了，对象拒=全部说明死活/生成过滤拒了。
+        """
+        now = time.time()
+        if now - self._last_esp_diag_log < self._esp_diag_interval:
+            return
+        self._last_esp_diag_log = now
+        try:
+            diag = self._universal_manager.fetch_diagnostics()
+        except Exception:
+            return
+        if not diag:
+            return
+        self._bus.emit(
+            'log_message',
+            level='info',
+            module='SessionManager',
+            audience='both',
+            message=(
+                "方框透视诊断: mode={game_mode} epoch={epoch} 回合结束={round_over} 候选={candidates} "
+                "来源拒={rejected_source} 对象拒={rejected_object} 敌我拒={rejected_team} "
+                "已画={drawn}(来源兜底={relaxed_drawn})"
+            ).format(**diag),
+        )
+
     def get_applied_esp_options(self):
         """返回 DLL 当前实际生效的 ESP 选项；未连接时返回 None（没有“已生效”状态）。
 
@@ -504,6 +535,8 @@ class GameSessionManager:
                     status='unavailable',
                     pid=pid,
                 )
+            else:
+                self._log_esp_diagnostics()
 
         with self._lock:
             esp_wanted = bool(self._desired_states.get('esp_box', False))

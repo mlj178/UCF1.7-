@@ -63,7 +63,10 @@ constexpr bool IsSourceEligible(int gameMode, std::uint32_t sources, bool botFre
     if (IsNanoMode(gameMode)) {
         return inAlive || freshBot;
     }
-    return false;
+    // 模式读不到/不认识（读取失败或新增模式）时不能把整帧候选全拒掉，
+    // 否则退出房间再进新房间后会表现为“方框透视整个失效”。这里放行，
+    // 交给 IsPlayerDead / IsPlayerSpawned / epoch / 类校验去过滤。
+    return true;
 }
 
 } // namespace policy

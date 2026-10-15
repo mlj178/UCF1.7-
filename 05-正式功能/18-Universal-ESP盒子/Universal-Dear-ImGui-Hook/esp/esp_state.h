@@ -39,6 +39,48 @@ public:
         return m_allPlayers.load(std::memory_order_acquire);
     }
 
+    // ---- 渲染诊断（外部经命名管道读取）------------------------------------
+    // 方框整帧为空时，用来判断到底是"没有候选""被来源策略拒了"还是"被死活/敌我过滤拒了"。
+    struct Diagnostics {
+        int gameMode = -1;
+        int epoch = 0;
+        int roundOver = 0;
+        int candidates = 0;
+        int rejectedSource = 0;
+        int rejectedObject = 0;
+        int rejectedTeam = 0;
+        int drawn = 0;
+        int relaxedDrawn = 0;
+    };
+
+    void SetDiagnostics(int gameMode, unsigned long epoch, int roundOver, int candidates,
+                        int rejectedSource, int rejectedObject, int rejectedTeam,
+                        int drawn, int relaxedDrawn) {
+        m_diagGameMode.store(gameMode, std::memory_order_relaxed);
+        m_diagEpoch.store(static_cast<int>(epoch), std::memory_order_relaxed);
+        m_diagRoundOver.store(roundOver, std::memory_order_relaxed);
+        m_diagCandidates.store(candidates, std::memory_order_relaxed);
+        m_diagRejectedSource.store(rejectedSource, std::memory_order_relaxed);
+        m_diagRejectedObject.store(rejectedObject, std::memory_order_relaxed);
+        m_diagRejectedTeam.store(rejectedTeam, std::memory_order_relaxed);
+        m_diagDrawn.store(drawn, std::memory_order_relaxed);
+        m_diagRelaxedDrawn.store(relaxedDrawn, std::memory_order_relaxed);
+    }
+
+    Diagnostics GetDiagnostics() const {
+        Diagnostics d;
+        d.gameMode = m_diagGameMode.load(std::memory_order_relaxed);
+        d.epoch = m_diagEpoch.load(std::memory_order_relaxed);
+        d.roundOver = m_diagRoundOver.load(std::memory_order_relaxed);
+        d.candidates = m_diagCandidates.load(std::memory_order_relaxed);
+        d.rejectedSource = m_diagRejectedSource.load(std::memory_order_relaxed);
+        d.rejectedObject = m_diagRejectedObject.load(std::memory_order_relaxed);
+        d.rejectedTeam = m_diagRejectedTeam.load(std::memory_order_relaxed);
+        d.drawn = m_diagDrawn.load(std::memory_order_relaxed);
+        d.relaxedDrawn = m_diagRelaxedDrawn.load(std::memory_order_relaxed);
+        return d;
+    }
+
     // 方框轮廓开关：关闭后仍按血量选项画血条/数值，只是不画四周方框。
     bool IsBoxOutlineEnabled() const {
         return m_boxOutline.load(std::memory_order_acquire);
@@ -113,6 +155,15 @@ private:
     std::atomic<bool> m_boxEnabled;
     std::atomic<bool> m_allPlayers;
     std::atomic<bool> m_boxOutline;
+    std::atomic<int> m_diagGameMode{ -1 };
+    std::atomic<int> m_diagEpoch{ 0 };
+    std::atomic<int> m_diagRoundOver{ 0 };
+    std::atomic<int> m_diagCandidates{ 0 };
+    std::atomic<int> m_diagRejectedSource{ 0 };
+    std::atomic<int> m_diagRejectedObject{ 0 };
+    std::atomic<int> m_diagRejectedTeam{ 0 };
+    std::atomic<int> m_diagDrawn{ 0 };
+    std::atomic<int> m_diagRelaxedDrawn{ 0 };
     std::atomic<int> m_healthMode;
     std::atomic<int> m_healthDisplay;
     std::atomic<int> m_revision;

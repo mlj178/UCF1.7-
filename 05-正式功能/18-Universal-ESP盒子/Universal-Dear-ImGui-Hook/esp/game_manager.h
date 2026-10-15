@@ -60,11 +60,14 @@ public:
     static bool BuildPlayerSnapshot(PlayerSnapshot* outSnapshot);
     static int GetGameMode();
     static bool IsGameRoundOver();
+    // relaxed = true 时跳过“按模式挑容器”的来源筛选与回合结束闸门（其它硬过滤照旧），
+    // 供渲染器在第一遍把整帧候选全部拒掉时做一次兜底重试。
     static bool IsCandidateRenderable(
         const PlayerCandidate& candidate,
         const PlayerSnapshot& snapshot,
         void* localPlayer,
-        DWORD now);
+        DWORD now,
+        bool relaxed = false);
     static bool IsEnemy(void* player, void* localPlayer);
 
     static bool IsValidPlayer(void* player);

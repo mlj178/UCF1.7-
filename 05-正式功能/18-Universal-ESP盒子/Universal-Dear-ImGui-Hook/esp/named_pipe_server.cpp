@@ -15,10 +15,11 @@ static std::atomic<bool> s_unload_requested{false};
 // 3 = 增加 esp_health_mode / esp_health_display（血量显示格式与内容）。
 // 4 = 血量数值模式只显示剩余值（不再 "当前/上限"）。
 // 5 = 增加 esp_box_outline（方框轮廓开关；关闭后仍画血条/数值）。
+// 6 = 增加 esp_diag_* 渲染诊断字段（会话自愈 + 渲染兜底同批修复）。
 // 版本不一致时 Python 侧会拒绝复用进程内旧 DLL，避免继续使用带双引擎
 // 重复挂钩闪退风险的旧版本。
-static const int PROTOCOL_VERSION = 5;
-static const char* DLL_VERSION = "1.8.2";
+static const int PROTOCOL_VERSION = 6;
+static const char* DLL_VERSION = "1.8.3";
 
 // Pipe name will be dynamically generated based on PID
 static std::string s_pipe_name;
@@ -138,6 +139,7 @@ static std::string BuildHelloResponse() {
 
 // Build state response
 static std::string BuildStateResponse() {
+    const ESPState::Diagnostics diag = ESPState::Instance().GetDiagnostics();
     std::ostringstream oss;
     oss << "{"
         << "\"ok\":true"
@@ -146,6 +148,15 @@ static std::string BuildStateResponse() {
         << ",\"esp_box_outline\":" << (ESPState::Instance().IsBoxOutlineEnabled() ? "true" : "false")
         << ",\"esp_health_mode\":" << ESPState::Instance().GetHealthMode()
         << ",\"esp_health_display\":" << ESPState::Instance().GetHealthDisplay()
+        << ",\"esp_diag_mode\":" << diag.gameMode
+        << ",\"esp_diag_epoch\":" << diag.epoch
+        << ",\"esp_diag_round_over\":" << diag.roundOver
+        << ",\"esp_diag_candidates\":" << diag.candidates
+        << ",\"esp_diag_rejected_source\":" << diag.rejectedSource
+        << ",\"esp_diag_rejected_object\":" << diag.rejectedObject
+        << ",\"esp_diag_rejected_team\":" << diag.rejectedTeam
+        << ",\"esp_diag_drawn\":" << diag.drawn
+        << ",\"esp_diag_relaxed_drawn\":" << diag.relaxedDrawn
         << ",\"revision\":" << ESPState::Instance().GetRevision()
         << "}";
     return oss.str();

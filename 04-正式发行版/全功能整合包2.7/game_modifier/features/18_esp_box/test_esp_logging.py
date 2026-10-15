@@ -53,6 +53,14 @@ class EspLoggingTests(unittest.TestCase):
             self.assertIn(token, source)
         self.assertIn("方框模块稍后重试", source)
 
+    def test_render_diagnostics_reach_the_log(self):
+        manager = HOOK_MANAGER.read_text(encoding="utf-8")
+        session = SESSION.read_text(encoding="utf-8")
+        self.assertIn("def fetch_diagnostics", manager)
+        self.assertIn("esp_diag_candidates", manager)
+        self.assertIn("_log_esp_diagnostics", session)
+        self.assertIn("方框透视诊断", session)
+
     def test_event_controller_writes_universal_message(self):
         """端到端：Universal 的 log_message 经 AppEventController 落到 log_writer。"""
         import types

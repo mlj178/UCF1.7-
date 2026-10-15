@@ -13,12 +13,27 @@
 //   4. 用对应阵营的倍率改写 DamageEventData.damage。
 //   5. 记录 WPN_Missile.SetOwner / SentryGun.SetData，用于导弹、RPG、
 //      榴弹和炮台这类特殊来源的归属判断。
+//   6. 保底 1 点伤害：游戏会把 float damage 截断成 int，倍率 <1 时必须保证
+//      「原本能造成伤害的一击」至少还是 1 点，否则最后一击会被截断成 0，
+//      出现「敌人一直剩一滴血、打不死人」的问题。
+//
+// 关于 1 点保底（IDA 反汇编核对 Entity.OnEntityHurt）：
+//   movss  xmm0, [ebp+eventData.damage]   ; 读 float damage
+//   cvtps2pd xmm0, xmm0
+//   cvttsd2si eax, xmm0                   ; float -> int，向零截断
+//   call   HealthData.Hurt                ; int 直接相减，没有任何下限钳制
+//   所以 damage < 1.0 时游戏实际收到 0 点伤害。
 //
 // 阵营判定来源（IDA 反编译核对）：
 //   Entity.get_team()            -> Entity.team（+0x20）
 //   ExpandUtil.IsEnemy(a, b)     -> a.team==2 || b.team==2 || a.team!=b.team
 //   ExpandUtil.IsSameTeam(a, b)  -> a!=2 && b!=2 && a==b
 //   即 team==2（Neutral）永远算敌对，同队同阵营才叫队友。
+//
+//   变身/换队：人类 <-> 生化幽灵在 ModeBase_Nano.UpdateNanoRole 里
+//   SetTeam(NanoRoleExpand.GetTeam(role))：人类 = GlobalRisk(1)、幽灵 = BlackList(0)；
+//   Player.get_isNanoGhost() 本身就是 team == BlackList。
+//   所以阵营按"实时读取的 team"判断（不用缓存快照），变身当帧就跟着变。
 //
 // RVA / 字段来源：dump.cs + script.json + 现有功能脚本交叉验证
 //   Entity_OnEntityHurt:        0x00B3F470
@@ -130,6 +145,7 @@
             min_multiplier: 0.1,
             max_multiplier: 10.0,
             max_damage: 999999.0,
+            min_applied_damage: 1.0,
             skip_local_victim: true,
             include_infect: false,
             allow_other_damage_type: true,
@@ -144,6 +160,7 @@
             multipliedEnemy: 0,
             multipliedSelf: 0,
             multipliedMate: 0,
+            flooredToMin: 0,
             skippedDisabled: 0,
             skippedPlayerBaseDepth: 0,
             skippedInvalidEvent: 0,
@@ -467,6 +484,12 @@
     }
 
     // 把伤害来源（已解析 owner 之后）归到 self / mate / enemy。
+    //
+    // 队伍必须"实时读"，不能用玩家缓存里的快照：
+    // 游戏在 ModeBase_Nano.UpdateNanoRole 里每次换角色都会 set_nanoRole 之后
+    // 调用 SetTeam(NanoRoleExpand.GetTeam(role))，也就是"人类 <-> 生化幽灵"
+    // 一变身就立刻改写 Entity.team。缓存带 2s TTL，变身那一瞬间还是旧阵营，
+    // 会把刚变幽灵的队友/自己判错，所以要按当前 team 现算。
     function classifyAttacker(attacker) {
         if (isNull(attacker) || !isReadablePtr(attacker)) return Category.UNKNOWN;
 
@@ -482,23 +505,26 @@
         }
         if (isNull(Runtime.localPlayer)) return Category.UNKNOWN;
 
-        var key = ptrKey(attacker);
-        var entry = Runtime.playerCache[key];
-        if (!entry) {
+        var team = readEntityTeam(attacker);
+        var localTeam = readEntityTeam(Runtime.localPlayer);
+
+        if (team < 0 || localTeam < 0) {
+            // 刚加入房间、还没进过玩家缓存的对象：限频刷新一次玩家列表再试。
             Runtime.stats.playerCacheMisses += 1;
             var now = Date.now();
             if (!Runtime.playerCacheMissAt || now - Runtime.playerCacheMissAt > 1000) {
                 Runtime.playerCacheMissAt = now;
                 refreshPlayerCache(true);
-                entry = Runtime.playerCache[key];
             }
+            team = readEntityTeam(attacker);
+            localTeam = readEntityTeam(Runtime.localPlayer);
+            if (team < 0 || localTeam < 0) return Category.UNKNOWN;
         }
 
-        var team = entry ? entry.team : readEntityTeam(attacker);
-        if (team < 0) return Category.UNKNOWN;
+        Runtime.localTeam = localTeam;
 
         // 与 ExpandUtil.IsSameTeam 一致：Neutral(2) 不算同队。
-        if (team !== 2 && Runtime.localTeam !== 2 && team === Runtime.localTeam) {
+        if (team !== 2 && localTeam !== 2 && team === localTeam) {
             return Category.MATE;
         }
         return Category.ENEMY;
@@ -574,7 +600,7 @@
         return value.toFixed(3);
     }
 
-    function logDamageDiagnostic(data, source, category, multiplier, newDamage, effectiveAttacker, victim, victimIsLocal) {
+    function logDamageDiagnostic(data, source, category, multiplier, newDamage, effectiveAttacker, victim, victimIsLocal, flooredToMin) {
         if (!Runtime.config.diagnostic_log) return;
 
         var truncDamage = newDamage < 0 ? Math.ceil(newDamage) : Math.floor(newDamage);
@@ -588,6 +614,7 @@
             ' round=' + Math.round(newDamage) +
             ' ceil=' + Math.ceil(newDamage) +
             ' below_one=' + (newDamage > 0 && newDamage < 1) +
+            ' floored_to_min=' + flooredToMin +
             ' type=' + data.type +
             ' tag=' + data.damageTag +
             ' wpn=' + data.wpnIndex +
@@ -665,7 +692,19 @@
         var newDamage = data.damage * multiplier;
         if (newDamage > Runtime.config.max_damage) newDamage = Runtime.config.max_damage;
         if (newDamage < 0) newDamage = 0;
-        logDamageDiagnostic(data, source, category, multiplier, newDamage, effectiveAttacker, victim, victimIsLocal);
+
+        // 保底 1 点：游戏用 cvttsd2si 把 float damage 截断成 int，
+        // 倍率 <1 时若把一击压到 1 点以下，游戏会收到 0 点伤害，
+        // 导致目标永远卡在最后一滴血。原本 >=1 点的一击至少保留 1 点。
+        var flooredToMin = false;
+        if (data.damage >= Runtime.config.min_applied_damage &&
+            newDamage < Runtime.config.min_applied_damage) {
+            newDamage = Runtime.config.min_applied_damage;
+            flooredToMin = true;
+            Runtime.stats.flooredToMin += 1;
+        }
+
+        logDamageDiagnostic(data, source, category, multiplier, newDamage, effectiveAttacker, victim, victimIsLocal, flooredToMin);
 
         try {
             var damageAddr = eventPtr.add(OFF.Dmg_damage);
@@ -887,6 +926,13 @@
         if (config.max_damage !== undefined) {
             Runtime.config.max_damage = clampFloat(config.max_damage, 1.0, 99999999.0);
         }
+        if (config.min_applied_damage !== undefined) {
+            Runtime.config.min_applied_damage = clampFloat(
+                config.min_applied_damage,
+                0.0,
+                Runtime.config.max_damage
+            );
+        }
         return getStatus();
     }
 
@@ -905,6 +951,7 @@
             multiplier: Runtime.config.self_multiplier,
             min_multiplier: Runtime.config.min_multiplier,
             max_multiplier: Runtime.config.max_multiplier,
+            min_applied_damage: Runtime.config.min_applied_damage,
             local_player_ready: !isNull(Runtime.localPlayer),
             local_team: Runtime.localTeam,
             cached_player_count: Object.keys(Runtime.playerCache).length,
@@ -920,6 +967,7 @@
             multiplied_enemy: Runtime.stats.multipliedEnemy,
             multiplied_self: Runtime.stats.multipliedSelf,
             multiplied_mate: Runtime.stats.multipliedMate,
+            floored_to_min: Runtime.stats.flooredToMin,
             skipped_disabled: Runtime.stats.skippedDisabled,
             skipped_player_base_depth: Runtime.stats.skippedPlayerBaseDepth,
             skipped_invalid_event: Runtime.stats.skippedInvalidEvent,

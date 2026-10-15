@@ -79,32 +79,59 @@ void ESPRenderer::Render() {
     int rejectedSource = 0;
     int rejectedObject = 0;
     int rejectedTeam = 0;
-    for (const PlayerCandidate& candidate : snapshot.candidates) {
-        const bool botFresh =
-            policy::HasSource(candidate.sources, policy::SourceBotUpdate) &&
-            candidate.sessionEpoch == snapshot.sessionEpoch &&
-            policy::IsBotFresh(candidate.botLastSeenTick, now);
-        if (!policy::IsSourceEligible(snapshot.gameMode, candidate.sources, botFresh)) {
-            ++rejectedSource;
-            continue;
+    int relaxedDrawn = 0;
+
+    // 一次扫描；relaxed=true 时跳过来源策略与回合结束闸门（兜底重试用）。
+    auto drawPass = [&](bool relaxed) {
+        int drawn = 0;
+        for (const PlayerCandidate& candidate : snapshot.candidates) {
+            if (!relaxed) {
+                const bool botFresh =
+                    policy::HasSource(candidate.sources, policy::SourceBotUpdate) &&
+                    candidate.sessionEpoch == snapshot.sessionEpoch &&
+                    policy::IsBotFresh(candidate.botLastSeenTick, now);
+                if (!policy::IsSourceEligible(snapshot.gameMode, candidate.sources, botFresh)) {
+                    ++rejectedSource;
+                    continue;
+                }
+            }
+            if (!GameManager::IsCandidateRenderable(candidate, snapshot, localPlayer, now,
+                                                    relaxed)) {
+                if (!relaxed) ++rejectedObject;
+                continue;
+            }
+            if (!ESPState::Instance().IsAllPlayersEnabled() &&
+                !GameManager::IsEnemy(candidate.player, localPlayer)) {
+                if (!relaxed) ++rejectedTeam;
+                continue;
+            }
+            if (SafeDrawPlayer(candidate.player, localPlayer)) ++drawn;
         }
-        if (!GameManager::IsCandidateRenderable(candidate, snapshot, localPlayer, now)) {
-            ++rejectedObject;
-            continue;
-        }
-        if (!ESPState::Instance().IsAllPlayersEnabled() &&
-            !GameManager::IsEnemy(candidate.player, localPlayer)) {
-            ++rejectedTeam;
-            continue;
-        }
-        if (SafeDrawPlayer(candidate.player, localPlayer)) ++drawnCount;
+        return drawn;
+    };
+
+    drawnCount = drawPass(false);
+    if (drawnCount == 0 && rejectedSource > 0) {
+        // 来源策略把整帧候选全拒了（模式读不到 / 退出房间再进新房间后容器分布变了）：
+        // 兜底再扫一遍，只保留死活、已生成、敌我、epoch 这些硬过滤。
+        // 宁可画出来，也不要整帧空白地“功能失效”。
+        relaxedDrawn = drawPass(true);
+        drawnCount += relaxedDrawn;
     }
+
+    // 落一份诊断，供修改器经命名管道读取（方框空白时用于定位原因）。
+    ESPState::Instance().SetDiagnostics(
+        snapshot.gameMode,
+        static_cast<unsigned long>(snapshot.sessionEpoch),
+        snapshot.roundOver ? 1 : 0,
+        static_cast<int>(snapshot.candidates.size()),
+        rejectedSource, rejectedObject, rejectedTeam, drawnCount, relaxedDrawn);
 
     s_FrameCounter++;
     if (s_FrameCounter % config::LOG_INTERVAL == 0) {
         DebugLog(
             "[ESP] mode=%d epoch=%lu states=%d/%d/%d/%d/%d candidates=%zu "
-            "rejectedSource=%d rejectedObject=%d rejectedTeam=%d drawn=%d\n",
+            "rejectedSource=%d rejectedObject=%d rejectedTeam=%d drawn=%d relaxed=%d\n",
             snapshot.gameMode,
             snapshot.sessionEpoch,
             static_cast<int>(snapshot.allPlayersState),
@@ -116,7 +143,8 @@ void ESPRenderer::Render() {
             rejectedSource,
             rejectedObject,
             rejectedTeam,
-            drawnCount);
+            drawnCount,
+            relaxedDrawn);
     }
 }
 
