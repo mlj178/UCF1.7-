@@ -1,5 +1,5 @@
 // ============================================================
-// AAAAA-bullet_wall_penetration_min.js
+// script.js（整合包运行时版本；单功能版见 05-正式功能/29-子弹穿墙/）
 //
 // feature_id: "bullet_wall_penetration"
 // 卡片名：子弹穿墙/弹体穿墙
@@ -165,14 +165,12 @@
         WeaponData_Gun_wallShotDamageRatio: 0x158,
         Klass_staticFields: 0x5C,
         LayerConstant_Environment: 0x00,
-        LayerConstant_AirWall: 0x04,
         LayerConstant_HitBox: 0x08,
         LayerConstant_LM_GunShoot: 0x38,
 
         // ---- 弹体穿墙（投射物）----
         Missile_owner: 0x30,
         Missile_rigidBody: 0x44,
-        Missile_shootSpeed: 0x4C,
         WPN_GRENADE_expWhenTouchSth: 0x74,
         Collision_collider: 0x24,
         Collision_relativeVelocity: 0x14,
@@ -294,9 +292,7 @@
             lastWallNormalY: -2.0,
             lastIsMyRaw: '',               // 最近一次 isMyPlayer 的原始返回值（typeof:值）
             lastWallObject: '',            // 撞到的对象名（诊断）
-            probeLayerHistogram: '',       // 探路命中层分布 "层号:次数 ..."（诊断用，beat 里可见）
             probeLayerCounts: {},
-            lastProbeLayer: -1,
             lastReject: ""
         }
     };

@@ -68,7 +68,6 @@
     var CALL_CONV = 'mscdecl';
 
     var DamageType = {
-        Invalid: 0,
         Gun: 1,
         Knife: 2,
         Grenade: 3,
@@ -1012,7 +1011,7 @@
             if (!Runtime.module) findGameAssembly();
             return getStatus();
         },
-        cleanup: function (payload) {
+        cleanup: function () {
             return cleanupFeature();
         },
         setConfig: function (config) {
