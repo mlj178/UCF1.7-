@@ -112,7 +112,10 @@ const RVA = {
     WPN_Missile_Recycle: 0x00B66240,
     WPN_Missile_SetOwner: 0x00B66390,
     WPN_Missile_SetWeaponData: 0x00B663C0,
-    WPN_Missile_Work: 0x00B664D0
+    WPN_Missile_Work: 0x00B664D0,
+
+    // 场景/GameManager 销毁（别的功能也用它做 resetRuntime 的时机）
+    GameManager_OnDestroy: 0x00AEBD40
 };
 
 const Offsets = {
@@ -128,6 +131,11 @@ const Offsets = {
     Ammo_key: 0x08,
     Ammo_hidden: 0x0C,
     Ammo_plain_or_fake: 0x14, // ObscuredInt: key0/hidden4/inited8/fakeValueC/fakeValueActive10（相对 clip 起点 0x8）
+    // AmmoData 里是 4 个 ObscuredInt：clip(0x8) / ammo(0x1C) / maxClip(0x30) / maxAmmo(0x44)。
+    // WPN_Throw.Throw 只减 clip；Reload 是 clip++ / ammo--。只锁 clip 时，
+    // 游戏侧的 isEmptyAmmo / isAllEmpty 之类判定仍可能认为"手雷用尽"。
+    Ammo_ammo_key: 0x1C,
+    Ammo_ammo_hidden: 0x20,
 
     Missile_owner: 0x30,
     Missile_ownerInitalTeam: 0x34,
@@ -160,6 +168,17 @@ const DefaultConfig = {
     protect_weapon_remove: true,
     protect_ttl_ms: 5000,
     max_protected_weapons: 64,
+    // 除了 clip，把备弹 ammo 也锁到 target_count（v2.13.1）
+    lock_ammo_field_too: true,
+    // 无限手雷周期统计间隔（这条日志不被 NoisyInfoMessages 过滤，默认可见）
+    lock_stats_interval_ms: 5000,
+    // Remove 守卫被自动撤销后的冷却与最大重装次数
+    remove_guard_retry_ms: 3000,
+    // v2.13.2：偶发异常不再撤销守卫，只有"窗口内异常密度超阈值"才撤销
+    remove_guard_error_window_ms: 5000,
+    remove_guard_error_threshold: 10,
+    // 重装次数上限（旧值 5 太容易用光，保护会永久失效）
+    remove_guard_max_retries: 50,
 
     runtime_tuner_enabled: true,
     owner_filter: "local_only",
@@ -266,6 +285,10 @@ const Runtime = {
     natives: {},
     protectedWeapons: {},
     trackedMissiles: {},
+    // Remove 守卫自愈用：撤销后的冷却时间点 / 已经重装过几次
+    removeGuardSuspendedUntil: 0,
+    removeGuardRetries: 0,
+    lastLockStatsAt: 0,
     explosionContexts: {},
     throwAnimContexts: {},
     touchedAnimators: {},
@@ -283,10 +306,16 @@ const Runtime = {
     stats: {
         hook_hits: 0,
         remove_original_error: 0,
+        remove_original_error_recent: 0,
         replace_auto_reverted: 0,
         lock_attempts: 0,
         lock_writes: 0,
         lock_skipped_same: 0,
+        lock_snapshot_fail: 0,
+        lock_scope_skip: 0,
+        lock_ammo_writes: 0,
+        teardown_clears: 0,
+        last_lock_snapshot: null,
         sync_plain_writes: 0,
         throw_hits: 0,
         onFireAnimEnd_hits: 0,
@@ -723,11 +752,15 @@ function getAmmoSnapshot(wpnThrowPtr) {
     const key = safeReadU32(ammoData, Offsets.Ammo_key, "ammo.key");
     const hidden = safeReadU32(ammoData, Offsets.Ammo_hidden, "ammo.hidden");
     const plain = safeReadU32(ammoData, Offsets.Ammo_plain_or_fake, "ammo.plain_or_fake");
+    const ammoKey = safeReadU32(ammoData, Offsets.Ammo_ammo_key, "ammo.ammoKey");
+    const ammoHidden = safeReadU32(ammoData, Offsets.Ammo_ammo_hidden, "ammo.ammoHidden");
     let value = null;
     if (key !== null && hidden !== null) value = (key ^ hidden) >>> 0;
-    return { ok: key !== null && hidden !== null, throwPtr: ptrStr(wpnThrowPtr), ammoDataPtr: ammoData, ammoData: ptrStr(ammoData), key: key, hidden: hidden, plain_or_fake: plain, value: value };
+    let ammoValue = null;
+    if (ammoKey !== null && ammoHidden !== null) ammoValue = (ammoKey ^ ammoHidden) >>> 0;
+    return { ok: key !== null && hidden !== null, throwPtr: ptrStr(wpnThrowPtr), ammoDataPtr: ammoData, ammoData: ptrStr(ammoData), key: key, hidden: hidden, plain_or_fake: plain, value: value, ammoKey: ammoKey, ammoHidden: ammoHidden, ammoValue: ammoValue };
 }
-function publicSnap(s) { if (!s) return null; return { ok: s.ok, throwPtr: s.throwPtr, ammoData: s.ammoData, key: s.key, hidden: s.hidden, plain_or_fake: s.plain_or_fake, value: s.value }; }
+function publicSnap(s) { if (!s) return null; return { ok: s.ok, throwPtr: s.throwPtr, ammoData: s.ammoData, key: s.key, hidden: s.hidden, plain_or_fake: s.plain_or_fake, value: s.value, ammo_value: s.ammoValue }; }
 function targetCount() { let n = parseInt(Runtime.config.target_count, 10); if (isNaN(n) || n < 1) n = 999; if (n > 9999) n = 9999; return n >>> 0; }
 
 function getThreadKey() {
@@ -871,14 +904,35 @@ function throwWeaponAllowedByScope(wpnThrowPtr, reason) {
 
 function lockAmmo(wpnThrowPtr, reason) {
     if (!Runtime.enabled || !Runtime.config.lock999_enabled) return false;
+    // 守卫被自动撤销后有冷却，到点就顺手装回来（否则一次异常会让保护永久失效）
+    try { maybeRetryRemoveGuard("lockAmmo"); } catch (e) {}
     const scopeInfo = throwWeaponAllowedByScope(wpnThrowPtr, reason);
-    if (!scopeInfo.allowedByInfiniteScope) return false;
+    if (!scopeInfo.allowedByInfiniteScope) {
+        Runtime.stats.lock_scope_skip = (Runtime.stats.lock_scope_skip || 0) + 1;
+        return false;
+    }
     Runtime.stats.lock_attempts += 1;
     const before = getAmmoSnapshot(wpnThrowPtr);
-    if (!before || !before.ok) { Runtime.stats.skipped_invalid += 1; return false; }
+    if (!before || !before.ok) {
+        Runtime.stats.lock_snapshot_fail = (Runtime.stats.lock_snapshot_fail || 0) + 1;
+        // 这条以前是静默 return（只加 skipped_invalid），日志里完全看不出来。
+        // 用 warn 级别，保证不被 NoisyInfoMessages 过滤。
+        warn("无限手雷：读不到 ammoData，本次没锁定", {
+            reason: reason, throwPtr: ptrStr(wpnThrowPtr),
+            ammoData: (before && before.ammoData) || "0x0",
+            snapshot_fail: Runtime.stats.lock_snapshot_fail,
+            note: "WPN_Throw+0xF0 为空/不可读；clip 在 ammoData+0x8，备弹 ammo 在 +0x1C"
+        });
+        return false;
+    }
+    Runtime.stats.last_lock_snapshot = publicSnap(before);
     rememberProtectedThrow(wpnThrowPtr, before, reason);
     const target = targetCount();
-    if (before.value === target) { Runtime.stats.lock_skipped_same += 1; return true; }
+    if (before.value === target) {
+        Runtime.stats.lock_skipped_same += 1;
+        lockAmmoField(before, target, reason);
+        return true;
+    }
     const newHidden = (before.key ^ target) >>> 0;
     const okHidden = safeWriteU32(before.ammoDataPtr, Offsets.Ammo_hidden, newHidden, "lock999.hidden");
     let okPlain = false;
@@ -886,14 +940,31 @@ function lockAmmo(wpnThrowPtr, reason) {
         okPlain = safeWriteU32(before.ammoDataPtr, Offsets.Ammo_plain_or_fake, target, "lock999.plain_or_fake");
         if (okPlain) Runtime.stats.sync_plain_writes += 1;
     }
+    const okAmmo = lockAmmoField(before, target, reason);
     const after = getAmmoSnapshot(wpnThrowPtr);
     if (okHidden) {
         Runtime.stats.lock_writes += 1;
         rememberProtectedThrow(wpnThrowPtr, after, reason + ".after");
-        log("手雷数量已锁定并保护武器对象", { reason: reason, before: publicSnap(before), after: publicSnap(after), target_count: target, sync_plain_value: Runtime.config.sync_plain_value, sync_plain_ok: okPlain, lock_writes: Runtime.stats.lock_writes });
+        logOnce("lock999:" + ptrStr(wpnThrowPtr), "手雷数量已锁定并保护武器对象", Runtime.config.log_interval_ms, { reason: reason, before: publicSnap(before), after: publicSnap(after), target_count: target, sync_plain_value: Runtime.config.sync_plain_value, sync_plain_ok: okPlain, lock_ammo_ok: okAmmo, lock_writes: Runtime.stats.lock_writes });
         return true;
     }
     return false;
+}
+
+// 备弹 ammo（ObscuredInt 在 0x1C / hidden 0x20）也锁到 target。
+// 为什么：Throw 只减 clip，但游戏侧还有 isEmptyAmmo / isAllEmpty 这类判定
+// （AmmoData.isAllEmpty = clip 和 ammo 都为空），只锁 clip 时仍可能触发
+// "认为手雷用尽 -> 删武器/禁止投掷"，表现就是"丢几个就没了"。
+function lockAmmoField(snap, target, reason) {
+    if (!snap || snap.ammoDataPtr === undefined) return false;
+    if (!Runtime.config.lock_ammo_field_too) return false;
+    if (snap.ammoKey === null || snap.ammoKey === undefined) return false;
+    if (snap.ammoHidden === null || snap.ammoHidden === undefined) return false;
+    if (snap.ammoValue === target) return true;
+    const newAmmoHidden = (snap.ammoKey ^ target) >>> 0;
+    const ok = safeWriteU32(snap.ammoDataPtr, Offsets.Ammo_ammo_hidden, newAmmoHidden, "lock999.ammo_hidden");
+    if (ok) Runtime.stats.lock_ammo_writes = (Runtime.stats.lock_ammo_writes || 0) + 1;
+    return ok;
 }
 
 function setupNatives() {
@@ -1179,6 +1250,7 @@ function hookThrowLike(name, rva, statName, enterConfigName, leaveConfigName) {
                     }
                 }
             } catch (e) {}
+            try { maybeLogLockStats(); } catch (e) {}
             this.pushedThrowAnimCtx = false;
             if (name === "WPN_Throw.Throw" && Runtime.enabled && Runtime.config.throw_anim_speed_enabled) {
                 this.pushedThrowAnimCtx = pushThrowAnimContext(this.self, "WPN_Throw.Throw.onEnter");
@@ -2121,8 +2193,30 @@ function installRemoveGuard() {
         } catch (e) {
             Runtime.stats.remove_original_error += 1;
             recordError("PlayerWeapons.Remove.original", e);
-            // 自愈：原函数抛出托管异常时说明 Frida 已经把游戏自己的异常帧挡掉了，
-            // 立刻撤销本替换让游戏完全回到原厂行为，避免整条武器切换流程被静默中断。
+            // v2.13.2：不再"一次异常就撤销"。
+            // 实测（v2.13.1 日志）：每次重装后几乎第一次放行的 Remove 就报 system error
+            // （remove_original_error 与 replace_auto_reverted 计数完全相等），于是
+            // "撤销 -> 3s 冷却 -> 重装 -> 又撤销"，重试额度很快用光，
+            // 剩下整局保护都失效 —— 这就是"手雷丢几个就没了"的直接原因。
+            // 改成按"错误密度"判断：窗口内连续超过阈值才撤销，偶发一次只记数 + WARN。
+            const errWindowMs = Math.max(500, parseInt(Runtime.config.remove_guard_error_window_ms, 10) || 5000);
+            const errThreshold = Math.max(2, parseInt(Runtime.config.remove_guard_error_threshold, 10) || 10);
+            const errNow = Date.now();
+            if (!Runtime.removeErrorWindow || errNow - Runtime.removeErrorWindow.at > errWindowMs) {
+                Runtime.removeErrorWindow = { at: errNow, count: 0 };
+            }
+            Runtime.removeErrorWindow.count += 1;
+            Runtime.stats.remove_original_error_recent = Runtime.removeErrorWindow.count;
+            if (Runtime.removeErrorWindow.count < errThreshold) {
+                logOnce("remove_orig_error_keep", "Remove 原函数抛异常，但保留守卫（未达撤销阈值）", errWindowMs, {
+                    error: "" + e, recent: Runtime.removeErrorWindow.count, threshold: errThreshold,
+                    total: Runtime.stats.remove_original_error,
+                    note: "偶发 system error 不撤销守卫；窗口内密集异常才撤销"
+                });
+                return;
+            }
+            // 自愈：异常密集到阈值，说明 Frida 已经把游戏自己的异常帧挡掉了，
+            // 撤销本替换让游戏完全回到原厂行为，避免整条武器切换流程被静默中断。
             try {
                 const item = Runtime.replacements.filter(function (i) { return i.address.equals(address); })[0];
                 Interceptor.revert(address);
@@ -2137,9 +2231,91 @@ function installRemoveGuard() {
                 error: "" + e, auto_reverted: Runtime.stats.replace_auto_reverted,
                 note: "原函数内部的托管异常被 Frida 变成 system error；撤销后武器切换不再经过我们的 JS"
             });
+            // v2.13.1：撤销后不再"永久失效"。记下冷却时间点，下一次锁定时自动重装
+            // （见 maybeRetryRemoveGuard）。旧行为是撤销后整个对局都不再保护手雷武器对象。
+            Runtime.removeGuardSuspendedUntil = Date.now() + (parseInt(Runtime.config.remove_guard_retry_ms, 10) || 3000);
+            if (Runtime.groups && Runtime.groups.removeGuard) Runtime.groups.removeGuard.installed = false;
+            warn("Remove 守卫已撤销，稍后会自动重装", {
+                error: "" + e, auto_reverted: Runtime.stats.replace_auto_reverted,
+                retry_ms: parseInt(Runtime.config.remove_guard_retry_ms, 10) || 3000,
+                retries_used: Runtime.removeGuardRetries || 0
+            });
         }
     }, "void", ["pointer", "pointer", "bool", "pointer"], CALL_CONV);
     replaceFunction("PlayerWeapons.Remove", address, replacement, "仅保护当前手雷对象（纯内存判断，出错自动撤销）");
+}
+
+// ---------------------------------------------------------------------------
+// 无限手雷：可观测性 + 自愈（v2.13.1）
+//   背景：锁999 的"已记录当前手雷武器保护对象 / 手雷数量已锁定"两条日志被
+//   NoisyInfoMessages 过滤掉了（默认不输出），所以从日志里根本看不出锁有没有写进去，
+//   只能靠猜。这里补一条**不被过滤**的周期统计。
+// ---------------------------------------------------------------------------
+function maybeLogLockStats() {
+    const s = Runtime.stats;
+    const now = Date.now();
+    const interval = Math.max(1000, parseInt(Runtime.config.lock_stats_interval_ms, 10) || 5000);
+    if (Runtime.lastLockStatsAt && now - Runtime.lastLockStatsAt < interval) return;
+    Runtime.lastLockStatsAt = now;
+    log("无限手雷统计", {
+        throw_hits: s.throw_hits,
+        lock_attempts: s.lock_attempts,
+        lock_writes: s.lock_writes,
+        lock_skipped_same: s.lock_skipped_same,
+        lock_snapshot_fail: s.lock_snapshot_fail || 0,
+        lock_scope_skip: s.lock_scope_skip || 0,
+        lock_ammo_writes: s.lock_ammo_writes || 0,
+        target_count: targetCount(),
+        sync_plain_value: !!Runtime.config.sync_plain_value,
+        lock_ammo_field_too: !!Runtime.config.lock_ammo_field_too,
+        remove_hits: s.remove_hits,
+        remove_blocked: s.remove_blocked,
+        remove_allowed: s.remove_allowed,
+        remove_original_error: s.remove_original_error,
+        remove_original_error_recent: s.remove_original_error_recent || 0,
+        replace_auto_reverted: s.replace_auto_reverted,
+        guard_installed: groupInstalled("removeGuard"),
+        guard_retries: Runtime.removeGuardRetries || 0,
+        protected_count: Object.keys(Runtime.protectedWeapons).length,
+        last_snapshot: s.last_lock_snapshot || null,
+        note: "lock_writes 不涨=一直没写进去；lock_snapshot_fail 涨=ammoData 读不到；remove_blocked 不涨=没人删武器"
+    });
+}
+
+// Remove 守卫因为"原函数托管异常"被撤销后，过一段冷却再装回来。
+// 时间点由 installRemoveGuard 的 catch 分支设置（也可能是 GameManager 销毁后暂缓）。
+function maybeRetryRemoveGuard(reason) {
+    if (!Runtime.enabled || !Runtime.config.lock999_enabled || !Runtime.config.protect_weapon_remove) return false;
+    const until = Runtime.removeGuardSuspendedUntil || 0;
+    if (!until || Date.now() < until) return false;
+    const max = Math.max(0, parseInt(Runtime.config.remove_guard_max_retries, 10) || 0);
+    if ((Runtime.removeGuardRetries || 0) >= max) return false;
+    Runtime.removeGuardSuspendedUntil = 0;
+    Runtime.removeGuardRetries = (Runtime.removeGuardRetries || 0) + 1;
+    try { uninstallGroup("removeGuard"); } catch (e) {}
+    const ok = installGroup("removeGuard");
+    warn("Remove 守卫自动重装", {
+        reason: reason, ok: ok, retries: Runtime.removeGuardRetries, max_retries: max,
+        note: "上次因原函数托管异常被撤销；重装后恢复保护当前手雷对象"
+    });
+    return ok;
+}
+
+// 场景/GameManager 销毁：对象成批释放。此时继续按老指针写内存（锁数量、改手雷字段）
+// 很容易踩到已释放对象 —— 旧日志里"关游戏闪退"就是 GameAssembly 里
+// 0xc0000005（访问非法对象指针），时间点正好在 GameManager.OnDestroy 之后。
+function onGameManagerDestroy() {
+    Runtime.protectedWeapons = {};
+    Runtime.trackedMissiles = {};
+    Runtime.touchedAnimators = {};
+    Runtime.stats.teardown_clears = (Runtime.stats.teardown_clears || 0) + 1;
+    Runtime.removeGuardRetries = 0;
+    try { uninstallGroup("removeGuard"); } catch (e) {}
+    Runtime.removeGuardSuspendedUntil = Date.now() + (parseInt(Runtime.config.remove_guard_retry_ms, 10) || 3000);
+    warn("GameManager 销毁：已清空手雷指针表并暂缓 Remove 守卫", {
+        teardown_clears: Runtime.stats.teardown_clears,
+        note: "新场景里第一次锁定时会自动重装"
+    });
 }
 
 function isBotThrowDriveActive() {
@@ -3180,6 +3356,10 @@ const GROUP_INSTALLERS = {
         hookThrowLike("WPN_Throw.OnGenerateFromOwner", RVA.WPN_Throw_OnGenerateFromOwner, "generate_hits", "lock_on_generate_from_owner", "lock_on_generate_from_owner");
         hookThrowLike("WPN_Throw.OnAnimationEnd", RVA.WPN_Throw_OnAnimationEnd, "animationEnd_hits", "lock_on_animation_end", "lock_on_animation_end");
         hookThrowLike("WPN_Throw.OnFireAnimEnd", RVA.WPN_Throw_OnFireAnimEnd, "onFireAnimEnd_hits", "lock_on_animation_end", "lock_on_animation_end");
+        // 场景/GameManager 销毁：清空指针表 + 暂缓 Remove 守卫（避免在对象成批释放时继续写内存）
+        addHook("GameManager.OnDestroy", RVA.GameManager_OnDestroy, {
+            onEnter() { try { onGameManagerDestroy(); } catch (e) { recordError("GameManager.OnDestroy", e); } }
+        });
     },
 
     // --- 手雷强化（伤害/范围/速度）：捕获 WPN_Throw 生成的 missile 进表 ---

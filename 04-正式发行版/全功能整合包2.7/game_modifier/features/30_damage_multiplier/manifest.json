@@ -7,14 +7,14 @@
   "tab_title": "武器",
   "tab_order": 10,
   "order": 88,
-  "desc": "放大玩家造成的输出伤害。",
+  "desc": "分开调整敌人 / 自己 / 队友造成的伤害。1.0x 为原版，低于 1.0x 是削弱，最低 0.1x。",
   "script": "script.js",
   "runtime": {
     "type": "plugin_script"
   },
   "layout": {
-    "card_type": "simple",
-    "columnspan": 1,
+    "card_type": "wide",
+    "columnspan": 2,
     "title_color": "#f97316"
   },
   "controls": [
@@ -23,18 +23,67 @@
       "action": "enable"
     },
     {
+      "type": "switch",
+      "action": "setConfig",
+      "key": "enemy_enabled",
+      "label": "",
+      "default": true
+    },
+    {
       "type": "slider",
       "action": "setConfig",
-      "key": "multiplier",
-      "label": "伤害倍率",
-      "min": 1.0,
-      "max": 20.0,
+      "key": "enemy_multiplier",
+      "label": "敌人",
+      "min": 0.1,
+      "max": 10,
       "step": 0.1,
-      "default": 2.0
+      "default": 1,
+      "suffix": "x"
+    },
+    {
+      "type": "switch",
+      "action": "setConfig",
+      "key": "self_enabled",
+      "label": "",
+      "default": true
+    },
+    {
+      "type": "slider",
+      "action": "setConfig",
+      "key": "self_multiplier",
+      "label": "自己",
+      "min": 0.1,
+      "max": 10,
+      "step": 0.1,
+      "default": 2,
+      "suffix": "x"
+    },
+    {
+      "type": "switch",
+      "action": "setConfig",
+      "key": "mate_enabled",
+      "label": "",
+      "default": true
+    },
+    {
+      "type": "slider",
+      "action": "setConfig",
+      "key": "mate_multiplier",
+      "label": "队友",
+      "min": 0.1,
+      "max": 10,
+      "step": 0.1,
+      "default": 1,
+      "suffix": "x"
     }
   ],
   "config": {
-    "multiplier": 2.0,
+    "enemy_multiplier": 1,
+    "self_multiplier": 2,
+    "mate_multiplier": 1,
+    "enemy_enabled": true,
+    "self_enabled": true,
+    "mate_enabled": true,
     "skip_local_victim": true,
     "include_infect": false,
     "allow_other_damage_type": true,
@@ -63,9 +112,23 @@
   },
   "ui_handles": {
     "switch": "damage_multiplier_switch",
-    "multiplier_var": "damage_multiplier_var",
-    "multiplier_slider": "damage_multiplier_slider",
-    "multiplier_label": "damage_multiplier_label"
+    "summary": "damage_multiplier_summary",
+    "reset_button": "damage_multiplier_reset_btn",
+    "enemy_multiplier_var": "damage_multiplier_enemy_var",
+    "enemy_multiplier_slider": "damage_multiplier_enemy_slider",
+    "enemy_multiplier_label": "damage_multiplier_enemy_label",
+    "enemy_enabled_var": "damage_multiplier_enemy_enabled_var",
+    "enemy_enabled_switch": "damage_multiplier_enemy_enabled_switch",
+    "self_multiplier_var": "damage_multiplier_self_var",
+    "self_multiplier_slider": "damage_multiplier_self_slider",
+    "self_multiplier_label": "damage_multiplier_self_label",
+    "self_enabled_var": "damage_multiplier_self_enabled_var",
+    "self_enabled_switch": "damage_multiplier_self_enabled_switch",
+    "mate_multiplier_var": "damage_multiplier_mate_var",
+    "mate_multiplier_slider": "damage_multiplier_mate_slider",
+    "mate_multiplier_label": "damage_multiplier_mate_label",
+    "mate_enabled_var": "damage_multiplier_mate_enabled_var",
+    "mate_enabled_switch": "damage_multiplier_mate_enabled_switch"
   },
   "state": {
     "sync_enabled_from_config": true

@@ -347,6 +347,15 @@ class UniversalHookManager:
         self._esp_box_outline = bool(enabled)
         return self.set_esp_state(self._esp_box_enabled, self._esp_target_scope)
 
+    def get_esp_options(self):
+        """返回上一次成功下发到 DLL 的选项（失败不更新，故等于 DLL 当前生效值）。"""
+        return {
+            "esp_target_scope": self._esp_target_scope,
+            "esp_health_mode": self._esp_health_mode,
+            "esp_health_display": self._esp_health_display,
+            "esp_box_outline": bool(self._esp_box_outline),
+        }
+
     def set_esp_state(self, enabled, scope, health_mode=None, health_display=None,
                       box_outline=None):
         """Set ESP enabled state, target scope, box outline and health options at once."""
@@ -399,9 +408,26 @@ class UniversalHookManager:
                     self._esp_health_mode = health_mode
                     self._esp_health_display = health_display
                     self._esp_box_outline = bool(box_outline)
-                    self._log("success", "方框透视已开启" if enabled else "方框透视已关闭")
+                    # 记录 DLL 回读确认后的实际生效值：日志里能直接看到"界面选了什么、
+                    # 游戏里就生效什么"，排查选项不一致时不用再猜。
+                    self._log(
+                        "success",
+                        "方框透视{}：显示对象={}，血量={}/{}，方框={}，rev={}".format(
+                            "已开启" if enabled else "已关闭",
+                            scope,
+                            health_mode,
+                            health_display,
+                            "开" if box_outline else "关",
+                            self._revision,
+                        ),
+                    )
                 else:
-                    self._log("error", response.get("error", "方框透视设置失败"))
+                    # 下发失败时调用方会把配置回退为 DLL 当前生效值，保证界面与实际一致。
+                    self._log(
+                        "error",
+                        response.get("error")
+                        or "方框透视选项下发失败，界面已回退为游戏当前值",
+                    )
                 return ok
             except Exception as e:
                 self._log("error", f"设置失败: {e}")
@@ -652,4 +678,12 @@ class UniversalHookManager:
             self._pipe = None
 
     def _log(self, level, message):
-        self._bus.emit("log_message", level=level, module="Universal", message=message)
+        # audience="both"：这类控制面消息既显示在界面日志里，也写进
+        # logs/game_modifier.log，方便事后离线排查方框透视问题（默认 user 只进界面）。
+        self._bus.emit(
+            "log_message",
+            level=level,
+            module="Universal",
+            message=message,
+            audience="both",
+        )

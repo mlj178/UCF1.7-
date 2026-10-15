@@ -36,7 +36,9 @@
     "projectileProbeLookahead": 3.5,
     "projectileGhostExtra": 0.8,
     "projectileIgnoreMinMs": 80,
-    "projectileIgnoreMaxMs": 1200
+    "projectileIgnoreMaxMs": 1200,
+    "projectileProbeMaxSkips": 3,
+    "projectilePendingRetryMs": 400
   },
   "rpc": [
     "enable",
@@ -52,7 +54,7 @@
     "restore": true,
     "requires_room_ready_reapply": false,
     "room_ready_retry": false,
-    "room_ready_reapply_exempt_reason": "功能安装固定 RVA Hook，命中本地开火 Damage 时按 enabled/config 状态临时 patch 层掩码；弹体穿墙只在本地玩家弹体的 OnCollisionEnter 窗口内临时抑制撞墙爆炸并忽略该面墙碰撞，碰撞后按窗口还原。"
+    "room_ready_reapply_exempt_reason": "功能安装固定 RVA Hook，命中本地开火 Damage 时按 enabled/config 状态临时 patch 层掩码；弹体穿墙只在本地玩家弹体的物理步内提前探路忽略前方墙面（自己的 collider 优先取 Collision 接触点里的 thisCollider 实例 ID，失败时用缓存/OverlapSphere 兜底，仍失败则在下一物理步补忽略），并在 OnCollisionEnter 窗口内临时抑制撞墙爆炸；碰撞忽略按窗口还原。"
   },
   "source": {
     "runtime_script_js": "features/29_bullet_wall_penetration/script.js"

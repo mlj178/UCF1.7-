@@ -121,5 +121,14 @@
 - 新增：界面加「方框轮廓」开关（`esp_box_outline`，默认开）。关掉后 `DrawBox()` 不执行，
   只保留血条/数值——满足“只想要血条或数字、不要方框”的需求。协议版本 4 → 5、
   DLL 版本 1.8.1 → 1.8.2。
+- 修复：**方框透视选项「所选即所得」**。此前会话层用 `UniversalHookManager` 的缓存下发
+  （只调 `set_esp_box()`），离线时改的选项只落盘、之后连接又推旧缓存，导致界面选择与
+  游戏实际效果不一致。现在：
+  - 所有下发路径（开关 / 连接注入 / 四个选项改动）先 `_refresh_esp_target_scope_from_config()`
+    按配置校准，再带完整选项 `set_esp_state()`；
+  - `FeatureCommandService._apply_esp_options()` 下发后比对
+    `get_applied_esp_options()`，DLL 拒绝时把配置回退为生效值并写日志；
+  - 面板 `sync_from_config()` 在改动后按配置回读控件（800/2000/4000 ms），界面自动对齐。
+  - 纯 Python 侧改动，DLL 不变（仍 1.8.2 / 协议 5）。
 
 编译产物交付到 `04-正式发行版/全功能整合包2.7/game_modifier/plugins/universal_hook/Universal-ImGui-Hook.dll`。

@@ -724,6 +724,137 @@ log('原始=' + typeof raw + ':' + String(raw) + ' -> toFlag=' + toFlag(raw));
 `NativeFunction` 的浮点参数建议统一传 `floatToU32` 的位模式（`'uint'`），
 避免不同 Frida 版本对 `'float'` 的 ABI 处理差异。
 
+---
+
+## 十、⚠️ 第二个隐形坑：物理查询不要放在物理步中途，碰撞数据本身更可靠
+
+**现象**（29-子弹穿墙/弹体穿墙 v3 实测）：功能"看着是好的" —— 能穿墙、计数器在涨、
+没有报错。但玩家反馈**穿墙时弹体会明显减速、卡在墙里、最后悬在空中过一会儿才原地自爆**。
+
+日志给出的链条（每一步都有计数可查）：
+
+```
+反查弹体自身 collider 失败 ×19（这条 WARNING 限频 2s/条，采样）
+弹体穿墙：missile=0x… wall=0x… 忽略=0对      ← 2.3 秒内同一面墙连撞 14 次
+弹体碰撞：… 判定=墙面→穿墙                    ← 判定是对的，但"忽略"这一步失败了
+```
+
+**根因**：为了 `Physics.IgnoreCollision(自己的 collider, 墙, true)`，需要用
+`Physics.OverlapSphere(...) + Collider.attachedRigidbody == 自己的 Rigidbody`
+反查"自己的 collider"。这个查询**在碰撞回调 / 物理步中途会间歇性返回空**（实测约 45% 失败）。
+失败之后没有兜底 → 这面墙没被忽略 → 游戏原版每次碰撞都执行 `velocity *= 0.6`
+（反汇编出来的硬编码常量）→ 连撞几次就卡住。
+
+**正解**：用**碰撞事件自己携带的数据**，不要用查询：
+
+```javascript
+// ContactPoint: m_Point(0x0) m_Normal(0xC)
+//               m_ThisColliderInstanceID(0x18) m_OtherColliderInstanceID(0x1C) m_Separation(0x20)
+var contacts = native.getContacts(collision, ptr(0));       // Collision.get_contacts()
+var items    = contacts.add(0x10);                          // Il2CppArray items
+var id       = items.add(0x18).readS32();                   // 自己的 collider 实例 ID
+var selfCol  = native.findObjectFromInstanceID(id, ptr(0)); // Object.FindObjectFromInstanceID
+```
+
+**可复用的结论**：
+
+1. **`OverlapSphere` / `Raycast` / `CheckSphere` 在 `OnCollisionEnter` 之类的物理回调里、
+   或者物理步中途调用时，结果不可依赖**（时序问题，不是参数错）。
+   能用 `Collision` / `RaycastHit` 里已经写好的数据（`m_Collider`、接触点的实例 ID）
+   就不要另开查询。
+2. **"阻止型"操作要有失败语义和兜底**。`IgnoreCollision` / `detectCollisions` /
+   写字段这类动作，函数返回成功 ≠ 效果达成。设计时先问一句
+   "**这一步失败了会发生什么**" —— 本例里"忽略失败"最终表现成
+   "弹体悬在空中 2 秒后原地爆炸"，症状和根因完全不像，靠猜会浪费好几轮实测。
+3. **限频日志只能当"存在性证据"，不能当"频率证据"**。
+   `logLimited(..., 2000)` 会让 45% 的失败只露出 19 条记录 ——
+   要算比率就把**计数放进周期 beat 汇总**（本例的 `反查失败` / `补忽略=N(队列M/超时K)`）。
+4. **用"计数器 + 周期 beat + 每次事件一行"三件套**定位这类"没生效"问题：
+   beat 给趋势，事件行给单次判定，计数器给比率。
+
+---
+
+## 十一、⚠️ 第三个隐形坑：被过滤掉的日志 = 没有日志
+
+**现象**（26-手雷模式"无限手雷"）：功能开着、UI 显示 999，但游戏里丢几个手雷就没了。
+按上一节的思路去日志里找"锁有没有写进去"，结果**一条都没有**，看起来像"锁根本没跑"。
+
+**真相**：这个脚本有个默认开启的降噪白名单：
+
+```javascript
+const NoisyInfoMessages = {
+    "Hook 已安装": true,
+    "已记录当前手雷武器保护对象": true,      // ← 锁成功的必经日志
+    "手雷数量已锁定并保护武器对象": true,     // ← 锁成功的日志
+    ...
+};
+function shouldEmitLog(level, message) {
+    if (level !== "INFO") return true;
+    if (Runtime.config.verbose_log_enabled) return true;
+    return !NoisyInfoMessages[message || ""];
+}
+```
+
+也就是说：**"日志里没有"不能推出"代码没跑"** —— 也可能是被降噪过滤了。
+
+**修法（可复用）**：
+
+1. 降噪白名单里的消息，**一律改成周期统计（beat）或 WARN 级别**输出，
+   否则功能一旦失效，日志里会安静得像没装钩子。
+2. 每个"会静默 return"的分支都要有**失败计数**，并把这些计数打进 beat：
+   `lock_attempts / lock_writes / lock_skipped_same / lock_snapshot_fail / lock_scope_skip`。
+   只看一个总数（例如 `skipped_invalid`）分不清"没调用 / 调用了但读不到 / 已经是对的"。
+3. 判断功能"是否执行过"用 **beat 计数器**，不要用"某条日志有没有出现"。
+
+**判断"被保护的机制是否还活着"**（本例是 `PlayerWeapons.Remove` 守卫）也要设计自愈：
+一次 `Interceptor.replace` 回调里调用原函数抛出托管异常 → Frida 变成 `Error: system error`
+→ 脚本"自动撤销替换" → **整个对局剩下的时间里保护彻底失效**。
+这类"自愈"必须配一个**冷却后自动重装**，并且撤销/重装都打 WARN（可见）。
+
+---
+
+## 十二、游戏闪退怎么定位：Windows 事件日志 + 模块基址 → 崩溃 RVA
+
+游戏闪退后，第一手证据不是游戏日志，而是 **Windows 应用程序事件日志**：
+
+```powershell
+Get-WinEvent -FilterHashtable @{LogName='Application'; Level=1,2;
+  StartTime=[datetime]'2026-10-15 18:50:00'; EndTime=[datetime]'2026-10-15 19:10:00'} |
+  Select-Object TimeCreated, Id, ProviderName, Message | Format-List
+```
+
+典型记录：
+
+```
+Faulting application name: UnityCrossFire.exe ...
+Faulting module name: GameAssembly.dll ...
+Exception code: 0xc0000005
+Fault offset: 0x001443f8
+Faulting process id: 0x5828
+```
+
+读法：
+
+1. `Exception code: 0xc0000005` = 访问违例（读写非法地址）。
+2. **`Fault offset` 是相对"出错模块基址"的 RVA**，不是绝对地址。
+   本次要把它和修改器自己记录的模块基址对上：
+   `手雷模式 找到 GameAssembly.dll | {"base":"0x5b600000"}`（Frida `Module.base`）。
+   于是出错代码地址 = `0x5b600000 + 0x1443f8`。
+3. 把 RVA 加回 IDA 的镜像基址（本项目 `0x10000000`）→ `0x101443F8`，就能在反汇编里
+   找到"正在执行的指令"。本次是 `and eax,0xfffffffe` 后紧跟 `mov cl, byte ptr [eax+0xba]`
+   —— **清掉 GC 标记位后解引用对象指针**，属于运行时的对象图遍历。
+   对象指针无效 ⇒ 说明**内存里被写进了一个坏指针**（典型是踩到已释放对象）。
+4. 结论要分清两层：
+   - **崩溃点**（这里能证明）：GameAssembly 运行时遍历对象图时踩到非法指针。
+   - **谁写坏的**（这里证明不了）：崩溃点不等于肇事者。要靠"崩溃时间点 + 当时哪些
+     功能还在按老指针写内存"来锁定可疑对象。
+5. 时间线比对同样重要：本次崩在 `19:00:13`，而日志里 `19:00:12.912`
+   刚打完全 `Nano4T OnDestroy / game_manager_destroy / 检测到游戏场景销毁`
+   —— 即**场景销毁（对象成批释放）之后**，而保持"原始指针表 + 继续写字段"的功能
+   （手雷模式的 protectedWeapons/trackedMissiles）此刻最危险。
+6. **对策**：给这类"持有游戏原始指针"的功能加 `GameManager.OnDestroy` 钩子，
+   销毁时**立刻清空指针表并暂停/卸载相关的 replace**，等新场景里再按需重装。
+
 
 
 
