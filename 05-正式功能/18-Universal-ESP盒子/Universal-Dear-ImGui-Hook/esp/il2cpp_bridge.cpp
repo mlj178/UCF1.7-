@@ -150,19 +150,33 @@ void* IL2CPPBridge::TryGetGameManagerInstance() {
 }
 
 void* IL2CPPBridge::GetGameManagerInstance() {
-    if (s_CachedInstance) {
-        if (ValidateGameManagerInstance(s_CachedInstance)) {
-            return s_CachedInstance;
-        }
-        DebugLog("[IL2CPPBridge] Cached GM instance invalid, clearing cache\n");
-        s_CachedInstance = nullptr;
+    // 低频强制重查：SingletonGet 只是读类静态字段，成本极低。但退出房间再开新房间时，
+    // 旧的 GameManager 对象可能已被销毁而内存仍可读，ValidateGameManagerInstance 会继续
+    // 返回 true，缓存就永远钉在旧实例上（玩家容器全是旧的）→ 方框透视整个失效。
+    // 每 config::GM_REQUERY_INTERVAL 次查询绕过缓存重取一次，最多半秒内追上真实实例。
+    static int requeryCounter = 0;
+    const bool forceRequery = ((++requeryCounter) % config::GM_REQUERY_INTERVAL) == 0;
+
+    if (s_CachedInstance && !forceRequery && ValidateGameManagerInstance(s_CachedInstance)) {
+        return s_CachedInstance;
     }
 
     void* instance = TryGetGameManagerInstance();
     if (instance) {
+        if (s_CachedInstance && instance != s_CachedInstance) {
+            DebugLog("[IL2CPPBridge] GameManager instance re-resolved: 0x%p -> 0x%p\n",
+                     s_CachedInstance, instance);
+        }
         s_CachedInstance = instance;
+        return instance;
     }
-    return instance;
+
+    // 重查失败：旧缓存仍“看起来有效”时继续沿用，避免房间切换瞬间误判为会话消失。
+    if (s_CachedInstance && ValidateGameManagerInstance(s_CachedInstance)) {
+        return s_CachedInstance;
+    }
+    s_CachedInstance = nullptr;
+    return nullptr;
 }
 
 }

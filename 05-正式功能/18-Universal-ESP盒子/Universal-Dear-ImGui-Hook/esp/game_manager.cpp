@@ -213,6 +213,25 @@ void GameManager::Cleanup() {
     s_initialized = false;
 }
 
+// 会话自愈看门狗：会话“有效”但连续多帧拿不到本地玩家，通常说明缓存的 GameManager
+// 已随房间销毁（旧内存仍可读，结构校验被骗过去了）。强制丢弃桥接层 + 会话层缓存，
+// 下一帧重新 SingletonGet，退出房间再进新房间后自动恢复，不需要重启修改器或游戏。
+static void UpdateSessionWatchdog() {
+    static int s_NoLocalPlayerFrames = 0;
+    if (GameManager::GetLocalPlayer() != nullptr) {
+        s_NoLocalPlayerFrames = 0;
+        return;
+    }
+
+    if (++s_NoLocalPlayerFrames < config::SESSION_RESYNC_FRAMES) return;
+    s_NoLocalPlayerFrames = 0;
+
+    DebugLog("[GameManager] session watchdog: no local player for %d frames, forcing resync\n",
+             config::SESSION_RESYNC_FRAMES);
+    ClearSessionCaches("session watchdog");
+    s_SessionEpoch++;
+}
+
 bool GameManager::RefreshSession() {
     if (!s_initialized || !IL2CPPBridge::IsInitialized() || !IL2CPPBridge::IsGameAssemblyReady()) {
         ClearSessionCaches("bridge unavailable");
@@ -239,6 +258,7 @@ bool GameManager::RefreshSession() {
     }
 
     s_hasActiveSession = true;
+    UpdateSessionWatchdog();
     return true;
 }
 
@@ -435,18 +455,23 @@ bool GameManager::IsCandidateRenderable(
     const PlayerCandidate& candidate,
     const PlayerSnapshot& snapshot,
     void* localPlayer,
-    DWORD now) {
-    if (!HasActiveSession() || snapshot.roundOver) return false;
+    DWORD now,
+    bool relaxed) {
+    if (!HasActiveSession()) return false;
+    // 回合结束只是"暂时不画"；relaxed 兜底时不再用它整帧掐死方框。
+    if (!relaxed && snapshot.roundOver) return false;
     if (candidate.sessionEpoch != snapshot.sessionEpoch) return false;
     if (!candidate.player || candidate.player == localPlayer) return false;
     if (!IsPlayerClassCompatible(candidate.player, localPlayer)) return false;
 
-    const bool botFresh =
-        policy::HasSource(candidate.sources, policy::SourceBotUpdate) &&
-        candidate.sessionEpoch == s_SessionEpoch &&
-        policy::IsBotFresh(candidate.botLastSeenTick, now);
-    if (!policy::IsSourceEligible(snapshot.gameMode, candidate.sources, botFresh)) {
-        return false;
+    if (!relaxed) {
+        const bool botFresh =
+            policy::HasSource(candidate.sources, policy::SourceBotUpdate) &&
+            candidate.sessionEpoch == s_SessionEpoch &&
+            policy::IsBotFresh(candidate.botLastSeenTick, now);
+        if (!policy::IsSourceEligible(snapshot.gameMode, candidate.sources, botFresh)) {
+            return false;
+        }
     }
     if (IsPlayerDead(candidate.player)) return false;
     if (!IsPlayerSpawned(candidate.player)) return false;

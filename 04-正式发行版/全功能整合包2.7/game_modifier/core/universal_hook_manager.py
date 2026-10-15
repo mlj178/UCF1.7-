@@ -103,8 +103,9 @@ class UniversalHookManager:
     # 必须与 DLL 一致；不匹配时拒绝复用进程内的旧 DLL（旧版带双引擎重复挂钩风险）。
     # v4：血量数值模式只显示剩余值（不再 "当前/上限"）。
     # v5：新增 esp_box_outline（方框轮廓开关，关闭后仍画血条/数值）。
+    # v6：会话自愈（定期重取单例 + 无本地玩家看门狗）、来源策略兜底、esp_diag_* 诊断字段。
     # 旧 DLL 必须重启游戏后重新注入。
-    PROTOCOL_VERSION = 5  # Must match DLL
+    PROTOCOL_VERSION = 6  # Must match DLL
     FILE_FLAG_OVERLAPPED = 0x40000000
     ERROR_IO_PENDING = 997
     WAIT_OBJECT_0 = 0
@@ -354,6 +355,32 @@ class UniversalHookManager:
             "esp_health_mode": self._esp_health_mode,
             "esp_health_display": self._esp_health_display,
             "esp_box_outline": bool(self._esp_box_outline),
+        }
+
+    def fetch_diagnostics(self):
+        """读取 DLL 最近一帧的渲染诊断；管道不可用/失败时返回 None。
+
+        用来回答"方框为什么没画出来"：没有候选、被来源策略拒了、还是被死活/敌我过滤拒了。
+        """
+        if not self._pipe:
+            return None
+        try:
+            with self._lock:
+                state = self._send({"cmd": "get_state"})
+        except Exception:
+            return None
+        if not state or not state.get("ok"):
+            return None
+        return {
+            "game_mode": state.get("esp_diag_mode", -1),
+            "epoch": state.get("esp_diag_epoch", 0),
+            "round_over": state.get("esp_diag_round_over", 0),
+            "candidates": state.get("esp_diag_candidates", 0),
+            "rejected_source": state.get("esp_diag_rejected_source", 0),
+            "rejected_object": state.get("esp_diag_rejected_object", 0),
+            "rejected_team": state.get("esp_diag_rejected_team", 0),
+            "drawn": state.get("esp_diag_drawn", 0),
+            "relaxed_drawn": state.get("esp_diag_relaxed_drawn", 0),
         }
 
     def set_esp_state(self, enabled, scope, health_mode=None, health_display=None,

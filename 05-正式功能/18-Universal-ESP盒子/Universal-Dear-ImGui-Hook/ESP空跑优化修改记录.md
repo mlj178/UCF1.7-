@@ -130,5 +130,18 @@
     `get_applied_esp_options()`，DLL 拒绝时把配置回退为生效值并写日志；
   - 面板 `sync_from_config()` 在改动后按配置回读控件（800/2000/4000 ms），界面自动对齐。
   - 纯 Python 侧改动，DLL 不变（仍 1.8.2 / 协议 5）。
+- 修复（P0 回归）：**退出房间再开新房间后方框整个失效**。根因是"为省 CPU 而做的单例缓存"
+  在切房后仍指向已销毁的旧 GameManager —— 旧对象内存还能读、容器字段还是旧值，
+  `ValidateGameManagerInstance` 照样返回 true，于是玩家容器里永远没有当前房间的人。
+  三重兜底 + 诊断（协议 5 → 6、DLL 版本 1.8.2 → 1.8.3）：
+  - `IL2CPPBridge::GetGameManagerInstance()` 每 30 帧（`config::GM_REQUERY_INTERVAL`）
+    绕过缓存重取一次单例，指针变了就打 `GameManager instance re-resolved`；重查失败但旧缓存仍
+    有效时继续沿用，避免切房瞬间误判"会话消失"。
+  - `RefreshSession()` 看门狗：连续 90 帧（`config::SESSION_RESYNC_FRAMES`）拿不到本地玩家，
+    清空桥接层 + 会话层缓存并 `s_SessionEpoch++`，下一帧重新取单例。
+  - 渲染器两遍扫描：来源策略把整帧候选全拒时，用 `relaxed` 模式再扫一遍（同样跳过回合结束闸门），
+    只保留死活/已生成/敌我/epoch 硬过滤；`IsSourceEligible` 对"模式读不到/不认识"改为放行。
+  - 新增 `esp_diag_*`（mode / epoch / roundOver / 候选 / 来源拒 / 对象拒 / 敌我拒 / 已画 / 兜底已画）
+    写入 `get_state`，修改器每 10 秒记一行 `方框透视诊断: ...`，方框空白时可直接定位。
 
 编译产物交付到 `04-正式发行版/全功能整合包2.7/game_modifier/plugins/universal_hook/Universal-ImGui-Hook.dll`。

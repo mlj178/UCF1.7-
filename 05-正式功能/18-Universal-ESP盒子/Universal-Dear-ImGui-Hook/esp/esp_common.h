@@ -103,6 +103,12 @@ namespace config {
     constexpr float BOX_MAX_ASPECT = 5.0f;         // max width/height ratio
 
     constexpr int LOG_INTERVAL = 60;
+
+    // 会话自愈节奏（帧）。退出房间再开新房间时，旧的 GameManager 对象可能已被销毁
+    // 但内存仍可读，结构校验会继续通过，缓存就一直指向旧实例、方框再也画不出来。
+    // 这里用两个兜底：定期绕过缓存重取单例 + 长时间没有本地玩家就强制重查。
+    constexpr int GM_REQUERY_INTERVAL = 30;    // 每 30 帧强制重取一次 GameManager 实例
+    constexpr int SESSION_RESYNC_FRAMES = 90;  // 连续 90 帧拿不到本地玩家即强制重查
     
     constexpr ImVec4 COLOR_TEAM1 = {0.78f, 0.80f, 0.82f, 1.0f};
     constexpr ImVec4 COLOR_TEAM2 = {0.5f, 0.6f, 0.7f, 1.0f};

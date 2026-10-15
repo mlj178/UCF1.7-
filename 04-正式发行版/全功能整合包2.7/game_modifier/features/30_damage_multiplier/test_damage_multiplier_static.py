@@ -110,7 +110,7 @@ class DamageMultiplierStaticTests(unittest.TestCase):
             "Runtime.localTeam",
             "Runtime.playerCache",
             "Category.UNKNOWN",
-            "team !== 2 && Runtime.localTeam !== 2 && team === Runtime.localTeam",
+            "team !== 2 && localTeam !== 2 && team === localTeam",
         ]:
             self.assertIn(token, text, f"script.js missing {token}")
 
@@ -209,6 +209,36 @@ class DamageMultiplierStaticTests(unittest.TestCase):
             "local_player_ready",
         ]:
             self.assertIn(status_key, text)
+
+    def test_js_reads_team_live_so_role_changes_apply_immediately(self):
+        """人类 <-> 生化幽灵变身会立刻改 Entity.team，阵营判定必须实时读。"""
+        text = read_text(JS_FILE)
+
+        for token in [
+            "var localTeam = readEntityTeam(Runtime.localPlayer);",
+            "Runtime.localTeam = localTeam;",
+            "ModeBase_Nano.UpdateNanoRole",
+            "NanoRoleExpand.GetTeam",
+        ]:
+            self.assertIn(token, text, f"script.js missing {token}")
+
+        # 旧的「用缓存快照判阵营」写法必须消失，否则变身那一瞬间会判错
+        self.assertNotIn("entry ? entry.team", text)
+
+    def test_js_floors_scaled_damage_to_at_least_one(self):
+        """游戏把 float damage 截断成 int，倍率 <1 时若不保底会把一击压成 0。"""
+        text = read_text(JS_FILE)
+
+        for token in [
+            "min_applied_damage: 1.0",
+            "flooredToMin",
+            "floored_to_min",
+            "Runtime.stats.flooredToMin += 1",
+            "data.damage >= Runtime.config.min_applied_damage",
+            "newDamage < Runtime.config.min_applied_damage",
+            "cvttsd2si",
+        ]:
+            self.assertIn(token, text, f"script.js missing {token}")
 
     def test_js_migrates_legacy_single_multiplier_key(self):
         text = read_text(JS_FILE)
