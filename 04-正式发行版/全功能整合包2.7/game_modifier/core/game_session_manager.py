@@ -68,6 +68,8 @@ class GameSessionManager:
         # 方框透视血量显示：percent/value + bar/text/both
         self._esp_health_mode = "percent"
         self._esp_health_display = "both"
+        # 方框轮廓开关：关闭后仍画血条/数值
+        self._esp_box_outline = True
         
         # Applied feature states (runtime, from DLL)
         self._applied_states = {}
@@ -191,12 +193,16 @@ class GameSessionManager:
             scope = config.get("esp_target_scope", "enemy_only")
             health_mode = config.get("esp_health_mode", "percent")
             health_display = config.get("esp_health_display", "both")
+            box_outline = config.get("esp_box_outline", True)
+            if isinstance(box_outline, str):
+                box_outline = box_outline.strip().lower() not in ("false", "0", "no", "off")
             with self._lock:
                 self._esp_target_scope = "all_players" if scope == "all_players" else "enemy_only"
                 self._esp_health_mode = "value" if health_mode == "value" else "percent"
                 self._esp_health_display = (
                     health_display if health_display in ("bar", "text", "both") else "both"
                 )
+                self._esp_box_outline = bool(box_outline)
         except Exception as e:
             log_to_file("debug", "系统", f"ESP options config read failed: {e}")
 
@@ -210,8 +216,9 @@ class GameSessionManager:
                 esp_wanted = bool(self._desired_states.get("esp_box", False))
                 health_mode = self._esp_health_mode
                 health_display = self._esp_health_display
+                box_outline = self._esp_box_outline
             return self._universal_manager.set_esp_state(
-                esp_wanted, normalized, health_mode, health_display
+                esp_wanted, normalized, health_mode, health_display, box_outline
             )
         self._wake_event.set()
         return False
@@ -229,8 +236,27 @@ class GameSessionManager:
             scope = self._esp_target_scope
             mode = self._esp_health_mode
             display = self._esp_health_display
+            outline = self._esp_box_outline
         if self._universal_manager:
-            return self._universal_manager.set_esp_state(esp_wanted, scope, mode, display)
+            return self._universal_manager.set_esp_state(
+                esp_wanted, scope, mode, display, outline
+            )
+        self._wake_event.set()
+        return False
+
+    def set_esp_box_outline(self, enabled):
+        """Apply the ESP box outline switch immediately when the DLL is connected."""
+        with self._lock:
+            self._esp_box_outline = bool(enabled)
+            esp_wanted = bool(self._desired_states.get("esp_box", False))
+            scope = self._esp_target_scope
+            mode = self._esp_health_mode
+            display = self._esp_health_display
+            outline = self._esp_box_outline
+        if self._universal_manager:
+            return self._universal_manager.set_esp_state(
+                esp_wanted, scope, mode, display, outline
+            )
         self._wake_event.set()
         return False
     
@@ -507,6 +533,7 @@ class GameSessionManager:
                 self._esp_target_scope,
                 self._esp_health_mode,
                 self._esp_health_display,
+                self._esp_box_outline,
             ):
                 with self._lock:
                     self._applied_states['esp_box'] = esp_wanted
@@ -530,7 +557,7 @@ class GameSessionManager:
             esp_wanted = bool(self._desired_states.get('esp_box', False))
         if universal.set_esp_state(
             esp_wanted, self._esp_target_scope,
-            self._esp_health_mode, self._esp_health_display
+            self._esp_health_mode, self._esp_health_display, self._esp_box_outline
         ):
             with self._lock:
                 self._applied_states['esp_box'] = esp_wanted

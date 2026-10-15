@@ -7,17 +7,12 @@
   "tab_title": "武器",
   "tab_order": 10,
   "order": 89,
-  "desc": "常规枪械：开火不走子弹射线，把伤害直接结算给准星方向最近的敌人（命中判定不做视线检查，隔墙也能结算）。\n榴弹 / 手雷 / RPG / 榴弹枪：不做直伤，改为弹体拐弯追踪，伤害仍由原版爆炸结算，可单独关闭。\n　手雷：普通手雷、诅咒娃娃手雷、幽灵宝宝手雷、生化手雷、震撼弹、震荡弹\n　榴弹枪：FN FAL 榴弹版\n　火箭筒：Nano AT4（含地图补给 RPG / AT4）\n特殊技能弹：不做直伤，改为弹体拐弯追踪，伤害仍由原版爆炸结算，可单独关闭。\n　奥术手榴弹（奥术手雷）\n　地狱终结者火球",
+  "desc": "常规枪械：伤害直接结算给准星方向最近的敌人（不看视线，隔墙也能结算）。\n爆炸类 / 技能弹：不做直伤，改为弹体拐弯追踪，伤害仍由原版爆炸结算，可单独关闭。\n覆盖：手雷（普通 / 诅咒娃娃 / 幽灵宝宝 / 生化 / 震撼弹 / 震荡弹）、榴弹枪 FN FAL 榴弹版、火箭筒 Nano AT4（含地图补给 RPG / AT4）、技能弹（奥术手榴弹 / 地狱终结者火球）",
   "ui_text": {
     "lines": [
-      "常规枪械：开火不走子弹射线，把伤害直接结算给准星方向最近的敌人（命中判定不做视线检查，隔墙也能结算）。",
-      "榴弹 / 手雷 / RPG / 榴弹枪：不做直伤，改为弹体拐弯追踪，伤害仍由原版爆炸结算，可单独关闭。",
-      "　手雷：普通手雷、诅咒娃娃手雷、幽灵宝宝手雷、生化手雷、震撼弹、震荡弹",
-      "　榴弹枪：FN FAL 榴弹版",
-      "　火箭筒：Nano AT4（含地图补给 RPG / AT4）",
-      "特殊技能弹：不做直伤，改为弹体拐弯追踪，伤害仍由原版爆炸结算，可单独关闭。",
-      "　奥术手榴弹（奥术手雷）",
-      "　地狱终结者火球"
+      "常规枪械：伤害直接结算给准星方向最近的敌人（不看视线，隔墙也能结算）。",
+      "爆炸类 / 技能弹：不做直伤，改为弹体拐弯追踪，伤害仍由原版爆炸结算，可单独关闭。",
+      "覆盖：手雷（普通 / 诅咒娃娃 / 幽灵宝宝 / 生化 / 震撼弹 / 震荡弹）、榴弹枪 FN FAL 榴弹版、火箭筒 Nano AT4（含地图补给 RPG / AT4）、技能弹（奥术手榴弹 / 地狱终结者火球）"
     ]
   },
   "script": "script.js",
@@ -26,7 +21,7 @@
   },
   "layout": {
     "card_type": "simple",
-    "columnspan": 1,
+    "columnspan": 2,
     "title_color": "#f472b6"
   },
   "controls": [
@@ -39,6 +34,13 @@
       "action": "setConfig",
       "key": "enable_guns",
       "label": "常规枪械直伤",
+      "default": true
+    },
+    {
+      "type": "switch",
+      "action": "setConfig",
+      "key": "gun_ray_redirect",
+      "label": "原生射线接管(走游戏死亡流程)",
       "default": true
     },
     {
@@ -88,6 +90,11 @@
     "death_diag_raise": false,
     "death_fix_wpn": false,
     "death_fix_respawn": true,
+    "death_fix_broadcast": true,
+    "gun_ray_redirect": true,
+    "death_rescue_max_tries": 6,
+    "death_rescue_retry_gap_ms": 3000,
+    "death_diag_chain": false,
     "death_respawn_grace_ms": 6000,
     "diagnostic_log": false,
     "log_every": 20,

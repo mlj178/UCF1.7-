@@ -32,6 +32,13 @@
     {
       "type": "switch",
       "action": "setConfig",
+      "key": "gun_ray_redirect",
+      "label": "原生射线接管(走游戏死亡流程)",
+      "default": true
+    },
+    {
+      "type": "switch",
+      "action": "setConfig",
       "key": "enable_homing",
       "label": "弹体追踪(拐弯) 总开关",
       "default": true
@@ -134,6 +141,11 @@
     "death_diag_raise": false,
     "death_fix_wpn": false,
     "death_fix_respawn": true,
+    "death_fix_broadcast": true,
+    "gun_ray_redirect": true,
+    "death_rescue_max_tries": 6,
+    "death_rescue_retry_gap_ms": 3000,
+    "death_diag_chain": false,
     "death_respawn_grace_ms": 6000,
     "verbose_probe": true,
     "diagnostic_log": true

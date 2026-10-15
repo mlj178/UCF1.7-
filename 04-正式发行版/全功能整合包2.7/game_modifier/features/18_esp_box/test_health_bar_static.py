@@ -80,6 +80,30 @@ class HealthBarStaticTests(unittest.TestCase):
         self.assertIn("GetHealthMode", state)
         self.assertIn("GetHealthDisplay", state)
 
+    def test_box_outline_switch_gates_box_drawing_only(self):
+        source = RENDERER.read_text(encoding="utf-8")
+        state = (SOURCE_ROOT / "esp" / "esp_state.h").read_text(encoding="utf-8")
+
+        # 方框轮廓是独立开关（默认开）：
+        self.assertIn("m_boxOutline", state)
+        self.assertIn("IsBoxOutlineEnabled", state)
+        # 主方案与后备方案都只在开关打开时才画方框……
+        self.assertIn(
+            "if (ESPState::Instance().IsBoxOutlineEnabled()) {\n"
+            "            DrawBox(center, hitbox.width, hitbox.height, color, config::BOX_THICKNESS);\n"
+            "        }",
+            source,
+        )
+        self.assertIn(
+            "if (ESPState::Instance().IsBoxOutlineEnabled()) {\n"
+            "        DrawBox(center, boxWidth, boxHeight, color, config::BOX_THICKNESS);\n"
+            "    }",
+            source,
+        )
+        # ……而血量覆盖层始终在开关之外绘制，关掉方框仍能看到血条/数值。
+        self.assertEqual(source.count("DrawHealthOverlay(center"), 2)
+        self.assertNotIn("IsBoxOutlineEnabled()) {\n            PlayerHealthInfo", source)
+
     def test_health_value_is_decoded_from_obscured_int(self):
         manager = GAME_MANAGER.read_text(encoding="utf-8")
         bridge = BRIDGE.read_text(encoding="utf-8")

@@ -58,6 +58,11 @@ def build_card(parent, manifest, row, col, colspan, callbacks, card_builder):
         display_values[2],
     )
 
+    # --- 方框轮廓开关：关闭后只看血条/数值，不画方框 ---
+    current_outline = config.get("esp_box_outline", defaults.get("esp_box_outline", True))
+    if isinstance(current_outline, str):
+        current_outline = current_outline.strip().lower() not in ("false", "0", "no", "off")
+
     def add_row(row_index, label_text, values, selected_label, on_change):
         ctk.CTkLabel(
             body,
@@ -89,13 +94,40 @@ def build_card(parent, manifest, row, col, colspan, callbacks, card_builder):
     def on_display_changed(label):
         callbacks["set_config"](feature_id, "esp_health_display", display_to_value[label])
 
+    def on_outline_toggled():
+        callbacks["set_config"](feature_id, "esp_box_outline", bool(outline_switch.get()))
+
     scope_menu = add_row(0, "显示对象", scope_values, selected_scope, on_scope_changed)
     mode_menu = add_row(1, "血量显示", mode_values, selected_mode, on_mode_changed)
     display_menu = add_row(2, "显示内容", display_values, selected_display, on_display_changed)
+
+    # 方框轮廓：独立开关，可与「显示内容」组合成只留血条/数值
+    ctk.CTkLabel(
+        body,
+        text="方框轮廓",
+        font=("Microsoft YaHei", 13),
+        text_color="#c0c0c0",
+        width=72,
+        anchor="w",
+    ).grid(row=3, column=0, padx=(0, 8), pady=3, sticky="w")
+    outline_switch = ctk.CTkSwitch(
+        body,
+        text="",
+        font=("Microsoft YaHei", 13),
+        command=on_outline_toggled,
+        onvalue=1,
+        offvalue=0,
+    )
+    if current_outline:
+        outline_switch.select()
+    else:
+        outline_switch.deselect()
+    outline_switch.grid(row=3, column=1, padx=(0, 8), pady=3, sticky="w")
 
     return {
         manifest.get("ui_handles", {}).get("switch", "esp_box_switch"): switch,
         "esp_target_scope_menu": scope_menu,
         "esp_health_mode_menu": mode_menu,
         "esp_health_display_menu": display_menu,
+        "esp_box_outline_switch": outline_switch,
     }
