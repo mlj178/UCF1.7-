@@ -178,8 +178,30 @@ class Nano4tRuntime:
 
     def auto_init_bg(self):
         try:
-            if self._context.is_connected() and not state.ready:
-                self._context.feature_service.call_action("nano4t", "nano4tInit", {})
+            if not self._context.is_connected():
+                # P0：原实现直接静默跳过 —— 一旦“连接就绪”事件没送达 UI 线程，
+                # 这里不留任何痕迹，用户只看到“按钮点不动、日志空白”。
+                self._context.log("⚠ [多人生化] 未连接游戏，跳过初始化（连上游戏后会自动重试）")
+                self._log_skipped("nano4tInit", "is_connected()==False")
+                return
+            if state.ready:
+                return
+            self._context.feature_service.call_action("nano4t", "nano4tInit", {})
+        except Exception as exc:
+            self._context.log(f"❌ [多人生化] 初始化请求失败: {exc}")
+            self._log_skipped("nano4tInit", f"exception: {exc}")
+
+    def _log_skipped(self, action, reason):
+        """把“未执行”的原因写进日志文件（不只依赖 UI 面板）。"""
+        try:
+            self._context.emit(
+                "log_message",
+                level="warning",
+                module="Nano4T",
+                message=f"多人生化 {action} 未执行",
+                audience="dev",
+                dev_detail=f"nano4t {action} skipped: {reason}",
+            )
         except Exception:
             pass
 
@@ -190,5 +212,6 @@ class Nano4tRuntime:
         try:
             if self._context.is_connected() and state.ready:
                 self._context.feature_service.call_action("nano4t", "nano4tGetCurrent", {})
-        except Exception:
-            pass
+        except Exception as exc:
+            self._context.log(f"⚠ [多人生化] 读取当前特性失败: {exc}")
+            self._log_skipped("nano4tGetCurrent", f"exception: {exc}")

@@ -200,9 +200,17 @@ class FridaManager:
 
     def plugin_call(self, feature_id, action, payload=None):
         with self._lock:
-            if self._disconnecting or not self._rpc_client:
-                return None
+            disconnecting = self._disconnecting
             rpc_client = self._rpc_client
+        if disconnecting or not rpc_client:
+            # P0：原实现静默 return None —— 插件层整体不可用时日志里没有任何痕迹，
+            # 表现为“所有功能都不生效、连一条报错都看不到”。
+            self._log_plugin_call_skipped(
+                feature_id,
+                action,
+                "disconnecting" if disconnecting else "no_rpc_client",
+            )
+            return None
         try:
             return rpc_client.call(feature_id, action, payload)
         except Exception as e:
@@ -216,6 +224,19 @@ class FridaManager:
                     dev_detail=f"Plugin RPC failed: {feature_id}.{action}: {e}",
                 )
             return None
+
+    def _log_plugin_call_skipped(self, feature_id, action, reason):
+        """插件 RPC 未执行时留痕（按 feature/action/reason 限频）。"""
+        if not self._should_log_rpc_error(feature_id, action, f"skipped:{reason}"):
+            return
+        self._event_bus.emit(
+            "log_message",
+            level="warning",
+            module="Plugin",
+            message=f"{feature_id} 未执行：插件 RPC 客户端不可用（{reason}）",
+            audience="dev",
+            dev_detail=f"Plugin RPC skipped: {feature_id}.{action} reason={reason}",
+        )
 
     def plugin_cleanup_all(self, reason):
         with self._lock:

@@ -1,6 +1,7 @@
 import customtkinter as ctk
 import threading
 import time
+import traceback
 
 from core.event_bus import EventBus
 from core.frida_manager import FridaManager
@@ -40,6 +41,8 @@ class App(ctk.CTk):
         super().__init__()
         # Initialize file logging first
         setup_logging()
+        # P0：Tk 回调异常默认只打到 stderr，发行版/无控制台时什么都看不到 → 统一落盘留痕
+        self._install_tk_exception_logging()
         self.title(APP_TITLE)
         self.geometry(MAIN_WINDOW_GEOMETRY)
         self.resizable(True, True)
@@ -83,6 +86,7 @@ class App(ctk.CTk):
         self._mainloop_ready = False
         self._pending_ui_callbacks = []
         self._pending_ui_lock = threading.Lock()
+        self._ui_drain_timer = None
 
         self._features = dict(self._persistent_state.features)
         self._migrate_plugin_config_from_persistent_state()
@@ -182,28 +186,105 @@ class App(ctk.CTk):
     def _setup_events(self):
         self._event_controller.register(self._event_bus)
 
+    def _install_tk_exception_logging(self):
+        """把 Tk 回调异常落盘留痕。
+
+        P0：Tkinter 默认只把回调异常打到 stderr；发行版没有控制台，回调里的异常
+        （例如“连接就绪 → 恢复功能”的 UI 线程处理）会完全消失，表现为功能静默不生效。
+        """
+        previous = getattr(self, "report_callback_exception", None)
+
+        def _report(exc, val, tb):
+            detail = "".join(traceback.format_exception(exc, val, tb)).strip().replace("\n", " | ")
+            try:
+                log_to_file("error", "TkCallback", f"Tk 回调异常: {val!r} | {detail}")
+            except Exception:
+                pass
+            if callable(previous):
+                try:
+                    previous(exc, val, tb)
+                except Exception:
+                    pass
+
+        self.report_callback_exception = _report
+
     def _log(self, msg, color=None):
         ts = time.strftime("%H:%M:%S")
         self._safe_after(0, lambda: self._log_ui(ts, msg, color))
 
     def _safe_after(self, delay_ms, callback, *args):
+        """把回调投递到 Tk 主线程（线程安全）。
+
+        P0：原实现“主循环未就绪就只入队”，而队列只被 _mark_mainloop_ready 排空一次；
+        若调用线程在“读到未就绪 → 入队”之间被抢占，回调会在排空之后才入队，
+        从此无人重投 —— 无日志、无提示，连接就绪处理会整体静默失效（功能全不生效）。
+        现在：主循环已就绪时优先直接投递；投不进去或尚未就绪则入队，由 1 秒心跳
+        （_ui_drain_heartbeat）兜底重投，把“永久丢失”降级为“最多晚 1 秒生效”。
+        """
         if self._stop:
             return None
-        if not self._mainloop_ready:
-            self._queue_ui_callback(delay_ms, callback, args)
-            return None
+        if self._mainloop_ready:
+            timer_id = self._try_after(delay_ms, callback, args)
+            if timer_id is not None:
+                return timer_id
+        self._queue_ui_callback(delay_ms, callback, args)
+        return None
+
+    def _try_after(self, delay_ms, callback, args):
+        """尝试投递一次 Tk after；跨线程被 Tk 拒绝时返回 None（交给队列重投）。"""
         try:
             return self.after(delay_ms, callback, *args)
         except RuntimeError as exc:
             if "main thread is not in main loop" not in str(exc):
                 raise
-            self._queue_ui_callback(delay_ms, callback, args)
             return None
 
     def _queue_ui_callback(self, delay_ms, callback, args):
         with self._pending_ui_lock:
             if not self._stop:
                 self._pending_ui_callbacks.append((delay_ms, callback, args))
+
+    def _take_pending_ui_callbacks(self):
+        with self._pending_ui_lock:
+            pending = self._pending_ui_callbacks
+            self._pending_ui_callbacks = []
+        return pending
+
+    def _drain_pending_ui_callbacks(self):
+        """把滞留的 UI 回调重新投递到主线程；返回本次补投成功的条数。"""
+        pending = self._take_pending_ui_callbacks()
+        rescued = 0
+        for delay_ms, callback, args in pending:
+            if self._stop:
+                break
+            if self._try_after(delay_ms, callback, args) is None:
+                self._queue_ui_callback(delay_ms, callback, args)
+            else:
+                rescued += 1
+        return rescued
+
+    def _schedule_ui_drain_heartbeat(self):
+        if self._stop:
+            return None
+        try:
+            self._ui_drain_timer = self.after(1000, self._ui_drain_heartbeat)
+        except RuntimeError:
+            self._ui_drain_timer = None
+        return self._ui_drain_timer
+
+    def _ui_drain_heartbeat(self):
+        """每秒兜底重投；一旦真的救回回调就落盘，作为“时序竞争发生过”的证据。"""
+        self._ui_drain_timer = None
+        if self._stop:
+            return
+        rescued = self._drain_pending_ui_callbacks()
+        if rescued:
+            log_to_file(
+                "warning",
+                "App",
+                f"UI 回调滞留后由心跳补投 {rescued} 条（发生过主循环时序竞争，功能已自动恢复）",
+            )
+        self._schedule_ui_drain_heartbeat()
 
     def _run_in_background(self, fn):
         """在后台线程执行 RPC 等阻塞调用，避免冻结 Tk 事件循环。"""
@@ -213,12 +294,10 @@ class App(ctk.CTk):
 
     def _mark_mainloop_ready(self):
         self._mainloop_ready = True
-        with self._pending_ui_lock:
-            pending = self._pending_ui_callbacks
-            self._pending_ui_callbacks = []
-        for delay_ms, callback, args in pending:
-            if not self._stop:
-                self.after(delay_ms, callback, *args)
+        drained = self._drain_pending_ui_callbacks()
+        if drained:
+            log_to_file("info", "App", f"主循环就绪，补投启动期排队的 UI 回调 {drained} 条")
+        self._schedule_ui_drain_heartbeat()
 
     def _log_ui(self, ts, msg, color=None):
         self.log_box.configure(state="normal")
@@ -486,6 +565,9 @@ class App(ctk.CTk):
         if getattr(self, '_save_state_timer', None):
             self.after_cancel(self._save_state_timer)
             self._save_state_timer = None
+        if getattr(self, '_ui_drain_timer', None):
+            self.after_cancel(self._ui_drain_timer)
+            self._ui_drain_timer = None
         with self._pending_ui_lock:
             self._pending_ui_callbacks = []
         self._event_bus.emit("app_closing")

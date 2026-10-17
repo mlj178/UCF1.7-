@@ -50,6 +50,9 @@ class AppEventController:
                 app.pid_label.configure(text=f"PID: {pid}")
                 app._ready = True
                 app._pid = pid
+                # P0：这条是“连接就绪链路真的在 UI 线程跑到了”的锚点。
+                # 日志里没有它 = 连接事件被静默吞掉（功能会整体不生效）。
+                self._log_writer("info", "App", f"UI 已就绪（PID: {pid}），开始恢复功能开关")
                 app._feature_controller.restore_features()
                 app._event_bus.emit("game_connected", pid=pid)
             elif status == "not_found":
