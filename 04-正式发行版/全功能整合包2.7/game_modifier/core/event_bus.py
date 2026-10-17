@@ -21,6 +21,7 @@ class EventBus:
         self._dropped_events = 0
         self._stopping = False
         self._error_log_at = {}
+        self._drop_log_at = {}
         self._error_log_throttle_seconds = 3.0
 
     @classmethod
@@ -52,6 +53,8 @@ class EventBus:
 
         # P1：原来每条事件对每个订阅者都新建一个线程，日志量大时会造成线程风暴。
         # 改为固定 2 个工作线程 + 有界队列；队列满时丢弃并计数，保证不拖垮 UI。
+        # P0：丢弃必须留痕 —— 原实现只加计数，连 connection_status 这类关键事件被丢掉
+        # 也毫无记录，表现为“功能整体不生效且日志空白”。
         self._ensure_workers()
         for ref in subscribers:
             callback = self._resolve_ref(ref)
@@ -61,6 +64,7 @@ class EventBus:
                 self._event_queue.put_nowait((callback, kwargs))
             except queue.Full:
                 self._dropped_events += 1
+                self._report_dropped_event(event_type, callback)
 
     def _ensure_workers(self):
         with self._lock:
@@ -128,6 +132,30 @@ class EventBus:
         for worker in workers:
             if worker.is_alive():
                 worker.join(timeout)
+
+    def _report_dropped_event(self, event_type, callback):
+        """队列满导致事件被丢弃时落盘（按事件类型限频），避免关键事件静默消失。"""
+        try:
+            key = ("dropped", str(event_type))
+            now = time.monotonic()
+            last = self._drop_log_at.get(key)
+            if last is not None and now - last < self._error_log_throttle_seconds:
+                return
+            self._drop_log_at[key] = now
+            from core.log_manager import log_to_file
+            name = (
+                getattr(callback, "__qualname__", None)
+                or getattr(callback, "__name__", None)
+                or repr(callback)
+            )
+            log_to_file(
+                "error",
+                "EventBus",
+                f"事件队列已满，已丢弃事件 {event_type} → {name}"
+                f"（累计丢弃 {self._dropped_events} 条；该订阅者本次不会收到通知）",
+            )
+        except Exception:
+            pass
 
     def _report_subscriber_error(self, callback):
         """Isolate subscriber failures; report them throttled instead of swallowing."""
