@@ -17,8 +17,11 @@ const testExports = [
   '      buildShotDirection: buildShotDirection,',
   '      buildChestAimPointCandidates: buildChestAimPointCandidates,',
   '      isTargetDamageHit: isTargetDamageHit,',
-  '      chooseTargetCandidate: chooseTargetCandidate,',
-  '      chooseTargetCandidateWithHysteresis: chooseTargetCandidateWithHysteresis,',
+  '      pickBestCandidate: pickBestCandidate,',
+  '      selectTargetWithPolicy: selectTargetWithPolicy,',
+  '      resetTargetLockState: resetTargetLockState,',
+  '      TARGET_POLICY: TARGET_POLICY,',
+  '      targetLockState: targetLockState,',
   '      updateManualAimAccumulator: updateManualAimAccumulator,',
   '      emitBoneReadDiagnostic: emitBoneReadDiagnostic,',
   '      emitAimScanDiagnostic: emitAimScanDiagnostic,',
@@ -40,7 +43,7 @@ const context = {
   console: console,
   Date: { now: () => nowMs },
   Interceptor: { attach: () => ({ detach: () => {} }) },
-  Memory: {},
+  Memory: { alloc: () => ({}) },
   NativeFunction: function NativeFunction() {},
   Process: { findModuleByName: () => null },
   ptr: () => null,
@@ -60,18 +63,89 @@ const angles = aim.calculateTargetAngles(
 assert(angles.targetPitchDeg > 0, 'target above origin must produce positive pitch');
 assert(Math.abs(angles.rawPitchDeg - 11.309932) < 0.0001);
 
-const selected = aim.chooseTargetCandidate([
-  { id: 'nearest', selectionDistance: 10.0, angleDeg: 20.0 },
-  { id: 'best-angle-in-band', selectionDistance: 11.5, angleDeg: 5.0 },
-  { id: 'outside-band', selectionDistance: 12.01, angleDeg: 1.0 },
-], 2.0);
-assert.strictEqual(selected.id, 'best-angle-in-band');
-assert.strictEqual(aim.chooseTargetCandidate([], 2.0), null);
-const resilientSelection = aim.chooseTargetCandidate([
-  { id: 'invalid-metrics-near', selectionDistance: NaN, dist: 8.0, angleDeg: NaN },
-  { id: 'invalid-metrics-far', selectionDistance: NaN, dist: 12.0, angleDeg: NaN },
-], 2.0);
-assert.strictEqual(resilientSelection.id, 'invalid-metrics-near');
+const playerA = { id: 'A' };
+const playerB = { id: 'B' };
+const playerC = { id: 'C' };
+const playerD = { id: 'D' };
+const candidate = (player, angleDeg, dist) => ({ player: player, angleDeg: angleDeg, dist: dist });
+
+const innerPreferred = aim.pickBestCandidate([
+  candidate(playerB, 6.0, 5.0),
+  candidate(playerA, 4.0, 20.0),
+], 5.0, 1.0);
+assert.strictEqual(innerPreferred.player, playerA, 'inner cone must win over a closer outer target');
+
+const angleTieUsesDistance = aim.pickBestCandidate([
+  candidate(playerA, 2.0, 10.0),
+  candidate(playerB, 2.5, 5.0),
+], 5.0, 1.0);
+assert.strictEqual(angleTieUsesDistance.player, playerB, 'within angle tie, the closer target wins');
+assert.strictEqual(aim.pickBestCandidate([], 5.0, 1.0), null);
+
+aim.resetTargetLockState('runtime-test');
+let lockNow = 1000;
+let lockCandidates = [candidate(playerA, 4.0, 10.0), candidate(playerB, 6.0, 5.0)];
+assert.strictEqual(aim.selectTargetWithPolicy(lockCandidates, lockNow).player, playerA);
+assert.strictEqual(aim.targetLockState.reason, 'acquire');
+
+lockNow = 1040;
+assert.strictEqual(aim.selectTargetWithPolicy(lockCandidates, lockNow).player, playerA);
+assert.strictEqual(aim.targetLockState.reason, 'hold');
+
+lockNow = 1080;
+lockCandidates = [candidate(playerA, 4.0, 10.0), candidate(playerC, 3.2, 20.0)];
+assert.strictEqual(
+  aim.selectTargetWithPolicy(lockCandidates, lockNow).player,
+  playerA,
+  'small angle improvements inside the stickiness margin must not switch'
+);
+
+lockNow = 1100;
+lockCandidates = [candidate(playerA, 4.0, 10.0), candidate(playerC, 2.5, 20.0)];
+assert.strictEqual(aim.selectTargetWithPolicy(lockCandidates, lockNow).player, playerA);
+assert.strictEqual(aim.targetLockState.reason, 'confirming');
+
+lockNow = 1120;
+assert.strictEqual(aim.selectTargetWithPolicy(lockCandidates, lockNow).player, playerC);
+assert.strictEqual(aim.targetLockState.switchCount, 1);
+
+lockNow = 1140;
+lockCandidates = [candidate(playerC, 2.5, 20.0), candidate(playerD, 0.5, 30.0)];
+assert.strictEqual(
+  aim.selectTargetWithPolicy(lockCandidates, lockNow).player,
+  playerC,
+  'switch cooldown must suppress a flip immediately after a switch'
+);
+assert.strictEqual(aim.targetLockState.reason, 'cooldown_hold');
+
+lockNow = 1240;
+assert.strictEqual(aim.selectTargetWithPolicy(lockCandidates, lockNow).player, playerC);
+lockNow = 1260;
+assert.strictEqual(aim.selectTargetWithPolicy(lockCandidates, lockNow).player, playerD);
+
+aim.resetTargetLockState('inner-override-test');
+lockNow = 2000;
+lockCandidates = [candidate(playerA, 4.0, 10.0), candidate(playerB, 6.0, 5.0)];
+assert.strictEqual(aim.selectTargetWithPolicy(lockCandidates, lockNow).player, playerA);
+lockNow = 2100;
+lockCandidates = [candidate(playerA, 6.0, 10.0), candidate(playerB, 4.5, 5.0)];
+assert.strictEqual(aim.selectTargetWithPolicy(lockCandidates, lockNow).player, playerA);
+assert.strictEqual(aim.targetLockState.reason, 'confirming');
+lockNow = 2120;
+assert.strictEqual(aim.selectTargetWithPolicy(lockCandidates, lockNow).player, playerB);
+assert.strictEqual(aim.targetLockState.reason, 'inner_override');
+
+aim.resetTargetLockState('current-lost-test');
+lockNow = 3000;
+lockCandidates = [candidate(playerA, 4.0, 10.0), candidate(playerB, 6.0, 5.0)];
+assert.strictEqual(aim.selectTargetWithPolicy(lockCandidates, lockNow).player, playerA);
+lockNow = 3040;
+assert.strictEqual(
+  aim.selectTargetWithPolicy([candidate(playerB, 6.0, 5.0)], lockNow).player,
+  playerB,
+  'losing the current candidate must reacquire immediately'
+);
+assert.strictEqual(aim.targetLockState.reason, 'current_lost');
 assert(Math.abs(aim.calculateVisibilityRayDistance(10.0, 0.20, 0.50) - 10.30) < 0.000001);
 assert.strictEqual(aim.calculateVisibilityRayDistance(0.10, 0.20, 0.0), 0.0);
 assert(Math.abs(aim.calculateSelectionRayDistance(10.0, 0.20, 0.10) - 9.70) < 0.000001);
@@ -108,24 +182,6 @@ assert.strictEqual(
   aim.isTargetDamageHit(false, 3, 3),
   false,
   'another entity hitbox must not be accepted for the selected target'
-);
-
-const currentPlayer = { id: 'current' };
-const betterPlayer = { id: 'better' };
-const stickyCandidates = [
-  { player: currentPlayer, selectionDistance: 10.0, angleDeg: 5.0 },
-  { player: betterPlayer, selectionDistance: 10.5, angleDeg: 4.0 },
-];
-assert.strictEqual(
-  aim.chooseTargetCandidateWithHysteresis(stickyCandidates, 2.0, currentPlayer, 2.0).player,
-  currentPlayer,
-  'small angle improvements must not cause target jitter'
-);
-stickyCandidates[1].angleDeg = 2.0;
-assert.strictEqual(
-  aim.chooseTargetCandidateWithHysteresis(stickyCandidates, 2.0, currentPlayer, 2.0).player,
-  betterPlayer,
-  'a clearly better crosshair target must be allowed to switch'
 );
 
 let manualState = { accumulatedDeg: 0.0, lastInputAtMs: 0 };

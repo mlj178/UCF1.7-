@@ -117,19 +117,32 @@ modules.aim = (function() {
   var roomHooks = [];
   var frameCount = 0;
 
+  // 统一目标策略（与 40_direct_damage/script.js 的 TARGET_POLICY 保持一致）：
+  //   1) 只保留外锥内的敌人；
+  //   2) 内锥有人时，只在内锥里选；
+  //   3) 角度优先，角度差 <= angleTieDeg 时再比距离；
+  //   4) 当前目标轻粘滞：新目标必须明显更靠近准星，且连续确认才换。
+  // 这取代了旧的"最近距离带 + 2° 角度优势"策略。
+  var TARGET_POLICY = {
+    outerConeDeg: 12.0,
+    innerConeDeg: 5.0,
+    angleTieDeg: 1.0,
+    switchMarginDeg: 1.2,
+    switchConfirmScans: 2,
+    switchCooldownMs: 100,
+  };
+
   var CONFIG = {
     aimKey:          0,
     aimBone:         BONE.CHEST,
     smoothness:      1.0,
     maxAimDistance:  200.0,
-    maxAngleFOV:     60.0,
-    nearestDistanceBand: 2.0,
     pitchMin:        -88.0,
     pitchMax:         88.0,
     localEyeHeight:  1.55,
     neckToHeadOffset: 0.20,
     cameraCacheMaxAgeMs: 250,
-    targetScanIntervalMs: 30,
+    targetScanIntervalMs: 20,
     maxCameraPlayerDistance: 4.0,
     maxBoneRootDistance: 3.0,
     visibilityOriginClearance: 0.20,
@@ -147,9 +160,8 @@ modules.aim = (function() {
     manualOverrideInputFloorDeg: 0.05,
     manualOverrideThresholdDeg: 3.0,
     manualOverrideAccumWindowMs: 120,
-    manualOverridePauseMs: 150,
+    manualOverridePauseMs: 60,
     lastWrittenAimMaxAgeMs: 100,
-    targetSwitchAngleAdvantageDeg: 2.0,
     diagnosticLogIntervalMs: 1000,
     visibilityCheck: true,
   };
@@ -178,6 +190,15 @@ modules.aim = (function() {
 
   var aimTimer = null;
   var cachedTarget = null;
+  // 目标锁定状态：current 保存上一次选中的候选对象；pending 用于"连续确认才换"。
+  var targetLockState = {
+    current: null,
+    pendingPlayer: null,
+    pendingCount: 0,
+    lastSwitchAtMs: 0,
+    reason: 'init',
+    switchCount: 0,
+  };
   var scanYawDeg = 0;
   var scanPitchDeg = 0;
   var lastAimDiagnosticAtMs = 0;
@@ -197,9 +218,19 @@ modules.aim = (function() {
   var aimPosBuf = Memory.alloc(12);
   var aimForwardBuf = Memory.alloc(12);
 
+  function resetTargetLockState(reason) {
+    targetLockState.current = null;
+    targetLockState.pendingPlayer = null;
+    targetLockState.pendingCount = 0;
+    targetLockState.lastSwitchAtMs = 0;
+    targetLockState.reason = reason || 'reset';
+    targetLockState.switchCount = 0;
+  }
+
   function resetAimState(reason) {
     cachedTarget = null;
     targetEnemy = null;
+    resetTargetLockState(reason || 'reset');
     aimCamera.valid = false;
     aimCamera.position = null;
     aimCamera.forward = null;
@@ -805,70 +836,147 @@ modules.aim = (function() {
     };
   }
 
-  function chooseTargetCandidate(candidates, distanceBand) {
-    if (!candidates || candidates.length === 0) return null;
-
-    var minDistance = Infinity;
-    for (var i = 0; i < candidates.length; i++) {
-      var distance = candidates[i].selectionDistance;
-      if (!isFinite(distance)) distance = candidates[i].dist;
-      if (isFinite(distance) && distance < minDistance) minDistance = distance;
-    }
-    if (!isFinite(minDistance)) return candidates[0];
-
-    var bandLimit = minDistance + Math.max(0.0, distanceBand || 0.0);
-    var best = null;
-    var bestAngle = Infinity;
-    var bestDistance = Infinity;
-    for (var j = 0; j < candidates.length; j++) {
-      var candidate = candidates[j];
-      var candidateDistance = candidate.selectionDistance;
-      if (!isFinite(candidateDistance)) candidateDistance = candidate.dist;
-      if (!isFinite(candidateDistance) || candidateDistance > bandLimit) continue;
-      var candidateAngle = isFinite(candidate.angleDeg) ? candidate.angleDeg : Infinity;
-      if (
-        !best ||
-        candidateAngle < bestAngle ||
-        (candidateAngle === bestAngle && candidateDistance < bestDistance)
-      ) {
-        best = candidate;
-        bestAngle = candidateAngle;
-        bestDistance = candidateDistance;
-      }
-    }
-    return best || candidates[0];
-  }
-
-  function samePlayerPointer(a, b) {
+  function sameTargetPlayer(a, b) {
     if (!a || !b) return false;
     if (a === b) return true;
-    try { return a.equals(b); } catch (_) { return false; }
+    try { if (typeof a.equals === 'function') return a.equals(b); } catch (_) {}
+    try { if (typeof b.equals === 'function') return b.equals(a); } catch (_) {}
+    return false;
   }
 
-  function chooseTargetCandidateWithHysteresis(candidates, distanceBand, currentPlayer, angleAdvantage) {
-    var best = chooseTargetCandidate(candidates, distanceBand);
-    if (!best || !currentPlayer) return best;
+  function candidateAngle(candidate) {
+    return candidate && isFinite(candidate.angleDeg) ? candidate.angleDeg : Infinity;
+  }
 
-    var current = null;
-    var minDistance = Infinity;
+  function candidateIsBetter(a, b, angleTieDeg) {
+    if (!a) return false;
+    if (!b) return true;
+    var aAngle = candidateAngle(a);
+    var bAngle = candidateAngle(b);
+    if (!isFinite(aAngle)) return false;
+    if (!isFinite(bAngle)) return true;
+    var tie = Math.max(0.0, angleTieDeg || 0.0);
+    if (aAngle + tie < bAngle) return true;
+    if (bAngle + tie < aAngle) return false;
+    return a.dist < b.dist;
+  }
+
+  function pickBestCandidate(candidates, innerConeDeg, angleTieDeg) {
+    if (!candidates || candidates.length === 0) return null;
+    var bestInner = null;
+    var bestOuter = null;
+    var innerLimit = Math.max(0.0, innerConeDeg || 0.0);
     for (var i = 0; i < candidates.length; i++) {
       var candidate = candidates[i];
-      var candidateDistance = candidate.selectionDistance;
-      if (!isFinite(candidateDistance)) candidateDistance = candidate.dist;
-      if (isFinite(candidateDistance) && candidateDistance < minDistance) minDistance = candidateDistance;
-      if (samePlayerPointer(candidate.player, currentPlayer)) current = candidate;
+      if (!candidate || !isFinite(candidate.angleDeg)) continue;
+      if (!bestOuter || candidateIsBetter(candidate, bestOuter, angleTieDeg)) bestOuter = candidate;
+      if (candidate.angleDeg <= innerLimit && (!bestInner || candidateIsBetter(candidate, bestInner, angleTieDeg))) {
+        bestInner = candidate;
+      }
     }
-    if (!current || !isFinite(minDistance)) return best;
+    return bestInner || bestOuter;
+  }
 
-    var currentDistance = current.selectionDistance;
-    if (!isFinite(currentDistance)) currentDistance = current.dist;
-    var bandLimit = minDistance + Math.max(0.0, distanceBand || 0.0);
-    if (!isFinite(currentDistance) || currentDistance > bandLimit) return best;
-    if (samePlayerPointer(best.player, currentPlayer)) return best;
+  function findCandidateByPlayer(candidates, player) {
+    if (!candidates || !player) return null;
+    for (var i = 0; i < candidates.length; i++) {
+      if (candidates[i] && sameTargetPlayer(candidates[i].player, player)) return candidates[i];
+    }
+    return null;
+  }
 
-    var currentAngle = isFinite(current.angleDeg) ? current.angleDeg : Infinity;
-    var bestAngle = isFinite(best.angleDeg) ? best.angleDeg : Infinity;
-    return bestAngle + Math.max(0.0, angleAdvantage || 0.0) < currentAngle ? best : current;
+  // 统一目标选择：角度优先 + 内锥优先 + 轻粘滞。
+  // 返回值就是当前应锁定的候选；targetLockState.current 同步更新。
+  function selectTargetWithPolicy(candidates, nowMs) {
+    var best = pickBestCandidate(candidates, TARGET_POLICY.innerConeDeg, TARGET_POLICY.angleTieDeg);
+    if (!best) {
+      targetLockState.current = null;
+      targetLockState.pendingPlayer = null;
+      targetLockState.pendingCount = 0;
+      targetLockState.reason = 'no_candidate';
+      return null;
+    }
+
+    var current = targetLockState.current;
+    var currentFresh = current ? findCandidateByPlayer(candidates, current.player) : null;
+
+    if (!current) {
+      targetLockState.current = best;
+      targetLockState.pendingPlayer = null;
+      targetLockState.pendingCount = 0;
+      targetLockState.lastSwitchAtMs = nowMs;
+      targetLockState.reason = 'acquire';
+      return best;
+    }
+
+    if (!currentFresh) {
+      targetLockState.current = best;
+      targetLockState.pendingPlayer = null;
+      targetLockState.pendingCount = 0;
+      targetLockState.lastSwitchAtMs = nowMs;
+      targetLockState.reason = 'current_lost';
+      return best;
+    }
+
+    if (sameTargetPlayer(best.player, currentFresh.player)) {
+      targetLockState.current = currentFresh;
+      targetLockState.pendingPlayer = null;
+      targetLockState.pendingCount = 0;
+      targetLockState.reason = 'hold';
+      return currentFresh;
+    }
+
+    var currentAngle = candidateAngle(currentFresh);
+    var bestAngle = candidateAngle(best);
+    var currentInner = currentAngle <= TARGET_POLICY.innerConeDeg;
+    var bestInner = bestAngle <= TARGET_POLICY.innerConeDeg;
+    var advantage = currentAngle - bestAngle;
+    var wantSwitch = false;
+    var switchReason = '';
+
+    if (bestInner && !currentInner) {
+      wantSwitch = true;
+      switchReason = 'inner_override';
+    } else if (advantage > TARGET_POLICY.switchMarginDeg) {
+      wantSwitch = true;
+      switchReason = 'angle_advantage';
+    }
+
+    if (!wantSwitch) {
+      targetLockState.current = currentFresh;
+      targetLockState.pendingPlayer = null;
+      targetLockState.pendingCount = 0;
+      targetLockState.reason = 'hold';
+      return currentFresh;
+    }
+
+    if ((nowMs - targetLockState.lastSwitchAtMs) < TARGET_POLICY.switchCooldownMs) {
+      targetLockState.current = currentFresh;
+      targetLockState.pendingPlayer = null;
+      targetLockState.pendingCount = 0;
+      targetLockState.reason = 'cooldown_hold';
+      return currentFresh;
+    }
+
+    if (!targetLockState.pendingPlayer || !sameTargetPlayer(targetLockState.pendingPlayer, best.player)) {
+      targetLockState.pendingPlayer = best.player;
+      targetLockState.pendingCount = 1;
+    } else {
+      targetLockState.pendingCount += 1;
+    }
+    if (targetLockState.pendingCount < TARGET_POLICY.switchConfirmScans) {
+      targetLockState.current = currentFresh;
+      targetLockState.reason = 'confirming';
+      return currentFresh;
+    }
+
+    targetLockState.current = best;
+    targetLockState.pendingPlayer = null;
+    targetLockState.pendingCount = 0;
+    targetLockState.lastSwitchAtMs = nowMs;
+    targetLockState.switchCount += 1;
+    targetLockState.reason = switchReason;
+    return best;
   }
 
   function calculateVisibilityRayDistance(targetDistance, originClearance, targetExtraDistance) {
@@ -950,6 +1058,7 @@ modules.aim = (function() {
     manualAimAccumulator = { accumulatedDeg: 0.0, lastInputAtMs: nowMs };
     lastWrittenAim.valid = false;
     cachedTarget = null;
+    resetTargetLockState('manual_override');
     emitAimScanDiagnostic({ reason: 'manual_override', error: 'accumulatedDeg=' + accumulatedDeg });
     return true;
   }
@@ -1004,11 +1113,15 @@ modules.aim = (function() {
           players: scanStats.players || 0,
           enemies: scanStats.enemies || 0,
           aimPoints: scanStats.aimPoints || 0,
-          inFov: scanStats.inFov || 0,
+          inCone: scanStats.inCone || 0,
+          outerConeDeg: isFinite(scanStats.outerConeDeg) ? scanStats.outerConeDeg : TARGET_POLICY.outerConeDeg,
+          innerConeDeg: isFinite(scanStats.innerConeDeg) ? scanStats.innerConeDeg : TARGET_POLICY.innerConeDeg,
           visible: scanStats.visible || 0,
           candidates: scanStats.candidates || 0,
           firstAngleDeg: isFinite(scanStats.firstAngleDeg) ? scanStats.firstAngleDeg : null,
-          firstSelectionDistance: isFinite(scanStats.firstSelectionDistance) ? scanStats.firstSelectionDistance : null,
+          firstDistance: isFinite(scanStats.firstDistance) ? scanStats.firstDistance : null,
+          lockReason: scanStats.reason || '',
+          switchCount: scanStats.switchCount || 0,
           visibilityRejected: scanStats.visibilityRejected || 0,
           lastVisibilityReason: scanStats.lastVisibilityReason || '',
           lastVisibilityLayer: isFinite(scanStats.lastVisibilityLayer) ? scanStats.lastVisibilityLayer : -1,
@@ -1420,7 +1533,7 @@ modules.aim = (function() {
       for (var i = 0; i < all.length; i++) {
         try { if (isMyPlayerFn(all[i], ptr(0))) { myPlayer = all[i]; break; } } catch(e) {}
       }
-      if (!myPlayer) { cachedTarget = null; return; }
+      if (!myPlayer) { cachedTarget = null; resetTargetLockState('no_local_player'); return; }
     }
 
     try { if (!isMyPlayerFn(myPlayer, ptr(0))) { resetAimState('local_invalid_scan'); return; } } catch(e) { resetAimState('local_invalid_scan'); return; }
@@ -1447,7 +1560,7 @@ modules.aim = (function() {
       players: allPlayers.length,
       enemies: 0,
       aimPoints: 0,
-      inFov: 0,
+      inCone: 0,
       visible: 0,
       visibilityRejected: 0,
       lastVisibilityReason: '',
@@ -1507,12 +1620,12 @@ modules.aim = (function() {
         var angleDeg = fov.angleDeg;
         detail.angleDeg = angleDeg;
 
-        if (angleDeg > CONFIG.maxAngleFOV) {
-          detail.status = 'out_fov';
+        if (angleDeg > TARGET_POLICY.outerConeDeg) {
+          detail.status = 'out_cone';
           scanStats.targets.push(detail);
           continue;
         }
-        scanStats.inFov++;
+        scanStats.inCone++;
         if (CONFIG.visibilityCheck && !checkSelectionLineOfSight(myPos, targetPos, physicsScratch)) {
           scanStats.visibilityRejected++;
           scanStats.lastVisibilityReason = lastVisibilityReason;
@@ -1528,7 +1641,6 @@ modules.aim = (function() {
         detail.status = 'candidate';
         scanStats.targets.push(detail);
 
-        var selectionDistance = angles.dist;
         candidates.push({
           player: p,
           pos: targetPos,
@@ -1539,7 +1651,6 @@ modules.aim = (function() {
           pitchDiff: fov.pitchDiff,
           angleDeg: angleDeg,
           dist: angles.dist,
-          selectionDistance: selectionDistance,
         });
       } catch(e) {
         if (detail) {
@@ -1551,18 +1662,16 @@ modules.aim = (function() {
     }
 
     scanStats.candidates = candidates.length;
+    scanStats.outerConeDeg = TARGET_POLICY.outerConeDeg;
+    scanStats.innerConeDeg = TARGET_POLICY.innerConeDeg;
     if (candidates.length > 0) {
       scanStats.firstAngleDeg = candidates[0].angleDeg;
-      scanStats.firstSelectionDistance = candidates[0].selectionDistance;
+      scanStats.firstDistance = candidates[0].dist;
     }
-    best = chooseTargetCandidateWithHysteresis(
-      candidates,
-      CONFIG.nearestDistanceBand,
-      cachedTarget ? cachedTarget.player : null,
-      CONFIG.targetSwitchAngleAdvantageDeg
-    );
+    best = selectTargetWithPolicy(candidates, Date.now());
     cachedTarget = best;
-    scanStats.reason = best ? 'selected' : 'no_ranked_candidate';
+    scanStats.reason = targetLockState.reason || (best ? 'selected' : 'no_ranked_candidate');
+    scanStats.switchCount = targetLockState.switchCount;
     if (best && best.player) {
       var selectedId = best.player.toString();
       for (var k = 0; k < scanStats.targets.length; k++) {
@@ -1598,6 +1707,7 @@ modules.aim = (function() {
       if (!refreshed) {
         emitAimScanDiagnostic({ reason: 'refresh_failed' });
         cachedTarget = null;
+        resetTargetLockState('refresh_failed');
         return;
       }
 
@@ -1718,6 +1828,22 @@ modules.aim = (function() {
     }
   }
 
+  function getConfigSnapshot() {
+    return {
+      aimBone: CONFIG.aimBone,
+      smoothness: CONFIG.smoothness,
+      maxAimDistance: CONFIG.maxAimDistance,
+      localEyeHeight: CONFIG.localEyeHeight,
+      outerConeDeg: TARGET_POLICY.outerConeDeg,
+      innerConeDeg: TARGET_POLICY.innerConeDeg,
+      angleTieDeg: TARGET_POLICY.angleTieDeg,
+      switchMarginDeg: TARGET_POLICY.switchMarginDeg,
+      switchConfirmScans: TARGET_POLICY.switchConfirmScans,
+      switchCooldownMs: TARGET_POLICY.switchCooldownMs,
+      targetScanIntervalMs: CONFIG.targetScanIntervalMs,
+    };
+  }
+
   return {
     enable: function() {
       if (enabled) return;
@@ -1749,18 +1875,30 @@ modules.aim = (function() {
     },
     isEnabled: function() { return enabled; },
     setConfig: function(cfg) {
-      // 隐藏固定项（骨骼 / 平滑 / 距离 / FOV / 眼高）不接受运行时改写：
-      // manifest 只暴露一个开关，改这些值会直接改变命中判定与瞄准点，
-      // 由 test_aim_static.py 的隐藏项契约测试守住。这里只处理非隐藏项。
+      // 骨骼 / 平滑 / 最大距离 / 眼高仍是隐藏固定项；目标策略参数允许 RPC 调，
+      // 但 manifest 默认只暴露一个开关，避免误调。
       try {
         if (!cfg) return { ok: false, reason: 'empty' };
         var n;
         function num(v) { var x = Number(v); return isFinite(x) ? x : null; }
-        if ((n = num(cfg.nearestDistanceBand)) !== null && n >= 0) CONFIG.nearestDistanceBand = n;
+        function clamp(v, min, max) { return Math.min(max, Math.max(min, v)); }
+        if ((n = num(cfg.outerConeDeg)) !== null) {
+          TARGET_POLICY.outerConeDeg = clamp(n, 1.0, 90.0);
+          TARGET_POLICY.innerConeDeg = Math.min(TARGET_POLICY.innerConeDeg, TARGET_POLICY.outerConeDeg);
+        }
+        if ((n = num(cfg.innerConeDeg)) !== null) {
+          TARGET_POLICY.innerConeDeg = clamp(n, 0.0, TARGET_POLICY.outerConeDeg);
+        }
+        if ((n = num(cfg.angleTieDeg)) !== null) TARGET_POLICY.angleTieDeg = clamp(n, 0.0, 15.0);
+        if ((n = num(cfg.switchMarginDeg)) !== null) TARGET_POLICY.switchMarginDeg = clamp(n, 0.0, 15.0);
+        if ((n = num(cfg.switchConfirmScans)) !== null) {
+          TARGET_POLICY.switchConfirmScans = Math.max(1, Math.min(10, Math.round(n)));
+        }
+        if ((n = num(cfg.switchCooldownMs)) !== null) TARGET_POLICY.switchCooldownMs = clamp(n, 0.0, 2000.0);
+        if ((n = num(cfg.targetScanIntervalMs)) !== null) CONFIG.targetScanIntervalMs = clamp(n, 5.0, 200.0);
         if (cfg.visibilityCheck !== undefined) CONFIG.visibilityCheck = !!cfg.visibilityCheck;
         if ((n = num(cfg.aimKey)) !== null) CONFIG.aimKey = n | 0;
-        if ((n = num(cfg.targetScanIntervalMs)) !== null && n >= 0) CONFIG.targetScanIntervalMs = n;
-        return { ok: true, config: CONFIG };
+        return { ok: true, config: getConfigSnapshot() };
       } catch (e) { return { ok: false, reason: String(e) }; }
     },
     getConfig: function() {
@@ -1768,6 +1906,9 @@ modules.aim = (function() {
         aimOriginSource: aimCamera.valid ? 'camera' : 'player_eye',
         visibilityCheck: CONFIG.visibilityCheck,
         frameCount: frameCount,
+        targetLockReason: targetLockState.reason,
+        targetSwitchCount: targetLockState.switchCount,
+        target: getConfigSnapshot(),
       };
     }
   };
