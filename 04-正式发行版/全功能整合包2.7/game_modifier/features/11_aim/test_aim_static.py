@@ -16,14 +16,20 @@ def read_text(path: Path) -> str:
 
 
 class AimStaticTests(unittest.TestCase):
-    def test_defaults_to_chest_target_with_sixty_degree_fov(self):
+    def test_defaults_to_chest_target_with_unified_target_policy(self):
         text = read_text(SCRIPT_FILE)
 
         self.assertRegex(text, r"HEAD:\s*0")
         self.assertRegex(text, r"NECK:\s*3")
         self.assertRegex(text, r"CHEST:\s*7")
         self.assertRegex(text, r"aimBone:\s*BONE\.CHEST")
-        self.assertRegex(text, r"maxAngleFOV:\s*60\.0")
+        self.assertRegex(text, r"outerConeDeg:\s*12\.0")
+        self.assertRegex(text, r"innerConeDeg:\s*5\.0")
+        self.assertRegex(text, r"angleTieDeg:\s*1\.0")
+        self.assertRegex(text, r"switchMarginDeg:\s*1\.2")
+        self.assertRegex(text, r"switchConfirmScans:\s*2")
+        self.assertRegex(text, r"switchCooldownMs:\s*100")
+        self.assertRegex(text, r"targetScanIntervalMs:\s*20")
         self.assertIn("BONE_Y_OFFSET[BONE.HEAD] = 1.65", text)
         self.assertIn("BONE_Y_OFFSET[BONE.NECK] = 1.45", text)
         self.assertIn("BONE_Y_OFFSET[BONE.CHEST] = 1.05", text)
@@ -68,27 +74,31 @@ class AimStaticTests(unittest.TestCase):
         self.assertIn("var pos = getPlayerPos(player)", fallback_fn)
         self.assertIn("pos.y += yOff", fallback_fn)
 
-    def test_target_selection_uses_visible_candidates_and_nearest_distance_band(self):
+    def test_target_selection_uses_visible_candidates_and_unified_policy(self):
         text = read_text(SCRIPT_FILE)
 
         for token in [
-            "nearestDistanceBand: 2.0",
+            "outerConeDeg: 12.0",
+            "innerConeDeg: 5.0",
+            "switchMarginDeg: 1.2",
             "visibilityCheck: true",
             "Physics_get_defaultPhysicsScene_Injected",
             "PhysicsScene_Internal_Raycast_Injected",
-            "function chooseTargetCandidate(candidates, distanceBand)",
-            "function chooseTargetCandidateWithHysteresis(candidates, distanceBand, currentPlayer, angleAdvantage)",
+            "function pickBestCandidate(candidates, innerConeDeg, angleTieDeg)",
+            "function selectTargetWithPolicy(candidates, nowMs)",
+            "function candidateIsBetter(a, b, angleTieDeg)",
+            "function findCandidateByPlayer(candidates, player)",
             "var candidates = []",
-            "selectionDistance:",
-            "best = chooseTargetCandidateWithHysteresis(",
+            "best = selectTargetWithPolicy(candidates, Date.now())",
         ]:
             self.assertIn(token, text)
 
         scanner_fn = text.split("function targetScanner()", 1)[1].split("function writeAimbot()", 1)[0]
         self.assertLess(scanner_fn.index("checkSelectionLineOfSight"), scanner_fn.index("candidates.push"))
-        self.assertIn("var selectionDistance = angles.dist", scanner_fn)
+        self.assertIn("angleDeg > TARGET_POLICY.outerConeDeg", scanner_fn)
+        self.assertNotIn("nearestDistanceBand", scanner_fn)
+        self.assertNotIn("selectionDistance", scanner_fn)
         self.assertNotIn("var targetRoot = getPlayerPos(p)", scanner_fn)
-        self.assertNotIn("angleDeg < bestAngleDeg", scanner_fn)
 
     def test_actual_shot_validation_must_hit_target_entity_with_game_gun_mask(self):
         text = read_text(SCRIPT_FILE)
@@ -119,7 +129,9 @@ class AimStaticTests(unittest.TestCase):
             "stage: 'target_scan'",
             "candidates: scanStats.candidates || 0",
             "firstAngleDeg:",
-            "firstSelectionDistance:",
+            "firstDistance:",
+            "inCone: scanStats.inCone || 0",
+            "outerConeDeg: isFinite(scanStats.outerConeDeg)",
             "reason: scanStats.reason || 'no_ranked_candidate'",
             "emitAimScanDiagnostic(scanStats)",
         ]:
@@ -163,7 +175,7 @@ class AimStaticTests(unittest.TestCase):
             "stage: 'shot_ray'",
             "targets: scanStats.targets || []",
             "detail.status = 'candidate'",
-            "detail.status = 'out_fov'",
+            "detail.status = 'out_cone'",
             "detail.status = 'blocked_environment'",
         ]:
             self.assertIn(token, text)
@@ -194,7 +206,7 @@ class AimStaticTests(unittest.TestCase):
         text = read_text(SCRIPT_FILE)
 
         for token in [
-            "targetScanIntervalMs: 30",
+            "targetScanIntervalMs: 20",
             "visibilityCheck: true",
             "var PHYSICS_NATIVE_OPTIONS = { abi: 'mscdecl', scheduling: 'exclusive' }",
             "function createPhysicsScratch()",
@@ -234,14 +246,14 @@ class AimStaticTests(unittest.TestCase):
         for token in [
             "manualOverrideThresholdDeg: 3.0",
             "manualOverrideAccumWindowMs: 120",
-            "manualOverridePauseMs: 150",
-            "targetSwitchAngleAdvantageDeg: 2.0",
+            "manualOverridePauseMs: 60",
             "function updateManualAimAccumulator(state, deltaDeg, nowMs)",
             "function detectManualAimOverride(currentRotation, nowMs)",
-            "function chooseTargetCandidateWithHysteresis(candidates, distanceBand, currentPlayer, angleAdvantage)",
+            "function selectTargetWithPolicy(candidates, nowMs)",
             "manualOverrideUntilMs = nowMs + CONFIG.manualOverridePauseMs",
             "lastWrittenAim.valid = false",
-            "chooseTargetCandidateWithHysteresis(",
+            "resetTargetLockState('manual_override')",
+            "selectTargetWithPolicy(candidates, Date.now())",
         ]:
             self.assertIn(token, text)
 
@@ -489,7 +501,6 @@ class AimStaticTests(unittest.TestCase):
             "cfg.aimBone",
             "cfg.smoothness",
             "cfg.maxAimDistance",
-            "cfg.maxAngleFOV",
             "cfg.localEyeHeight",
         ]:
             self.assertNotIn(token, set_config_fn)
@@ -499,11 +510,11 @@ class AimStaticTests(unittest.TestCase):
             "aimBone",
             "localEyeHeight",
             "smoothness",
-            "maxAngleFOV",
             "maxAimDistance",
         ]:
             self.assertNotIn(token, status_fn)
         self.assertIn("frameCount", status_fn)
+        self.assertIn("targetLockReason", status_fn)
 
     def test_manifest_and_feature_expose_aim_controls_consistently(self):
         manifest = json.loads(read_text(MANIFEST_FILE))
@@ -512,7 +523,10 @@ class AimStaticTests(unittest.TestCase):
         self.assertEqual(manifest["feature_id"], "aim")
         self.assertEqual(manifest["script"], "script.js")
         self.assertEqual(manifest["config"]["aimBone"], "chest")
-        self.assertEqual(manifest["config"]["maxAngleFOV"], 60.0)
+        self.assertEqual(manifest["config"]["outerConeDeg"], 12.0)
+        self.assertEqual(manifest["config"]["innerConeDeg"], 5.0)
+        self.assertEqual(manifest["config"]["switchMarginDeg"], 1.2)
+        self.assertEqual(manifest["config"]["targetScanIntervalMs"], 20)
         self.assertEqual(manifest["config"]["smoothness"], 1.0)
         self.assertEqual(manifest["config"]["localEyeHeight"], 1.55)
         control_keys = {control.get("key") for control in manifest["controls"] if control.get("key")}
@@ -536,7 +550,7 @@ class AimStaticTests(unittest.TestCase):
             "callbacks[\"set_config\"]",
             '"aimBone"',
             '"smoothness"',
-            '"maxAngleFOV"',
+            '"outerConeDeg"',
             '"maxAimDistance"',
             '"localEyeHeight"',
             '"diagnosticLogIntervalMs"',

@@ -51,14 +51,13 @@
 //      方向角约定与游戏一致：yaw = atan2(dx, dz)，
 //      pitch = atan2(dy, sqrt(dx^2+dz^2))；夹角 = sqrt(yawDiff^2 + pitchDiff^2)。
 //
-//   3) 打分与排序（config.target_mode）
-//      - "angle_then_distance"（默认）：
-//          第一步 先卡准星锥：夹角 <= max_angle_deg 才算候选；
-//          第二步 在锥内取"距离最近"的人。
-//      - "weighted"：
-//          score = 夹角(度) * angle_weight + 距离(米) * distance_weight，取最小。
-//      - "nearest"：
-//          忽略角度，直接取全场最近的敌人（只用于调试/对照）。
+//   3) 统一目标策略（与自瞄 11_aim/script.js 的 TARGET_POLICY 完全一致）
+//      - 先卡外锥：夹角 <= target_outer_cone_deg 才算候选；
+//      - 内锥 target_inner_cone_deg 有人时，只在内锥里选；
+//      - 角度优先；角度差 <= target_angle_tie_deg 时再比距离；
+//      - 当前目标轻粘滞：新目标角度优势 > target_switch_margin_deg，
+//        且连续 target_switch_confirm_scans 次确认后才换；
+//      - 枪械锥内没人默认不回退（可选近距保底）。
 //
 //   4) 目标命中点
 //      优先胸部骨骼 spine1（character +0x60），退化到 spine（+0x5C），
@@ -129,22 +128,24 @@
 //     4) Rigidbody.set_velocity(新方向 * 速度)，同时把 transform 朝向也掰过去。
 //
 //   "打谁"策略（scanEnemies + 准星锥）：
-//     弹体追踪**不读 config.target_mode**，它只认两个键：
-//       homing_cone_deg      = 0 -> 关闭准星锥，退回"全场最近"
-//                            > 0 -> 先只保留「锥轴 与 参考点->目标 夹角 <= 该值」的敌人，
-//                                   锥内再比距离取最近的那个
-//       homing_cone_fallback = true （默认）锥内没人 -> 回退成"全场最近"
-//                            = false          锥内没人 -> 这颗弹不追踪、按原弹道直飞
+//     与枪械/自瞄同一套：外锥 -> 内锥优先 -> 角度优先 -> 距离 tiebreak。
+//     发射时锥轴 = 玩家相机朝向（锥心 = 眼睛位置）；
+//     目标死亡后换目标时锥轴 = 弹体当前速度方向（锥心 = 弹体位置）。
+//     锥内没人：missile_fallback_nearest=true（默认）回退最近，
+//              可用 missile_fallback_max_distance 限制回退距离；
+//              =false 则这颗弹不追踪、按原弹道直飞。
 //
 // ------------------------------------------------------------------
 // 配置项速查
 // ------------------------------------------------------------------
 //   enable_guns / enable_homing / enable_explosives / enable_skill_projectiles
 //   gun_ray_redirect          射线接管开关（关掉 = 常规枪械完全不介入）
-//   target_mode / max_angle_deg / max_distance / angle_weight / distance_weight
-//   local_eye_height / chest_fallback_height / target_cache_ms
+//   target_outer_cone_deg / target_inner_cone_deg / target_angle_tie_deg
+//   target_switch_margin_deg / target_switch_confirm_scans / target_switch_cooldown_ms
+//   max_distance / local_eye_height / chest_fallback_height / target_cache_ms
+//   gun_fallback_nearest / gun_fallback_max_distance
 //   homing_speed / homing_turn / homing_retarget / homing_max_ms
-//   homing_pending_ms / homing_cone_deg / homing_cone_fallback
+//   homing_pending_ms / missile_fallback_nearest / missile_fallback_max_distance
 //   diagnostic_log / log_every / verbose_probe / log_to_file / log_file
 //
 //   注意：这里**没有任何** death_* / damage_entry / damage_override /
@@ -159,13 +160,6 @@
     var CALL_CONV = 'mscdecl';
     var MAX_PLAYER_SLOTS = 64;
     var POINTER_SIZE = 4;
-
-    // 目标选择策略（config.target_mode）
-    var TARGET_MODE = {
-        ANGLE_THEN_DISTANCE: 'angle_then_distance',
-        WEIGHTED: 'weighted',
-        NEAREST: 'nearest'
-    };
 
     // 投射物类别（只决定"归哪个子开关管"，与伤害无关）
     var CATEGORY = {
@@ -308,25 +302,36 @@
             enable_explosives: true,         // 榴弹 / 手雷 / RPG / 榴弹枪
             enable_skill_projectiles: true,  // 奥术手雷 / 地狱终结者火球
 
-            // ---- 枪械：目标选择 ----
-            target_mode: TARGET_MODE.ANGLE_THEN_DISTANCE,
-            max_angle_deg: 30.0,        // 准星锥角度（angle_then_distance / weighted 生效）
+            // ---- 统一目标策略（与 11_aim 的 TARGET_POLICY 同一套）----
+            //   外锥 -> 内锥优先 -> 角度优先（角度差 <= tie 时比距离）-> 轻粘滞。
+            //   枪械是"开火事件驱动"，确认帧用 1；自瞄是连续扫描，确认帧用 2。
+            target_outer_cone_deg: 12.0,
+            target_inner_cone_deg: 5.0,
+            target_angle_tie_deg: 1.0,
+            target_switch_margin_deg: 1.2,
+            target_switch_confirm_scans: 1,
+            target_switch_cooldown_ms: 100,
             max_distance: 0.0,          // 0 = 不限距离
-            angle_weight: 1.0,
-            distance_weight: 0.5,
             local_eye_height: 1.55,     // 准星锥的锥心 = 玩家坐标 + 该高度
             chest_fallback_height: 1.1, // 读不到骨骼时的瞄准点高度
-            target_cache_ms: 25,        // 目标缓存（同一次开火/同一帧内不重复扫人）
+            target_cache_ms: 15,        // 目标缓存（同一次开火/同一帧内不重复扫人）
             gun_ray_redirect: true,     // ★ 射线接管；关掉 = 常规枪械完全不介入
+
+            // 枪械锥内没人时：默认不回退，避免"对着空气开火却打最近的人"。
+            // 需要保底命中可打开，并只回退到近距 target_fallback_max_distance 内。
+            gun_fallback_nearest: false,
+            gun_fallback_max_distance: 10.0,
 
             // ---- 弹体追踪 ----
             homing_speed: 0.0,          // 0 = 用弹体自身的 shootSpeed
             homing_turn: 1.0,           // 0.05~1.0，每个物理步把方向掰向目标的力度
-            homing_retarget: true,      // 原目标死了自动改追最近的敌人
+            homing_retarget: true,      // 原目标死了自动改追（用同一套锥角/排序）
             homing_max_ms: 20000,       // 超过这个时间放弃制导（防指针复用/泄漏）
             homing_pending_ms: 800,     // "开火记录 -> 弹体生成"的最大配对时间差
-            homing_cone_deg: 30.0,      // 0 = 关闭准星锥，退回全场最近
-            homing_cone_fallback: true, // 锥内没人 -> 回退成全场最近
+            // 弹体发射时也走同一套准星锥；锥内没人时回退"全场最近"，
+            // 保住"对着空气扔雷也能追到人"。
+            missile_fallback_nearest: true,
+            missile_fallback_max_distance: 0.0, // 0 = 不限距离
 
             // ---- 诊断 ----
             diagnostic_log: false,
@@ -344,6 +349,8 @@
             selectedAtMs: 0,
             rayWarnLogged: false
         },
+        // 枪械专用的目标锁定状态。弹体每颗弹有独立 target，不复用这个状态。
+        targetLock: null,
         stats: {
             // ---- 常规枪械 ----
             gunDamageCalls: 0,
@@ -356,6 +363,8 @@
             rayRedirectSkip: 0,     // 没走到选目标就退出（没本地玩家 / 读不到相机朝向 / 距离过近）
             targetsSelected: 0,
             noTarget: 0,
+            targetLockReason: 'init',
+            targetSwitchCount: 0,
             // ---- 弹体追踪 ----
             missileSpawns: 0,      // SetWeaponData 命中次数 = 观察到几颗弹生成
             missileNotMine: 0,     // 弹体是别人发射的（不制导）
@@ -388,7 +397,7 @@
             coneEmpty: 0,          // 锥内一个敌人都没有
             coneFallback: 0,       // 锥内没人 -> 回退成全场最近
             coneEmptyStrict: 0,    // 锥内没人且关掉了回退 -> 放弃追踪
-            coneOff: 0,            // homing_cone_deg = 0，没启用锥
+            coneOff: 0,            // target_outer_cone_deg = 0，没启用锥
             coneAxisFail: 0,       // 读不到相机朝向/弹体速度 -> 退回全场最近
             coneRetarget: 0,       // 中途换目标时用了锥并选中
             // ---- 通用 ----
@@ -1021,7 +1030,206 @@
     }
 
     // ------------------------------------------------------------------
-    // 目标选择：准星方向 + 距离
+    // 统一目标策略（与 11_aim/script.js 的 TARGET_POLICY 保持一致）
+    // ------------------------------------------------------------------
+    function createTargetLockState() {
+        return {
+            current: null,
+            pendingPlayer: null,
+            pendingCount: 0,
+            lastSwitchAtMs: 0,
+            reason: 'init',
+            switchCount: 0
+        };
+    }
+
+    function resetTargetLock(state, reason) {
+        var lock = state || Runtime.targetLock;
+        if (!lock) return;
+        lock.current = null;
+        lock.pendingPlayer = null;
+        lock.pendingCount = 0;
+        lock.lastSwitchAtMs = 0;
+        lock.reason = reason || 'reset';
+        lock.switchCount = 0;
+    }
+
+    function sameTargetPlayer(a, b) {
+        if (!a || !b) return false;
+        if (a === b) return true;
+        try { if (typeof a.equals === 'function') return a.equals(b); } catch (_) {}
+        try { if (typeof b.equals === 'function') return b.equals(a); } catch (_) {}
+        return false;
+    }
+
+    function targetPolicy() {
+        var c = Runtime.config;
+        return {
+            outerConeDeg: c.target_outer_cone_deg,
+            innerConeDeg: c.target_inner_cone_deg,
+            angleTieDeg: c.target_angle_tie_deg,
+            switchMarginDeg: c.target_switch_margin_deg,
+            switchConfirmScans: c.target_switch_confirm_scans,
+            switchCooldownMs: c.target_switch_cooldown_ms
+        };
+    }
+
+    function candidateAngle(candidate) {
+        return candidate && isFinite(candidate.angleDeg) ? candidate.angleDeg : Infinity;
+    }
+
+    function candidateIsBetter(a, b, angleTieDeg) {
+        if (!a) return false;
+        if (!b) return true;
+        var aAngle = candidateAngle(a);
+        var bAngle = candidateAngle(b);
+        if (!isFinite(aAngle)) return false;
+        if (!isFinite(bAngle)) return true;
+        var tie = Math.max(0.0, angleTieDeg || 0.0);
+        if (aAngle + tie < bAngle) return true;
+        if (bAngle + tie < aAngle) return false;
+        return a.dist < b.dist;
+    }
+
+    // 内锥优先；同一层里角度优先，角度差在 tie 内再比距离。
+    function pickBestCandidate(candidates, innerConeDeg, angleTieDeg) {
+        if (!candidates || candidates.length === 0) return null;
+        var bestInner = null;
+        var bestOuter = null;
+        var innerLimit = Math.max(0.0, innerConeDeg || 0.0);
+        for (var i = 0; i < candidates.length; i += 1) {
+            var candidate = candidates[i];
+            if (!candidate || !isFinite(candidate.angleDeg)) continue;
+            if (!bestOuter || candidateIsBetter(candidate, bestOuter, angleTieDeg)) bestOuter = candidate;
+            if (candidate.angleDeg <= innerLimit &&
+                (!bestInner || candidateIsBetter(candidate, bestInner, angleTieDeg))) {
+                bestInner = candidate;
+            }
+        }
+        return bestInner || bestOuter;
+    }
+
+    function findCandidateByPlayer(candidates, player) {
+        if (!candidates || !player) return null;
+        for (var i = 0; i < candidates.length; i += 1) {
+            if (candidates[i] && sameTargetPlayer(candidates[i].player, player)) return candidates[i];
+        }
+        return null;
+    }
+
+    // 统一目标选择：角度优先 + 内锥优先 + 轻粘滞。
+    // 枪械是事件驱动（每发一次），switch_confirm_scans 默认 1；
+    // 自瞄是连续扫描，默认 2。
+    function selectTargetFromCandidates(candidates, nowMs) {
+        if (!Runtime.targetLock) Runtime.targetLock = createTargetLockState();
+        var lock = Runtime.targetLock;
+        var policy = targetPolicy();
+        var best = pickBestCandidate(candidates, policy.innerConeDeg, policy.angleTieDeg);
+
+        if (!best) {
+            lock.current = null;
+            lock.pendingPlayer = null;
+            lock.pendingCount = 0;
+            lock.reason = 'no_candidate';
+            return null;
+        }
+
+        var current = lock.current;
+        var currentFresh = current ? findCandidateByPlayer(candidates, current.player) : null;
+
+        if (!current) {
+            lock.current = best;
+            lock.pendingPlayer = null;
+            lock.pendingCount = 0;
+            lock.lastSwitchAtMs = nowMs;
+            lock.reason = 'acquire';
+            return best;
+        }
+
+        if (!currentFresh) {
+            lock.current = best;
+            lock.pendingPlayer = null;
+            lock.pendingCount = 0;
+            lock.lastSwitchAtMs = nowMs;
+            lock.reason = 'current_lost';
+            return best;
+        }
+
+        if (sameTargetPlayer(best.player, currentFresh.player)) {
+            lock.current = currentFresh;
+            lock.pendingPlayer = null;
+            lock.pendingCount = 0;
+            lock.reason = 'hold';
+            return currentFresh;
+        }
+
+        var currentAngle = candidateAngle(currentFresh);
+        var bestAngle = candidateAngle(best);
+        var currentInner = currentAngle <= policy.innerConeDeg;
+        var bestInner = bestAngle <= policy.innerConeDeg;
+        var advantage = currentAngle - bestAngle;
+        var wantSwitch = false;
+        var switchReason = '';
+
+        if (bestInner && !currentInner) {
+            wantSwitch = true;
+            switchReason = 'inner_override';
+        } else if (advantage > policy.switchMarginDeg) {
+            wantSwitch = true;
+            switchReason = 'angle_advantage';
+        }
+
+        if (!wantSwitch) {
+            lock.current = currentFresh;
+            lock.pendingPlayer = null;
+            lock.pendingCount = 0;
+            lock.reason = 'hold';
+            return currentFresh;
+        }
+
+        if ((nowMs - lock.lastSwitchAtMs) < policy.switchCooldownMs) {
+            lock.current = currentFresh;
+            lock.pendingPlayer = null;
+            lock.pendingCount = 0;
+            lock.reason = 'cooldown_hold';
+            return currentFresh;
+        }
+
+        if (!lock.pendingPlayer || !sameTargetPlayer(lock.pendingPlayer, best.player)) {
+            lock.pendingPlayer = best.player;
+            lock.pendingCount = 1;
+        } else {
+            lock.pendingCount += 1;
+        }
+        if (lock.pendingCount < policy.switchConfirmScans) {
+            lock.current = currentFresh;
+            lock.reason = 'confirming';
+            return currentFresh;
+        }
+
+        lock.current = best;
+        lock.pendingPlayer = null;
+        lock.pendingCount = 0;
+        lock.lastSwitchAtMs = nowMs;
+        lock.switchCount += 1;
+        lock.reason = switchReason;
+        return best;
+    }
+
+    function pickNearestCandidate(candidates, maxDistance) {
+        if (!candidates || candidates.length === 0) return null;
+        var limit = maxDistance > 0 ? maxDistance : Infinity;
+        var best = null;
+        for (var i = 0; i < candidates.length; i += 1) {
+            var candidate = candidates[i];
+            if (!candidate || !isFinite(candidate.dist) || candidate.dist > limit) continue;
+            if (!best || candidate.dist < best.dist) best = candidate;
+        }
+        return best;
+    }
+
+    // ------------------------------------------------------------------
+    // 枪械目标选择：准星锥 -> 内锥优先 -> 角度优先 -> 轻粘滞
     // ------------------------------------------------------------------
     function selectTarget(myPlayer, eyePos, rotation) {
         var gm = getGameManager();
@@ -1033,8 +1241,10 @@
 
         var players = getAllPlayers(gm);
         var myTeam = readTeam(myPlayer);
+        var policy = targetPolicy();
+        var coneCandidates = [];
+        var allCandidates = [];
         var best = null;
-        var candidateCount = 0;
         var nearestDistance = -1;
 
         // 世界级探针：候选集多大、准星朝哪、用什么条件筛
@@ -1042,8 +1252,8 @@
             probe('sel', 'players=' + players.length + ' myPlayer=' + fmtPtr(myPlayer) +
                 ' myTeam=' + myTeam + ' eye=' + fmtVec(eyePos) +
                 ' rot=' + rotation.yawDeg.toFixed(1) + '/' + rotation.pitchDeg.toFixed(1) +
-                ' mode=' + Runtime.config.target_mode +
-                ' cone=' + Runtime.config.max_angle_deg + 'deg maxDist=' + Runtime.config.max_distance +
+                ' outer=' + policy.outerConeDeg + 'deg inner=' + policy.innerConeDeg +
+                ' maxDist=' + Runtime.config.max_distance +
                 ' enemies=' + countEnemies(myPlayer, players));
         }
 
@@ -1093,41 +1303,40 @@
                 );
                 if (!isFinite(angleDeg)) { note(i, 'angle not finite'); continue; }
 
-                // angle_then_distance / nearest 都要先过准星锥，
-                // 只有 nearest 模式才允许完全忽略角度。
-                if (Runtime.config.target_mode !== TARGET_MODE.NEAREST &&
-                    angleDeg > Runtime.config.max_angle_deg) {
+                var entry = {
+                    player: candidate,
+                    pos: aimPoint,
+                    rootPos: targetRoot,
+                    dist: angles.dist,
+                    angleDeg: angleDeg
+                };
+                allCandidates.push(entry);
+                if (nearestDistance < 0 || angles.dist < nearestDistance) nearestDistance = angles.dist;
+
+                if (angleDeg > policy.outerConeDeg) {
                     note(i, fmtPtr(candidate) + ' angle=' + angleDeg.toFixed(1) +
-                        ' > cone=' + Runtime.config.max_angle_deg + ' -> outside crosshair cone, skip');
+                        ' > outer=' + policy.outerConeDeg + ' -> outside crosshair cone, skip');
                     continue;
                 }
                 note(i, fmtPtr(candidate) + ' ACCEPT angle=' + angleDeg.toFixed(1) +
                     ' dist=' + angles.dist.toFixed(1));
-
-                candidateCount += 1;
-                if (nearestDistance < 0 || angles.dist < nearestDistance) nearestDistance = angles.dist;
-
-                var score;
-                if (Runtime.config.target_mode === TARGET_MODE.WEIGHTED) {
-                    score = angleDeg * Runtime.config.angle_weight +
-                        angles.dist * Runtime.config.distance_weight;
-                } else {
-                    // angle_then_distance：角度已过筛，直接比距离
-                    score = angles.dist;
-                }
-
-                if (best === null || score < best.score) {
-                    best = {
-                        player: candidate,
-                        pos: aimPoint,
-                        rootPos: targetRoot,
-                        dist: angles.dist,
-                        angleDeg: angleDeg,
-                        score: score
-                    };
-                }
+                coneCandidates.push(entry);
             } catch (_) {}
         }
+
+        best = selectTargetFromCandidates(coneCandidates, Date.now());
+
+        // 可选保底：锥内没人时，只回退到近距最近；默认关闭。
+        if (!best && Runtime.config.gun_fallback_nearest) {
+            best = pickNearestCandidate(allCandidates, Runtime.config.gun_fallback_max_distance);
+            if (best && Runtime.targetLock) {
+                Runtime.targetLock.current = best;
+                Runtime.targetLock.reason = 'fallback_nearest';
+            }
+        }
+
+        Runtime.stats.targetLockReason = Runtime.targetLock ? Runtime.targetLock.reason : 'uninitialized';
+        Runtime.stats.targetSwitchCount = Runtime.targetLock ? Runtime.targetLock.switchCount : 0;
 
         if (best) {
             Runtime.stats.targetsSelected += 1;
@@ -1136,14 +1345,16 @@
         } else {
             Runtime.stats.noTarget += 1;
             probe('sel', 'NO TARGET: players=' + players.length +
-                ' acceptedInCone=' + candidateCount +
-                ' nearestAccepted=' + (nearestDistance < 0 ? '-' : nearestDistance.toFixed(1)) +
-                ' cone=' + Runtime.config.max_angle_deg + 'deg maxDist=' + Runtime.config.max_distance +
-                ' (把"打谁策略"切到"仅取最近(调试)"可确认是不是准星锥卡太死)');
+                ' acceptedInCone=' + coneCandidates.length +
+                ' nearest=' + (nearestDistance < 0 ? '-' : nearestDistance.toFixed(1)) +
+                ' outer=' + policy.outerConeDeg + 'deg maxDist=' + Runtime.config.max_distance +
+                ' fallback=' + (Runtime.config.gun_fallback_nearest ? 'on' : 'off'));
         }
         Runtime.stats.lastResult = best
-            ? ('target ok, angle=' + best.angleDeg.toFixed(1) + 'deg, dist=' + best.dist.toFixed(1) + 'm, candidates=' + candidateCount)
-            : ('no target, candidatesWithinCone=' + candidateCount + ', nearest=' + (nearestDistance < 0 ? '-' : nearestDistance.toFixed(1)));
+            ? ('target ok, angle=' + best.angleDeg.toFixed(1) + 'deg, dist=' + best.dist.toFixed(1) +
+                'm, candidates=' + coneCandidates.length + ', reason=' + Runtime.stats.targetLockReason)
+            : ('no target, candidatesWithinCone=' + coneCandidates.length +
+                ', nearest=' + (nearestDistance < 0 ? '-' : nearestDistance.toFixed(1)));
         return best;
     }
 
@@ -1548,6 +1759,7 @@
                     ' skip=' + s.rayRedirectSkip +
                     ' noTarget=' + s.noTarget +
                     ' selected=' + s.targetsSelected +
+                    ' lockReason=' + s.targetLockReason + ' switches=' + s.targetSwitchCount +
                     ' passthrough(remote)=' + s.skippedRemote +
                     ' errors=' + s.errorCount + ' lastError=' + (s.lastError || '-'));
                 // 弹体追踪单独一行，方便一眼判断"追踪到底卡在哪一步"：
@@ -1613,25 +1825,24 @@
     //   与 selectTarget（枪械直伤）的区别：**不做任何视线判定**，
     //   敌我判定只保留两条硬规则：**敌对阵营 + 存活**，永远不打自己人。
     //
-    //   scanEnemies(from, cone) 一次扫完，同时给出两个结果：
-    //     bestCone = 锥内最近的敌人（cone 为 null 时 = bestAny）
-    //     bestAny  = 全场最近的敌人
-    //   这样"锥内没人就回退全场最近"不用扫两遍。
+    //   scanEnemies(from, axis, policy) 一次扫完：
+    //     allCandidates = 所有通过硬过滤的敌人（用于近距/全场回退）
+    //     coneCandidates = 外锥内的敌人
+    //     bestCone = 内锥优先 + 角度优先 + 距离 tiebreak 选出的目标
+    //     bestAny  = 全场最近（仅用于回退）
     //
-    //   cone = { yawDeg, pitchDeg, deg } 就是"准星锥"：
-    //     先只保留「参考点 -> 目标」方向与锥轴夹角 <= deg 的敌人，锥内再比距离。
-    //     夹角算法与枪械直伤用的完全一致（calculateTargetAngles + angleDistanceDeg），
-    //     所以"准星锥"在两条路径上的含义不会漂移。
-    //
-    //   排序依据 = 到参考点的 3D 直线距离，量到**胸口**（getAimPoint，取不到才退到脚底）。
-    //   早期版本量的是"脚底到脚底"，已改成胸口：命中点在胸口，排序和拐弯用同一个点更一致。
-    function scanEnemies(from, cone) {
+    //   axis = { yawDeg, pitchDeg }；policy = targetPolicy()。
+    //   夹角算法与枪械直伤完全一致，所以"准星锥"在三条路径上的含义不会漂移。
+    function scanEnemies(from, axis, policy) {
         var result = {
-            bestCone: null, bestAny: null,
-            enemies: 0,          // 通过硬过滤的敌人总数
-            inCone: 0,           // 其中落在准星锥内的数量
-            nearestAngle: -1,    // 全场最近的那个敌人与锥轴的夹角（锥空时看它，判断是"背对"还是"锥太小"）
-            usedCone: !!(cone && cone.deg > 0)
+            bestCone: null,
+            bestAny: null,
+            allCandidates: [],
+            coneCandidates: [],
+            enemies: 0,
+            inCone: 0,
+            nearestAngle: -1,
+            usedCone: !!(axis && policy && policy.outerConeDeg > 0)
         };
         if (!from) return result;
         var me = getMyPlayer();
@@ -1652,93 +1863,114 @@
                 var dx = aim.x - from.x, dy = aim.y - from.y, dz = aim.z - from.z;
                 var dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
                 result.enemies += 1;
-                // 夹角只在启用锥时才算（关锥时这个数没有意义，省一次三角运算）
+
                 var ang = -1;
                 if (result.usedCone) {
                     var angles = calculateTargetAngles(from, aim);
                     if (angles) {
                         var a = angleDistanceDeg(angles.targetYawDeg, angles.targetPitchDeg,
-                            cone.yawDeg, cone.pitchDeg);
+                            axis.yawDeg, axis.pitchDeg);
                         if (isFinite(a)) ang = a;
                     }
                 }
+
+                var entry = { player: candidate, dist: dist, angleDeg: ang };
+                result.allCandidates.push(entry);
                 if (result.bestAny === null || dist < result.bestAny.dist) {
-                    result.bestAny = { player: candidate, dist: dist, angleDeg: ang };
-                    // nearestAngle = **全场最近的那个敌人**的夹角（不是"最小夹角"）。
+                    result.bestAny = entry;
+                    // nearestAngle = 全场最近的那个敌人的夹角（不是最小夹角）。
                     // 锥空时看它：若在 90° 以上，说明你是背对着最近的人，不是锥开小了。
                     if (result.usedCone) result.nearestAngle = ang;
                 }
-                if (!result.usedCone) { result.inCone += 1; continue; }
-                if (ang < 0 || ang > cone.deg) continue;   // 锥外 / 夹角读不到：淘汰
-                result.inCone += 1;
-                if (result.bestCone === null || dist < result.bestCone.dist) {
-                    result.bestCone = { player: candidate, dist: dist, angleDeg: ang };
+
+                if (!result.usedCone) {
+                    result.inCone += 1;
+                    result.coneCandidates.push(entry);
+                    continue;
                 }
+                if (ang < 0 || ang > policy.outerConeDeg) continue;
+                result.inCone += 1;
+                result.coneCandidates.push(entry);
             } catch (_) {}
         }
-        if (!result.usedCone) result.bestCone = result.bestAny;
+        if (result.usedCone) {
+            result.bestCone = pickBestCandidate(
+                result.coneCandidates,
+                policy.innerConeDeg,
+                policy.angleTieDeg
+            );
+        } else {
+            result.bestCone = result.bestAny;
+        }
         return result;
     }
 
     // 纯"全场最近"（不启用准星锥）。
     function pickNearestEnemyFrom(from) {
-        return scanEnemies(from, null).bestCone;
+        return scanEnemies(from, null, targetPolicy()).bestAny;
     }
 
     // ------------------------------------------------------------------
-    // 弹体追踪的"打谁"策略：**准星锥内距离最近的敌人**
+    // 弹体追踪的"打谁"策略：与外锥/内锥/角度排序完全同一套
     // ------------------------------------------------------------------
     //   发射时（armMissileHoming 调用）：
     //     锥轴 = 本地玩家相机朝向（readCameraRotation）
     //     锥心 = 眼睛位置（getLocalEyePos）—— 准星锥必须从眼睛量
-    //   锥内有人 -> 取锥内最近的那个
-    //   锥内没人 -> homing_cone_fallback：
-    //       true （默认）= 回退成"全场最近"，保住"对着空气扔雷也能追到人"
-    //       false        = 返回 null，这颗弹不追踪、按原弹道直飞
-    //   homing_cone_deg = 0 -> 完全关闭锥，等于旧行为（全场最近）
+    //   锥内有人 -> 取内锥优先、角度优先的那个；锥内没人 -> 按配置回退
+    //   锥内没人 -> missile_fallback_nearest：
+    //       true （默认）= 回退"全场最近"（可再用 max_distance 限制近距），
+    //                       保住"对着空气扔雷也能追到人"；
+    //       false        = 返回 null，这颗弹不追踪、按原弹道直飞。
+    //   外锥 0 = 完全关闭锥（调试用），退回全场最近。
     function pickEnemyForLaunch() {
         var me = getMyPlayer();
         if (isNull(me)) return null;
         var eye = getLocalEyePos(me);
         if (!eye) return null;
+        var policy = targetPolicy();
 
-        var coneDeg = Runtime.config.homing_cone_deg;
-        if (!(coneDeg > 0)) {
+        if (!(policy.outerConeDeg > 0)) {
             Runtime.stats.coneOff += 1;
-            return scanEnemies(eye, null).bestCone;
+            return scanEnemies(eye, null, policy).bestAny;
         }
         var rot = readCameraRotation(me);
         if (!rot) {
             // 读不到相机朝向：宁可"追最近的"也不要完全不追
             Runtime.stats.coneAxisFail += 1;
-            return scanEnemies(eye, null).bestCone;
+            return scanEnemies(eye, null, policy).bestAny;
         }
-        var scan = scanEnemies(eye, { yawDeg: rot.yawDeg, pitchDeg: rot.pitchDeg, deg: coneDeg });
+        var scan = scanEnemies(eye, { yawDeg: rot.yawDeg, pitchDeg: rot.pitchDeg }, policy);
         if (scan.bestCone) {
             Runtime.stats.coneHit += 1;
             if (probeBudget('homingCone', 20)) {
                 probe('homingCone', 'LAUNCH 锥内命中 target=' + fmtPtr(scan.bestCone.player) +
-                    ' angle=' + scan.bestCone.angleDeg.toFixed(1) + '/' + coneDeg.toFixed(0) + 'deg' +
+                    ' angle=' + scan.bestCone.angleDeg.toFixed(1) + '/' + policy.outerConeDeg.toFixed(0) + 'deg' +
                     ' dist=' + scan.bestCone.dist.toFixed(1) +
-                    ' 锥内候选=' + scan.inCone + '/' + scan.enemies);
+                    ' 锥内候选=' + scan.inCone + '/' + scan.enemies +
+                    ' inner=' + policy.innerConeDeg.toFixed(1) + 'deg');
             }
             return scan.bestCone;
         }
         Runtime.stats.coneEmpty += 1;
-        if (!Runtime.config.homing_cone_fallback) {
+        if (!Runtime.config.missile_fallback_nearest) {
             Runtime.stats.coneEmptyStrict += 1;
             probe('homingCone', 'LAUNCH 锥内无敌人 + 已关闭回退 -> 这颗弹不追踪' +
                 ' 全场敌人=' + scan.enemies +
                 ' 最近夹角=' + (scan.nearestAngle < 0 ? '-' : scan.nearestAngle.toFixed(1)) +
-                ' (锥=' + coneDeg.toFixed(0) + 'deg)');
+                ' (outer=' + policy.outerConeDeg.toFixed(0) + 'deg)');
+            return null;
+        }
+        var fallback = pickNearestCandidate(scan.allCandidates, Runtime.config.missile_fallback_max_distance);
+        if (!fallback) {
+            Runtime.stats.coneEmptyStrict += 1;
             return null;
         }
         Runtime.stats.coneFallback += 1;
-        probe('homingCone', 'LAUNCH 锥内无敌人 -> 回退全场最近' +
+        probe('homingCone', 'LAUNCH 锥内无敌人 -> 回退最近' +
             ' 全场敌人=' + scan.enemies +
             ' 最近夹角=' + (scan.nearestAngle < 0 ? '-' : scan.nearestAngle.toFixed(1)) +
-            ' (锥=' + coneDeg.toFixed(0) + 'deg，调大锥角或关掉回退可改行为)');
-        return scan.bestAny;
+            ' (outer=' + policy.outerConeDeg.toFixed(0) + 'deg)');
+        return fallback;
     }
 
     // 弹体飞行途中换目标（原目标死亡/读不到时）：
@@ -1746,47 +1978,52 @@
     //   用速度而不是玩家准星的理由：
     //     1) 弹体已经飞出去了，玩家可能早就看别处，用玩家准星会让弹体突然大幅掉头；
     //     2) 用速度天然避免弹体在半空 180° 掉头，飞行观感更自然。
-    //   回退规则与发射时一致（homing_cone_fallback）。
+    //   排序仍用同一套：内锥优先 -> 角度优先 -> 距离 tiebreak。
     function pickEnemyForMissileRetarget(mpos, rb) {
         if (!mpos) return null;
-        var coneDeg = Runtime.config.homing_cone_deg;
-        if (!(coneDeg > 0)) {
+        var policy = targetPolicy();
+        if (!(policy.outerConeDeg > 0)) {
             Runtime.stats.coneOff += 1;
-            return scanEnemies(mpos, null).bestCone;
+            return scanEnemies(mpos, null, policy).bestAny;
         }
         var v = readRigidbodyVelocity(rb);
         var vlen = v ? Math.sqrt(v.x * v.x + v.y * v.y + v.z * v.z) : 0;
         if (!(vlen > 0.01)) {
             // 读不到速度（刚出膛/已停住）：退回全场最近
             Runtime.stats.coneAxisFail += 1;
-            return scanEnemies(mpos, null).bestCone;
+            return scanEnemies(mpos, null, policy).bestAny;
         }
         var hDist = Math.sqrt(v.x * v.x + v.z * v.z);
         if (hDist < 0.01) hDist = 0.01;
         var scan = scanEnemies(mpos, {
             yawDeg: Math.atan2(v.x, v.z) * 180.0 / Math.PI,
-            pitchDeg: Math.atan2(v.y, hDist) * 180.0 / Math.PI,
-            deg: coneDeg
-        });
+            pitchDeg: Math.atan2(v.y, hDist) * 180.0 / Math.PI
+        }, policy);
         if (scan.bestCone) {
             Runtime.stats.coneHit += 1;
             Runtime.stats.coneRetarget += 1;
             if (probeBudget('homingCone', 30)) {
                 probe('homingCone', 'RETARGET 锥内命中 target=' + fmtPtr(scan.bestCone.player) +
-                    ' angle=' + scan.bestCone.angleDeg.toFixed(1) + '/' + coneDeg.toFixed(0) + 'deg' +
+                    ' angle=' + scan.bestCone.angleDeg.toFixed(1) + '/' + policy.outerConeDeg.toFixed(0) + 'deg' +
                     ' dist=' + scan.bestCone.dist.toFixed(1) +
-                    ' 锥内候选=' + scan.inCone + '/' + scan.enemies);
+                    ' 锥内候选=' + scan.inCone + '/' + scan.enemies +
+                    ' inner=' + policy.innerConeDeg.toFixed(1) + 'deg');
             }
             return scan.bestCone;
         }
         Runtime.stats.coneEmpty += 1;
-        if (!Runtime.config.homing_cone_fallback) {
+        if (!Runtime.config.missile_fallback_nearest) {
+            Runtime.stats.coneEmptyStrict += 1;
+            return null;
+        }
+        var fallback = pickNearestCandidate(scan.allCandidates, Runtime.config.missile_fallback_max_distance);
+        if (!fallback) {
             Runtime.stats.coneEmptyStrict += 1;
             return null;
         }
         Runtime.stats.coneFallback += 1;
         Runtime.stats.coneRetarget += 1;
-        return scan.bestAny;
+        return fallback;
     }
 
     // float -> u32 位模式（按值 struct 压栈时用）
@@ -1912,7 +2149,8 @@
             probe('missileArm', 'ARM missile=' + fmtPtr(missile) + ' owner=' + fmtPtr(owner) +
                 ' target=' + fmtPtr(best.player) + ' dist=' + best.dist.toFixed(1) +
                 ' angle=' + (best.angleDeg >= 0 ? best.angleDeg.toFixed(1) : '-') +
-                ' cone=' + Runtime.config.homing_cone_deg.toFixed(0) + 'deg' +
+                ' outer=' + Runtime.config.target_outer_cone_deg.toFixed(0) + 'deg' +
+                ' inner=' + Runtime.config.target_inner_cone_deg.toFixed(0) + 'deg' +
                 ' category=' + pending.category + ' via=' + pending.label +
                 ' wpnData=' + fmtPtr(missile.add(OFF.Missile_weaponData).readPointer()));
         } catch (error) { fail('armMissileHoming', error); }
@@ -2162,6 +2400,9 @@
         Runtime.cache.selectedTarget = null;
         Runtime.cache.selectedAtMs = 0;
         Runtime.cache.rayWarnLogged = false;
+        Runtime.targetLock = null;
+        Runtime.stats.targetLockReason = 'init';
+        Runtime.stats.targetSwitchCount = 0;
         Runtime.generation += 1;
         Runtime.enabled = false;
         Runtime.module = null;
@@ -2191,21 +2432,36 @@
             c.enable_skill_projectiles = input.enable_skill_projectiles !== false;
         }
 
-        if (input.target_mode !== undefined) {
-            var mode = String(input.target_mode);
-            if (mode === TARGET_MODE.ANGLE_THEN_DISTANCE ||
-                mode === TARGET_MODE.WEIGHTED ||
-                mode === TARGET_MODE.NEAREST) {
-                c.target_mode = mode;
-            }
+        // ---- 统一目标策略 ----
+        if (input.target_outer_cone_deg !== undefined) {
+            c.target_outer_cone_deg = clampFloat(toNumber(input.target_outer_cone_deg, c.target_outer_cone_deg), 1, 90);
+            c.target_inner_cone_deg = Math.min(c.target_inner_cone_deg, c.target_outer_cone_deg);
         }
-        if (input.max_angle_deg !== undefined) c.max_angle_deg = clampFloat(toNumber(input.max_angle_deg, c.max_angle_deg), 0, 180);
+        if (input.target_inner_cone_deg !== undefined) {
+            c.target_inner_cone_deg = clampFloat(toNumber(input.target_inner_cone_deg, c.target_inner_cone_deg), 0, c.target_outer_cone_deg);
+        }
+        if (input.target_angle_tie_deg !== undefined) {
+            c.target_angle_tie_deg = clampFloat(toNumber(input.target_angle_tie_deg, c.target_angle_tie_deg), 0, 15);
+        }
+        if (input.target_switch_margin_deg !== undefined) {
+            c.target_switch_margin_deg = clampFloat(toNumber(input.target_switch_margin_deg, c.target_switch_margin_deg), 0, 15);
+        }
+        if (input.target_switch_confirm_scans !== undefined) {
+            c.target_switch_confirm_scans = Math.max(1, Math.min(10, Math.round(toNumber(input.target_switch_confirm_scans, c.target_switch_confirm_scans))));
+        }
+        if (input.target_switch_cooldown_ms !== undefined) {
+            c.target_switch_cooldown_ms = clampFloat(toNumber(input.target_switch_cooldown_ms, c.target_switch_cooldown_ms), 0, 2000);
+        }
         if (input.max_distance !== undefined) c.max_distance = clampFloat(toNumber(input.max_distance, c.max_distance), 0, 1000);
-        if (input.angle_weight !== undefined) c.angle_weight = clampFloat(toNumber(input.angle_weight, c.angle_weight), 0, 100);
-        if (input.distance_weight !== undefined) c.distance_weight = clampFloat(toNumber(input.distance_weight, c.distance_weight), 0, 100);
 
         // ★ 射线接管总开关。关掉 = 常规枪械完全不介入（纯弹体追踪）。
         if (input.gun_ray_redirect !== undefined) c.gun_ray_redirect = input.gun_ray_redirect !== false;
+
+        // 枪械锥内没人时的可选保底：只回退近距最近，默认关闭。
+        if (input.gun_fallback_nearest !== undefined) c.gun_fallback_nearest = input.gun_fallback_nearest !== false;
+        if (input.gun_fallback_max_distance !== undefined) {
+            c.gun_fallback_max_distance = clampFloat(toNumber(input.gun_fallback_max_distance, c.gun_fallback_max_distance), 0, 1000);
+        }
 
         if (input.local_eye_height !== undefined) c.local_eye_height = clampFloat(toNumber(input.local_eye_height, c.local_eye_height), 0, 5);
         if (input.chest_fallback_height !== undefined) c.chest_fallback_height = clampFloat(toNumber(input.chest_fallback_height, c.chest_fallback_height), 0, 5);
@@ -2218,9 +2474,11 @@
         if (input.homing_retarget !== undefined) c.homing_retarget = input.homing_retarget !== false;
         if (input.homing_max_ms !== undefined) c.homing_max_ms = clampFloat(toNumber(input.homing_max_ms, c.homing_max_ms), 500, 120000);
         if (input.homing_pending_ms !== undefined) c.homing_pending_ms = clampFloat(toNumber(input.homing_pending_ms, c.homing_pending_ms), 50, 5000);
-        // 弹体追踪的"打谁"策略：准星锥角度（0=关闭，回到全场最近）+ 锥内没人是否回退
-        if (input.homing_cone_deg !== undefined) c.homing_cone_deg = clampFloat(toNumber(input.homing_cone_deg, c.homing_cone_deg), 0, 180);
-        if (input.homing_cone_fallback !== undefined) c.homing_cone_fallback = input.homing_cone_fallback !== false;
+        // 弹体锥内没人时的回退：默认回退全场最近；可限制最大距离。
+        if (input.missile_fallback_nearest !== undefined) c.missile_fallback_nearest = input.missile_fallback_nearest !== false;
+        if (input.missile_fallback_max_distance !== undefined) {
+            c.missile_fallback_max_distance = clampFloat(toNumber(input.missile_fallback_max_distance, c.missile_fallback_max_distance), 0, 1000);
+        }
         if (input.verbose_probe !== undefined) c.verbose_probe = input.verbose_probe !== false;
         if (input.log_to_file !== undefined) c.log_to_file = input.log_to_file !== false;
         if (input.log_file !== undefined && String(input.log_file) !== c.log_file) {
@@ -2235,6 +2493,7 @@
         // 目标缓存与选择参数变了就失效，避免用到旧目标。
         Runtime.cache.selectedTarget = null;
         Runtime.cache.selectedAtMs = 0;
+        resetTargetLock(Runtime.targetLock, 'config_changed');
 
         log('info', '[probe:config] guns=' + c.enable_guns +
             ' rayRedirect=' + c.gun_ray_redirect +
@@ -2243,9 +2502,11 @@
             ' skills=' + c.enable_skill_projectiles +
             ' homingSpeed=' + c.homing_speed + ' homingTurn=' + c.homing_turn +
             ' retarget=' + c.homing_retarget + ' maxMs=' + c.homing_max_ms +
-            ' homingCone=' + c.homing_cone_deg + 'deg coneFallback=' + c.homing_cone_fallback +
-            ' mode=' + c.target_mode +
-            ' cone=' + c.max_angle_deg + ' maxDist=' + c.max_distance +
+            ' outer=' + c.target_outer_cone_deg + 'deg inner=' + c.target_inner_cone_deg + 'deg' +
+            ' margin=' + c.target_switch_margin_deg + 'deg confirm=' + c.target_switch_confirm_scans +
+            ' gunFallback=' + c.gun_fallback_nearest +
+            ' missileFallback=' + c.missile_fallback_nearest +
+            ' maxDist=' + c.max_distance +
             ' verboseProbe=' + c.verbose_probe +
             ' logFile=' + (c.log_file || '(none)'));
         return getStatus();
@@ -2272,8 +2533,11 @@
             ' explosives=' + Runtime.config.enable_explosives +
             ' skills=' + Runtime.config.enable_skill_projectiles +
             ' homingTurn=' + Runtime.config.homing_turn +
-            ' homingCone=' + Runtime.config.homing_cone_deg + 'deg fallback=' + Runtime.config.homing_cone_fallback +
-            ' cone=' + Runtime.config.max_angle_deg + ' maxDist=' + Runtime.config.max_distance +
+            ' outer=' + Runtime.config.target_outer_cone_deg + 'deg' +
+            ' inner=' + Runtime.config.target_inner_cone_deg + 'deg' +
+            ' gunFallback=' + Runtime.config.gun_fallback_nearest +
+            ' missileFallback=' + Runtime.config.missile_fallback_nearest +
+            ' maxDist=' + Runtime.config.max_distance +
             ' | logFile=' + (Runtime.logFilePath || '(none: ' + (Runtime.logFileFailed || 'not set') + ')'));
 
         if (!installHooks()) {
@@ -2324,6 +2588,8 @@
             ray_redirect_skip: Runtime.stats.rayRedirectSkip,
             targets_selected: Runtime.stats.targetsSelected,
             no_target: Runtime.stats.noTarget,
+            target_lock_reason: Runtime.stats.targetLockReason,
+            target_switch_count: Runtime.stats.targetSwitchCount,
             last_target_angle: Runtime.stats.lastTargetAngle,
             last_target_distance: Runtime.stats.lastTargetDistance,
 

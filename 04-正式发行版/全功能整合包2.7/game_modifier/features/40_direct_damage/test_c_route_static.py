@@ -77,13 +77,6 @@ RETIRED_CONFIG_KEYS = (
     "death_respawn_grace_ms",
 )
 
-TARGET_MODE_ALIASES = {
-    "TARGET_MODE.ANGLE_THEN_DISTANCE": "angle_then_distance",
-    "TARGET_MODE.WEIGHTED": "weighted",
-    "TARGET_MODE.NEAREST": "nearest",
-}
-
-
 def script_text():
     return SCRIPT_PATH.read_text(encoding="utf-8")
 
@@ -155,8 +148,6 @@ def script_config_lines(text):
 
 def normalize(raw):
     raw = raw.strip()
-    if raw in TARGET_MODE_ALIASES:
-        return TARGET_MODE_ALIASES[raw]
     if len(raw) >= 2 and raw[0] == raw[-1] and raw[0] in ("'", '"'):
         return raw[1:-1]
     if raw == "true":
@@ -288,6 +279,50 @@ class CrouteBoundaryTests(unittest.TestCase):
             "function redirectRayToTarget(",
         ):
             self.assertIn(token, text)
+
+    def test_unified_target_policy_matches_aim_and_replaces_distance_first_modes(self):
+        text = code()
+        for token in (
+            "target_outer_cone_deg: 12.0",
+            "target_inner_cone_deg: 5.0",
+            "target_angle_tie_deg: 1.0",
+            "target_switch_margin_deg: 1.2",
+            "target_switch_confirm_scans: 1",
+            "target_switch_cooldown_ms: 100",
+            "function selectTargetFromCandidates(candidates, nowMs)",
+            "function pickBestCandidate(candidates, innerConeDeg, angleTieDeg)",
+            "function candidateIsBetter(a, b, angleTieDeg)",
+            "function pickNearestCandidate(candidates, maxDistance)",
+        ):
+            self.assertIn(token, text)
+
+        for retired in (
+            "TARGET_MODE",
+            "target_mode",
+            "max_angle_deg",
+            "angle_weight",
+            "distance_weight",
+            "homing_cone_deg",
+            "homing_cone_fallback",
+        ):
+            self.assertNotIn(retired, text, "旧的距离优先目标策略残留：%s" % retired)
+
+    def test_gun_and_missile_paths_use_the_same_cone_and_ranking(self):
+        text = code()
+        gun = function_body(text, "function selectTarget(myPlayer, eyePos, rotation)")
+        self.assertIn("targetPolicy()", gun)
+        self.assertIn("selectTargetFromCandidates(coneCandidates, Date.now())", gun)
+        self.assertIn("pickNearestCandidate(allCandidates", gun)
+        self.assertIn("angleDeg > policy.outerConeDeg", gun)
+
+        launch = function_body(text, "function pickEnemyForLaunch()")
+        self.assertIn("var policy = targetPolicy()", launch)
+        self.assertIn("scanEnemies(eye, { yawDeg: rot.yawDeg, pitchDeg: rot.pitchDeg }, policy)", launch)
+        self.assertIn("pickNearestCandidate(scan.allCandidates", launch)
+
+        retarget = function_body(text, "function pickEnemyForMissileRetarget(mpos, rb)")
+        self.assertIn("var policy = targetPolicy()", retarget)
+        self.assertIn("pickNearestCandidate(scan.allCandidates", retarget)
 
 
 if __name__ == "__main__":
