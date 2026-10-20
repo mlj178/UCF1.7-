@@ -1,6 +1,0 @@
-def handle_event(context, event, payload):
-    """本功能插件事件处理，保持功能局部化。"""
-    if event == "enabled":
-        context.log("开火直伤已启用")
-    elif event == "disabled":
-        context.log("开火直伤已关闭")

@@ -124,5 +124,54 @@ class RoomPlayerCountStaticTests(unittest.TestCase):
         self.assertIn("writeProfileBytes('base')", apply_profile)
 
 
+    def test_v3_profile_does_not_patch_the_local_player_supply_box_branch(self):
+        # hotfix7: the old v3 profile's 0xB44895 -> 0x2BF6F8 -> 0x1553BA cave
+        # ran on every local-player supply-box pickup and ended in a DEP crash
+        # (call this). It must never come back into the write profile.
+        for path in (RUNTIME_JS, FORMAL_JS):
+            text = path.read_text(encoding="utf-8")
+            profile = text.split("var BASE_30_TO_V3_PROFILE = [", 1)[1].split("];", 1)[0]
+            for rva in ("0xB44895", "0x2BF6F8", "0x154FBA", "0x5C0E4B"):
+                self.assertNotIn(rva, profile, f"{path.name} writes {rva}")
+            self.assertIn("function clearLegacySupplyBoxCheat()", text, path.name)
+
+        runtime = RUNTIME_JS.read_text(encoding="utf-8")
+        apply_body = runtime.split("function applyBaselineProfile()", 1)[1].split(
+            "function restoreBaselineProfile()", 1
+        )[0]
+        self.assertIn("clearLegacySupplyBoxCheat();", apply_body)
+        disable_body = runtime.split("function disable()", 1)[1]
+        self.assertIn("clearLegacySupplyBoxCheat();", disable_body)
+
+    def test_v3_profile_does_not_install_unrelated_cheat_payloads(self):
+        # hotfix8: 0x12AF7F / 0x3D18E2 / 0x72BE79 / 0x9DA472 were weapon /
+        # jump / RPG cheat caves carried over from the 100-player cheat build.
+        # Neither build branches into them, so they only shipped dead bytes;
+        # the room-count profile must not write them at all.
+        dead_rvas = ("0x12AF7F", "0x3D18E2", "0x72BE79", "0x9DA472")
+        for path in (RUNTIME_JS, FORMAL_JS):
+            text = path.read_text(encoding="utf-8")
+            profile = text.split("var BASE_30_TO_V3_PROFILE = [", 1)[1].split("];", 1)[0]
+            legacy = text.split("var LEGACY_CHEAT_CAVES = [", 1)[1].split("];", 1)[0]
+            self.assertIn("function clearLegacyCheatCaves()", text, path.name)
+            for rva in dead_rvas:
+                self.assertNotIn(rva, profile, f"{path.name} writes {rva}")
+                self.assertIn(rva, legacy, f"{path.name} cannot restore {rva}")
+
+        runtime = RUNTIME_JS.read_text(encoding="utf-8")
+        apply_body = runtime.split("function applyBaselineProfile()", 1)[1].split(
+            "function restoreBaselineProfile()", 1
+        )[0]
+        self.assertIn("clearLegacyCheatCaves();", apply_body)
+        self.assertIn("clearLegacyCheatCaves();", runtime.split("function disable()", 1)[1])
+
+    def test_profile_writer_uses_the_matching_base_or_v3_column(self):
+        # 2.7 shipped writeEntry[1 + index], so writing v3 read column 3
+        # (undefined) and the recovery path wrote v3 bytes while reporting a
+        # base-write failure. Keep the column index exact.
+        text = RUNTIME_JS.read_text(encoding="utf-8")
+        self.assertIn("writeByteArray(hexBytes(writeEntry[index]))", text)
+        self.assertNotIn("writeEntry[1 + index]", text)
+
 if __name__ == "__main__":
     unittest.main()
