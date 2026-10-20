@@ -23,8 +23,8 @@ class AimStaticTests(unittest.TestCase):
         self.assertRegex(text, r"NECK:\s*3")
         self.assertRegex(text, r"CHEST:\s*7")
         self.assertRegex(text, r"aimBone:\s*BONE\.CHEST")
-        self.assertRegex(text, r"outerConeDeg:\s*12\.0")
-        self.assertRegex(text, r"innerConeDeg:\s*5\.0")
+        self.assertRegex(text, r"outerConeDeg:\s*30\.0")
+        self.assertRegex(text, r"innerConeDeg:\s*20\.0")
         self.assertRegex(text, r"angleTieDeg:\s*1\.0")
         self.assertRegex(text, r"switchMarginDeg:\s*1\.2")
         self.assertRegex(text, r"switchConfirmScans:\s*2")
@@ -78,8 +78,8 @@ class AimStaticTests(unittest.TestCase):
         text = read_text(SCRIPT_FILE)
 
         for token in [
-            "outerConeDeg: 12.0",
-            "innerConeDeg: 5.0",
+            "outerConeDeg: 30.0",
+            "innerConeDeg: 20.0",
             "switchMarginDeg: 1.2",
             "visibilityCheck: true",
             "Physics_get_defaultPhysicsScene_Injected",
@@ -523,8 +523,8 @@ class AimStaticTests(unittest.TestCase):
         self.assertEqual(manifest["feature_id"], "aim")
         self.assertEqual(manifest["script"], "script.js")
         self.assertEqual(manifest["config"]["aimBone"], "chest")
-        self.assertEqual(manifest["config"]["outerConeDeg"], 12.0)
-        self.assertEqual(manifest["config"]["innerConeDeg"], 5.0)
+        self.assertEqual(manifest["config"]["outerConeDeg"], 30.0)
+        self.assertEqual(manifest["config"]["innerConeDeg"], 20.0)
         self.assertEqual(manifest["config"]["switchMarginDeg"], 1.2)
         self.assertEqual(manifest["config"]["targetScanIntervalMs"], 20)
         self.assertEqual(manifest["config"]["smoothness"], 1.0)

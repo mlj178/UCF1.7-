@@ -7,11 +7,12 @@
   "tab_title": "武器",
   "tab_order": 10,
   "order": 89,
-  "desc": "常规枪械：把这一发的射线方向掰到准星优先的目标身上（射线接管），命中判定 / 伤害 / 死亡广播 / 复活调度全部由游戏原版完成。\n爆炸类 / 技能弹：不做直伤，改为弹体拐弯追踪，伤害仍由原版爆炸结算，可单独关闭。\n★ 本版本不注入伤害、不处理死亡与复活（旧版的自定义伤害 + 死亡兜底已移除并备份）。\n覆盖：手雷（普通 / 诅咒娃娃 / 幽灵宝宝 / 生化 / 震撼弹 / 震荡弹）、榴弹枪 FN FAL 榴弹版、火箭筒 Nano AT4（含地图补给 RPG / AT4）、技能弹（奥术手榴弹 / 地狱终结者火球）",
+  "desc": "普通枪械：开启「普通枪械自动跟枪」后，开火时子弹方向会自动修正到当前选中的敌人；命中判定和伤害仍由游戏原版结算，不额外改伤。关闭后普通枪械完全按准星方向射击。\n爆炸类 / 技能弹：不做直伤，改为弹体拐弯追踪，伤害仍由原版爆炸结算，可单独关闭。\n★ 突破复活无敌：开枪前复位选中目标、爆炸前复位半径内敌人的复活保护（完全免疫），让伤害真的落地；扣血 / 死亡广播 / 复活调度仍由原版完成。\n★ 本版本不注入伤害、不处理死亡与复活。\n覆盖：手雷（普通 / 诅咒娃娃 / 幽灵宝宝 / 生化 / 震撼弹 / 震荡弹）、榴弹枪 FN FAL 榴弹版、火箭筒 Nano AT4（含地图补给 RPG / AT4）、技能弹（奥术手榴弹 / 地狱终结者火球）",
   "ui_text": {
     "lines": [
-      "常规枪械：把这一发的射线方向掰到准星优先的目标身上（射线接管），命中判定 / 伤害 / 死亡广播 / 复活调度全部由游戏原版完成。",
+      "普通枪械：开启「普通枪械自动跟枪」后，开火时子弹方向会自动修正到当前选中的敌人；命中判定和伤害仍由游戏原版结算，不额外改伤。关闭后普通枪械完全按准星方向射击。",
       "爆炸类 / 技能弹：不做直伤，改为弹体拐弯追踪，伤害仍由原版爆炸结算，可单独关闭。",
+      "★ 突破复活无敌：开枪前复位选中目标、爆炸前复位半径内敌人的复活保护（完全免疫），让伤害真的落地；扣血 / 死亡广播 / 复活调度仍由原版完成（不会出现躺尸不复活）。",
       "★ 本版本不注入伤害、不处理死亡与复活（旧版的自定义伤害 + 死亡兜底已移除并备份）。",
       "覆盖：手雷（普通 / 诅咒娃娃 / 幽灵宝宝 / 生化 / 震撼弹 / 震荡弹）、榴弹枪 FN FAL 榴弹版、火箭筒 Nano AT4（含地图补给 RPG / AT4）、技能弹（奥术手榴弹 / 地狱终结者火球）"
     ]
@@ -34,14 +35,7 @@
       "type": "switch",
       "action": "setConfig",
       "key": "enable_guns",
-      "label": "常规枪械 射线接管",
-      "default": true
-    },
-    {
-      "type": "switch",
-      "action": "setConfig",
-      "key": "gun_ray_redirect",
-      "label": "射线接管总开关(原版伤害)",
+      "label": "普通枪械自动跟枪",
       "default": true
     },
     {
@@ -57,6 +51,13 @@
       "key": "enable_skill_projectiles",
       "label": "特殊技能弹 追踪",
       "default": true
+    },
+    {
+      "type": "switch",
+      "action": "setConfig",
+      "key": "pierce_respawn_invincible",
+      "label": "突破复活无敌（开枪/爆炸都能打死）",
+      "default": true
     }
   ],
   "config": {
@@ -64,9 +65,9 @@
     "enable_homing": true,
     "enable_explosives": true,
     "enable_skill_projectiles": true,
-    "gun_ray_redirect": true,
-    "target_outer_cone_deg": 12,
-    "target_inner_cone_deg": 5,
+    "pierce_respawn_invincible": true,
+    "target_outer_cone_deg": 30,
+    "target_inner_cone_deg": 20,
     "target_angle_tie_deg": 1,
     "target_switch_margin_deg": 1.2,
     "target_switch_confirm_scans": 1,
@@ -104,7 +105,7 @@
     "restore": true,
     "requires_room_ready_reapply": false,
     "room_ready_retry": false,
-    "room_ready_reapply_exempt_reason": "只装固定 RVA 钩子（WPN_Gun.Damage 的 attach 射线接管 + 投射物入口 attach + WPN_Missile 的物理步改写），每次开火/每个物理步按 enabled/config 实时读取房间内玩家列表；不注入伤害、不处理死亡与复活，因此不依赖进房时写入任何运行态对象。"
+    "room_ready_reapply_exempt_reason": "只装固定 RVA 钩子（WPN_Gun.Damage 的 attach 射线接管 + 投射物入口 attach + WPN_Missile 的物理步改写），每次开火/每个物理步按 enabled/config 实时读取房间内玩家列表；不注入伤害、不处理死亡与复活，因此不依赖进房时写入任何运行态对象。唯一的写操作是「突破复活无敌」开启时对目标（枪械=选中目标，爆炸=半径内敌人）的 Entity.damageRate / Entity.isInvincible / HealthData.invinsibleEndTime 三个防御字段复位，不写血量、不写任何指针。"
   },
   "source": {
     "single_feature_js": "05-正式功能/40-开火直伤/script.js",
@@ -114,9 +115,9 @@
   "ui_handles": {
     "switch": "direct_damage_switch",
     "enable_guns_var": "direct_damage_enable_guns_var",
-    "gun_ray_redirect_var": "direct_damage_gun_ray_redirect_var",
     "enable_explosives_var": "direct_damage_enable_explosives_var",
-    "enable_skill_projectiles_var": "direct_damage_enable_skill_projectiles_var"
+    "enable_skill_projectiles_var": "direct_damage_enable_skill_projectiles_var",
+    "pierce_respawn_invincible_var": "direct_damage_pierce_respawn_invincible_var"
   },
   "state": {
     "sync_enabled_from_config": true

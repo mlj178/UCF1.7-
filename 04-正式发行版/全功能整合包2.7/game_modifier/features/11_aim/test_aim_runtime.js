@@ -125,10 +125,10 @@ assert.strictEqual(aim.selectTargetWithPolicy(lockCandidates, lockNow).player, p
 
 aim.resetTargetLockState('inner-override-test');
 lockNow = 2000;
-lockCandidates = [candidate(playerA, 4.0, 10.0), candidate(playerB, 6.0, 5.0)];
+lockCandidates = [candidate(playerA, 18.0, 10.0), candidate(playerB, 25.0, 5.0)];
 assert.strictEqual(aim.selectTargetWithPolicy(lockCandidates, lockNow).player, playerA);
 lockNow = 2100;
-lockCandidates = [candidate(playerA, 6.0, 10.0), candidate(playerB, 4.5, 5.0)];
+lockCandidates = [candidate(playerA, 25.0, 10.0), candidate(playerB, 18.0, 5.0)];
 assert.strictEqual(aim.selectTargetWithPolicy(lockCandidates, lockNow).player, playerA);
 assert.strictEqual(aim.targetLockState.reason, 'confirming');
 lockNow = 2120;

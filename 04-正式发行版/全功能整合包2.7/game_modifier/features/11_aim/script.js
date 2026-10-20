@@ -124,8 +124,8 @@ modules.aim = (function() {
   //   4) 当前目标轻粘滞：新目标必须明显更靠近准星，且连续确认才换。
   // 这取代了旧的"最近距离带 + 2° 角度优势"策略。
   var TARGET_POLICY = {
-    outerConeDeg: 12.0,
-    innerConeDeg: 5.0,
+    outerConeDeg: 30.0,
+    innerConeDeg: 20.0,
     angleTieDeg: 1.0,
     switchMarginDeg: 1.2,
     switchConfirmScans: 2,

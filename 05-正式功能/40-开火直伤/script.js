@@ -10,7 +10,7 @@
 // ------------------------------------------------------------------
 // 本版本只做两件事
 // ------------------------------------------------------------------
-//   1) 常规枪械 —— 原生射线接管（config.gun_ray_redirect）
+//   1) 常规枪械 —— 子弹方向修正（config.enable_guns 一个开关）
 //        在 WPN_Gun.Damage 的 onEnter 里，把这一发的 rayDir 三个 float
 //        改成"指向准星方向最近的敌人"，然后放行原函数。
 //   2) 榴弹 / 手雷 / RPG / 榴弹枪 / 技能弹 —— 弹体追踪（homing）
@@ -24,7 +24,8 @@
 //   × 不 Interceptor.replace，不做任何"跳过原函数"的栈操作
 //   × 不碰死亡与复活：不补发 DeathEventBroadcast、不调 RespawnPlayer /
 //     Player.Respawn、不挂 GameRoundEnd / NewGameRoundStart / OnDestroy
-//   × 不清目标的复活无敌 / 减伤状态（那是复活系统的一部分，交给游戏）
+//   × 不清目标的复活无敌 / 减伤状态（那是复活系统的一部分，交给游戏；
+//     2026-10-20 起唯一例外是 pierce_respawn_invincible：只结束「完全免疫」，见 clearDefenseBeforeShot）
 //   × 不做"击杀后观察 N 秒看有没有复活"的兜底窗口
 //
 //   为什么这样就够（也是为什么旧版是越界）：
@@ -78,7 +79,7 @@
 // ------------------------------------------------------------------
 // 设计说明三：开关划分
 // ------------------------------------------------------------------
-//   enable_guns              : 常规枪械 射线接管
+//   enable_guns              : 普通枪械自动跟枪（唯一用户开关）
 //   enable_homing            : 投射物 追踪（制导）总开关
 //   enable_explosives        : 榴弹 / 手雷 / RPG / 榴弹枪 弹体追踪（子开关）
 //   enable_skill_projectiles : 特殊技能弹体追踪（奥术手雷 / 地狱终结者火球）（子开关）
@@ -139,7 +140,6 @@
 // 配置项速查
 // ------------------------------------------------------------------
 //   enable_guns / enable_homing / enable_explosives / enable_skill_projectiles
-//   gun_ray_redirect          射线接管开关（关掉 = 常规枪械完全不介入）
 //   target_outer_cone_deg / target_inner_cone_deg / target_angle_tie_deg
 //   target_switch_margin_deg / target_switch_confirm_scans / target_switch_cooldown_ms
 //   max_distance / local_eye_height / chest_fallback_height / target_cache_ms
@@ -208,6 +208,10 @@
         WPN_Missile_Work: 0x00B664D0,
         WPN_GRENADE_Work: 0x00B5D6C0,
         WPN_Missile_Recycle: 0x00B66240,
+        // 所有爆炸结算的公共入口（WPN_GRENADE 及其子类 Msl_Arcane 等都走它）
+        WPN_GRENADE_CreateExplosion: 0x00B5CC40,
+        // 游戏统一的伤害入口（静态，DamageEventData 按值压栈）
+        GameManager_TakeDamage: 0x00AFC1C0,
         WPN_Missile_OnCollisionEnter: 0x00B66100,
         WPN_GRENADE_OnCollisionEnter: 0x00B5D0F0,
         WPN_GRENADE_OnTriggerEnter: 0x00B5D270,
@@ -235,6 +239,16 @@
         // ---- Entity ----
         Entity_team: 0x20,
         Entity_healthData: 0x1C,
+
+        // ---- Entity 防御状态（复活无敌 / 完全免疫）----
+        //   平时只读；唯一例外是「突破复活无敌」开着时，在放行原版射线前复位它们
+        //   （见 clearDefenseBeforeShot）。偏移与 dump.cs / IDA 反汇编逐一核对过：
+        //     Entity.<damageRate>k__BackingField   +0x14 (float)  get_damageRate: fld [eax+14h]
+        //     Entity.<isInvincible>k__BackingField +0x18 (bool)   get_isInvincible: mov al,[eax+18h]
+        //     HealthData.invinsibleEndTime         +0x44 (float)  复活无敌结束时间戳
+        Entity_damageRate: 0x14,
+        Entity_isInvincible: 0x18,
+        HealthData_invinsibleEndTime: 0x44,
 
         // ---- Player ----
         Player_cameraRotation: 0x4C,
@@ -302,11 +316,17 @@
             enable_explosives: true,         // 榴弹 / 手雷 / RPG / 榴弹枪
             enable_skill_projectiles: true,  // 奥术手雷 / 地狱终结者火球
 
+            // 突破复活无敌：开火/爆炸前把目标的复活保护（完全免疫）复位，让伤害真的落地。
+            //   只写防御状态字段，不碰血量、不合成伤害事件、不调用任何游戏函数；
+            //   扣血 / 死亡广播 / 复活调度仍然全部由原版完成 ——
+            //   这是「不会出现躺尸不复活」的前提（那条 bug 的成因是跳过原函数自己注入）。
+            pierce_respawn_invincible: true,
+
             // ---- 统一目标策略（与 11_aim 的 TARGET_POLICY 同一套）----
             //   外锥 -> 内锥优先 -> 角度优先（角度差 <= tie 时比距离）-> 轻粘滞。
             //   枪械是"开火事件驱动"，确认帧用 1；自瞄是连续扫描，确认帧用 2。
-            target_outer_cone_deg: 12.0,
-            target_inner_cone_deg: 5.0,
+            target_outer_cone_deg: 30.0,
+            target_inner_cone_deg: 20.0,
             target_angle_tie_deg: 1.0,
             target_switch_margin_deg: 1.2,
             target_switch_confirm_scans: 1,
@@ -315,7 +335,6 @@
             local_eye_height: 1.55,     // 准星锥的锥心 = 玩家坐标 + 该高度
             chest_fallback_height: 1.1, // 读不到骨骼时的瞄准点高度
             target_cache_ms: 15,        // 目标缓存（同一次开火/同一帧内不重复扫人）
-            gun_ray_redirect: true,     // ★ 射线接管；关掉 = 常规枪械完全不介入
 
             // 枪械锥内没人时：默认不回退，避免"对着空气开火却打最近的人"。
             // 需要保底命中可打开，并只回退到近距 target_fallback_max_distance 内。
@@ -347,7 +366,11 @@
             ownPlayer: ptr(0),
             selectedTarget: null,
             selectedAtMs: 0,
-            rayWarnLogged: false
+            rayWarnLogged: false,
+            diagTd: 0,              // 伤害入口诊断：已经打过多少条
+            diagTdForeign: 0,       // 爆炸伤害但 attacker 不是本地玩家：已经打过多少条
+            diagExp: 0,             // 爆炸入口诊断：已经打过多少条
+            myExplosionAt: 0        // 最近一次「自己的爆炸」的时间戳（伤害入口按它归因）
         },
         // 枪械专用的目标锁定状态。弹体每颗弹有独立 target，不复用这个状态。
         targetLock: null,
@@ -359,8 +382,14 @@
             gunHookDisabled: 0,     // 功能/枪械开关关着
             rayRedirectShots: 0,    // "把射线掰到目标身上"的成功次数
             rayRedirectBadArgs: 0,  // 参数不像射线 -> 一行没写
-            rayRedirectOff: 0,      // gun_ray_redirect 关着
             rayRedirectSkip: 0,     // 没走到选目标就退出（没本地玩家 / 读不到相机朝向 / 距离过近）
+            invincibleCleared: 0,   // 复位了目标的复活无敌/完全免疫（pierce_respawn_invincible）
+            explosionDefenseCalls: 0,    // WPN_GRENADE.CreateExplosion 被调用次数（所有爆炸）
+            explosionDefenseCleared: 0,  // 爆炸穿透真正复位的敌人数
+            takeDamageCalls: 0,          // GameManager.TakeDamage 被调用次数（全场）
+            takeDamageOurs: 0,           // 其中 attacker = 本地玩家的次数
+            takeDamageCleared: 0,        // 伤害入口兜底真正复位的次数
+            invincibleUnreadable: 0, // 目标防御状态读不到（指针不可读/HealthData 为空），一枚字节都没写
             targetsSelected: 0,
             noTarget: 0,
             targetLockReason: 'init',
@@ -1431,10 +1460,6 @@
                         Runtime.stats.gunHookDisabled += 1;
                         return;                                   // 原版照常执行
                     }
-                    if (!Runtime.config.gun_ray_redirect) {
-                        Runtime.stats.rayRedirectOff += 1;
-                        return;                                   // 原版照常执行
-                    }
                     var weapon = args[0];
                     if (!isLocalWeapon(weapon)) {
                         Runtime.stats.skippedRemote += 1;
@@ -1461,7 +1486,7 @@
     }
 
     // ------------------------------------------------------------------
-    // 原生射线接管（gun_ray_redirect）：把这一发的射线掰到目标身上
+    // 原生射线接管（enable_guns）：把这一发的射线掰到目标身上
     // ------------------------------------------------------------------
     //   WPN_Gun.Damage(weapon, originX, originY, originZ, dirX, dirY, dirZ) 是 cdecl，
     //   参数压在栈上：arg0 在 [esp+4]，arg1..arg6 在 [esp+8]..[esp+0x1C]。
@@ -1489,6 +1514,240 @@
         return { origin: origin, dir: dir };
     }
     // ------------------------------------------------------------------
+    // 突破复活无敌（pierce_respawn_invincible）：放行原函数之前复位目标的防御状态
+    // ------------------------------------------------------------------
+    //   游戏在目标复活后会给一段保护：HealthData.invinsibleEndTime(+0x44) 是结束时间戳，
+    //   Entity.damageRate(+0x14) 被压到 0，Entity.isInvincible(+0x18) 可能同时为 1。
+    //   原版伤害链按这三样把这一发的伤害抹成 0 —— 射线明明命中了却不掉血。
+    //   这里在**原函数还没执行**的时候把它们复位，然后原函数照常跑完。
+    //
+    //   ★ 边界（为什么它不会重现"死了不复活"）：
+    //     只写三个防御状态字段 —— 不写 HP、不写任何对象指针、不合成 DamageEventData、
+    //     不调用任何游戏函数、不跳过原函数。扣血、死亡广播、复活调度仍然 100% 是游戏自己的代码。
+    //     旧版那条"躺尸不复活"的成因是"自己注入伤害 + 跳过原函数"，本函数一行都没碰。
+    function readDefenseState(victim) {
+        var info = { ok: false, health: ptr(0), invEnd: 0, damageRate: 1, isInvincible: 0, active: false, err: '' };
+        try {
+            if (isNull(victim) || !readable(victim)) return info;
+            var health = victim.add(OFF.Entity_healthData).readPointer();
+            if (isNull(health) || !readable(health)) return info;
+            var invEnd = health.add(OFF.HealthData_invinsibleEndTime).readFloat();
+            var damageRate = victim.add(OFF.Entity_damageRate).readFloat();
+            var isInvincible = victim.add(OFF.Entity_isInvincible).readU8();
+            if (!isFinite(invEnd) || !isFinite(damageRate)) return info;
+            info.health = health;
+            info.invEnd = invEnd;
+            info.damageRate = damageRate;
+            info.isInvincible = isInvincible >>> 0;
+            // 合理性闸门：指针被回收/复用时，这三个字段读出来往往是天文数字。
+            // 不合理就当作"读不到"处理 —— 宁可这一发不穿透，也不把字节写到别的对象上。
+            if (!(damageRate >= 0 && damageRate <= 10) ||
+                !(invEnd >= 0 && invEnd <= 10000000) ||
+                info.isInvincible > 1) {
+                info.err = 'implausible defense state';
+                return info;
+            }
+            info.ok = true;
+            // 「完全免疫」才算复活保护：复活时游戏把 damageRate 压到 0；
+            // 部分减伤（0.03 终结者技能护盾 / 0.88 补给箱护盾）不在此列，绝不抹掉。
+            info.active = invEnd > 0 || damageRate < 0.001 || info.isInvincible === 1;
+        } catch (error) {
+            info.ok = false;
+            info.err = (error && error.message) ? String(error.message) : String(error);
+        }
+        return info;
+    }
+
+    // 复位目标的复活无敌（完全免疫）。返回复位前的值（日志/UI 里能直接看到是不是它在挡）。
+    //   任何一项写失败都只吞掉，绝不让开火链路抛异常。
+    function clearDefenseBeforeShot(victim) {
+        var before = readDefenseState(victim);
+        if (!before.ok) {
+            Runtime.stats.invincibleUnreadable += 1;
+            return before;
+        }
+        if (!before.active) return before;
+        try {
+            if (before.invEnd > 0) before.health.add(OFF.HealthData_invinsibleEndTime).writeFloat(0);
+        } catch (_) {}
+        try {
+            // 只复位「完全免疫」（复活保护）。0<rate<1 是普通减伤/护盾 buff，
+            // 抹掉它等于把别人的技能废掉 —— 那不是本功能要的东西。
+            if (before.damageRate < 0.001) victim.add(OFF.Entity_damageRate).writeFloat(1.0);
+        } catch (_) {}
+        try {
+            if (before.isInvincible === 1) victim.add(OFF.Entity_isInvincible).writeU8(0);
+        } catch (_) {}
+        Runtime.stats.invincibleCleared += 1;
+        if (probeBudget('pierceInv', 20)) {
+            probe('pierceInv', '目标处于复活无敌（完全免疫），已在放行原版射线前复位: isInvincible=' +
+                before.isInvincible + ' invEnd=' + Number(before.invEnd).toFixed(2) +
+                ' damageRate=' + Number(before.damageRate).toFixed(3) +
+                ' -> 0/0/1');
+        }
+        return before;
+    }
+
+    // ------------------------------------------------------------------
+    // 爆炸类（手雷 / 榴弹 / RPG / 技能弹）的复活无敌穿透
+    // ------------------------------------------------------------------
+    //   WPN_GRENADE.CreateExplosion 是所有爆炸结算的公共入口（Msl_Arcane 等子类也走它）。
+    //   IDA 反汇编的栈布局（cdecl，参数从 [esp+4] 起）：
+    //     [esp+0x04] worldPos.x   [esp+0x08] y   [esp+0x0C] z
+    //     [esp+0x10] damage       [esp+0x14] range
+    //     [esp+0x18] distanceDecay  [esp+0x1C] ignoreWall(byte)
+    //     [esp+0x20] DamageEventData（0x48 字节，按值）  <- +0x00 就是 attacker
+    //     [esp+0x68] damageCallBack  [esp+0x6C] method
+    //
+    //   ★ 只有「这颗雷 / 这发 RPG 是我们自己扔的」（attacker == 本地玩家）才动手：
+    //     Bot 的爆炸绝不代劳，否则人机会无视别人的复活保护。
+    //   ★ 写操作仍然只有 clearDefenseBeforeShot 的那三个防御字段。
+    var EXPLOSION_RANGE_MARGIN = 0.5;
+
+    // 命中点是否落在爆炸半径内（多用 0.5m 余量：玩家坐标在脚底，爆炸判定的是胶囊体）
+    function explosionTouchesTarget(worldPos, aimPoint, range) {
+        var dx = aimPoint.x - worldPos.x;
+        var dy = aimPoint.y - worldPos.y;
+        var dz = aimPoint.z - worldPos.z;
+        var d2 = dx * dx + dy * dy + dz * dz;
+        var r = range + EXPLOSION_RANGE_MARGIN;
+        return isFinite(d2) && d2 <= r * r;
+    }
+
+    function pierceExplosionDefense(attacker, worldPos, range) {
+        if (!Runtime.config.pierce_respawn_invincible) return 0;
+        if (!(range > 0 && range <= 50)) return 0;
+        if (!worldPos || !isFinite(worldPos.x) || !isFinite(worldPos.y) || !isFinite(worldPos.z)) return 0;
+        if (Math.abs(worldPos.x) > 10000 || Math.abs(worldPos.y) > 10000 || Math.abs(worldPos.z) > 10000) return 0;
+        var myPlayer = getMyPlayer();
+        if (isNull(myPlayer)) return 0;
+        if (isNull(attacker) || !samePointer(attacker, myPlayer)) return 0;
+        var gm = getGameManager();
+        if (isNull(gm)) return 0;
+        var players = getAllPlayers(gm);
+        var myTeam = readTeam(myPlayer);
+        var cleared = 0;
+        for (var i = 0; i < players.length; i += 1) {
+            var candidate = players[i];
+            try {
+                if (samePointer(candidate, myPlayer)) continue;
+                if (!isEnemyTeam(myTeam, readTeam(candidate))) continue;
+                if (isDeadEntity(candidate)) continue;
+                var pos = getPlayerPos(candidate);
+                if (!pos) continue;
+                var aim = getAimPoint(candidate, pos) || pos;
+                if (!explosionTouchesTarget(worldPos, aim, range)) continue;
+                var before = clearDefenseBeforeShot(candidate);
+                if (before && before.active) cleared += 1;
+            } catch (_) {}
+        }
+        if (cleared > 0) {
+            Runtime.stats.explosionDefenseCleared += cleared;
+            if (probeBudget('pierceExplosion', 10)) {
+                probe('pierceExplosion', '爆炸中心 ' + fmtVec(worldPos) + ' r=' + Number(range).toFixed(2) +
+                    ' 已复位 ' + cleared + ' 个敌人的复活无敌（完全免疫）');
+            }
+        }
+        return cleared;
+    }
+
+    function installExplosionDefenseHook() {
+        registerAttach('WPN_GRENADE.CreateExplosion(defense-pierce)', RVA.WPN_GRENADE_CreateExplosion, {
+            onEnter: function () {
+                try {
+                    Runtime.stats.explosionDefenseCalls += 1;
+                    if (!Runtime.enabled || !Runtime.config.pierce_respawn_invincible) return;
+                    var sp = this.context ? this.context.esp : null;
+                    if (!sp) return;
+                    var worldPos = {
+                        x: sp.add(4).readFloat(),
+                        y: sp.add(8).readFloat(),
+                        z: sp.add(12).readFloat()
+                    };
+                    var range = sp.add(0x14).readFloat();
+                    var eventPtr = sp.add(0x20).readPointer();
+                    if (isNull(eventPtr) || !readable(eventPtr)) return;
+                    var attacker = eventPtr.readPointer();
+                    var me = getMyPlayer();
+                    if (!isNull(me) && samePointer(attacker, me)) Runtime.cache.myExplosionAt = Date.now();
+                    var cleared = pierceExplosionDefense(attacker, worldPos, range);
+                    if (Runtime.cache.diagExp < 5) {
+                        Runtime.cache.diagExp += 1;
+                        log('info', '[diag:explosion] #' + Runtime.cache.diagExp +
+                            ' pos=' + fmtVec(worldPos) + ' range=' + Number(range).toFixed(2) +
+                            ' attacker=' + fmtPtr(attacker) + ' me=' + fmtPtr(Runtime.cache.ownPlayer) +
+                            ' 复位=' + cleared);
+                    }
+                } catch (error) {
+                    fail('CreateExplosion defense-pierce', error);
+                }
+            }
+        });
+    }
+    // ------------------------------------------------------------------
+    // 伤害入口兜底：不管伤害来自枪、爆炸还是技能，都在游戏应用伤害之前复位 victim
+    // ------------------------------------------------------------------
+    //   GameManager.TakeDamage(DamageEventData data) 是静态入口，DamageEventData 按值压栈：
+    //     [esp+0x00] attacker   [esp+0x04] victim   [esp+0x08] damage
+    //     [esp+0x34] type（Gun=1 / Knife=2 / Grenade=3 / Infect=4 / Other=5）
+    //   ★ 只 attach：不 replace、不跳过原函数、不合成事件、不调用任何游戏函数。
+    //     看到 attacker 是本地玩家就复位 victim 的防御状态，然后原函数原样跑完。
+
+    function installTakeDamageDefenseHook() {
+        registerAttach('GameManager.TakeDamage(defense-pierce)', RVA.GameManager_TakeDamage, {
+            onEnter: function () {
+                try {
+                    Runtime.stats.takeDamageCalls += 1;
+                    if (!Runtime.enabled || !Runtime.config.pierce_respawn_invincible) return;
+                    var sp = this.context ? this.context.esp : null;
+                    if (!sp) return;
+                    var attacker = sp.readPointer();
+                    if (isNull(attacker)) return;
+                    var victim = sp.add(4).readPointer();
+                    if (isNull(victim)) return;
+                    var dmgType = sp.add(0x34).readS32();
+                    var me = Runtime.cache.ownPlayer;
+                    if (isNull(me)) {
+                        me = getMyPlayer();
+                        if (isNull(me)) return;
+                    }
+                    var mine = samePointer(attacker, me) && isLocalPlayer(attacker);
+                    // 兜底归因：爆炸事件里的 attacker 万一不是 Player，
+                    // 只要最近 250ms 内我们自己的爆炸入口刚跑过，就仍算我们的伤害。
+                    if (!mine && dmgType === 3 && Runtime.cache.myExplosionAt &&
+                        Date.now() - Runtime.cache.myExplosionAt <= 250) {
+                        mine = true;
+                    }
+                    if (!mine) {
+                        // 诊断：爆炸伤害却认不出是我们 —— 说明 attacker 不是 Player（或字段偏移不符）
+                        if (dmgType === 3 && Runtime.cache.diagTdForeign < 3) {
+                            Runtime.cache.diagTdForeign += 1;
+                            log('info', '[diag:takeDamage] 爆炸伤害但 attacker 不是本地玩家: attacker=' +
+                                fmtPtr(attacker) + ' me=' + fmtPtr(me) + ' victim=' + fmtPtr(victim));
+                        }
+                        return;
+                    }
+                    Runtime.stats.takeDamageOurs += 1;
+                    if (samePointer(victim, me)) return;
+                    if (isDeadEntity(victim)) return;
+                    if (!isEnemyTeam(readTeam(me), readTeam(victim))) return;
+                    var before = clearDefenseBeforeShot(victim);
+                    if (before && before.active) {
+                        Runtime.stats.takeDamageCleared += 1;
+                    }
+                    if (Runtime.cache.diagTd < 5) {
+                        Runtime.cache.diagTd += 1;
+                        log('info', '[diag:takeDamage] 我方伤害 type=' + dmgType + ' victim=' + fmtPtr(victim) +
+                            ' 防御[invEnd=' + Number(before && before.invEnd).toFixed(2) +
+                            ' rate=' + Number(before && before.damageRate).toFixed(3) +
+                            ' inv=' + (before && before.isInvincible) +
+                            ' ok=' + (before && before.ok) + ' active=' + (before && before.active) + ']');
+                    }
+                } catch (_) {}
+            }
+        });
+    }
+    // ------------------------------------------------------------------
     // 原生射线接管：把这一发的射线掰到目标身上
     // ------------------------------------------------------------------
     //   WPN_Gun.Damage(weapon, originX, originY, originZ, dirX, dirY, dirZ) 是 cdecl，
@@ -1500,7 +1759,9 @@
     //   返回 false = 没目标 / 参数不像射线 / 开关关着（调用方同样放行原函数，
     //                这一发就等于原版）
     //
-    //   ★ 只写三个 float。伤害数值、无敌判定、死亡广播、复活调度一行都不动。
+    //   ★ 平时只写三个 float。唯一例外：pierce_respawn_invincible 开着时，
+    //     在写完之后把「选中目标」的复活无敌（完全免疫）复位（clearDefenseBeforeShot），
+    //     否则原版会把命中伤害按复活保护抹成 0。伤害数值、死亡广播、复活调度仍然一行都不动。
     // ------------------------------------------------------------------
     function redirectRayToTarget(ctx) {
         try {
@@ -1538,6 +1799,12 @@
             sp.add(20).writeFloat(vx / len);
             sp.add(24).writeFloat(vy / len);
             sp.add(28).writeFloat(vz / len);
+
+            // 突破复活无敌：只复位"防御状态"，让紧接着执行的原函数能真的打掉血。
+            // 不做任何"跳过原函数/补伤害/兜底复活"的动作。
+            if (Runtime.config.pierce_respawn_invincible) {
+                clearDefenseBeforeShot(target.player);
+            }
 
             Runtime.stats.rayRedirectShots += 1;
             if (probeBudget('rayAim', 20)) {
@@ -1755,7 +2022,6 @@
                     ' localFires=' + s.localGunFires +
                     ' rayRedirect=' + s.rayRedirectShots +
                     ' badArgs=' + s.rayRedirectBadArgs +
-                    ' redirectOff=' + s.rayRedirectOff +
                     ' skip=' + s.rayRedirectSkip +
                     ' noTarget=' + s.noTarget +
                     ' selected=' + s.targetsSelected +
@@ -2357,17 +2623,21 @@
         if (!ensureNative()) return false;
         if (!ensureBuffers()) return false;
         try {
-            // 只装 4 组钩子，全部是"只读目标选择 + 改写射线/速度"：
-            //   installGunHook        : WPN_Gun.Damage（改 rayDir）
-            //   installExplosiveHooks : 手雷/榴弹/RPG 开火（登记弹体类别）
-            //   installSkillHooks     : 技能弹开火（登记弹体类别）
-            //   installHomingHooks    : 弹体 SetWeaponData / FixedUpdate / Work / Recycle
+            // 只装 5 组钩子，全部是"只读目标选择 + 改写射线/速度 + 爆炸前复位防御状态"：
+            //   installGunHook             : WPN_Gun.Damage（改 rayDir）
+            //   installExplosiveHooks      : 手雷/榴弹/RPG 开火（登记弹体类别）
+            //   installSkillHooks          : 技能弹开火（登记弹体类别）
+            //   installHomingHooks         : 弹体 SetWeaponData / FixedUpdate / Work / Recycle
+            //   installExplosionDefenseHook: WPN_GRENADE.CreateExplosion（爆炸前复位范围内敌人的防御状态）
+            //   installTakeDamageDefenseHook: GameManager.TakeDamage（伤害真正落地前复位 victim 的防御状态）
             // 旧版的 installPipelineProbes / installDeathDiagnostics /
             // installStringCaptureHooks / installEventTemplateCapture 已全部删除。
             installHomingHooks();
             installGunHook();
             installExplosiveHooks();
             installSkillHooks();
+            installExplosionDefenseHook();
+            installTakeDamageDefenseHook();
             Runtime.initialized = true;
             log('info', 'all hooks installed (ray-redirect + homing only; ' +
                 'no damage injection, no death/respawn handling)');
@@ -2454,9 +2724,6 @@
         }
         if (input.max_distance !== undefined) c.max_distance = clampFloat(toNumber(input.max_distance, c.max_distance), 0, 1000);
 
-        // ★ 射线接管总开关。关掉 = 常规枪械完全不介入（纯弹体追踪）。
-        if (input.gun_ray_redirect !== undefined) c.gun_ray_redirect = input.gun_ray_redirect !== false;
-
         // 枪械锥内没人时的可选保底：只回退近距最近，默认关闭。
         if (input.gun_fallback_nearest !== undefined) c.gun_fallback_nearest = input.gun_fallback_nearest !== false;
         if (input.gun_fallback_max_distance !== undefined) {
@@ -2496,7 +2763,6 @@
         resetTargetLock(Runtime.targetLock, 'config_changed');
 
         log('info', '[probe:config] guns=' + c.enable_guns +
-            ' rayRedirect=' + c.gun_ray_redirect +
             ' homing=' + c.enable_homing +
             ' explosives=' + c.enable_explosives +
             ' skills=' + c.enable_skill_projectiles +
@@ -2528,7 +2794,6 @@
         log('info', '[probe:enable] enable() called | 本版本只做射线接管 + 弹体追踪，' +
             '不注入伤害、不处理死亡/复活' +
             ' | guns=' + Runtime.config.enable_guns +
-            ' rayRedirect=' + Runtime.config.gun_ray_redirect +
             ' homing=' + Runtime.config.enable_homing +
             ' explosives=' + Runtime.config.enable_explosives +
             ' skills=' + Runtime.config.enable_skill_projectiles +
@@ -2584,8 +2849,14 @@
             gun_hook_disabled: Runtime.stats.gunHookDisabled,
             ray_redirect_shots: Runtime.stats.rayRedirectShots,
             ray_redirect_bad_args: Runtime.stats.rayRedirectBadArgs,
-            ray_redirect_off: Runtime.stats.rayRedirectOff,
             ray_redirect_skip: Runtime.stats.rayRedirectSkip,
+            invincible_cleared: Runtime.stats.invincibleCleared,
+            invincible_unreadable: Runtime.stats.invincibleUnreadable,
+            explosion_defense_calls: Runtime.stats.explosionDefenseCalls,
+            explosion_defense_cleared: Runtime.stats.explosionDefenseCleared,
+            take_damage_calls: Runtime.stats.takeDamageCalls,
+            take_damage_ours: Runtime.stats.takeDamageOurs,
+            take_damage_cleared: Runtime.stats.takeDamageCleared,
             targets_selected: Runtime.stats.targetsSelected,
             no_target: Runtime.stats.noTarget,
             target_lock_reason: Runtime.stats.targetLockReason,
