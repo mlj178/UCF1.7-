@@ -665,6 +665,14 @@
     var atk = st.current;
 
     if (!atk.damageDone) {
+      // 掏枪（select）结束说明这一下右键根本没有起手：游戏侧 OnSpecialBtnDown 因
+      // isSelecting 拒绝了它，不会再有 KnifeAttackEvent。这里必须立刻取消，
+      // 否则要一直等到 maxGuardMs(900ms) 兜底 —— 表现就是“掏枪动画都结束了还被锁”。
+      // 只认 select：run 在真实攻击起手后 3ms 就会到达（2026-10-20 日志），认了会误杀。
+      if (source.toLowerCase() === 'onanimationexit:select') {
+        unlockAttack(atk, '掏枪动画结束，未起手取消');
+        return;
+      }
       log('信息', '原始结束',
         source + ' 在原始伤害事件前到达，暂不解锁，等待 KnifeAttackEvent，seq=' + atk.seq
       );

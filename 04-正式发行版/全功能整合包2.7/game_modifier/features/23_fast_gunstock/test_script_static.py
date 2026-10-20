@@ -17,6 +17,13 @@ class FastGunstockNaturalDamageTests(unittest.TestCase):
         self.assertNotIn("function doEarlyDamage", source)
         self.assertNotIn("earlyDamageDelayMs", source)
 
+    def test_phantom_attack_is_cancelled_when_select_animation_ends(self):
+        """切枪 select 期右键没有真正起手：select 退出必须立即取消，不能等 900ms 兜底。"""
+        source = SCRIPT_PATH.read_text(encoding="utf-8")
+
+        self.assertIn("onanimationexit:select", source)
+        self.assertIn("掏枪动画结束，未起手取消", source)
+
     def test_keeps_an_exception_only_guard_without_a_fixed_attack_cadence(self):
         source = SCRIPT_PATH.read_text(encoding="utf-8")
 

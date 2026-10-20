@@ -28,22 +28,42 @@
   var BOT_NAME_CAVE_RVA = 0xB67F07;
   var BOT_NAME_BRANCH_OFFSET = 21;  // 74 05: skip RemoveAt only in mode 6
 
+  // hotfix7：旧版 v3 profile 还带了一个“本地玩家捡补给箱送武器”的作弊跳转：
+  //   0xB44895 -> 0x2BF6F8 -> 0x1553BA
+  // 0x1553BA 不是指令边界（它是 0x1553B4: 83 3D 7C 98 E6 10 00 的最后一个字节），
+  // 跳进去后主线程会在 il2cpp/GC 运行时里错位执行，最后走到
+  //   mov edi,[ebp+8] / call edi
+  // 把 ModeBase_Nano 实例当函数调用 -> DEP 0xC0000005（BEX）。
+  // 该分支只对 Player.get_isMyPlayer 为真时执行，所以本地玩家（人类 / 终结者 /
+  // 生化幽灵）捡任何补给箱都会命中；它不属于“房间人数”，已从写入 profile 中移除。
+  var SUPPLY_BOX_JUMP_RVA = 0xB44895;
+  var SUPPLY_BOX_BASE_HEX = '8b 87 cc 00 00 00';
+  var SUPPLY_BOX_CHEAT_HEX = 'e9 5e ae 77 ff 90';
+  var LEGACY_SUPPLY_BOX_CHEAT_RVAS = [0xB44895, 0x2BF6F8, 0x154FBA, 0x5C0E4B];
+
+  // hotfix8：v3 profile 里还夹带过四段与“房间人数”完全无关的作弊 payload：
+  //   0x12AF7F  武器预开火 / 切枪（跳到 WPN_Prefire.Init 中间）
+  //   0x3D18E2  只对本地玩家生效的浮点数值（后坐/散布一类）
+  //   0x72BE79  跳跃 / 连跳（跳到 Player.OnJumpBtnDown 中间）
+  //   0x9DA472  RPG 动画速度（跳到 WPN_RPG.AnimSpeedSetting 中间）
+  // 它们在原版二进制里没有任何代码引用、数据指针或跳转，写进去也不会被调用；
+  // 这些字节不属于人数功能，已从写入 profile 中移除；旧进程里已经写进去的副本
+  // 由 clearLegacyCheatCaves() 还原成原本的 int3 填充。
+  var LEGACY_CHEAT_CAVES = [
+    [0x12AF7F, 'cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc', '50 6a 00 56 e8 48 2e a4 00 83 c4 08 58 84 c0 74 0e b8 00 00 c8 42 66 0f 6e c0 e9 4d b9 a3 00 f3 0f 10 80 ec 00 00 00 e9 40 b9 a3 00'],
+    [0x3D18E2, 'cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc', '83 c4 0c 51 6a 00 ff 75 08 e8 e0 46 78 00 83 c4 08 84 c0 74 0e d9 c0 d8 c0 d8 c1 d8 c1 d8 c1 d8 c8 dd d9 59 5d c3'],
+    [0x72BE79, 'cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc', '6a 00 56 e8 4f a1 42 00 83 c4 08 84 c0 74 05 e9 fb 5a 42 00 80 be 70 00 00 00 00 75 05 e9 7a 5b 42 00 e9 e8 5a 42 00'],
+    [0x9DA472, 'cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc', '50 6a 00 56 e8 55 3d 19 00 83 c4 08 58 84 c0 74 0e b8 00 00 c8 42 66 0f 6e c0 e9 9d c8 18 00 f3 0f 10 80 f0 00 00 00 e9 90 c8 18 00'],
+  ];
+
   // Exact, reversible conversion from the verified original 30-player build
   // to its matching 100-player v3 build. Every range is checked before any
   // write; unknown or mixed binaries are never modified.
   var BASE_30_TO_V3_PROFILE = [
-    [0x12AF7F, 'cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc', '50 6a 00 56 e8 48 2e a4 00 83 c4 08 58 84 c0 74 0e b8 00 00 c8 42 66 0f 6e c0 e9 4d b9 a3 00 f3 0f 10 80 ec 00 00 00 e9 40 b9 a3 00'],
-    [0x154FBA, 'cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc', '56 57 8b f8 8b b7 ec 00 00 00 6a 00 68 0a 00 00 00 8d 46 30 50 e8 4c 95 6a 00 83 c4 0c 6a 00 68 e7 03 00 00 8d 46 44 50 e8 39 95 6a 00 83 c4 0c e9 5c ba 46 00'],
-    [0x2BF6F8, 'cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc', '8b 06 6a 00 6a 01 6a 00 68 a6 0d 00 00 50 e8 85 bc 83 00 83 c4 14 e9 a7 5c e9 ff'],
-    [0x3D18E2, 'cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc', '83 c4 0c 51 6a 00 ff 75 08 e8 e0 46 78 00 83 c4 08 84 c0 74 0e d9 c0 d8 c0 d8 c1 d8 c1 d8 c1 d8 c8 dd d9 59 5d c3'],
-    [0x5C0E4B, 'cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc', '6a 00 57 e8 1d 62 5a 00 83 c4 08 5f 5e e9 b1 e8 cf ff'],
-    [0x72BE79, 'cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc', '6a 00 56 e8 4f a1 42 00 83 c4 08 84 c0 74 05 e9 fb 5a 42 00 80 be 70 00 00 00 00 75 05 e9 7a 5b 42 00 e9 e8 5a 42 00'],
-    [0x9DA472, 'cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc', '50 6a 00 56 e8 55 3d 19 00 83 c4 08 58 84 c0 74 0e b8 00 00 c8 42 66 0f 6e c0 e9 9d c8 18 00 f3 0f 10 80 f0 00 00 00 e9 90 c8 18 00'],
     [0xAF9C69, '1e', '64'], [0xAFAD8D, '1e', '64'], [0xAFD066, '1e', '64'],
     [0xB25C56, '8b 40 5c 6a', 'e9 e1 b2 00'], [0xB25D3F, 'e8 4c 68 f0 ff', 'e9 c3 21 04 00'],
     [0xB30F3C, 'cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc', '8b 40 5c 83 78 04 06 75 05 bf 32 00 00 00 6a 00 e9 0a 4d ff ff'],
     [0xB43D76, '3b 41 0c 73 0b 8b 44 81 10 5d c3 e9 da 3f 62 ff 6a 00 e8 73 3c 62 ff 50 e8 9d 3f 62 ff', '83 f8 1d 7e 05 b8 1d 00 00 00 8b 44 81 10 5d c3 90 90 90 90 90 90 90 90 90 90 90 90 90'],
-    [0xB44895, '8b 87 cc 00 00 00', 'e9 5e ae 77 ff 90'],
     [0xB67F07, 'cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc', 'e8 00 00 00 00 59 81 c1 30 14 2c 00 8b 09 8b 49 5c 83 79 04 06 74 05 e8 6d 46 ec ff e9 1c de fb ff'],
     [0xB74657, '3b 48 0c 0f 83 34 01 00 00 8b 53 18 8b 4c 88 10', '83 f9 1d 7e 03 6a 1d 59 8b 53 18 8b 4c 88 10 90']
   ];
@@ -224,7 +244,62 @@
     if (profileState() !== expected) throw new Error('人数基础补丁写入后校验失败');
   }
 
+  // hotfix7: 还原旧版 profile 写进 0xB44895 的“本地玩家捡补给箱”作弊跳转。
+  function clearLegacySupplyBoxCheat() {
+    if (!gameAssembly) return false;
+    var actual = readBytes(SUPPLY_BOX_JUMP_RVA, 6);
+    if (bytesEqual(actual, SUPPLY_BOX_BASE_HEX)) return false;
+    if (!bytesEqual(actual, SUPPLY_BOX_CHEAT_HEX)) {
+      log('warning', '0xB44895 不是已知的原版/旧版字节，未改动：' +
+        actual.map(function (n) { return ('0' + n.toString(16)).slice(-2); }).join(' '));
+      return false;
+    }
+    var address = gameAssembly.base.add(SUPPLY_BOX_JUMP_RVA);
+    if (!Memory.protect(address, 6, 'rwx')) throw new Error('内存保护设置失败');
+    address.writeByteArray(hexBytes(SUPPLY_BOX_BASE_HEX));
+    if (!bytesEqual(readBytes(SUPPLY_BOX_JUMP_RVA, 6), SUPPLY_BOX_BASE_HEX)) {
+      throw new Error('旧版补给箱作弊跳转恢复失败 RVA 0xB44895');
+    }
+    log('info', '已移除旧版补给箱作弊跳转（0xB44895），拾取逻辑恢复原版');
+    return true;
+  }
+
+  // hotfix8: 把旧版 profile 写进四段无关作弊代码洞的字节还原成原始 int3 填充。
+  function clearLegacyCheatCaves() {
+    if (!gameAssembly) return false;
+    var restored = 0;
+    for (var i = 0; i < LEGACY_CHEAT_CAVES.length; i++) {
+      var entry = LEGACY_CHEAT_CAVES[i];
+      var value = hexBytes(entry[1]);
+      var actual = readBytes(entry[0], value.length);
+      if (bytesEqual(actual, entry[1])) continue;
+      if (!bytesEqual(actual, entry[2])) {
+        log('warning', '0x' + entry[0].toString(16).toUpperCase() +
+          ' 不是已知的原版/旧版字节，未改动：' +
+          actual.map(function (n) { return ('0' + n.toString(16)).slice(-2); }).join(' '));
+        continue;
+      }
+      var address = gameAssembly.base.add(entry[0]);
+      if (!Memory.protect(address, value.length, 'rwx')) throw new Error('内存保护设置失败');
+      address.writeByteArray(value);
+      if (!bytesEqual(readBytes(entry[0], value.length), entry[1])) {
+        throw new Error('旧版作弊代码洞恢复失败 RVA 0x' + entry[0].toString(16).toUpperCase());
+      }
+      restored++;
+    }
+    if (restored > 0) {
+      log('info', '已移除旧版 profile 夹带的 ' + restored + ' 段无关作弊代码，当前只保留人数补丁');
+    }
+    return restored > 0;
+  }
+
   function applyBaselineProfile() {
+    clearLegacySupplyBoxCheat();
+    try {
+      clearLegacyCheatCaves();
+    } catch (e) {
+      log('error', '旧版无关作弊代码恢复失败，请重启游戏：' + (e.message || e));
+    }
     var state = profileState();
     if (state === 'v3') {
       activePatchProfile = 'prepatched_v3';
@@ -420,6 +495,20 @@
   function disable() {
     stopEntityDiagnostic();
     var restored = true;
+    if (gameAssembly) {
+      try {
+        clearLegacySupplyBoxCheat();
+      } catch (e) {
+        restored = false;
+        log('error', '旧版补给箱作弊跳转恢复失败，请重启游戏：' + (e.message || e));
+      }
+      try {
+        clearLegacyCheatCaves();
+      } catch (e) {
+        restored = false;
+        log('error', '旧版无关作弊代码恢复失败，请重启游戏：' + (e.message || e));
+      }
+    }
     if (enabled && gameAssembly) {
       try {
         var layout = inspectLayout();
@@ -455,7 +544,7 @@
     status: function () { return { enabled: enabled, total_players: totalPlayers, bots: totalPlayers - 1,
       max_total_players: maxTotalPlayers, adopted_existing_patch: adoptedPatch,
       patch_profile: activePatchProfile, profile_patched_by_this_script: profilePatchedByThisScript,
-      version: 'room-count-100-hotfix4' }; },
+      version: 'room-count-100-hotfix8' }; },
     cleanup: disable,
     dispose: disable
   };
