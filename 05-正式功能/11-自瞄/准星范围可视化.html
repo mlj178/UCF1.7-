@@ -1,0 +1,881 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>准星捕获范围可视化 · 外锥 / 内锥</title>
+<style>
+  :root {
+    --bg: #0b1120;
+    --panel: #111a2e;
+    --panel-2: #16213a;
+    --line: #233452;
+    --text: #e5edf8;
+    --muted: #93a4bd;
+    --outer: #38bdf8;
+    --inner: #fbbf24;
+    --selected: #4ade80;
+    --dim: #64748b;
+    --danger: #fb7185;
+    --radius: 16px;
+    font-family: "Segoe UI", "Microsoft YaHei", system-ui, -apple-system, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); }
+  body {
+    min-height: 100vh;
+    background:
+      radial-gradient(900px 600px at 15% -10%, rgba(56,189,248,.10), transparent 60%),
+      radial-gradient(800px 500px at 110% 10%, rgba(251,191,36,.07), transparent 55%),
+      var(--bg);
+  }
+  .app { max-width: 1280px; margin: 0 auto; padding: 28px 22px 48px; }
+  header { margin-bottom: 18px; }
+  h1 { margin: 0 0 8px; font-size: clamp(22px, 2.4vw, 32px); letter-spacing: .3px; }
+  .subtitle { margin: 0; color: var(--muted); line-height: 1.7; font-size: 14px; }
+  .subtitle b { color: var(--text); }
+  .controls {
+    display: grid;
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    gap: 14px;
+    background: linear-gradient(180deg, rgba(22,33,58,.95), rgba(17,26,46,.95));
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 16px;
+    margin-bottom: 18px;
+  }
+  .control { grid-column: span 3; min-width: 0; }
+  .control.wide { grid-column: span 4; }
+  .control label {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 10px; color: var(--muted); font-size: 13px; margin-bottom: 8px;
+  }
+  .control label strong { color: var(--text); font-size: 14px; font-weight: 600; }
+  input[type="range"] {
+    width: 100%; height: 6px; margin: 4px 0 0; cursor: pointer;
+    accent-color: var(--outer); background: transparent;
+  }
+  #innerRange { accent-color: var(--inner); }
+  select {
+    width: 100%; background: var(--panel-2); color: var(--text);
+    border: 1px solid var(--line); border-radius: 10px; padding: 9px 10px;
+    font-size: 13px; outline: none;
+  }
+  .presets { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .presets button {
+    border: 1px solid var(--line); background: var(--panel-2); color: var(--text);
+    border-radius: 999px; padding: 7px 11px; font-size: 12px; cursor: pointer;
+    transition: .15s ease;
+  }
+  .presets button:hover { border-color: var(--outer); transform: translateY(-1px); }
+  .presets button.active { border-color: var(--outer); background: rgba(56,189,248,.14); }
+  .grid { display: grid; grid-template-columns: 1.35fr 1fr; gap: 18px; align-items: stretch; }
+  .card {
+    background: linear-gradient(180deg, rgba(22,33,58,.92), rgba(17,26,46,.96));
+    border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 16px; min-width: 0;
+  }
+  .card-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+  .card-head h2 { margin: 0; font-size: 16px; }
+  .card-head span { color: var(--muted); font-size: 12px; }
+  .canvas-wrap { position: relative; width: 100%; }
+  #topdown {
+    display: block; width: 100%; height: clamp(340px, 48vh, 480px);
+    border-radius: 12px; cursor: grab; touch-action: none;
+    background: #0c1527; border: 1px solid rgba(35,52,82,.7);
+  }
+  #topdown:active { cursor: grabbing; }
+  .canvas-hint {
+    position: absolute; left: 12px; bottom: 10px;
+    color: var(--muted); font-size: 12px; background: rgba(11,17,32,.72);
+    border: 1px solid rgba(35,52,82,.7); border-radius: 999px; padding: 5px 9px;
+    pointer-events: none;
+  }
+  .readouts { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 4px 0 14px; }
+  .readout {
+    background: rgba(11,17,32,.55); border: 1px solid var(--line);
+    border-radius: 12px; padding: 10px 12px;
+  }
+  .readout span { display: block; color: var(--muted); font-size: 12px; margin-bottom: 4px; }
+  .readout strong { font-size: 19px; font-weight: 700; }
+  .readout.outer strong { color: var(--outer); }
+  .readout.inner strong { color: var(--inner); }
+  .selected-card {
+    border: 1px solid rgba(74,222,128,.42); background: rgba(74,222,128,.08);
+    border-radius: 12px; padding: 12px 14px; margin-bottom: 14px;
+  }
+  .selected-card .label { color: var(--muted); font-size: 12px; margin-bottom: 4px; }
+  .selected-card .value { font-size: 18px; font-weight: 700; color: var(--selected); }
+  .selected-card .value.none { color: var(--danger); }
+  .selected-card .detail { color: var(--muted); font-size: 12px; margin-top: 4px; line-height: 1.5; }
+  .metrics { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 14px; }
+  .metric {
+    background: rgba(11,17,32,.5); border: 1px solid var(--line);
+    border-radius: 10px; padding: 8px 9px;
+  }
+  .metric span { display: block; color: var(--muted); font-size: 11px; margin-bottom: 3px; }
+  .metric strong { font-size: 14px; }
+  .section-title { color: var(--muted); font-size: 12px; margin: 0 0 8px; letter-spacing: .4px; text-transform: uppercase; }
+  .candidate-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+  .candidate-row {
+    display: grid; grid-template-columns: 22px 1fr auto auto;
+    gap: 8px; align-items: center;
+    background: rgba(11,17,32,.45); border: 1px solid var(--line);
+    border-left: 3px solid transparent; border-radius: 9px;
+    padding: 7px 9px; font-size: 12px;
+  }
+  .candidate-row.selected { border-left-color: var(--selected); background: rgba(74,222,128,.08); }
+  .candidate-row.inner { border-left-color: var(--inner); }
+  .candidate-row.outer { border-left-color: var(--outer); }
+  .candidate-row.out { opacity: .5; }
+  .candidate-row .dot {
+    width: 10px; height: 10px; border-radius: 50%; background: var(--dim);
+    display: inline-block; justify-self: center;
+  }
+  .candidate-row.inner .dot { background: var(--inner); }
+  .candidate-row.outer .dot { background: var(--outer); }
+  .candidate-row.selected .dot { background: var(--selected); box-shadow: 0 0 10px rgba(74,222,128,.8); }
+  .candidate-row .name { font-weight: 700; }
+  .candidate-row .angle { color: var(--text); font-variant-numeric: tabular-nums; }
+  .candidate-row .dist { color: var(--muted); font-variant-numeric: tabular-nums; }
+  .badge {
+    font-size: 10px; padding: 2px 7px; border-radius: 999px;
+    border: 1px solid var(--line); color: var(--muted); white-space: nowrap;
+  }
+  .badge.selected { color: var(--selected); border-color: rgba(74,222,128,.45); background: rgba(74,222,128,.10); }
+  .badge.inner { color: var(--inner); border-color: rgba(251,191,36,.45); background: rgba(251,191,36,.09); }
+  .badge.outer { color: var(--outer); border-color: rgba(56,189,248,.45); background: rgba(56,189,248,.09); }
+  .note {
+    color: var(--muted); font-size: 12px; line-height: 1.7;
+    background: rgba(11,17,32,.45); border: 1px dashed var(--line);
+    border-radius: 10px; padding: 10px 12px; min-height: 62px;
+  }
+  .note b { color: var(--text); }
+  .ruler-card { margin-top: 18px; }
+  #ruler { display: block; width: 100%; height: 190px; border-radius: 12px; background: #0c1527; border: 1px solid rgba(35,52,82,.7); }
+  .legend { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 16px; color: var(--muted); font-size: 12px; line-height: 1.6; }
+  .legend span { display: inline-flex; align-items: center; gap: 7px; }
+  .swatch { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+  .swatch.outer { background: var(--outer); }
+  .swatch.inner { background: var(--inner); }
+  .swatch.selected { background: var(--selected); }
+  .swatch.out { background: var(--dim); }
+  .footnote { color: var(--muted); font-size: 12px; line-height: 1.7; margin-top: 18px; }
+  .footnote b { color: var(--text); }
+  @media (max-width: 980px) {
+    .grid { grid-template-columns: 1fr; }
+    .control { grid-column: span 6; }
+    .control.wide { grid-column: span 12; }
+  }
+  @media (max-width: 560px) {
+    .app { padding: 18px 12px 32px; }
+    .controls { padding: 12px; gap: 10px; }
+    .control { grid-column: span 12; }
+    .readouts { grid-template-columns: 1fr 1fr; }
+    .metrics { grid-template-columns: 1fr 1fr; }
+    .candidate-row { grid-template-columns: 20px 1fr auto; }
+    .candidate-row .dist { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>准星捕获范围可视化</h1>
+    <p class="subtitle">
+      俯视图里的扇形是“能不能被选进来”的范围。拖动图里的准星方向，或直接拉滑杆，观察
+      <b>外锥</b>、<b>内锥</b>和选中目标怎么变化。示意图按角度绘制，实际屏幕像素会随游戏 FOV / 分辨率变化。
+      <br><b>游戏里现在已经按 30° / 20° 设置</b>；本页默认从 12° / 5° 开始对比，点“你的选择 30 / 20”即可看新设置。
+    </p>
+  </header>
+
+  <section class="controls">
+    <div class="control">
+      <label>外锥（捕获边界） <strong id="outerLabel">12.0°</strong></label>
+      <input id="outerRange" type="range" min="6" max="30" step="0.5" value="12">
+    </div>
+    <div class="control">
+      <label>内锥（优先保护区） <strong id="innerLabel">5.0°</strong></label>
+      <input id="innerRange" type="range" min="0" max="20" step="0.5" value="5">
+    </div>
+    <div class="control">
+      <label>准星方向 <strong id="crosshairLabel">0°</strong></label>
+      <input id="crosshairRange" type="range" min="0" max="360" step="1" value="0">
+    </div>
+    <div class="control wide">
+      <label>演示场景</label>
+      <select id="sceneSelect">
+        <option value="0">准星附近有人（A 4° / B 9°）</option>
+        <option value="1">准星附近没人（目标在 13° 外；外锥 12° 时无目标）</option>
+        <option value="2">内锥边界（内锥 5° 选 B，6° 选 A）</option>
+      </select>
+    </div>
+    <div class="control wide">
+      <label>常用档位</label>
+      <div class="presets" id="presets">
+        <button data-outer="12" data-inner="5">当前 12 / 5</button>
+        <button data-outer="16" data-inner="6">推荐 16 / 6</button>
+        <button data-outer="18" data-inner="7">更宽松 18 / 7</button>
+        <button data-outer="20" data-inner="8">上限 20 / 8</button>
+        <button data-outer="30" data-inner="20">你的选择 30 / 20</button>
+      </div>
+    </div>
+  </section>
+
+  <main class="grid">
+    <section class="card">
+      <div class="card-head">
+        <h2>俯视锥形图</h2>
+        <span>中心 = 你；扇形中心线 = 准星方向</span>
+      </div>
+      <div class="canvas-wrap">
+        <canvas id="topdown" aria-label="准星外锥内锥俯视图"></canvas>
+        <div class="canvas-hint">拖动旋转准星</div>
+      </div>
+    </section>
+
+    <aside class="card">
+      <div class="readouts">
+        <div class="readout outer"><span>外锥 / 捕获</span><strong id="outerReadout">12.0°</strong></div>
+        <div class="readout inner"><span>内锥 / 优先</span><strong id="innerReadout">5.0°</strong></div>
+      </div>
+
+      <div class="selected-card" id="selectedCard">
+        <div class="label">当前选中</div>
+        <div class="value" id="selectedValue">A</div>
+        <div class="detail" id="selectedDetail">4.0° / 18m</div>
+      </div>
+
+      <div class="metrics">
+        <div class="metric"><span>10m 处半径</span><strong id="radius10">2.1m</strong></div>
+        <div class="metric"><span>20m 处半径</span><strong id="radius20">4.2m</strong></div>
+        <div class="metric"><span>50m 处半径</span><strong id="radius50">10.6m</strong></div>
+      </div>
+
+      <p class="section-title">候选与状态</p>
+      <div class="candidate-list" id="candidateList"></div>
+      <div class="note" id="note"></div>
+    </aside>
+  </main>
+
+  <section class="card ruler-card">
+    <div class="card-head">
+      <h2>准星角度尺</h2>
+      <span>0° = 准星正中；左右刻度 = 目标与准星的夹角</span>
+    </div>
+    <canvas id="ruler" aria-label="准星角度尺"></canvas>
+  </section>
+
+  <div class="legend">
+    <span><i class="swatch outer"></i>外锥：圈外完全不进入候选，决定“能不能选到”</span>
+    <span><i class="swatch inner"></i>内锥：内锥有人时只在内锥里选，是优先保护区</span>
+    <span><i class="swatch selected"></i>绿色：当前选中</span>
+    <span><i class="swatch out"></i>灰色：圈外 / 不参与</span>
+  </div>
+
+  <p class="footnote">
+    <b>关键点：</b>当前算法是“角度优先”。你现在用的是 <b>30° 外锥 / 20° 内锥</b>：
+    外锥已经比较宽，再往上加只会让更外侧的人**有机会进入候选**；如果 30° 内已经有人，选中目标通常不会变，因为那个人角度更小。
+    外锥解决的是“准星附近完全没人时选不到”的问题。内锥更像“准星正下方的保护区”，它不会扩大捕获范围；
+    20° 内锥已经覆盖 30° 外锥的大部分，所以这个档位下内锥主要是在边界 tie 时保护角度更小的目标。
+  </p>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  var RAD = Math.PI / 180;
+  var SCENES = [
+    {
+      name: '准星附近有人（看角度优先）',
+      targets: [
+        { id: 'A', dist: 18, bearing: 4.0 },
+        { id: 'B', dist: 12, bearing: 9.0 },
+        { id: 'C', dist: 25, bearing: 14.0 },
+        { id: 'D', dist: 30, bearing: -7.0 },
+        { id: 'E', dist: 40, bearing: 24.0 }
+      ]
+    },
+    {
+      name: '准星附近没人（看外锥捕获）',
+      targets: [
+        { id: 'A', dist: 18, bearing: 13.0 },
+        { id: 'B', dist: 22, bearing: 17.0 },
+        { id: 'C', dist: 30, bearing: -15.0 },
+        { id: 'D', dist: 15, bearing: 26.0 },
+        { id: 'E', dist: 40, bearing: -28.0 }
+      ]
+    },
+    {
+      name: '内锥边界（看内锥保护）',
+      targets: [
+        { id: 'A', dist: 40, bearing: 5.8 },
+        { id: 'B', dist: 8, bearing: 6.4 },
+        { id: 'C', dist: 20, bearing: 15.0 },
+        { id: 'D', dist: 32, bearing: -10.0 }
+      ]
+    }
+  ];
+
+  var state = {
+    outer: 12,
+    inner: 5,
+    crosshair: 0,
+    sceneIndex: 0,
+    targets: [],
+    selected: null,
+    candidates: [],
+    innerCandidates: []
+  };
+
+  var topdown = document.getElementById('topdown');
+  var ruler = document.getElementById('ruler');
+  var outerRange = document.getElementById('outerRange');
+  var innerRange = document.getElementById('innerRange');
+  var crosshairRange = document.getElementById('crosshairRange');
+  var sceneSelect = document.getElementById('sceneSelect');
+  var candidateList = document.getElementById('candidateList');
+  var note = document.getElementById('note');
+
+  function normalize180(deg) {
+    var d = ((deg + 180) % 360 + 360) % 360 - 180;
+    return d;
+  }
+
+  function rel(t) {
+    return normalize180(t.bearing - state.crosshair);
+  }
+
+  function absRel(t) {
+    return Math.abs(rel(t));
+  }
+
+  function fmtDeg(v) {
+    return v.toFixed(1) + '°';
+  }
+
+  function clamp(v, min, max) {
+    return Math.min(max, Math.max(min, v));
+  }
+
+  function loadScene(index) {
+    state.sceneIndex = index;
+    state.targets = SCENES[index].targets.map(function (t) {
+      return { id: t.id, dist: t.dist, bearing: t.bearing };
+    });
+    state.crosshair = 0;
+    crosshairRange.value = '0';
+    document.getElementById('crosshairLabel').textContent = '0°';
+    sceneSelect.value = String(index);
+    refresh();
+  }
+
+  function computeSelection() {
+    var candidates = [];
+    var innerCandidates = [];
+    var i;
+    for (i = 0; i < state.targets.length; i += 1) {
+      var t = state.targets[i];
+      var a = absRel(t);
+      if (a <= state.outer + 0.000001) {
+        candidates.push(t);
+        if (a <= state.inner + 0.000001) innerCandidates.push(t);
+      }
+    }
+    var pool = innerCandidates.length ? innerCandidates : candidates;
+    var best = null;
+    for (i = 0; i < pool.length; i += 1) {
+      var c = pool[i];
+      if (!best) {
+        best = c;
+        continue;
+      }
+      var ca = absRel(c);
+      var ba = absRel(best);
+      if (ca + 1.0 < ba) {
+        best = c;
+      } else if (ba + 1.0 < ca) {
+        // keep best
+      } else if (c.dist < best.dist) {
+        best = c;
+      }
+    }
+    state.candidates = candidates;
+    state.innerCandidates = innerCandidates;
+    state.selected = best;
+  }
+
+  function statusOf(t) {
+    var a = absRel(t);
+    if (state.selected === t) return 'selected';
+    if (a <= state.inner) return 'inner';
+    if (a <= state.outer) return 'outer';
+    return 'out';
+  }
+
+  function badgeText(status) {
+    if (status === 'selected') return '选中';
+    if (status === 'inner') return '内锥';
+    if (status === 'outer') return '外锥';
+    return '圈外';
+  }
+
+  function renderInfo() {
+    document.getElementById('outerLabel').textContent = fmtDeg(state.outer);
+    document.getElementById('innerLabel').textContent = fmtDeg(state.inner);
+    document.getElementById('outerReadout').textContent = fmtDeg(state.outer);
+    document.getElementById('innerReadout').textContent = fmtDeg(state.inner);
+    document.getElementById('radius10').textContent = (Math.tan(state.outer * RAD) * 10).toFixed(1) + 'm';
+    document.getElementById('radius20').textContent = (Math.tan(state.outer * RAD) * 20).toFixed(1) + 'm';
+    document.getElementById('radius50').textContent = (Math.tan(state.outer * RAD) * 50).toFixed(1) + 'm';
+
+    var selectedValue = document.getElementById('selectedValue');
+    var selectedDetail = document.getElementById('selectedDetail');
+    if (state.selected) {
+      var sr = rel(state.selected);
+      selectedValue.textContent = state.selected.id;
+      selectedValue.className = 'value';
+      selectedDetail.textContent = (sr >= 0 ? '+' : '') + sr.toFixed(1) + '° / ' + state.selected.dist + 'm' +
+        ' · ' + (state.innerCandidates.length ? '内锥优先' : '外锥候选');
+    } else {
+      selectedValue.textContent = '无目标';
+      selectedValue.className = 'value none';
+      selectedDetail.textContent = '外锥 ' + state.outer.toFixed(1) + '° 内没有任何敌人';
+    }
+
+    var sorted = state.targets.slice().sort(function (a, b) {
+      return absRel(a) - absRel(b);
+    });
+    var html = '';
+    for (var i = 0; i < sorted.length; i += 1) {
+      var t = sorted[i];
+      var st = statusOf(t);
+      var r = rel(t);
+      html += '<div class="candidate-row ' + st + '">' +
+        '<i class="dot"></i>' +
+        '<span><span class="name">' + t.id + '</span> <span class="angle">' + (r >= 0 ? '+' : '') + r.toFixed(1) + '°</span></span>' +
+        '<span class="dist">' + t.dist + 'm</span>' +
+        '<span class="badge ' + st + '">' + badgeText(st) + '</span>' +
+        '</div>';
+    }
+    candidateList.innerHTML = html;
+
+    function candidateById(id) {
+      for (var ci = 0; ci < state.candidates.length; ci += 1) {
+        if (state.candidates[ci].id === id) return state.candidates[ci];
+      }
+      return null;
+    }
+    var selectedId = state.selected ? state.selected.id : '';
+    var hasA = !!candidateById('A');
+    var hasB = !!candidateById('B');
+
+    if (state.sceneIndex === 0 && selectedId === 'A' && hasA && hasB) {
+      note.innerHTML = 'A 在 <b>4°</b>（内锥），B 在 <b>9°</b>（外锥）。A 角度更小，所以选 A；即使 B 更近（12m），角度优先仍然选 A。';
+    } else if (state.sceneIndex === 1 && selectedId === 'A' && hasA) {
+      note.innerHTML = '外锥 <b>' + state.outer.toFixed(1) + '°</b> 后 A 进入候选。它是当前角度最小的目标，所以选 A；继续加大外锥不会改变它。';
+    } else if (state.sceneIndex === 2 && hasA && hasB) {
+      if (selectedId === 'B' && state.innerCandidates.length === 0) {
+        note.innerHTML = 'A 在 5.8° / 40m，B 在 6.4° / 8m：两人都在外锥，角度差 0.6° ≤ 1°，B 更近，所以选 B。' +
+          '把内锥调到 <b>≥ 5.8°</b>，A 进入内锥，就会改选 A。';
+      } else if (selectedId === 'A' && state.innerCandidates.length > 0) {
+        note.innerHTML = 'A 在 5.8°，已经进入内锥；B 在 6.4°，仍在外锥。内锥优先，所以选 A（即使 A 在 40m）。';
+      } else {
+        note.innerHTML = '内锥边界演示：A 5.8° / 40m，B 6.4° / 8m。内锥小于 5.8° 时 B 胜出；内锥 ≥ 5.8° 时 A 进入保护区并胜出。';
+      }
+    } else if (state.selected) {
+      note.innerHTML = '当前选中 <b>' + state.selected.id + '</b>。继续加大外锥，只会把更外侧的人加进候选，通常不会改变这个“角度最小”的目标；外锥主要解决“圈内完全没人”的情况。';
+    } else {
+      var outside = state.targets.filter(function (t) { return absRel(t) > state.outer; })
+        .sort(function (a, b) { return absRel(a) - absRel(b); });
+      if (outside.length) {
+        var nearest = outside[0];
+        note.innerHTML = '外锥 <b>' + state.outer.toFixed(1) + '°</b> 内没人。最近的是 <b>' + nearest.id +
+          '</b>（' + absRel(nearest).toFixed(1) + '°），把外锥调到 <b>≥ ' + absRel(nearest).toFixed(1) +
+          '°</b> 就能选到它。';
+      } else {
+        note.textContent = '场上没有可用目标。';
+      }
+    }
+  }
+
+  function setupCanvas(canvas) {
+    var rect = canvas.getBoundingClientRect();
+    var dpr = window.devicePixelRatio || 1;
+    var w = Math.max(1, rect.width);
+    var h = Math.max(1, rect.height);
+    if (canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(h * dpr)) {
+      canvas.width = Math.round(w * dpr);
+      canvas.height = Math.round(h * dpr);
+    }
+    var ctx = canvas.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    return { ctx: ctx, w: w, h: h };
+  }
+
+  function topdownCenter(canvas) {
+    var rect = canvas.getBoundingClientRect();
+    return { cx: rect.width / 2, cy: rect.height * 0.57 };
+  }
+
+  function drawTopdown() {
+    var s = setupCanvas(topdown);
+    var ctx = s.ctx;
+    var w = s.w;
+    var h = s.h;
+    var cx = w / 2;
+    var cy = h * 0.57;
+    var maxR = Math.min(w, h) * 0.43;
+    var maxDist = 50;
+    var scale = maxR / maxDist;
+
+    ctx.clearRect(0, 0, w, h);
+    var bg = ctx.createRadialGradient(cx, cy, 0, cx, cy, maxR * 1.35);
+    bg.addColorStop(0, '#101d33');
+    bg.addColorStop(.65, '#0c1527');
+    bg.addColorStop(1, '#09101f');
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, w, h);
+
+    // distance rings
+    ctx.save();
+    ctx.strokeStyle = 'rgba(147,164,189,.20)';
+    ctx.fillStyle = 'rgba(147,164,189,.62)';
+    ctx.lineWidth = 1;
+    ctx.font = '11px "Segoe UI", "Microsoft YaHei", sans-serif';
+    for (var d = 10; d <= maxDist; d += 10) {
+      var rr = d * scale;
+      ctx.beginPath();
+      ctx.arc(cx, cy, rr, 0, Math.PI * 2);
+      ctx.stroke();
+      if (d % 20 === 0) {
+        ctx.fillText(d + 'm', cx + 4, cy - rr - 4);
+      }
+    }
+    ctx.restore();
+
+    function drawWedge(deg, fill, stroke) {
+      if (!(deg > 0)) return;
+      var a0 = (-90 + state.crosshair - deg) * RAD;
+      var a1 = (-90 + state.crosshair + deg) * RAD;
+      ctx.beginPath();
+      ctx.moveTo(cx, cy);
+      ctx.arc(cx, cy, maxR, a0, a1);
+      ctx.closePath();
+      ctx.fillStyle = fill;
+      ctx.fill();
+      ctx.strokeStyle = stroke;
+      ctx.lineWidth = 1.6;
+      ctx.stroke();
+    }
+
+    drawWedge(state.outer, 'rgba(56,189,248,.10)', 'rgba(56,189,248,.78)');
+    drawWedge(state.inner, 'rgba(251,191,36,.14)', 'rgba(251,191,36,.92)');
+
+    // crosshair direction
+    var ca = (-90 + state.crosshair) * RAD;
+    ctx.save();
+    ctx.strokeStyle = 'rgba(229,237,248,.85)';
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([5, 5]);
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.lineTo(cx + Math.cos(ca) * maxR, cy + Math.sin(ca) * maxR);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = 'rgba(229,237,248,.8)';
+    ctx.font = '11px "Segoe UI", "Microsoft YaHei", sans-serif';
+    ctx.fillText('准星', cx + Math.cos(ca) * maxR - 12, cy + Math.sin(ca) * maxR - 8);
+    ctx.restore();
+
+    // player
+    ctx.beginPath();
+    ctx.arc(cx, cy, 7, 0, Math.PI * 2);
+    ctx.fillStyle = '#e5edf8';
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(cx, cy, 13, 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(229,237,248,.35)';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    // targets
+    for (var i = 0; i < state.targets.length; i += 1) {
+      var t = state.targets[i];
+      var r = t.dist * scale;
+      var ta = (-90 + t.bearing) * RAD;
+      var x = cx + Math.cos(ta) * r;
+      var y = cy + Math.sin(ta) * r;
+      var st = statusOf(t);
+      var isSelected = st === 'selected';
+      var color = isSelected ? '#4ade80' : st === 'inner' ? '#fbbf24' : st === 'outer' ? '#38bdf8' : '#64748b';
+
+      ctx.save();
+      if (isSelected) {
+        ctx.shadowColor = 'rgba(74,222,128,.9)';
+        ctx.shadowBlur = 18;
+      }
+      ctx.beginPath();
+      ctx.arc(x, y, isSelected ? 9 : 6.5, 0, Math.PI * 2);
+      ctx.fillStyle = color;
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.strokeStyle = isSelected ? '#eafff2' : 'rgba(11,17,32,.85)';
+      ctx.lineWidth = isSelected ? 2.5 : 1.5;
+      ctx.stroke();
+      ctx.restore();
+
+      var side = x < cx ? 'left' : 'right';
+      var tx = x + (side === 'left' ? -12 : 12);
+      function drawTag(text, ty, bold) {
+        ctx.font = (bold ? '600 12px ' : '10px ') + '"Segoe UI", "Microsoft YaHei", sans-serif';
+        var tw = ctx.measureText(text).width;
+        var bx = side === 'left' ? tx - tw - 5 : tx - 3;
+        ctx.fillStyle = 'rgba(9,16,31,.74)';
+        ctx.fillRect(bx, ty - 11, tw + 8, 13);
+        ctx.fillStyle = bold && isSelected ? '#dcfce7' : (bold ? '#dbe7f7' : 'rgba(147,164,189,.95)');
+        ctx.textAlign = side === 'left' ? 'right' : 'left';
+        ctx.fillText(text, tx, ty);
+        ctx.textAlign = 'left';
+      }
+      drawTag(t.id, y - 4, true);
+    }
+
+    // center label
+    ctx.font = '11px "Segoe UI", "Microsoft YaHei", sans-serif';
+    ctx.fillStyle = 'rgba(147,164,189,.75)';
+    ctx.fillText('你', cx + 14, cy + 4);
+  }
+
+  function drawRuler() {
+    var s = setupCanvas(ruler);
+    var ctx = s.ctx;
+    var w = s.w;
+    var h = s.h;
+    var center = w / 2;
+    var range = 30;
+    var pxPerDeg = (w * 0.43) / range;
+    var baseline = h - 44;
+
+    ctx.clearRect(0, 0, w, h);
+    ctx.fillStyle = '#0c1527';
+    ctx.fillRect(0, 0, w, h);
+
+    function xFor(a) {
+      return center + clamp(a, -range, range) * pxPerDeg;
+    }
+
+    // outer band
+    ctx.fillStyle = 'rgba(56,189,248,.09)';
+    ctx.fillRect(xFor(-state.outer), 26, xFor(state.outer) - xFor(-state.outer), baseline - 26);
+    // inner band
+    ctx.fillStyle = 'rgba(251,191,36,.13)';
+    ctx.fillRect(xFor(-state.inner), 26, xFor(state.inner) - xFor(-state.inner), baseline - 26);
+
+    // boundary lines
+    function vline(a, color, label, dash) {
+      var x = xFor(a);
+      ctx.save();
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1.5;
+      if (dash) ctx.setLineDash([4, 4]);
+      ctx.beginPath();
+      ctx.moveTo(x, 20);
+      ctx.lineTo(x, baseline + 8);
+      ctx.stroke();
+      ctx.restore();
+      ctx.fillStyle = color;
+      ctx.font = '10px "Segoe UI", "Microsoft YaHei", sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(label, x, 16);
+      ctx.textAlign = 'left';
+    }
+    vline(-state.outer, 'rgba(56,189,248,.95)', '-' + state.outer.toFixed(1) + '°', false);
+    vline(state.outer, 'rgba(56,189,248,.95)', '+' + state.outer.toFixed(1) + '°', false);
+    vline(-state.inner, 'rgba(251,191,36,.95)', '-' + state.inner.toFixed(1) + '°', true);
+    vline(state.inner, 'rgba(251,191,36,.95)', '+' + state.inner.toFixed(1) + '°', true);
+
+    // baseline
+    ctx.strokeStyle = 'rgba(147,164,189,.45)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(xFor(-range), baseline);
+    ctx.lineTo(xFor(range), baseline);
+    ctx.stroke();
+
+    // ticks
+    ctx.font = '10px "Segoe UI", "Microsoft YaHei", sans-serif';
+    ctx.textAlign = 'center';
+    for (var a = -30; a <= 30; a += 5) {
+      var x = xFor(a);
+      var big = a % 10 === 0;
+      ctx.strokeStyle = big ? 'rgba(147,164,189,.55)' : 'rgba(147,164,189,.25)';
+      ctx.beginPath();
+      ctx.moveTo(x, baseline);
+      ctx.lineTo(x, baseline + (big ? 8 : 4));
+      ctx.stroke();
+      if (big) {
+        ctx.fillStyle = 'rgba(147,164,189,.8)';
+        ctx.fillText((a > 0 ? '+' : '') + a + '°', x, baseline + 22);
+      }
+    }
+    ctx.textAlign = 'left';
+
+    // crosshair center
+    ctx.strokeStyle = 'rgba(229,237,248,.9)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(center, 24);
+    ctx.lineTo(center, baseline + 8);
+    ctx.stroke();
+    ctx.fillStyle = 'rgba(229,237,248,.9)';
+    ctx.font = '11px "Segoe UI", "Microsoft YaHei", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('准星', center, baseline + 38);
+    ctx.textAlign = 'left';
+
+    // targets
+    for (var i = 0; i < state.targets.length; i += 1) {
+      var t = state.targets[i];
+      var r = rel(t);
+      if (Math.abs(r) > range) continue;
+      var x = xFor(r);
+      var y = baseline - 22 - (t.dist / 50) * 44;
+      var st = statusOf(t);
+      var isSelected = st === 'selected';
+      var color = isSelected ? '#4ade80' : st === 'inner' ? '#fbbf24' : st === 'outer' ? '#38bdf8' : '#64748b';
+
+      ctx.strokeStyle = color;
+      ctx.lineWidth = isSelected ? 2 : 1;
+      ctx.beginPath();
+      ctx.moveTo(x, baseline);
+      ctx.lineTo(x, y + 7);
+      ctx.stroke();
+
+      ctx.save();
+      if (isSelected) {
+        ctx.shadowColor = 'rgba(74,222,128,.9)';
+        ctx.shadowBlur = 14;
+      }
+      ctx.beginPath();
+      ctx.arc(x, y, isSelected ? 7 : 5, 0, Math.PI * 2);
+      ctx.fillStyle = color;
+      ctx.fill();
+      ctx.restore();
+
+      ctx.fillStyle = isSelected ? '#dcfce7' : '#dbe7f7';
+      ctx.font = '600 11px "Segoe UI", "Microsoft YaHei", sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(t.id, x, y - 10);
+      ctx.font = '10px "Segoe UI", "Microsoft YaHei", sans-serif';
+      ctx.fillStyle = 'rgba(147,164,189,.95)';
+      ctx.fillText((r >= 0 ? '+' : '') + r.toFixed(1) + '°', x, y - 23);
+      ctx.textAlign = 'left';
+    }
+
+    // edge note for outside targets
+    var hidden = state.targets.filter(function (t) { return Math.abs(rel(t)) > range; });
+    if (hidden.length) {
+      ctx.fillStyle = 'rgba(147,164,189,.75)';
+      ctx.font = '11px "Segoe UI", "Microsoft YaHei", sans-serif';
+      ctx.fillText('还有 ' + hidden.length + ' 个目标在 ±30° 外', 12, 18);
+    }
+  }
+
+  function refresh() {
+    computeSelection();
+    renderInfo();
+    drawTopdown();
+    drawRuler();
+  }
+
+  function syncSliders() {
+    outerRange.value = String(state.outer);
+    innerRange.value = String(state.inner);
+    crosshairRange.value = String(Math.round(state.crosshair));
+    document.getElementById('crosshairLabel').textContent = Math.round(state.crosshair) + '°';
+  }
+
+  outerRange.addEventListener('input', function (e) {
+    state.outer = Number(e.target.value);
+    if (state.inner > state.outer) {
+      state.inner = state.outer;
+      innerRange.value = String(state.inner);
+    }
+    refresh();
+  });
+
+  innerRange.addEventListener('input', function (e) {
+    state.inner = Math.min(Number(e.target.value), state.outer);
+    innerRange.value = String(state.inner);
+    refresh();
+  });
+
+  crosshairRange.addEventListener('input', function (e) {
+    state.crosshair = Number(e.target.value);
+    document.getElementById('crosshairLabel').textContent = Math.round(state.crosshair) + '°';
+    refresh();
+  });
+
+  sceneSelect.addEventListener('change', function (e) {
+    loadScene(Number(e.target.value));
+  });
+
+  var presetButtons = document.querySelectorAll('#presets button');
+  for (var i = 0; i < presetButtons.length; i += 1) {
+    presetButtons[i].addEventListener('click', function (e) {
+      var btn = e.currentTarget;
+      state.outer = Number(btn.getAttribute('data-outer'));
+      state.inner = Number(btn.getAttribute('data-inner'));
+      syncSliders();
+      for (var k = 0; k < presetButtons.length; k += 1) {
+        presetButtons[k].classList.toggle('active', presetButtons[k] === btn);
+      }
+      refresh();
+    });
+  }
+
+  var dragging = false;
+  function updateCrosshairFromPointer(e) {
+    var rect = topdown.getBoundingClientRect();
+    var cx = rect.width / 2;
+    var cy = rect.height * 0.57;
+    var dx = e.clientX - rect.left - cx;
+    var dy = e.clientY - rect.top - cy;
+    var deg = Math.atan2(dx, -dy) * 180 / Math.PI;
+    if (deg < 0) deg += 360;
+    state.crosshair = deg;
+    crosshairRange.value = String(Math.round(deg));
+    document.getElementById('crosshairLabel').textContent = Math.round(deg) + '°';
+    refresh();
+  }
+
+  topdown.addEventListener('pointerdown', function (e) {
+    dragging = true;
+    if (topdown.setPointerCapture) topdown.setPointerCapture(e.pointerId);
+    updateCrosshairFromPointer(e);
+  });
+  topdown.addEventListener('pointermove', function (e) {
+    if (dragging) updateCrosshairFromPointer(e);
+  });
+  topdown.addEventListener('pointerup', function () { dragging = false; });
+  topdown.addEventListener('pointercancel', function () { dragging = false; });
+
+  var resizeTimer = null;
+  window.addEventListener('resize', function () {
+    if (resizeTimer) clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(refresh, 80);
+  });
+
+  // default scene
+  state.targets = SCENES[0].targets.map(function (t) {
+    return { id: t.id, dist: t.dist, bearing: t.bearing };
+  });
+  syncSliders();
+  presetButtons[0].classList.add('active');
+  refresh();
+})();
+</script>
+</body>
+</html>

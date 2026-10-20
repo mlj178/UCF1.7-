@@ -32,7 +32,6 @@ const DEFAULT_SCRIPT = path.resolve(
 
 // 旧版（注入式）用过的地址 —— 只要有一个出现在 NativeFunction/attach 里就是回归
 const RETIRED_RVA = {
-    0x00AFC1C0: 'GameManager.TakeDamage',
     0x00B3F470: 'Entity.OnEntityHurt',
     0x00B516B0: 'Player.OnEntityHurt',
     0x00AE45B0: 'HealthData.Hurt',
@@ -179,11 +178,20 @@ function main() {
     check('Interceptor.replace never used', world.replaces.length === 0, world.replaces.length);
     check('Interceptor.revert never used', world.reverts.length === 0, world.reverts.length);
 
-    const expectHooks = 15;
+    const expectHooks = 17;
     check('installed hook count matches the C route (' + expectHooks + ')', world.attaches.length === expectHooks, world.attaches.length);
     check('WPN_Gun.Damage is attach-hooked exactly once',
         hookNames.filter((a) => a === BASE + 0x00B613D0).length === 1,
         hookNames.filter((a) => a === BASE + 0x00B613D0).length);
+    check('WPN_GRENADE.CreateExplosion is attach-hooked exactly once',
+        hookNames.filter((a) => a === BASE + 0x00B5CC40).length === 1,
+        hookNames.filter((a) => a === BASE + 0x00B5CC40).length);
+    // GameManager.TakeDamage 允许 attach（只复位防御字段），但绝不允许被 NativeFunction 调用
+    check('GameManager.TakeDamage is attach-hooked exactly once',
+        hookNames.filter((a) => a === BASE + 0x00AFC1C0).length === 1,
+        hookNames.filter((a) => a === BASE + 0x00AFC1C0).length);
+    check('GameManager.TakeDamage is never called through NativeFunction',
+        world.nativeCalls.filter((c) => c.address === BASE + 0x00AFC1C0).length === 0);
 
     // 触发开火钩子：不允许抛异常，且不许出现任何"注入伤害"的副作用
     let fireError = null;
@@ -200,6 +208,19 @@ function main() {
         }
     }
     check('firing the gun hook does not throw', !fireError, fireError && fireError.message);
+
+    // 爆炸钩子：栈上是 0（不是有效世界），必须安全退出、不许抛异常
+    let explosionError = null;
+    for (const record of world.attaches) {
+        if (record.address !== BASE + 0x00B5CC40) continue;
+        try {
+            record.callbacks.onEnter.call({ context: { esp: world.P(0x30000000) } }, []);
+        } catch (error) {
+            explosionError = error;
+        }
+    }
+    check('firing the explosion hook does not throw', !explosionError, explosionError && explosionError.message);
+    check('explosion hook recorded the call', rpc.status().explosion_defense_calls >= 1, rpc.status().explosion_defense_calls);
 
     const afterFire = rpc.status();
     check('gun hook recorded the call', afterFire.gun_damage_calls >= 1, afterFire.gun_damage_calls);

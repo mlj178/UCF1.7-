@@ -70,8 +70,8 @@ const test = context.rpc.exports.__test;
 assert(test, 'direct_damage __test exports missing');
 const Runtime = test.getRuntime();
 
-assert.strictEqual(Runtime.config.target_outer_cone_deg, 12.0);
-assert.strictEqual(Runtime.config.target_inner_cone_deg, 5.0);
+assert.strictEqual(Runtime.config.target_outer_cone_deg, 30.0);
+assert.strictEqual(Runtime.config.target_inner_cone_deg, 20.0);
 assert.strictEqual(Runtime.config.target_angle_tie_deg, 1.0);
 assert.strictEqual(Runtime.config.target_switch_margin_deg, 1.2);
 assert.strictEqual(Runtime.config.target_switch_confirm_scans, 1);
@@ -127,10 +127,10 @@ assert.strictEqual(Runtime.targetLock.reason, 'angle_advantage');
 test.resetTargetLock(Runtime.targetLock, 'inner-override-test');
 Runtime.targetLock = null;
 now = 2000;
-candidates = [candidate(playerA, 4.0, 10.0), candidate(playerB, 6.0, 5.0)];
+candidates = [candidate(playerA, 18.0, 10.0), candidate(playerB, 25.0, 5.0)];
 assert.strictEqual(test.selectTargetFromCandidates(candidates, now).player, playerA);
 now = 2100;
-candidates = [candidate(playerA, 6.0, 10.0), candidate(playerB, 4.5, 5.0)];
+candidates = [candidate(playerA, 25.0, 10.0), candidate(playerB, 18.0, 5.0)];
 assert.strictEqual(test.selectTargetFromCandidates(candidates, now).player, playerB);
 assert.strictEqual(Runtime.targetLock.reason, 'inner_override');
 
