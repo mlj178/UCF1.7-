@@ -1659,22 +1659,23 @@
                     if (!Runtime.enabled || !Runtime.config.pierce_respawn_invincible) return;
                     var sp = this.context ? this.context.esp : null;
                     if (!sp) return;
-                    var worldPos = {
-                        x: sp.add(4).readFloat(),
-                        y: sp.add(8).readFloat(),
-                        z: sp.add(12).readFloat()
-                    };
-                    var range = sp.add(0x14).readFloat();
-                    var eventPtr = sp.add(0x20).readPointer();
-                    if (isNull(eventPtr) || !readable(eventPtr)) return;
-                    var attacker = eventPtr.readPointer();
-                    var me = getMyPlayer();
-                    if (!isNull(me) && samePointer(attacker, me)) Runtime.cache.myExplosionAt = Date.now();
-                    var cleared = pierceExplosionDefense(attacker, worldPos, range);
+                    var ex = readExplosionArgs(sp);
+                    var worldPos = ex.worldPos;
+                    var range = ex.range;
+                    var eventPtr = ex.eventPtr;
+                    var eventOk = !isNull(eventPtr) && readable(eventPtr);
+                    var attacker = eventOk ? eventPtr.readPointer() : ptr(0);
+                    var cleared = 0;
+                    if (eventOk) {
+                        var me = getMyPlayer();
+                        if (!isNull(me) && samePointer(attacker, me)) Runtime.cache.myExplosionAt = Date.now();
+                        cleared = pierceExplosionDefense(attacker, worldPos, range);
+                    }
                     if (Runtime.cache.diagExp < 5) {
                         Runtime.cache.diagExp += 1;
                         log('info', '[diag:explosion] #' + Runtime.cache.diagExp +
                             ' pos=' + fmtVec(worldPos) + ' range=' + Number(range).toFixed(2) +
+                            ' event=' + fmtPtr(eventPtr) + ' eventOk=' + eventOk +
                             ' attacker=' + fmtPtr(attacker) + ' me=' + fmtPtr(Runtime.cache.ownPlayer) +
                             ' 复位=' + cleared);
                     }
@@ -1693,6 +1694,33 @@
     //   ★ 只 attach：不 replace、不跳过原函数、不合成事件、不调用任何游戏函数。
     //     看到 attacker 是本地玩家就复位 victim 的防御状态，然后原函数原样跑完。
 
+    // ------------------------------------------------------------------
+    // 入口参数读取（ABI 钉死在这里，方便单测）
+    // ------------------------------------------------------------------
+    //   ★ Frida 的 onEnter 里 this.context.esp 指向**返回地址**，
+    //     所以第一个参数在 esp+4，不是 esp+0。2026-10-20 就是这里差了 4 字节，
+    //     导致 TakeDamage 把返回地址当成 attacker，永远认不出我们的伤害。
+    function readTakeDamageArgs(sp) {
+        // DamageEventData 按值压栈：attacker +0x00 / victim +0x04 / type +0x34
+        return {
+            attacker: sp.add(4).readPointer(),
+            victim: sp.add(8).readPointer(),
+            type: sp.add(0x38).readS32()
+        };
+    }
+
+    function readExplosionArgs(sp) {
+        // CreateExplosion(worldPos, damage, range, distanceDecay, ignoreWall, event, cb)
+        return {
+            worldPos: {
+                x: sp.add(4).readFloat(),
+                y: sp.add(8).readFloat(),
+                z: sp.add(12).readFloat()
+            },
+            range: sp.add(0x14).readFloat(),
+            eventPtr: sp.add(0x20).readPointer()
+        };
+    }
     function installTakeDamageDefenseHook() {
         registerAttach('GameManager.TakeDamage(defense-pierce)', RVA.GameManager_TakeDamage, {
             onEnter: function () {
@@ -1701,11 +1729,12 @@
                     if (!Runtime.enabled || !Runtime.config.pierce_respawn_invincible) return;
                     var sp = this.context ? this.context.esp : null;
                     if (!sp) return;
-                    var attacker = sp.readPointer();
+                    var ev = readTakeDamageArgs(sp);
+                    var attacker = ev.attacker;
                     if (isNull(attacker)) return;
-                    var victim = sp.add(4).readPointer();
+                    var victim = ev.victim;
                     if (isNull(victim)) return;
-                    var dmgType = sp.add(0x34).readS32();
+                    var dmgType = ev.type;
                     var me = Runtime.cache.ownPlayer;
                     if (isNull(me)) {
                         me = getMyPlayer();

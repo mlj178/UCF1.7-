@@ -222,6 +222,19 @@ function main() {
     check('firing the explosion hook does not throw', !explosionError, explosionError && explosionError.message);
     check('explosion hook recorded the call', rpc.status().explosion_defense_calls >= 1, rpc.status().explosion_defense_calls);
 
+    // 伤害入口钩子：栈上是 0，必须安全退出
+    let tdError = null;
+    for (const record of world.attaches) {
+        if (record.address !== BASE + 0x00AFC1C0) continue;
+        try {
+            record.callbacks.onEnter.call({ context: { esp: world.P(0x30000000) } }, []);
+        } catch (error) {
+            tdError = error;
+        }
+    }
+    check('firing the take-damage hook does not throw', !tdError, tdError && tdError.message);
+    check('take-damage hook recorded the call', rpc.status().take_damage_calls >= 1, rpc.status().take_damage_calls);
+
     const afterFire = rpc.status();
     check('gun hook recorded the call', afterFire.gun_damage_calls >= 1, afterFire.gun_damage_calls);
     check('no damage was ever applied (counter is gone)',

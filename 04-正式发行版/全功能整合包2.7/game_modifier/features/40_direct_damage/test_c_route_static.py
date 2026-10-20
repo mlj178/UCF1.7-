@@ -6,6 +6,10 @@
 把**选中目标**的三个防御字段（Entity.damageRate / Entity.isInvincible /
 HealthData.invinsibleEndTime）复位。它不写血量、不写指针、不调游戏函数，
 所以死亡广播与复活调度仍然由原版完成 —— 下面有独立用例锁住这条边界。
+
+另有两条只 attach 的钩子：`WPN_GRENADE.CreateExplosion`（爆炸前复位半径内敌人）与
+`GameManager.TakeDamage`（伤害落地前复位 victim）。两者都**不** replace / 跳过 / 合成事件，
+`TakeDamage` 还额外禁止出现 `NativeFunction` 调用 —— 旧版正是「调用它 + 塞自造事件」才出的问题。
 以后任何一次改动想恢复注入链路（自己合成 DamageEventData / 跳过原函数 /
 死亡兜底），都会先在这里炸掉。
 
@@ -29,7 +33,6 @@ MANIFEST_PATH = FEATURE_DIR / "manifest.json"
 FORBIDDEN_IN_CODE = (
     "Interceptor.replace",
     "Interceptor.revert",
-    "GameManager_TakeDamage",
     "DeathEventBroadcast",
     "Entity_OnEntityHurt",
     "Player_OnEntityHurt",
@@ -177,8 +180,10 @@ class CrouteBoundaryTests(unittest.TestCase):
 
     def test_rva_table_has_no_damage_or_death_entries(self):
         table = block(code(), "var RVA = {", "};")
+        # GameManager.TakeDamage 是唯一允许的「伤害入口」RVA：只 attach、只复位防御字段，见
+        # installTakeDamageDefenseHook；其余伤害/死亡函数一律不许出现。
+        self.assertIn("GameManager_TakeDamage: 0x00AFC1C0", table)
         for token in (
-            "TakeDamage",
             "DeathEventBroadcast",
             "OnEntityHurt",
             "HealthData_Hurt",
@@ -267,8 +272,7 @@ class CrouteBoundaryTests(unittest.TestCase):
         self.assertIn("WPN_GRENADE_CreateExplosion: 0x00B5CC40", block(text, "var RVA = {", "};"))
         hook = function_body(text, "function installExplosionDefenseHook()")
         self.assertIn("registerAttach(", hook)
-        self.assertIn("sp.add(0x14).readFloat()", hook)   # range
-        self.assertIn("sp.add(0x20).readPointer()", hook)  # DamageEventData
+        self.assertIn("readExplosionArgs(sp)", hook)   # worldPos/range/event 由 ABI 读取函数统一负责
         self.assertNotIn("onLeave", hook)
         self.assertNotIn("Interceptor", hook)
 
@@ -279,9 +283,38 @@ class CrouteBoundaryTests(unittest.TestCase):
         for forbidden in ("writeFloat", "writeU8", "writePointer", "TakeDamage", "Hurt"):
             self.assertNotIn(forbidden, helper, "爆炸穿透只允许调用 clearDefenseBeforeShot，出现了 %s" % forbidden)
 
+    def test_take_damage_hook_is_attach_only_and_only_resets_defense(self):
+        body = function_body(code(), "function installTakeDamageDefenseHook()")
+        self.assertIn("registerAttach(", body)
+        self.assertIn("RVA.GameManager_TakeDamage", body)
+        self.assertNotIn("onLeave", body)
+        self.assertNotIn("Interceptor", body)
+        for forbidden in ("writeFloat", "writeU8", "writePointer", "callGameManagerTakeDamage", "skipOriginal"):
+            self.assertNotIn(forbidden, body, "伤害入口只允许复位防御字段，出现了 %s" % forbidden)
+        self.assertIn("readTakeDamageArgs(sp)", body)
+        self.assertIn("samePointer(attacker, me)", body, "必须只处理本地玩家造成的伤害")
+        self.assertIn("isLocalPlayer(attacker)", body)
+        self.assertIn("isEnemyTeam(", body)
+        self.assertIn("clearDefenseBeforeShot(victim)", body)
+
     def test_install_hooks_registers_the_explosion_pierce(self):
         body = function_body(code(), "function installHooks()")
         self.assertIn("installExplosionDefenseHook()", body)
+
+    def test_entry_abi_offsets_are_pinned(self):
+        """Frida 的 onEnter 里 esp 指向返回地址，第一个参数在 esp+4。
+
+        2026-10-20 的线上 bug：TakeDamage 的 attacker 读成了 esp+0（返回地址），
+        永远认不出我们的伤害 -> 火箭筒打不死刚复活的人。这里把偏移钉死。
+        """
+        td = function_body(code(), "function readTakeDamageArgs(sp)")
+        self.assertIn("sp.add(4).readPointer()", td, "attacker 必须在 esp+4")
+        self.assertIn("sp.add(8).readPointer()", td, "victim 必须在 esp+8")
+        self.assertIn("sp.add(0x38).readS32()", td, "type 必须在 esp+0x38（事件内 +0x34）")
+        ex = function_body(code(), "function readExplosionArgs(sp)")
+        for token in ("sp.add(4).readFloat()", "sp.add(8).readFloat()", "sp.add(12).readFloat()",
+                      "sp.add(0x14).readFloat()", "sp.add(0x20).readPointer()"):
+            self.assertIn(token, ex)
 
     def test_pierce_respawn_invincible_is_a_manifest_switch_default_on(self):
         data = manifest()

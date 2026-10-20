@@ -7,7 +7,7 @@
   "tab_title": "武器",
   "tab_order": 10,
   "order": 70,
-  "desc": "玩家开火允许子弹穿墙。开启后，本地玩家发射的投射物（火箭筒 / 榴弹 / 手雷 / 技能弹）在碰到墙面前就被放行，直接穿墙继续飞；地板、角色、他人/人机的弹体保持原版。",
+  "desc": "玩家开火允许子弹穿墙。开启后，本地玩家发射的投射物（火箭筒 / 榴弹 / 手雷 / 技能弹）在碰到墙面前就被放行，直接穿墙继续飞；默认连地板 / 天花板 / 斜坡也能穿，角色、他人/人机的弹体保持原版。",
   "script": "script.js",
   "hotkey": {
     "enabled": true
@@ -30,6 +30,7 @@
     "forceHitboxOnlyDuringLocalDamage": true,
     "logEveryDamageHits": 25,
     "projectileWallPenetration": true,
+    "projectilePenetrateAllSurfaces": true,
     "projectilePenetrableLayers": 4294965879,
     "projectilePenetrateAirWall": false,
     "projectileWallMaxNormalY": 0.6,

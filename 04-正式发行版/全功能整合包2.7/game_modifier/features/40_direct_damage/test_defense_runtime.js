@@ -29,7 +29,9 @@ source = source.replace(exportPattern,
     '            getRuntime: function () { return Runtime; },\n' +
     '            readDefenseState: readDefenseState,\n' +
     '            clearDefenseBeforeShot: clearDefenseBeforeShot,\n' +
-    '            explosionTouchesTarget: explosionTouchesTarget\n' +
+    '            explosionTouchesTarget: explosionTouchesTarget,\n' +
+    '            readTakeDamageArgs: readTakeDamageArgs,\n' +
+    '            readExplosionArgs: readExplosionArgs\n' +
     '        },\n');
 
 // ---- 一块真的能读写的内存 -------------------------------------------------
@@ -259,5 +261,33 @@ assert.strictEqual(test.explosionTouchesTarget(origin, { x: 3.6, y: 0, z: 0 }, 3
 assert.strictEqual(test.explosionTouchesTarget(origin, { x: 0, y: 5.0, z: 0 }, 3.0), false, 'vertical distance counts');
 assert.strictEqual(test.explosionTouchesTarget(origin, { x: 0, y: 0, z: 2.9 }, 3.0), true, 'z axis inside');
 assert.strictEqual(test.explosionTouchesTarget(origin, { x: NaN, y: 0, z: 0 }, 3.0), false, 'NaN never matches');
+
+// ---- 10) 入口 ABI：esp 指向返回地址，参数从 +4 开始 ------------------------
+// 2026-10-20 的线上 bug：TakeDamage 的 attacker 读成了 esp+0（返回地址），
+// 于是永远认不出我们的伤害，RPG 打不死人。这里把偏移钉死。
+const STACK = 0x13000;
+mapRange(STACK, 0x100);
+view.setUint32(STACK + 4 - MEM_BASE, VICTIM, true);        // attacker
+view.setUint32(STACK + 8 - MEM_BASE, 0x11100, true);       // victim
+view.setInt32(STACK + 0x38 - MEM_BASE, 3, true);           // type = Grenade
+const tdArgs = test.readTakeDamageArgs(P(STACK));
+assert.strictEqual(tdArgs.attacker.__addr, VICTIM, 'attacker must be at esp+4');
+assert.strictEqual(tdArgs.victim.__addr, 0x11100, 'victim must be at esp+8');
+assert.strictEqual(tdArgs.type, 3, 'type must be at esp+0x38');
+assert.notStrictEqual(tdArgs.attacker.__addr, P(STACK).readPointer().__addr, 'never treat the return address as attacker');
+
+const ESTACK = 0x13100;
+mapRange(ESTACK, 0x100);
+w32(ESTACK + 4, 1.5);
+w32(ESTACK + 8, 2.5);
+w32(ESTACK + 12, -3.5);
+w32(ESTACK + 0x14, 6.0);
+view.setUint32(ESTACK + 0x20 - MEM_BASE, 0x11200, true);
+const exArgs = test.readExplosionArgs(P(ESTACK));
+assert.strictEqual(exArgs.worldPos.x, 1.5);
+assert.strictEqual(exArgs.worldPos.y, 2.5);
+assert.strictEqual(exArgs.worldPos.z, -3.5);
+assert.strictEqual(exArgs.range, 6);
+assert.strictEqual(exArgs.eventPtr.__addr, 0x11200, 'DamageEventData must be at esp+0x20');
 
 console.log('direct damage defense runtime tests passed');

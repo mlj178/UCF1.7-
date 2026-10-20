@@ -210,6 +210,8 @@
         WPN_Missile_Recycle: 0x00B66240,
         // 所有爆炸结算的公共入口（WPN_GRENADE 及其子类 Msl_Arcane 等都走它）
         WPN_GRENADE_CreateExplosion: 0x00B5CC40,
+        // 游戏统一的伤害入口（静态，DamageEventData 按值压栈）
+        GameManager_TakeDamage: 0x00AFC1C0,
         WPN_Missile_OnCollisionEnter: 0x00B66100,
         WPN_GRENADE_OnCollisionEnter: 0x00B5D0F0,
         WPN_GRENADE_OnTriggerEnter: 0x00B5D270,
@@ -364,7 +366,11 @@
             ownPlayer: ptr(0),
             selectedTarget: null,
             selectedAtMs: 0,
-            rayWarnLogged: false
+            rayWarnLogged: false,
+            diagTd: 0,              // 伤害入口诊断：已经打过多少条
+            diagTdForeign: 0,       // 爆炸伤害但 attacker 不是本地玩家：已经打过多少条
+            diagExp: 0,             // 爆炸入口诊断：已经打过多少条
+            myExplosionAt: 0        // 最近一次「自己的爆炸」的时间戳（伤害入口按它归因）
         },
         // 枪械专用的目标锁定状态。弹体每颗弹有独立 target，不复用这个状态。
         targetLock: null,
@@ -380,6 +386,9 @@
             invincibleCleared: 0,   // 复位了目标的复活无敌/完全免疫（pierce_respawn_invincible）
             explosionDefenseCalls: 0,    // WPN_GRENADE.CreateExplosion 被调用次数（所有爆炸）
             explosionDefenseCleared: 0,  // 爆炸穿透真正复位的敌人数
+            takeDamageCalls: 0,          // GameManager.TakeDamage 被调用次数（全场）
+            takeDamageOurs: 0,           // 其中 attacker = 本地玩家的次数
+            takeDamageCleared: 0,        // 伤害入口兜底真正复位的次数
             invincibleUnreadable: 0, // 目标防御状态读不到（指针不可读/HealthData 为空），一枚字节都没写
             targetsSelected: 0,
             noTarget: 0,
@@ -1650,18 +1659,120 @@
                     if (!Runtime.enabled || !Runtime.config.pierce_respawn_invincible) return;
                     var sp = this.context ? this.context.esp : null;
                     if (!sp) return;
-                    var worldPos = {
-                        x: sp.add(4).readFloat(),
-                        y: sp.add(8).readFloat(),
-                        z: sp.add(12).readFloat()
-                    };
-                    var range = sp.add(0x14).readFloat();
-                    var eventPtr = sp.add(0x20).readPointer();
-                    if (isNull(eventPtr) || !readable(eventPtr)) return;
-                    pierceExplosionDefense(eventPtr.readPointer(), worldPos, range);
+                    var ex = readExplosionArgs(sp);
+                    var worldPos = ex.worldPos;
+                    var range = ex.range;
+                    var eventPtr = ex.eventPtr;
+                    var eventOk = !isNull(eventPtr) && readable(eventPtr);
+                    var attacker = eventOk ? eventPtr.readPointer() : ptr(0);
+                    var cleared = 0;
+                    if (eventOk) {
+                        var me = getMyPlayer();
+                        if (!isNull(me) && samePointer(attacker, me)) Runtime.cache.myExplosionAt = Date.now();
+                        cleared = pierceExplosionDefense(attacker, worldPos, range);
+                    }
+                    if (Runtime.cache.diagExp < 5) {
+                        Runtime.cache.diagExp += 1;
+                        log('info', '[diag:explosion] #' + Runtime.cache.diagExp +
+                            ' pos=' + fmtVec(worldPos) + ' range=' + Number(range).toFixed(2) +
+                            ' event=' + fmtPtr(eventPtr) + ' eventOk=' + eventOk +
+                            ' attacker=' + fmtPtr(attacker) + ' me=' + fmtPtr(Runtime.cache.ownPlayer) +
+                            ' 复位=' + cleared);
+                    }
                 } catch (error) {
                     fail('CreateExplosion defense-pierce', error);
                 }
+            }
+        });
+    }
+    // ------------------------------------------------------------------
+    // 伤害入口兜底：不管伤害来自枪、爆炸还是技能，都在游戏应用伤害之前复位 victim
+    // ------------------------------------------------------------------
+    //   GameManager.TakeDamage(DamageEventData data) 是静态入口，DamageEventData 按值压栈：
+    //     [esp+0x00] attacker   [esp+0x04] victim   [esp+0x08] damage
+    //     [esp+0x34] type（Gun=1 / Knife=2 / Grenade=3 / Infect=4 / Other=5）
+    //   ★ 只 attach：不 replace、不跳过原函数、不合成事件、不调用任何游戏函数。
+    //     看到 attacker 是本地玩家就复位 victim 的防御状态，然后原函数原样跑完。
+
+    // ------------------------------------------------------------------
+    // 入口参数读取（ABI 钉死在这里，方便单测）
+    // ------------------------------------------------------------------
+    //   ★ Frida 的 onEnter 里 this.context.esp 指向**返回地址**，
+    //     所以第一个参数在 esp+4，不是 esp+0。2026-10-20 就是这里差了 4 字节，
+    //     导致 TakeDamage 把返回地址当成 attacker，永远认不出我们的伤害。
+    function readTakeDamageArgs(sp) {
+        // DamageEventData 按值压栈：attacker +0x00 / victim +0x04 / type +0x34
+        return {
+            attacker: sp.add(4).readPointer(),
+            victim: sp.add(8).readPointer(),
+            type: sp.add(0x38).readS32()
+        };
+    }
+
+    function readExplosionArgs(sp) {
+        // CreateExplosion(worldPos, damage, range, distanceDecay, ignoreWall, event, cb)
+        return {
+            worldPos: {
+                x: sp.add(4).readFloat(),
+                y: sp.add(8).readFloat(),
+                z: sp.add(12).readFloat()
+            },
+            range: sp.add(0x14).readFloat(),
+            eventPtr: sp.add(0x20).readPointer()
+        };
+    }
+    function installTakeDamageDefenseHook() {
+        registerAttach('GameManager.TakeDamage(defense-pierce)', RVA.GameManager_TakeDamage, {
+            onEnter: function () {
+                try {
+                    Runtime.stats.takeDamageCalls += 1;
+                    if (!Runtime.enabled || !Runtime.config.pierce_respawn_invincible) return;
+                    var sp = this.context ? this.context.esp : null;
+                    if (!sp) return;
+                    var ev = readTakeDamageArgs(sp);
+                    var attacker = ev.attacker;
+                    if (isNull(attacker)) return;
+                    var victim = ev.victim;
+                    if (isNull(victim)) return;
+                    var dmgType = ev.type;
+                    var me = Runtime.cache.ownPlayer;
+                    if (isNull(me)) {
+                        me = getMyPlayer();
+                        if (isNull(me)) return;
+                    }
+                    var mine = samePointer(attacker, me) && isLocalPlayer(attacker);
+                    // 兜底归因：爆炸事件里的 attacker 万一不是 Player，
+                    // 只要最近 250ms 内我们自己的爆炸入口刚跑过，就仍算我们的伤害。
+                    if (!mine && dmgType === 3 && Runtime.cache.myExplosionAt &&
+                        Date.now() - Runtime.cache.myExplosionAt <= 250) {
+                        mine = true;
+                    }
+                    if (!mine) {
+                        // 诊断：爆炸伤害却认不出是我们 —— 说明 attacker 不是 Player（或字段偏移不符）
+                        if (dmgType === 3 && Runtime.cache.diagTdForeign < 3) {
+                            Runtime.cache.diagTdForeign += 1;
+                            log('info', '[diag:takeDamage] 爆炸伤害但 attacker 不是本地玩家: attacker=' +
+                                fmtPtr(attacker) + ' me=' + fmtPtr(me) + ' victim=' + fmtPtr(victim));
+                        }
+                        return;
+                    }
+                    Runtime.stats.takeDamageOurs += 1;
+                    if (samePointer(victim, me)) return;
+                    if (isDeadEntity(victim)) return;
+                    if (!isEnemyTeam(readTeam(me), readTeam(victim))) return;
+                    var before = clearDefenseBeforeShot(victim);
+                    if (before && before.active) {
+                        Runtime.stats.takeDamageCleared += 1;
+                    }
+                    if (Runtime.cache.diagTd < 5) {
+                        Runtime.cache.diagTd += 1;
+                        log('info', '[diag:takeDamage] 我方伤害 type=' + dmgType + ' victim=' + fmtPtr(victim) +
+                            ' 防御[invEnd=' + Number(before && before.invEnd).toFixed(2) +
+                            ' rate=' + Number(before && before.damageRate).toFixed(3) +
+                            ' inv=' + (before && before.isInvincible) +
+                            ' ok=' + (before && before.ok) + ' active=' + (before && before.active) + ']');
+                    }
+                } catch (_) {}
             }
         });
     }
@@ -2547,6 +2658,7 @@
             //   installSkillHooks          : 技能弹开火（登记弹体类别）
             //   installHomingHooks         : 弹体 SetWeaponData / FixedUpdate / Work / Recycle
             //   installExplosionDefenseHook: WPN_GRENADE.CreateExplosion（爆炸前复位范围内敌人的防御状态）
+            //   installTakeDamageDefenseHook: GameManager.TakeDamage（伤害真正落地前复位 victim 的防御状态）
             // 旧版的 installPipelineProbes / installDeathDiagnostics /
             // installStringCaptureHooks / installEventTemplateCapture 已全部删除。
             installHomingHooks();
@@ -2554,6 +2666,7 @@
             installExplosiveHooks();
             installSkillHooks();
             installExplosionDefenseHook();
+            installTakeDamageDefenseHook();
             Runtime.initialized = true;
             log('info', 'all hooks installed (ray-redirect + homing only; ' +
                 'no damage injection, no death/respawn handling)');
@@ -2770,6 +2883,9 @@
             invincible_unreadable: Runtime.stats.invincibleUnreadable,
             explosion_defense_calls: Runtime.stats.explosionDefenseCalls,
             explosion_defense_cleared: Runtime.stats.explosionDefenseCleared,
+            take_damage_calls: Runtime.stats.takeDamageCalls,
+            take_damage_ours: Runtime.stats.takeDamageOurs,
+            take_damage_cleared: Runtime.stats.takeDamageCleared,
             targets_selected: Runtime.stats.targetsSelected,
             no_target: Runtime.stats.noTarget,
             target_lock_reason: Runtime.stats.targetLockReason,
