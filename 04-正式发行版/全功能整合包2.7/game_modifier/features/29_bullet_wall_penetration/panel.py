@@ -75,10 +75,10 @@ def _tracking_from(config, enabled):
 def _link_hint(tracking, wall_on):
     """返回 (提示文案, 颜色类型)。"""
     if wall_on:
-        return "✓ 已开启：子弹与本地投射物（火箭筒 / 榴弹 / 手雷 / 技能弹）都能穿墙。", "ok"
+        return "✓ 已开启：子弹与本地投射物（火箭筒 / 榴弹 / 手雷 / 技能弹）都能穿墙，含地板 / 天花板 / 斜坡。", "ok"
     if tracking:
         return "⚠ 「开火直伤/弹体追踪」已开启追踪，本功能关闭 → 追踪弹体撞墙即爆。", "warn"
-    return "开启后子弹可穿墙；本地投射物（火箭筒 / 榴弹 / 手雷 / 技能弹）也一起穿墙。", "idle"
+    return "开启后子弹可穿墙；本地投射物（火箭筒 / 榴弹 / 手雷 / 技能弹）也一起穿墙，含地板 / 天花板 / 斜坡。", "idle"
 
 
 def _bind_link_hint(hint, parent, switch, callbacks, feature_id):

@@ -74,14 +74,18 @@ class ProjectileWallPenetrationStaticTests(unittest.TestCase):
         self.assertIn("writeU8(0)", grenade_hook)
         self.assertIn("writeU8(this.savedFlag)", grenade_hook)
 
-    def test_only_local_player_projectiles_and_only_side_walls(self):
+    def test_only_local_player_projectiles_and_all_surfaces_by_default(self):
         text = script_text()
         self.assertIn("function isLocalMissile(missile)", text)
         self.assertIn("native.isMyPlayer", text)
         self.assertIn("LayerConstant_Environment: 0x00", text)
         self.assertIn("function readContactNormalY(collision)", text)
         self.assertIn("projectileWallMaxNormalY", text)
-        # 读不到接触法线时保守按地板处理（不穿透），避免误伤滚雷/落地逻辑
+        self.assertIn("projectilePenetrateAllSurfaces", text)
+        # 默认连地板/天花板/斜坡一起穿；关闭开关时才用法线阈值恢复旧行为。
+        # 主动探路 + 反应式碰撞两条路径都必须有这个条件。
+        self.assertGreaterEqual(text.count("!Runtime.config.projectilePenetrateAllSurfaces"), 2)
+        # 读不到接触法线时仍保守处理（不穿透）
         self.assertIn("Runtime.stats.lastReject = 'noNormal'", text)
 
     def test_native_bool_is_never_compared_with_strict_true(self):
@@ -122,7 +126,7 @@ class ProjectileWallPenetrationStaticTests(unittest.TestCase):
         # 探路必须反查"命中物在哪一层"，不能只靠 mask 猜
         self.assertIn("native.findObjectFromInstanceID", text)
         self.assertIn("isPenetrableWallLayer(layer)", text)
-        # 主选必须是"只忽略这一颗弹 × 这一面墙"（作用域最小，地板不受影响），
+        # 主选必须是"只忽略这一颗弹 × 这一面墙"（作用域最小，不永久改整张关卡），
         # detectCollisions 只能作为拿不到 collider 时的备选
         ghost_fn = text.split("function tickMissileGhost(st, missile, rb, pos, v)", 1)[1].split("function restoreGhost", 1)[0]
         self.assertIn("ignoreWallForMissile(missile, rb, pos, hit.collider, st, hit.plane)", ghost_fn)
@@ -236,6 +240,7 @@ class ProjectileWallPenetrationStaticTests(unittest.TestCase):
         self.assertEqual(manifest["script"], "script.js")
         config = manifest["config"]
         self.assertTrue(config["projectileWallPenetration"])
+        self.assertTrue(config["projectilePenetrateAllSurfaces"])
         self.assertFalse(config["projectilePenetrateAirWall"])   # 兼容键
         # 默认可穿透层 = 除角色/命中盒层外全部（0xFFFFFA77）；收窄靠这个掩码
         self.assertEqual(config["projectilePenetrableLayers"], 0xFFFFFA77)

@@ -40,9 +40,9 @@
 //
 //   因此弹体穿墙分四步（全部在 OnCollisionEnter 的 onEnter/onLeave 窗口内）：
 //     1) 判定：本地玩家发射（WPN_Missile.owner + Player.get_isMyPlayer）
-//        + 撞的是墙面（collider 所在 GameObject 的 layer == LayerConstant.Environment
-//          且接触法线偏水平 |normal.y| < projectileWallMaxNormalY）。
-//        地板/天花板/斜坡（法线朝上下）不处理 -> 滚雷、落地行为保持原版。
+//        + 撞的是可穿透层（projectilePenetrableLayers，默认除角色/命中盒层外全部）。
+//        默认 projectilePenetrateAllSurfaces=true：地板 / 天花板 / 斜坡也穿；
+//        设为 false 才恢复旧行为（只穿侧墙，|normal.y| >= projectileWallMaxNormalY 不处理）。
 //     2) 抑制爆炸：onEnter 里把 WPN_GRENADE.expWhenTouchSth(+0x74) 临时写 0，
 //        onLeave 里按保存的原始字节原样写回。原版本体在这次调用里读到的就是 0，
 //        于是 vtable._11_TryExplosion 不会被调用（不替换函数、不动控制流）。
@@ -64,8 +64,8 @@
 //        再退化用 transform.forward * WPN_Missile.shootSpeed(+0x4C)。
 //
 //   **忽略是"带窗口"的**（关键安全设计）：
-//     永久 IgnoreCollision 在"整张关卡是同一个 MeshCollider"的地图里会把地板
-//     一起忽略（手雷会掉出地图）。所以：
+//     即使用户要求地板也穿，也不能永久 IgnoreCollision —— 在"整张关卡是同一个
+//     MeshCollider"的地图里，永久忽略会让弹体离开这一面后仍然什么都不碰。所以：
 //       经过 projectileIgnoreMinMs（默认 80ms）之后，每一物理步检查
 //         Physics.OverlapSphere(弹体中心, 0.08, Environment层掩码)
 //         └─ 过滤掉 attachedRigidbody == 弹体 Rigidbody 的自身 collider
@@ -213,6 +213,8 @@
             forceHitboxOnlyDuringLocalDamage: true,
             logEveryDamageHits: 25,
             projectileWallPenetration: true,
+            // true = 地板 / 天花板 / 斜坡也穿；false = 只穿侧墙（旧行为，滚雷更安全）
+            projectilePenetrateAllSurfaces: true,
             // 可穿透层掩码。默认 = 全部 32 层，**只排除角色/命中盒相关层**：
             //   bit3  HitBox / PlayerViewModel
             //   bit7  Entity
@@ -221,11 +223,13 @@
             // => 0xFFFFFA77。
             // 为什么要这么宽：实测这张图的物理阻挡不止落在 Environment(0) 上
             // （layer 2 上大量命中），只认 layer 0 会导致"怎么都不穿"。
-            // 地板不会被误伤：主动探路只对"法线偏水平"的面生效，地板法线朝上下会被拒。
-            // 要收窄就改这个掩码（例如只留 0 和 2 => 5）。
+            // 默认连地板 / 天花板 / 斜坡一起穿（projectilePenetrateAllSurfaces=true）。
+            // 要恢复旧行为（只穿侧墙）就把 projectilePenetrateAllSurfaces 设 false。
+            // 要收窄层就改这个掩码（例如只留 0 和 2 => 5）。
             projectilePenetrableLayers: 0xFFFFFA77,
             // 兼容旧键：true 时额外把 AirWall 位打开
             projectilePenetrateAirWall: false,
+            // 仅当 projectilePenetrateAllSurfaces=false 时生效：|normal.y| 超过它算地板/天花板，不穿
             projectileWallMaxNormalY: 0.6,
             projectileProbeLookahead: 3.5,   // 主动探路距离(m)：这个距离内发现"墙面"就提前关碰撞
             projectileGhostExtra: 0.8,       // 需要再往前走多少米才算穿过这面墙
@@ -276,7 +280,7 @@
             projectileSweepRemoved: 0,   // 心跳清理掉的僵尸记录
             projectileRayHits: 0,         // 主动探路射线命中总次数
             projectileRayWallHits: 0,     // 其中判定为"墙面"的次数
-            projectileRayFloorLikes: 0,   // 其中判定为"地板/斜面"的次数
+            projectileRayFloorLikes: 0,   // allSurfaces=false 时判定为"地板/斜面"的次数
             projectileGhostStarts: 0,     // 主动穿墙开始次数
             projectileGhostEnds: 0,       // 主动穿墙结束次数
             projectileGhostForceEnds: 0,  // 因硬上限强制的结束次数
@@ -1359,13 +1363,14 @@
                 Runtime.stats.projectileRayOtherLayers += 1;
                 return;
             }
-            if (Math.abs(hit.normalY) >= Runtime.config.projectileWallMaxNormalY) {
+            if (!Runtime.config.projectilePenetrateAllSurfaces &&
+                Math.abs(hit.normalY) >= Runtime.config.projectileWallMaxNormalY) {
                 Runtime.stats.projectileRayFloorLikes += 1;
                 return;
             }
             Runtime.stats.projectileRayWallHits += 1;
 
-            // 主选：只忽略"这一颗弹 × 这一面墙"。作用域最小，地板完全不受影响。
+            // 主选：只忽略"这一颗弹 × 这一面墙"。作用域最小，窗口结束立刻还原。
             // 返回值：>0 新忽略了几对；-1 这面墙早就忽略过了（也算成功）；0 失败。
             var applied = hit.collider
                 ? ignoreWallForMissile(missile, rb, pos, hit.collider, st, hit.plane)
@@ -1465,7 +1470,8 @@
             Runtime.stats.lastReject = 'noNormal';
             return null;
         }
-        if (Math.abs(ny) >= Runtime.config.projectileWallMaxNormalY) {
+        if (!Runtime.config.projectilePenetrateAllSurfaces &&
+            Math.abs(ny) >= Runtime.config.projectileWallMaxNormalY) {
             Runtime.stats.lastReject = 'floorLike';
             return null;
         }
@@ -1796,7 +1802,7 @@
 
     // 5 秒一条的弹体穿墙汇总。排查"没生效"时先看这一行：
     //   探路射线=0            -> FixedUpdate 钩子没进本地弹体（owner 判定/开关）
-    //   探路射线>0 墙=0       -> 射线一直把前方判成地板/斜面（法线阈值问题）
+    //   探路射线>0 墙=0       -> allSurfaces=false 时射线一直把前方判成地板/斜面（法线阈值问题）
     //   主动穿墙=0            -> 射线没命中（层不对：看 lastReject/layer）
     //   主动穿墙>0 但没效果   -> detectCollisions 写入没被游戏接受
     //   碰撞=0                -> OnCollisionEnter 那条路根本没被走到（正常，主动穿墙会先接管）
@@ -1959,6 +1965,9 @@
             Runtime.config.projectileWallPenetration = input.projectileWallPenetration !== false;
             if (!Runtime.config.projectileWallPenetration) releaseEveryIgnore('config-off');
         }
+        if (input.projectilePenetrateAllSurfaces !== undefined) {
+            Runtime.config.projectilePenetrateAllSurfaces = input.projectilePenetrateAllSurfaces !== false;
+        }
         if (input.projectilePenetrableLayers !== undefined) {
             var mask = Number(input.projectilePenetrableLayers);
             if (isFinite(mask) && mask >= 0) {
@@ -2010,6 +2019,7 @@
             ', projectilePenetrableLayers=0x' + (Runtime.config.projectilePenetrableLayers >>> 0).toString(16) +
             ' ' + penetrableLayerText() +
             ', projectilePenetrateAirWall=' + Runtime.config.projectilePenetrateAirWall +
+            ', projectilePenetrateAllSurfaces=' + Runtime.config.projectilePenetrateAllSurfaces +
             ', projectileWallMaxNormalY=' + Runtime.config.projectileWallMaxNormalY +
             ', projectileProbeLookahead=' + Runtime.config.projectileProbeLookahead +
             ', projectileGhostExtra=' + Runtime.config.projectileGhostExtra +
