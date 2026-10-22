@@ -31,7 +31,9 @@ class FeatureCardBuilder:
             border_width=1,
             border_color="#4b5563",
         )
-        sticky = "nsew" if rowspan > 1 else "ew"
+        # layout.stretch=True：同一排的卡片一起撑满行高，避免短卡下面留空、边框参差
+        stretch = bool(manifest.get("layout", {}).get("stretch", False))
+        sticky = "nsew" if (rowspan > 1 or stretch) else "ew"
         frame.grid(row=row, column=col, columnspan=colspan, rowspan=rowspan, sticky=sticky, padx=3, pady=3)
 
         top_frame = ctk.CTkFrame(frame, fg_color="transparent")

@@ -13,11 +13,12 @@
   #define ReleaseOutputDir "..\release"
 #endif
 #define AppName "全功能整合包" + AppVersion
-#define AppExeName "UCF" + AppVersion + "修改器"
+; 2.7 起主程序 exe 与安装器统一叫“全功能整合包x.x”，AppExeName 必须与 spec 的 app_name 完全一致
+#define AppExeName "全功能整合包" + AppVersion
 #define InstallFolder "UCF-Trainer-" + AppVersion
 
 [Setup]
-; AppName 为控制面板显示名（中文），AppExeName 为 PyInstaller 产物 exe 名
+; AppName 为控制面板显示名与安装器文件名（中文），AppExeName 为 PyInstaller 产物 exe 名
 AppName={#AppName}
 AppVersion={#AppVersion}
 DefaultDirName={code:GetDefaultInstallDir}
@@ -29,8 +30,9 @@ ArchitecturesAllowed=x64
 PrivilegesRequired=admin
 UninstallDisplayIcon={app}\{#AppExeName}.exe
 ; 产物输出到 game_modifier 同级的 release/（脚本从 packaging/ 调用，故 ..\release）
+; 2.7 起安装器不再加“安装器”后缀，成品就是 全功能整合包x.x.exe
 OutputDir={#ReleaseOutputDir}
-OutputBaseFilename={#AppExeName}安装器
+OutputBaseFilename={#AppName}
 DisableProgramGroupPage=yes
 WizardStyle=modern
 ; 安装前展示免责声明页，用户须点「I accept the agreement」才能继续；文件与本脚本同目录

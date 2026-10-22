@@ -1,7 +1,7 @@
-# UCF 修改器 onedir + Inno Setup 一键构建脚本
+﻿# UCF 修改器 onedir + Inno Setup 一键构建脚本
 # 对应《安装器打包规范-onedir+InnoSetup.md》§10
 # 用法：在 game_modifier/ 目录下执行  powershell -ExecutionPolicy Bypass -File packaging\build_release.ps1
-# 产物：release/UCF<版本>修改器安装器.exe + release/SHA256.txt
+# 产物：release/全功能整合包<版本>.exe（安装器）+ release/SHA256.txt
 
 $ErrorActionPreference = 'Stop'
 
@@ -13,7 +13,9 @@ if (-not $versionMatch.Success) {
     throw "整合包目录名不符合规则：$packageFolder；应为：全功能整合包x.x"
 }
 $packageVersion = $versionMatch.Groups['version'].Value
-$appExeName = "UCF${packageVersion}修改器"
+# 2.7 起发布名统一为“全功能整合包x.x”（与 spec 的 app_name、installer.iss 的 AppExeName 一致），
+# 以后复制出“全功能整合包2.8”等目录时自动跟着变，无需再改这里。
+$appExeName = "全功能整合包${packageVersion}"
 Write-Output "[1/8] 版本号：$packageVersion"
 Write-Output "[1/8] 主程序名：$appExeName"
 
@@ -31,6 +33,17 @@ $iscc = $env:ISCC_PATH
 if (-not $iscc) {
     $cmd = Get-Command iscc.exe -ErrorAction SilentlyContinue
     if ($cmd) { $iscc = $cmd.Source }
+}
+# Inno Setup 默认不写 PATH，这里再补几个常见安装位置，免得每次都手动设 ISCC_PATH
+if (-not $iscc) {
+    $isccCandidates = @(
+        'C:\Program Files (x86)\Inno Setup 6\ISCC.exe',
+        'C:\Program Files\Inno Setup 6\ISCC.exe',
+        (Join-Path $env:ProgramFiles 'Inno Setup 6\ISCC.exe')
+    )
+    foreach ($candidate in $isccCandidates) {
+        if ($candidate -and (Test-Path -LiteralPath $candidate -PathType Leaf)) { $iscc = $candidate; break }
+    }
 }
 if (-not $iscc -or -not (Test-Path -LiteralPath $iscc -PathType Leaf)) {
     throw "未找到 iscc.exe；请安装 Inno Setup 6.2+ 并加入 PATH，或设置 ISCC_PATH 环境变量"
@@ -74,13 +87,13 @@ Write-Output "[7/8] Inno Setup 编译中..."
 if ($LASTEXITCODE -ne 0) { throw "Inno Setup 编译失败（退出码 $LASTEXITCODE）" }
 
 # 8. 校验安装器产物并生成 SHA256
-$installerPath = Join-Path $releaseDir "${appExeName}安装器.exe"
+$installerPath = Join-Path $releaseDir "${appExeName}.exe"
 if (-not (Test-Path -LiteralPath $installerPath -PathType Leaf)) {
     throw "未找到安装器产物：$installerPath"
 }
 $hash = (Get-FileHash -LiteralPath $installerPath -Algorithm SHA256).Hash
 $hashFile = Join-Path $releaseDir 'SHA256.txt'
-"$hash  ${appExeName}安装器.exe" | Out-File -Encoding utf8 -FilePath $hashFile
+"$hash  ${appExeName}.exe" | Out-File -Encoding utf8 -FilePath $hashFile
 $readmeSource = Join-Path $projectDir 'packaging\README.txt'
 if (-not (Test-Path -LiteralPath $readmeSource -PathType Leaf)) {
     throw "未找到发布说明：$readmeSource"
@@ -91,6 +104,15 @@ if (-not (Test-Path -LiteralPath $disclaimerSource -PathType Leaf)) {
     throw "未找到免责声明：$disclaimerSource"
 }
 Copy-Item -LiteralPath $disclaimerSource -Destination (Join-Path $releaseDir '免责声明.txt') -Force
+# 随包分发：Q群二维码 + Win7 不可用提示。release 目录旁边也放一份，方便连同安装包一起发出去
+$resourceDir = Join-Path (Split-Path -Parent $projectDir) '资源'
+foreach ($extraName in @('UCF1.7Q群1095388251.jpg', 'win7用不了，只有win10和11能用.txt')) {
+    $extraSource = Join-Path $resourceDir $extraName
+    if (-not (Test-Path -LiteralPath $extraSource -PathType Leaf)) {
+        throw "未找到附加资源：$extraSource"
+    }
+    Copy-Item -LiteralPath $extraSource -Destination (Join-Path $releaseDir $extraName) -Force
+}
 Write-Output "[8/8] 构建完成"
 Write-Output ""
 Write-Output "安装器：$installerPath"

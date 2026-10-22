@@ -20,7 +20,9 @@ if version_match is None:
         f"整合包目录名不符合规则：{package_dir_name}；应为：全功能整合包x.x"
     )
 package_version = version_match.group("version")
-app_name = f"UCF{package_version}修改器"
+# 发布名统一为“全功能整合包x.x”（2.7 起，以后以此类推）：
+# 主程序 exe 叫 全功能整合包2.7.exe，安装器产物同名，都在各自目录下，互不冲突。
+app_name = f"全功能整合包{package_version}"
 
 # 定义要包含的数据文件
 datas = []
@@ -124,6 +126,15 @@ for resource_name in ("微信赞赏码.png", "音效1.MP3"):
     if not os.path.isfile(resource_path):
         raise FileNotFoundError(f"缺少正式版必需资源：{resource_path}")
     datas.append((resource_path, "资源"))
+
+# 1.2 随包分发的附加资源（2.7 起）：
+#  - Q群二维码（资源文件夹里的 UCF1.7Q群…jpg），安装后仍落在 _internal/资源 下
+#  - 空文件“win7用不了，只有win10和11能用.txt”，仅作系统兼容性提示
+for extra_resource in ("UCF1.7Q群1095388251.jpg", "win7用不了，只有win10和11能用.txt"):
+    extra_path = os.path.join(resource_dir, extra_resource)
+    if not os.path.isfile(extra_path):
+        raise FileNotFoundError(f"缺少正式版附加资源：{extra_path}")
+    datas.append((extra_path, "资源"))
 
 # 1.1 红色主题 Tab 资源（红色图片/红色文案 子目录）
 # 对应《33-设置页红色主题Tab设计.md》§5.1，目标路径需保留中文子目录名，

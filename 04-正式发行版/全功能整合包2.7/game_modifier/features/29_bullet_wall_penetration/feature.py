@@ -6,4 +6,4 @@ class PluginFeature(PluginFeatureBase):
     js_filename = "script.js"
     name = "子弹穿墙/弹体穿墙"
     category = "weapon"
-    desc = "玩家开火允许子弹穿墙；本地玩家的投射物（火箭筒 / 榴弹 / 手雷 / 技能弹）撞墙也不被挡住，默认连地板 / 天花板 / 斜坡也能穿。"
+    desc = "子弹和弹体（火箭弹/榴弹/手雷/技能弹）能直接穿墙，隔墙也能打到人。只对自己生效。"

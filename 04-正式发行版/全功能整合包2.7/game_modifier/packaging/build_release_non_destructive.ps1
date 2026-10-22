@@ -1,4 +1,4 @@
-# UCF 2.6 non-destructive onedir + Inno Setup release builder.
+# UCF 2.7 non-destructive onedir + Inno Setup release builder.
 # This file is ASCII-only so Windows PowerShell can execute it without a UTF-8 BOM.
 
 $ErrorActionPreference = 'Stop'
@@ -13,9 +13,9 @@ if (-not $versionMatch.Success) {
 }
 
 $packageVersion = $versionMatch.Groups['version'].Value
-$modifierSuffix = [string]::Concat([char]0x4FEE, [char]0x6539, [char]0x5668)
-$installerSuffix = [string]::Concat([char]0x5B89, [char]0x88C5, [char]0x5668)
-$appExeName = "UCF${packageVersion}${modifierSuffix}"
+# Since 2.7 the exe is named after the package folder: <packagePrefix><version>
+# (must match app_name in game_modifier_onedir.spec and AppExeName in installer.iss)
+$appExeName = "$packagePrefix$packageVersion"
 $releaseRoot = Split-Path -Parent (Split-Path -Parent $projectDir)
 $buildEnv = Join-Path $releaseRoot '.venv-build'
 $buildPython = Join-Path $buildEnv 'Scripts\python.exe'
@@ -60,7 +60,7 @@ $issFile = Join-Path $projectDir 'packaging\installer.iss'
 & $iscc "/DAppVersion=$packageVersion" "/DBuildDistDir=$distDir" "/DReleaseOutputDir=$releaseDir" $issFile
 if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed with exit code $LASTEXITCODE" }
 
-$installerFileName = "${appExeName}${installerSuffix}.exe"
+$installerFileName = "${appExeName}.exe"
 $installerPath = Join-Path $releaseDir $installerFileName
 if (-not (Test-Path -LiteralPath $installerPath -PathType Leaf)) {
     throw "The installer was not found: $installerPath"

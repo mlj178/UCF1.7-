@@ -405,8 +405,9 @@ class CrouteBoundaryTests(unittest.TestCase):
 
         gun_control = [c for c in controls if c.get("key") == "enable_guns"][0]
         self.assertEqual(gun_control.get("label"), "普通枪械自动跟枪")
-        self.assertIn("不额外改伤", data["desc"])
-        self.assertIn("按准星方向射击", data["desc"])
+        self.assertIn("自动追踪目标", data["desc"])
+        self.assertIn("拐弯追人", data["desc"])
+        self.assertIn("无视复活无敌", data["desc"])
         self.assertNotIn("射线接管", data["desc"])
 
     def test_unified_target_policy_matches_aim_and_replaces_distance_first_modes(self):

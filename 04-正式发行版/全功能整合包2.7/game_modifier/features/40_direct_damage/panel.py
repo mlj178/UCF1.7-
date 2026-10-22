@@ -190,7 +190,15 @@ def build_card(parent, manifest, row, col, colspan, callbacks, card_builder):
         border_width=1,
         border_color="#4b5563",
     )
-    frame.grid(row=row, column=col, columnspan=colspan, sticky="ew", padx=3, pady=3)
+    stretch = bool(manifest.get("layout", {}).get("stretch", False))
+    frame.grid(
+        row=row,
+        column=col,
+        columnspan=colspan,
+        sticky="nsew" if stretch else "ew",
+        padx=3,
+        pady=3,
+    )
 
     top = ctk.CTkFrame(frame, fg_color="transparent")
     top.pack(fill="x", padx=8, pady=(6, 0))
@@ -223,52 +231,12 @@ def build_card(parent, manifest, row, col, colspan, callbacks, card_builder):
     ).pack(fill="x", padx=10, pady=(4, 6))
 
     result = {handles.get("switch", feature_id + "_switch"): switch}
-    # 提示行在子开关之后创建，这里先用占位函数把刷新接到子开关点击上
+    # 提示行放在说明文字下面、子开关上面；刷新函数先占位，绑定后再接子开关点击
     refresh_ref = {"fn": lambda: None}
-
-    for control in _config_switches(manifest):
-        key = control["key"]
-
-        row_frame = ctk.CTkFrame(frame, fg_color="transparent")
-        row_frame.pack(fill="x", padx=12, pady=2)
-
-        ctk.CTkLabel(
-            row_frame,
-            text=control.get("label", key),
-            font=("Microsoft YaHei", 12),
-            text_color="#e0e0e0",
-        ).pack(side="left")
-
-        sub = ctk.CTkSwitch(
-            row_frame,
-            text="",
-            font=("Microsoft YaHei", 11),
-            width=44,
-            height=20,
-        )
-        sub.pack(side="right")
-
-        # 初始状态以 manifest.config 为准（JS 端的内置默认值与它保持一致）
-        initial = bool(config.get(key, control.get("default", False)))
-        if initial:
-            sub.select()
-        else:
-            sub.deselect()
-
-        holder = _SyncedSwitchVar(
-            sub,
-            initial,
-            lambda value, fid=feature_id, cfg_key=key: (
-                callbacks["set_config"](fid, cfg_key, value),
-                refresh_ref["fn"](),
-            ),
-        )
-        sub.configure(command=holder.on_click)
-        result[handles.get(key + "_var", feature_id + "_" + key + "_var")] = holder
 
     # A 方案联动提示：追踪已开启而「子弹穿墙/弹体穿墙」关闭时提醒，并可一键开启穿墙
     hint_row = ctk.CTkFrame(frame, fg_color="transparent")
-    hint_row.pack(fill="x", padx=10, pady=(2, 8))
+    hint_row.pack(fill="x", padx=10, pady=(0, 4))
     hint = ctk.CTkLabel(
         hint_row,
         text="",
@@ -301,5 +269,57 @@ def build_card(parent, manifest, row, col, colspan, callbacks, card_builder):
     refresh_hint = _bind_link_hint(hint, open_button, callbacks, resolve)
     refresh_ref["fn"] = refresh_hint
     switch.configure(command=lambda: (callbacks["toggle"](feature_id), refresh_hint()))
+
+    # 子开关 2 列排布：从"竖排 4 行"变"2 行 2 列"，卡片高度大约减半
+    subs_box = ctk.CTkFrame(frame, fg_color="transparent")
+    subs_box.pack(fill="x", padx=12, pady=(0, 8))
+    subs_box.grid_columnconfigure(0, weight=1, uniform="dd_sub")
+    subs_box.grid_columnconfigure(1, weight=1, uniform="dd_sub")
+
+    for index, control in enumerate(_config_switches(manifest)):
+        key = control["key"]
+
+        cell = ctk.CTkFrame(subs_box, fg_color="transparent")
+        cell.grid(
+            row=index // 2,
+            column=index % 2,
+            sticky="ew",
+            padx=(0, 10) if index % 2 == 0 else (10, 0),
+            pady=2,
+        )
+
+        ctk.CTkLabel(
+            cell,
+            text=control.get("label", key),
+            font=("Microsoft YaHei", 12),
+            text_color="#e0e0e0",
+        ).pack(side="left")
+
+        sub = ctk.CTkSwitch(
+            cell,
+            text="",
+            font=("Microsoft YaHei", 11),
+            width=44,
+            height=20,
+        )
+        sub.pack(side="right")
+
+        # 初始状态以 manifest.config 为准（JS 端的内置默认值与它保持一致）
+        initial = bool(config.get(key, control.get("default", False)))
+        if initial:
+            sub.select()
+        else:
+            sub.deselect()
+
+        holder = _SyncedSwitchVar(
+            sub,
+            initial,
+            lambda value, fid=feature_id, cfg_key=key: (
+                callbacks["set_config"](fid, cfg_key, value),
+                refresh_ref["fn"](),
+            ),
+        )
+        sub.configure(command=holder.on_click)
+        result[handles.get(key + "_var", feature_id + "_" + key + "_var")] = holder
 
     return result
