@@ -4,12 +4,13 @@
     "display_name":  "无限子弹",
     "category":  "weapon",
     "tab":  "weapon_tab",
-    "order":  30,
+    "order":  70,
     "desc":  "子弹永不消耗",
     "script":  "script.js",
     "layout":  {
                    "card_type":  "simple",
                    "columnspan":  1,
+                   "stretch": true,
                    "title_color":  "#E5B73B"
                },
     "controls":  [

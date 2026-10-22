@@ -6,8 +6,8 @@
   "tab": "weapon_tab",
   "tab_title": "武器",
   "tab_order": 10,
-  "order": 70,
-  "desc": "玩家开火允许子弹穿墙。开启后，本地玩家发射的投射物（火箭筒 / 榴弹 / 手雷 / 技能弹）在碰到墙面前就被放行，直接穿墙继续飞；默认连地板 / 天花板 / 斜坡也能穿，角色、他人/人机的弹体保持原版。",
+  "order": 80,
+  "desc": "子弹和弹体（火箭弹/榴弹/手雷/技能弹）能直接穿墙，隔墙也能打到人。只对自己生效。",
   "script": "script.js",
   "hotkey": {
     "enabled": true
@@ -18,6 +18,7 @@
   "layout": {
     "card_type": "simple",
     "columnspan": 1,
+    "stretch": true,
     "title_color": "#fca5a5"
   },
   "controls": [

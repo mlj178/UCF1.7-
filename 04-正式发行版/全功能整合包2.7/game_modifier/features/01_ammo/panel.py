@@ -35,8 +35,19 @@ def build_card(parent, manifest, row, col, colspan, callbacks, card_builder):
     switch = ctk.CTkSwitch(top, text="", font=("Microsoft YaHei", 12), width=50, command=lambda: callbacks["toggle"](feature_id))
     switch.pack(side="right", padx=6)
 
+    # 说明文字放在标题下面（和武器 tab 其他卡一致），应用范围下拉框跟在其后
+    ctk.CTkLabel(
+        frame,
+        font=("Microsoft YaHei", 12),
+        text=manifest["desc"],
+        text_color="#a0a0a0",
+        wraplength=280 * colspan,
+        justify="left",
+        anchor="w",
+    ).pack(fill="x", expand=False, padx=10, pady=(4, 0))
+
     scope_frame = ctk.CTkFrame(frame, fg_color="transparent")
-    scope_frame.pack(fill="x", padx=10, pady=(2, 0))
+    scope_frame.pack(fill="x", padx=10, pady=(2, 8))
     ctk.CTkLabel(scope_frame, text=scope_control.get("label", "应用范围:"), font=("Microsoft YaHei", 12), text_color="#c0c0c0").pack(side="left", padx=(0, 6))
     scope_var = ctk.StringVar(value=scope_labels[0] if scope_labels else "")
     scope_combo = ctk.CTkComboBox(
@@ -55,8 +66,6 @@ def build_card(parent, manifest, row, col, colspan, callbacks, card_builder):
         ),
     )
     scope_combo.pack(side="left", padx=2)
-
-    ctk.CTkLabel(frame, font=("Microsoft YaHei", 12), text=manifest["desc"], text_color="#a0a0a0", wraplength=280 * colspan, justify="left", anchor="w").pack(fill="x", expand=False, padx=10, pady=(4, 8))
 
     return {
         handles.get("switch", "ammo_switch"): switch,

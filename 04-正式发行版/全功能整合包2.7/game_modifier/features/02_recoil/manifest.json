@@ -4,12 +4,13 @@
     "display_name":  "无后座力",
     "category":  "weapon",
     "tab":  "weapon_tab",
-    "order":  20,
+    "order":  30,
     "desc":  "消除所有枪械后座力",
     "script":  "script.js",
     "layout":  {
                    "card_type":  "simple",
                    "columnspan":  1,
+                   "stretch": true,
                    "title_color":  "#6A9FB5"
                },
     "controls":  [

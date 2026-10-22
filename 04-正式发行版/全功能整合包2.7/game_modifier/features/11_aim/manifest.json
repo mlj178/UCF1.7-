@@ -4,12 +4,13 @@
     "display_name":  "自瞄",
     "category":  "weapon",
     "tab":  "weapon_tab",
-    "order":  60,
+    "order":  50,
     "desc":  "自动瞄准敌方玩家",
     "script":  "script.js",
     "layout":  {
                    "card_type":  "simple",
                    "columnspan":  1,
+                   "stretch": true,
                    "title_color":  "#FF6B6B"
                },
     "controls":  [

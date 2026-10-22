@@ -251,7 +251,7 @@ class SettingsWindow(ctk.CTkToplevel):
                      font=("Microsoft YaHei", 12)).pack(pady=2)
         ctk.CTkLabel(about_frame, text="游戏原作者：內個_shei_鸭",
                      font=("Microsoft YaHei", 12)).pack(pady=2)
-        ctk.CTkLabel(about_frame, text="更新日期：2026年09月21日",
+        ctk.CTkLabel(about_frame, text="更新日期：2026年10月22日",
                      font=("Microsoft YaHei", 12)).pack(pady=2)
         ctk.CTkLabel(about_frame, text="\nQQ群: 1095388251",
                      font=("Microsoft YaHei", 12)).pack(pady=4)

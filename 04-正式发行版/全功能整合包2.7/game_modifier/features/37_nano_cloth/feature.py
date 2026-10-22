@@ -6,4 +6,4 @@ class PluginFeature(PluginFeatureBase):
     js_filename = "script.js"
     name = "增加防化服"
     category = "player"
-    desc = "每触发一次将本地玩家防化服设为滑块值。"
+    desc = "点一次给防化服加 N 件，可反复叠加，回合结束自动清回原样。"

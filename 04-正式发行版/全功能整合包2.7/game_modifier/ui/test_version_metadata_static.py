@@ -19,7 +19,7 @@ class VersionMetadataStaticTests(unittest.TestCase):
         author_index = text.index('text="修改器作者: 挂呱呱呱"')
         contributor_index = text.index('text="代码贡献者：少年与狗子"')
         game_author_index = text.index('text="游戏原作者：內個_shei_鸭"')
-        date_index = text.index('text="更新日期：2026年09月21日"')
+        date_index = text.index('text="更新日期：2026年10月22日"')
 
         self.assertLess(author_index, contributor_index)
         self.assertLess(contributor_index, game_author_index)
