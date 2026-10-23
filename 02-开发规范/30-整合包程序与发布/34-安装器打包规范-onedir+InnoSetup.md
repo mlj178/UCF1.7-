@@ -1,10 +1,10 @@
-# UCF2.4 修改器 安装器打包规范（onedir + Inno Setup）
+# 安装器打包规范（onedir + Inno Setup）
 
-本文档规定 `PyInstaller onedir + Inno Setup` 安装器打包方式，作为《32-打包发布须知.md》单文件（onefile）形态的**替代发布形态**。规范参照外部项目《03-整合包1.2安装器打包规范.md》迁移而来，并按本项目（UCF 修改器）的实际技术栈与既有约定做了适配。
+本文档规定 `PyInstaller onedir + Inno Setup` 安装器打包方式，作为《32-打包发布须知.md》单文件（onefile）形态的**替代发布形态**。规范参照外部项目《03-整合包1.2安装器打包规范.md》迁移而来，并按本项目的实际技术栈与既有约定做了适配，**以整合包 2.7 为基准**；文中 `<版本号>` 一律由整合包目录名动态解析，不要手工写死。
 
-> 适用范围：`全功能整合包2.4/game_modifier/`。后续版本复制本目录时，版本号由整合包目录名动态解析，spec / iss / 构建脚本均无需手工改版本。
+> 适用范围：`04-正式发行版/全功能整合包<版本号>/game_modifier/`。版本号由整合包目录名动态解析（`全功能整合包(?P<version>\d+(?:\.\d+)+)`），spec / iss / 构建脚本均无需手工改版本。
 >
-> **2.7 起命名变更**：主程序 exe 与安装器产物统一叫 `全功能整合包<版本号>.exe`（不再使用 `UCF<版本号>修改器` / `UCF<版本号>修改器安装器`）。本文中出现的 `UCF2.4修改器*` 文件名均为 2.4 的历史名称，仅作说明用；新版本以《32-打包发布须知.md》§四与 `spec` / `installer.iss` / `build_release.ps1` 中的写法为准。
+> **命名规则（2.7 起）**：主程序 exe 与安装器产物统一叫 `全功能整合包<版本号>.exe`，例如 2.7 就是 `全功能整合包2.7.exe`；安装器产物不再带"安装器"后缀，只是分处 `dist_release/` 与 `release/` 两个目录。2.6 及更早的 `UCF<版本号>修改器` 命名已废弃。
 
 ## 1. 方案目标
 
@@ -20,19 +20,19 @@
 
 | 形态 | 工具 | 产物 | 适用场景 |
 |---|---|---|---|
-| 单文件（既有） | PyInstaller onefile | `UCF2.4修改器.exe` | 单文件分发，启动需自解压到 `%TEMP%` |
-| 安装器（本文） | PyInstaller onedir + Inno Setup | `UCF2.4修改器安装器.exe` | 目录版，无需每次自解压，便于排查缺文件 |
+| 单文件（历史形态，2.6 及更早） | PyInstaller onefile | `UCF<版本号>修改器.exe` | 单文件分发，启动需自解压到 `%TEMP%` |
+| 安装器（2.4 起，2.7 起为唯一发布形态） | PyInstaller onedir + Inno Setup | `全功能整合包<版本号>.exe`（安装器，与主程序同名） | 目录版，无需每次自解压，便于排查缺文件 |
 
-两种形态**并存**，不互相替代。安装器版作为兼容备用，降低单文件自解压失败（杀软拦截 `%TEMP%` 写入、磁盘空间不足等）的风险。
+2.7 起对外只发布安装器形态，单文件版不再维护；安装器产物与 `dist_release/` 里的主程序 exe 同名，只是分处 `release/` 与 `dist_release/` 两个目录。安装器形态大幅降低单文件自解压失败（杀软拦截 `%TEMP%` 写入、磁盘空间不足等）的风险。
 
 ## 3. 总体流程
 
 ```text
 PyInstaller onedir
-    └── dist_release/UCF2.4修改器/        exe + _internal/
+    └── dist_release/全功能整合包<版本号>/        exe + _internal/
             ↓
 Inno Setup 编译 .iss
-    └── release/UCF2.4修改器安装器.exe
+    └── release/全功能整合包<版本号>.exe（安装器）
             ↓
 用户运行安装器 → 选路径 → 建快捷方式 → 启动 exe
 ```
@@ -59,7 +59,7 @@ Inno Setup 编译 .iss
 依赖清单（锁定版本）：
 
 ```text
-全功能整合包2.4/game_modifier/requirements-build.txt
+全功能整合包<版本号>/game_modifier/requirements-build.txt
 ```
 
 从目标版本的 `game_modifier` 目录校准环境：
@@ -85,9 +85,9 @@ if (-not (Test-Path -LiteralPath $buildPython -PathType Leaf)) {
 | 外部项目设定 | 本项目适配 |
 |---|---|
 | UI 框架 `imgui_bundle`，需 `collect_data_files` + `collect_dynamic_libs` | UI 框架 `customtkinter`，仅需 `collect_data_files("customtkinter")` |
-| AppName `整合包1.2` | AppName `UCF2.4修改器`（由目录名动态解析） |
-| 安装目录英文名 `DarkStar-Trainer-1.2` | 安装目录英文名 `UCF-Trainer-2.4`（见 §8.2） |
-| 用户数据 `%LOCALAPPDATA%\DarkStarSingularity\整合包1.2\` | 用户数据 `%LOCALAPPDATA%\UCFModifier\2.4\data\`（见 §7） |
+| AppName `整合包1.2` | AppName `全功能整合包<版本号>`（由目录名动态解析） |
+| 安装目录英文名 `DarkStar-Trainer-1.2` | 安装目录英文名 `UCF-Trainer-<版本号>`（见 §8.2） |
+| 用户数据 `%LOCALAPPDATA%\DarkStarSingularity\整合包1.2\` | 用户数据 `%LOCALAPPDATA%\UCFModifier\<版本号>\data\`（见 §7） |
 | 游戏进程 `DarkStar.exe` | 游戏进程 `UnityCrossFire.exe` |
 | `upx=True` | 沿用本项目约定 `upx=False`（见《32》§六） |
 
@@ -98,7 +98,7 @@ if (-not (Test-Path -LiteralPath $buildPython -PathType Leaf)) {
 复用既有 spec：
 
 ```text
-全功能整合包2.4/game_modifier/game_modifier.spec
+全功能整合包<版本号>/game_modifier/game_modifier_onedir.spec
 ```
 
 onefile 与 onedir 的 spec 差异仅在末尾 `EXE()` / `COLLECT()` 段。需要在现有 spec 末尾将单文件写法改为 onedir 写法（见 §6.3）。
@@ -114,7 +114,7 @@ plugins/universal_hook/   inject.exe、Universal-ImGui-Hook.dll、universal_hook
 Tcl/Tk               spec 已从本机 Python 暂存并收集（见《32》§七）
 ```
 
-> onedir 下资源直接落在 `UCF2.4修改器/_internal/`，运行时 `sys._MEIPASS` 仍可正确访问，`core/config.py` 中的 `BASE_DIR = sys._MEIPASS`、`RESOURCE_DIR`、`PLUGINS_DIR`、`FEATURES_DIR` 逻辑无需改动。
+> onedir 下资源直接落在 `全功能整合包<版本号>/_internal/`，运行时 `sys._MEIPASS` 仍可正确访问，`core/config.py` 中的 `BASE_DIR = sys._MEIPASS`、`RESOURCE_DIR`、`PLUGINS_DIR`、`FEATURES_DIR` 逻辑无需改动。
 
 ### 6.3 spec 末尾结构（onedir）
 
@@ -161,7 +161,7 @@ DATA_DIR = os.path.join(APP_DIR, "data")    # 用户配置 JSON 落点
 
 即 `data/`（`hotkeys.json`、`settings.json`、`weapon_hotkeys.json`、`desired_states.json`、`feature_state.json`、`user_config.json` 等）当前落在 **exe 同级目录**。
 
-安装到 `Program Files\UCF-Trainer-2.4` 后，写入该目录需要管理员权限，且卸载时 Inno Setup 默认清空安装目录会连用户配置一起删除。因此采用**方案 A**：frozen 时把 `DATA_DIR` 重定向到 `%LOCALAPPDATA%\UCFModifier\2.4\`，安装目录不再写用户数据，卸载保留该目录。
+安装到 `Program Files\UCF-Trainer-<版本号>` 后，写入该目录需要管理员权限，且卸载时 Inno Setup 默认清空安装目录会连用户配置一起删除。因此采用**方案 A**：frozen 时把 `DATA_DIR` 重定向到 `%LOCALAPPDATA%\UCFModifier\<版本号>\`，安装目录不再写用户数据，卸载保留该目录。
 
 ### 7.1 config.py 改造步骤
 
@@ -176,7 +176,7 @@ if getattr(sys, 'frozen', False):
     FEATURES_DIR = os.path.join(BASE_DIR, "features")
     # 用户可写数据重定向到 %LOCALAPPDATA%，避免写 Program Files
     _local_app_data = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~\\AppData\\Local")
-    DATA_DIR = os.path.join(_local_app_data, "UCFModifier", "2.4", "data")
+    DATA_DIR = os.path.join(_local_app_data, "UCFModifier", "<版本号>", "data")
 else:
     APP_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     BASE_DIR = APP_DIR
@@ -189,9 +189,9 @@ else:
 要点：
 
 1. 仅 frozen 模式重定向；源码运行时仍用 `APP_DIR/data`，不影响开发。
-2. `2.4` 版本号建议从整合包目录名解析，避免后续版本手工改。若暂不解析，复制版本目录时务必同步修改此处字面量。
+2. `<版本号>` 版本号建议从整合包目录名解析，避免后续版本手工改。若暂不解析，复制版本目录时务必同步修改此处字面量。
 3. `os.makedirs(DATA_DIR, exist_ok=True)` 已在下方保留，首次运行自动创建。
-4. 改造后需回归测试：快捷键保存/恢复、设置项持久化、武器快捷键、Nano-4T 选择、desired_state/feature_state 持久化均在 `%LOCALAPPDATA%\UCFModifier\2.4\data\` 下生效。
+4. 改造后需回归测试：快捷键保存/恢复、设置项持久化、武器快捷键、Nano-4T 选择、desired_state/feature_state 持久化均在 `%LOCALAPPDATA%\UCFModifier\<版本号>\data\` 下生效。
 
 `logs/` 目录：按《32》§十一，正式版所有文件日志开关必须关闭，正式版**不产生** `logs/`。源码运行时才产生 `logs/`。本文按“正式版无日志文件”处理，卸载逻辑不需为 `logs/` 留保留项。
 
@@ -200,7 +200,7 @@ else:
 ### 8.1 脚本位置
 
 ```text
-全功能整合包2.4/game_modifier/packaging/installer.iss
+全功能整合包<版本号>/game_modifier/packaging/installer.iss
 ```
 
 与 spec 同处 `game_modifier/` 下的 `packaging/` 子目录，便于构建脚本统一调用。
@@ -209,8 +209,8 @@ else:
 
 | 项 | 要求 |
 |---|---|
-| AppName | `全功能整合包2.4`（由目录版本动态生成，见 §8.3） |
-| AppVersion | `2.4`（与 spec 的 `app_name` 版本一致） |
+| AppName | `全功能整合包<版本号>`（由目录版本动态生成，见 §8.3） |
+| AppVersion | `<版本号>`（与 spec 的 `app_name` 版本一致） |
 | DefaultDirName | 动态计算（见 §8.5），不写死 `{autopf}` |
 | DefaultGroupName | `UCF修改器` |
 | Compression | `lzma2/ultra64` |
@@ -219,7 +219,7 @@ else:
 | PrivilegesRequired | `admin`（写 Program Files + frida attach 需要） |
 | UninstallDisplayIcon | 主 exe 图标 |
 
-安装目录名固定为英文 `UCF-Trainer-2.4`（降低中文路径风险）。AppName 仍用中文 `全功能整合包2.4` 作为显示名。
+安装目录名固定为英文 `UCF-Trainer-<版本号>`（降低中文路径风险）。AppName 仍用中文 `全功能整合包<版本号>` 作为显示名。
 
 ### 8.3 版本号动态生成
 
@@ -231,7 +231,7 @@ else:
 2. 桌面快捷方式（默认勾选，可取消）。
 3. 开始菜单快捷方式。
 4. 注册卸载项（控制面板可见）。
-5. 卸载时清理安装目录内的程序文件；用户数据在 `%LOCALAPPDATA%\UCFModifier\2.4\`，卸载不删该目录。
+5. 卸载时清理安装目录内的程序文件；用户数据在 `%LOCALAPPDATA%\UCFModifier\<版本号>\`，卸载不删该目录。
 
 ### 8.5 默认安装路径选择逻辑
 
@@ -239,7 +239,7 @@ else:
 
 ```pascal
 const
-  InstallFolder = 'UCF-Trainer-2.4';
+  InstallFolder = 'UCF-Trainer-<版本号>';
 
 function GetDefaultInstallDir(Param: string): string;
 var
@@ -284,7 +284,7 @@ Source: "..\dist_release\{#AppExeName}\*"; DestDir: "{app}"; \
     Excludes: "build\*,dist\*,__pycache__\*,*.spec.bak,logs\*,data\*"
 
 [Icons]
-; 快捷方式显示名用 AppName（全功能整合包2.4），exe 文件名用 AppExeName（UCF2.4修改器.exe）
+; 快捷方式显示名用 AppName（全功能整合包<版本号>），exe 文件名用 AppExeName（全功能整合包<版本号>.exe）
 Name: "{group}\{#AppName}"; Filename: "{app}\{#AppExeName}.exe"
 Name: "{commondesktop}\{#AppName}"; Filename: "{app}\{#AppExeName}.exe"; \
     Tasks: desktopicon
@@ -296,13 +296,13 @@ Name: "desktopicon"; Description: "在桌面创建快捷方式"; GroupDescriptio
 ; 安装结束不自动启动（修改器需用户主动启动并接受 UAC）
 ```
 
-> 其中 `{#AppName}` = `全功能整合包2.4`（控制面板/快捷方式显示名），`{#AppExeName}` = `UCF2.4修改器`（PyInstaller 产物 exe 名），由 ISPP `#define` 从 `AppVersion` 拼接，见 §8.3。
+> 其中 `{#AppName}` 与 `{#AppExeName}` 都是 `全功能整合包<版本号>`（2.7 起两者相同）：`{#AppName}` 用作控制面板/快捷方式显示名与安装器文件名，`{#AppExeName}` 是 PyInstaller 产物的 exe 基名（不含 `.exe`），必须与 spec 的 `app_name` 完全一致。两者都由 ISPP `#define` 从 `AppVersion` 拼接，见 §8.3。
 
-> `Excludes` 中的 `data\*` 为防御性排除：方案 A 下 `data/` 已重定向到 `%LOCALAPPDATA%`，安装目录不预置开发者 data，首次运行由程序在 `%LOCALAPPDATA%\UCFModifier\2.4\data\` 自动创建。
+> `Excludes` 中的 `data\*` 为防御性排除：方案 A 下 `data/` 已重定向到 `%LOCALAPPDATA%`，安装目录不预置开发者 data，首次运行由程序在 `%LOCALAPPDATA%\UCFModifier\<版本号>\data\` 自动创建。
 
 ### 8.7 Uninstall 段要点
 
-方案 A 下用户数据在 `%LOCALAPPDATA%\UCFModifier\2.4\`，不在安装目录。默认卸载清空 `{app}` 即可，**不要**在 `[UninstallDelete]` 中触碰 `%LOCALAPPDATA%`：
+方案 A 下用户数据在 `%LOCALAPPDATA%\UCFModifier\<版本号>\`，不在安装目录。默认卸载清空 `{app}` 即可，**不要**在 `[UninstallDelete]` 中触碰 `%LOCALAPPDATA%`：
 
 ```text
 [UninstallDelete]
@@ -339,7 +339,7 @@ Type: filesandordirs; Name: "{app}"
 固定位置：
 
 ```text
-全功能整合包2.4/game_modifier/packaging/build_release.ps1
+全功能整合包<版本号>/game_modifier/packaging/build_release.ps1
 ```
 
 脚本职责：
@@ -355,25 +355,25 @@ Type: filesandordirs; Name: "{app}"
   --noconfirm `
   --workpath build_release `
   --distpath dist_release `
-  game_modifier.spec
+  game_modifier_onedir.spec
 ```
 
-5. 校验产物 `dist_release/UCF<版本>修改器/UCF<版本>修改器.exe` 存在，且包含 `_internal/`。
+5. 校验产物 `dist_release/全功能整合包<版本号>/全功能整合包<版本号>.exe` 存在，且包含 `_internal/`。
 6. 调用 `iscc.exe installer.iss` 编译安装器（版本号通过 ISCC 参数或占位符替换传入）。
-7. 输出 `release/UCF<版本>修改器安装器.exe`。
+7. 输出 `release/全功能整合包<版本号>.exe`。
 8. 计算 SHA256，写入 `release/SHA256.txt`。
 
 调用顺序：
 
 ```powershell
-python -m PyInstaller --clean --noconfirm --workpath build_release --distpath dist_release game_modifier.spec
+python -m PyInstaller --clean --noconfirm --workpath build_release --distpath dist_release game_modifier_onedir.spec
 iscc packaging\installer.iss
 ```
 
 ## 11. README 模板（UAC 提示）
 
 ```text
-每次启动 UCF2.4修改器.exe 会弹出 UAC 授权窗口，请点击“是”。
+每次启动 全功能整合包<版本号>.exe 会弹出 UAC 授权窗口，请点击“是”。
 这是修改器连接游戏（frida attach + DLL 注入）所必需的权限，属于正常现象。
 
 若杀毒软件报毒，系修改器含注入器与 Frida 组件所致，请加入信任后使用。
@@ -383,10 +383,15 @@ iscc packaging\installer.iss
 
 ```text
 release/
-├── UCF2.4修改器安装器.exe
+├── 全功能整合包<版本号>.exe（安装器）
 ├── README.txt
-└── SHA256.txt
+├── 免责声明.txt
+├── SHA256.txt
+├── UCF1.7Q群1095388251.jpg          （2.7 起随包附带）
+└── win7用不了，只有win10和11能用.txt  （2.7 起随包附带，空文件）
 ```
+
+后四个文件由 `build_release.ps1` 的第 8 步从 `packaging/` 与 `资源/` 拷贝，不要只手工补一处；群二维码和空白 txt 同时会打进安装包内的 `_internal/资源/`。
 
 不应包含：
 
@@ -401,8 +406,8 @@ build/  build_release/  dist/  dist_release/  *.spec.bak  __pycache__/  tests/  
 1. 安装器能选择自定义路径。
 2. 安装后开始菜单和桌面快捷方式存在。
 3. 控制面板出现卸载项。
-4. 安装目录包含 `UCF2.4修改器.exe` 和 `_internal/`。
-5. 首次启动后在 `%LOCALAPPDATA%\UCFModifier\2.4\data\` 自动生成用户数据目录。
+4. 安装目录包含 `全功能整合包<版本号>.exe` 和 `_internal/`。
+5. 首次启动后在 `%LOCALAPPDATA%\UCFModifier\<版本号>\data\` 自动生成用户数据目录。
 
 ### 13.2 运行验证
 
@@ -418,7 +423,7 @@ build/  build_release/  dist/  dist_release/  *.spec.bak  __pycache__/  tests/  
 1. 控制面板卸载成功。
 2. 安装目录程序文件被清理。
 3. 快捷方式被清除。
-4. `%LOCALAPPDATA%\UCFModifier\2.4\` 用户数据保留（卸载不清用户配置）。
+4. `%LOCALAPPDATA%\UCFModifier\<版本号>\` 用户数据保留（卸载不清用户配置）。
 
 ### 13.4 干净机器验证
 
@@ -431,7 +436,7 @@ build/  build_release/  dist/  dist_release/  *.spec.bak  __pycache__/  tests/  
 
 1. 主 exe 从中文安装路径（如 `D:\Program Files\游戏修改器\`）启动正常。
 2. frida 从中文安装目录发起 attach 连接成功。
-3. 用户数据写入 `%LOCALAPPDATA%\UCFModifier\2.4\data\` 正常。
+3. 用户数据写入 `%LOCALAPPDATA%\UCFModifier\<版本号>\data\` 正常。
 
 ## 14. 已确认决策
 
@@ -439,11 +444,11 @@ build/  build_release/  dist/  dist_release/  *.spec.bak  __pycache__/  tests/  
 
 | 决策项 | 结论 | 依据 |
 |---|---|---|
-| D1 用户数据目录策略 | 方案 A：frozen 时重定向到 `%LOCALAPPDATA%\UCFModifier\2.4\data\`，需改 `config.py`（见 §7.1） | 安装到 Program Files 后可正常写、卸载不丢、升级不冲突 |
-| D2 安装目录英文名 | `UCF-Trainer-2.4` | 降低中文路径风险，AppName 显示名仍为中文 `UCF2.4修改器` |
-| D3 onedir+Inno 与 onefile 关系 | 并存 | 安装器版作为兼容备用，单文件版继续维护 |
+| D1 用户数据目录策略 | 方案 A：frozen 时重定向到 `%LOCALAPPDATA%\UCFModifier\<版本号>\data\`，需改 `config.py`（见 §7.1） | 安装到 Program Files 后可正常写、卸载不丢、升级不冲突 |
+| D2 安装目录英文名 | `UCF-Trainer-<版本号>` | 降低中文路径风险，AppName 显示名仍为中文 `全功能整合包<版本号>` |
+| D3 onedir+Inno 与 onefile 关系 | 2.7 起只发布安装器形态 | 单文件版自 2.7 起停更，安装器版成为唯一对外发布物 |
 | D4 packaging 目录位置 | `game_modifier/packaging/` | 与 spec 同处，构建脚本统一调用 |
-| D5 用户数据公司级目录名 | `UCFModifier`（即 `%LOCALAPPDATA%\UCFModifier\2.4\`） | 方案 A 下 `%LOCALAPPDATA%` 的根目录名 |
+| D5 用户数据公司级目录名 | `UCFModifier`（即 `%LOCALAPPDATA%\UCFModifier\<版本号>\`） | 方案 A 下 `%LOCALAPPDATA%` 的根目录名 |
 
 ## 15. 风险与处理
 
@@ -463,17 +468,17 @@ build/  build_release/  dist/  dist_release/  *.spec.bak  __pycache__/  tests/  
 
 ### 16.1 问题
 
-`dist_release\UCF2.4修改器`（PyInstaller onedir 便携版产物）与 `D:\Program Files\UCF-Trainer-2.4`（Inno Setup 安装版产物）两个程序的快捷键记录，读取的是哪个位置的 json 文件？初步判断两者读取的是同一个文件，但缺少依据。
+`dist_release\全功能整合包<版本号>`（PyInstaller onedir 便携版产物）与 `D:\Program Files\UCF-Trainer-<版本号>`（Inno Setup 安装版产物）两个程序的快捷键记录，读取的是哪个位置的 json 文件？初步判断两者读取的是同一个文件，但缺少依据。
 
 ### 16.2 结论
 
 两个程序读取的是**同一个文件**：
 
 ```text
-C:\Users\<用户名>\AppData\Local\UCFModifier\2.4\data\hotkeys.json
+C:\Users\<用户名>\AppData\Local\UCFModifier\<版本号>\data\hotkeys.json
 ```
 
-（本机实测路径：`C:\Users\17242\AppData\Local\UCFModifier\2.4\data\hotkeys.json`）
+（本机实测路径：`C:\Users\17242\AppData\Local\UCFModifier\<版本号>\data\hotkeys.json`）
 
 ### 16.3 依据
 
@@ -486,7 +491,7 @@ if getattr(sys, 'frozen', False):
     ...
     # 用户可写数据重定向到 %LOCALAPPDATA%，避免写 Program Files（安装器打包规范 §7.1 方案A）
     _local_app_data = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~\\AppData\\Local")
-    DATA_DIR = os.path.join(_local_app_data, "UCFModifier", "2.4", "data")
+    DATA_DIR = os.path.join(_local_app_data, "UCFModifier", "<版本号>", "data")
 else:
     ...
     DATA_DIR = os.path.join(APP_DIR, "data")
@@ -494,8 +499,16 @@ else:
 
 第 26 行：`HOTKEYS_FILE = os.path.join(DATA_DIR, "hotkeys.json")`。
 
-两个产物均为 PyInstaller 打包的发行版（`sys.frozen == True`），因此 `DATA_DIR` **不取决于 exe 所在位置**，统一指向 `%LOCALAPPDATA%\UCFModifier\2.4\data\`。无论从 `D:\trae_project\...\UCF2.4修改器\` 还是 `D:\Program Files\UCF-Trainer-2.4\` 启动，快捷键文件都落在上述同一位置。已确认该目录下存在 `hotkeys.json`（以及 `weapon_hotkeys.json`、`feature_state.json`、`desired_states.json`、`user_config.json` 等也共用同一位置）。
+两个产物均为 PyInstaller 打包的发行版（`sys.frozen == True`），因此 `DATA_DIR` **不取决于 exe 所在位置**，统一指向 `%LOCALAPPDATA%\UCFModifier\<版本号>\data\`。无论从 `D:\trae_project\...\全功能整合包<版本号>\` 还是 `D:\Program Files\UCF-Trainer-<版本号>\` 启动，快捷键文件都落在上述同一位置。已确认该目录下存在 `hotkeys.json`（以及 `weapon_hotkeys.json`、`feature_state.json`、`desired_states.json`、`user_config.json` 等也共用同一位置）。
 
 ### 16.4 设计原因
 
-代码注释已说明：把用户可写数据重定向到 `%LOCALAPPDATA%`，是为了避免向 `D:\Program Files\UCF-Trainer-2.4` 这种受保护目录写入，同时让便携版和安装版共享同一份用户配置（见 §7.1 方案 A）。
+代码注释已说明：把用户可写数据重定向到 `%LOCALAPPDATA%`，是为了避免向 `D:\Program Files\UCF-Trainer-<版本号>` 这种受保护目录写入，同时让便携版和安装版共享同一份用户配置（见 §7.1 方案 A）。
+
+## 更新记录
+
+```text
+更新日期：2026-10-23
+更新说明：从 04-正式发行版/全功能整合包2.4/ 迁入 02-开发规范/30-整合包程序与发布/，并去版本号写死：文件名、安装目录、数据目录统一改为 <版本号>；spec 名更正为 game_modifier_onedir.spec；命名规则改为 2.7 起的「全功能整合包<版本号>.exe」（安装器不带“安装器”后缀）；发布物结构补 README/免责声明/SHA256 与随包 jpg、空白 txt；D3 决策改为“2.7 起只发布安装器形态”。
+```
+

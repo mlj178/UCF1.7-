@@ -4,6 +4,9 @@
 首次运行主程序时弹出一次，用户点击「我已知晓并继续」后，在数据目录写入已读标记，
 之后不再弹出；点击「不同意，退出」或直接关闭窗口则退出主程序。
 
+为保证「使用前请阅读」真正生效，「我已知晓并继续」按钮在弹窗显示后的
+READ_SECONDS 秒内保持禁用，并显示剩余秒数，读秒结束才可点击。
+
 数据目录见 core/config.DATA_DIR（打包后为 %LOCALAPPDATA%\\UCFModifier）。
 声明正文与「设置 - 免责声明」页保持一致。
 """
@@ -19,10 +22,15 @@ ACK_FILE = os.path.join(DATA_DIR, "disclaimer_ack.json")
 
 _DIALOG_TEXT = (
     "1.本工具为免费开源的第三方非官方修改器，仅供个人学习与单机娱乐使用。\n"
-    "2.使用可能导致游戏崩溃；请勿用于破坏他人游戏体验或任何违反当地法律法规的行为。\n"
+    "2.请勿用于破坏他人游戏体验或任何违反当地法律法规的行为。\n"
     "3.本程序按「现状」提供，不提供任何担保，作者不承担因使用产生的责任。\n"
     "4.点击「我已知晓并继续」即视为你已阅读并同意完整条款（设置 - 免责声明）。"
 )
+
+# 阅读倒计时（秒）：倒计时结束前「我已知晓并继续」不可点击。
+READ_SECONDS = 5
+
+_ACCEPT_TEXT = "我已知晓并继续"
 
 
 def is_acknowledged():
@@ -54,6 +62,8 @@ class DisclaimerDialog(ctk.CTkToplevel):
         self.grab_set()
 
         self._parent = parent
+        self._remaining_seconds = READ_SECONDS
+        self._countdown_job = None
 
         ctk.CTkLabel(self, text="使用前请阅读",
                      font=("Microsoft YaHei", 15, "bold"),
@@ -66,8 +76,10 @@ class DisclaimerDialog(ctk.CTkToplevel):
 
         action = ctk.CTkFrame(self, fg_color="transparent")
         action.pack(pady=(0, 16))
-        ctk.CTkButton(action, text="我已知晓并继续", font=("Microsoft YaHei", 12),
-                      width=140, command=self._on_accept).pack(side="left", padx=6)
+        self._accept_button = ctk.CTkButton(
+            action, text=self._countdown_text(), font=("Microsoft YaHei", 12),
+            width=140, state="disabled", command=self._on_accept)
+        self._accept_button.pack(side="left", padx=6)
         ctk.CTkButton(action, text="不同意，退出", font=("Microsoft YaHei", 12),
                       width=120, fg_color="#7a2a2a", hover_color="#9a3a3a",
                       command=self._on_decline).pack(side="left", padx=6)
@@ -75,7 +87,51 @@ class DisclaimerDialog(ctk.CTkToplevel):
         # 点右上角关闭等同「不同意」
         self.protocol("WM_DELETE_WINDOW", self._on_decline)
 
+        self._start_countdown()
+
+    def _countdown_text(self):
+        if self._remaining_seconds > 0:
+            return f"请阅读（{self._remaining_seconds} 秒）"
+        return _ACCEPT_TEXT
+
+    def _start_countdown(self):
+        """按钮先禁用，读秒结束再允许点击。"""
+        if READ_SECONDS <= 0:
+            self._enable_accept()
+            return
+        self._countdown_job = self.after(1000, self._tick_countdown)
+
+    def _tick_countdown(self):
+        self._countdown_job = None
+        if not self.winfo_exists():
+            return
+        self._remaining_seconds -= 1
+        if self._remaining_seconds <= 0:
+            self._enable_accept()
+            return
+        self._accept_button.configure(text=self._countdown_text())
+        self._countdown_job = self.after(1000, self._tick_countdown)
+
+    def _enable_accept(self):
+        self._remaining_seconds = 0
+        self._accept_button.configure(text=_ACCEPT_TEXT, state="normal")
+
+    def _cancel_countdown(self):
+        if self._countdown_job is not None:
+            try:
+                self.after_cancel(self._countdown_job)
+            except Exception:
+                pass
+            self._countdown_job = None
+
+    def destroy(self):
+        self._cancel_countdown()
+        super().destroy()
+
     def _on_accept(self):
+        # 读秒未结束时按钮处于禁用状态，这里再兜一层，防止程序内触发跳过阅读。
+        if self._remaining_seconds > 0:
+            return
         mark_acknowledged()
         self.destroy()
 
