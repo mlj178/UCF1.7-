@@ -174,6 +174,7 @@ void ESPRenderer::DrawPlayerESP(void* player, void* localPlayer) {
                      hitbox.validScreenCount);
         }
 
+        const bool isEnemy = GameManager::IsEnemy(player, localPlayer);
         ImVec4 color = GetPlayerColor(player, localPlayer);
         // 方框轮廓可单独关闭：关闭后仍按血量选项画血条/数值。
         if (ESPState::Instance().IsBoxOutlineEnabled()) {
@@ -182,7 +183,7 @@ void ESPRenderer::DrawPlayerESP(void* player, void* localPlayer) {
 
         PlayerHealthInfo health;
         if (GameManager::GetPlayerHealth(player, &health)) {
-            DrawHealthOverlay(center, hitbox.width, hitbox.height, health);
+            DrawHealthOverlay(center, hitbox.width, hitbox.height, health, isEnemy);
         }
         return;
     }
@@ -223,6 +224,7 @@ void ESPRenderer::DrawPlayerESPFallback(void* player, void* localPlayer, bool sh
                  player, screenFeet.x, screenFeet.y, screenHead.x, screenHead.y);
     }
 
+    const bool isEnemy = GameManager::IsEnemy(player, localPlayer);
     ImVec4 color = GetPlayerColor(player, localPlayer);
     if (ESPState::Instance().IsBoxOutlineEnabled()) {
         DrawBox(center, boxWidth, boxHeight, color, config::BOX_THICKNESS);
@@ -230,7 +232,7 @@ void ESPRenderer::DrawPlayerESPFallback(void* player, void* localPlayer, bool sh
 
     PlayerHealthInfo health;
     if (GameManager::GetPlayerHealth(player, &health)) {
-        DrawHealthOverlay(center, boxWidth, boxHeight, health);
+        DrawHealthOverlay(center, boxWidth, boxHeight, health, isEnemy);
     }
 }
 
@@ -248,8 +250,17 @@ void ESPRenderer::DrawBox(const Vector2& center, float w, float h,
 // 血量覆盖层：
 //   HealthDisplay = 仅血条 / 仅数值 / 血条 + 数值
 //   HealthMode    = 百分比 / 剩余数值（只显示当前血量，不显示上限）
+//   颜色           = 敌人红色 / 队友蓝色（isEnemy 由 GameManager::IsEnemy 判定）
+static ImU32 HealthBarFillColor(bool isEnemy) {
+    return isEnemy ? IM_COL32(235, 55, 55, 235) : IM_COL32(60, 120, 245, 235);
+}
+
+static ImU32 HealthTextColor(bool isEnemy) {
+    return isEnemy ? IM_COL32(255, 80, 80, 240) : IM_COL32(100, 160, 255, 240);
+}
+
 void ESPRenderer::DrawHealthOverlay(const Vector2& center, float w, float h,
-                                    const PlayerHealthInfo& health) {
+                                    const PlayerHealthInfo& health, bool isEnemy) {
     if (!health.valid || (!health.hasRate && !health.hasValue)) return;
 
     const int display = ESPState::Instance().GetHealthDisplay();
@@ -286,7 +297,7 @@ void ESPRenderer::DrawHealthOverlay(const Vector2& center, float w, float h,
         drawList->AddRectFilled(ImVec2(left, barTop), ImVec2(right, barTop + barHeight),
                                 IM_COL32(20, 20, 20, 190));
         drawList->AddRectFilled(ImVec2(left, barTop), ImVec2(left + fillWidth, barTop + barHeight),
-                                IM_COL32(70, 220, 90, 235));
+                                HealthBarFillColor(isEnemy));
     }
 
     if (drawText) {
@@ -303,7 +314,7 @@ void ESPRenderer::DrawHealthOverlay(const Vector2& center, float w, float h,
             sprintf_s(text, sizeof(text), "%d%%", percent);
         }
         drawList->AddText(ImGui::GetFont(), textHeight, ImVec2(left, textY),
-                          IM_COL32(255, 255, 255, 240), text);
+                          HealthTextColor(isEnemy), text);
     }
 }
 

@@ -1,0 +1,70 @@
+{
+  "feature_id": "29_bullet_wall_penetration",
+  "canonical_id": "bullet_wall_penetration",
+  "display_name": "子弹穿墙/弹体穿墙",
+  "category": "weapon",
+  "tab": "weapon_tab",
+  "tab_title": "武器",
+  "tab_order": 10,
+  "order": 80,
+  "desc": "子弹和弹体（火箭弹/榴弹/手雷/技能弹）能直接穿墙，隔墙也能打到人。只对自己生效。",
+  "script": "script.js",
+  "hotkey": {
+    "enabled": true
+  },
+  "runtime": {
+    "type": "plugin_script"
+  },
+  "layout": {
+    "card_type": "simple",
+    "columnspan": 1,
+    "stretch": true,
+    "title_color": "#fca5a5"
+  },
+  "controls": [
+    {
+      "type": "switch",
+      "action": "enable"
+    }
+  ],
+  "config": {
+    "forceHitboxOnlyDuringLocalDamage": true,
+    "logEveryDamageHits": 25,
+    "projectileWallPenetration": true,
+    "projectilePenetrateAllSurfaces": true,
+    "projectilePenetrableLayers": 4294965879,
+    "projectilePenetrateAirWall": false,
+    "projectileWallMaxNormalY": 0.6,
+    "projectileProbeLookahead": 3.5,
+    "projectileGhostExtra": 0.8,
+    "projectileIgnoreMinMs": 80,
+    "projectileIgnoreMaxMs": 1200,
+    "projectileProbeMaxSkips": 3,
+    "projectilePendingRetryMs": 400
+  },
+  "rpc": [
+    "enable",
+    "disable",
+    "setConfig",
+    "set_config",
+    "setconfig",
+    "status",
+    "cleanup"
+  ],
+  "lifecycle": {
+    "cleanup": true,
+    "restore": true,
+    "requires_room_ready_reapply": false,
+    "room_ready_retry": false,
+    "room_ready_reapply_exempt_reason": "功能安装固定 RVA Hook，命中本地开火 Damage 时按 enabled/config 状态临时 patch 层掩码；弹体穿墙只在本地玩家弹体的物理步内提前探路忽略前方墙面（自己的 collider 优先取 Collision 接触点里的 thisCollider 实例 ID，失败时用缓存/OverlapSphere 兜底，仍失败则在下一物理步补忽略），并在 OnCollisionEnter 窗口内临时抑制撞墙爆炸；碰撞忽略按窗口还原。"
+  },
+  "source": {
+    "runtime_script_js": "features/29_bullet_wall_penetration/script.js"
+  },
+  "ui_handles": {
+    "switch": "bullet_wall_penetration_switch"
+  },
+  "state": {
+    "sync_enabled_from_config": true
+  }
+}
