@@ -207,6 +207,10 @@ class DamageMultiplierStaticTests(unittest.TestCase):
             "skipped_category_disabled",
             "last_category",
             "local_player_ready",
+            "pre_cap_hook_installed",
+            "pre_cap_multiplied",
+            "post_cap_multiplied",
+            "skipped_lethal_capped",
         ]:
             self.assertIn(status_key, text)
 
@@ -237,6 +241,59 @@ class DamageMultiplierStaticTests(unittest.TestCase):
             "data.damage >= Runtime.config.min_applied_damage",
             "newDamage < Runtime.config.min_applied_damage",
             "cvttsd2si",
+        ]:
+            self.assertIn(token, text, f"script.js missing {token}")
+
+    def test_js_hooks_gamemanager_takedamage_before_hp_cap(self):
+        """枪/雷/技能/炮台必须在游戏钳血之前乘倍率，否则伤害会和剩余血量挂钩。"""
+        text = read_text(JS_FILE)
+
+        for token in [
+            "GameManager_TakeDamage: 0x00AFC1C0",
+            "function eventDataFromTakeDamageStack(context)",
+            "return context.esp.add(4);",
+            "DamageStage.PRE_CAP",
+            "GameManager.TakeDamage",
+            "preCapHookInstalled",
+            "function readVictimCurrentHealth(victimPtr)",
+            "Entity_healthData: 0x1C",
+            "HealthData_currentHealthKey: 0x08",
+            "HealthData_currentHealthHidden: 0x0C",
+            "OBSCURED_INT_STATIC_KEY = 0x6C81C",
+        ]:
+            self.assertIn(token, text, f"script.js missing {token}")
+
+    def test_js_routes_knife_to_post_cap_and_others_to_pre_cap(self):
+        """刀会被 CalKnifeDmg 按角色重写，只能在 OnEntityHurt 收尾段乘；其余在入口段乘。"""
+        text = read_text(JS_FILE)
+
+        for token in [
+            "var DamageStage = {",
+            "PRE_CAP: 'pre_cap'",
+            "POST_CAP: 'post_cap'",
+            "data.type === DamageType.Knife",
+            "data.type !== DamageType.Knife",
+            "skippedKnifeAtPreCap",
+            "skippedNonKnifeAtPostCap",
+            "DamageStage.POST_CAP",
+        ]:
+            self.assertIn(token, text, f"script.js missing {token}")
+
+        # 入口段与收尾段都必须显式传 stage，禁止再出现两参数的旧调用
+        self.assertNotIn("multiplyDamageEvent(eventDataFromOnEntityHurtStack(this.context), 'Player.OnEntityHurt');", text)
+        self.assertNotIn("multiplyDamageEvent(eventDataFromOnEntityHurtStack(this.context), 'Entity.OnEntityHurt');", text)
+
+    def test_js_does_not_weaken_lethal_knife_blows(self):
+        """刀在 OnEntityHurt 看到的是 min(伤害, 剩余血量)，致死一击不能再乘 <1 倍率。"""
+        text = read_text(JS_FILE)
+
+        for token in [
+            "skippedLethalCapped",
+            "skipped_lethal_capped",
+            "multiplier < 1.0",
+            "victimHp > 0",
+            "data.damage + 0.001 >= victimHp",
+            "recordLast(data, source, 'skip_lethal_capped'",
         ]:
             self.assertIn(token, text, f"script.js missing {token}")
 

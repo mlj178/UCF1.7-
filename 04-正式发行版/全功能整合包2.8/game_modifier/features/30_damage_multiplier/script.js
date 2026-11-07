@@ -5,17 +5,33 @@
 // 功能目标：分别调整「敌人 / 自己 / 队友」造成的最终生命伤害，
 //           倍率可调高（>1.0x）也可调低（<1.0x，最低 0.1x，不允许 0）。
 //
-// 实现原理：
-//   1. Hook Entity.OnEntityHurt / Player.OnEntityHurt。
-//   2. 在 x86 cdecl 栈上定位按值传入的 DamageEventData。
+// 实现原理（两段式）：
+//   1. 【入口段·枪/雷/技能/炮台】Hook GameManager.TakeDamage（RVA 0xAFC1C0）。
+//      游戏在这个函数里才做「×受害者防御率 → min(剩余血量) → Hurt」，
+//      所以在入口先乘倍率，最终伤害 = 原始伤害 × 倍率（防御和血量上限照旧），
+//      与目标剩余血量无关。这是「伤害只由倍率决定」的关键。
+//   2. 【收尾段·刀】Hook Entity.OnEntityHurt / Player.OnEntityHurt。
+//      生化模式的 ModeBase_Nano.PreDamageEvent 会调 CalKnifeDmg，按攻击者
+//      NanoRole 把刀伤重写成固定值（1000/1500/2500/3000/8000…），把入口段
+//      乘好的倍率覆盖掉；只有最后一步乘才保得住刀伤倍率。
 //   3. 解析真正的伤害来源（attacker 本体，或导弹/炮台的 owner），
 //      再按阵营把来源分成 self（本地玩家）/ mate（队友）/ enemy（敌人）。
-//   4. 用对应阵营的倍率改写 DamageEventData.damage。
-//   5. 记录 WPN_Missile.SetOwner / SentryGun.SetData，用于导弹、RPG、
+//   4. 记录 WPN_Missile.SetOwner / SentryGun.SetData，用于导弹、RPG、
 //      榴弹和炮台这类特殊来源的归属判断。
-//   6. 保底 1 点伤害：游戏会把 float damage 截断成 int，倍率 <1 时必须保证
+//   5. 保底 1 点伤害：游戏会把 float damage 截断成 int，倍率 <1 时必须保证
 //      「原本能造成伤害的一击」至少还是 1 点，否则最后一击会被截断成 0，
 //      出现「敌人一直剩一滴血、打不死人」的问题。
+//
+// 关于「斩杀线不做几何衰减」（2026-11 修复）：
+//   GameManager.TakeDamage 在调用 OnEntityHurt 之前就执行了
+//     damage = Mathf.Max(0, Mathf.Min((int)(damage * victim.damageRate),
+//                                      decrypt(victim.healthData.currentHealth)))
+//   也就是说 OnEntityHurt 里拿到的 damage 已经是 min(伤害, 剩余血量)。
+//   如果直接在 OnEntityHurt 里乘 <1 的倍率，到了斩杀线就变成
+//     「这一击只扣 剩余血量 × 倍率」，下一击再按新的剩余血量算 →
+//     血量几何级衰减，永远磨到 1 滴血才死。
+//   所以：枪/雷/技能/炮台在入口（钳血之前）乘；刀留在 OnEntityHurt，
+//   但如果这一刀已经被钳成「致死一击」（damage >= 剩余血量），就不再削弱。
 //
 // 关于 1 点保底（IDA 反汇编核对 Entity.OnEntityHurt）：
 //   movss  xmm0, [ebp+eventData.damage]   ; 读 float damage
@@ -23,6 +39,12 @@
 //   cvttsd2si eax, xmm0                   ; float -> int，向零截断
 //   call   HealthData.Hurt                ; int 直接相减，没有任何下限钳制
 //   所以 damage < 1.0 时游戏实际收到 0 点伤害。
+//
+// 血量读取（ObscuredInt，与 18 方框透视同口径）：
+//   victim(+0x1C) -> HealthData
+//   HealthData+0x08 = currentCryptoKey(int)
+//   HealthData+0x0C = hiddenValue(int)
+//   明文 = hiddenValue ^ (currentCryptoKey || 0x6C81C)
 //
 // 阵营判定来源（IDA 反编译核对）：
 //   Entity.get_team()            -> Entity.team（+0x20）
@@ -36,7 +58,8 @@
 //   所以阵营按"实时读取的 team"判断（不用缓存快照），变身当帧就跟着变。
 //
 // RVA / 字段来源：dump.cs + script.json + 现有功能脚本交叉验证
-//   Entity_OnEntityHurt:        0x00B3F470
+//   GameManager_TakeDamage:     0x00AFC1C0   （入口段：枪/雷/技能/炮台）
+//   Entity_OnEntityHurt:        0x00B3F470   （收尾段：刀）
 //   Player_OnEntityHurt:        0x00B516B0
 //   Player_get_isMyPlayer:      0x00B55FD0
 //   Entity_get_team:            0x001E0070
@@ -56,6 +79,8 @@
 //   DamageEventData.wpnSprIndex:0x40
 //   DamageEventData.ignoreDmgRate: 0x44
 //   Entity.team:                0x20
+//   Entity.healthData:          0x1C
+//   HealthData.currentHealth:   0x08 (ObscuredInt: key +0x00, hidden +0x04)
 //   GameManager.allPlayers:     0x1C (Il2Cpp array)
 //   GameManager.playersBL:      0x20 (List<Player>)
 //   GameManager.playersGR:      0x28 (List<Player>)
@@ -83,9 +108,22 @@
         UNKNOWN: 'unknown'
     };
 
+    // 伤害事件阶段：
+    //   PRE_CAP  = GameManager.TakeDamage 入口（游戏还没做「×防御率 / 钳到剩余血量」）
+    //   POST_CAP = Entity.OnEntityHurt / Player.OnEntityHurt（游戏已经钳到剩余血量）
+    var DamageStage = {
+        PRE_CAP: 'pre_cap',
+        POST_CAP: 'post_cap'
+    };
+
+    // CodeStage AntiCheat ObscuredInt：currentCryptoKey 为 0 时使用静态密钥。
+    // 与 18 方框透视读取 HealthData 的口径一致。
+    var OBSCURED_INT_STATIC_KEY = 0x6C81C;
+
     var RVA = {
         Entity_OnEntityHurt: 0x00B3F470,
         Player_OnEntityHurt: 0x00B516B0,
+        GameManager_TakeDamage: 0x00AFC1C0,
         Player_get_isMyPlayer: 0x00B55FD0,
         Entity_get_team: 0x001E0070,
         SingletonGet: 0x004A8170,
@@ -107,6 +145,9 @@
         Dmg_wpnSprIndex: 0x40,
         Dmg_ignoreDmgRate: 0x44,
         Entity_team: 0x20,
+        Entity_healthData: 0x1C,
+        HealthData_currentHealthKey: 0x08,
+        HealthData_currentHealthHidden: 0x0C,
         GM_allPlayers: 0x1C,
         GM_playersBL: 0x20,
         GM_playersGR: 0x28,
@@ -120,6 +161,9 @@
         feature_id: "damage_multiplier",
         enabled: false,
         initialized: false,
+        // GameManager.TakeDamage 入口钩子是否安装成功：
+        // 安装失败时退回旧行为（全部在 OnEntityHurt 收尾段处理，含致死一击跳过）。
+        preCapHookInstalled: false,
         module: null,
         base: ptr(0),
         hooks: [],
@@ -155,6 +199,14 @@
             totalHurtEvents: 0,
             entityHurtEvents: 0,
             playerHurtEvents: 0,
+            takeDamageCalls: 0,
+            preCapHurtEvents: 0,
+            preCapMultiplied: 0,
+            postCapMultiplied: 0,
+            skippedKnifeAtPreCap: 0,
+            skippedNonKnifeAtPostCap: 0,
+            skippedLethalCapped: 0,
+            victimHpReadFailures: 0,
             multipliedEvents: 0,
             multipliedEnemy: 0,
             multipliedSelf: 0,
@@ -323,6 +375,26 @@
             var team = entityPtr.add(OFF.Entity_team).readS32();
             if (team < 0 || team > 2) return -1;
             return team;
+        } catch (error) {
+            return -1;
+        }
+    }
+
+    // 读受害者当前血量（HealthData.currentHealth 是 CodeStage ObscuredInt）。
+    // 只用于「刀的致死一击判定」：当 data.damage 已经被游戏钳到剩余血量时，
+    // 说明这一刀本来就致死，再乘 <1 的倍率会让血量按比例几何衰减。
+    // 读不到返回 -1，调用方退回正常乘算——绝不因为读血量失败而漏改伤害。
+    function readVictimCurrentHealth(victimPtr) {
+        try {
+            if (isNull(victimPtr) || !isReadablePtr(victimPtr)) return -1;
+            var health = victimPtr.add(OFF.Entity_healthData).readPointer();
+            if (isNull(health) || !isReadablePtr(health)) return -1;
+            var key = health.add(OFF.HealthData_currentHealthKey).readS32();
+            var hidden = health.add(OFF.HealthData_currentHealthHidden).readS32();
+            var resolvedKey = key !== 0 ? key : OBSCURED_INT_STATIC_KEY;
+            var hp = (hidden ^ resolvedKey) >>> 0;
+            if (hp > 1000000) return -1;
+            return hp;
         } catch (error) {
             return -1;
         }
@@ -599,11 +671,12 @@
         return value.toFixed(3);
     }
 
-    function logDamageDiagnostic(data, source, category, multiplier, newDamage, effectiveAttacker, victim, victimIsLocal, flooredToMin) {
+    function logDamageDiagnostic(data, source, stage, category, multiplier, newDamage, effectiveAttacker, victim, victimIsLocal, flooredToMin, victimHp) {
         if (!Runtime.config.diagnostic_log) return;
 
         var truncDamage = newDamage < 0 ? Math.ceil(newDamage) : Math.floor(newDamage);
         var message = 'damage_diag source=' + source +
+            ' stage=' + stage +
             ' category=' + category +
             ' raw_damage=' + formatFloat(data.damage) +
             ' multiplier=' + formatFloat(multiplier) +
@@ -614,6 +687,7 @@
             ' ceil=' + Math.ceil(newDamage) +
             ' below_one=' + (newDamage > 0 && newDamage < 1) +
             ' floored_to_min=' + flooredToMin +
+            ' victim_hp=' + victimHp +
             ' type=' + data.type +
             ' tag=' + data.damageTag +
             ' wpn=' + data.wpnIndex +
@@ -627,7 +701,13 @@
         logLimited('damage_diagnostic', 'info', message, 300);
     }
 
-    function multiplyDamageEvent(eventPtr, source) {
+    // stage:
+    //   DamageStage.PRE_CAP  — GameManager.TakeDamage 入口。damage 还是原始伤害，
+    //                          游戏随后才会 ×防御率、min(剩余血量)。只处理非刀伤害。
+    //   DamageStage.POST_CAP — Entity/Player.OnEntityHurt。游戏已经做完防御/钳血。
+    //                          只处理刀（生化模式会在 TakeDamage 内部按角色重写刀伤），
+    //                          并且对“已经被钳成致死一击”的刀不再削弱。
+    function multiplyDamageEvent(eventPtr, source, stage) {
         Runtime.stats.totalHurtEvents += 1;
         if (!Runtime.enabled) {
             Runtime.stats.skippedDisabled += 1;
@@ -638,6 +718,23 @@
         if (!data) {
             Runtime.stats.skippedInvalidEvent += 1;
             recordLast(null, source, 'invalid_event');
+            return false;
+        }
+
+        var isPreCap = (stage === DamageStage.PRE_CAP);
+
+        // 阶段路由：
+        //   入口段不碰刀——生化模式的 CalKnifeDmg 会按角色把刀伤重写成固定值，
+        //   在入口乘的倍率会被覆盖，只能在 OnEntityHurt 收尾段乘。
+        //   收尾段不碰非刀——它们在入口段已经乘过，这里再乘会变成平方。
+        if (isPreCap) {
+            Runtime.stats.preCapHurtEvents += 1;
+            if (data.type === DamageType.Knife) {
+                Runtime.stats.skippedKnifeAtPreCap += 1;
+                return false;
+            }
+        } else if (Runtime.preCapHookInstalled && data.type !== DamageType.Knife) {
+            Runtime.stats.skippedNonKnifeAtPostCap += 1;
             return false;
         }
 
@@ -688,14 +785,41 @@
             Runtime.config.min_multiplier,
             Runtime.config.max_multiplier
         );
-        var newDamage = data.damage * multiplier;
+
+        var victimHp = -1; // 入口段不读血量（用不到），日志里显示 -1
+        var newDamage;
+        var flooredToMin = false;
+
+        if (!isPreCap) {
+            // 收尾段（刀；或入口钩子安装失败时兜底处理全部伤害）：
+            // data.damage 在 TakeDamage 里已经被钳到 min(伤害, 剩余血量)。
+            // 当它 >= 剩余血量，说明这一击本来就是致死一击；再乘 <1 的倍率会变成
+            // “按剩余血量比例扣血”，血量几何级衰减，永远磨到 1 滴血才死。
+            victimHp = readVictimCurrentHealth(victim);
+            if (victimHp < 0) Runtime.stats.victimHpReadFailures += 1;
+            if (multiplier < 1.0 && victimHp > 0 && data.damage + 0.001 >= victimHp) {
+                Runtime.stats.skippedLethalCapped += 1;
+                recordLast(data, source, 'skip_lethal_capped', undefined, category, multiplier);
+                logLimited(
+                    'skip_lethal_capped',
+                    'info',
+                    'lethal blow not weakened: source=' + source + ' category=' + category +
+                    ' damage=' + data.damage.toFixed(2) + ' victim_hp=' + victimHp +
+                    ' multiplier=' + multiplier.toFixed(2),
+                    500
+                );
+                return false;
+            }
+        }
+
+        newDamage = data.damage * multiplier;
         if (newDamage > Runtime.config.max_damage) newDamage = Runtime.config.max_damage;
         if (newDamage < 0) newDamage = 0;
 
         // 保底 1 点：游戏用 cvttsd2si 把 float damage 截断成 int，
         // 倍率 <1 时若把一击压到 1 点以下，游戏会收到 0 点伤害，
         // 导致目标永远卡在最后一滴血。原本 >=1 点的一击至少保留 1 点。
-        var flooredToMin = false;
+        // 入口段之后游戏还会 ×防御率（正常为 1.0），所以正常场景下保底有效。
         if (data.damage >= Runtime.config.min_applied_damage &&
             newDamage < Runtime.config.min_applied_damage) {
             newDamage = Runtime.config.min_applied_damage;
@@ -703,12 +827,14 @@
             Runtime.stats.flooredToMin += 1;
         }
 
-        logDamageDiagnostic(data, source, category, multiplier, newDamage, effectiveAttacker, victim, victimIsLocal, flooredToMin);
+        logDamageDiagnostic(data, source, stage, category, multiplier, newDamage, effectiveAttacker, victim, victimIsLocal, flooredToMin, victimHp);
 
         try {
             var damageAddr = eventPtr.add(OFF.Dmg_damage);
             damageAddr.writeFloat(newDamage);
             Runtime.stats.multipliedEvents += 1;
+            if (isPreCap) Runtime.stats.preCapMultiplied += 1;
+            else Runtime.stats.postCapMultiplied += 1;
             if (category === Category.SELF) Runtime.stats.multipliedSelf += 1;
             else if (category === Category.MATE) Runtime.stats.multipliedMate += 1;
             else if (category === Category.ENEMY) Runtime.stats.multipliedEnemy += 1;
@@ -718,7 +844,7 @@
                     'multiplied',
                     'info',
                     source + ' [' + category + '] damage ' + data.damage.toFixed(2) + ' -> ' + newDamage.toFixed(2) +
-                    ', type=' + data.type + ', wpn=' + data.wpnIndex,
+                    ', type=' + data.type + ', wpn=' + data.wpnIndex + ', stage=' + stage,
                     500
                 );
             }
@@ -735,6 +861,13 @@
         return context.esp.add(8);
     }
 
+    function eventDataFromTakeDamageStack(context) {
+        // GameManager.TakeDamage 是静态方法：x86 cdecl 下 [ESP+4] 就是
+        // DamageEventData.attacker（没有 this）。40 开火直伤已验证过这个 ABI，
+        // 注意 onEnter 的 esp 指向返回地址，所以是 +4 而不是 +0。
+        return context.esp.add(4);
+    }
+
     function attachHook(name, rva, callbacks) {
         var addr = Runtime.base.add(rva);
         var hook = Interceptor.attach(addr, callbacks);
@@ -749,7 +882,7 @@
                 Runtime.stats.playerHurtEvents += 1;
                 this.depthEntered = true;
                 try {
-                    multiplyDamageEvent(eventDataFromOnEntityHurtStack(this.context), 'Player.OnEntityHurt');
+                    multiplyDamageEvent(eventDataFromOnEntityHurtStack(this.context), 'Player.OnEntityHurt', DamageStage.POST_CAP);
                 } catch (error) {
                     setError('Player.OnEntityHurt onEnter failed', error);
                 }
@@ -767,7 +900,7 @@
                     return;
                 }
                 try {
-                    multiplyDamageEvent(eventDataFromOnEntityHurtStack(this.context), 'Entity.OnEntityHurt');
+                    multiplyDamageEvent(eventDataFromOnEntityHurtStack(this.context), 'Entity.OnEntityHurt', DamageStage.POST_CAP);
                 } catch (error) {
                     setError('Entity.OnEntityHurt onEnter failed', error);
                 }
@@ -826,6 +959,31 @@
                 }
             }
         });
+
+        // 入口段：枪/雷/技能/炮台在游戏「×防御率 → min(剩余血量)」之前乘倍率，
+        // 这样最终伤害 = 原始伤害 × 倍率，和受害者剩余血量无关。
+        // 安装失败不阻断功能：退回「全部在 OnEntityHurt 收尾段处理」（含致死一击跳过）。
+        try {
+            attachHook('GameManager.TakeDamage', RVA.GameManager_TakeDamage, {
+                onEnter: function () {
+                    Runtime.stats.takeDamageCalls += 1;
+                    try {
+                        multiplyDamageEvent(
+                            eventDataFromTakeDamageStack(this.context),
+                            'GameManager.TakeDamage',
+                            DamageStage.PRE_CAP
+                        );
+                    } catch (error) {
+                        setError('GameManager.TakeDamage onEnter failed', error);
+                    }
+                }
+            });
+            Runtime.preCapHookInstalled = true;
+        } catch (error) {
+            Runtime.preCapHookInstalled = false;
+            setError('GameManager.TakeDamage hook install failed', error);
+            log('info', 'GameManager.TakeDamage hook failed; fallback to OnEntityHurt-only mode');
+        }
     }
 
     function cleanupHooks() {
@@ -880,6 +1038,7 @@
         Runtime.enabled = false;
         cleanupHooks();
         Runtime.initialized = false;
+        Runtime.preCapHookInstalled = false;
         clearOwnerMaps("cleanup");
         clearPlayerCache("cleanup");
         Runtime.stats.cleanupCount += 1;
@@ -940,6 +1099,7 @@
             feature_id: Runtime.feature_id,
             enabled: Runtime.enabled,
             initialized: Runtime.initialized,
+            pre_cap_hook_installed: Runtime.preCapHookInstalled,
             module_found: Runtime.module !== null,
             enemy_multiplier: Runtime.config.enemy_multiplier,
             self_multiplier: Runtime.config.self_multiplier,
@@ -962,6 +1122,14 @@
             total_hurt_events: Runtime.stats.totalHurtEvents,
             entity_hurt_events: Runtime.stats.entityHurtEvents,
             player_hurt_events: Runtime.stats.playerHurtEvents,
+            take_damage_calls: Runtime.stats.takeDamageCalls,
+            pre_cap_hurt_events: Runtime.stats.preCapHurtEvents,
+            pre_cap_multiplied: Runtime.stats.preCapMultiplied,
+            post_cap_multiplied: Runtime.stats.postCapMultiplied,
+            skipped_knife_precap: Runtime.stats.skippedKnifeAtPreCap,
+            skipped_non_knife_postcap: Runtime.stats.skippedNonKnifeAtPostCap,
+            skipped_lethal_capped: Runtime.stats.skippedLethalCapped,
+            victim_hp_read_failures: Runtime.stats.victimHpReadFailures,
             multiplied_events: Runtime.stats.multipliedEvents,
             multiplied_enemy: Runtime.stats.multipliedEnemy,
             multiplied_self: Runtime.stats.multipliedSelf,
