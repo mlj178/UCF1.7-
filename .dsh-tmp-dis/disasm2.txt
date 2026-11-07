@@ -1,0 +1,601 @@
+========== ModeBaseNano_PreDamageEvent 0xaf2000
+10AF2000  push     ebp
+10AF2001  mov      ebp, esp
+10AF2003  sub      esp, 0x1c
+10AF2006  cmp      byte ptr [0x10e6a405], 0
+10AF200D  push     ebx
+10AF200E  push     esi
+10AF200F  push     edi
+10AF2010  jne      0x10af2062
+10AF2012  push     0x10e2933c
+10AF2017  call     0x10167c10   ; 0x167c10
+10AF201C  push     0x10e29f00
+10AF2021  call     0x10167c10   ; 0x167c10
+10AF2026  push     0x10e2cc74
+10AF202B  call     0x10167c10   ; 0x167c10
+10AF2030  push     0x10e2d558
+10AF2035  call     0x10167c10   ; 0x167c10
+10AF203A  push     0x10e2d848
+10AF203F  call     0x10167c10   ; 0x167c10
+10AF2044  push     0x10e2e3b4
+10AF2049  call     0x10167c10   ; 0x167c10
+10AF204E  push     0x10e20b8c
+10AF2053  call     0x10167c10   ; 0x167c10
+10AF2058  add      esp, 0x1c
+10AF205B  mov      byte ptr [0x10e6a405], 1
+10AF2062  mov      esi, dword ptr [ebp + 0xc]
+10AF2065  xorps    xmm0, xmm0
+10AF2068  movss    xmm1, dword ptr [esi + 8]
+10AF206D  mov      eax, dword ptr [esi + 0x34]
+10AF2070  mov      edi, dword ptr [esi]
+10AF2072  comiss   xmm1, xmm0
+10AF2075  mov      dword ptr [ebp - 0xc], eax
+10AF2078  seta     byte ptr [ebp - 1]
+10AF207C  cmp      eax, 2
+10AF207F  sete     byte ptr [ebp - 2]
+10AF2083  xor      al, al
+10AF2085  mov      byte ptr [ebp + 0xf], al
+10AF2088  test     edi, edi
+10AF208A  je       0x10af21b3
+10AF2090  mov      edx, dword ptr [0x10e2e3b4]
+10AF2096  mov      eax, dword ptr [edi]
+10AF2098  mov      cl, byte ptr [edx + 0xb4]
+10AF209E  cmp      byte ptr [eax + 0xb4], cl
+10AF20A4  jb       0x10af21b9
+10AF20AA  mov      eax, dword ptr [eax + 0x64]
+10AF20AD  movzx    ecx, cl
+10AF20B0  cmp      dword ptr [eax + ecx*4 - 4], edx
+10AF20B4  jne      0x10af21b9
+10AF20BA  push     0
+10AF20BC  push     edi
+10AF20BD  call     0x10671060   ; System.NumberFormatter$$get_IsZero
+10AF20C2  push     0
+10AF20C4  push     edi
+10AF20C5  mov      byte ptr [ebp + 0xf], al
+10AF20C8  call     0x105ee130   ; Pathfinding.Path$$get_error
+10AF20CD  mov      ebx, dword ptr [ebp + 8]
+10AF20D0  add      esp, 0x10
+10AF20D3  test     al, al
+10AF20D5  je       0x10af2143
+10AF20D7  mov      ecx, dword ptr [ebx + 0xa8]
+10AF20DD  test     ecx, ecx
+10AF20DF  je       0x10af248e
+10AF20E5  push     dword ptr [0x10e29f00]
+10AF20EB  push     dword ptr [esi + 0x3c]
+10AF20EE  push     ecx
+10AF20EF  call     0x109fb840   ; System.Collections.Generic.List<int>$$Contains
+10AF20F4  add      esp, 0xc
+10AF20F7  test     al, al
+10AF20F9  jne      0x10af2143
+10AF20FB  mov      eax, dword ptr [0x10e2cc74]
+10AF2100  movss    xmm0, dword ptr [esi + 8]
+10AF2105  movss    dword ptr [ebp - 8], xmm0
+10AF210A  test     byte ptr [eax + 0xbb], 4
+10AF2111  je       0x10af2127
+10AF2113  cmp      dword ptr [eax + 0x74], 0
+10AF2117  jne      0x10af2127
+10AF2119  push     eax
+10AF211A  call     0x10108970   ; 0x108970
+10AF211F  mov      eax, dword ptr [0x10e2cc74]
+10AF2124  add      esp, 4
+10AF2127  mov      eax, dword ptr [eax + 0x5c]
+10AF212A  movd     xmm0, dword ptr [eax]
+10AF212E  cvtdq2ps xmm0, xmm0
+10AF2131  mulss    xmm0, dword ptr [0x10b99db4]
+10AF2139  mulss    xmm0, dword ptr [ebp - 8]
+10AF213E  movss    dword ptr [esi + 8], xmm0
+10AF2143  cmp      dword ptr [ebp - 0xc], 2
+10AF2147  jne      0x10af21b3
+10AF2149  cmp      byte ptr [ebp - 1], 0
+10AF214D  jne      0x10af216f
+10AF214F  mov      eax, dword ptr [esi + 4]
+10AF2152  test     eax, eax
+10AF2154  je       0x10af248e
+10AF215A  push     0
+10AF215C  push     dword ptr [0x10e20b8c]
+10AF2162  push     eax
+10AF2163  call     0x10b3f190   ; Entity$$FindBuff
+10AF2168  add      esp, 0xc
+10AF216B  test     eax, eax
+10AF216D  je       0x10af21b3
+10AF216F  push     0
+10AF2171  push     edi
+10AF2172  call     0x10b56200   ; Player$$get_nanoRole
+10AF2177  mov      ecx, dword ptr [edi + 0x98]
+10AF217D  add      esp, 8
+10AF2180  movss    xmm0, dword ptr [esi + 8]
+10AF2185  mov      edx, eax
+10AF2187  test     ecx, ecx
+10AF2189  je       0x10af248e
+10AF218F  mov      eax, dword ptr [ebx]
+10AF2191  push     dword ptr [eax + 0x1a0]
+10AF2197  mov      eax, dword ptr [eax + 0x19c]
+10AF219D  push     dword ptr [ecx + 0x3c]
+10AF21A0  push     dword ptr [esi + 0x38]
+10AF21A3  push     ecx
+10AF21A4  movss    dword ptr [esp], xmm0
+10AF21A9  push     edx
+10AF21AA  push     ebx
+10AF21AB  call     eax
+10AF21AD  fstp     dword ptr [esi + 8]
+10AF21B0  add      esp, 0x18
+10AF21B3  mov      edx, dword ptr [0x10e2e3b4]
+10AF21B9  mov      edi, dword ptr [esi + 4]
+10AF21BC  test     edi, edi
+10AF21BE  je       0x10af2487
+10AF21C4  mov      eax, dword ptr [edi]
+10AF21C6  mov      cl, byte ptr [edx + 0xb4]
+10AF21CC  cmp      byte ptr [eax + 0xb4], cl
+10AF21D2  jb       0x10af2487
+10AF21D8  mov      eax, dword ptr [eax + 0x64]
+10AF21DB  movzx    ecx, cl
+10AF21DE  cmp      dword ptr [eax + ecx*4 - 4], edx
+10AF21E2  jne      0x10af2487
+10AF21E8  push     0
+10AF21EA  push     edi
+10AF21EB  call     0x10b56200   ; Player$$get_nanoRole
+10AF21F0  add      esp, 8
+10AF21F3  test     eax, eax
+10AF21F5  jne      0x10af2206
+10AF21F7  mov      ecx, dword ptr [0x10e2933c]
+10AF21FD  mov      dword ptr [ebp - 8], 1
+10AF2204  jmp      0x10af2252
+10AF2206  push     0
+10AF2208  push     edi
+10AF2209  call     0x10b56200   ; Player$$get_nanoRole
+10AF220E  mov      ecx, dword ptr [0x10e2933c]
+10AF2214  add      esp, 8
+10AF2217  cmp      eax, 0x12
+10AF221A  je       0x10af2225
+10AF221C  mov      dword ptr [ebp - 8], 0
+10AF2223  jmp      0x10af2252
+10AF2225  test     byte ptr [ecx + 0xbb], 4
+10AF222C  je       0x10af2243
+10AF222E  cmp      dword ptr [ecx + 0x74], 0
+10AF2232  jne      0x10af2243
+10AF2234  push     ecx
+10AF2235  call     0x10108970   ; 0x108970
+10AF223A  mov      ecx, dword ptr [0x10e2933c]
+10AF2240  add      esp, 4
+10AF2243  mov      eax, dword ptr [ecx + 0x5c]
+10AF2246  xor      edx, edx
+10AF2248  cmp      dword ptr [eax + 4], 3
+10AF224C  sete     dl
+10AF224F  mov      dword ptr [ebp - 8], edx
+10AF2252  test     byte ptr [ecx + 0xbb], 4
+10AF2259  je       0x10af2270
+10AF225B  cmp      dword ptr [ecx + 0x74], 0
+10AF225F  jne      0x10af2270
+10AF2261  push     ecx
+10AF2262  call     0x10108970   ; 0x108970
+10AF2267  mov      ecx, dword ptr [0x10e2933c]
+10AF226D  add      esp, 4
+10AF2270  cmp      byte ptr [0x10e6a439], 0
+10AF2277  jne      0x10af2293
+10AF2279  push     0x10e2933c
+10AF227E  call     0x10167c10   ; 0x167c10
+10AF2283  mov      ecx, dword ptr [0x10e2933c]
+10AF2289  add      esp, 4
+10AF228C  mov      byte ptr [0x10e6a439], 1
+10AF2293  test     byte ptr [ecx + 0xbb], 4
+10AF229A  je       0x10af22b1
+10AF229C  cmp      dword ptr [ecx + 0x74], 0
+10AF22A0  jne      0x10af22b1
+10AF22A2  push     ecx
+10AF22A3  call     0x10108970   ; 0x108970
+10AF22A8  mov      ecx, dword ptr [0x10e2933c]
+10AF22AE  add      esp, 4
+10AF22B1  mov      ecx, dword ptr [ecx + 0x5c]
+10AF22B4  xor      ebx, ebx
+10AF22B6  mov      eax, dword ptr [ebp - 8]
+10AF22B9  movzx    eax, al
+10AF22BC  cmp      byte ptr [ecx + 0x20], bl
+10AF22BF  cmove    ebx, eax
+10AF22C2  mov      al, byte ptr [ebp + 0xf]
+10AF22C5  and      bl, al
+10AF22C7  and      al, byte ptr [ebp - 2]
+10AF22CA  and      bl, byte ptr [ebp - 2]
+10AF22CD  test     byte ptr [ebp - 1], al
+10AF22D0  je       0x10af247c
+10AF22D6  mov      eax, dword ptr [edi + 0xf4]
+10AF22DC  movups   xmm0, xmmword ptr [edi + 0xe4]
+10AF22E3  mov      dword ptr [ebp + 0xc], eax
+10AF22E6  mov      eax, dword ptr [0x10e2d848]
+10AF22EB  movups   xmmword ptr [ebp - 0x1c], xmm0
+10AF22EF  test     byte ptr [eax + 0xbb], 4
+10AF22F6  je       0x10af230b
+10AF22F8  cmp      dword ptr [eax + 0x74], 0
+10AF22FC  jne      0x10af230b
+10AF22FE  push     eax
+10AF22FF  call     0x10108970   ; 0x108970
+10AF2304  movups   xmm0, xmmword ptr [ebp - 0x1c]
+10AF2308  add      esp, 4
+10AF230B  mov      ecx, dword ptr [ebp + 0xc]
+10AF230E  push     0
+10AF2310  sub      esp, 0x14
+10AF2313  mov      eax, esp
+10AF2315  movups   xmmword ptr [eax], xmm0
+10AF2318  mov      dword ptr [eax + 0x10], ecx
+10AF231B  call     0x107febb0   ; CodeStage.AntiCheat.ObscuredTypes.ObscuredInt$$op_Implicit
+10AF2320  add      esp, 0x18
+10AF2323  test     eax, eax
+10AF2325  jle      0x10af247c
+10AF232B  mov      dword ptr [esi + 8], 0
+10AF2332  mov      eax, dword ptr [0x10e2d848]
+10AF2337  movups   xmm0, xmmword ptr [edi + 0xe4]
+10AF233E  mov      ebx, dword ptr [edi + 0xf4]
+10AF2344  test     byte ptr [eax + 0xbb], 4
+10AF234B  movups   xmmword ptr [ebp - 0x1c], xmm0
+10AF234F  je       0x10af2364
+10AF2351  cmp      dword ptr [eax + 0x74], 0
+10AF2355  jne      0x10af2364
+10AF2357  push     eax
+10AF2358  call     0x10108970   ; 0x108970
+10AF235D  movups   xmm0, xmmword ptr [ebp - 0x1c]
+10AF2361  add      esp, 4
+10AF2364  push     0
+10AF2366  sub      esp, 0x14
+10AF2369  mov      eax, esp
+10AF236B  movups   xmmword ptr [eax], xmm0
+10AF236E  mov      dword ptr [eax + 0x10], ebx
+10AF2371  call     0x107febb0   ; CodeStage.AntiCheat.ObscuredTypes.ObscuredInt$$op_Implicit
+10AF2376  push     0
+10AF2378  dec      eax
+10AF2379  push     eax
+10AF237A  push     edi
+10AF237B  call     0x10b533a0   ; Player$$SetNanoClothCount
+10AF2380  mov      eax, dword ptr [0x10e2933c]
+10AF2385  add      esp, 0x24
+10AF2388  mov      ebx, dword ptr [esi]
+10AF238A  test     byte ptr [eax + 0xbb], 4
+10AF2391  je       0x10af23a7
+10AF2393  cmp      dword ptr [eax + 0x74], 0
+10AF2397  jne      0x10af23a7
+10AF2399  push     eax
+10AF239A  call     0x10108970   ; 0x108970
+10AF239F  mov      eax, dword ptr [0x10e2933c]
+10AF23A4  add      esp, 4
+10AF23A7  mov      eax, dword ptr [eax + 0x5c]
+10AF23AA  mov      edi, dword ptr [eax]
+10AF23AC  mov      eax, dword ptr [0x10e2d558]
+10AF23B1  test     byte ptr [eax + 0xbb], 4
+10AF23B8  je       0x10af23c9
+10AF23BA  cmp      dword ptr [eax + 0x74], 0
+10AF23BE  jne      0x10af23c9
+10AF23C0  push     eax
+10AF23C1  call     0x10108970   ; 0x108970
+10AF23C6  add      esp, 4
+10AF23C9  push     0
+10AF23CB  push     edi
+10AF23CC  push     ebx
+10AF23CD  call     0x104ea220   ; UnityEngine.Object$$op_Equality
+10AF23D2  add      esp, 0xc
+10AF23D5  test     al, al
+10AF23D7  jne      0x10af2456
+10AF23D9  mov      eax, dword ptr [0x10e2933c]
+10AF23DE  mov      edi, dword ptr [esi + 4]
+10AF23E1  test     byte ptr [eax + 0xbb], 4
+10AF23E8  je       0x10af23fe
+10AF23EA  cmp      dword ptr [eax + 0x74], 0
+10AF23EE  jne      0x10af23fe
+10AF23F0  push     eax
+10AF23F1  call     0x10108970   ; 0x108970
+10AF23F6  mov      eax, dword ptr [0x10e2933c]
+10AF23FB  add      esp, 4
+10AF23FE  mov      eax, dword ptr [eax + 0x5c]
+10AF2401  mov      ebx, dword ptr [eax]
+10AF2403  mov      eax, dword ptr [0x10e2d558]
+10AF2408  test     byte ptr [eax + 0xbb], 4
+10AF240F  je       0x10af2420
+10AF2411  cmp      dword ptr [eax + 0x74], 0
+10AF2415  jne      0x10af2420
+10AF2417  push     eax
+10AF2418  call     0x10108970   ; 0x108970
+10AF241D  add      esp, 4
+10AF2420  push     0
+10AF2422  push     ebx
+10AF2423  push     edi
+10AF2424  call     0x104ea220   ; UnityEngine.Object$$op_Equality
+10AF2429  add      esp, 0xc
+10AF242C  test     al, al
+10AF242E  je       0x10af2480
+10AF2430  mov      ecx, dword ptr [ebp + 8]
+10AF2433  mov      eax, dword ptr [ecx + 0x78]
+10AF2436  test     eax, eax
+10AF2438  je       0x10af248e
+10AF243A  push     0
+10AF243C  push     dword ptr [eax + 0x24]
+10AF243F  push     ecx
+10AF2440  call     0x10af1ce0   ; ModeBase_Nano$$PlayNanoClothMark
+10AF2445  add      esp, 0xc
+10AF2448  mov      dword ptr [esi + 0x34], 4
+10AF244F  pop      edi
+10AF2450  pop      esi
+10AF2451  pop      ebx
+10AF2452  mov      esp, ebp
+10AF2454  pop      ebp
+10AF2455  ret      
+
+========== ModeNano6_PostDamageEvent 0xb48e10
+10B48E10  push     ebp
+10B48E11  mov      ebp, esp
+10B48E13  cmp      byte ptr [0x10e6a78f], 0
+10B48E1A  jne      0x10b48e3a
+10B48E1C  push     0x10e2d558
+10B48E21  call     0x10167c10   ; 0x167c10
+10B48E26  push     0x10e2e3b4
+10B48E2B  call     0x10167c10   ; 0x167c10
+10B48E30  add      esp, 8
+10B48E33  mov      byte ptr [0x10e6a78f], 1
+10B48E3A  push     ebx
+10B48E3B  mov      ebx, dword ptr [ebp + 0xc]
+10B48E3E  push     esi
+10B48E3F  push     edi
+10B48E40  push     0
+10B48E42  push     ebx
+10B48E43  push     dword ptr [ebp + 8]
+10B48E46  call     0x10af1eb0   ; ModeBase_Nano$$PostDamageEvent
+10B48E4B  mov      esi, dword ptr [ebx]
+10B48E4D  add      esp, 0xc
+10B48E50  mov      edx, dword ptr [0x10e2e3b4]
+10B48E56  test     esi, esi
+10B48E58  jne      0x10b48e5e
+10B48E5A  xor      edi, edi
+10B48E5C  jmp      0x10b48e87
+10B48E5E  mov      eax, dword ptr [esi]
+10B48E60  mov      cl, byte ptr [edx + 0xb4]
+10B48E66  cmp      byte ptr [eax + 0xb4], cl
+10B48E6C  jb       0x10b48e7e
+10B48E6E  mov      eax, dword ptr [eax + 0x64]
+10B48E71  movzx    ecx, cl
+10B48E74  cmp      dword ptr [eax + ecx*4 - 4], edx
+10B48E78  jne      0x10b48e7e
+10B48E7A  mov      al, 1
+10B48E7C  jmp      0x10b48e80
+10B48E7E  xor      al, al
+10B48E80  xor      edi, edi
+10B48E82  test     al, al
+10B48E84  cmovne   edi, esi
+10B48E87  mov      eax, dword ptr [ebx + 4]
+10B48E8A  test     eax, eax
+10B48E8C  jne      0x10b48e92
+10B48E8E  xor      esi, esi
+10B48E90  jmp      0x10b48ebc
+10B48E92  mov      eax, dword ptr [eax]
+10B48E94  mov      cl, byte ptr [edx + 0xb4]
+10B48E9A  cmp      byte ptr [eax + 0xb4], cl
+10B48EA0  jb       0x10b48eb2
+10B48EA2  mov      eax, dword ptr [eax + 0x64]
+10B48EA5  movzx    ecx, cl
+10B48EA8  cmp      dword ptr [eax + ecx*4 - 4], edx
+10B48EAC  jne      0x10b48eb2
+10B48EAE  mov      al, 1
+10B48EB0  jmp      0x10b48eb4
+10B48EB2  xor      al, al
+10B48EB4  xor      esi, esi
+10B48EB6  test     al, al
+10B48EB8  cmovne   esi, dword ptr [ebx + 4]
+10B48EBC  mov      eax, dword ptr [0x10e2d558]
+10B48EC1  test     byte ptr [eax + 0xbb], 4
+10B48EC8  je       0x10b48ed9
+10B48ECA  cmp      dword ptr [eax + 0x74], 0
+10B48ECE  jne      0x10b48ed9
+10B48ED0  push     eax
+10B48ED1  call     0x10108970   ; 0x108970
+10B48ED6  add      esp, 4
+10B48ED9  push     0
+10B48EDB  push     edi
+10B48EDC  call     0x104ea360   ; UnityEngine.Object$$op_Implicit
+10B48EE1  add      esp, 8
+10B48EE4  test     al, al
+10B48EE6  je       0x10b48fba
+10B48EEC  mov      eax, dword ptr [0x10e2d558]
+10B48EF1  test     byte ptr [eax + 0xbb], 4
+10B48EF8  je       0x10b48f09
+10B48EFA  cmp      dword ptr [eax + 0x74], 0
+10B48EFE  jne      0x10b48f09
+10B48F00  push     eax
+10B48F01  call     0x10108970   ; 0x108970
+10B48F06  add      esp, 4
+10B48F09  push     0
+10B48F0B  push     esi
+10B48F0C  call     0x104ea360   ; UnityEngine.Object$$op_Implicit
+10B48F11  add      esp, 8
+10B48F14  test     al, al
+10B48F16  je       0x10b48fba
+10B48F1C  test     edi, edi
+10B48F1E  je       0x10b48fbf
+10B48F24  push     0
+10B48F26  push     edi
+10B48F27  call     0x10b56050   ; Player$$get_isNanoGhost
+10B48F2C  add      esp, 8
+10B48F2F  test     al, al
+10B48F31  je       0x10b48fba
+10B48F37  cmp      dword ptr [ebx + 0x34], 4
+10B48F3B  je       0x10b48f94
+10B48F3D  test     esi, esi
+10B48F3F  je       0x10b48fbf
+10B48F41  push     0
+10B48F43  push     esi
+10B48F44  call     0x10b56200   ; Player$$get_nanoRole
+10B48F49  add      esp, 8
+10B48F4C  cmp      eax, 0x15
+10B48F4F  jne      0x10b48fba
+10B48F51  push     0
+10B48F53  push     edi
+10B48F54  lea      ebx, [eax - 0x12]
+10B48F57  lea      esi, [eax + 0x4f]
+10B48F5A  call     0x10b56200   ; Player$$get_nanoRole
+10B48F5F  cmp      eax, 0xa
+10B48F62  mov      ecx, 0xc8
+10B48F67  cmove    esi, ecx
+10B48F6A  push     0
+10B48F6C  push     edi
+10B48F6D  call     0x10b56240   ; Player$$get_score
+10B48F72  push     0
+10B48F74  add      eax, esi
+10B48F76  push     eax
+10B48F77  push     edi
+10B48F78  call     0x10b568d0   ; Player$$set_score
+10B48F7D  add      esp, 0x1c
+10B48F80  push     0
+10B48F82  push     ebx
+10B48F83  push     edi
+10B48F84  push     dword ptr [ebp + 8]
+10B48F87  call     0x10aeec40   ; ModeBase_Nano$$AddNanoGhostExp
+10B48F8C  add      esp, 0x10
+10B48F8F  pop      edi
+10B48F90  pop      esi
+10B48F91  pop      ebx
+10B48F92  pop      ebp
+10B48F93  ret      
+
+========== ModeBaseNano_PostDamageEvent 0xaf1eb0
+10AF1EB0  push     ebp
+10AF1EB1  mov      ebp, esp
+10AF1EB3  push     ecx
+10AF1EB4  cmp      byte ptr [0x10e6a407], 0
+10AF1EBB  jne      0x10af1ee5
+10AF1EBD  push     0x10e29974
+10AF1EC2  call     0x10167c10   ; 0x167c10
+10AF1EC7  push     0x10e2e3b4
+10AF1ECC  call     0x10167c10   ; 0x167c10
+10AF1ED1  push     0x10e2007c
+10AF1ED6  call     0x10167c10   ; 0x167c10
+10AF1EDB  add      esp, 0xc
+10AF1EDE  mov      byte ptr [0x10e6a407], 1
+10AF1EE5  push     ebx
+10AF1EE6  push     esi
+10AF1EE7  mov      esi, dword ptr [ebp + 0xc]
+10AF1EEA  mov      ebx, dword ptr [esi]
+10AF1EEC  test     ebx, ebx
+10AF1EEE  je       0x10af1ff1
+10AF1EF4  mov      ecx, dword ptr [0x10e2e3b4]
+10AF1EFA  mov      eax, dword ptr [ebx]
+10AF1EFC  mov      dl, byte ptr [ecx + 0xb4]
+10AF1F02  cmp      byte ptr [eax + 0xb4], dl
+10AF1F08  jb       0x10af1ff1
+10AF1F0E  mov      eax, dword ptr [eax + 0x64]
+10AF1F11  push     edi
+10AF1F12  movzx    edi, dl
+10AF1F15  mov      dword ptr [ebp + 0xc], edi
+10AF1F18  cmp      dword ptr [eax + edi*4 - 4], ecx
+10AF1F1C  jne      0x10af1ff0
+10AF1F22  mov      edi, dword ptr [esi + 4]
+10AF1F25  test     edi, edi
+10AF1F27  je       0x10af1ff0
+10AF1F2D  mov      eax, dword ptr [edi]
+10AF1F2F  cmp      byte ptr [eax + 0xb4], dl
+10AF1F35  jb       0x10af1ff0
+10AF1F3B  mov      eax, dword ptr [eax + 0x64]
+10AF1F3E  mov      edx, dword ptr [ebp + 0xc]
+10AF1F41  cmp      dword ptr [eax + edx*4 - 4], ecx
+10AF1F45  jne      0x10af1ff0
+10AF1F4B  cmp      dword ptr [edi + 0x20], 0
+10AF1F4F  jne      0x10af1f74
+10AF1F51  push     0
+10AF1F53  push     dword ptr [0x10e2007c]
+10AF1F59  sub      esp, 8
+10AF1F5C  mov      dword ptr [esp + 4], 0x3dcccccd
+10AF1F64  mov      dword ptr [esp], 0x3e99999a
+10AF1F6B  push     edi
+10AF1F6C  call     0x10b3ee70   ; Entity$$AddSpeedPenalty
+10AF1F71  add      esp, 0x14
+10AF1F74  cmp      dword ptr [esi + 0x34], 4
+10AF1F78  jne      0x10af1ff0
+10AF1F7A  movss    xmm0, dword ptr [esi + 8]
+10AF1F7F  comiss   xmm0, dword ptr [0x10b99d50]
+10AF1F86  jbe      0x10af1ff0
+10AF1F88  push     0
+10AF1F8A  push     ebx
+10AF1F8B  call     0x10b50810   ; Player$$get_nickName
+10AF1F90  push     0
+10AF1F92  push     edi
+10AF1F93  mov      dword ptr [ebp - 4], eax
+10AF1F96  call     0x10b50810   ; Player$$get_nickName
+10AF1F9B  push     0
+10AF1F9D  push     esi
+10AF1F9E  mov      dword ptr [ebp + 0xc], eax
+10AF1FA1  call     0x10b3d1b0   ; DamageEventData$$get_killMsgIcon
+10AF1FA6  mov      ecx, dword ptr [0x10e29974]
+10AF1FAC  add      esp, 0x18
+10AF1FAF  mov      esi, eax
+10AF1FB1  test     byte ptr [ecx + 0xbb], 4
+10AF1FB8  je       0x10af1fc9
+10AF1FBA  cmp      dword ptr [ecx + 0x74], 0
+10AF1FBE  jne      0x10af1fc9
+10AF1FC0  push     ecx
+10AF1FC1  call     0x10108970   ; 0x108970
+10AF1FC6  add      esp, 4
+10AF1FC9  push     0
+10AF1FCB  push     esi
+10AF1FCC  push     dword ptr [ebp + 0xc]
+10AF1FCF  push     dword ptr [ebp - 4]
+10AF1FD2  call     0x10b0a300   ; HUD_KillMsg$$NanoInfect
+10AF1FD7  mov      eax, dword ptr [ebp + 8]
+10AF1FDA  mov      ecx, dword ptr [eax]
+10AF1FDC  push     dword ptr [ecx + 0x1a8]
+10AF1FE2  push     edi
+10AF1FE3  push     ebx
+10AF1FE4  push     eax
+10AF1FE5  mov      eax, dword ptr [ecx + 0x1a4]
+10AF1FEB  call     eax
+10AF1FED  add      esp, 0x20
+10AF1FF0  pop      edi
+10AF1FF1  pop      esi
+10AF1FF2  pop      ebx
+10AF1FF3  mov      esp, ebp
+10AF1FF5  pop      ebp
+10AF1FF6  ret      
+
+========== ModeBaseNano_InvalidDmgCheck 0xaf0b20
+10AF0B20  push     ebp
+10AF0B21  mov      ebp, esp
+10AF0B23  cmp      byte ptr [0x10e6a404], 0
+10AF0B2A  jne      0x10af0b40
+10AF0B2C  push     0x10e2933c
+10AF0B31  call     0x10167c10   ; 0x167c10
+10AF0B36  add      esp, 4
+10AF0B39  mov      byte ptr [0x10e6a404], 1
+10AF0B40  mov      eax, dword ptr [0x10e2933c]
+10AF0B45  test     byte ptr [eax + 0xbb], 4
+10AF0B4C  je       0x10af0b62
+10AF0B4E  cmp      dword ptr [eax + 0x74], 0
+10AF0B52  jne      0x10af0b62
+10AF0B54  push     eax
+10AF0B55  call     0x10108970   ; 0x108970
+10AF0B5A  mov      eax, dword ptr [0x10e2933c]
+10AF0B5F  add      esp, 4
+10AF0B62  cmp      byte ptr [0x10e6a439], 0
+10AF0B69  jne      0x10af0b84
+10AF0B6B  push     0x10e2933c
+10AF0B70  call     0x10167c10   ; 0x167c10
+10AF0B75  mov      eax, dword ptr [0x10e2933c]
+10AF0B7A  add      esp, 4
+10AF0B7D  mov      byte ptr [0x10e6a439], 1
+10AF0B84  test     byte ptr [eax + 0xbb], 4
+10AF0B8B  je       0x10af0ba1
+10AF0B8D  cmp      dword ptr [eax + 0x74], 0
+10AF0B91  jne      0x10af0ba1
+10AF0B93  push     eax
+10AF0B94  call     0x10108970   ; 0x108970
+10AF0B99  mov      eax, dword ptr [0x10e2933c]
+10AF0B9E  add      esp, 4
+10AF0BA1  mov      eax, dword ptr [eax + 0x5c]
+10AF0BA4  cmp      byte ptr [eax + 0x20], 0
+10AF0BA8  je       0x10af0bce
+10AF0BAA  mov      eax, dword ptr [ebp + 0xc]
+10AF0BAD  mov      ecx, dword ptr [eax + 4]
+10AF0BB0  test     ecx, ecx
+10AF0BB2  je       0x10af0bd0
+10AF0BB4  cmp      dword ptr [ecx + 0x20], 1
+10AF0BB8  je       0x10af0bc7
+10AF0BBA  mov      ecx, dword ptr [eax + 0x34]
+10AF0BBD  cmp      ecx, 1
+10AF0BC0  je       0x10af0bc7
+10AF0BC2  cmp      ecx, 3
+10AF0BC5  jne      0x10af0bce
+10AF0BC7  mov      dword ptr [eax + 0x34], 0
+10AF0BCE  pop      ebp
+10AF0BCF  ret      
+

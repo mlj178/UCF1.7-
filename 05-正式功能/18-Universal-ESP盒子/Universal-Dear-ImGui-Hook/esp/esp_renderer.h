@@ -12,8 +12,9 @@ public:
     static void DrawBox(const Vector2& center, float width, float height,
                        const ImVec4& color, float thickness = 1.5f);
     // 血量覆盖层：按 ESPState 里的 HealthMode / HealthDisplay 决定画血条、数值或两者。
+    // isEnemy 决定配色：敌人红色、队友蓝色（与方框的敌我配色一致）。
     static void DrawHealthOverlay(const Vector2& center, float width, float height,
-                                  const PlayerHealthInfo& health);
+                                  const PlayerHealthInfo& health, bool isEnemy);
 
     static ImVec4 GetPlayerColor(void* player, void* localPlayer);
 

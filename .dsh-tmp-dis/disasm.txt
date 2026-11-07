@@ -1,0 +1,1642 @@
+==================== Entity_OnEntityHurt RVA=0xb3f470 ====================
+10B3F470  push     ebp                                      
+10B3F471  mov      ebp, esp                                 
+10B3F473  cmp      dword ptr [ebp + 0x40], 4                
+10B3F477  je       0x10b3f49b                               
+10B3F479  mov      eax, dword ptr [ebp + 8]                 
+10B3F47C  mov      ecx, dword ptr [eax + 0x1c]              
+10B3F47F  test     ecx, ecx                                 
+10B3F481  je       0x10b3f49d                               
+10B3F483  movss    xmm0, dword ptr [ebp + 0x14]             
+10B3F488  cvtps2pd xmm0, xmm0                               
+10B3F48B  push     0                                        
+10B3F48D  cvttsd2si eax, xmm0                                
+10B3F491  push     eax                                      
+10B3F492  push     ecx                                      
+10B3F493  call     0x10ae45b0                               HealthData$$Hurt  ; rva=0xae45b0
+10B3F498  add      esp, 0xc                                 
+10B3F49B  pop      ebp                                      
+10B3F49C  ret                                               
+
+==================== Player_OnEntityHurt RVA=0xb516b0 ====================
+10B516B0  push     ebp                                      
+10B516B1  mov      ebp, esp                                 
+10B516B3  movups   xmm0, xmmword ptr [ebp + 0xc]            
+10B516B7  push     esi                                      
+10B516B8  mov      esi, dword ptr [ebp + 8]                 
+10B516BB  push     0                                        
+10B516BD  sub      esp, 0x48                                
+10B516C0  mov      eax, esp                                 
+10B516C2  push     esi                                      
+10B516C3  movups   xmmword ptr [eax], xmm0                  
+10B516C6  movups   xmm0, xmmword ptr [ebp + 0x1c]           
+10B516CA  movups   xmmword ptr [eax + 0x10], xmm0           
+10B516CE  movups   xmm0, xmmword ptr [ebp + 0x2c]           
+10B516D2  movups   xmmword ptr [eax + 0x20], xmm0           
+10B516D6  movups   xmm0, xmmword ptr [ebp + 0x3c]           
+10B516DA  movups   xmmword ptr [eax + 0x30], xmm0           
+10B516DE  movq     xmm0, qword ptr [ebp + 0x4c]             
+10B516E3  movq     qword ptr [eax + 0x40], xmm0             
+10B516E8  call     0x10b3f470                               Entity$$OnEntityHurt  ; rva=0xb3f470
+10B516ED  mov      edx, dword ptr [esi + 0x5c]              
+10B516F0  add      esp, 0x50                                
+10B516F3  test     edx, edx                                 
+10B516F5  je       0x10b51726                               
+10B516F7  movq     xmm0, qword ptr [ebp + 0x18]             
+10B516FC  mov      eax, dword ptr [ebp + 0x20]              
+10B516FF  push     0                                        
+10B51701  sub      esp, 0xc                                 
+10B51704  mov      ecx, esp                                 
+10B51706  push     edx                                      
+10B51707  movq     qword ptr [ecx], xmm0                    
+10B5170B  mov      dword ptr [ecx + 8], eax                 
+10B5170E  call     0x10b38fb0                               CharacterModel$$PlayHitAnim  ; rva=0xb38fb0
+10B51713  push     0                                        
+10B51715  call     0x103f2540                               UnityEngine.Time$$get_time  ; rva=0x3f2540
+10B5171A  add      esp, 0x18                                
+10B5171D  fstp     dword ptr [esi + 0xf8]                   
+10B51723  pop      esi                                      
+10B51724  pop      ebp                                      
+10B51725  ret                                               
+
+==================== GameManager_TakeDamage RVA=0xafc1c0 ====================
+10AFC1C0  push     ebp                                      
+10AFC1C1  mov      ebp, esp                                 
+10AFC1C3  sub      esp, 0xac                                
+10AFC1C9  cmp      byte ptr [0x10e6a47b], 0                 
+10AFC1D0  push     ebx                                      
+10AFC1D1  push     esi                                      
+10AFC1D2  push     edi                                      
+10AFC1D3  jne      0x10afc225                               
+10AFC1D5  push     0x10e2933c                               
+10AFC1DA  call     0x10167c10                                 ; rva=0x167c10
+10AFC1DF  push     0x10e2d558                               
+10AFC1E4  call     0x10167c10                                 ; rva=0x167c10
+10AFC1E9  push     0x10e2d848                               
+10AFC1EE  call     0x10167c10                                 ; rva=0x167c10
+10AFC1F3  push     0x10e288b0                               
+10AFC1F8  call     0x10167c10                                 ; rva=0x167c10
+10AFC1FD  push     0x10e2e568                               
+10AFC202  call     0x10167c10                                 ; rva=0x167c10
+10AFC207  push     0x10e299dc                               
+10AFC20C  call     0x10167c10                                 ; rva=0x167c10
+10AFC211  push     0x10e21ed0                               
+10AFC216  call     0x10167c10                                 ; rva=0x167c10
+10AFC21B  add      esp, 0x1c                                
+10AFC21E  mov      byte ptr [0x10e6a47b], 1                 
+10AFC225  mov      eax, dword ptr [0x10e2933c]              
+10AFC22A  test     byte ptr [eax + 0xbb], 4                 
+10AFC231  je       0x10afc247                               
+10AFC233  cmp      dword ptr [eax + 0x74], 0                
+10AFC237  jne      0x10afc247                               
+10AFC239  push     eax                                      
+10AFC23A  call     0x10108970                                 ; rva=0x108970
+10AFC23F  mov      eax, dword ptr [0x10e2933c]              
+10AFC244  add      esp, 4                                   
+10AFC247  mov      eax, dword ptr [eax + 0x5c]              
+10AFC24A  mov      eax, dword ptr [eax + 0x24]              
+10AFC24D  test     eax, eax                                 
+10AFC24F  je       0x10afc260                               
+10AFC251  push     0                                        
+10AFC253  lea      ecx, [ebp + 8]                           
+10AFC256  push     ecx                                      
+10AFC257  push     eax                                      
+10AFC258  call     0x10b6f420                               HUD_KillMark.KillMarkEvent$$Invoke  ; rva=0xb6f420
+10AFC25D  add      esp, 0xc                                 
+10AFC260  cmp      dword ptr [ebp + 0x3c], 0                
+10AFC264  je       0x10afc87c                               
+10AFC26A  mov      eax, dword ptr [ebp + 8]                 
+10AFC26D  mov      edi, dword ptr [ebp + 0x2c]              
+10AFC270  movq     xmm0, qword ptr [ebp + 0x20]             
+10AFC275  mov      esi, dword ptr [ebp + 0xc]               
+10AFC278  push     0                                        
+10AFC27A  push     dword ptr [0x10e2e568]                   
+10AFC280  mov      dword ptr [ebp - 0x10], eax              
+10AFC283  mov      eax, dword ptr [ebp + 0x28]              
+10AFC286  push     edi                                      
+10AFC287  movq     qword ptr [ebp - 0x1c], xmm0             
+10AFC28C  mov      dword ptr [ebp - 8], eax                 
+10AFC28F  call     0x10741660                               System.String$$Equals  ; rva=0x741660
+10AFC294  add      esp, 0xc                                 
+10AFC297  test     al, al                                   
+10AFC299  je       0x10afc2a1                               
+10AFC29B  mov      byte ptr [ebp - 4], 1                    
+10AFC29F  jmp      0x10afc2b5                               
+10AFC2A1  push     0                                        
+10AFC2A3  push     dword ptr [0x10e288b0]                   
+10AFC2A9  push     edi                                      
+10AFC2AA  call     0x10741660                               System.String$$Equals  ; rva=0x741660
+10AFC2AF  add      esp, 0xc                                 
+10AFC2B2  mov      byte ptr [ebp - 4], al                   
+10AFC2B5  push     0                                        
+10AFC2B7  push     dword ptr [ebp - 4]                      
+10AFC2BA  lea      eax, [ebp + 0x40]                        
+10AFC2BD  push     eax                                      
+10AFC2BE  call     0x10b3d560                               DamageTag$$set_isHitLower  ; rva=0xb3d560
+10AFC2C3  add      esp, 0xc                                 
+10AFC2C6  test     esi, esi                                 
+10AFC2C8  je       0x10afc883                               
+10AFC2CE  cmp      byte ptr [esi + 0x18], 0                 
+10AFC2D2  je       0x10afc2db                               
+10AFC2D4  mov      dword ptr [ebp + 0x10], 0                
+10AFC2DB  mov      ecx, dword ptr [0x10e2933c]              
+10AFC2E1  test     byte ptr [ecx + 0xbb], 4                 
+10AFC2E8  je       0x10afc2ff                               
+10AFC2EA  cmp      dword ptr [ecx + 0x74], 0                
+10AFC2EE  jne      0x10afc2ff                               
+10AFC2F0  push     ecx                                      
+10AFC2F1  call     0x10108970                                 ; rva=0x108970
+10AFC2F6  mov      ecx, dword ptr [0x10e2933c]              
+10AFC2FC  add      esp, 4                                   
+10AFC2FF  mov      eax, dword ptr [ecx + 0x5c]              
+10AFC302  mov      eax, dword ptr [eax + 0x28]              
+10AFC305  test     eax, eax                                 
+10AFC307  je       0x10afc31e                               
+10AFC309  push     0                                        
+10AFC30B  lea      ecx, [ebp + 8]                           
+10AFC30E  push     ecx                                      
+10AFC30F  push     eax                                      
+10AFC310  call     0x10b6f420                               HUD_KillMark.KillMarkEvent$$Invoke  ; rva=0xb6f420
+10AFC315  mov      ecx, dword ptr [0x10e2933c]              
+10AFC31B  add      esp, 0xc                                 
+10AFC31E  test     byte ptr [ecx + 0xbb], 4                 
+10AFC325  je       0x10afc33c                               
+10AFC327  cmp      dword ptr [ecx + 0x74], 0                
+10AFC32B  jne      0x10afc33c                               
+10AFC32D  push     ecx                                      
+10AFC32E  call     0x10108970                                 ; rva=0x108970
+10AFC333  mov      ecx, dword ptr [0x10e2933c]              
+10AFC339  add      esp, 4                                   
+10AFC33C  mov      eax, dword ptr [ecx + 0x5c]              
+10AFC33F  mov      eax, dword ptr [eax + 0x2c]              
+10AFC342  test     eax, eax                                 
+10AFC344  je       0x10afc35b                               
+10AFC346  push     0                                        
+10AFC348  lea      ecx, [ebp + 8]                           
+10AFC34B  push     ecx                                      
+10AFC34C  push     eax                                      
+10AFC34D  call     0x10b6f420                               HUD_KillMark.KillMarkEvent$$Invoke  ; rva=0xb6f420
+10AFC352  mov      ecx, dword ptr [0x10e2933c]              
+10AFC358  add      esp, 0xc                                 
+10AFC35B  cmp      byte ptr [esi + 0x18], 0                 
+10AFC35F  je       0x10afc368                               
+10AFC361  mov      dword ptr [ebp + 0x10], 0                
+10AFC368  cmp      byte ptr [ebp + 0x4c], 0                 
+10AFC36C  je       0x10afc378                               
+10AFC36E  movss    xmm1, dword ptr [0x10b99d68]             
+10AFC376  jmp      0x10afc3a5                               
+10AFC378  movss    xmm0, dword ptr [esi + 0x14]             
+10AFC37D  push     0                                        
+10AFC37F  sub      esp, 8                                   
+10AFC382  movss    dword ptr [esp + 4], xmm0                
+10AFC388  mov      dword ptr [esp], 0                       
+10AFC38F  call     0x104e32e0                               UnityEngine.Mathf$$Max  ; rva=0x4e32e0
+10AFC394  mov      ecx, dword ptr [0x10e2933c]              
+10AFC39A  add      esp, 0xc                                 
+10AFC39D  fstp     dword ptr [ebp - 4]                      
+10AFC3A0  movss    xmm1, dword ptr [ebp - 4]                
+10AFC3A5  cmp      byte ptr [esi + 0x31], 0                 
+10AFC3A9  movss    xmm0, dword ptr [ebp + 0x10]             
+10AFC3AE  mov      ebx, dword ptr [ebp + 0x3c]              
+10AFC3B1  mulss    xmm0, xmm1                               
+10AFC3B5  mov      dword ptr [ebp - 4], ebx                 
+10AFC3B8  cvtps2pd xmm0, xmm0                               
+10AFC3BB  cvttsd2si eax, xmm0                                
+10AFC3BF  mov      dword ptr [ebp - 0xc], eax               
+10AFC3C2  jne      0x10afc414                               
+10AFC3C4  test     byte ptr [ecx + 0xbb], 4                 
+10AFC3CB  mov      eax, dword ptr [ebp + 0x34]              
+10AFC3CE  mov      ebx, dword ptr [ebp + 0x30]              
+10AFC3D1  mov      dword ptr [ebp - 0x14], eax              
+10AFC3D4  je       0x10afc3e8                               
+10AFC3D6  cmp      dword ptr [ecx + 0x74], 0                
+10AFC3DA  jne      0x10afc3e8                               
+10AFC3DC  push     ecx                                      
+10AFC3DD  call     0x10108970                                 ; rva=0x108970
+10AFC3E2  mov      eax, dword ptr [ebp - 0x14]              
+10AFC3E5  add      esp, 4                                   
+10AFC3E8  movq     xmm0, qword ptr [ebp - 0x1c]             
+10AFC3ED  mov      ecx, dword ptr [ebp - 8]                 
+10AFC3F0  push     0                                        
+10AFC3F2  push     eax                                      
+10AFC3F3  push     edi                                      
+10AFC3F4  push     ebx                                      
+10AFC3F5  mov      ebx, dword ptr [ebp - 4]                 
+10AFC3F8  push     ebx                                      
+10AFC3F9  sub      esp, 0xc                                 
+10AFC3FC  mov      eax, esp                                 
+10AFC3FE  push     esi                                      
+10AFC3FF  movq     qword ptr [eax], xmm0                    
+10AFC403  mov      dword ptr [eax + 8], ecx                 
+10AFC406  call     0x10afb970                               GameManager$$PlayHitFxAndSnd  ; rva=0xafb970
+10AFC40B  mov      ecx, dword ptr [0x10e2933c]              
+10AFC411  add      esp, 0x24                                
+10AFC414  test     byte ptr [ecx + 0xbb], 4                 
+10AFC41B  je       0x10afc432                               
+10AFC41D  cmp      dword ptr [ecx + 0x74], 0                
+10AFC421  jne      0x10afc432                               
+10AFC423  push     ecx                                      
+10AFC424  call     0x10108970                                 ; rva=0x108970
+10AFC429  mov      ecx, dword ptr [0x10e2933c]              
+10AFC42F  add      esp, 4                                   
+10AFC432  cmp      byte ptr [0x10e6a439], 0                 
+10AFC439  jne      0x10afc455                               
+10AFC43B  push     0x10e2933c                               
+10AFC440  call     0x10167c10                                 ; rva=0x167c10
+10AFC445  mov      ecx, dword ptr [0x10e2933c]              
+10AFC44B  add      esp, 4                                   
+10AFC44E  mov      byte ptr [0x10e6a439], 1                 
+10AFC455  test     byte ptr [ecx + 0xbb], 4                 
+10AFC45C  je       0x10afc473                               
+10AFC45E  cmp      dword ptr [ecx + 0x74], 0                
+10AFC462  jne      0x10afc473                               
+10AFC464  push     ecx                                      
+10AFC465  call     0x10108970                                 ; rva=0x108970
+10AFC46A  mov      ecx, dword ptr [0x10e2933c]              
+10AFC470  add      esp, 4                                   
+10AFC473  mov      eax, dword ptr [ecx + 0x5c]              
+10AFC476  cmp      byte ptr [eax + 0x20], 0                 
+10AFC47A  je       0x10afc481                               
+10AFC47C  cmp      ebx, 2                                   
+10AFC47F  jne      0x10afc4a4                               
+10AFC481  push     0                                        
+10AFC483  call     0x103f2540                               UnityEngine.Time$$get_time  ; rva=0x3f2540
+10AFC488  mov      eax, dword ptr [esi + 0x1c]              
+10AFC48B  add      esp, 4                                   
+10AFC48E  fstp     dword ptr [ebp - 8]                      
+10AFC491  test     eax, eax                                 
+10AFC493  je       0x10afc883                               
+10AFC499  movss    xmm0, dword ptr [eax + 0x44]             
+10AFC49E  comiss   xmm0, dword ptr [ebp - 8]                
+10AFC4A2  jbe      0x10afc4ab                               
+10AFC4A4  mov      eax, dword ptr [esi + 0x1c]              
+10AFC4A7  xor      ebx, ebx                                 
+10AFC4A9  jmp      0x10afc4ae                               
+10AFC4AB  mov      ebx, dword ptr [ebp - 0xc]               
+10AFC4AE  test     eax, eax                                 
+10AFC4B0  je       0x10afc883                               
+10AFC4B6  movups   xmm0, xmmword ptr [eax + 8]              
+10AFC4BA  mov      eax, dword ptr [eax + 0x18]              
+10AFC4BD  mov      dword ptr [ebp - 0xc], eax               
+10AFC4C0  mov      eax, dword ptr [0x10e2d848]              
+10AFC4C5  movups   xmmword ptr [ebp - 0x2c], xmm0           
+10AFC4C9  test     byte ptr [eax + 0xbb], 4                 
+10AFC4D0  je       0x10afc4e5                               
+10AFC4D2  cmp      dword ptr [eax + 0x74], 0                
+10AFC4D6  jne      0x10afc4e5                               
+10AFC4D8  push     eax                                      
+10AFC4D9  call     0x10108970                                 ; rva=0x108970
+10AFC4DE  movups   xmm0, xmmword ptr [ebp - 0x2c]           
+10AFC4E2  add      esp, 4                                   
+10AFC4E5  mov      ecx, dword ptr [ebp - 0xc]               
+10AFC4E8  push     0                                        
+10AFC4EA  sub      esp, 0x14                                
+10AFC4ED  mov      eax, esp                                 
+10AFC4EF  movups   xmmword ptr [eax], xmm0                  
+10AFC4F2  mov      dword ptr [eax + 0x10], ecx              
+10AFC4F5  call     0x107febb0                               CodeStage.AntiCheat.ObscuredTypes.ObscuredInt$$op_Implicit  ; rva=0x7febb0
+10AFC4FA  push     0                                        
+10AFC4FC  push     eax                                      
+10AFC4FD  push     ebx                                      
+10AFC4FE  call     0x104e3310                               UnityEngine.Mathf$$Min  ; rva=0x4e3310
+10AFC503  push     0                                        
+10AFC505  push     eax                                      
+10AFC506  push     0                                        
+10AFC508  call     0x104e3300                               UnityEngine.Mathf$$Max  ; rva=0x4e3300
+10AFC50D  add      esp, 0x30                                
+10AFC510  movd     xmm0, eax                                
+10AFC514  cvtdq2ps xmm0, xmm0                               
+10AFC517  movss    dword ptr [ebp + 0x10], xmm0             
+10AFC51C  mov      ecx, dword ptr [esi]                     
+10AFC51E  movups   xmm0, xmmword ptr [ebp + 8]              
+10AFC522  push     dword ptr [ecx + 0x118]                  
+10AFC528  sub      esp, 0x48                                
+10AFC52B  mov      eax, esp                                 
+10AFC52D  push     esi                                      
+10AFC52E  movups   xmmword ptr [eax], xmm0                  
+10AFC531  movups   xmm0, xmmword ptr [ebp + 0x18]           
+10AFC535  movups   xmmword ptr [eax + 0x10], xmm0           
+10AFC539  movups   xmm0, xmmword ptr [ebp + 0x28]           
+10AFC53D  movups   xmmword ptr [eax + 0x20], xmm0           
+10AFC541  movups   xmm0, xmmword ptr [ebp + 0x38]           
+10AFC545  movups   xmmword ptr [eax + 0x30], xmm0           
+10AFC549  movq     xmm0, qword ptr [ebp + 0x48]             
+10AFC54E  movq     qword ptr [eax + 0x40], xmm0             
+10AFC553  mov      eax, dword ptr [ecx + 0x114]             
+10AFC559  call     eax                                      
+10AFC55B  mov      ecx, dword ptr [0x10e2933c]              
+10AFC561  add      esp, 0x50                                
+10AFC564  test     byte ptr [ecx + 0xbb], 4                 
+10AFC56B  je       0x10afc582                               
+10AFC56D  cmp      dword ptr [ecx + 0x74], 0                
+10AFC571  jne      0x10afc582                               
+10AFC573  push     ecx                                      
+10AFC574  call     0x10108970                                 ; rva=0x108970
+10AFC579  mov      ecx, dword ptr [0x10e2933c]              
+10AFC57F  add      esp, 4                                   
+10AFC582  mov      eax, dword ptr [ecx + 0x5c]              
+10AFC585  mov      eax, dword ptr [eax + 0x30]              
+10AFC588  test     eax, eax                                 
+10AFC58A  je       0x10afc5a1                               
+10AFC58C  push     0                                        
+10AFC58E  lea      ecx, [ebp + 8]                           
+10AFC591  push     ecx                                      
+10AFC592  push     eax                                      
+10AFC593  call     0x10b6f420                               HUD_KillMark.KillMarkEvent$$Invoke  ; rva=0xb6f420
+10AFC598  mov      ecx, dword ptr [0x10e2933c]              
+10AFC59E  add      esp, 0xc                                 
+10AFC5A1  test     byte ptr [ecx + 0xbb], 4                 
+10AFC5A8  je       0x10afc5bf                               
+10AFC5AA  cmp      dword ptr [ecx + 0x74], 0                
+10AFC5AE  jne      0x10afc5bf                               
+10AFC5B0  push     ecx                                      
+10AFC5B1  call     0x10108970                                 ; rva=0x108970
+10AFC5B6  mov      ecx, dword ptr [0x10e2933c]              
+10AFC5BC  add      esp, 4                                   
+10AFC5BF  mov      eax, dword ptr [ecx + 0x5c]              
+10AFC5C2  mov      ebx, dword ptr [eax]                     
+10AFC5C4  mov      eax, dword ptr [0x10e2d558]              
+10AFC5C9  test     byte ptr [eax + 0xbb], 4                 
+10AFC5D0  je       0x10afc5e1                               
+10AFC5D2  cmp      dword ptr [eax + 0x74], 0                
+10AFC5D6  jne      0x10afc5e1                               
+10AFC5D8  push     eax                                      
+10AFC5D9  call     0x10108970                                 ; rva=0x108970
+10AFC5DE  add      esp, 4                                   
+10AFC5E1  push     0                                        
+10AFC5E3  push     ebx                                      
+10AFC5E4  push     dword ptr [ebp - 0x10]                   
+10AFC5E7  call     0x104ea220                               UnityEngine.Object$$op_Equality  ; rva=0x4ea220
+10AFC5EC  mov      ecx, dword ptr [0x10e2933c]              
+10AFC5F2  add      esp, 0xc                                 
+10AFC5F5  test     al, al                                   
+10AFC5F7  je       0x10afc636                               
+10AFC5F9  test     byte ptr [ecx + 0xbb], 4                 
+10AFC600  je       0x10afc617                               
+10AFC602  cmp      dword ptr [ecx + 0x74], 0                
+10AFC606  jne      0x10afc617                               
+10AFC608  push     ecx                                      
+10AFC609  call     0x10108970                                 ; rva=0x108970
+10AFC60E  mov      ecx, dword ptr [0x10e2933c]              
+10AFC614  add      esp, 4                                   
+10AFC617  mov      eax, dword ptr [ecx + 0x5c]              
+10AFC61A  mov      eax, dword ptr [eax + 0x50]              
+10AFC61D  test     eax, eax                                 
+10AFC61F  je       0x10afc636                               
+10AFC621  push     0                                        
+10AFC623  lea      ecx, [ebp + 8]                           
+10AFC626  push     ecx                                      
+10AFC627  push     eax                                      
+10AFC628  call     0x10b6f420                               HUD_KillMark.KillMarkEvent$$Invoke  ; rva=0xb6f420
+10AFC62D  mov      ecx, dword ptr [0x10e2933c]              
+10AFC633  add      esp, 0xc                                 
+10AFC636  test     byte ptr [ecx + 0xbb], 4                 
+10AFC63D  je       0x10afc654                               
+10AFC63F  cmp      dword ptr [ecx + 0x74], 0                
+10AFC643  jne      0x10afc654                               
+10AFC645  push     ecx                                      
+10AFC646  call     0x10108970                                 ; rva=0x108970
+10AFC64B  mov      ecx, dword ptr [0x10e2933c]              
+10AFC651  add      esp, 4                                   
+10AFC654  mov      eax, dword ptr [ecx + 0x5c]              
+10AFC657  mov      ebx, dword ptr [eax]                     
+10AFC659  mov      eax, dword ptr [0x10e2d558]              
+10AFC65E  test     byte ptr [eax + 0xbb], 4                 
+10AFC665  je       0x10afc676                               
+10AFC667  cmp      dword ptr [eax + 0x74], 0                
+10AFC66B  jne      0x10afc676                               
+10AFC66D  push     eax                                      
+10AFC66E  call     0x10108970                                 ; rva=0x108970
+10AFC673  add      esp, 4                                   
+10AFC676  push     0                                        
+10AFC678  push     ebx                                      
+10AFC679  push     esi                                      
+10AFC67A  call     0x104ea220                               UnityEngine.Object$$op_Equality  ; rva=0x4ea220
+10AFC67F  add      esp, 0xc                                 
+10AFC682  test     al, al                                   
+10AFC684  je       0x10afc6c1                               
+10AFC686  mov      eax, dword ptr [0x10e2933c]              
+10AFC68B  test     byte ptr [eax + 0xbb], 4                 
+10AFC692  je       0x10afc6a8                               
+10AFC694  cmp      dword ptr [eax + 0x74], 0                
+10AFC698  jne      0x10afc6a8                               
+10AFC69A  push     eax                                      
+10AFC69B  call     0x10108970                                 ; rva=0x108970
+10AFC6A0  mov      eax, dword ptr [0x10e2933c]              
+10AFC6A5  add      esp, 4                                   
+10AFC6A8  mov      eax, dword ptr [eax + 0x5c]              
+10AFC6AB  mov      eax, dword ptr [eax + 0x54]              
+10AFC6AE  test     eax, eax                                 
+10AFC6B0  je       0x10afc6c1                               
+10AFC6B2  push     0                                        
+10AFC6B4  lea      ecx, [ebp + 8]                           
+10AFC6B7  push     ecx                                      
+10AFC6B8  push     eax                                      
+10AFC6B9  call     0x10b6f420                               HUD_KillMark.KillMarkEvent$$Invoke  ; rva=0xb6f420
+10AFC6BE  add      esp, 0xc                                 
+10AFC6C1  mov      eax, dword ptr [ebp + 0xc]               
+10AFC6C4  test     eax, eax                                 
+10AFC6C6  je       0x10afc883                               
+10AFC6CC  mov      eax, dword ptr [eax + 0x1c]              
+10AFC6CF  test     eax, eax                                 
+10AFC6D1  je       0x10afc883                               
+10AFC6D7  push     0                                        
+10AFC6D9  push     eax                                      
+10AFC6DA  call     0x10ae4830                               HealthData$$get_isDead  ; rva=0xae4830
+10AFC6DF  add      esp, 8                                   
+10AFC6E2  test     al, al                                   
+10AFC6E4  je       0x10afc87c                               
+10AFC6EA  push     0x38                                     
+10AFC6EC  lea      eax, [ebp - 0x64]                        
+10AFC6EF  push     0                                        
+10AFC6F1  push     eax                                      
+10AFC6F2  call     0x1016ef00                                 ; rva=0x16ef00
+10AFC6F7  mov      eax, dword ptr [ebp - 0x10]              
+10AFC6FA  push     eax                                      
+10AFC6FB  mov      dword ptr [ebp - 0x64], eax              
+10AFC6FE  lea      eax, [ebp - 0x64]                        
+10AFC701  push     eax                                      
+10AFC702  call     0x101677f0                                 ; rva=0x1677f0
+10AFC707  lea      eax, [ebp - 0x60]                        
+10AFC70A  mov      dword ptr [ebp - 0x60], esi              
+10AFC70D  push     esi                                      
+10AFC70E  push     eax                                      
+10AFC70F  call     0x101677f0                                 ; rva=0x1677f0
+10AFC714  mov      al, byte ptr [ebp + 0x38]                
+10AFC717  add      esp, 0x1c                                
+10AFC71A  movq     xmm0, qword ptr [ebp + 0x14]             
+10AFC71F  mov      ecx, dword ptr [0x10e2933c]              
+10AFC725  mov      byte ptr [ebp - 0x58], al                
+10AFC728  mov      eax, dword ptr [ebp - 4]                 
+10AFC72B  movq     qword ptr [ebp - 0x50], xmm0             
+10AFC730  movups   xmm0, xmmword ptr [ebp - 0x64]           
+10AFC734  mov      dword ptr [ebp - 0x54], eax              
+10AFC737  mov      eax, dword ptr [ebp + 0x1c]              
+10AFC73A  mov      dword ptr [ebp - 0x48], eax              
+10AFC73D  mov      eax, dword ptr [ebp + 0x44]              
+10AFC740  mov      dword ptr [ebp - 0x34], eax              
+10AFC743  mov      eax, dword ptr [ebp + 0x48]              
+10AFC746  movups   xmmword ptr [ebp - 0xac], xmm0           
+10AFC74D  mov      dword ptr [ebp - 0x30], eax              
+10AFC750  movups   xmm0, xmmword ptr [ebp - 0x54]           
+10AFC754  mov      eax, dword ptr [ebp + 0x40]              
+10AFC757  mov      dword ptr [ebp - 0x38], eax              
+10AFC75A  test     byte ptr [ecx + 0xbb], 4                 
+10AFC761  movups   xmmword ptr [ebp - 0x74], xmm0           
+10AFC765  movups   xmm0, xmmword ptr [ebp - 0x44]           
+10AFC769  movups   xmmword ptr [ebp - 0x2c], xmm0           
+10AFC76D  movups   xmmword ptr [ebp - 0x8c], xmm0           
+10AFC774  movq     xmm0, qword ptr [ebp - 0x34]             
+10AFC779  movq     qword ptr [ebp - 0x1c], xmm0             
+10AFC77E  je       0x10afc795                               
+10AFC780  cmp      dword ptr [ecx + 0x74], 0                
+10AFC784  jne      0x10afc795                               
+10AFC786  push     ecx                                      
+10AFC787  call     0x10108970                                 ; rva=0x108970
+10AFC78C  mov      ecx, dword ptr [0x10e2933c]              
+10AFC792  add      esp, 4                                   
+10AFC795  mov      eax, dword ptr [ecx + 0x5c]              
+10AFC798  cmp      dword ptr [eax + 0x3c], 0                
+10AFC79C  je       0x10afc7ec                               
+10AFC79E  test     byte ptr [ecx + 0xbb], 4                 
+10AFC7A5  je       0x10afc7bc                               
+10AFC7A7  cmp      dword ptr [ecx + 0x74], 0                
+10AFC7AB  jne      0x10afc7bc                               
+10AFC7AD  push     ecx                                      
+10AFC7AE  call     0x10108970                                 ; rva=0x108970
+10AFC7B3  mov      ecx, dword ptr [0x10e2933c]              
+10AFC7B9  add      esp, 4                                   
+10AFC7BC  mov      eax, dword ptr [ecx + 0x5c]              
+10AFC7BF  mov      eax, dword ptr [eax + 0x3c]              
+10AFC7C2  test     eax, eax                                 
+10AFC7C4  je       0x10afc883                               
+10AFC7CA  push     0                                        
+10AFC7CC  push     dword ptr [ebp + 0xc]                    
+10AFC7CF  push     dword ptr [ebp + 8]                      
+10AFC7D2  push     eax                                      
+10AFC7D3  call     0x10260180                               System.Comparison<object>$$Invoke  ; rva=0x260180
+10AFC7D8  mov      dword ptr [ebp - 0x8c], eax              
+10AFC7DE  add      esp, 0x10                                
+10AFC7E1  movups   xmm0, xmmword ptr [ebp - 0x8c]           
+10AFC7E8  movups   xmmword ptr [ebp - 0x2c], xmm0           
+10AFC7EC  push     0                                        
+10AFC7EE  push     dword ptr [0x10e21ed0]                   
+10AFC7F4  push     edi                                      
+10AFC7F5  call     0x10741660                               System.String$$Equals  ; rva=0x741660
+10AFC7FA  add      esp, 0xc                                 
+10AFC7FD  test     al, al                                   
+10AFC7FF  jne      0x10afc822                               
+10AFC801  push     0                                        
+10AFC803  push     dword ptr [0x10e299dc]                   
+10AFC809  push     edi                                      
+10AFC80A  call     0x10741660                               System.String$$Equals  ; rva=0x741660
+10AFC80F  add      esp, 0xc                                 
+10AFC812  test     al, al                                   
+10AFC814  je       0x10afc82c                               
+10AFC816  mov      dword ptr [ebp - 0xa4], 1                
+10AFC820  jmp      0x10afc82c                               
+10AFC822  mov      dword ptr [ebp - 0xa4], 2                
+10AFC82C  mov      eax, dword ptr [0x10e2933c]              
+10AFC831  test     byte ptr [eax + 0xbb], 4                 
+10AFC838  je       0x10afc849                               
+10AFC83A  cmp      dword ptr [eax + 0x74], 0                
+10AFC83E  jne      0x10afc849                               
+10AFC840  push     eax                                      
+10AFC841  call     0x10108970                                 ; rva=0x108970
+10AFC846  add      esp, 4                                   
+10AFC849  movups   xmm0, xmmword ptr [ebp - 0xac]           
+10AFC850  push     0                                        
+10AFC852  sub      esp, 0x38                                
+10AFC855  mov      eax, esp                                 
+10AFC857  movups   xmmword ptr [eax], xmm0                  
+10AFC85A  movups   xmm0, xmmword ptr [ebp - 0x74]           
+10AFC85E  movups   xmmword ptr [eax + 0x10], xmm0           
+10AFC862  movups   xmm0, xmmword ptr [ebp - 0x2c]           
+10AFC866  movups   xmmword ptr [eax + 0x20], xmm0           
+10AFC86A  movq     xmm0, qword ptr [ebp - 0x1c]             
+10AFC86F  movq     qword ptr [eax + 0x30], xmm0             
+10AFC874  call     0x10afa400                               GameManager$$DeathEventBroadcast  ; rva=0xafa400
+10AFC879  add      esp, 0x3c                                
+10AFC87C  pop      edi                                      
+10AFC87D  pop      esi                                      
+10AFC87E  pop      ebx                                      
+10AFC87F  mov      esp, ebp                                 
+10AFC881  pop      ebp                                      
+10AFC882  ret                                               
+
+==================== HealthData_Hurt RVA=0xae45b0 ====================
+10AE45B0  push     ebp                                      
+10AE45B1  mov      ebp, esp                                 
+10AE45B3  sub      esp, 0x14                                
+10AE45B6  cmp      byte ptr [0x10e6a37a], 0                 
+10AE45BD  push     esi                                      
+10AE45BE  push     edi                                      
+10AE45BF  jne      0x10ae45d5                               
+10AE45C1  push     0x10e2d848                               
+10AE45C6  call     0x10167c10                                 ; rva=0x167c10
+10AE45CB  add      esp, 4                                   
+10AE45CE  mov      byte ptr [0x10e6a37a], 1                 
+10AE45D5  mov      esi, dword ptr [ebp + 8]                 
+10AE45D8  mov      eax, dword ptr [0x10e2d848]              
+10AE45DD  movups   xmm0, xmmword ptr [esi + 8]              
+10AE45E1  test     byte ptr [eax + 0xbb], 4                 
+10AE45E8  mov      edi, dword ptr [esi + 0x18]              
+10AE45EB  movups   xmmword ptr [ebp - 0x10], xmm0           
+10AE45EF  je       0x10ae4604                               
+10AE45F1  cmp      dword ptr [eax + 0x74], 0                
+10AE45F5  jne      0x10ae4604                               
+10AE45F7  push     eax                                      
+10AE45F8  call     0x10108970                                 ; rva=0x108970
+10AE45FD  movups   xmm0, xmmword ptr [ebp - 0x10]           
+10AE4601  add      esp, 4                                   
+10AE4604  push     0                                        
+10AE4606  sub      esp, 0x14                                
+10AE4609  mov      eax, esp                                 
+10AE460B  movups   xmmword ptr [eax], xmm0                  
+10AE460E  mov      dword ptr [eax + 0x10], edi              
+10AE4611  call     0x107febb0                               CodeStage.AntiCheat.ObscuredTypes.ObscuredInt$$op_Implicit  ; rva=0x7febb0
+10AE4616  sub      eax, dword ptr [ebp + 0xc]               
+10AE4619  push     0                                        
+10AE461B  push     0                                        
+10AE461D  push     eax                                      
+10AE461E  call     0x104e3300                               UnityEngine.Mathf$$Max  ; rva=0x4e3300
+10AE4623  push     0                                        
+10AE4625  push     eax                                      
+10AE4626  lea      eax, [ebp - 0x14]                        
+10AE4629  push     eax                                      
+10AE462A  call     0x107febd0                               CodeStage.AntiCheat.ObscuredTypes.ObscuredInt$$op_Implicit  ; rva=0x7febd0
+10AE462F  add      esp, 0x30                                
+10AE4632  movups   xmm0, xmmword ptr [eax]                  
+10AE4635  mov      eax, dword ptr [eax + 0x10]              
+10AE4638  pop      edi                                      
+10AE4639  movups   xmmword ptr [esi + 8], xmm0              
+10AE463D  mov      dword ptr [esi + 0x18], eax              
+10AE4640  pop      esi                                      
+10AE4641  mov      esp, ebp                                 
+10AE4643  pop      ebp                                      
+10AE4644  ret                                               
+
+==================== ModeBase_Nano_InvalidDmgCheck RVA=0xaf0b20 ====================
+10AF0B20  push     ebp                                      
+10AF0B21  mov      ebp, esp                                 
+10AF0B23  cmp      byte ptr [0x10e6a404], 0                 
+10AF0B2A  jne      0x10af0b40                               
+10AF0B2C  push     0x10e2933c                               
+10AF0B31  call     0x10167c10                                 ; rva=0x167c10
+10AF0B36  add      esp, 4                                   
+10AF0B39  mov      byte ptr [0x10e6a404], 1                 
+10AF0B40  mov      eax, dword ptr [0x10e2933c]              
+10AF0B45  test     byte ptr [eax + 0xbb], 4                 
+10AF0B4C  je       0x10af0b62                               
+10AF0B4E  cmp      dword ptr [eax + 0x74], 0                
+10AF0B52  jne      0x10af0b62                               
+10AF0B54  push     eax                                      
+10AF0B55  call     0x10108970                                 ; rva=0x108970
+10AF0B5A  mov      eax, dword ptr [0x10e2933c]              
+10AF0B5F  add      esp, 4                                   
+10AF0B62  cmp      byte ptr [0x10e6a439], 0                 
+10AF0B69  jne      0x10af0b84                               
+10AF0B6B  push     0x10e2933c                               
+10AF0B70  call     0x10167c10                                 ; rva=0x167c10
+10AF0B75  mov      eax, dword ptr [0x10e2933c]              
+10AF0B7A  add      esp, 4                                   
+10AF0B7D  mov      byte ptr [0x10e6a439], 1                 
+10AF0B84  test     byte ptr [eax + 0xbb], 4                 
+10AF0B8B  je       0x10af0ba1                               
+10AF0B8D  cmp      dword ptr [eax + 0x74], 0                
+10AF0B91  jne      0x10af0ba1                               
+10AF0B93  push     eax                                      
+10AF0B94  call     0x10108970                                 ; rva=0x108970
+10AF0B99  mov      eax, dword ptr [0x10e2933c]              
+10AF0B9E  add      esp, 4                                   
+10AF0BA1  mov      eax, dword ptr [eax + 0x5c]              
+10AF0BA4  cmp      byte ptr [eax + 0x20], 0                 
+10AF0BA8  je       0x10af0bce                               
+10AF0BAA  mov      eax, dword ptr [ebp + 0xc]               
+10AF0BAD  mov      ecx, dword ptr [eax + 4]                 
+10AF0BB0  test     ecx, ecx                                 
+10AF0BB2  je       0x10af0bd0                               
+10AF0BB4  cmp      dword ptr [ecx + 0x20], 1                
+10AF0BB8  je       0x10af0bc7                               
+10AF0BBA  mov      ecx, dword ptr [eax + 0x34]              
+10AF0BBD  cmp      ecx, 1                                   
+10AF0BC0  je       0x10af0bc7                               
+10AF0BC2  cmp      ecx, 3                                   
+10AF0BC5  jne      0x10af0bce                               
+10AF0BC7  mov      dword ptr [eax + 0x34], 0                
+10AF0BCE  pop      ebp                                      
+10AF0BCF  ret                                               
+
+==================== ModeBase_Nano_PreDamageEvent RVA=0xaf2000 ====================
+10AF2000  push     ebp                                      
+10AF2001  mov      ebp, esp                                 
+10AF2003  sub      esp, 0x1c                                
+10AF2006  cmp      byte ptr [0x10e6a405], 0                 
+10AF200D  push     ebx                                      
+10AF200E  push     esi                                      
+10AF200F  push     edi                                      
+10AF2010  jne      0x10af2062                               
+10AF2012  push     0x10e2933c                               
+10AF2017  call     0x10167c10                                 ; rva=0x167c10
+10AF201C  push     0x10e29f00                               
+10AF2021  call     0x10167c10                                 ; rva=0x167c10
+10AF2026  push     0x10e2cc74                               
+10AF202B  call     0x10167c10                                 ; rva=0x167c10
+10AF2030  push     0x10e2d558                               
+10AF2035  call     0x10167c10                                 ; rva=0x167c10
+10AF203A  push     0x10e2d848                               
+10AF203F  call     0x10167c10                                 ; rva=0x167c10
+10AF2044  push     0x10e2e3b4                               
+10AF2049  call     0x10167c10                                 ; rva=0x167c10
+10AF204E  push     0x10e20b8c                               
+10AF2053  call     0x10167c10                                 ; rva=0x167c10
+10AF2058  add      esp, 0x1c                                
+10AF205B  mov      byte ptr [0x10e6a405], 1                 
+10AF2062  mov      esi, dword ptr [ebp + 0xc]               
+10AF2065  xorps    xmm0, xmm0                               
+10AF2068  movss    xmm1, dword ptr [esi + 8]                
+10AF206D  mov      eax, dword ptr [esi + 0x34]              
+10AF2070  mov      edi, dword ptr [esi]                     
+10AF2072  comiss   xmm1, xmm0                               
+10AF2075  mov      dword ptr [ebp - 0xc], eax               
+10AF2078  seta     byte ptr [ebp - 1]                       
+10AF207C  cmp      eax, 2                                   
+10AF207F  sete     byte ptr [ebp - 2]                       
+10AF2083  xor      al, al                                   
+10AF2085  mov      byte ptr [ebp + 0xf], al                 
+10AF2088  test     edi, edi                                 
+10AF208A  je       0x10af21b3                               
+10AF2090  mov      edx, dword ptr [0x10e2e3b4]              
+10AF2096  mov      eax, dword ptr [edi]                     
+10AF2098  mov      cl, byte ptr [edx + 0xb4]                
+10AF209E  cmp      byte ptr [eax + 0xb4], cl                
+10AF20A4  jb       0x10af21b9                               
+10AF20AA  mov      eax, dword ptr [eax + 0x64]              
+10AF20AD  movzx    ecx, cl                                  
+10AF20B0  cmp      dword ptr [eax + ecx*4 - 4], edx         
+10AF20B4  jne      0x10af21b9                               
+10AF20BA  push     0                                        
+10AF20BC  push     edi                                      
+10AF20BD  call     0x10671060                               System.NumberFormatter$$get_IsZero  ; rva=0x671060
+10AF20C2  push     0                                        
+10AF20C4  push     edi                                      
+10AF20C5  mov      byte ptr [ebp + 0xf], al                 
+10AF20C8  call     0x105ee130                               Pathfinding.Path$$get_error  ; rva=0x5ee130
+10AF20CD  mov      ebx, dword ptr [ebp + 8]                 
+10AF20D0  add      esp, 0x10                                
+10AF20D3  test     al, al                                   
+10AF20D5  je       0x10af2143                               
+10AF20D7  mov      ecx, dword ptr [ebx + 0xa8]              
+10AF20DD  test     ecx, ecx                                 
+10AF20DF  je       0x10af248e                               
+10AF20E5  push     dword ptr [0x10e29f00]                   
+10AF20EB  push     dword ptr [esi + 0x3c]                   
+10AF20EE  push     ecx                                      
+10AF20EF  call     0x109fb840                               System.Collections.Generic.List<int>$$Contains  ; rva=0x9fb840
+10AF20F4  add      esp, 0xc                                 
+10AF20F7  test     al, al                                   
+10AF20F9  jne      0x10af2143                               
+10AF20FB  mov      eax, dword ptr [0x10e2cc74]              
+10AF2100  movss    xmm0, dword ptr [esi + 8]                
+10AF2105  movss    dword ptr [ebp - 8], xmm0                
+10AF210A  test     byte ptr [eax + 0xbb], 4                 
+10AF2111  je       0x10af2127                               
+10AF2113  cmp      dword ptr [eax + 0x74], 0                
+10AF2117  jne      0x10af2127                               
+10AF2119  push     eax                                      
+10AF211A  call     0x10108970                                 ; rva=0x108970
+10AF211F  mov      eax, dword ptr [0x10e2cc74]              
+10AF2124  add      esp, 4                                   
+10AF2127  mov      eax, dword ptr [eax + 0x5c]              
+10AF212A  movd     xmm0, dword ptr [eax]                    
+10AF212E  cvtdq2ps xmm0, xmm0                               
+10AF2131  mulss    xmm0, dword ptr [0x10b99db4]             
+10AF2139  mulss    xmm0, dword ptr [ebp - 8]                
+10AF213E  movss    dword ptr [esi + 8], xmm0                
+10AF2143  cmp      dword ptr [ebp - 0xc], 2                 
+10AF2147  jne      0x10af21b3                               
+10AF2149  cmp      byte ptr [ebp - 1], 0                    
+10AF214D  jne      0x10af216f                               
+10AF214F  mov      eax, dword ptr [esi + 4]                 
+10AF2152  test     eax, eax                                 
+10AF2154  je       0x10af248e                               
+10AF215A  push     0                                        
+10AF215C  push     dword ptr [0x10e20b8c]                   
+10AF2162  push     eax                                      
+10AF2163  call     0x10b3f190                               Entity$$FindBuff  ; rva=0xb3f190
+10AF2168  add      esp, 0xc                                 
+10AF216B  test     eax, eax                                 
+10AF216D  je       0x10af21b3                               
+10AF216F  push     0                                        
+10AF2171  push     edi                                      
+10AF2172  call     0x10b56200                               Player$$get_nanoRole  ; rva=0xb56200
+10AF2177  mov      ecx, dword ptr [edi + 0x98]              
+10AF217D  add      esp, 8                                   
+10AF2180  movss    xmm0, dword ptr [esi + 8]                
+10AF2185  mov      edx, eax                                 
+10AF2187  test     ecx, ecx                                 
+10AF2189  je       0x10af248e                               
+10AF218F  mov      eax, dword ptr [ebx]                     
+10AF2191  push     dword ptr [eax + 0x1a0]                  
+10AF2197  mov      eax, dword ptr [eax + 0x19c]             
+10AF219D  push     dword ptr [ecx + 0x3c]                   
+10AF21A0  push     dword ptr [esi + 0x38]                   
+10AF21A3  push     ecx                                      
+10AF21A4  movss    dword ptr [esp], xmm0                    
+10AF21A9  push     edx                                      
+10AF21AA  push     ebx                                      
+10AF21AB  call     eax                                      
+10AF21AD  fstp     dword ptr [esi + 8]                      
+10AF21B0  add      esp, 0x18                                
+10AF21B3  mov      edx, dword ptr [0x10e2e3b4]              
+10AF21B9  mov      edi, dword ptr [esi + 4]                 
+10AF21BC  test     edi, edi                                 
+10AF21BE  je       0x10af2487                               
+10AF21C4  mov      eax, dword ptr [edi]                     
+10AF21C6  mov      cl, byte ptr [edx + 0xb4]                
+10AF21CC  cmp      byte ptr [eax + 0xb4], cl                
+10AF21D2  jb       0x10af2487                               
+10AF21D8  mov      eax, dword ptr [eax + 0x64]              
+10AF21DB  movzx    ecx, cl                                  
+10AF21DE  cmp      dword ptr [eax + ecx*4 - 4], edx         
+10AF21E2  jne      0x10af2487                               
+10AF21E8  push     0                                        
+10AF21EA  push     edi                                      
+10AF21EB  call     0x10b56200                               Player$$get_nanoRole  ; rva=0xb56200
+10AF21F0  add      esp, 8                                   
+10AF21F3  test     eax, eax                                 
+10AF21F5  jne      0x10af2206                               
+10AF21F7  mov      ecx, dword ptr [0x10e2933c]              
+10AF21FD  mov      dword ptr [ebp - 8], 1                   
+10AF2204  jmp      0x10af2252                               
+10AF2206  push     0                                        
+10AF2208  push     edi                                      
+10AF2209  call     0x10b56200                               Player$$get_nanoRole  ; rva=0xb56200
+10AF220E  mov      ecx, dword ptr [0x10e2933c]              
+10AF2214  add      esp, 8                                   
+10AF2217  cmp      eax, 0x12                                
+10AF221A  je       0x10af2225                               
+10AF221C  mov      dword ptr [ebp - 8], 0                   
+10AF2223  jmp      0x10af2252                               
+10AF2225  test     byte ptr [ecx + 0xbb], 4                 
+10AF222C  je       0x10af2243                               
+10AF222E  cmp      dword ptr [ecx + 0x74], 0                
+10AF2232  jne      0x10af2243                               
+10AF2234  push     ecx                                      
+10AF2235  call     0x10108970                                 ; rva=0x108970
+10AF223A  mov      ecx, dword ptr [0x10e2933c]              
+10AF2240  add      esp, 4                                   
+10AF2243  mov      eax, dword ptr [ecx + 0x5c]              
+10AF2246  xor      edx, edx                                 
+10AF2248  cmp      dword ptr [eax + 4], 3                   
+10AF224C  sete     dl                                       
+10AF224F  mov      dword ptr [ebp - 8], edx                 
+10AF2252  test     byte ptr [ecx + 0xbb], 4                 
+10AF2259  je       0x10af2270                               
+10AF225B  cmp      dword ptr [ecx + 0x74], 0                
+10AF225F  jne      0x10af2270                               
+10AF2261  push     ecx                                      
+10AF2262  call     0x10108970                                 ; rva=0x108970
+10AF2267  mov      ecx, dword ptr [0x10e2933c]              
+10AF226D  add      esp, 4                                   
+10AF2270  cmp      byte ptr [0x10e6a439], 0                 
+10AF2277  jne      0x10af2293                               
+10AF2279  push     0x10e2933c                               
+10AF227E  call     0x10167c10                                 ; rva=0x167c10
+10AF2283  mov      ecx, dword ptr [0x10e2933c]              
+10AF2289  add      esp, 4                                   
+10AF228C  mov      byte ptr [0x10e6a439], 1                 
+10AF2293  test     byte ptr [ecx + 0xbb], 4                 
+10AF229A  je       0x10af22b1                               
+10AF229C  cmp      dword ptr [ecx + 0x74], 0                
+10AF22A0  jne      0x10af22b1                               
+10AF22A2  push     ecx                                      
+10AF22A3  call     0x10108970                                 ; rva=0x108970
+10AF22A8  mov      ecx, dword ptr [0x10e2933c]              
+10AF22AE  add      esp, 4                                   
+10AF22B1  mov      ecx, dword ptr [ecx + 0x5c]              
+10AF22B4  xor      ebx, ebx                                 
+10AF22B6  mov      eax, dword ptr [ebp - 8]                 
+10AF22B9  movzx    eax, al                                  
+10AF22BC  cmp      byte ptr [ecx + 0x20], bl                
+10AF22BF  cmove    ebx, eax                                 
+10AF22C2  mov      al, byte ptr [ebp + 0xf]                 
+10AF22C5  and      bl, al                                   
+10AF22C7  and      al, byte ptr [ebp - 2]                   
+10AF22CA  and      bl, byte ptr [ebp - 2]                   
+10AF22CD  test     byte ptr [ebp - 1], al                   
+10AF22D0  je       0x10af247c                               
+10AF22D6  mov      eax, dword ptr [edi + 0xf4]              
+10AF22DC  movups   xmm0, xmmword ptr [edi + 0xe4]           
+10AF22E3  mov      dword ptr [ebp + 0xc], eax               
+10AF22E6  mov      eax, dword ptr [0x10e2d848]              
+10AF22EB  movups   xmmword ptr [ebp - 0x1c], xmm0           
+10AF22EF  test     byte ptr [eax + 0xbb], 4                 
+10AF22F6  je       0x10af230b                               
+10AF22F8  cmp      dword ptr [eax + 0x74], 0                
+10AF22FC  jne      0x10af230b                               
+10AF22FE  push     eax                                      
+10AF22FF  call     0x10108970                                 ; rva=0x108970
+10AF2304  movups   xmm0, xmmword ptr [ebp - 0x1c]           
+10AF2308  add      esp, 4                                   
+10AF230B  mov      ecx, dword ptr [ebp + 0xc]               
+10AF230E  push     0                                        
+10AF2310  sub      esp, 0x14                                
+10AF2313  mov      eax, esp                                 
+10AF2315  movups   xmmword ptr [eax], xmm0                  
+10AF2318  mov      dword ptr [eax + 0x10], ecx              
+10AF231B  call     0x107febb0                               CodeStage.AntiCheat.ObscuredTypes.ObscuredInt$$op_Implicit  ; rva=0x7febb0
+10AF2320  add      esp, 0x18                                
+10AF2323  test     eax, eax                                 
+10AF2325  jle      0x10af247c                               
+10AF232B  mov      dword ptr [esi + 8], 0                   
+10AF2332  mov      eax, dword ptr [0x10e2d848]              
+10AF2337  movups   xmm0, xmmword ptr [edi + 0xe4]           
+10AF233E  mov      ebx, dword ptr [edi + 0xf4]              
+10AF2344  test     byte ptr [eax + 0xbb], 4                 
+10AF234B  movups   xmmword ptr [ebp - 0x1c], xmm0           
+10AF234F  je       0x10af2364                               
+10AF2351  cmp      dword ptr [eax + 0x74], 0                
+10AF2355  jne      0x10af2364                               
+10AF2357  push     eax                                      
+10AF2358  call     0x10108970                                 ; rva=0x108970
+10AF235D  movups   xmm0, xmmword ptr [ebp - 0x1c]           
+10AF2361  add      esp, 4                                   
+10AF2364  push     0                                        
+10AF2366  sub      esp, 0x14                                
+10AF2369  mov      eax, esp                                 
+10AF236B  movups   xmmword ptr [eax], xmm0                  
+10AF236E  mov      dword ptr [eax + 0x10], ebx              
+10AF2371  call     0x107febb0                               CodeStage.AntiCheat.ObscuredTypes.ObscuredInt$$op_Implicit  ; rva=0x7febb0
+10AF2376  push     0                                        
+10AF2378  dec      eax                                      
+10AF2379  push     eax                                      
+10AF237A  push     edi                                      
+10AF237B  call     0x10b533a0                               Player$$SetNanoClothCount  ; rva=0xb533a0
+10AF2380  mov      eax, dword ptr [0x10e2933c]              
+10AF2385  add      esp, 0x24                                
+10AF2388  mov      ebx, dword ptr [esi]                     
+10AF238A  test     byte ptr [eax + 0xbb], 4                 
+10AF2391  je       0x10af23a7                               
+10AF2393  cmp      dword ptr [eax + 0x74], 0                
+10AF2397  jne      0x10af23a7                               
+10AF2399  push     eax                                      
+10AF239A  call     0x10108970                                 ; rva=0x108970
+10AF239F  mov      eax, dword ptr [0x10e2933c]              
+10AF23A4  add      esp, 4                                   
+10AF23A7  mov      eax, dword ptr [eax + 0x5c]              
+10AF23AA  mov      edi, dword ptr [eax]                     
+10AF23AC  mov      eax, dword ptr [0x10e2d558]              
+10AF23B1  test     byte ptr [eax + 0xbb], 4                 
+10AF23B8  je       0x10af23c9                               
+10AF23BA  cmp      dword ptr [eax + 0x74], 0                
+10AF23BE  jne      0x10af23c9                               
+10AF23C0  push     eax                                      
+10AF23C1  call     0x10108970                                 ; rva=0x108970
+10AF23C6  add      esp, 4                                   
+10AF23C9  push     0                                        
+10AF23CB  push     edi                                      
+10AF23CC  push     ebx                                      
+10AF23CD  call     0x104ea220                               UnityEngine.Object$$op_Equality  ; rva=0x4ea220
+10AF23D2  add      esp, 0xc                                 
+10AF23D5  test     al, al                                   
+10AF23D7  jne      0x10af2456                               
+10AF23D9  mov      eax, dword ptr [0x10e2933c]              
+10AF23DE  mov      edi, dword ptr [esi + 4]                 
+10AF23E1  test     byte ptr [eax + 0xbb], 4                 
+10AF23E8  je       0x10af23fe                               
+10AF23EA  cmp      dword ptr [eax + 0x74], 0                
+10AF23EE  jne      0x10af23fe                               
+10AF23F0  push     eax                                      
+10AF23F1  call     0x10108970                                 ; rva=0x108970
+10AF23F6  mov      eax, dword ptr [0x10e2933c]              
+10AF23FB  add      esp, 4                                   
+10AF23FE  mov      eax, dword ptr [eax + 0x5c]              
+10AF2401  mov      ebx, dword ptr [eax]                     
+10AF2403  mov      eax, dword ptr [0x10e2d558]              
+10AF2408  test     byte ptr [eax + 0xbb], 4                 
+10AF240F  je       0x10af2420                               
+10AF2411  cmp      dword ptr [eax + 0x74], 0                
+10AF2415  jne      0x10af2420                               
+10AF2417  push     eax                                      
+10AF2418  call     0x10108970                                 ; rva=0x108970
+10AF241D  add      esp, 4                                   
+10AF2420  push     0                                        
+10AF2422  push     ebx                                      
+10AF2423  push     edi                                      
+10AF2424  call     0x104ea220                               UnityEngine.Object$$op_Equality  ; rva=0x4ea220
+10AF2429  add      esp, 0xc                                 
+10AF242C  test     al, al                                   
+10AF242E  je       0x10af2480                               
+10AF2430  mov      ecx, dword ptr [ebp + 8]                 
+10AF2433  mov      eax, dword ptr [ecx + 0x78]              
+10AF2436  test     eax, eax                                 
+10AF2438  je       0x10af248e                               
+10AF243A  push     0                                        
+10AF243C  push     dword ptr [eax + 0x24]                   
+10AF243F  push     ecx                                      
+10AF2440  call     0x10af1ce0                               ModeBase_Nano$$PlayNanoClothMark  ; rva=0xaf1ce0
+10AF2445  add      esp, 0xc                                 
+10AF2448  mov      dword ptr [esi + 0x34], 4                
+10AF244F  pop      edi                                      
+10AF2450  pop      esi                                      
+10AF2451  pop      ebx                                      
+10AF2452  mov      esp, ebp                                 
+10AF2454  pop      ebp                                      
+10AF2455  ret                                               
+
+==================== ModeNano6_InvalidDmgCheck RVA=0xb481b0 ====================
+10B481B0  push     ebp                                      
+10B481B1  mov      ebp, esp                                 
+10B481B3  push     ecx                                      
+10B481B4  cmp      byte ptr [0x10e6a78d], 0                 
+10B481BB  jne      0x10b481d1                               
+10B481BD  push     0x10e2e3b4                               
+10B481C2  call     0x10167c10                                 ; rva=0x167c10
+10B481C7  add      esp, 4                                   
+10B481CA  mov      byte ptr [0x10e6a78d], 1                 
+10B481D1  push     esi                                      
+10B481D2  mov      esi, dword ptr [ebp + 0xc]               
+10B481D5  push     edi                                      
+10B481D6  mov      edi, dword ptr [esi]                     
+10B481D8  test     edi, edi                                 
+10B481DA  je       0x10b482ab                               
+10B481E0  mov      edx, dword ptr [0x10e2e3b4]              
+10B481E6  mov      eax, dword ptr [edi]                     
+10B481E8  mov      cl, byte ptr [edx + 0xb4]                
+10B481EE  cmp      byte ptr [eax + 0xb4], cl                
+10B481F4  jb       0x10b48206                               
+10B481F6  mov      eax, dword ptr [eax + 0x64]              
+10B481F9  movzx    ecx, cl                                  
+10B481FC  cmp      dword ptr [eax + ecx*4 - 4], edx         
+10B48200  jne      0x10b48206                               
+10B48202  mov      cl, 1                                    
+10B48204  jmp      0x10b48208                               
+10B48206  xor      cl, cl                                   
+10B48208  xor      eax, eax                                 
+10B4820A  test     cl, cl                                   
+10B4820C  mov      ecx, dword ptr [esi + 4]                 
+10B4820F  cmovne   eax, edi                                 
+10B48212  test     eax, eax                                 
+10B48214  je       0x10b482ab                               
+10B4821A  mov      edi, dword ptr [eax + 0x98]              
+10B48220  test     ecx, ecx                                 
+10B48222  je       0x10b482ab                               
+10B48228  mov      al, byte ptr [edx + 0xb4]                
+10B4822E  push     ebx                                      
+10B4822F  mov      ebx, dword ptr [ecx]                     
+10B48231  cmp      byte ptr [ebx + 0xb4], al                
+10B48237  jb       0x10b482ab                               
+10B48239  movzx    eax, al                                  
+10B4823C  mov      dword ptr [ebp - 4], eax                 
+10B4823F  mov      esi, eax                                 
+10B48241  mov      eax, dword ptr [ebx + 0x64]              
+10B48244  cmp      dword ptr [eax + esi*4 - 4], edx         
+10B48248  mov      esi, dword ptr [ebp + 0xc]               
+10B4824B  jne      0x10b482ab                               
+10B4824D  mov      ebx, dword ptr [ebp - 4]                 
+10B48250  cmp      dword ptr [eax + ebx*4 - 4], edx         
+10B48254  pop      ebx                                      
+10B48255  jne      0x10b4825b                               
+10B48257  mov      dl, 1                                    
+10B48259  jmp      0x10b4825d                               
+10B4825B  xor      dl, dl                                   
+10B4825D  xor      eax, eax                                 
+10B4825F  test     dl, dl                                   
+10B48261  cmovne   eax, ecx                                 
+10B48264  mov      eax, dword ptr [eax + 0x98]              
+10B4826A  test     eax, eax                                 
+10B4826C  je       0x10b482ab                               
+10B4826E  cmp      byte ptr [eax + 0x49], 0                 
+10B48272  jne      0x10b4827e                               
+10B48274  test     edi, edi                                 
+10B48276  je       0x10b482ab                               
+10B48278  cmp      byte ptr [edi + 0x49], 0                 
+10B4827C  je       0x10b48297                               
+10B4827E  lea      eax, [esi + 0x38]                        
+10B48281  push     0                                        
+10B48283  push     eax                                      
+10B48284  call     0x10b3d4b0                               DamageTag$$get_isGhostBladeSecKill  ; rva=0xb3d4b0
+10B48289  add      esp, 8                                   
+10B4828C  test     al, al                                   
+10B4828E  jne      0x10b48297                               
+10B48290  mov      dword ptr [esi + 0x34], 0                
+10B48297  push     0                                        
+10B48299  push     esi                                      
+10B4829A  push     dword ptr [ebp + 8]                      
+10B4829D  call     0x10af0b20                               ModeBase_Nano$$InvalidDmgCheck  ; rva=0xaf0b20
+10B482A2  add      esp, 0xc                                 
+10B482A5  pop      edi                                      
+10B482A6  pop      esi                                      
+10B482A7  mov      esp, ebp                                 
+10B482A9  pop      ebp                                      
+10B482AA  ret                                               
+
+==================== ModeNano6_PostDamageEvent RVA=0xb48e10 ====================
+10B48E10  push     ebp                                      
+10B48E11  mov      ebp, esp                                 
+10B48E13  cmp      byte ptr [0x10e6a78f], 0                 
+10B48E1A  jne      0x10b48e3a                               
+10B48E1C  push     0x10e2d558                               
+10B48E21  call     0x10167c10                                 ; rva=0x167c10
+10B48E26  push     0x10e2e3b4                               
+10B48E2B  call     0x10167c10                                 ; rva=0x167c10
+10B48E30  add      esp, 8                                   
+10B48E33  mov      byte ptr [0x10e6a78f], 1                 
+10B48E3A  push     ebx                                      
+10B48E3B  mov      ebx, dword ptr [ebp + 0xc]               
+10B48E3E  push     esi                                      
+10B48E3F  push     edi                                      
+10B48E40  push     0                                        
+10B48E42  push     ebx                                      
+10B48E43  push     dword ptr [ebp + 8]                      
+10B48E46  call     0x10af1eb0                               ModeBase_Nano$$PostDamageEvent  ; rva=0xaf1eb0
+10B48E4B  mov      esi, dword ptr [ebx]                     
+10B48E4D  add      esp, 0xc                                 
+10B48E50  mov      edx, dword ptr [0x10e2e3b4]              
+10B48E56  test     esi, esi                                 
+10B48E58  jne      0x10b48e5e                               
+10B48E5A  xor      edi, edi                                 
+10B48E5C  jmp      0x10b48e87                               
+10B48E5E  mov      eax, dword ptr [esi]                     
+10B48E60  mov      cl, byte ptr [edx + 0xb4]                
+10B48E66  cmp      byte ptr [eax + 0xb4], cl                
+10B48E6C  jb       0x10b48e7e                               
+10B48E6E  mov      eax, dword ptr [eax + 0x64]              
+10B48E71  movzx    ecx, cl                                  
+10B48E74  cmp      dword ptr [eax + ecx*4 - 4], edx         
+10B48E78  jne      0x10b48e7e                               
+10B48E7A  mov      al, 1                                    
+10B48E7C  jmp      0x10b48e80                               
+10B48E7E  xor      al, al                                   
+10B48E80  xor      edi, edi                                 
+10B48E82  test     al, al                                   
+10B48E84  cmovne   edi, esi                                 
+10B48E87  mov      eax, dword ptr [ebx + 4]                 
+10B48E8A  test     eax, eax                                 
+10B48E8C  jne      0x10b48e92                               
+10B48E8E  xor      esi, esi                                 
+10B48E90  jmp      0x10b48ebc                               
+10B48E92  mov      eax, dword ptr [eax]                     
+10B48E94  mov      cl, byte ptr [edx + 0xb4]                
+10B48E9A  cmp      byte ptr [eax + 0xb4], cl                
+10B48EA0  jb       0x10b48eb2                               
+10B48EA2  mov      eax, dword ptr [eax + 0x64]              
+10B48EA5  movzx    ecx, cl                                  
+10B48EA8  cmp      dword ptr [eax + ecx*4 - 4], edx         
+10B48EAC  jne      0x10b48eb2                               
+10B48EAE  mov      al, 1                                    
+10B48EB0  jmp      0x10b48eb4                               
+10B48EB2  xor      al, al                                   
+10B48EB4  xor      esi, esi                                 
+10B48EB6  test     al, al                                   
+10B48EB8  cmovne   esi, dword ptr [ebx + 4]                 
+10B48EBC  mov      eax, dword ptr [0x10e2d558]              
+10B48EC1  test     byte ptr [eax + 0xbb], 4                 
+10B48EC8  je       0x10b48ed9                               
+10B48ECA  cmp      dword ptr [eax + 0x74], 0                
+10B48ECE  jne      0x10b48ed9                               
+10B48ED0  push     eax                                      
+10B48ED1  call     0x10108970                                 ; rva=0x108970
+10B48ED6  add      esp, 4                                   
+10B48ED9  push     0                                        
+10B48EDB  push     edi                                      
+10B48EDC  call     0x104ea360                               UnityEngine.Object$$op_Implicit  ; rva=0x4ea360
+10B48EE1  add      esp, 8                                   
+10B48EE4  test     al, al                                   
+10B48EE6  je       0x10b48fba                               
+10B48EEC  mov      eax, dword ptr [0x10e2d558]              
+10B48EF1  test     byte ptr [eax + 0xbb], 4                 
+10B48EF8  je       0x10b48f09                               
+10B48EFA  cmp      dword ptr [eax + 0x74], 0                
+10B48EFE  jne      0x10b48f09                               
+10B48F00  push     eax                                      
+10B48F01  call     0x10108970                                 ; rva=0x108970
+10B48F06  add      esp, 4                                   
+10B48F09  push     0                                        
+10B48F0B  push     esi                                      
+10B48F0C  call     0x104ea360                               UnityEngine.Object$$op_Implicit  ; rva=0x4ea360
+10B48F11  add      esp, 8                                   
+10B48F14  test     al, al                                   
+10B48F16  je       0x10b48fba                               
+10B48F1C  test     edi, edi                                 
+10B48F1E  je       0x10b48fbf                               
+10B48F24  push     0                                        
+10B48F26  push     edi                                      
+10B48F27  call     0x10b56050                               Player$$get_isNanoGhost  ; rva=0xb56050
+10B48F2C  add      esp, 8                                   
+10B48F2F  test     al, al                                   
+10B48F31  je       0x10b48fba                               
+10B48F37  cmp      dword ptr [ebx + 0x34], 4                
+10B48F3B  je       0x10b48f94                               
+10B48F3D  test     esi, esi                                 
+10B48F3F  je       0x10b48fbf                               
+10B48F41  push     0                                        
+10B48F43  push     esi                                      
+10B48F44  call     0x10b56200                               Player$$get_nanoRole  ; rva=0xb56200
+10B48F49  add      esp, 8                                   
+10B48F4C  cmp      eax, 0x15                                
+10B48F4F  jne      0x10b48fba                               
+10B48F51  push     0                                        
+10B48F53  push     edi                                      
+10B48F54  lea      ebx, [eax - 0x12]                        
+10B48F57  lea      esi, [eax + 0x4f]                        
+10B48F5A  call     0x10b56200                               Player$$get_nanoRole  ; rva=0xb56200
+10B48F5F  cmp      eax, 0xa                                 
+10B48F62  mov      ecx, 0xc8                                
+10B48F67  cmove    esi, ecx                                 
+10B48F6A  push     0                                        
+10B48F6C  push     edi                                      
+10B48F6D  call     0x10b56240                               Player$$get_score  ; rva=0xb56240
+10B48F72  push     0                                        
+10B48F74  add      eax, esi                                 
+10B48F76  push     eax                                      
+10B48F77  push     edi                                      
+10B48F78  call     0x10b568d0                               Player$$set_score  ; rva=0xb568d0
+10B48F7D  add      esp, 0x1c                                
+10B48F80  push     0                                        
+10B48F82  push     ebx                                      
+10B48F83  push     edi                                      
+10B48F84  push     dword ptr [ebp + 8]                      
+10B48F87  call     0x10aeec40                               ModeBase_Nano$$AddNanoGhostExp  ; rva=0xaeec40
+10B48F8C  add      esp, 0x10                                
+10B48F8F  pop      edi                                      
+10B48F90  pop      esi                                      
+10B48F91  pop      ebx                                      
+10B48F92  pop      ebp                                      
+10B48F93  ret                                               
+
+==================== GhostBlade_InvalidDmgCheck RVA=0xb5db70 ====================
+10B5DB70  push     ebp                                      
+10B5DB71  mov      ebp, esp                                 
+10B5DB73  sub      esp, 0x50                                
+10B5DB76  cmp      byte ptr [0x10e6a8a8], 0                 
+10B5DB7D  push     ebx                                      
+10B5DB7E  push     esi                                      
+10B5DB7F  push     edi                                      
+10B5DB80  jne      0x10b5dbaa                               
+10B5DB82  push     0x10e2d558                               
+10B5DB87  call     0x10167c10                                 ; rva=0x167c10
+10B5DB8C  push     0x10e2cec8                               
+10B5DB91  call     0x10167c10                                 ; rva=0x167c10
+10B5DB96  push     0x10e2ecb8                               
+10B5DB9B  call     0x10167c10                                 ; rva=0x167c10
+10B5DBA0  add      esp, 0xc                                 
+10B5DBA3  mov      byte ptr [0x10e6a8a8], 1                 
+10B5DBAA  mov      eax, dword ptr [0x10e2d558]              
+10B5DBAF  mov      esi, dword ptr [ebp + 8]                 
+10B5DBB2  test     byte ptr [eax + 0xbb], 4                 
+10B5DBB9  mov      edi, dword ptr [esi + 0x30]              
+10B5DBBC  je       0x10b5dbcd                               
+10B5DBBE  cmp      dword ptr [eax + 0x74], 0                
+10B5DBC2  jne      0x10b5dbcd                               
+10B5DBC4  push     eax                                      
+10B5DBC5  call     0x10108970                                 ; rva=0x108970
+10B5DBCA  add      esp, 4                                   
+10B5DBCD  push     0                                        
+10B5DBCF  push     0                                        
+10B5DBD1  push     edi                                      
+10B5DBD2  call     0x104ea220                               UnityEngine.Object$$op_Equality  ; rva=0x4ea220
+10B5DBD7  add      esp, 0xc                                 
+10B5DBDA  test     al, al                                   
+10B5DBDC  jne      0x10b5dddd                               
+10B5DBE2  mov      eax, dword ptr [esi + 0x30]              
+10B5DBE5  mov      edi, dword ptr [ebp + 0xc]               
+10B5DBE8  mov      dword ptr [ebp + 8], eax                 
+10B5DBEB  mov      eax, dword ptr [0x10e2d558]              
+10B5DBF0  mov      ebx, dword ptr [edi + 4]                 
+10B5DBF3  test     byte ptr [eax + 0xbb], 4                 
+10B5DBFA  je       0x10b5dc0b                               
+10B5DBFC  cmp      dword ptr [eax + 0x74], 0                
+10B5DC00  jne      0x10b5dc0b                               
+10B5DC02  push     eax                                      
+10B5DC03  call     0x10108970                                 ; rva=0x108970
+10B5DC08  add      esp, 4                                   
+10B5DC0B  push     0                                        
+10B5DC0D  push     dword ptr [ebp + 8]                      
+10B5DC10  push     ebx                                      
+10B5DC11  call     0x104ea220                               UnityEngine.Object$$op_Equality  ; rva=0x4ea220
+10B5DC16  add      esp, 0xc                                 
+10B5DC19  test     al, al                                   
+10B5DC1B  je       0x10b5dddd                               
+10B5DC21  mov      eax, dword ptr [0x10e2d558]              
+10B5DC26  mov      ebx, dword ptr [edi]                     
+10B5DC28  test     byte ptr [eax + 0xbb], 4                 
+10B5DC2F  je       0x10b5dc40                               
+10B5DC31  cmp      dword ptr [eax + 0x74], 0                
+10B5DC35  jne      0x10b5dc40                               
+10B5DC37  push     eax                                      
+10B5DC38  call     0x10108970                                 ; rva=0x108970
+10B5DC3D  add      esp, 4                                   
+10B5DC40  push     0                                        
+10B5DC42  push     0                                        
+10B5DC44  push     ebx                                      
+10B5DC45  call     0x104ea420                               UnityEngine.Object$$op_Inequality  ; rva=0x4ea420
+10B5DC4A  add      esp, 0xc                                 
+10B5DC4D  test     al, al                                   
+10B5DC4F  je       0x10b5dddd                               
+10B5DC55  cmp      byte ptr [esi + 0xfc], 0                 
+10B5DC5C  je       0x10b5dddd                               
+10B5DC62  mov      eax, dword ptr [esi + 0x30]              
+10B5DC65  test     eax, eax                                 
+10B5DC67  je       0x10b5dde4                               
+10B5DC6D  push     0                                        
+10B5DC6F  push     eax                                      
+10B5DC70  lea      eax, [ebp - 0x38]                        
+10B5DC73  push     eax                                      
+10B5DC74  call     0x10b56130                               Player$$get_mapCameraForward  ; rva=0xb56130
+10B5DC79  add      esp, 0xc                                 
+10B5DC7C  movq     xmm0, qword ptr [eax]                    
+10B5DC80  mov      ebx, dword ptr [eax + 8]                 
+10B5DC83  mov      eax, dword ptr [edi]                     
+10B5DC85  movq     qword ptr [ebp - 8], xmm0                
+10B5DC8A  test     eax, eax                                 
+10B5DC8C  je       0x10b5dde4                               
+10B5DC92  push     0                                        
+10B5DC94  push     eax                                      
+10B5DC95  call     0x1032cf40                               UnityEngine.Component$$get_transform  ; rva=0x32cf40
+10B5DC9A  add      esp, 8                                   
+10B5DC9D  test     eax, eax                                 
+10B5DC9F  je       0x10b5dde4                               
+10B5DCA5  push     0                                        
+10B5DCA7  push     eax                                      
+10B5DCA8  lea      eax, [ebp - 0x38]                        
+10B5DCAB  push     eax                                      
+10B5DCAC  call     0x103f42b0                               UnityEngine.Transform$$get_position  ; rva=0x3f42b0
+10B5DCB1  add      esp, 0xc                                 
+10B5DCB4  movq     xmm0, qword ptr [eax]                    
+10B5DCB8  mov      eax, dword ptr [eax + 8]                 
+10B5DCBB  mov      dword ptr [ebp - 0xc], eax               
+10B5DCBE  mov      eax, dword ptr [esi + 0x30]              
+10B5DCC1  movq     qword ptr [ebp - 0x14], xmm0             
+10B5DCC6  test     eax, eax                                 
+10B5DCC8  je       0x10b5dde4                               
+10B5DCCE  push     0                                        
+10B5DCD0  push     eax                                      
+10B5DCD1  call     0x1032cf40                               UnityEngine.Component$$get_transform  ; rva=0x32cf40
+10B5DCD6  add      esp, 8                                   
+10B5DCD9  test     eax, eax                                 
+10B5DCDB  je       0x10b5dde4                               
+10B5DCE1  push     0                                        
+10B5DCE3  push     eax                                      
+10B5DCE4  lea      eax, [ebp - 0x50]                        
+10B5DCE7  push     eax                                      
+10B5DCE8  call     0x103f42b0                               UnityEngine.Transform$$get_position  ; rva=0x3f42b0
+10B5DCED  movss    xmm2, dword ptr [ebp - 0x14]             
+10B5DCF2  movss    xmm1, dword ptr [ebp - 0x10]             
+10B5DCF7  movq     xmm0, qword ptr [eax]                    
+10B5DCFB  mov      ecx, dword ptr [eax + 8]                 
+10B5DCFE  movq     qword ptr [ebp - 0x20], xmm0             
+10B5DD03  movq     xmm0, xmm0                               
+10B5DD07  subss    xmm2, dword ptr [ebp - 0x20]             
+10B5DD0C  movq     qword ptr [ebp - 0x2c], xmm0             
+10B5DD11  movq     xmm0, qword ptr [eax]                    
+10B5DD15  mov      eax, ecx                                 
+10B5DD17  subss    xmm1, dword ptr [ebp - 0x28]             
+10B5DD1C  movq     qword ptr [ebp - 0x38], xmm0             
+10B5DD21  movss    xmm0, dword ptr [ebp - 0xc]              
+10B5DD26  mov      dword ptr [ebp - 0x30], eax              
+10B5DD29  subss    xmm0, dword ptr [ebp - 0x30]             
+10B5DD2E  movss    dword ptr [ebp - 0x30], xmm0             
+10B5DD33  mov      eax, dword ptr [ebp - 0x30]              
+10B5DD36  mov      dword ptr [ebp - 0x3c], eax              
+10B5DD39  lea      eax, [ebp - 0x44]                        
+10B5DD3C  push     0                                        
+10B5DD3E  push     eax                                      
+10B5DD3F  lea      eax, [ebp - 0x50]                        
+10B5DD42  unpcklps xmm2, xmm1                               
+10B5DD45  push     eax                                      
+10B5DD46  movq     qword ptr [ebp - 0x44], xmm2             
+10B5DD4B  call     0x10a57fe0                               UnityEngine.Vector3$$get_normalized  ; rva=0xa57fe0
+10B5DD50  add      esp, 0x18                                
+10B5DD53  movq     xmm0, qword ptr [eax]                    
+10B5DD57  mov      eax, dword ptr [eax + 8]                 
+10B5DD5A  push     0                                        
+10B5DD5C  sub      esp, 0xc                                 
+10B5DD5F  mov      ecx, esp                                 
+10B5DD61  sub      esp, 0xc                                 
+10B5DD64  movq     qword ptr [ecx], xmm0                    
+10B5DD68  movq     xmm0, qword ptr [ebp - 8]                
+10B5DD6D  mov      dword ptr [ecx + 8], eax                 
+10B5DD70  mov      eax, esp                                 
+10B5DD72  movq     qword ptr [eax], xmm0                    
+10B5DD76  mov      dword ptr [eax + 8], ebx                 
+10B5DD79  call     0x10a56640                               UnityEngine.Vector3$$Angle  ; rva=0xa56640
+10B5DD7E  movss    xmm0, dword ptr [0x10c9e958]             
+10B5DD86  add      esp, 0x1c                                
+10B5DD89  fstp     dword ptr [ebp + 8]                      
+10B5DD8C  comiss   xmm0, dword ptr [ebp + 8]                
+10B5DD90  jbe      0x10b5dddd                               
+10B5DD92  push     0                                        
+10B5DD94  push     ecx                                      
+10B5DD95  mov      dword ptr [esp], 0                       
+10B5DD9C  push     0                                        
+10B5DD9E  push     0                                        
+10B5DDA0  mov      dword ptr [edi + 0x34], 0                
+10B5DDA7  push     dword ptr [0x10e2cec8]                   
+10B5DDAD  push     esi                                      
+10B5DDAE  call     0x10b34d60                               CFAnimator$$PlayTempAnim  ; rva=0xb34d60
+10B5DDB3  mov      eax, dword ptr [esi + 0x30]              
+10B5DDB6  add      esp, 0x18                                
+10B5DDB9  test     eax, eax                                 
+10B5DDBB  je       0x10b5dde4                               
+10B5DDBD  mov      eax, dword ptr [eax + 0x5c]              
+10B5DDC0  test     eax, eax                                 
+10B5DDC2  je       0x10b5dde4                               
+10B5DDC4  push     0                                        
+10B5DDC6  push     ecx                                      
+10B5DDC7  mov      dword ptr [esp], 0x3dcccccd              
+10B5DDCE  push     dword ptr [0x10e2ecb8]                   
+10B5DDD4  push     eax                                      
+10B5DDD5  call     0x10b39470                               CharacterModel$$PlayWpnAnim  ; rva=0xb39470
+10B5DDDA  add      esp, 0x10                                
+10B5DDDD  pop      edi                                      
+10B5DDDE  pop      esi                                      
+10B5DDDF  pop      ebx                                      
+10B5DDE0  mov      esp, ebp                                 
+10B5DDE2  pop      ebp                                      
+10B5DDE3  ret                                               
+
+==================== GhostBlade_CanSecKill RVA=0xb5d8e0 ====================
+10B5D8E0  push     ebp                                      
+10B5D8E1  mov      ebp, esp                                 
+10B5D8E3  sub      esp, 0x10                                
+10B5D8E6  cmp      byte ptr [0x10e6a8a0], 0                 
+10B5D8ED  push     esi                                      
+10B5D8EE  push     edi                                      
+10B5D8EF  jne      0x10b5d905                               
+10B5D8F1  push     0x10e2d848                               
+10B5D8F6  call     0x10167c10                                 ; rva=0x167c10
+10B5D8FB  add      esp, 4                                   
+10B5D8FE  mov      byte ptr [0x10e6a8a0], 1                 
+10B5D905  mov      esi, dword ptr [ebp + 0xc]               
+10B5D908  test     esi, esi                                 
+10B5D90A  je       0x10b5d987                               
+10B5D90C  mov      eax, dword ptr [esi + 0x1c]              
+10B5D90F  test     eax, eax                                 
+10B5D911  je       0x10b5d987                               
+10B5D913  movups   xmm0, xmmword ptr [eax + 8]              
+10B5D917  mov      edi, dword ptr [eax + 0x18]              
+10B5D91A  mov      eax, dword ptr [0x10e2d848]              
+10B5D91F  movups   xmmword ptr [ebp - 0x10], xmm0           
+10B5D923  test     byte ptr [eax + 0xbb], 4                 
+10B5D92A  je       0x10b5d93f                               
+10B5D92C  cmp      dword ptr [eax + 0x74], 0                
+10B5D930  jne      0x10b5d93f                               
+10B5D932  push     eax                                      
+10B5D933  call     0x10108970                                 ; rva=0x108970
+10B5D938  movups   xmm0, xmmword ptr [ebp - 0x10]           
+10B5D93C  add      esp, 4                                   
+10B5D93F  push     0                                        
+10B5D941  sub      esp, 0x14                                
+10B5D944  mov      eax, esp                                 
+10B5D946  movups   xmmword ptr [eax], xmm0                  
+10B5D949  mov      dword ptr [eax + 0x10], edi              
+10B5D94C  call     0x107febb0                               CodeStage.AntiCheat.ObscuredTypes.ObscuredInt$$op_Implicit  ; rva=0x7febb0
+10B5D951  movss    xmm0, dword ptr [0x10c9e944]             
+10B5D959  add      esp, 0x18                                
+10B5D95C  movd     xmm1, eax                                
+10B5D960  cvtdq2ps xmm1, xmm1                               
+10B5D963  comiss   xmm0, xmm1                               
+10B5D966  jae      0x10b5d970                               
+10B5D968  xor      al, al                                   
+10B5D96A  pop      edi                                      
+10B5D96B  pop      esi                                      
+10B5D96C  mov      esp, ebp                                 
+10B5D96E  pop      ebp                                      
+10B5D96F  ret                                               
+
+==================== GhostBlade_OnSecKillAnimEnd RVA=0xb5e090 ====================
+10B5E090  push     ebp                                      
+10B5E091  mov      ebp, esp                                 
+10B5E093  sub      esp, 0x9c                                
+10B5E099  cmp      byte ptr [0x10e6a8a2], 0                 
+10B5E0A0  push     ebx                                      
+10B5E0A1  push     esi                                      
+10B5E0A2  push     edi                                      
+10B5E0A3  jne      0x10b5e0c3                               
+10B5E0A5  push     0x10e2d558                               
+10B5E0AA  call     0x10167c10                                 ; rva=0x167c10
+10B5E0AF  push     0x10e2ce48                               
+10B5E0B4  call     0x10167c10                                 ; rva=0x167c10
+10B5E0B9  add      esp, 8                                   
+10B5E0BC  mov      byte ptr [0x10e6a8a2], 1                 
+10B5E0C3  mov      esi, dword ptr [ebp + 8]                 
+10B5E0C6  push     0                                        
+10B5E0C8  push     ecx                                      
+10B5E0C9  mov      dword ptr [esp], 0                       
+10B5E0D0  push     1                                        
+10B5E0D2  push     0                                        
+10B5E0D4  push     dword ptr [0x10e2ce48]                   
+10B5E0DA  push     esi                                      
+10B5E0DB  call     0x10b34d60                               CFAnimator$$PlayTempAnim  ; rva=0xb34d60
+10B5E0E0  mov      eax, dword ptr [esi + 0x30]              
+10B5E0E3  add      esp, 0x18                                
+10B5E0E6  test     eax, eax                                 
+10B5E0E8  je       0x10b5e2f5                               
+10B5E0EE  mov      eax, dword ptr [eax + 0x98]              
+10B5E0F4  test     eax, eax                                 
+10B5E0F6  je       0x10b5e2f5                               
+10B5E0FC  mov      byte ptr [eax + 0x49], 0                 
+10B5E100  lea      edi, [esi + 0xf8]                        
+10B5E106  mov      eax, dword ptr [0x10e2d558]              
+10B5E10B  mov      ebx, dword ptr [edi]                     
+10B5E10D  test     byte ptr [eax + 0xbb], 4                 
+10B5E114  je       0x10b5e125                               
+10B5E116  cmp      dword ptr [eax + 0x74], 0                
+10B5E11A  jne      0x10b5e125                               
+10B5E11C  push     eax                                      
+10B5E11D  call     0x10108970                                 ; rva=0x108970
+10B5E122  add      esp, 4                                   
+10B5E125  push     0                                        
+10B5E127  push     ebx                                      
+10B5E128  call     0x104ea360                               UnityEngine.Object$$op_Implicit  ; rva=0x4ea360
+10B5E12D  add      esp, 8                                   
+10B5E130  test     al, al                                   
+10B5E132  je       0x10b5e2ee                               
+10B5E138  push     0x48                                     
+10B5E13A  lea      eax, [ebp - 0x48]                        
+10B5E13D  push     0                                        
+10B5E13F  push     eax                                      
+10B5E140  call     0x1016ef00                                 ; rva=0x16ef00
+10B5E145  mov      eax, dword ptr [esi + 0x30]              
+10B5E148  push     eax                                      
+10B5E149  mov      dword ptr [ebp - 0x48], eax              
+10B5E14C  lea      eax, [ebp - 0x48]                        
+10B5E14F  push     eax                                      
+10B5E150  call     0x101677f0                                 ; rva=0x1677f0
+10B5E155  mov      eax, dword ptr [edi]                     
+10B5E157  push     eax                                      
+10B5E158  mov      dword ptr [ebp - 0x44], eax              
+10B5E15B  lea      eax, [ebp - 0x44]                        
+10B5E15E  push     eax                                      
+10B5E15F  call     0x101677f0                                 ; rva=0x1677f0
+10B5E164  mov      eax, dword ptr [esi + 0x30]              
+10B5E167  add      esp, 0x1c                                
+10B5E16A  mov      dword ptr [ebp - 0x40], 0x476a6000       
+10B5E171  test     eax, eax                                 
+10B5E173  je       0x10b5e2f5                               
+10B5E179  push     0                                        
+10B5E17B  push     eax                                      
+10B5E17C  call     0x1032cf40                               UnityEngine.Component$$get_transform  ; rva=0x32cf40
+10B5E181  add      esp, 8                                   
+10B5E184  test     eax, eax                                 
+10B5E186  je       0x10b5e2f5                               
+10B5E18C  push     0                                        
+10B5E18E  push     eax                                      
+10B5E18F  lea      eax, [ebp - 0x54]                        
+10B5E192  push     eax                                      
+10B5E193  call     0x103f42b0                               UnityEngine.Transform$$get_position  ; rva=0x3f42b0
+10B5E198  add      esp, 0xc                                 
+10B5E19B  movq     xmm0, qword ptr [eax]                    
+10B5E19F  movq     qword ptr [ebp - 0x3c], xmm0             
+10B5E1A4  mov      eax, dword ptr [eax + 8]                 
+10B5E1A7  mov      dword ptr [ebp - 0x34], eax              
+10B5E1AA  mov      eax, dword ptr [edi]                     
+10B5E1AC  test     eax, eax                                 
+10B5E1AE  je       0x10b5e2f5                               
+10B5E1B4  push     0                                        
+10B5E1B6  push     eax                                      
+10B5E1B7  call     0x1032cf40                               UnityEngine.Component$$get_transform  ; rva=0x32cf40
+10B5E1BC  add      esp, 8                                   
+10B5E1BF  test     eax, eax                                 
+10B5E1C1  je       0x10b5e2f5                               
+10B5E1C7  push     0                                        
+10B5E1C9  push     eax                                      
+10B5E1CA  lea      eax, [ebp - 0x54]                        
+10B5E1CD  push     eax                                      
+10B5E1CE  call     0x103f42b0                               UnityEngine.Transform$$get_position  ; rva=0x3f42b0
+10B5E1D3  push     0                                        
+10B5E1D5  push     esi                                      
+10B5E1D6  movq     xmm0, qword ptr [eax]                    
+10B5E1DA  movq     qword ptr [ebp - 0x30], xmm0             
+10B5E1DF  mov      eax, dword ptr [eax + 8]                 
+10B5E1E2  mov      dword ptr [ebp - 0x28], eax              
+10B5E1E5  mov      dword ptr [ebp - 0x10], 0                
+10B5E1EC  call     0x10b647b0                               WPN_Knife$$get_realData  ; rva=0xb647b0
+10B5E1F1  add      esp, 0x14                                
+10B5E1F4  test     eax, eax                                 
+10B5E1F6  je       0x10b5e2f5                               
+10B5E1FC  mov      eax, dword ptr [eax + 0xbc]              
+10B5E202  push     eax                                      
+10B5E203  mov      dword ptr [ebp - 0x20], eax              
+10B5E206  lea      eax, [ebp - 0x20]                        
+10B5E209  push     eax                                      
+10B5E20A  call     0x101677f0                                 ; rva=0x1677f0
+10B5E20F  mov      eax, dword ptr [esi + 0x68]              
+10B5E212  add      esp, 8                                   
+10B5E215  mov      dword ptr [ebp - 0x14], 2                
+10B5E21C  test     eax, eax                                 
+10B5E21E  je       0x10b5e2f5                               
+10B5E224  mov      eax, dword ptr [eax + 0xc]               
+10B5E227  mov      dword ptr [ebp - 0xc], eax               
+10B5E22A  movups   xmm0, xmmword ptr [ebp - 0x48]           
+10B5E22E  xor      eax, eax                                 
+10B5E230  cmp      byte ptr [esi + 0x54], al                
+10B5E233  movups   xmmword ptr [ebp - 0x9c], xmm0           
+10B5E23A  setne    al                                       
+10B5E23D  movups   xmm0, xmmword ptr [ebp - 0x38]           
+10B5E241  mov      dword ptr [ebp - 8], eax                 
+10B5E244  lea      eax, [ebp - 0x64]                        
+10B5E247  push     0                                        
+10B5E249  movups   xmmword ptr [ebp - 0x8c], xmm0           
+10B5E250  push     1                                        
+10B5E252  movups   xmm0, xmmword ptr [ebp - 0x28]           
+10B5E256  push     eax                                      
+10B5E257  movups   xmmword ptr [ebp - 0x7c], xmm0           
+10B5E25B  movups   xmm0, xmmword ptr [ebp - 0x18]           
+10B5E25F  movups   xmmword ptr [ebp - 0x6c], xmm0           
+10B5E263  movq     xmm0, qword ptr [ebp - 8]                
+10B5E268  movq     qword ptr [ebp - 0x5c], xmm0             
+10B5E26D  call     0x10b3d540                               DamageTag$$set_isGhostBladeSecKill  ; rva=0xb3d540
+10B5E272  lea      eax, [ebp - 0x9c]                        
+10B5E278  push     0                                        
+10B5E27A  push     eax                                      
+10B5E27B  call     0x10b3d0d0                               DamageEventData$$TakePlace  ; rva=0xb3d0d0
+10B5E280  mov      eax, dword ptr [edi]                     
+10B5E282  add      esp, 0x14                                
+10B5E285  test     eax, eax                                 
+10B5E287  je       0x10b5e2f5                               
+10B5E289  mov      eax, dword ptr [eax + 0x98]              
+10B5E28F  test     eax, eax                                 
+10B5E291  je       0x10b5e2f5                               
+10B5E293  mov      byte ptr [eax + 0x49], 0                 
+10B5E297  mov      eax, dword ptr [edi]                     
+10B5E299  mov      esi, dword ptr [esi + 0x30]              
+10B5E29C  test     eax, eax                                 
+10B5E29E  je       0x10b5e2f5                               
+10B5E2A0  push     0                                        
+10B5E2A2  push     eax                                      
+10B5E2A3  call     0x1032cf40                               UnityEngine.Component$$get_transform  ; rva=0x32cf40
+10B5E2A8  add      esp, 8                                   
+10B5E2AB  test     eax, eax                                 
+10B5E2AD  je       0x10b5e2f5                               
+10B5E2AF  push     0                                        
+10B5E2B1  push     eax                                      
+10B5E2B2  lea      eax, [ebp - 0x54]                        
+10B5E2B5  push     eax                                      
+10B5E2B6  call     0x103f42b0                               UnityEngine.Transform$$get_position  ; rva=0x3f42b0
+10B5E2BB  add      esp, 0xc                                 
+10B5E2BE  test     esi, esi                                 
+10B5E2C0  je       0x10b5e2f5                               
+10B5E2C2  movq     xmm0, qword ptr [eax]                    
+10B5E2C6  mov      eax, dword ptr [eax + 8]                 
+10B5E2C9  push     0                                        
+10B5E2CB  sub      esp, 0xc                                 
+10B5E2CE  mov      ecx, esp                                 
+10B5E2D0  push     esi                                      
+10B5E2D1  movq     qword ptr [ecx], xmm0                    
+10B5E2D5  mov      dword ptr [ecx + 8], eax                 
+10B5E2D8  call     0x10b534c0                               Player$$SetPos  ; rva=0xb534c0
+10B5E2DD  push     0                                        
+10B5E2DF  push     edi                                      
+10B5E2E0  mov      dword ptr [edi], 0                       
+10B5E2E6  call     0x101677f0                                 ; rva=0x1677f0
+10B5E2EB  add      esp, 0x1c                                
+10B5E2EE  pop      edi                                      
+10B5E2EF  pop      esi                                      
+10B5E2F0  pop      ebx                                      
+10B5E2F1  mov      esp, ebp                                 
+10B5E2F3  pop      ebp                                      
+10B5E2F4  ret                                               
+

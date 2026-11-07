@@ -1,0 +1,109 @@
+{
+  "feature_id": "nano_cloth",
+  "canonical_id": "nano_cloth",
+  "display_name": "增加防化服",
+  "category": "player",
+  "tab": "player_tab",
+  "tab_title": "人物属性",
+  "tab_order": 20,
+  "order": 40,
+  "desc": "点一次给防化服加 N 件，可反复叠加，回合结束自动清回原样。",
+  "ui_text": {
+    "lines": [
+      "点一次给防化服加 N 件，可反复叠加。",
+      "回合结束自动清回原样。"
+    ]
+  },
+  "script": "script.js",
+  "runtime": {
+    "type": "plugin_script"
+  },
+  "hotkey": {
+    "enabled": true
+  },
+  "layout": {
+    "card_type": "simple",
+    "columnspan": 1,
+    "title_color": "#4ECDC4"
+  },
+  "controls": [
+    {
+      "type": "switch",
+      "action": "enable"
+    },
+    {
+      "type": "slider",
+      "action": "setConfig",
+      "key": "cloth_count",
+      "label": "每次增加量",
+      "min": 1,
+      "max": 10,
+      "step": 1,
+      "default": 10,
+      "suffix": "件"
+    },
+    {
+      "type": "combo",
+      "action": "setConfig",
+      "key": "cloth_target",
+      "label": "应用对象:",
+      "values": [
+        "local_player",
+        "all_humans"
+      ],
+      "display_values": {
+        "local_player": "仅本地玩家",
+        "all_humans": "全体人类"
+      },
+      "default": "local_player"
+    },
+    {
+      "type": "button",
+      "action": "apply",
+      "label": "应用防化服"
+    }
+  ],
+  "config": {
+    "cloth_count": 10,
+    "cloth_target": "local_player"
+  },
+  "rpc": [
+    "enable",
+    "disable",
+    "setConfig",
+    "set_config",
+    "setconfig",
+    "status",
+    "cleanup",
+    "apply"
+  ],
+  "actions": {
+    "apply": {
+      "type": "rpc",
+      "requires_connection": true
+    }
+  },
+  "lifecycle": {
+    "cleanup": true,
+    "restore": true,
+    "requires_room_ready_reapply": true,
+    "room_ready_retry": true
+  },
+  "source": {
+    "single_feature_js": "05-正式功能/37-增加防化服/script.js",
+    "runtime_script_js": "features/37_nano_cloth/script.js"
+  },
+  "ui_handles": {
+    "switch": "nano_cloth_switch",
+    "cloth_count_slider": "nano_cloth_cloth_count_slider",
+    "cloth_count_var": "nano_cloth_cloth_count_var",
+    "cloth_count_label": "nano_cloth_cloth_count_label",
+    "cloth_target_var": "nano_cloth_cloth_target_var",
+    "cloth_target_combo": "nano_cloth_cloth_target_combo",
+    "current_label": "nano_cloth_current_label",
+    "button": "nano_cloth_apply_btn"
+  },
+  "state": {
+    "sync_enabled_from_config": true
+  }
+}

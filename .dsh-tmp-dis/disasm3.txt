@@ -1,0 +1,143 @@
+========== CalKnifeDmg base 0x794180
+10794180  push     ebp
+10794181  mov      ebp, esp
+10794183  fld      dword ptr [ebp + 0x10]
+10794186  pop      ebp
+10794187  ret      
+
+========== CalKnifeDmg nano4 0xb417e0
+10B417E0  push     ebp
+10B417E1  mov      ebp, esp
+10B417E3  push     esi
+10B417E4  mov      esi, dword ptr [ebp + 0xc]
+10B417E7  lea      eax, [ebp + 0x14]
+10B417EA  push     0
+10B417EC  push     eax
+10B417ED  call     0x10b3d490   ; DamageTag$$get_isBigshot
+10B417F2  add      esp, 8
+10B417F5  mov      dl, al
+10B417F7  cmp      esi, 0x12
+10B417FA  jl       0x10b41822
+10B417FC  cmp      esi, 0x1b
+10B417FF  jg       0x10b41822
+10B41801  test     dl, dl
+10B41803  mov      ecx, 0x578
+10B41808  mov      eax, 0xfa0
+10B4180D  cmovne   ecx, eax
+10B41810  movd     xmm0, ecx
+10B41814  cvtdq2ps xmm0, xmm0
+10B41817  pop      esi
+10B41818  movss    dword ptr [ebp + 0xc], xmm0
+10B4181D  fld      dword ptr [ebp + 0xc]
+10B41820  pop      ebp
+10B41821  ret      
+
+========== CalKnifeDmg nano4T 0xb431a0
+10B431A0  push     ebp
+10B431A1  mov      ebp, esp
+10B431A3  push     esi
+10B431A4  mov      esi, dword ptr [ebp + 0xc]
+10B431A7  lea      eax, [ebp + 0x14]
+10B431AA  push     0
+10B431AC  push     eax
+10B431AD  call     0x10b3d490   ; DamageTag$$get_isBigshot
+10B431B2  movss    xmm0, dword ptr [ebp + 0x10]
+10B431B7  add      esp, 8
+10B431BA  movss    dword ptr [ebp + 0xc], xmm0
+10B431BF  mov      cl, al
+10B431C1  cmp      esi, 1
+10B431C4  jl       0x10b431d7
+10B431C6  cmp      esi, 7
+10B431C9  jg       0x10b431d7
+10B431CB  mov      eax, 0x3e8
+10B431D0  mov      edx, 0x5dc
+10B431D5  jmp      0x10b43211
+10B431D7  lea      eax, [esi - 8]
+10B431DA  cmp      eax, 0x13
+10B431DD  ja       0x10b4323f
+10B431DF  movzx    eax, byte ptr [eax + 0x10b43350]
+10B431E6  jmp      dword ptr [eax*4 + 0x10b43324]
+10B431ED  mov      eax, 0x7d0
+10B431F2  mov      edx, 0xbb8
+10B431F7  jmp      0x10b4322e
+10B431F9  mov      edx, 0xdac
+10B431FE  jmp      0x10b4320c
+10B43200  mov      edx, 0x1f40
+10B43205  jmp      0x10b4320c
+10B43207  mov      edx, 0x1d4c
+10B4320C  mov      eax, 0x9c4
+10B43211  test     cl, cl
+10B43213  cmovne   eax, edx
+10B43216  movd     xmm0, eax
+10B4321A  cvtdq2ps xmm0, xmm0
+10B4321D  movss    dword ptr [ebp + 0xc], xmm0
+10B43222  jmp      0x10b43252
+10B43224  mov      eax, 0x2bc
+10B43229  mov      edx, 0x5dc
+10B4322E  test     cl, cl
+10B43230  cmovne   eax, edx
+10B43233  movd     xmm0, eax
+10B43237  cvtdq2ps xmm0, xmm0
+10B4323A  movss    dword ptr [ebp + 0xc], xmm0
+10B4323F  test     esi, esi
+10B43241  je       0x10b432b6
+10B43243  cmp      esi, 0x12
+10B43246  jl       0x10b43252
+10B43248  movss    dword ptr [ebp + 0xc], xmm0
+10B4324D  cmp      esi, 0x1b
+10B43250  jle      0x10b432b6
+10B43252  mov      eax, dword ptr [ebp + 8]
+10B43255  mov      eax, dword ptr [eax + 0xe0]
+10B4325B  test     eax, eax
+10B4325D  je       0x10b4331f
+10B43263  cmp      dword ptr [eax + 0xc], 5
+10B43267  jne      0x10b432b6
+10B43269  addss    xmm0, dword ptr [0x10c9e950]
+10B43271  pop      esi
+10B43272  movss    dword ptr [ebp + 0xc], xmm0
+10B43277  fld      dword ptr [ebp + 0xc]
+10B4327A  pop      ebp
+10B4327B  ret      
+
+========== CalKnifeDmg nano6 0xb478e0
+10B478E0  push     ebp
+10B478E1  mov      ebp, esp
+10B478E3  push     ebx
+10B478E4  push     esi
+10B478E5  mov      esi, dword ptr [ebp + 0xc]
+10B478E8  lea      eax, [ebp + 0x14]
+10B478EB  push     0
+10B478ED  push     eax
+10B478EE  call     0x10b3d490   ; DamageTag$$get_isBigshot
+10B478F3  movss    xmm0, dword ptr [ebp + 0x10]
+10B478F8  add      esp, 8
+10B478FB  ucomiss  xmm0, dword ptr [0x10b99d50]
+10B47902  mov      bl, al
+10B47904  lahf     
+10B47905  test     ah, 0x44
+10B47908  jnp      0x10b47a03
+10B4790E  cmp      esi, 0x15
+10B47911  je       0x10b479c8
+10B47917  test     esi, esi
+10B47919  je       0x10b479da
+10B4791F  cmp      esi, 0x12
+10B47922  jl       0x10b4792d
+10B47924  cmp      esi, 0x1b
+10B47927  jle      0x10b479da
+10B4792D  mov      eax, dword ptr [ebp + 0x18]
+10B47930  cmp      eax, 3
+10B47933  ja       0x10b479da
+10B47939  jmp      dword ptr [eax*4 + 0x10b47a0c]
+10B47940  test     bl, bl
+10B47942  mov      eax, 0x64
+10B47947  mov      ecx, 0xc8
+10B4794C  cmovne   eax, ecx
+10B4794F  movd     xmm0, eax
+10B47953  cvtdq2ps xmm0, xmm0
+10B47956  pop      esi
+10B47957  pop      ebx
+10B47958  movss    dword ptr [ebp + 0x10], xmm0
+10B4795D  fld      dword ptr [ebp + 0x10]
+10B47960  pop      ebp
+10B47961  ret      
+

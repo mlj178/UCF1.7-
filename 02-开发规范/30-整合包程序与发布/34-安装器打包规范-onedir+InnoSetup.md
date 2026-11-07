@@ -109,7 +109,7 @@ onefile 与 onedir 的 spec 差异仅在末尾 `EXE()` / `COLLECT()` 段。需�
 customtkinter        collect_data_files（spec 已有）
 frida                collect_dynamic_libs（PyInstaller 自带 hook 通常已处理，构建后用 warn-*.txt 核对）
 features/*/*         作为 data 文件，保持相对路径（spec 已用 add_feature_runtime_files 收集）
-资源/                微信赞赏码.png、音效1.MP3、红色图片/、红色文案/（spec 已收集）
+00-资源/             微信赞赏码.png、音效1.MP3、红色图片/、红色文案/（spec 已收集；2.8 起各版本共用，见 §6.4）
 plugins/universal_hook/   inject.exe、Universal-ImGui-Hook.dll、universal_hook.json（spec 已收集）
 Tcl/Tk               spec 已从本机 Python 暂存并收集（见《32》§七）
 ```
@@ -148,6 +148,24 @@ coll = COLLECT(
 
 ### 6.4 资源路径
 
+**2.8 起资源由各版本共享，只保留一份**，放在发行版根目录：
+
+```text
+04-正式发行版/
+  00-资源/                          <- 2.8 及以后所有版本共用（不再复制到版本目录）
+    微信赞赏码.png、音效1.MP3、UCF1.7Q群1095388251.jpg、
+    win7用不了，只有win10和11能用.txt、红色图片/、红色文案/
+  全功能整合包2.8/
+    game_modifier/
+      game_modifier_onedir.spec
+      core/config.py                <- 源码运行时同样从这里取资源
+```
+
+- **spec**：资源来源改为 `发行版根目录/00-资源`，由 `release_root_dir = os.path.dirname(os.path.dirname(current_dir))` 推出；版本目录内不再有 `资源/`，旧结构仅作兜底。
+- **源码运行**：`core/config.py` 非 frozen 分支优先取 `发行版根目录/00-资源`，取不到时回退 `版本目录/资源`。
+- **打包产物不变**：资源仍收集到 `_internal/资源/`，安装后 `sys._MEIPASS/资源` 即 `RESOURCE_DIR`，frozen 分支无需改动。
+- **2.8 之前的版本**：继续使用各自版本目录内的 `资源/`，不迁移、不删除。
+
 onedir 下 `_internal/` 即 PyInstaller 的 `sys._MEIPASS`，只读资源访问逻辑无需改动。**用户可写数据**（`data/`）的落点见 §7。
 
 ## 7. 用户数据目录策略（已确认：方案 A）
@@ -180,7 +198,7 @@ if getattr(sys, 'frozen', False):
 else:
     APP_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     BASE_DIR = APP_DIR
-    RESOURCE_DIR = os.path.join(os.path.dirname(APP_DIR), "资源")
+    RESOURCE_DIR = os.path.join(os.path.dirname(APP_DIR), "资源")  # 2.8 起改为共享资源，见 §6.4
     PLUGINS_DIR = os.path.join(APP_DIR, "plugins")
     FEATURES_DIR = os.path.join(APP_DIR, "features")
     DATA_DIR = os.path.join(APP_DIR, "data")
@@ -192,6 +210,7 @@ else:
 2. `<版本号>` 版本号建议从整合包目录名解析，避免后续版本手工改。若暂不解析，复制版本目录时务必同步修改此处字面量。
 3. `os.makedirs(DATA_DIR, exist_ok=True)` 已在下方保留，首次运行自动创建。
 4. 改造后需回归测试：快捷键保存/恢复、设置项持久化、武器快捷键、Nano-4T 选择、desired_state/feature_state 持久化均在 `%LOCALAPPDATA%\UCFModifier\<版本号>\data\` 下生效。
+5. 2.8 起非 frozen 分支的 `RESOURCE_DIR` 改为共享资源解析（`04-正式发行版/00-资源`，旧结构回退 `版本目录/资源`），见 §6.4；上面片段中该行以实际实现为准。
 
 `logs/` 目录：按《32》§十一，正式版所有文件日志开关必须关闭，正式版**不产生** `logs/`。源码运行时才产生 `logs/`。本文按“正式版无日志文件”处理，卸载逻辑不需为 `logs/` 留保留项。
 
@@ -391,7 +410,9 @@ release/
 └── win7用不了，只有win10和11能用.txt  （2.7 起随包附带，空文件）
 ```
 
-后四个文件由 `build_release.ps1` 的第 8 步从 `packaging/` 与 `资源/` 拷贝，不要只手工补一处；群二维码和空白 txt 同时会打进安装包内的 `_internal/资源/`。
+后四个文件由 `build_release.ps1` 的第 8 步从 `packaging/` 与资源目录拷贝，不要只手工补一处；群二维码和空白 txt 同时会打进安装包内的 `_internal/资源/`。
+
+> 2.8 起资源目录统一为 `04-正式发行版/00-资源/`。从旧版本复制 `packaging/build_release.ps1` 时，必须把脚本里的资源路径（原为 `Split-Path -Parent $projectDir` + `资源`）改为 `<发行版根>/00-资源`，因为版本目录内已不再有 `资源/`。
 
 不应包含：
 

@@ -1,0 +1,372 @@
+import customtkinter as ctk
+import os
+import webbrowser
+
+from core.config import (
+    DEDICATED_HOTKEY_ACTIONS,
+    FEATURES_INFO,
+    DATA_DIR,
+    RESOURCE_DIR,
+    HOTKEY_POSITIONS,
+    HOTKEY_DISPLAY_NAMES,
+    HOTKEY_EXCLUDED,
+    ROLE_TRANSFORM_HOTKEY_ACTIONS,
+    ROLE_TRANSFORM_HOTKEY_DISPLAY_NAMES,
+    DIRECT_TRANSFORM_HOTKEY_ACTIONS,
+    DIRECT_TRANSFORM_HOTKEY_DISPLAY_NAMES,
+)
+from core.hotkey_manager import HotkeyManager
+from core.sound_manager import SoundManager
+from core.weapon_catalog import get_weapon_name
+from ui.views.red_theme_tab import build_red_theme_tab
+from ui.window_contract import APP_TITLE
+
+
+class SettingsWindow(ctk.CTkToplevel):
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.title("设置")
+        self.geometry("500x650")
+        self.resizable(False, False)
+        self.attributes('-topmost', True)
+        self.transient(parent)
+        self.grab_set()
+
+        self._parent = parent
+        self._hotkey = HotkeyManager.get_instance()
+        self._sound = SoundManager.get_instance()
+
+        self._setup_ui()
+        self.protocol("WM_DELETE_WINDOW", self._on_save)
+
+    def _setup_ui(self):
+        self._tabview = ctk.CTkTabview(self, corner_radius=8)
+        self._tabview.pack(fill="both", expand=True, padx=12, pady=12)
+
+        self._setup_hotkey_tab()
+        self._setup_about_tab()
+        self._setup_free_tab()
+        self._setup_disclaimer_tab()
+        # 文档 §1：红色主题 tab 排在关于 tab 之后
+        self._setup_red_theme_tab()
+
+    def _setup_red_theme_tab(self):
+        tab = self._tabview.add("红色主题")
+        build_red_theme_tab(tab)
+
+    def _setup_hotkey_tab(self):
+        tab = self._tabview.add("快捷键")
+        hotkey_frame = ctk.CTkScrollableFrame(tab, corner_radius=0)
+        hotkey_frame.pack(fill="both", expand=True, padx=4, pady=4)
+
+        # === 功能快捷键部分 ===
+        ctk.CTkLabel(hotkey_frame, text="功能快捷键绑定 - 功能互斥绑定",
+                     font=("Microsoft YaHei", 14, "bold")).pack(pady=(12, 6))
+
+        feature_display_names = {v['name']: k for k, v in FEATURES_INFO.items()
+                                 if k not in HOTKEY_EXCLUDED}
+        option_bindings = dict(feature_display_names)
+        self._feature_display_names = option_bindings
+
+        def binding_key(binding):
+            if not isinstance(binding, dict):
+                return binding
+            feature_id = binding.get('feature_id')
+            payload_action = (binding.get('payload') or {}).get('action')
+            return f"{feature_id}:{payload_action}"
+
+        display_names_by_binding = {
+            binding_key(binding): display_name
+            for display_name, binding in option_bindings.items()
+        }
+
+        self._combo_widgets = {}
+
+        hotkey_data = self._hotkey.get_hotkey_config()
+
+        for pos, fid in hotkey_data.items():
+            if isinstance(fid, str) and fid in HOTKEY_EXCLUDED:
+                self._hotkey.remove_hotkey(pos)
+                hotkey_data[pos] = None
+
+        def get_available_features(exclude_pos=None):
+            available = ["未绑定"]
+            for display_name, feature_id in option_bindings.items():
+                is_bound = False
+                for pos, feat in hotkey_data.items():
+                    if pos != exclude_pos and binding_key(feat) == binding_key(feature_id):
+                        is_bound = True
+                        break
+                if not is_bound:
+                    available.append(display_name)
+            return available
+
+        def update_combo_options():
+            for pos, combo in self._combo_widgets.items():
+                current_value = combo.get()
+                available = get_available_features(exclude_pos=pos)
+                combo.configure(values=available)
+                if current_value not in available:
+                    combo.set("未绑定")
+                    self._hotkey.remove_hotkey(pos)
+                    hotkey_data[pos] = None
+
+        for pos in HOTKEY_POSITIONS:
+            row_frame = ctk.CTkFrame(hotkey_frame, fg_color="#2a2a2a")
+            row_frame.pack(fill="x", padx=8, pady=3)
+
+            display_name = HOTKEY_DISPLAY_NAMES.get(pos, pos)
+            ctk.CTkLabel(row_frame, text=display_name, font=("Microsoft YaHei", 12),
+                         text_color="#aaa", width=60).pack(side="left", padx=8)
+
+            dedicated_action = DEDICATED_HOTKEY_ACTIONS.get(pos)
+            if dedicated_action:
+                self._hotkey.remove_hotkey(pos)
+                hotkey_data[pos] = None
+                ctk.CTkLabel(
+                    row_frame,
+                    text=f"{dedicated_action.get('label', '固定动作')}（固定绑定）",
+                    font=("Microsoft YaHei", 11),
+                    text_color="#38bdf8",
+                    width=190,
+                ).pack(side="left", padx=8)
+                continue
+
+            feature_id = hotkey_data.get(pos)
+            feature_name = display_names_by_binding.get(binding_key(feature_id), "未绑定")
+
+            available_features = get_available_features(exclude_pos=pos)
+            combo = ctk.CTkComboBox(row_frame, values=available_features,
+                                     state="readonly", width=150)
+            combo.pack(side="left", padx=8)
+            combo.set(feature_name)
+
+            self._combo_widgets[pos] = combo
+
+            def on_combo_change(selected, position=pos):
+                if selected and selected != "未绑定":
+                    fid = option_bindings[selected]
+                    if isinstance(fid, dict):
+                        fid = {
+                            'feature_id': fid['feature_id'],
+                            'action': fid['action'],
+                            'payload': dict(fid.get('payload') or {}),
+                        }
+                    self._hotkey.set_hotkey(position, fid)
+                    hotkey_data[position] = fid
+                else:
+                    self._hotkey.remove_hotkey(position)
+                    hotkey_data[position] = None
+                update_combo_options()
+
+            combo.configure(command=on_combo_change)
+
+        ctk.CTkLabel(hotkey_frame, text="\n角色变身固定快捷键",
+                     font=("Microsoft YaHei", 14, "bold")).pack(pady=(20, 6))
+        for hotkey, binding in ROLE_TRANSFORM_HOTKEY_ACTIONS.items():
+            row_frame = ctk.CTkFrame(hotkey_frame, fg_color="#2a2a2a")
+            row_frame.pack(fill="x", padx=8, pady=3)
+            ctk.CTkLabel(
+                row_frame,
+                text=ROLE_TRANSFORM_HOTKEY_DISPLAY_NAMES[hotkey],
+                font=("Microsoft YaHei", 12),
+                text_color="#aaa",
+                width=60,
+            ).pack(side="left", padx=8)
+            ctk.CTkLabel(
+                row_frame,
+                text=f"{binding['label']}（固定绑定）",
+                font=("Microsoft YaHei", 11),
+                text_color="#a855f7",
+                width=240,
+            ).pack(side="left", padx=8)
+
+        ctk.CTkLabel(hotkey_frame, text="\n直接变身固定快捷键",
+                     font=("Microsoft YaHei", 14, "bold")).pack(pady=(20, 6))
+        for hotkey, binding in DIRECT_TRANSFORM_HOTKEY_ACTIONS.items():
+            row_frame = ctk.CTkFrame(hotkey_frame, fg_color="#2a2a2a")
+            row_frame.pack(fill="x", padx=8, pady=3)
+            ctk.CTkLabel(
+                row_frame,
+                text=DIRECT_TRANSFORM_HOTKEY_DISPLAY_NAMES[hotkey],
+                font=("Microsoft YaHei", 12),
+                text_color="#aaa",
+                width=60,
+            ).pack(side="left", padx=8)
+            ctk.CTkLabel(
+                row_frame,
+                text=f"{binding['label']}（固定绑定）",
+                font=("Microsoft YaHei", 11),
+                text_color="#38bdf8",
+                width=240,
+            ).pack(side="left", padx=8)
+
+        # === 武器快捷键部分 ===
+        ctk.CTkLabel(hotkey_frame, text="\n武器快捷键绑定 - 快速赋予武器",
+                     font=("Microsoft YaHei", 14, "bold")).pack(pady=(20, 6))
+        
+        self._setup_weapon_hotkey_section(hotkey_frame)
+    
+    def _setup_weapon_hotkey_section(self, parent):
+        """设置武器快捷键显示部分"""
+        from core.weapon_hotkey_manager import WeaponHotkeyManager
+        from core.config import WEAPON_HOTKEY_POSITIONS, WEAPON_HOTKEY_DISPLAY_NAMES
+        
+        whm = WeaponHotkeyManager.get_instance()
+        bindings = whm.get_all_bindings()
+        
+        # 显示武器快捷键绑定
+        for hotkey in WEAPON_HOTKEY_POSITIONS:
+            row_frame = ctk.CTkFrame(parent, fg_color="#2a2a2a")
+            row_frame.pack(fill="x", padx=8, pady=3)
+            
+            display_name = WEAPON_HOTKEY_DISPLAY_NAMES.get(hotkey, hotkey)
+            ctk.CTkLabel(row_frame, text=display_name, font=("Microsoft YaHei", 12),
+                         text_color="#aaa", width=60).pack(side="left", padx=8)
+            
+            weapon_id = bindings.get(hotkey)
+            if weapon_id:
+                # 查找武器名称
+                weapon_name = self._get_weapon_name_by_id(weapon_id)
+                weapon_display = f"🔫 {weapon_name}"
+            else:
+                weapon_display = "未绑定"
+            
+            weapon_label = ctk.CTkLabel(row_frame, text=weapon_display,
+                                         font=("Microsoft YaHei", 11), width=150)
+            weapon_label.pack(side="left", padx=8)
+    
+    def _get_weapon_name_by_id(self, weapon_id):
+        return get_weapon_name(weapon_id)
+    def _setup_about_tab(self):
+        tab = self._tabview.add("关于")
+        about_frame = ctk.CTkFrame(tab, corner_radius=0, fg_color="transparent")
+        about_frame.pack(fill="both", expand=True, padx=4, pady=4)
+
+        ctk.CTkLabel(about_frame, text=APP_TITLE,
+                     font=("Microsoft YaHei", 18, "bold")).pack(pady=(12, 4))
+        ctk.CTkLabel(about_frame, text="修改器作者: 挂呱呱呱",
+                     font=("Microsoft YaHei", 12)).pack(pady=2)
+        ctk.CTkLabel(about_frame, text="代码贡献者：少年与狗子",
+                     font=("Microsoft YaHei", 12)).pack(pady=2)
+        ctk.CTkLabel(about_frame, text="游戏原作者：內個_shei_鸭",
+                     font=("Microsoft YaHei", 12)).pack(pady=2)
+        ctk.CTkLabel(about_frame, text="更新日期：2026年11月7日",
+                     font=("Microsoft YaHei", 12)).pack(pady=2)
+        ctk.CTkLabel(about_frame, text="\nQQ群: 1095388251",
+                     font=("Microsoft YaHei", 12)).pack(pady=4)
+
+
+        bili_frame = ctk.CTkFrame(about_frame, fg_color="transparent")
+        bili_frame.pack(pady=(12, 4))
+        bili_btn = ctk.CTkButton(bili_frame, text="🔗 B站主页", font=("Microsoft YaHei", 11),
+                                   width=100, command=self._open_bilibili)
+        bili_btn.pack(side="left")
+
+        # 全功能整合包源代码链接
+        version_frame = ctk.CTkFrame(about_frame, fg_color="transparent")
+        version_frame.pack(pady=(8, 4))
+        version_btn = ctk.CTkButton(version_frame, text="🔗 全功能整合包源代码", font=("Microsoft YaHei", 11),
+                                     width=170, command=self._open_source_code)
+        version_btn.pack(side="left")
+
+        ctk.CTkLabel(about_frame, text="\n微信赞赏码:",
+                     font=("Microsoft YaHei", 12)).pack(pady=4)
+        donate_image_path = os.path.join(RESOURCE_DIR, "微信赞赏码.png")
+        if os.path.exists(donate_image_path):
+            try:
+                from PIL import Image
+                # with 确保原图文件句柄在缩放完成后立即关闭（PIL 默认延迟打开文件）
+                with Image.open(donate_image_path) as source:
+                    donate_image = source.resize((225, 225), Image.LANCZOS)
+                donate_photo = ctk.CTkImage(light_image=donate_image, dark_image=donate_image,
+                                             size=(225, 225))
+                donate_label = ctk.CTkLabel(about_frame, image=donate_photo, text="")
+                donate_label.pack(pady=4)
+            except Exception as e:
+                ctk.CTkLabel(about_frame, text=f"加载图片失败: {e}",
+                             font=("Microsoft YaHei", 11), text_color="#888").pack(pady=4)
+        else:
+            ctk.CTkLabel(about_frame, text="赞赏码图片未找到",
+                         font=("Microsoft YaHei", 11), text_color="#888").pack(pady=4)
+
+    def _setup_free_tab(self):
+        tab = self._tabview.add("免费声明")
+        free_frame = ctk.CTkFrame(tab, corner_radius=0, fg_color="transparent")
+        free_frame.pack(fill="both", expand=True, padx=8, pady=8)
+
+        # 标题与落款使用统一的灰色说明页样式，保持各说明页观感一致
+        ctk.CTkLabel(free_frame, text="免 费 声 明",
+                     font=("Microsoft YaHei", 18), text_color="#9a8f7d").pack(pady=(20, 14))
+
+        free_lines = [
+            "1.作者从未以任何形式出售本软件，也未授权任何第三方代售。",
+            "2.若你是付费获取，说明你被欺骗了，请尽快联系卖家退款。",
+            "3.官方渠道只有：B站主页、GitHub 源码仓库、QQ群 1095388251。",
+            "4.「关于」页的赞赏码为自愿打赏，与软件功能无关，不构成购买行为。",
+            "5.任何以本修改器名义收费的行为，均与作者无关。",
+        ]
+        for line in free_lines:
+            ctk.CTkLabel(free_frame, text=line, anchor="w",
+                         wraplength=440, justify="left",
+                         font=("Microsoft YaHei", 15)).pack(fill="x", pady=3)
+
+        sign_frame = ctk.CTkFrame(free_frame, fg_color="transparent")
+        sign_frame.pack(fill="x", pady=(26, 10))
+        sep = ctk.CTkFrame(sign_frame, height=1, fg_color="#ddd6c8")
+        sep.pack(fill="x")
+        ctk.CTkLabel(sign_frame, text="全功能整合包 · 永久免费 · 已开源",
+                     font=("Microsoft YaHei", 13), text_color="#9a8f7d").pack(fill="x", pady=(8, 0))
+
+    def _setup_disclaimer_tab(self):
+        tab = self._tabview.add("免责声明")
+        frame = ctk.CTkFrame(tab, corner_radius=0, fg_color="transparent")
+        frame.pack(fill="both", expand=True, padx=8, pady=8)
+
+        ctk.CTkLabel(frame, text="免 责 声 明",
+                     font=("Microsoft YaHei", 18), text_color="#9a8f7d").pack(pady=(18, 10))
+
+        # 分四组：使用范围 / 风险提示 / 责任限制 / 生效
+        sections = [
+            ("使用范围", [
+                "仅供个人学习与单机娱乐使用，禁止商业用途。",
+                "非官方工具，与游戏开发商、发行商及原作者无关。",
+            ]),
+            ("风险提示", [
+                "请勿利用本程序破坏他人游戏体验，或从事任何违反当地法律法规的行为。",
+            ]),
+            ("责任限制", [
+                "第三方基于本程序修改或二次分发的版本，其内容与后果均与原作者无关，请自行甄别来源。",
+            ]),
+            ("生效", [
+                "你开始使用本程序，即视为已阅读并同意以上全部条款；如不同意，请立即停止使用并删除本程序。",
+            ]),
+        ]
+        for group, lines in sections:
+            ctk.CTkLabel(frame, text=group, anchor="w",
+                         font=("Microsoft YaHei", 13, "bold"),
+                         text_color="#9a8f7d").pack(fill="x", pady=(10, 2))
+            for line in lines:
+                ctk.CTkLabel(frame, text=line, anchor="w",
+                             wraplength=440, justify="left",
+                             font=("Microsoft YaHei", 14)).pack(fill="x", pady=2)
+
+        sign_frame = ctk.CTkFrame(frame, fg_color="transparent")
+        sign_frame.pack(fill="x", pady=(22, 10))
+        sep = ctk.CTkFrame(sign_frame, height=1, fg_color="#ddd6c8")
+        sep.pack(fill="x")
+        ctk.CTkLabel(sign_frame, text="全功能整合包 · 遵循 AGPL-3.0 开源许可 · 不提供任何担保",
+                     font=("Microsoft YaHei", 12), text_color="#9a8f7d",
+                     wraplength=440, justify="center").pack(fill="x", pady=(8, 0))
+
+    def _open_bilibili(self):
+        webbrowser.open("https://space.bilibili.com/481324794")
+
+    def _open_source_code(self):
+        webbrowser.open("https://github.com/mlj178/UCF1.7-")
+
+    def _on_save(self):
+        self._hotkey.save_and_apply(
+            self._parent._on_hotkey_toggle if hasattr(self._parent, '_on_hotkey_toggle') else lambda fid: None
+        )
+        self.destroy()
