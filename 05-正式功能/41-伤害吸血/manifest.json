@@ -1,0 +1,160 @@
+{
+  "feature_id": "lifesteal",
+  "canonical_id": "lifesteal",
+  "display_name": "伤害吸血",
+  "category": "player",
+  "tab": "player_tab",
+  "tab_title": "人物属性",
+  "tab_order": 20,
+  "order": 55,
+  "desc": "对敌人造成伤害时，按实际扣血 × 吸血比例回复自身血量；主/副武器、枪托重击、近战、投掷、特殊来源可分别开关。",
+  "ui_text": {
+    "lines": [
+      "打出多少伤害就按比例回多少血。",
+      "吸血比例取「实际扣掉的血量」，已包含伤害倍率等功能的结果。",
+      "主武器 / 副武器 / 枪托重击 / 近战 / 投掷 / 特殊来源可分别开关。"
+    ]
+  },
+  "script": "script.js",
+  "runtime": {
+    "type": "plugin_script"
+  },
+  "layout": {
+    "card_type": "wide",
+    "columnspan": 2,
+    "title_color": "#ef4444"
+  },
+  "controls": [
+    {
+      "type": "switch",
+      "action": "enable"
+    },
+    {
+      "type": "slider",
+      "action": "setConfig",
+      "key": "lifesteal_percent",
+      "label": "吸血比例",
+      "min": 0,
+      "max": 100,
+      "step": 1,
+      "default": 10,
+      "suffix": "%"
+    },
+    {
+      "type": "switch",
+      "action": "setConfig",
+      "key": "src_gun_primary_enabled",
+      "label": "主武器（步枪/狙击/机枪/冲锋枪/霰弹枪）",
+      "default": true
+    },
+    {
+      "type": "switch",
+      "action": "setConfig",
+      "key": "src_gun_secondary_enabled",
+      "label": "副武器（手枪）",
+      "default": true
+    },
+    {
+      "type": "switch",
+      "action": "setConfig",
+      "key": "src_gun_stock_enabled",
+      "label": "枪托重击（枪械近战）",
+      "default": true
+    },
+    {
+      "type": "switch",
+      "action": "setConfig",
+      "key": "src_knife_enabled",
+      "label": "近战武器（刀 / 英雄近战）",
+      "default": true
+    },
+    {
+      "type": "switch",
+      "action": "setConfig",
+      "key": "src_grenade_enabled",
+      "label": "投掷 / 爆炸（手雷 / RPG / 榴弹）",
+      "default": true
+    },
+    {
+      "type": "switch",
+      "action": "setConfig",
+      "key": "src_special_enabled",
+      "label": "特殊 / 技能（其它伤害类型）",
+      "default": true
+    },
+    {
+      "type": "switch",
+      "action": "setConfig",
+      "key": "src_infect_enabled",
+      "label": "感染（生化感染伤害，默认关）",
+      "default": false
+    },
+    {
+      "type": "switch",
+      "action": "setConfig",
+      "key": "only_enemy_victim",
+      "label": "只吸敌人（不打队友/自己吸血）",
+      "default": true
+    }
+  ],
+  "config": {
+    "lifesteal_percent": 10,
+    "src_gun_primary_enabled": true,
+    "src_gun_secondary_enabled": true,
+    "src_gun_stock_enabled": true,
+    "src_knife_enabled": true,
+    "src_grenade_enabled": true,
+    "src_special_enabled": true,
+    "src_infect_enabled": false,
+    "only_enemy_victim": true,
+    "diagnostic_log": true,
+    "max_pending_heal": 5000
+  },
+  "rpc": [
+    "enable",
+    "disable",
+    "setConfig",
+    "set_config",
+    "setconfig",
+    "status",
+    "cleanup",
+    "reset"
+  ],
+  "lifecycle": {
+    "cleanup": true,
+    "restore": true,
+    "requires_room_ready_reapply": false,
+    "room_ready_retry": false,
+    "room_ready_reapply_exempt_reason": "吸血是逐伤害事件结算：enable 只安装固定 RVA Hook，命中时实时查找本地玩家与武器分类；回合/房间边界由 GameManager 生命周期 Hook 清空缓存，进房后自动重新识别，不需要进房时二次应用。"
+  },
+  "source": {
+    "single_feature_js": "05-正式功能/41-伤害吸血/script.js",
+    "runtime_script_js": "features/41_lifesteal/script.js"
+  },
+  "ui_handles": {
+    "switch": "lifesteal_switch",
+    "summary": "lifesteal_summary",
+    "lifesteal_percent_var": "lifesteal_percent_var",
+    "lifesteal_percent_slider": "lifesteal_percent_slider",
+    "lifesteal_percent_label": "lifesteal_percent_label",
+    "src_gun_primary_enabled_var": "lifesteal_src_gun_primary_var",
+    "src_gun_primary_enabled_switch": "lifesteal_src_gun_primary_switch",
+    "src_gun_secondary_enabled_var": "lifesteal_src_gun_secondary_var",
+    "src_gun_secondary_enabled_switch": "lifesteal_src_gun_secondary_switch",
+    "src_gun_stock_enabled_var": "lifesteal_src_gun_stock_var",
+    "src_gun_stock_enabled_switch": "lifesteal_src_gun_stock_switch",
+    "src_knife_enabled_var": "lifesteal_src_knife_var",
+    "src_knife_enabled_switch": "lifesteal_src_knife_switch",
+    "src_grenade_enabled_var": "lifesteal_src_grenade_var",
+    "src_grenade_enabled_switch": "lifesteal_src_grenade_switch",
+    "src_special_enabled_var": "lifesteal_src_special_var",
+    "src_special_enabled_switch": "lifesteal_src_special_switch",
+    "src_infect_enabled_var": "lifesteal_src_infect_var",
+    "src_infect_enabled_switch": "lifesteal_src_infect_switch",
+    "only_enemy_victim_var": "lifesteal_only_enemy_victim_var",
+    "only_enemy_victim_switch": "lifesteal_only_enemy_victim_switch"
+  },
+  "state": {
+    "sync_enabled_from_config": true
+  }
+}

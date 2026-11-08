@@ -1,66 +1,101 @@
 {
-    "feature_id":  "ammo",
-    "canonical_id":  "infinite_ammo",
-    "display_name":  "无限子弹",
-    "category":  "weapon",
-    "tab":  "weapon_tab",
-    "order":  70,
-    "desc":  "子弹永不消耗",
-    "script":  "script.js",
-    "layout":  {
-                   "card_type":  "simple",
-                   "columnspan":  1,
-                   "stretch": true,
-                   "title_color":  "#E5B73B"
-               },
-    "controls":  [
-                     {
-                         "type":  "switch",
-                         "action":  "enable"
-                     },
-                     {
-                         "type":  "combo",
-                         "action":  "setConfig",
-                         "key":  "scope",
-                         "label":  "应用范围:",
-                         "values":  [
-                                        "player_only",
-                                        "all_players"
-                                    ],
-                         "display_values":  {
-                                                "player_only":  "仅限玩家",
-                                                "all_players":  "玩家和所有人机"
-                                            },
-                         "default":  "player_only"
-                     }
-                 ],
-    "config":  {
-                   "scope":  "player_only"
-               },
-    "rpc":  [
-                "enable",
-                "disable",
-                "setConfig",
-                "status",
-                "cleanup"
+    "feature_id": "ammo",
+    "canonical_id": "infinite_ammo",
+    "display_name": "无限子弹",
+    "category": "weapon",
+    "tab": "weapon_tab",
+    "order": 70,
+    "desc": "无限子弹：开火不扣弹，无需换弹。无限弹药：备弹无限，打空后仍会换弹，覆盖普通枪械与 RPG/AT4。两种模式可分别开关并设置应用范围。",
+    "script": "script.js",
+    "layout": {
+        "card_type": "simple",
+        "columnspan": 1,
+        "stretch": true,
+        "title_color": "#E5B73B"
+    },
+    "controls": [
+        {
+            "type": "switch",
+            "action": "enable"
+        },
+        {
+            "type": "switch",
+            "action": "setConfig",
+            "key": "infinite_bullet_enabled",
+            "label": "无限子弹",
+            "default": true
+        },
+        {
+            "type": "combo",
+            "action": "setConfig",
+            "key": "infinite_bullet_scope",
+            "label": "应用范围:",
+            "values": [
+                "player_only",
+                "all_players"
             ],
-    "lifecycle":  {
-                      "cleanup":  true
-                  },
-    "source":  {
-                   "runtime_script_js":  "features/01_ammo/script.js"
-               },
-    "ui_handles":  {
-                       "switch":  "ammo_switch",
-                       "scope_var":  "ammo_scope_var",
-                       "scope_combo":  "ammo_scope_combo"
-                   },
-    "runtime":  {
-                    "type":  "plugin_script"
-                },
-    "tab_title":  "武器",
-    "tab_order":  10,
-    "state":  {
-                  "sync_enabled_from_config":  true
-              }
+            "display_values": {
+                "player_only": "仅限玩家",
+                "all_players": "玩家和所有人机"
+            },
+            "default": "player_only"
+        },
+        {
+            "type": "switch",
+            "action": "setConfig",
+            "key": "infinite_ammo_enabled",
+            "label": "无限弹药",
+            "default": false
+        },
+        {
+            "type": "combo",
+            "action": "setConfig",
+            "key": "infinite_ammo_scope",
+            "label": "应用范围:",
+            "values": [
+                "player_only",
+                "all_players"
+            ],
+            "display_values": {
+                "player_only": "仅限玩家",
+                "all_players": "玩家和所有人机"
+            },
+            "default": "player_only"
+        }
+    ],
+    "config": {
+        "scope": "player_only",
+        "infinite_bullet_enabled": true,
+        "infinite_bullet_scope": "player_only",
+        "infinite_ammo_enabled": false,
+        "infinite_ammo_scope": "player_only"
+    },
+    "rpc": [
+        "enable",
+        "disable",
+        "setConfig",
+        "status",
+        "cleanup"
+    ],
+    "lifecycle": {
+        "cleanup": true
+    },
+    "source": {
+        "runtime_script_js": "features/01_ammo/script.js"
+    },
+    "ui_handles": {
+        "switch": "ammo_switch",
+        "infinite_bullet_enabled_var": "infinite_bullet_enabled_var",
+        "infinite_bullet_scope_var": "infinite_bullet_scope_var",
+        "infinite_ammo_enabled_var": "infinite_ammo_enabled_var",
+        "infinite_ammo_scope_var": "infinite_ammo_scope_var"
+    },
+    "runtime": {
+        "type": "plugin_script"
+    },
+    "tab_title": "武器",
+    "tab_order": 10,
+    "state": {
+        "sync_enabled_from_config": true
+    }
 }
