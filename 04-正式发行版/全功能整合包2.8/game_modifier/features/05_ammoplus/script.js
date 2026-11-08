@@ -79,40 +79,45 @@ function registerCleanup(callback) {
   return true;
 }
 
-// reload_speed.js - 快速换弹（GUN 走动画参数，RPG 走动画器速度；倍率 1.0~5.0）
+// reload_speed.js - 快速换弹（普通枪械=动画参数；榴弹模式 & RPG=动画器速度；倍率 1.0~5.0）
 //
-// 一、GUN 与 RPG 是两条完全不同的实现路径（这是 v2 修 RPG 失效的根据）
-//   · GUN（WPN_Gun 系）：WPN_Gun.Reload(0xB62CB0) 每次都算
-//       GetAnimSpeed(reloadAnimRatio) × PlayerWeapons.ReloadSpeed
-//     然后 CFAnimator.SetFloat("ReloadSpeed", v) 再播放 "reload" 动画 → 乘这个 v 即可。
-//   · RPG（WPN_RPG）：换弹入口是 WPN_RPG.OnReloadBtnDown(0xB67AF0)，
-//     它只做 PlayWeaponAnimWithSameTag("reload") + CharacterModel.PlayGunReloadAnim，
-//     **完全不动 "ReloadSpeed" 参数**；该参数只在 Deploy 时由
-//     Weapon.Deploy 的虚调用(Slot 23) → WPN_RPG.AnimSpeedSetting(0xB66CA0) 写一次。
-//     → 实测：RPG 的换弹动画不吃这个参数，乘参数对 RPG 没有效果。
-//   注：WPN_RPG.Reload(0xB67C40) 在 0xB67AF0 存在的情况下没有任何调用点（死代码），
-//       所以 v2 早期把"刷新 RPG 参数"的钩子挂在 0xB67C40 上等于没挂（2.8 的 01_ammo 也踩了同一个坑）。
+// 一、三种武器形态、两条实现路径
+//   A) 普通枪械（WPN_Gun 系，含榴弹枪的步枪模式）
+//        WPN_Gun.Reload(0xB62CB0) 每次都算
+//          GetAnimSpeed(reloadAnimRatio) × PlayerWeapons.ReloadSpeed
+//        再 CFAnimator.SetFloat("ReloadSpeed", v) → 播放 "reload" → 乘这个 v 即可。
+//   B) 步枪的「榴弹模式」（WPN_GrenadeGun 的 changeMode 状态，CFAnimator+0x54）
+//        换弹仍走 WPN_Gun.Reload，但 CFAnimator.AnimName_Modifier(WPN_GrenadeGun 版 0xB602D0)
+//        会把动画名 "reload" 改写成 "reload_A"（后缀 StringLiteral 0x10E28EB8 = "_A"），
+//        换弹状态变成另一条 clip，实测不吃 "ReloadSpeed" 参数 → 乘参数无效。
+//        → 在 Reload 入口把武器/手部 Animator.speed 设为倍率，动画结束复位。
+//   C) WPN_RPG（火箭筒 / AT4）
+//        换弹入口是 WPN_RPG.OnReloadBtnDown(0xB67AF0)，只播放动画、从不写 "ReloadSpeed"。
+//        → 同样改 Animator.speed。
+//   注：WPN_RPG.Reload(0xB67C40) 没有被任何地方调用（死代码），不要挂钩子。
 //
-// 二、RPG 的正确做法：直接改动画器播放速度
-//   · OnReloadBtnDown 里在游戏播放换弹动画之前，把
-//       weapon.animator(CFAnimator+0x40) 与 owner.characterModel.handAnimator(+0x5C→+0x4C)
-//     的 Animator.speed 设为倍率；换弹动画结束（OnAnimationEnd tag=="reload"）立刻复位 1.0。
-//   · 游戏自己在每次 Deploy 的 CFAnimator.AnimatorInit 里也会把这两个 Animator.speed 复位成 1.0，
-//     所以切枪/重部署天然是安全的兜底；另外再挂 5s 看门狗，防止换弹被打断时速度残留。
-//   · RPG 不再乘 "ReloadSpeed" 参数，避免两种机制叠加成倍率平方。
+// 二、动画器速度方案的复位时机（缺一不可）
+//   · 换弹动画结束：WPN_Gun.OnAnimationEnd(0xB627A0) tag=="reload" / WPN_RPG.OnAnimationEnd(0xB67640)
+//   · 榴弹模式切换：WPN_GrenadeGun.OnSpecialBtnDown(0xB5FCF0)
+//   · 重新部署：WPN_RPG.Deploy(0xB67030)；普通枪械由游戏 CFAnimator.AnimatorInit 每次部署置 1.0
+//   · 关闭功能 / 5s 看门狗（换弹被打断时的兜底）
 //
-// 三、关键地址（GameAssembly.dll，RVA；与 2.8 当前对应的游戏版本一致）
-//   0xB34E40  CFAnimator.SetFloat(this, name, value, character, method)   GUN 落点
-//   0xB6E1D0  Weapon.get_isMyWeapon(this)                                 本地玩家过滤
-//   0xB67AF0  WPN_RPG.OnReloadBtnDown(this)                               RPG 换弹真实入口
-//   0xB67640  WPN_RPG.OnAnimationEnd(this, animName, animTag)             换弹结束复位
-//   0xB67030  WPN_RPG.Deploy(this)                                        重部署复位
-//   0xAA8C30  UnityEngine.Animator.set_speed(animator, value, method)
-//   0xB170E0  PlayerWeapons.get_ReloadSpeed                               老方案落点，已弃用
+// 三、参数路径与动画器速度路径互斥：changeMode!=0 或 RPG 时不再乘 "ReloadSpeed"，
+//     否则两种机制会叠成倍率平方。
 //
-// 四、Frida 17 的注入脚本运行在严格模式：任何未声明变量赋值都会抛 ReferenceError
-//     并让 enable() 中断（2.7/2.8 早期就是栽在 originalGetReloadSpeed 漏写 var）。
-//     本文件所有跨闭包变量一律显式 var 声明；诊断日志走 log_file 通道，不受"每模块 10 条"上限影响。
+// 四、关键地址（GameAssembly.dll，RVA；与 2.8 当前对应的游戏版本一致）
+//   0xB34E40  CFAnimator.SetFloat(this, name, value, character, method)   参数路径落点
+//   0xB6E1D0  Weapon.get_isMyWeapon(this)                                  本地玩家过滤
+//   0xB62CB0  WPN_Gun.Reload(this)                                         枪械换弹入口
+//   0xB627A0  WPN_Gun.OnAnimationEnd(this, animName, animTag)              枪械换弹结束
+//   0xB5FCF0  WPN_GrenadeGun.OnSpecialBtnDown(this)                        榴弹模式切换
+//   0xB67AF0  WPN_RPG.OnReloadBtnDown(this)                                RPG 换弹入口
+//   0xB67640  WPN_RPG.OnAnimationEnd(this, animName, animTag)              RPG 换弹结束
+//   0xB67030  WPN_RPG.Deploy(this)                                         RPG 重新部署
+//   0xAA8C30  UnityEngine.Animator.set_speed(animator, value, method)      改动画器速度
+//
+// 五、Frida 17 注入脚本运行在严格模式：未声明变量赋值会抛 ReferenceError 让 enable() 中断。
+//     本文件所有跨闭包变量都显式 var；诊断日志走 log_file 通道，不受"每模块 10 条"上限影响。
 
 modules.ammoplus = (function() {
   var MIN_MULTIPLIER = 1.0;
@@ -128,13 +133,18 @@ modules.ammoplus = (function() {
   var isMyWeapon = null;
   var animatorSetSpeed = null;
 
+  var gunReloadHook = null;
+  var gunAnimEndHook = null;
+  var grenadeModeHook = null;
   var rpgReloadHook = null;
   var rpgAnimEndHook = null;
   var rpgDeployHook = null;
-  var rpgAnimators = [];
-  var rpgRestoreTimer = null;
+
+  var speedTargets = [];
+  var speedRestoreTimer = null;
 
   var gunScaleCount = 0;
+  var grenadeScaleCount = 0;
   var rpgScaleCount = 0;
   var errorCount = 0;
 
@@ -184,8 +194,7 @@ modules.ammoplus = (function() {
     }
   }
 
-  // WPN_RPG 的判定：Weapon.data(+0x68) 与 WPN_RPG.realData(+0xF0) 是同一个 WD_RPG 实例。
-  // WPN_Gun 的 +0xF0 是 bool（isSemiGun），不会是有效指针，因此不会误判。
+  // WPN_RPG 判定：Weapon.data(+0x68) 与 WPN_RPG.realData(+0xF0) 指向同一个 WD_RPG 实例
   function isRpgWeapon(weapon) {
     try {
       if (!weapon || weapon.isNull()) return false;
@@ -199,7 +208,17 @@ modules.ammoplus = (function() {
     }
   }
 
-  function collectRpgAnimators(weapon) {
+  // 榴弹模式：CFAnimator.changeMode(+0x54)，WPN_GrenadeGun 切模式时置位
+  function isGrenadeMode(weapon) {
+    try {
+      if (!weapon || weapon.isNull()) return false;
+      return weapon.add(0x54).readU8() !== 0;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function collectAnimators(weapon) {
     var list = [];
     var weaponAnimator = readPtr(weapon.add(0x40));            // CFAnimator.animator
     if (weaponAnimator) list.push(weaponAnimator);
@@ -210,20 +229,35 @@ modules.ammoplus = (function() {
     return list;
   }
 
-  function restoreRpgAnimators() {
-    for (var i = 0; i < rpgAnimators.length; i++) {
-      try { animatorSetSpeed(rpgAnimators[i], 1.0, ptr(0)); } catch (e) { errorCount++; }
+  function restoreAnimatorSpeed() {
+    for (var i = 0; i < speedTargets.length; i++) {
+      try { animatorSetSpeed(speedTargets[i], 1.0, ptr(0)); } catch (e) { errorCount++; }
     }
-    rpgAnimators = [];
-    if (rpgRestoreTimer) {
-      try { clearTimeout(rpgRestoreTimer); } catch (e) {}
-      rpgRestoreTimer = null;
+    speedTargets = [];
+    if (speedRestoreTimer) {
+      try { clearTimeout(speedRestoreTimer); } catch (e) {}
+      speedRestoreTimer = null;
     }
   }
 
+  function applyAnimatorSpeed(weapon) {
+    if (multiplier <= 1.001) { restoreAnimatorSpeed(); return false; }
+    var list = collectAnimators(weapon);
+    if (!list.length) return false;
+    for (var i = 0; i < list.length; i++) animatorSetSpeed(list[i], multiplier, ptr(0));
+    speedTargets = list;
+    if (speedRestoreTimer) { try { clearTimeout(speedRestoreTimer); } catch (e) {} }
+    // 换弹被切枪/死亡打断时兜底复位，避免武器后续动作一直加速
+    speedRestoreTimer = setTimeout(function() { restoreAnimatorSpeed(); }, 5000);
+    return true;
+  }
+
   function tearDown() {
-    try { restoreRpgAnimators(); } catch (e) {}
+    try { restoreAnimatorSpeed(); } catch (e) {}
     if (setFloatAddr) { try { Interceptor.revert(setFloatAddr); } catch (e) {} }
+    if (gunReloadHook) { try { gunReloadHook.detach(); } catch (e) {} }
+    if (gunAnimEndHook) { try { gunAnimEndHook.detach(); } catch (e) {} }
+    if (grenadeModeHook) { try { grenadeModeHook.detach(); } catch (e) {} }
     if (rpgReloadHook) { try { rpgReloadHook.detach(); } catch (e) {} }
     if (rpgAnimEndHook) { try { rpgAnimEndHook.detach(); } catch (e) {} }
     if (rpgDeployHook) { try { rpgDeployHook.detach(); } catch (e) {} }
@@ -231,10 +265,13 @@ modules.ammoplus = (function() {
     originalSetFloat = null;
     isMyWeapon = null;
     animatorSetSpeed = null;
+    gunReloadHook = null;
+    gunAnimEndHook = null;
+    grenadeModeHook = null;
     rpgReloadHook = null;
     rpgAnimEndHook = null;
     rpgDeployHook = null;
-    rpgAnimators = [];
+    speedTargets = [];
   }
 
   return {
@@ -263,14 +300,15 @@ modules.ammoplus = (function() {
         isMyWeapon = new NativeFunction(base.add(0xB6E1D0), 'bool', ['pointer', 'pointer']);
         animatorSetSpeed = new NativeFunction(base.add(0xAA8C30), 'void', ['pointer', 'float', 'pointer']);
 
-        // ---------- GUN：乘 "ReloadSpeed" 参数 ----------
+        // ---------- A) 普通枪械：乘 "ReloadSpeed" 参数 ----------
         setFloatAddr = base.add(0xB34E40);
         originalSetFloat = new NativeFunction(setFloatAddr, 'void', ['pointer', 'pointer', 'float', 'int', 'pointer']);
 
         Interceptor.replace(setFloatAddr, new NativeCallback(function(self, name, value, character, method) {
           try {
-            // 先按名字过滤，再做归属判断；RPG 不在这里处理（见下面的动画器速度方案），避免叠加成平方
-            if (isReloadParamName(name) && isMyWeapon(self, ptr(0)) && !isRpgWeapon(self)) {
+            // 榴弹模式与 RPG 不吃这个参数，走动画器速度路径；先判名字再判归属，避免对非 Weapon 解引用
+            if (isReloadParamName(name) && isMyWeapon(self, ptr(0)) &&
+                !isGrenadeMode(self) && !isRpgWeapon(self)) {
               var scaled = value * multiplier;
               gunScaleCount++;
               if (gunScaleCount <= 8) {
@@ -286,9 +324,46 @@ modules.ammoplus = (function() {
           return originalSetFloat(self, name, value, character, method);
         }, 'void', ['pointer', 'pointer', 'float', 'int', 'pointer']));
 
-        // ---------- RPG：直接改动画器速度 ----------
-        // 换弹真实入口。RPG 不写 "ReloadSpeed"，所以在这里把动画器速度设为倍率，
-        // 游戏播放 reload 动画时长度即被缩短，动画结束事件（补弹）也同步提前。
+        // ---------- B) 榴弹模式：改动画器速度 ----------
+        // 换弹仍走 WPN_Gun.Reload，但动画名被改写成 "reload_A"，不吃 ReloadSpeed 参数
+        gunReloadHook = Interceptor.attach(base.add(0xB62CB0), {
+          onEnter: function(args) {
+            try {
+              var weapon = args[0];
+              if (!weapon || weapon.isNull()) return;
+              if (!isMyWeapon(weapon, ptr(0))) return;
+              if (isRpgWeapon(weapon)) return;
+              if (!isGrenadeMode(weapon)) return;
+              if (applyAnimatorSpeed(weapon)) {
+                grenadeScaleCount++;
+                if (grenadeScaleCount <= 8) {
+                  sendLogFile('info', '快速换弹',
+                    '榴弹模式换弹加速 ×' + multiplier.toFixed(1) + '（动画器速度）');
+                }
+              }
+            } catch (e) {
+              errorCount++;
+            }
+          }
+        });
+
+        gunAnimEndHook = Interceptor.attach(base.add(0xB627A0), {
+          onEnter: function(args) {
+            try {
+              if (!speedTargets.length) return;
+              if (readIl2CppString(args[2]) === 'reload') restoreAnimatorSpeed();
+            } catch (e) {}
+          }
+        });
+
+        // 榴弹模式开关（步枪 ↔ 榴弹）时复位，避免打断换弹后速度残留
+        grenadeModeHook = Interceptor.attach(base.add(0xB5FCF0), {
+          onEnter: function() {
+            try { if (speedTargets.length) restoreAnimatorSpeed(); } catch (e) {}
+          }
+        });
+
+        // ---------- C) RPG / AT4：改动画器速度 ----------
         rpgReloadHook = Interceptor.attach(base.add(0xB67AF0), {
           onEnter: function(args) {
             try {
@@ -296,40 +371,31 @@ modules.ammoplus = (function() {
               if (!weapon || weapon.isNull()) return;
               if (!isMyWeapon(weapon, ptr(0))) return;
               if (!isRpgWeapon(weapon)) return;
-              if (multiplier <= 1.001) { restoreRpgAnimators(); return; }
-              var list = collectRpgAnimators(weapon);
-              if (!list.length) return;
-              for (var i = 0; i < list.length; i++) animatorSetSpeed(list[i], multiplier, ptr(0));
-              rpgAnimators = list;
-              rpgScaleCount++;
-              if (rpgScaleCount <= 8) {
-                sendLogFile('info', '快速换弹',
-                  'RPG 换弹加速 ×' + multiplier.toFixed(1) + '（动画器速度，共 ' + list.length + ' 个 animator）');
+              if (applyAnimatorSpeed(weapon)) {
+                rpgScaleCount++;
+                if (rpgScaleCount <= 8) {
+                  sendLogFile('info', '快速换弹',
+                    'RPG 换弹加速 ×' + multiplier.toFixed(1) + '（动画器速度，共 ' + speedTargets.length + ' 个 animator）');
+                }
               }
-              if (rpgRestoreTimer) { try { clearTimeout(rpgRestoreTimer); } catch (e) {} }
-              // 换弹被打断（切枪/死亡）时兜底复位，避免武器后续动作一直加速
-              rpgRestoreTimer = setTimeout(function() { restoreRpgAnimators(); }, 5000);
             } catch (e) {
               errorCount++;
             }
           }
         });
 
-        // 换弹动画结束（tag == "reload"）→ 立即复位，和游戏给 GUN 的时机一致
         rpgAnimEndHook = Interceptor.attach(base.add(0xB67640), {
           onEnter: function(args) {
             try {
-              var weapon = args[0];
-              if (!weapon || weapon.isNull() || !rpgAnimators.length) return;
-              if (readIl2CppString(args[2]) === 'reload') restoreRpgAnimators();
+              if (!speedTargets.length) return;
+              if (readIl2CppString(args[2]) === 'reload') restoreAnimatorSpeed();
             } catch (e) {}
           }
         });
 
-        // 重新部署 / 切枪 → 复位（游戏 AnimatorInit 也会把 speed 置 1.0，这里是双保险）
         rpgDeployHook = Interceptor.attach(base.add(0xB67030), {
           onEnter: function() {
-            try { if (rpgAnimators.length) restoreRpgAnimators(); } catch (e) {}
+            try { if (speedTargets.length) restoreAnimatorSpeed(); } catch (e) {}
           }
         });
       } catch (e) {
@@ -341,9 +407,11 @@ modules.ammoplus = (function() {
 
       enabled = true;
       gunScaleCount = 0;
+      grenadeScaleCount = 0;
       rpgScaleCount = 0;
       errorCount = 0;
-      sendLogFile('success', '快速换弹', '已启用 — ' + multiplier.toFixed(1) + 'x（GUN=动画参数 / RPG=动画器速度）');
+      sendLogFile('success', '快速换弹',
+        '已启用 — ' + multiplier.toFixed(1) + 'x（枪械=动画参数 / 榴弹模式+RPG=动画器速度）');
       sendStatus('ammoplus', true);
       return { ok: true, enabled: true, multiplier: multiplier };
     },
@@ -363,6 +431,7 @@ modules.ammoplus = (function() {
         enabled: enabled,
         multiplier: multiplier,
         gunScaled: gunScaleCount,
+        grenadeScaled: grenadeScaleCount,
         rpgScaled: rpgScaleCount,
         errors: errorCount
       };

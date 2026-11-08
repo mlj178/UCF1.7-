@@ -111,6 +111,13 @@ class AmmoModesStaticTests(unittest.TestCase):
             self.assertIn(address, self.script)
         self.assertIn("base.add(0xB17120)", self.script)
         self.assertNotIn("0x10B17120", self.script)
+
+    def test_rpg_hud_identifies_weapon_by_il2cpp_class_name(self):
+        # HUD 图标放行必须按类名识别 WPN_RPG，不能依赖 +0xF4(gunfire) 等序列化字段。
+        self.assertIn("function classNameOf(", self.script)
+        self.assertIn("cls.indexOf('WPN_RPG') === 0", self.script)
+        self.assertIn("looksLikeRpgByFields", self.script)
+        self.assertIn("sendLogFile('info', '无限弹药HUD'", self.script)
         self.assertIn("infinite_ammo_enabled", self.script)
         self.assertIn("infinite_bullet_enabled", self.script)
         self.assertIn("Player.UpdateBuffProperty", self.script)
