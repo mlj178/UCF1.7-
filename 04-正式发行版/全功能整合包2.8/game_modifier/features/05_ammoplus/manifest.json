@@ -1,49 +1,63 @@
 {
-    "feature_id":  "ammoplus",
-    "canonical_id":  "fast_reload",
-    "display_name":  "快速换弹",
-    "category":  "weapon",
-    "tab":  "weapon_tab",
-    "order":  40,
-    "desc":  "换弹速度加快",
-    "script":  "script.js",
-    "layout":  {
-                   "card_type":  "simple",
-                   "columnspan":  1,
-                   "stretch": true,
-                   "title_color":  "#D4AF37"
-               },
-    "controls":  [
-                     {
-                         "type":  "switch",
-                         "action":  "enable"
-                     }
-                 ],
-    "config":  {
-
-               },
-    "rpc":  [
-                "enable",
-                "disable",
-                "setConfig",
-                "status",
-                "cleanup"
-            ],
-    "lifecycle":  {
-                      "cleanup":  true
-                  },
-    "source":  {
-                   "runtime_script_js":  "features/05_ammoplus/script.js"
-               },
-    "ui_handles":  {
-                       "switch":  "ammoplus_switch"
-                   },
-    "runtime":  {
-                    "type":  "plugin_script"
-                },
-    "tab_title":  "武器",
-    "tab_order":  10,
-    "state":  {
-                  "sync_enabled_from_config":  true
-              }
+    "feature_id": "ammoplus",
+    "canonical_id": "fast_reload",
+    "display_name": "快速换弹",
+    "category": "weapon",
+    "tab": "weapon_tab",
+    "order": 40,
+    "desc": "换弹速度加快（GUN + RPG）。倍率 1.0~5.0 可调，与游戏原生「快速换弹」BUFF 叠加而非覆盖。",
+    "script": "script.js",
+    "layout": {
+        "card_type": "simple",
+        "columnspan": 1,
+        "stretch": true,
+        "title_color": "#D4AF37"
+    },
+    "controls": [
+        {
+            "type": "switch",
+            "action": "enable"
+        },
+        {
+            "type": "slider",
+            "action": "setConfig",
+            "key": "multiplier",
+            "label": "倍率",
+            "min": 1.0,
+            "max": 5.0,
+            "step": 0.1,
+            "default": 4.0,
+            "suffix": "x"
+        }
+    ],
+    "config": {
+        "multiplier": 4.0
+    },
+    "rpc": [
+        "enable",
+        "disable",
+        "setConfig",
+        "status",
+        "cleanup"
+    ],
+    "lifecycle": {
+        "cleanup": true
+    },
+    "source": {
+        "single_feature_js": "05-正式功能/05-快速换弹BUFF/AAAAA-fast_reload.js",
+        "runtime_script_js": "features/05_ammoplus/script.js"
+    },
+    "ui_handles": {
+        "switch": "ammoplus_switch",
+        "slider_var": "ammoplus_multiplier_var",
+        "slider_label": "ammoplus_multiplier_label"
+    },
+    "runtime": {
+        "type": "plugin_script"
+    },
+    "tab_title": "武器",
+    "tab_order": 10,
+    "state": {
+        "sync_enabled_from_config": true
+    }
 }

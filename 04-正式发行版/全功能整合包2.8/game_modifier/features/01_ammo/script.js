@@ -79,8 +79,15 @@ function registerCleanup(callback) {
   return true;
 }
 
-// ammo.js - 无限子弹 plan4
-// 替换 ConsumeAmmo 函数，仅本地玩家消耗子弹时返回 true 但不扣弹
+// ammo.js - 无限子弹 / 无限弹药
+// 无限子弹：替换 ConsumeAmmo，开火不扣弹，不需要换弹。
+// 无限弹药：Hook Player.UpdateBuffProperty，每帧把 Player.Buff_InfinityAmmo(+0x128) 置 1。
+//   这是游戏原生 InfinityAmmoBuff 的实现方式，复用其换弹逻辑：
+//   - WPN_Gun.CanReload：备弹为 0 时也允许换弹；
+//   - WPN_Gun.ReloadOver：直接把 clip 填到 maxClip，不扣备弹；
+//   - PlayerWeapons.get_isInfinityAmmo：HUD 显示无限弹药图标。
+// 依据：InfinityAmmoBuff..ctor 0x10AE7990 / Player.UpdateBuffProperty 0x10B547F0 /
+//       WPN_Gun.CanReload 0x10B60E30 / WPN_Gun.ReloadOver 0x10B62C10。
 
 modules.ammo = (function() {
   var enabled = false;
@@ -89,7 +96,18 @@ modules.ammo = (function() {
   var originalConsumeBase = null;
   var isMyPlayer = null;
   var isMyWeapon = null;
-  var scope = 'player_only';
+  var rpgIsMaxClip = null;
+  var rpgCanReload = null;
+  var rpgAnimEmptyTag = null;
+  var rpgHudLogged = false;
+
+  // 无限子弹（原来的 ConsumeAmmo 方案）
+  var bulletEnabled = true;
+  var bulletScope = 'player_only';
+
+  // 无限弹药（复用游戏 Buff_InfinityAmmo 标志位）
+  var ammoEnabled = false;
+  var ammoScope = 'player_only';
 
   function writeObscuredInt(fieldPtr, value) {
     try {
@@ -106,19 +124,6 @@ modules.ammo = (function() {
     }
   }
 
-  function setLocalRpgClip10(weaponPtr) {
-    try {
-      if (!weaponPtr || weaponPtr.isNull() || !shouldAffect(weaponPtr)) return false;
-      var ammo = weaponPtr.add(0xEC).readPointer();
-      if (!ammo || ammo.isNull() || !isReadablePtr(ammo)) return false;
-      var clipOk = writeObscuredInt(ammo.add(0x08), 10);
-      var maxClipOk = writeObscuredInt(ammo.add(0x30), 10);
-      return clipOk && maxClipOk;
-    } catch (e) {
-      return false;
-    }
-  }
-
   function isReadablePtr(p) {
     try {
       if (!p || p.isNull()) return false;
@@ -127,6 +132,18 @@ modules.ammo = (function() {
     } catch (e) {
       return false;
     }
+  }
+
+  function isAllScope(scope) {
+    return scope === 'all_players' || scope === 'all';
+  }
+
+  function normalizeScope(scope) {
+    return (scope === 'all_players' || scope === 'all') ? 'all_players' : 'player_only';
+  }
+
+  function scopeLabel(scope) {
+    return isAllScope(scope) ? '玩家和所有人机' : '仅限玩家';
   }
 
   function isLocalWeapon(weaponPtr) {
@@ -140,7 +157,7 @@ modules.ammo = (function() {
     // 路径2：兜底尝试 Weapon/PlayerWeapons 常见 owner 字段。
     try {
       if (!isMyPlayer || !isReadablePtr(weaponPtr)) return false;
-      // Weapon : CFAnimator : Model；owner 是 Model.owner(+0x30)。Weapon 自身字段从 0x68 开始，+0x8 不是 owner
+      // Weapon : CFAnimator : Model；owner 是 Model.owner(+0x30)。
       var owner = weaponPtr.add(0x30).readPointer();
       if (owner && !owner.isNull() && isReadablePtr(owner)) {
         return !!isMyPlayer(owner, ptr(0));
@@ -150,18 +167,80 @@ modules.ammo = (function() {
     return false;
   }
 
-  function isAllScope() {
-    return scope === 'all_players' || scope === 'all';
-  }
-
-  function shouldAffect(weaponPtr) {
+  function shouldAffectWeapon(weaponPtr, scope) {
     if (!weaponPtr || weaponPtr.isNull()) return false;
-    if (isAllScope()) return true;
+    if (isAllScope(scope)) return true;
     return isLocalWeapon(weaponPtr);
   }
 
-  function scopeLabel() {
-    return isAllScope() ? '玩家和所有人机' : '仅限玩家';
+  // RPG/AT4 不走 ConsumeAmmo，单独维持弹匣。
+  function setLocalRpgClip10(weaponPtr) {
+    try {
+      if (!bulletEnabled) return false;
+      if (!weaponPtr || weaponPtr.isNull() || !shouldAffectWeapon(weaponPtr, bulletScope)) return false;
+      var ammo = weaponPtr.add(0xEC).readPointer();
+      if (!ammo || ammo.isNull() || !isReadablePtr(ammo)) return false;
+      var clipOk = writeObscuredInt(ammo.add(0x08), 10);
+      var maxClipOk = writeObscuredInt(ammo.add(0x30), 10);
+      return clipOk && maxClipOk;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  // WPN_RPG 的弹药对象：WPN_RPG.ammo(+0xEC)，不是 WPN_Gun.ammoData(+0xF4)。
+  function readRpgAmmo(weaponPtr) {
+    try {
+      if (!weaponPtr || weaponPtr.isNull()) return null;
+      var ammo = weaponPtr.add(0xEC).readPointer();
+      if (!ammo || ammo.isNull() || !isReadablePtr(ammo)) return null;
+      return ammo;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  // 与 WPN_Gun.ReloadOver 的 buff 分支一致：20 字节 ObscuredInt 原样拷贝 maxClip -> clip。
+  function copyAmmoClipToMax(ammoPtr) {
+    try {
+      if (!ammoPtr || ammoPtr.isNull() || !isReadablePtr(ammoPtr)) return false;
+      var maxClipBytes = ammoPtr.add(0x30).readByteArray(0x14);
+      if (!maxClipBytes) return false;
+      ammoPtr.add(0x08).writeByteArray(maxClipBytes);
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  // 仅用于 HUD 判断：WPN_RPG 的 ammo(+0xEC) / realData(+0xF0) / gunfire(+0xF4) 都是有效指针。
+  // WPN_Gun 的 +0xF0 是 bool，readPointer 会失败；WPN_Throw 的 +0xF4 是 bool，也会失败。
+  function isRpgWeapon(weaponPtr) {
+    try {
+      if (!weaponPtr || weaponPtr.isNull()) return false;
+      var ammo = weaponPtr.add(0xEC).readPointer();
+      var realData = weaponPtr.add(0xF0).readPointer();
+      var gunfire = weaponPtr.add(0xF4).readPointer();
+      if (!ammo || ammo.isNull() || !realData || realData.isNull()) return false;
+      if (!isReadablePtr(ammo) || !isReadablePtr(realData) || !isReadablePtr(gunfire)) return false;
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  // 每帧在 Player.UpdateBuffProperty 返回后写 1。
+  // 该函数会先把 Buff_InfinityAmmo 清 0，再调用所有 RefBool 回调；
+  // 我们在 onLeave 写入，等价于身上一直挂着 InfinityAmmoBuff。
+  function applyInfinityAmmoFlag(playerPtr) {
+    if (!ammoEnabled) return;
+    if (!playerPtr || playerPtr.isNull()) return;
+    try {
+      if (!isAllScope(ammoScope)) {
+        if (!isMyPlayer || !isMyPlayer(playerPtr, ptr(0))) return;
+      }
+      playerPtr.add(0x128).writeU8(1);
+    } catch (e) {}
   }
 
   return {
@@ -169,13 +248,14 @@ modules.ammo = (function() {
       if (enabled) return;
       var mod = Process.findModuleByName('GameAssembly.dll');
       if (!mod) { sendBothLog('error', '无限子弹', '无限子弹暂未就绪，请重新连接游戏后重试', 'Ammo GameAssembly.dll not found'); return; }
+      enabled = true;
       var base = mod.base;
 
       try {
         var addrConsumeAmmo = base.add(0xB61140);
         var addrConsumeBase = base.add(0xB6C310);
-        var addrIsMyPlayer = base.add(0xB55FD0);   // Player.get_isMyPlayer
-        var addrIsMyWeapon = base.add(0xB6E1D0);   // Weapon.get_isMyWeapon
+        var addrIsMyPlayer = base.add(0xB55FD0);
+        var addrIsMyWeapon = base.add(0xB6E1D0);
 
         originalConsumeAmmo = new NativeFunction(addrConsumeAmmo, 'bool', ['pointer', 'pointer']);
         originalConsumeBase = new NativeFunction(addrConsumeBase, 'bool', ['pointer', 'pointer']);
@@ -183,27 +263,38 @@ modules.ammo = (function() {
         isMyWeapon = new NativeFunction(addrIsMyWeapon, 'bool', ['pointer', 'pointer']);
 
         Interceptor.replace(addrConsumeAmmo, new NativeCallback(function(thisPtr, methodInfo) {
-          if (shouldAffect(thisPtr)) {
+          if (bulletEnabled && shouldAffectWeapon(thisPtr, bulletScope)) {
             return 1;
           }
+          if (!originalConsumeAmmo) return 0;
           return originalConsumeAmmo(thisPtr, methodInfo);
         }, 'bool', ['pointer', 'pointer']));
         hooks.push({ type: 'replace', addr: addrConsumeAmmo });
-        sendLog('info', '无限子弹', 'WPN_Gun.ConsumeAmmo 已替换（' + scopeLabel() + '）');
+        sendLog('info', '无限子弹', 'WPN_Gun.ConsumeAmmo 已替换（无限子弹=' + (bulletEnabled ? '开' : '关') + '，' + scopeLabel(bulletScope) + '）');
       } catch (e) {
         sendBothLog('error', '无限子弹', '无限子弹初始化失败，请稍后重试', 'Ammo replace WPN_Gun.ConsumeAmmo failed: ' + e);
       }
 
+      // WPN_RPG 补充所需的原生辅助函数。
       try {
-        var addrConsumeBase = base.add(0xB6C310);
-        Interceptor.replace(addrConsumeBase, new NativeCallback(function(thisPtr, methodInfo) {
-          if (shouldAffect(thisPtr)) {
+        rpgIsMaxClip = new NativeFunction(base.add(0xB6EEA0), 'bool', ['pointer', 'pointer']);
+        rpgCanReload = new NativeFunction(base.add(0xB6EBD0), 'bool', ['pointer', 'pointer']);
+        rpgAnimEmptyTag = new NativeFunction(base.add(0xB35350), 'bool', ['pointer', 'pointer']);
+      } catch (e) {
+        sendDevLog('warn', '无限弹药', 'RPG 弹药辅助函数初始化失败: ' + e, 'RPG ammo helpers failed: ' + e);
+      }
+
+      try {
+        var addrConsumeBaseFallback = base.add(0xB6C310);
+        Interceptor.replace(addrConsumeBaseFallback, new NativeCallback(function(thisPtr, methodInfo) {
+          if (bulletEnabled && shouldAffectWeapon(thisPtr, bulletScope)) {
             return 1;
           }
+          if (!originalConsumeBase) return 0;
           return originalConsumeBase(thisPtr, methodInfo);
         }, 'bool', ['pointer', 'pointer']));
-        hooks.push({ type: 'replace', addr: addrConsumeBase });
-        sendLog('info', '无限子弹', 'Weapon.ConsumeAmmo 已替换（' + scopeLabel() + '）');
+        hooks.push({ type: 'replace', addr: addrConsumeBaseFallback });
+        sendLog('info', '无限子弹', 'Weapon.ConsumeAmmo 已替换（兜底）');
       } catch (e) {
         sendDevLog('warn', '无限子弹', '替换 Weapon.ConsumeAmmo 失败: ' + e, 'Ammo fallback replace failed');
       }
@@ -212,12 +303,12 @@ modules.ammo = (function() {
         var addrRpgFire = base.add(0xB670A0);
         var addrRpgFillAmmo = base.add(0xB67070);
         var rpgFillAmmoFn = new NativeFunction(addrRpgFillAmmo, 'void', ['pointer', 'pointer']);
-        
+
         var rpgFireHook = Interceptor.attach(addrRpgFire, {
           onEnter: function(args) {
             try {
               var self = args[0];
-              if (self && !self.isNull() && shouldAffect(self)) {
+              if (self && !self.isNull() && bulletEnabled && shouldAffectWeapon(self, bulletScope)) {
                 rpgFillAmmoFn(self, ptr(0));
                 setLocalRpgClip10(self);
                 this.rpgSelf = self;
@@ -231,7 +322,7 @@ modules.ammo = (function() {
           }
         });
         hooks.push({ type: 'attach', handle: rpgFireHook });
-        sendLog('info', '无限子弹', 'RPG/AT4 无限子弹已启用（' + scopeLabel() + '）');
+        sendLog('info', '无限子弹', 'RPG/AT4 无限子弹已启用（' + (bulletEnabled ? '开' : '关') + '，' + scopeLabel(bulletScope) + '）');
       } catch (e) {
         sendDevLog('warn', '无限子弹', 'RPG/AT4 初始化失败: ' + e, 'Ammo RPG/AT4 hook init failed');
       }
@@ -249,13 +340,168 @@ modules.ammo = (function() {
           }
         });
         hooks.push({ type: 'attach', handle: rpgReloadHook });
-        sendLog('info', '无限子弹', 'RPG/AT4 弹匣已维持为10（' + scopeLabel() + '）');
+        sendLog('info', '无限子弹', 'RPG/AT4 弹匣已维持为10（' + scopeLabel(bulletScope) + '）');
       } catch (e) {
         sendDevLog('warn', '无限子弹', 'RPG/AT4 换弹挂钩失败: ' + e, 'Ammo RPG/AT4 reload hook init failed');
       }
 
-      enabled = true;
-      sendLog('success', '无限子弹', '已启用 (Zero ammo consumption, scope=' + scope + ')');
+      // 无限弹药：WPN_RPG / AT4 / Nano AT4。
+      // WPN_RPG 不读 Player.Buff_InfinityAmmo，单独补：
+      // - CanReload：备弹为 0 时仍允许自动换弹；
+      // - OnReloadBtnDown：手动换弹时临时补 1 发备弹让原逻辑启动，随后把 clip 填满并恢复备弹；
+      // - Reload：自动换弹路径启动时把 clip 填满。
+      // 填满 clip 后，后续 AmmoData.Reload 的 need=0，不会扣备弹。
+      try {
+        if (!rpgIsMaxClip || !rpgCanReload || !rpgAnimEmptyTag) throw new Error('rpg helpers not ready');
+
+        var rpgCanReloadHook = Interceptor.attach(base.add(0xB66E80), {
+          onEnter: function(args) {
+            this.weapon = args[0];
+          },
+          onLeave: function(retval) {
+            try {
+              if (!ammoEnabled || retval.toInt32() !== 0) return;
+              var self = this.weapon;
+              if (!self || !shouldAffectWeapon(self, ammoScope)) return;
+              var ammo = readRpgAmmo(self);
+              if (!ammo) return;
+              if (rpgIsMaxClip(ammo, ptr(0))) return;
+              if (!rpgAnimEmptyTag(self, ptr(0))) return;
+              retval.replace(1);
+              sendDevLog('info', '无限弹药', 'RPG CanReload 放行（备弹=0）');
+            } catch (e) {}
+          }
+        });
+        hooks.push({ type: 'attach', handle: rpgCanReloadHook });
+
+        var rpgReloadBtnHook = Interceptor.attach(base.add(0xB67AF0), {
+          onEnter: function(args) {
+            this.weapon = args[0];
+            this.ammo = null;
+            this.injected = false;
+            try {
+              if (!ammoEnabled) return;
+              var self = this.weapon;
+              if (!self || !shouldAffectWeapon(self, ammoScope)) return;
+              var ammo = readRpgAmmo(self);
+              if (!ammo) return;
+              if (rpgIsMaxClip(ammo, ptr(0))) return;
+              if (!rpgAnimEmptyTag(self, ptr(0))) return;
+              this.ammo = ammo;
+              if (!rpgCanReload(ammo, ptr(0))) {
+                if (writeObscuredInt(ammo.add(0x1C), 1)) {
+                  this.injected = true;
+                } else {
+                  this.ammo = null;
+                }
+              }
+            } catch (e) {
+              this.ammo = null;
+            }
+          },
+          onLeave: function() {
+            var ammo = this.ammo;
+            if (!ammo) return;
+            try {
+              copyAmmoClipToMax(ammo);
+              if (this.injected) writeObscuredInt(ammo.add(0x1C), 0);
+              sendDevLog('info', '无限弹药', 'RPG 换弹启动：clip=max，injected=' + this.injected);
+            } catch (e) {}
+          }
+        });
+        hooks.push({ type: 'attach', handle: rpgReloadBtnHook });
+
+        var rpgAmmoReloadHook = Interceptor.attach(base.add(0xB67C40), {
+          onEnter: function(args) {
+            this.weapon = args[0];
+          },
+          onLeave: function() {
+            try {
+              if (!ammoEnabled) return;
+              var self = this.weapon;
+              if (!self || !shouldAffectWeapon(self, ammoScope)) return;
+              var ammo = readRpgAmmo(self);
+              if (!ammo) return;
+              if (!rpgIsMaxClip(ammo, ptr(0))) { copyAmmoClipToMax(ammo); sendDevLog('info', '无限弹药', 'RPG Reload 填满弹夹'); }
+            } catch (e) {}
+          }
+        });
+        hooks.push({ type: 'attach', handle: rpgAmmoReloadHook });
+
+        // 换弹完成事件（AnimationEventReceiver.AE_ReloadOver -> WPN_RPG.ReloadOver）也兜底填满。
+        var rpgReloadOverHook = Interceptor.attach(base.add(0xB67BC0), {
+          onEnter: function(args) {
+            try {
+              if (!ammoEnabled) return;
+              var self = args[0];
+              if (!self || !shouldAffectWeapon(self, ammoScope)) return;
+              var ammo = readRpgAmmo(self);
+              if (!ammo) return;
+              if (!rpgIsMaxClip(ammo, ptr(0))) { copyAmmoClipToMax(ammo); sendDevLog('info', '无限弹药', 'RPG ReloadOver 填满弹夹'); }
+            } catch (e) {}
+          }
+        });
+        hooks.push({ type: 'attach', handle: rpgReloadOverHook });
+
+        sendLog('info', '无限弹药', 'WPN_RPG/AT4 已挂钩（无限弹药=' + (ammoEnabled ? '开' : '关') + '，' + scopeLabel(ammoScope) + '）');
+      } catch (e) {
+        sendBothLog('error', '无限弹药', 'RPG/AT4 无限弹药初始化失败，请稍后重试', 'RPG infinite ammo hook failed: ' + e);
+      }
+
+      // 仅 UI：让 WPN_RPG/AT4 的 HUD 也显示无限弹药。WPN_RPG 的 CanGetInfinityAmmo 仍返回 false。
+      try {
+        var rpgHudHook = Interceptor.attach(base.add(0xB17120), {
+          onEnter: function(args) {
+            this.wpns = args[0];
+          },
+          onLeave: function(retval) {
+            try {
+              if (!ammoEnabled || retval.toInt32() !== 0) return;
+              var wpns = this.wpns;
+              if (!wpns || wpns.isNull()) return;
+              var inUse = wpns.add(0x18).readPointer();
+              if (!inUse || inUse.isNull()) return;
+              if (!shouldAffectWeapon(inUse, ammoScope)) return;
+              if (isRpgWeapon(inUse)) {
+                retval.replace(1);
+                if (!rpgHudLogged) {
+                  rpgHudLogged = true;
+                  sendDevLog('info', '无限弹药', 'RPG/AT4 HUD 已显示无限弹药');
+                }
+              }
+            } catch (e) {}
+          }
+        });
+        hooks.push({ type: 'attach', handle: rpgHudHook });
+        sendLog('info', '无限弹药', 'RPG/AT4 HUD 无限弹药图标已挂钩');
+      } catch (e) {
+        sendDevLog('warn', '无限弹药', 'RPG/AT4 HUD 挂钩失败: ' + e, 'RPG HUD hook failed: ' + e);
+      }
+
+      // 无限弹药：复用游戏原生 Buff_InfinityAmmo 标志位。
+      try {
+        var addrUpdateBuffProperty = base.add(0xB547F0);
+        var buffHook = Interceptor.attach(addrUpdateBuffProperty, {
+          onEnter: function(args) {
+            this.player = args[0];
+          },
+          onLeave: function() {
+            applyInfinityAmmoFlag(this.player);
+          }
+        });
+        hooks.push({ type: 'attach', handle: buffHook });
+        sendLog('info', '无限弹药', 'Player.UpdateBuffProperty 已挂钩（无限弹药=' + (ammoEnabled ? '开' : '关') + '，' + scopeLabel(ammoScope) + '）');
+      } catch (e) {
+        sendBothLog('error', '无限弹药', '无限弹药初始化失败，请稍后重试', 'Ammo buff flag hook failed: ' + e);
+      }
+
+      if (!hooks.length) {
+        enabled = false;
+        sendBothLog('error', '无限子弹', '无限子弹初始化失败，请稍后重试', 'Ammo no hooks installed');
+        return;
+      }
+
+      sendLog('success', '无限子弹', '已启用（无限子弹=' + (bulletEnabled ? '开' : '关') + '，无限弹药=' + (ammoEnabled ? '开' : '关') + '）');
       sendStatus('ammo', true);
     },
     disable: function() {
@@ -267,26 +513,60 @@ modules.ammo = (function() {
           } else {
             hooks[i].handle.detach();
           }
-        } catch(e) {}
+        } catch (e) {}
       }
       hooks = [];
       originalConsumeAmmo = null;
       originalConsumeBase = null;
       isMyPlayer = null;
       isMyWeapon = null;
+      rpgIsMaxClip = null;
+      rpgCanReload = null;
+      rpgAnimEmptyTag = null;
+      rpgHudLogged = false;
       enabled = false;
       sendLog('info', '无限子弹', '已禁用');
       sendStatus('ammo', false);
     },
-    setconfig: function(scopeValue) {
-      if (typeof scopeValue === 'string' && scopeValue.length) {
-        scope = (scopeValue === 'all_players' || scopeValue === 'all') ? 'all_players' : 'player_only';
+    setconfig: function(payload) {
+      if (typeof payload === 'string') {
+        bulletScope = normalizeScope(payload);
+        ammoScope = bulletScope;
+      } else if (payload && typeof payload === 'object') {
+        if (payload.scope !== undefined) {
+          bulletScope = normalizeScope(payload.scope);
+        }
+        if (payload.infinite_bullet_scope !== undefined) {
+          bulletScope = normalizeScope(payload.infinite_bullet_scope);
+        }
+        if (payload.infinite_ammo_scope !== undefined) {
+          ammoScope = normalizeScope(payload.infinite_ammo_scope);
+        }
+        if (payload.infinite_bullet_enabled !== undefined) {
+          bulletEnabled = !!payload.infinite_bullet_enabled;
+        }
+        if (payload.infinite_ammo_enabled !== undefined) {
+          ammoEnabled = !!payload.infinite_ammo_enabled;
+        }
       }
-      sendLog('info', '无限子弹', '应用范围已更新: ' + scopeLabel());
-      return { ok: true, scope: scope };
+      sendLog('info', '无限子弹', '设置已更新：无限子弹=' + (bulletEnabled ? '开' : '关') + '（' + scopeLabel(bulletScope) + '），无限弹药=' + (ammoEnabled ? '开' : '关') + '（' + scopeLabel(ammoScope) + '）');
+      return {
+        ok: true,
+        infinite_bullet_enabled: bulletEnabled,
+        infinite_bullet_scope: bulletScope,
+        infinite_ammo_enabled: ammoEnabled,
+        infinite_ammo_scope: ammoScope
+      };
     },
     getstatus: function() {
-      return { enabled: enabled, scope: scope, hooks: hooks.length };
+      return {
+        enabled: enabled,
+        hooks: hooks.length,
+        infinite_bullet_enabled: bulletEnabled,
+        infinite_bullet_scope: bulletScope,
+        infinite_ammo_enabled: ammoEnabled,
+        infinite_ammo_scope: ammoScope
+      };
     }
   };
 })();
@@ -296,7 +576,13 @@ modules.ammo = (function() {
 var __pluginFeatureId = "ammo";
 var __pluginModuleName = "ammo";
 var __pluginEnabled = false;
-var __pluginConfig = { scope: "player_only" };
+var __pluginConfig = {
+  scope: "player_only",
+  infinite_bullet_enabled: true,
+  infinite_bullet_scope: "player_only",
+  infinite_ammo_enabled: false,
+  infinite_ammo_scope: "player_only"
+};
 
 function __pluginModule() {
   return modules[__pluginModuleName];
@@ -304,13 +590,17 @@ function __pluginModule() {
 
 function __pluginApplyConfig(config) {
   if (config) {
+    // 旧版只有 scope 键，迁移到无限子弹的范围，避免被新键默认值覆盖。
+    if (config.scope !== undefined && config.infinite_bullet_scope === undefined) {
+      __pluginConfig.infinite_bullet_scope = config.scope;
+    }
     for (var key in config) {
       if (Object.prototype.hasOwnProperty.call(config, key)) __pluginConfig[key] = config[key];
     }
   }
   var module = __pluginModule();
   if (!module) return { ok: false, reason: 'module_not_loaded', config: __pluginConfig };
-  if (typeof module.setconfig === 'function') module.setconfig(__pluginConfig.scope);
+  if (typeof module.setconfig === 'function') module.setconfig(__pluginConfig);
   return { ok: true, config: __pluginConfig };
 }
 
@@ -352,4 +642,3 @@ rpc.exports = {
   status: __pluginStatus,
   cleanup: __pluginCleanup
 };
-
