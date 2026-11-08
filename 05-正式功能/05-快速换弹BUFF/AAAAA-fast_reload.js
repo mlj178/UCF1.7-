@@ -1,18 +1,18 @@
-// AAAAA-fast_reload.js — 快速换弹（GUN + RPG，倍率可调）
+// AAAAA-fast_reload.js — 快速换弹（GUN / 榴弹模式 / RPG，倍率可调）
 //
 // 独立版脚本（不依赖整合包运行时）：frida -n <游戏进程> -l AAAAA-fast_reload.js
 // 2.8 整合包内的同源实现：04-正式发行版/全功能整合包2.8/game_modifier/features/05_ammoplus/script.js
 // 原理/逆向过程见同目录《无限弹匣+快速换弹-经验总结.md》
 //
-// 两条路径（GUN 和 RPG 的实现完全不同，不能只做一条）：
-//   GUN：WPN_Gun.Reload 每次算出 GetAnimSpeed(reloadAnimRatio) × PlayerWeapons.ReloadSpeed，
-//        再 CFAnimator.SetFloat("ReloadSpeed", v) 播放 "reload" 动画 → 在这里把 v 乘倍率。
-//   RPG：WPN_RPG.OnReloadBtnDown(0xB67AF0) 只播放动画、从不写 "ReloadSpeed"
-//        （那个参数只在 Deploy 的 AnimSpeedSetting 里写一次，且 RPG 的换弹动画不吃它），
-//        → 换弹前直接改武器/手部 Animator.speed，动画结束复位 1.0。
+// 三条路径（缺一不可）：
+//   1) 普通枪械：WPN_Gun.Reload 每帧算 GetAnimSpeed(reloadAnimRatio) × PlayerWeapons.ReloadSpeed
+//      再 CFAnimator.SetFloat("ReloadSpeed", v) → 在这里把 v 乘倍率。
+//   2) 步枪的榴弹模式（CFAnimator.changeMode+0x54）：换弹动画名被改写为 "reload_A"，
+//      不吃 "ReloadSpeed" 参数 → 改为把武器/手部 Animator.speed 设为倍率。
+//   3) WPN_RPG（火箭筒/AT4）：换弹入口 OnReloadBtnDown 从不写 "ReloadSpeed" → 同样改 Animator.speed。
 
 console.log("[*] ======================================");
-console.log("[*]  FAST RELOAD (GUN + RPG)");
+console.log("[*]  FAST RELOAD (GUN / GRENADE MODE / RPG)");
 console.log("[*]  快速换弹 - 全武器通用");
 console.log("[*] ======================================");
 
@@ -76,7 +76,15 @@ console.log("[*] ======================================");
         } catch (e) { return false; }
     }
 
-    function collectRpgAnimators(weapon) {
+    // 榴弹模式：CFAnimator.changeMode(+0x54)
+    function isGrenadeMode(weapon) {
+        try {
+            if (!weapon || weapon.isNull()) return false;
+            return weapon.add(0x54).readU8() !== 0;
+        } catch (e) { return false; }
+    }
+
+    function collectAnimators(weapon) {
         var list = [];
         var weaponAnimator = readPtr(weapon.add(0x40));
         if (weaponAnimator) list.push(weaponAnimator);
@@ -87,14 +95,37 @@ console.log("[*] ======================================");
         return list;
     }
 
-    // ---------- GUN：乘 "ReloadSpeed" 参数 ----------
+    var speedTargets = [];
+    var speedRestoreTimer = null;
+
+    function restoreAnimatorSpeed() {
+        for (var i = 0; i < speedTargets.length; i++) {
+            try { animatorSetSpeed(speedTargets[i], 1.0, ptr(0)); } catch (e) {}
+        }
+        speedTargets = [];
+        if (speedRestoreTimer) { try { clearTimeout(speedRestoreTimer); } catch (e) {} speedRestoreTimer = null; }
+    }
+
+    function applyAnimatorSpeed(weapon) {
+        if (RELOAD_MULTIPLIER <= 1.001) { restoreAnimatorSpeed(); return false; }
+        var list = collectAnimators(weapon);
+        if (!list.length) return false;
+        for (var i = 0; i < list.length; i++) animatorSetSpeed(list[i], RELOAD_MULTIPLIER, ptr(0));
+        speedTargets = list;
+        if (speedRestoreTimer) { try { clearTimeout(speedRestoreTimer); } catch (e) {} }
+        speedRestoreTimer = setTimeout(function () { restoreAnimatorSpeed(); }, 5000);
+        return true;
+    }
+
+    // ---------- 1) 普通枪械：乘 "ReloadSpeed" 参数 ----------
     var setFloatAddr = base.add(0xB34E40);
     var originalSetFloat = new NativeFunction(setFloatAddr, 'void', ['pointer', 'pointer', 'float', 'int', 'pointer']);
     var gunCount = 0;
 
     Interceptor.replace(setFloatAddr, new NativeCallback(function (self, name, value, character, method) {
         try {
-            if (isReloadParamName(name) && isMyWeapon(self, ptr(0)) && !isRpgWeapon(self)) {
+            if (isReloadParamName(name) && isMyWeapon(self, ptr(0)) &&
+                !isGrenadeMode(self) && !isRpgWeapon(self)) {
                 gunCount++;
                 if (gunCount <= 5) {
                     console.log("[GUN] ReloadSpeed " + value.toFixed(2) + " -> " +
@@ -106,19 +137,42 @@ console.log("[*] ======================================");
         return originalSetFloat(self, name, value, character, method);
     }, 'void', ['pointer', 'pointer', 'float', 'int', 'pointer']));
 
-    // ---------- RPG：改动画器速度 ----------
-    var rpgAnimators = [];
-    var rpgRestoreTimer = null;
-    var rpgCount = 0;
-
-    function restoreRpgAnimators() {
-        for (var i = 0; i < rpgAnimators.length; i++) {
-            try { animatorSetSpeed(rpgAnimators[i], 1.0, ptr(0)); } catch (e) {}
+    // ---------- 2) 榴弹模式：改动画器速度 ----------
+    var grenadeCount = 0;
+    Interceptor.attach(base.add(0xB62CB0), {          // WPN_Gun.Reload
+        onEnter: function (args) {
+            try {
+                var weapon = args[0];
+                if (!weapon || weapon.isNull()) return;
+                if (!isMyWeapon(weapon, ptr(0))) return;
+                if (isRpgWeapon(weapon) || !isGrenadeMode(weapon)) return;
+                if (applyAnimatorSpeed(weapon)) {
+                    grenadeCount++;
+                    if (grenadeCount <= 5) {
+                        console.log("[GRENADE] reload animator speed -> " + RELOAD_MULTIPLIER.toFixed(1) + "x");
+                    }
+                }
+            } catch (e) {}
         }
-        rpgAnimators = [];
-        if (rpgRestoreTimer) { try { clearTimeout(rpgRestoreTimer); } catch (e) {} rpgRestoreTimer = null; }
-    }
+    });
 
+    Interceptor.attach(base.add(0xB627A0), {          // WPN_Gun.OnAnimationEnd
+        onEnter: function (args) {
+            try {
+                if (!speedTargets.length) return;
+                if (readIl2CppString(args[2]) === 'reload') restoreAnimatorSpeed();
+            } catch (e) {}
+        }
+    });
+
+    Interceptor.attach(base.add(0xB5FCF0), {          // WPN_GrenadeGun.OnSpecialBtnDown（切模式）
+        onEnter: function () {
+            try { if (speedTargets.length) restoreAnimatorSpeed(); } catch (e) {}
+        }
+    });
+
+    // ---------- 3) RPG / AT4：改动画器速度 ----------
+    var rpgCount = 0;
     Interceptor.attach(base.add(0xB67AF0), {          // WPN_RPG.OnReloadBtnDown
         onEnter: function (args) {
             try {
@@ -126,17 +180,12 @@ console.log("[*] ======================================");
                 if (!weapon || weapon.isNull()) return;
                 if (!isMyWeapon(weapon, ptr(0))) return;
                 if (!isRpgWeapon(weapon)) return;
-                if (RELOAD_MULTIPLIER <= 1.001) { restoreRpgAnimators(); return; }
-                var list = collectRpgAnimators(weapon);
-                if (!list.length) return;
-                for (var i = 0; i < list.length; i++) animatorSetSpeed(list[i], RELOAD_MULTIPLIER, ptr(0));
-                rpgAnimators = list;
-                rpgCount++;
-                if (rpgCount <= 5) {
-                    console.log("[RPG] reload animator speed -> " + RELOAD_MULTIPLIER.toFixed(1) + "x (" + list.length + " animator)");
+                if (applyAnimatorSpeed(weapon)) {
+                    rpgCount++;
+                    if (rpgCount <= 5) {
+                        console.log("[RPG] reload animator speed -> " + RELOAD_MULTIPLIER.toFixed(1) + "x (" + speedTargets.length + " animator)");
+                    }
                 }
-                if (rpgRestoreTimer) { try { clearTimeout(rpgRestoreTimer); } catch (e) {} }
-                rpgRestoreTimer = setTimeout(function () { restoreRpgAnimators(); }, 5000);
             } catch (e) {}
         }
     });
@@ -144,21 +193,21 @@ console.log("[*] ======================================");
     Interceptor.attach(base.add(0xB67640), {          // WPN_RPG.OnAnimationEnd
         onEnter: function (args) {
             try {
-                if (!rpgAnimators.length) return;
-                if (readIl2CppString(args[2]) === 'reload') restoreRpgAnimators();
+                if (!speedTargets.length) return;
+                if (readIl2CppString(args[2]) === 'reload') restoreAnimatorSpeed();
             } catch (e) {}
         }
     });
 
     Interceptor.attach(base.add(0xB67030), {          // WPN_RPG.Deploy
         onEnter: function () {
-            try { if (rpgAnimators.length) restoreRpgAnimators(); } catch (e) {}
+            try { if (speedTargets.length) restoreAnimatorSpeed(); } catch (e) {}
         }
     });
 
-    console.log("[+] CFAnimator.SetFloat @ " + setFloatAddr + " hooked (GUN)");
-    console.log("[+] WPN_RPG.OnReloadBtnDown @ " + base.add(0xB67AF0) + " hooked (RPG)");
+    console.log("[+] CFAnimator.SetFloat @ " + setFloatAddr + " hooked (普通枪械)");
+    console.log("[+] WPN_Gun.Reload @ " + base.add(0xB62CB0) + " hooked (榴弹模式)");
+    console.log("[+] WPN_RPG.OnReloadBtnDown @ " + base.add(0xB67AF0) + " hooked (RPG/AT4)");
     console.log("[+] Multiplier: " + RELOAD_MULTIPLIER.toFixed(1) + "x (1.0 ~ 5.0)");
-    console.log("[+] 覆盖：WPN_Gun 系（步枪/冲锋枪/狙击/手枪/霰弹/榴弹枪）+ WPN_RPG（火箭筒/AT4）");
     console.log("[+] TEST SCRIPT ACTIVE - 进入任意模式即可生效");
 })();

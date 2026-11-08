@@ -125,8 +125,23 @@
         }
     }
 
-    // 仅用于 HUD 判断：WPN_RPG 的 ammo(+0xEC) / realData(+0xF0) / gunfire(+0xF4) 都是有效指针。
-    function isRpgWeapon(weaponPtr) {
+    // il2cpp 对象 -> 类名（Il2CppClass.name 在 klass+0x8）。
+    function classNameOf(objPtr) {
+        try {
+            if (!objPtr || objPtr.isNull()) return '';
+            var klass = objPtr.readPointer();
+            if (!klass || klass.isNull()) return '';
+            var namePtr = klass.add(0x8).readPointer();
+            if (!namePtr || namePtr.isNull()) return '';
+            return namePtr.readUtf8String() || '';
+        } catch (e) {
+            return '';
+        }
+    }
+
+    // 仅用于 HUD 判断：优先按类名识别 WPN_RPG（AT4 / Nano AT4 同一组件），
+    // 不依赖 +0xF4(gunfire) 等序列化字段。类名读取失败时退回字段探测。
+    function looksLikeRpgByFields(weaponPtr) {
         try {
             if (!weaponPtr || weaponPtr.isNull()) return false;
             var ammo = weaponPtr.add(0xEC).readPointer();
@@ -135,6 +150,17 @@
             if (!ammo || ammo.isNull() || !realData || realData.isNull()) return false;
             if (!isReadablePtr(ammo) || !isReadablePtr(realData) || !isReadablePtr(gunfire)) return false;
             return true;
+        } catch (e) {
+            return false;
+        }
+    }
+
+    function isRpgWeapon(weaponPtr) {
+        try {
+            if (!weaponPtr || weaponPtr.isNull()) return false;
+            var cls = classNameOf(weaponPtr);
+            if (cls) return cls.indexOf('WPN_RPG') === 0;
+            return looksLikeRpgByFields(weaponPtr);
         } catch (e) {
             return false;
         }
@@ -157,19 +183,22 @@
     }));
 
     // 1.5) 仅 UI：WPN_RPG/AT4 的 HUD 无限弹药图标
+    // HUD_Weapon.Update 只读 PlayerWeapons.get_isInfinityAmmo，放行这一个返回值即可。
     hooks.push(Interceptor.attach(base.add(0xB17120), {
         onEnter: function (args) {
             this.wpns = args[0];
         },
         onLeave: function (retval) {
             try {
-                if (!enabled || retval.toInt32() !== 0) return;
+                if (!enabled) return;
                 var wpns = this.wpns;
                 if (!wpns || wpns.isNull()) return;
                 var inUse = wpns.add(0x18).readPointer();
                 if (!inUse || inUse.isNull()) return;
+                if ((retval.toInt32() & 0xff) !== 0) return;
+                if (!isRpgWeapon(inUse)) return;
                 if (!shouldAffect(inUse)) return;
-                if (isRpgWeapon(inUse)) retval.replace(1);
+                retval.replace(1);
             } catch (e) {}
         }
     }));

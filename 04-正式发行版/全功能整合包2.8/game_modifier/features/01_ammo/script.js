@@ -213,9 +213,24 @@ modules.ammo = (function() {
     }
   }
 
-  // 仅用于 HUD 判断：WPN_RPG 的 ammo(+0xEC) / realData(+0xF0) / gunfire(+0xF4) 都是有效指针。
-  // WPN_Gun 的 +0xF0 是 bool，readPointer 会失败；WPN_Throw 的 +0xF4 是 bool，也会失败。
-  function isRpgWeapon(weaponPtr) {
+  // il2cpp 对象 -> 类名（Il2CppClass.name 在 klass+0x8）。
+  function classNameOf(objPtr) {
+    try {
+      if (!objPtr || objPtr.isNull()) return '';
+      var klass = objPtr.readPointer();
+      if (!klass || klass.isNull()) return '';
+      var namePtr = klass.add(0x8).readPointer();
+      if (!namePtr || namePtr.isNull()) return '';
+      return namePtr.readUtf8String() || '';
+    } catch (e) {
+      return '';
+    }
+  }
+
+  // 仅用于 HUD 判断：优先按 IL2CPP 类名识别 WPN_RPG（AT4 / Nano AT4 同一组件），
+  // 不依赖 +0xF0(realData) / +0xF4(gunfire) 是否已在预制体上序列化。
+  // 类名读取失败时退回原来的字段探测。
+  function looksLikeRpgByFields(weaponPtr) {
     try {
       if (!weaponPtr || weaponPtr.isNull()) return false;
       var ammo = weaponPtr.add(0xEC).readPointer();
@@ -224,6 +239,17 @@ modules.ammo = (function() {
       if (!ammo || ammo.isNull() || !realData || realData.isNull()) return false;
       if (!isReadablePtr(ammo) || !isReadablePtr(realData) || !isReadablePtr(gunfire)) return false;
       return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function isRpgWeapon(weaponPtr) {
+    try {
+      if (!weaponPtr || weaponPtr.isNull()) return false;
+      var cls = classNameOf(weaponPtr);
+      if (cls) return cls.indexOf('WPN_RPG') === 0;
+      return looksLikeRpgByFields(weaponPtr);
     } catch (e) {
       return false;
     }
@@ -448,26 +474,37 @@ modules.ammo = (function() {
         sendBothLog('error', '无限弹药', 'RPG/AT4 无限弹药初始化失败，请稍后重试', 'RPG infinite ammo hook failed: ' + e);
       }
 
-      // 仅 UI：让 WPN_RPG/AT4 的 HUD 也显示无限弹药。WPN_RPG 的 CanGetInfinityAmmo 仍返回 false。
+      // 仅 UI：让 WPN_RPG/AT4 的 HUD 也显示无限弹药。WPN_RPG 的 CanGetInfinityAmmo 仍返回 false，
+      // 但 HUD_Weapon.Update 只读 PlayerWeapons.get_isInfinityAmmo，所以在这里放行即可。
       try {
+        var rpgHudProbePtr = null;
         var rpgHudHook = Interceptor.attach(base.add(0xB17120), {
           onEnter: function(args) {
             this.wpns = args[0];
           },
           onLeave: function(retval) {
             try {
-              if (!ammoEnabled || retval.toInt32() !== 0) return;
+              if (!ammoEnabled) return;
               var wpns = this.wpns;
               if (!wpns || wpns.isNull()) return;
               var inUse = wpns.add(0x18).readPointer();
               if (!inUse || inUse.isNull()) return;
+              var cls = classNameOf(inUse);
+              var isRpg = isRpgWeapon(inUse);
+              // 首次见到某把 RPG 时输出一条不受「每模块 10 条」限制的诊断。
+              if (isRpg && (!rpgHudProbePtr || !rpgHudProbePtr.equals(inUse))) {
+                rpgHudProbePtr = inUse;
+                sendLogFile('info', '无限弹药HUD', 'HUD 诊断 inUse=' + inUse + ' class=' + cls
+                  + ' ret=' + (retval.toInt32() & 0xff) + ' scope=' + ammoScope
+                  + ' scopeOk=' + shouldAffectWeapon(inUse, ammoScope));
+              }
+              if ((retval.toInt32() & 0xff) !== 0) return;
+              if (!isRpg) return;
               if (!shouldAffectWeapon(inUse, ammoScope)) return;
-              if (isRpgWeapon(inUse)) {
-                retval.replace(1);
-                if (!rpgHudLogged) {
-                  rpgHudLogged = true;
-                  sendDevLog('info', '无限弹药', 'RPG/AT4 HUD 已显示无限弹药');
-                }
+              retval.replace(1);
+              if (!rpgHudLogged) {
+                rpgHudLogged = true;
+                sendLogFile('info', '无限弹药HUD', 'HUD 已强制显示无限弹药图标 class=' + cls + ' inUse=' + inUse);
               }
             } catch (e) {}
           }
