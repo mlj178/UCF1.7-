@@ -153,11 +153,13 @@ class ProjectileWallPenetrationStaticTests(unittest.TestCase):
         self.assertIn("restoreGhost(st, reason || 'drop')", drop_fn)
         release_fn = text.split("function releaseEveryIgnore(reason)", 1)[1].split("function cleanupHooks", 1)[0]
         self.assertIn("restoreGhost(st, reason)", release_fn)
-        sweep_fn = text.split("function sweepMissileStates()", 1)[1].split("function releaseEveryIgnore", 1)[0]
-        self.assertIn("restoreGhost(st, 'sweep')", sweep_fn)
+        # 心跳只登记，真正还原在主线程的 processSweepQueue 里做（见跨线程护栏）
+        sweep_queue_fn = text.split("function processSweepQueue()", 1)[1].split("function pumpMainThreadWork", 1)[0]
+        self.assertIn("restoreGhost(st, 'sweep')", sweep_queue_fn)
         # 关掉弹体穿墙开关时也要还原
         config_fn = text.split("function updateConfig(input)", 1)[1].split("function getStatus", 1)[0]
-        self.assertIn("releaseEveryIgnore('config-off')", config_fn)
+        # 关掉弹体穿墙开关：登记给主线程泵还原（不在 RPC 线程直接调托管函数）
+        self.assertIn("queueReleaseAll('config-off')", config_fn)
 
     def test_has_observable_diagnostics(self):
         text = script_text()
@@ -190,7 +192,8 @@ class ProjectileWallPenetrationStaticTests(unittest.TestCase):
         # 关闭 / 卸载 / 回池 / 心跳都要还原
         disable_fn = text.split("function disableFeature()", 1)[1].split("function cleanupFeature()", 1)[0]
         cleanup_fn = text.split("function cleanupFeature()", 1)[1].split("function updateConfig", 1)[0]
-        self.assertIn("releaseEveryIgnore('disable')", disable_fn)
+        # 关功能：登记给主线程泵；卸载（钩子马上要 detach）才同步还原
+        self.assertIn("queueReleaseAll('disable')", disable_fn)
         self.assertIn("releaseEveryIgnore('cleanup')", cleanup_fn)
         self.assertIn("dropMissileState(args[0], 'recycle')", text)
         self.assertIn("releaseAllIgnores(st, 'sweep')", text)
@@ -319,6 +322,67 @@ class ProjectileWallPenetrationStaticTests(unittest.TestCase):
         # 回池/复用/清理时 pendingWalls 随 state 一起消失（state 被整个删掉）
         drop_fn = text.split("function dropMissileState(missile, reason, releaseIgnores)", 1)[1].split("function readRigidbodyVelocity", 1)[0]
         self.assertIn("delete Runtime.missiles[key]", drop_fn)
+
+    def test_no_managed_call_runs_on_the_frida_js_thread(self):
+        """跨线程护栏（2026-11-10 崩溃：Unity "Collecting from unknown thread"）。
+
+        Frida 的 setInterval / rpc.exports 跑在 JS 线程上，那不是 IL2CPP 托管的线程。
+        在这个线程上调用会分配托管内存的函数（LayerToName 返回 string、Object.get_name
+        返回 string、Physics.OverlapSphere 返回数组、IgnoreCollision/detectCollisions 等），
+        一旦该线程内发生托管分配，Boehm GC 会在未知线程上启动回收并 abort。
+        """
+        text = script_text()
+
+        # 1) 层名：layerName() 必须是纯 JS 缓存读取；托管调用只允许在 learnLayerName() 里
+        layer_fn = text.split("function layerName(layer)", 1)[1].split("function learnLayerName", 1)[0]
+        self.assertNotIn("native.", layer_fn)
+        self.assertIn("Runtime.layerNames", layer_fn)
+        learn_fn = text.split("function learnLayerName(layer)", 1)[1].split("function learnLayerNamesStep", 1)[0]
+        self.assertIn("native.layerToName", learn_fn)
+        self.assertIn("Runtime.layerNames[id]", learn_fn)
+
+        # 2) 对象名：必须按指针缓存，且 native.getName 只出现在 objectName() 里
+        object_fn = text.split("function objectName(obj)", 1)[1].split("function isEnvironmentCollider", 1)[0]
+        self.assertIn("native.getName", object_fn)
+        self.assertIn("Runtime.objectNames", object_fn)
+        self.assertEqual(text.count("native.getName("), 1)
+
+        # 3) 心跳（setInterval，JS 线程）里不许有任何托管调用
+        heartbeat_fn = text.split("function startHeartbeat()", 1)[1].split("function stopHeartbeat", 1)[0]
+        self.assertNotIn("native.", heartbeat_fn)
+        sweep_fn = text.split("function sweepMissileStates()", 1)[1].split("function processSweepQueue", 1)[0]
+        self.assertNotIn("native.", sweep_fn)
+        self.assertNotIn("restoreGhost", sweep_fn)
+        self.assertNotIn("releaseAllIgnores", sweep_fn)
+        self.assertIn("Runtime.sweepPending.push", sweep_fn)
+
+        # 4) 启用/改配置（rpc，JS 线程）里不许调会分配的托管 API
+        enable_fn = text.split("function enableFeature()", 1)[1].split("function disableFeature", 1)[0]
+        self.assertNotIn("allLayerNamesText(", enable_fn)
+        self.assertNotIn("layerToName", enable_fn)
+        # environmentLayer() 会走 LayerConstant..cctor（托管静态构造）——也不能在 RPC 线程调
+        # （注释里提到它是允许的，只查真正执行的代码行）
+        offenders = [
+            line for line in enable_fn.splitlines()
+            if "environmentLayer(" in line.split("//")[0]
+        ]
+        self.assertEqual(offenders, [], "启用路径不许调 environmentLayer()：%s" % offenders)
+        config_fn = text.split("function updateConfig(input)", 1)[1].split("function getStatus", 1)[0]
+        self.assertNotIn("allLayerNamesText(", config_fn)
+        self.assertNotIn("native.layerToName", config_fn)
+
+        # 5) 必须有ModeBase.Update 主线程泵，并且它消费上面两个待办
+        self.assertIn("ModeBase_Update: 0x00AF6A00", text)
+        self.assertIn("attachHook('ModeBase.Update'", text)
+        pump_fn = text.split("function pumpMainThreadWork()", 1)[1].split("function releaseEveryIgnore", 1)[0]
+        self.assertIn("learnLayerNamesStep(6)", pump_fn)
+        self.assertIn("processSweepQueue()", pump_fn)
+        # 关功能/改配置的还原只登记，不能顺手在 RPC 线程里还原
+        self.assertIn("function queueReleaseAll(reason)", text)
+        self.assertIn("queueReleaseAll('disable')", text)
+        # 泵必须无条件跑：关了功能之后还得把登记过的还原消费掉
+        pump_hook = text.split("attachHook('ModeBase.Update'", 1)[1].split("startHeartbeat();", 1)[0]
+        self.assertNotIn("Runtime.enabled", pump_hook)
 
     def test_probe_skips_non_penetrable_layers_to_reach_the_wall_behind(self):
         """敌人/命中盒/尸体经常正好挡在墙前面：只打一发射线就会被吃掉，

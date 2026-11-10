@@ -122,6 +122,23 @@ public:
     static bool IsGameAssemblyReady();
     static void ResetSessionState();
 
+    // ------------------------------------------------------------------
+    // 跨线程修复（2026-11-10）
+    //
+    // 本 DLL 的 ESP 逻辑全部跑在 D3D11 Present 钩子里 —— 也就是 Unity 的渲染线程。
+    // 它不是 IL2CPP 托管线程（IL2CPP 只认识由 il2cpp_thread_attach 注册过的线程）。
+    // 在这个线程上直接调 GameAssembly 的托管方法时，只要调用链里发生一次托管分配，
+    // Unity 的 Boehm GC 就会在这个"未知线程"上启动回收并 abort：
+    //     Fatal error in GC
+    //     Collecting from unknown thread
+    // （已在 2026-11-10 实测崩溃中确认：UnityCrossFire.gc.log 两行该文案）
+    //
+    // 所以：任何托管调用之前，必须先 EnsureThreadAttached()。
+    // 只需要调用一次，函数内部按线程记账；同一个线程重复调用直接返回 true。
+    // ------------------------------------------------------------------
+    static bool EnsureThreadAttached();
+    static void DetachCurrentThread();
+
     // Get GameManager instance (pure RVA method)
     static void* GetGameManagerInstance();
 
