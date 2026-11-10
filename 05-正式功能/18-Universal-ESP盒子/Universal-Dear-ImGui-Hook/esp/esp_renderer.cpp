@@ -36,6 +36,14 @@ static bool SafeDrawPlayer(void* player, void* localPlayer) {
 bool ESPRenderer::Initialize() {
     if (s_Initialized) return true;
 
+    // 跨线程修复（2026-11-10）：本函数由 Present 钩子调用 = Unity 渲染线程，
+    // 下面 GameManager/TransformHelper/CoordConverter 都会直接调托管方法。
+    // 没挂到 IL2CPP 域上就宁可不启用 ESP，也不能让 GC 在未知线程上 abort。
+    if (!IL2CPPBridge::EnsureThreadAttached()) {
+        DebugLog("[ESPRenderer] Initialize aborted: render thread is not attached to IL2CPP\n");
+        return false;
+    }
+
     // 说明（2026-10-15 闪退修复）：
     // 旧实现在这里调用 GameManager::InitializeBotHook() / InitializeRoomHooks()，
     // 用 MinHook 改写 GameAssembly.dll 的 Bot.Update / *OnStartNewGameRound /
@@ -67,6 +75,11 @@ void ESPRenderer::Render() {
     // Check if ESP box is enabled via external control
     if (!ESPState::Instance().IsBoxEnabled()) return;
     if (!s_Enabled || !s_Initialized) return;
+
+    // 每帧确认一次（同线程重复调用是零成本的，内部按线程记账）。
+    // 这是所有托管调用的唯一入口，缺了它就会偶发
+    // "Fatal error in GC: Collecting from unknown thread"。
+    if (!IL2CPPBridge::EnsureThreadAttached()) return;
 
     PlayerSnapshot snapshot;
     if (!GameManager::BuildPlayerSnapshot(&snapshot)) return;

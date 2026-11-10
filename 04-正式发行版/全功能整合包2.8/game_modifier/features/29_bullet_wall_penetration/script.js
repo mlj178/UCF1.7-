@@ -103,6 +103,17 @@
 //   WPN_GRENADE_OnCollisionEnter:          0x00B5D0F0   手雷/榴弹/RPG/技能弹的碰撞 + 撞墙爆炸
 //   WPN_Missile_Recycle:                   0x00B66240   回池：清状态 + 立刻还原忽略
 //   Player_get_isMyPlayer:                 0x00B55FD0
+//
+//   ---- 主线程泵（跨线程修复）----
+//   ModeBase_Update:                       0x00AF6A00   每帧主线程：补层名表 + 消费心跳登记的还原
+//
+//   铁律（2026-11-10 崩溃定性）：
+//   托管函数（LayerMask.LayerToName 返回 string、Object.get_name 返回 string、
+//   Physics.OverlapSphere 返回数组）只能在游戏主线程调用。在 Frida 的 JS 线程
+//   （setInterval / rpc.exports）上调它们，一旦该线程内发生托管分配，Unity 的
+//   Boehm GC 会在这个未注册线程上启动回收并 abort：
+//       "Fatal error in GC: Collecting from unknown thread"
+//   ！所以：心跳/启用/改配置只做纯 JS 记账，所有托管调用一律走 pumpMainThreadWork()。
 //   WPN_Missile.owner:                     0x30
 //   WPN_Missile.rigidBody:                 0x44
 //   WPN_Missile.shootSpeed:                0x4C
@@ -131,6 +142,9 @@
     var RVA = {
         Weapon_get_isMyWeapon: 0x00B6E1D0,
         WPN_Gun_Damage: 0x00B613D0,
+        // 每帧主线程：CES/ModeBase 的 Update。只挂 onEnter 做"主线程泵"，
+        // 不 replace、不改任何游戏字节（和 12_godmode / 08_gather 用的是同一地址）。
+        ModeBase_Update: 0x00AF6A00,
         WeaponLogic_CheckWall: 0x00B78F80,
         LayerConstant_cctor: 0x00AE7CD0,
         LayerConstant_TypeInfo: 0x0E2BE3C,
@@ -204,6 +218,12 @@
         // 弹体状态：key = WPN_Missile 指针。对象池会复用指针，SetWeaponData/Recycle 都要清。
         missiles: {},
         heartbeat: null,
+        // 跨线程修复：下面三个缓存只由主线程钩子写、任何线程都能读（纯 JS）。
+        layerNames: {},              // 层号 -> 层名（LayerToName 的结果缓存）
+        layerNamesLogged: false,     // 层名表补齐后是否已经打印过一次
+        objectNames: {},             // 对象指针 -> 名字（Object.get_name 的结果缓存）
+        objectNameCount: 0,
+        sweepPending: [],            // 心跳只登记待清理的弹体 key，还原由主线程泵执行
         cache: {
             floatBuf: null,
             vecBuf: null,
@@ -959,19 +979,67 @@
     }
 
     // 层号 -> 层名（诊断用："层=2" 一眼看不出是什么，加上名字就清楚了）
+    //
+    // ！！！纯 JS 缓存读取，任何线程都能调（心跳/日志里都在用）。
+    // LayerMask.LayerToName 返回托管 string，只能在主线程调，见 learnLayerName()。
     function layerName(layer) {
+        var id = layer | 0;
+        if (id < 0 || id > 31) return String(id);
+        var cached = Runtime.layerNames[id];
+        return cached !== undefined ? cached : String(id);
+    }
+
+    // 只允许主线程（ModeBase.Update / 物理步 / 碰撞钩子）调用：
+    // LayerToName 会 new 一个托管 string，在 Frida JS 线程上会触发 GC abort。
+    function learnLayerName(layer) {
+        var id = layer | 0;
+        if (id < 0 || id > 31) return;
+        if (Runtime.layerNames[id] !== undefined) return;
         try {
-            if (!native.layerToName) return String(layer);
-            return readIl2CppString(native.layerToName(layer | 0, ptr(0))) || String(layer);
+            if (!native.layerToName) {
+                Runtime.layerNames[id] = String(id);
+                return;
+            }
+            Runtime.layerNames[id] = readIl2CppString(native.layerToName(id, ptr(0))) || String(id);
         } catch (_) {
-            return String(layer);
+            Runtime.layerNames[id] = String(id);
         }
     }
 
+    // 主线程：每帧最多补 budget 个层名（32 个都补齐后打印一次层名表）。
+    // 分帧补是为了不在单帧里连做 32 次托管调用。
+    function learnLayerNamesStep(budget) {
+        var done = 0;
+        for (var id = 0; id <= 31 && done < budget; id++) {
+            if (Runtime.layerNames[id] !== undefined) continue;
+            learnLayerName(id);
+            done += 1;
+        }
+        if (Runtime.layerNamesLogged) return;
+        for (var i = 0; i <= 31; i++) {
+            if (Runtime.layerNames[i] === undefined) return;
+        }
+        Runtime.layerNamesLogged = true;
+        // 全部在主线程执行：LayerToName / LayerConstant..cctor 都不会跑在 JS 线程上
+        log('info', '本工程层名表：' + allLayerNamesText() +
+            ' Environment层=' + environmentLayer());
+    }
+
+    // 对象名：只在主线程钩子里调用；按指针缓存，避免每次碰撞都新建托管 string。
     function objectName(obj) {
         try {
-            if (!native.getName) return '';
-            return readIl2CppString(native.getName(obj, ptr(0)));
+            if (!native.getName || !isReadablePtr(obj)) return '';
+            var key = obj.toString();
+            var cached = Runtime.objectNames[key];
+            if (cached !== undefined) return cached;
+            if (Runtime.objectNameCount > 512) {
+                Runtime.objectNames = {};
+                Runtime.objectNameCount = 0;
+            }
+            var name = readIl2CppString(native.getName(obj, ptr(0)));
+            Runtime.objectNames[key] = name;
+            Runtime.objectNameCount += 1;
+            return name;
         } catch (_) {
             return '';
         }
@@ -984,6 +1052,8 @@
             if (!isReadablePtr(go)) return false;
             var layer = native.getLayer(go, ptr(0));
             Runtime.stats.lastWallLayer = layer;
+            // 这里在碰撞/探路钩子里 = 游戏主线程，可以安全补层名缓存
+            learnLayerName(layer);
             Runtime.stats.lastWallObject = objectName(go);
             return isPenetrableWallLayer(layer);
         } catch (_) {
@@ -1751,6 +1821,15 @@
                 }
             });
 
+            // 主线程泵：层名表补齐 + 心跳登记的还原都必须在游戏主线程执行。
+            // 这个钩子只挂 onEnter 做搬运，不 replace、不改游戏字节。
+            attachHook('ModeBase.Update', RVA.ModeBase_Update, {
+                onEnter: function () {
+                    // 不按 enabled 拦截：关功能时登记的"还原忽略"还要靠它消费。
+                    pumpMainThreadWork();
+                }
+            });
+
             startHeartbeat();
 
             Runtime.initialized = true;
@@ -1840,6 +1919,10 @@
 
     // 兜底清理：万一某颗弹没触发 Recycle（场景卸载/异常）就消失了，
     // 记录不会永远堆在内存里，忽略也不会永远留着。
+    //
+    // ！！！心跳跑在 Frida 的 JS 线程：这里只做纯 JS 记账（挑出该清理的 key），
+    // 真正的 restoreGhost / releaseAllIgnores 是托管调用（Physics.IgnoreCollision /
+    // Rigidbody.detectCollisions），必须交给主线程的 processSweepQueue()。
     function sweepMissileStates() {
         var now = Date.now();
         var keys = Object.keys(Runtime.missiles);
@@ -1851,16 +1934,46 @@
             for (var j = 0; j < st.ignores.length; j++) {
                 if (now - st.ignores[j].at >= Runtime.config.projectileIgnoreMaxMs) { hardIgnores = true; break; }
             }
-            if (expired || hardIgnores) {
-                restoreGhost(st, 'sweep');
-                releaseAllIgnores(st, 'sweep');
-                delete Runtime.missiles[keys[i]];
-                Runtime.stats.projectileSweepRemoved += 1;
+            if ((expired || hardIgnores) && Runtime.sweepPending.indexOf(keys[i]) < 0) {
+                Runtime.sweepPending.push(keys[i]);
             }
         }
     }
 
+    // 主线程：消费心跳登记的待清理弹体（还原忽略 + 还原 detectCollisions + 删状态）
+    function processSweepQueue() {
+        if (!Runtime.sweepPending.length) return;
+        var keys = Runtime.sweepPending;
+        Runtime.sweepPending = [];
+        for (var i = 0; i < keys.length; i++) {
+            var st = Runtime.missiles[keys[i]];
+            if (!st) continue;
+            restoreGhost(st, 'sweep');
+            releaseAllIgnores(st, 'sweep');
+            delete Runtime.missiles[keys[i]];
+            Runtime.stats.projectileSweepRemoved += 1;
+        }
+    }
+
+    // 关功能 / 改配置要还原全部忽略时用：只登记，还原交给主线程泵。
+    // （托管调用 Physics.IgnoreCollision / Rigidbody.detectCollisions 不能跑在 RPC 线程）
+    function queueReleaseAll(reason) {
+        var keys = Object.keys(Runtime.missiles);
+        for (var i = 0; i < keys.length; i++) {
+            if (Runtime.sweepPending.indexOf(keys[i]) < 0) Runtime.sweepPending.push(keys[i]);
+        }
+        Runtime.pendingReleaseReason = reason || 'queued';
+    }
+
+    // 主线程泵：心跳/启用/改配置里登记的所有"托管工作"都在这里执行（ModeBase.Update）。
+    // 这是本功能唯一的跨线程出口 —— 任何新加的托管调用都必须挂到这里。
+    function pumpMainThreadWork() {
+        try { learnLayerNamesStep(6); } catch (_) {}
+        try { processSweepQueue(); } catch (_) {}
+    }
+
     function releaseEveryIgnore(reason) {
+        Runtime.sweepPending = [];
         var keys = Object.keys(Runtime.missiles);
         for (var i = 0; i < keys.length; i++) {
             var st = Runtime.missiles[keys[i]];
@@ -1900,8 +2013,9 @@
         Runtime.stats.errorCount = 0;
         Runtime.stats.lastError = '';
         log('info', 'enabled: bullet wall penetration (original damage flow) + projectile wall penetration');
-        log('info', '弹体穿墙参数：Environment层=' + environmentLayer() +
-            ' 掩码=0x' + environmentMask().toString(16) +
+        // P0：这里在 RPC 线程。environmentLayer() 会走 LayerConstant..cctor
+        // （托管静态构造，可能分配内存）——改由主线程泵补完层名表后再打印。
+        log('info', '弹体穿墙参数：掩码=0x' + environmentMask().toString(16) +
             ' 探路=' + Runtime.config.projectileProbeLookahead + 'm 法线阈值=' + Runtime.config.projectileWallMaxNormalY +
             ' 窗口=' + Runtime.config.projectileIgnoreMinMs + '~' + Runtime.config.projectileIgnoreMaxMs + 'ms' +
             ' 探路跳过=' + Runtime.config.projectileProbeMaxSkips +
@@ -1911,9 +2025,10 @@
             ' findObject=' + (native.findObjectFromInstanceID ? 'OK' : 'MISSING') +
             ' detectCollisions=' + (native.setDetectCollisions ? 'OK' : 'MISSING') +
             ' ignoreCollision=' + (native.ignoreCollision ? 'OK' : 'MISSING'));
+        // P0：RPC 线程不能调 LayerMask.LayerToName（返回托管 string，会分配内存）。
+        // 这里只打印掩码数字；层名表由主线程泵（ModeBase.Update）分帧补齐后打印一次。
         log('info', '可穿透层掩码=0x' + (Runtime.config.projectilePenetrableLayers >>> 0).toString(16) +
-            ' -> ' + penetrableLayerText());
-        log('info', '本工程层名表：' + allLayerNamesText());
+            '（层名表将在主线程补齐后打印）');
         return getStatus();
     }
 
@@ -1921,7 +2036,9 @@
         Runtime.enabled = false;
         sendStatus('29_bullet_wall_penetration', false);
         forceRestoreGunShootLayerMask('disable');
-        releaseEveryIgnore('disable');
+        // 只登记：真正的 IgnoreCollision/detectCollisions 还原由主线程泵完成。
+        // （钩子此时还挂着下一个 ModeBase.Update 就会消费；卸载走 cleanupFeature 的同步还原）
+        queueReleaseAll('disable');
         stopHeartbeat();   // enableFeature 会重新 startHeartbeat（installHooks 里那次只在首次安装时执行）
         Runtime.damageDepth = 0;
         Runtime.activeDamageWeapon = ptr(0);
@@ -1933,6 +2050,9 @@
         Runtime.enabled = false;
         Runtime.stats.cleanupCount += 1;
         forceRestoreGunShootLayerMask('cleanup');
+        // 这里必须同步还原：下一行 cleanupHooks() 就把主线程泵拆了，
+        // 登记给泵的还原会永远没人消费。只调 IgnoreCollision/detectCollisions
+        // 这类不分配内存的 setter，不会触发 GC。
         releaseEveryIgnore('cleanup');
         cleanupHooks();
         Runtime.damageDepth = 0;
@@ -1963,7 +2083,7 @@
         }
         if (input.projectileWallPenetration !== undefined) {
             Runtime.config.projectileWallPenetration = input.projectileWallPenetration !== false;
-            if (!Runtime.config.projectileWallPenetration) releaseEveryIgnore('config-off');
+            if (!Runtime.config.projectileWallPenetration) queueReleaseAll('config-off');
         }
         if (input.projectilePenetrateAllSurfaces !== undefined) {
             Runtime.config.projectilePenetrateAllSurfaces = input.projectilePenetrateAllSurfaces !== false;

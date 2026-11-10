@@ -238,6 +238,13 @@ bool GameManager::RefreshSession() {
         return false;
     }
 
+    // 跨线程修复（2026-11-10）：下面是本 DLL 第一次调托管方法（Singleton.get_instance）。
+    // 调用方必须是已挂到 IL2CPP 域的线程，否则那次调用内部一旦分配托管内存，
+    // Boehm GC 会在"未知线程"上回收并 abort。幂等，每帧调用无额外开销。
+    if (!IL2CPPBridge::EnsureThreadAttached()) {
+        return false;
+    }
+
     // 每帧轮询 GameManager 单例；IL2CPPBridge 内部会缓存并逐次校验，
     // 因此只要缓存有效就不会重复调用 SingletonGet。
     void* newInstance = IL2CPPBridge::GetGameManagerInstance();

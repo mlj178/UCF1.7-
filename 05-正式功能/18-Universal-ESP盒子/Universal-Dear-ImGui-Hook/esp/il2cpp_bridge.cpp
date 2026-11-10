@@ -8,6 +8,113 @@ bool IL2CPPBridge::s_Initialized = false;
 IL2CPPBridge::SingletonGetFn IL2CPPBridge::s_SingletonGet = nullptr;
 void* IL2CPPBridge::s_CachedInstance = nullptr;
 
+// ============================================================================
+// 跨线程修复（2026-11-10）：把渲染线程挂到 IL2CPP 域上
+//
+// Present 钩子运行在 Unity 的渲染线程；它不在 IL2CPP 的托管线程表里。
+// 在该线程上直接调 GameAssembly 的托管方法（Singleton.get_instance /
+// Camera.get_main / Entity.get_isDead / HealthData.get_rate ...）时，
+// 只要调用链内部发生一次托管分配，Boehm GC 就会在这个"未知线程"上启动
+// 回收并 abort -> "Fatal error in GC: Collecting from unknown thread"。
+// il2cpp_thread_attach() 会把当前线程登记进 IL2CPP/GC，是官方给原生线程
+// 调托管代码用的入口。
+// ============================================================================
+namespace {
+
+typedef void* (*Il2CppDomainGetFn)();
+typedef void* (*Il2CppThreadAttachFn)(void* domain);
+typedef void (*Il2CppThreadDetachFn)(void* thread);
+
+Il2CppDomainGetFn s_DomainGet = nullptr;
+Il2CppThreadAttachFn s_ThreadAttach = nullptr;
+Il2CppThreadDetachFn s_ThreadDetach = nullptr;
+bool s_ThreadApiResolved = false;
+
+// 按线程记账：只有还没挂过的线程才需要 attach。
+thread_local bool t_ThreadAttached = false;
+thread_local void* t_AttachedThread = nullptr;
+
+void ResolveThreadApi() {
+    if (s_ThreadApiResolved) return;
+    s_ThreadApiResolved = true;
+
+    HMODULE module = static_cast<HMODULE>(IL2CPPBridge::GetBase());
+    if (!module) module = GetModuleHandleA("GameAssembly.dll");
+    if (!module) {
+        DebugLog("[IL2CPPBridge] thread attach: GameAssembly.dll not loaded\n");
+        return;
+    }
+
+    s_DomainGet = reinterpret_cast<Il2CppDomainGetFn>(
+        GetProcAddress(module, "il2cpp_domain_get"));
+    s_ThreadAttach = reinterpret_cast<Il2CppThreadAttachFn>(
+        GetProcAddress(module, "il2cpp_thread_attach"));
+    s_ThreadDetach = reinterpret_cast<Il2CppThreadDetachFn>(
+        GetProcAddress(module, "il2cpp_thread_detach"));
+
+    if (!s_DomainGet || !s_ThreadAttach) {
+        DebugLog("[IL2CPPBridge] thread attach: il2cpp_thread_attach export missing\n");
+    }
+}
+
+}  // namespace
+
+bool IL2CPPBridge::EnsureThreadAttached() {
+    if (t_ThreadAttached) return true;
+
+    ResolveThreadApi();
+    if (!s_DomainGet || !s_ThreadAttach) {
+        return false;
+    }
+
+    void* domain = nullptr;
+    void* thread = nullptr;
+#if defined(_MSC_VER)
+    __try {
+        domain = s_DomainGet();
+        if (domain) thread = s_ThreadAttach(domain);
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        thread = nullptr;
+    }
+#else
+    SAFE_TRY {
+        domain = s_DomainGet();
+        if (domain) thread = s_ThreadAttach(domain);
+    } SAFE_EXCEPT_NOP
+#endif
+
+    if (!thread) {
+        DebugLog("[IL2CPPBridge] EnsureThreadAttached failed: attach returned null\n");
+        return false;
+    }
+
+    t_AttachedThread = thread;
+    t_ThreadAttached = true;
+    DebugLog("[IL2CPPBridge] render thread attached to IL2CPP (domain=0x%p thread=0x%p)\n",
+             domain, thread);
+    return true;
+}
+
+void IL2CPPBridge::DetachCurrentThread() {
+    if (!t_ThreadAttached || !t_AttachedThread) return;
+
+    void* thread = t_AttachedThread;
+    t_AttachedThread = nullptr;
+    t_ThreadAttached = false;
+    if (!s_ThreadDetach) return;
+
+#if defined(_MSC_VER)
+    __try {
+        s_ThreadDetach(thread);
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+    }
+#else
+    SAFE_TRY {
+        s_ThreadDetach(thread);
+    } SAFE_EXCEPT_NOP
+#endif
+}
+
 static bool ValidateArray(void* arrayPtr, int maxLength) {
     if (!arrayPtr || !IsValidPointer(arrayPtr)) return false;
 
