@@ -15,6 +15,8 @@ import customtkinter as ctk
 import frida
 import psutil
 
+import lifesteal_log
+
 
 ctk.set_appearance_mode("Dark")
 ctk.set_default_color_theme("blue")
@@ -60,7 +62,8 @@ DEFAULT_CONFIG = {
     "src_infect_enabled": False,
     "only_enemy_victim": True,
     "diagnostic_log": True,
-    "max_pending_heal": 5000,
+    # 单次结算上限：生化/终结者一刀 7000~15000，5000 会截掉大半，故放到 20000
+    "max_pending_heal": 20000,
 }
 
 
@@ -89,10 +92,22 @@ class LifestealApp(ctk.CTk):
         self.rpc_lock = threading.Lock()
         self.ui_queue = queue.Queue()
 
+        # 运行日志：一次启动一个文件，跟着进程一直写下去（见 lifesteal_log.py）
+        self.log_path = lifesteal_log.start(prefix="lifesteal-ui", source="ui")
+        lifesteal_log.info(
+            "启动独立测试 UI",
+            frida=frida.__version__,
+            game=GAME_PROCESS_NAME,
+            percent=self.config["lifesteal_percent"],
+            diagnostic_log=self.config["diagnostic_log"],
+        )
+
         self._build_ui()
         self.protocol("WM_DELETE_WINDOW", self._on_close)
         self.after(100, self._drain_ui_queue)
         self.after(600, self._schedule_connect)
+        if self.log_path:
+            self._log("运行日志：" + self.log_path)
 
     # ==================== UI 构建 ====================
 
@@ -268,7 +283,7 @@ class LifestealApp(ctk.CTk):
 
     def _handle_event(self, event, *args):
         if event == "log":
-            self._log(args[0])
+            self._log(args[0], args[1] if len(args) > 1 else "INFO")
         elif event == "waiting":
             self._set_connection(False, args[0], args[1] if len(args) > 1 else "")
         elif event == "connected":
@@ -290,7 +305,12 @@ class LifestealApp(ctk.CTk):
         elif event == "destroy":
             self.destroy()
 
-    def _log(self, text):
+    def _log(self, text, level="INFO"):
+        # 界面上照旧只显示时间 + 文本；文件里额外带等级，便于事后按等级过滤。
+        try:
+            lifesteal_log.write(level, text)
+        except Exception:
+            pass
         stamp = time.strftime("%H:%M:%S")
         self.log_box.configure(state="normal")
         self.log_box.insert("end", f"[{stamp}] {text}\n")
@@ -335,6 +355,7 @@ class LifestealApp(ctk.CTk):
             if not pid:
                 self.connecting = False
                 self._post("waiting", "等待 UnityCrossFire.exe", "")
+                lifesteal_log.debug("等待游戏进程", game=GAME_PROCESS_NAME)
                 self._post("retry_connect")
                 return
 
@@ -356,13 +377,14 @@ class LifestealApp(ctk.CTk):
             self.connecting = False
             self.connected = False
             self._post("waiting", "连接失败，等待重试", "")
-            self._post("log", "连接异常：" + str(exc))
+            self._post("log", "连接异常：" + str(exc), "ERROR")
             self._post("retry_connect")
 
     def _on_connected(self, pid):
         self._set_connection(True, "已连接游戏", f"PID {pid}")
         self._set_controls_enabled(True)
-        self._log("脚本已加载")
+        self._log("脚本已加载", "INFO")
+        lifesteal_log.info("已注入 script.js", pid=pid, config=self._current_config())
         if self.status_job is not None:
             try:
                 self.after_cancel(self.status_job)
@@ -377,6 +399,7 @@ class LifestealApp(ctk.CTk):
         self._post("detached", reason)
 
     def _on_detached(self, reason):
+        lifesteal_log.warn("游戏连接断开", reason=str(reason))
         self.connected = False
         self.script = None
         self.session = None
@@ -389,10 +412,13 @@ class LifestealApp(ctk.CTk):
         if message.get("type") == "send":
             payload = message.get("payload", {})
             if isinstance(payload, dict) and payload.get("type") == "log":
-                self._post("log", payload.get("message", ""))
+                level = str(payload.get("level") or "INFO").upper()
+                if level == "SUCCESS":
+                    level = "INFO"
+                self._post("log", payload.get("message", ""), level)
             return
         if message.get("type") == "error":
-            self._post("log", message.get("stack", message.get("description", "Frida error")))
+            self._post("log", message.get("stack", message.get("description", "Frida error")), "ERROR")
 
     # ==================== RPC ====================
 
@@ -421,8 +447,10 @@ class LifestealApp(ctk.CTk):
                     result = self.script.exports_sync.reset("ui_reset")
                 else:
                     raise ValueError("unknown rpc method: " + method)
+                lifesteal_log.debug("rpc 完成", method=method, result=_brief_status(result))
                 self._post("rpc_done", result)
             except Exception as exc:
+                lifesteal_log.error("rpc 失败", method=method, error=str(exc))
                 self._post("rpc_error", exc)
 
     def _refresh_status(self):
@@ -437,7 +465,8 @@ class LifestealApp(ctk.CTk):
                 result = self.script.exports_sync.status()
                 self._post("status", result)
             except Exception as exc:
-                self._post("log", "状态读取失败：" + str(exc))
+                lifesteal_log.warn("状态读取失败", error=str(exc))
+                self._post("log", "状态读取失败：" + str(exc), "WARN")
             finally:
                 self.status_busy = False
 
@@ -462,8 +491,15 @@ class LifestealApp(ctk.CTk):
 
     def _on_percent_change(self, value):
         numeric = int(round(float(value)))
-        self.config["lifesteal_percent"] = numeric
         self.percent_label.configure(text=f"{numeric}%")
+        previous = self.config["lifesteal_percent"]
+        if numeric == previous:
+            # 滑块拖动会连续回调，值没变就不重复下发、也不重复写日志
+            return
+        self.config["lifesteal_percent"] = numeric
+        # 记 INFO：事后翻日志要能看到"几点几分把比例从 10% 调成了 100%"，
+        # 否则同一份日志里前后百分比不一样，没法解释。
+        self._log(f"吸血比例 {previous}% -> {numeric}%")
         self._schedule_config_push()
 
     def _on_source_changed(self, key):
@@ -493,8 +529,10 @@ class LifestealApp(ctk.CTk):
         with self.rpc_lock:
             try:
                 self.script.exports_sync.setconfig(config)
+                lifesteal_log.debug("配置已下发", config=config)
             except Exception as exc:
-                self._post("log", "配置下发失败：" + str(exc))
+                lifesteal_log.error("配置下发失败", error=str(exc))
+                self._post("log", "配置下发失败：" + str(exc), "ERROR")
 
     def _current_config(self):
         return dict(self.config)
@@ -569,6 +607,7 @@ class LifestealApp(ctk.CTk):
     def _on_close(self):
         if self.shutdown_done:
             return
+        lifesteal_log.info("关闭 UI", enabled=self.desired_enabled, config=self._current_config())
         self.shutdown_done = True
         self.closing = True
         self._set_controls_enabled(False)
@@ -601,6 +640,18 @@ class LifestealApp(ctk.CTk):
             self._post_allow_closing("destroy")
 
 
+def _brief_status(result):
+    """只挑几个字段写进日志，避免整块 status 把文件写胖。"""
+    if not isinstance(result, dict):
+        return result
+    keys = ("enabled", "initialized", "heal_calls", "healed_total", "local_damage_events", "error_count")
+    return {key: result.get(key) for key in keys if key in result}
+
+
 if __name__ == "__main__":
     app = LifestealApp()
-    app.mainloop()
+    try:
+        app.mainloop()
+    finally:
+        lifesteal_log.info("主循环结束")
+        lifesteal_log.stop()

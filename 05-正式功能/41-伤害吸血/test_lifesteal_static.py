@@ -234,5 +234,122 @@ class LifestealPythonTest(unittest.TestCase):
         self.assertIn("exports_sync.setconfig", text)
 
 
+class LifestealRuntimeLogTest(unittest.TestCase):
+    """运行日志必须"能落盘、能滚动、不拖累功能"。
+
+    背景：这个功能是靠实机试出来的（枪托重击算哪类、手雷归属是谁、致死一击回多少），
+    以前只在 UI 的日志框里滚，关掉就没了，出问题只能靠回忆复述。
+    现在要求：一次运行 = 一个日志文件，UI / JS 两侧的行都写进去。
+    """
+
+    def test_log_module_exists_and_is_safe(self):
+        text = (BASE_DIR / "lifesteal_log.py").read_text(encoding="utf-8")
+        for api in ("def start(", "def stop(", "def write(", "def info(", "def warn(", "def error("):
+            self.assertIn(api, text)
+        # 目录必须落在功能目录的 logs/ 下，且写不进去要能退到用户目录
+        self.assertIn('os.path.join(_BASE_DIR, "logs")', text)
+        self.assertIn("LOCALAPPDATA", text)
+        # 日志目录最多保留 N 个文件、单文件超限滚动
+        self.assertIn("MAX_FILES", text)
+        self.assertIn("MAX_BYTES", text)
+        self.assertIn("def _prune(", text)
+        self.assertIn("def _roll(", text)
+
+    def test_ui_persists_every_log_line(self):
+        text = (BASE_DIR / "AAAAA-lifesteal_ui.py").read_text(encoding="utf-8")
+        self.assertIn("import lifesteal_log", text)
+        self.assertIn('lifesteal_log.start(prefix="lifesteal-ui"', text)
+        self.assertIn("lifesteal_log.stop()", text)
+        # _log 必须同时写文件（否则只在 UI 框里滚，关掉就没了）
+        start = text.index("def _log(self, text")
+        body = text[start:start + 600]
+        self.assertIn("lifesteal_log.write(", body)
+        self.assertIn("self.log_box.insert(", body)
+        # Frida 的日志等级要带到文件里
+        self.assertIn('payload.get("level")', text)
+
+    def test_js_emits_periodic_stats(self):
+        js = JS_PATH.read_text(encoding="utf-8")
+        for token in ("function logStats(", "function startStatsTimer(", "function stopStatsTimer(", "stats_log_interval_ms", "SCRIPT_VERSION"):
+            self.assertIn(token, js)
+        # 开/关都要立刻落一条，方便判断"开关有没有生效"
+        self.assertIn("logStats('enabled')", js)
+        self.assertIn("logStats('disabled')", js)
+        # 定时器必须能注销，且离线测试时不能把 node 进程挂住
+        self.assertIn("clearInterval(StatsTimer)", js)
+        self.assertIn("StatsTimer.unref()", js)
+        self.assertIn("logStats('periodic')", js)
+        # 统计里要有关键排查字段（否则日志等于没写）
+        start = js.index("function logStats(")
+        body = js[start:start + 2200]
+        for field in ("hurt_hits=", "local_events=", "heal_calls=", "healed_total=", "attacker_missile=", "attacker_sentry=", "cats=", "errors="):
+            self.assertIn(field, body)
+
+    # ---- 2026-11-14 实机日志复查后的三条日志补强 + 上限调整 ----
+
+    def test_max_pending_heal_default_is_20000(self):
+        """单次回血上限必须 20000：生化/终结者模式一刀 7000~15000，5000 会截掉一大半。
+
+        实测依据：日志里 7000/9000/13000/15000 全部只回了 5000。
+        三处默认值必须一致（script.js / manifest.json / 独立 UI），否则注入后被旧值覆盖。
+        """
+        js = JS_PATH.read_text(encoding="utf-8")
+        self.assertIn("max_pending_heal: 20000.0", js)
+        self.assertNotIn("max_pending_heal: 5000.0", js)
+
+        manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
+        self.assertEqual(manifest["config"]["max_pending_heal"], 20000)
+
+        ui = (BASE_DIR / "AAAAA-lifesteal_ui.py").read_text(encoding="utf-8")
+        self.assertIn('"max_pending_heal": 20000,', ui)
+
+    def test_diag_reports_hp_max(self):
+        """明细必须带 hp_max，否则分不清"被我们的上限截断"还是"被满血截断"。
+
+        实测依据：一条 damage=7000 heal=3000 无法判定成因，只能靠"满血时 Heal 只回 0
+        且后面出现过 17852"反推，太绕。带上 hp_max 一眼就能看出来。
+        """
+        js = JS_PATH.read_text(encoding="utf-8")
+        start = js.index("function logDiagnostic(")
+        body = js[start:start + 1200]
+        self.assertIn("hp_max=", body)
+        self.assertIn("hpMax", body)
+        # 调用方要把 maxHp 传进来
+        call = js[js.index("function logHealOutcome("):][:900]
+        self.assertIn("hpAfter.maxHp", call)
+
+    def test_diag_and_summary_share_one_throttle(self):
+        """明细与汇总必须共用同一道节流闸门，否则会错位配对 / 缺明细。
+
+        实测依据：diag damage=21 后面跟的是另一发的 damage=36；另有一条回血只有汇总没有明细。
+        """
+        js = JS_PATH.read_text(encoding="utf-8")
+        self.assertIn("function shouldLog(", js)
+        # 汇总不再单独节流
+        self.assertNotIn("'healed',", js)
+        # 明细本身也不再单独节流，改由 logHealOutcome 统一放行
+        self.assertNotIn("logLimited('lifesteal_diag'", js)
+        start = js.index("function logHealOutcome(")
+        body = js[start:start + 900]
+        self.assertIn("shouldLog('heal_outcome'", body)
+        that = js[:start]
+        self.assertIn("function logDiagnostic(", that)
+        # 结算处只调这一个入口
+        self.assertIn("logHealOutcome(ctx, damage, actualHeal, hpBefore, hpAfter);", js)
+
+    def test_ui_logs_percent_change(self):
+        """滑块改比例要落一条 INFO，且值没变不重复下发/重复记。
+
+        实测依据：注入时 10%，日志里却全是 100%，中间没有任何一行记录，事后对不上时间点。
+        """
+        ui = (BASE_DIR / "AAAAA-lifesteal_ui.py").read_text(encoding="utf-8")
+        start = ui.index("def _on_percent_change(")
+        body = ui[start:start + 900]
+        self.assertIn("吸血比例", body)
+        self.assertIn("if numeric == previous:", body)
+        # 先比较再下发：避免拖动过程中每帧都发 RPC / 写日志
+        self.assertLess(body.index("if numeric == previous:"), body.index("_schedule_config_push()"))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
