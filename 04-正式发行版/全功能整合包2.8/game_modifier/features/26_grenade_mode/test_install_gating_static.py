@@ -21,6 +21,7 @@
   4) 必须替换的 Remove 守卫回调内不做任何游戏方法调用，出错立刻撤销替换。
 """
 
+import re
 import unittest
 from pathlib import Path
 
@@ -182,6 +183,120 @@ class GrenadeInstallGatingTests(unittest.TestCase):
         occurrences = SCRIPT.count("Interceptor.replace(")
         self.assertEqual(occurrences, 1, "除 replaceFunction 外不应再有裸 Interceptor.replace 调用")
         self.assertIn("function replaceFunction(", SCRIPT)
+
+
+
+class GrenadeNativeDefinitionTests(unittest.TestCase):
+    """v2.13.3：脚本里引用的每一个 Runtime.natives.X 都必须真的被创建过。
+
+    背景（2026-11-14 真实日志）：v2.13 把 GameManager.GiveWeapon 从 Interceptor.replace
+    改成 Interceptor.attach 后，"替换时顺带生成 .original" 的
+    Runtime.natives.GameManager_GiveWeapon_Original 就没人创建了，但
+    tryGiveBotGrenadeForThrow 还在调它。结果：
+        异常：tryGiveBotGrenadeForThrow:WPN_Gun.BotControl.VirtualBotControl.activeGive
+        error = "TypeError: not a function"
+    而且 recordError 的阈值恢复又会清空 Bot 手雷记录表和补发冷却，一次新回合在 11 秒内
+    自激出 6950 条 ERROR，人机于是彻底不投雷。这类"引用了不存在的 Native"必须被静态测试拦住。
+    """
+
+    NATIVE_READ = re.compile(r"Runtime\.natives\.([A-Za-z_][A-Za-z0-9_]*)")
+    NATIVE_WRITE = re.compile(r"Runtime\.natives\.([A-Za-z_][A-Za-z0-9_]*)\s*=(?!=)")
+
+    def test_every_native_reference_is_created(self):
+        assigned = set(self.NATIVE_WRITE.findall(SCRIPT))
+        used = set(self.NATIVE_READ.findall(SCRIPT))
+        missing = sorted(used - assigned)
+        self.assertEqual(
+            missing,
+            [],
+            "这些 Native 被调用但从未创建（调用即 TypeError: not a function）：" + ", ".join(missing),
+        )
+
+    def test_giveweapon_native_is_created_for_active_give(self):
+        self.assertIn("Runtime.natives.GameManager_GiveWeapon_Original(playerPtr", SCRIPT)
+        setup = function_body("setupNatives")
+        self.assertIn("Runtime.natives.GameManager_GiveWeapon_Original = new NativeFunction(", setup)
+        # 签名必须与 dump.cs 一致：static Weapon GiveWeapon(Player, int, bool, bool)
+        self.assertIn('"pointer", "int", "int", "int", "pointer"', setup)
+        # 失败时不能留 undefined，必须换成返回 0 的桩
+        self.assertIn("return ptr(0);", setup)
+
+    def test_active_give_has_a_circuit_breaker(self):
+        body = function_body("tryGiveBotGrenadeForThrow")
+        self.assertIn("Runtime.activeGiveBreakerOpen", body)
+        self.assertIn("Runtime.activeGiveFailStreak", body)
+        self.assertIn(">= 3", body)
+        # 熔断后必须直接 return，不能再走 recordError 去顶全局错误阈值
+        breaker = body[body.index("activeGiveFailStreak >= 3"):]
+        self.assertIn("return null;", breaker)
+        self.assertLess(breaker.index("warn("), breaker.index("recordError("))
+
+    def test_known_game_exception_does_not_feed_global_threshold(self):
+        """v2.13.4：PlayerWeapons.Remove 内部抛的托管异常是"游戏自己的"，每局都会出现几次。
+
+        它算进全局错误阈值（14 条）会触发 recoverRuntimeAfterErrorThreshold，
+        把本局 Bot 手雷记录表清空 —— 噪音把功能搞坏。所以必须只记数、不走 recordError。
+        """
+        guard = function_body("installRemoveGuard")
+        self.assertIn("known_game_error", guard)
+        self.assertNotIn('recordError("PlayerWeapons.Remove.original"', guard)
+        # 真的需要我们处理的错误仍然要报（自动撤销那一步）
+        self.assertIn('recordError("PlayerWeapons.Remove.autoRevert"', guard)
+
+    def test_error_threshold_cleanup_keeps_give_cooldown(self):
+        reset = function_body("resetVolatileRuntimeState")
+        self.assertIn('indexOf("error_threshold")', reset)
+        guard = reset[reset.index('indexOf("error_threshold")'):]
+        self.assertIn("Runtime.botGrenadeGiveLast = {};", guard)
+
+
+class SmartAiGateObservabilityTests(unittest.TestCase):
+    """v2.13.5：智能闸门的两件事必须同时成立。
+
+    1) "SmartGrenadeAI跳过" 单局 2775 条（占整份日志 1/3，实测 1388+1387 条全部是跳过），
+       默认不再输出 —— 它是每个 bot 每种原因最多 1 条/秒的逐条探测日志。
+    2) 静音不能把信息也一起丢掉：闸门计数、最近一次跳过原因必须能从 status / 周期统计里看到，
+       否则"人机不投雷"又会退回只能靠猜。
+    另外锁死一个真实 bug：调用方曾经把 (info, got) 传反，导致官方可见判断永远读到 undefined，
+    闸门恒为 false（那 2775 条就是它），AI 钩子路径一次都没投出去。
+    """
+
+    def test_skip_probe_log_is_muted_by_default(self):
+        self.assertIn('"SmartGrenadeAI跳过": true', SCRIPT)
+
+    def test_verbose_log_still_restores_the_detail(self):
+        self.assertIn("if (Runtime.config.verbose_log_enabled) {", function_body("driveBotThrowFromAIHook"))
+        self.assertIn('"SmartGrenadeAI跳过"', SCRIPT)
+
+    def test_muting_keeps_counters_visible_in_status(self):
+        status = function_body("getStatus")
+        for name in (
+            "smart_ai_eval",
+            "smart_ai_allowed",
+            "smart_ai_skipped_official_visibility",
+            "smart_ai_skip_attack_target_false",
+            "smart_ai_skip_no_recent_visible",
+            "smart_ai_official_visible_true",
+            "smart_ai_official_visible_false",
+            "smart_ai_last_skip",
+        ):
+            self.assertIn(name, status, f"日志静音后 status 必须仍能看到 {name}")
+
+    def test_periodic_stats_carry_the_gate_counters(self):
+        stats = function_body("maybeLogLockStats")
+        self.assertIn("smart_ai_eval", stats)
+        self.assertIn("smart_ai_skip_attack_false", stats)
+
+    def test_evaluate_receives_bot_ai_info_in_the_right_slot(self):
+        self.assertIn("evaluateSmartGrenadeAI(botPtr, got, info, name, retval)", SCRIPT)
+        self.assertNotIn("evaluateSmartGrenadeAI(botPtr, info, got, name, retval)", SCRIPT)
+
+    def test_each_skip_reason_has_its_own_counter(self):
+        body = function_body("evaluateSmartGrenadeAI")
+        self.assertIn("smart_ai_skip_attack_target_false += 1", body)
+        self.assertIn("smart_ai_skip_no_recent_visible += 1", body)
+        # 跳过时必须留下"最近一条"证据（bot / 钩子 / 原因），日志静音后靠它定位
+        self.assertIn("noteSmartAiSkip(", body)
 
 
 if __name__ == "__main__":

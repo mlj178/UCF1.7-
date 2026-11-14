@@ -2,7 +2,7 @@
 
 /*
  * feature_id: grenade_mode_lock999_keep_weapon_tuner
- * version: 2.12.8
+ * version: 2.13.5
  *
  * 基于 lock999_keep_weapon v1.1：
  * - 保留锁定 WPN_Throw.ammoData 数量。
@@ -40,10 +40,19 @@
  * - v2.12.1 精简：删除死统计、UpdateAction残留、SmartAI/v2.10.1路径/距离/抛物线实验残留，并统一命名。
  * - v2.12.2 UI清理：删除界面和启动说明里的v2.10/v2.10.1 SmartAI实验文案。
  * - v2.12.3 修复：删除_collect_config中残留的旧距离参数旧距离配置，修复开启失败。
+ * - v2.13.5 修复：evaluateSmartGrenadeAI 的实参顺序写反——调用方按 (botPtr, info, got) 传，函数按 (botPtr, got, info) 收，
+ *   于是官方可见判断永远读到 undefined → 智能闸门恒为 false，AI 钩子路径一次都没投出去（日志里 1388+1387 条跳过正是它）。
+ *   同时把 "SmartGrenadeAI跳过" 从默认输出里摘掉（单局 2775 条，占整份日志 1/3），改看 status 的 smart_ai_* / smart_ai_last_skip。
+ * - v2.13.4 修复：PlayerWeapons.Remove 内部抛的托管异常（"system error"）不再计入全局错误阈值。
+ *   它每局都会出现几次，累计到 14 条会把本局 Bot 手雷记录表清空，表现成"人机突然不扔雷"。
+ * - v2.13.3 修复：GameManager.GiveWeapon 在 v2.13 改为 attach 后，Runtime.natives.GameManager_GiveWeapon_Original
+ *   再没人创建，但 Bot主动补发Grenade 仍在调它 → "TypeError: not a function"，每个新回合刷出近 7000 条
+ *   ERROR，并把全局错误阈值打爆（每 14 条错误清一次 Bot 手雷记录）→ 人机不再投雷。现补齐该 Native 定义，
+ *   并给补发路径加熔断（连续失败 3 次本局停用）+ 错误阈值清理不再清补发冷却。
  */
 
 const FEATURE_ID = "grenade_mode_lock999_keep_weapon_tuner";
-const VERSION = "2.13.0";
+const VERSION = "2.13.5";
 const MODULE_NAME = "GameAssembly.dll";
 const CALL_CONV = "mscdecl";
 
@@ -288,6 +297,9 @@ const Runtime = {
     // Remove 守卫自愈用：撤销后的冷却时间点 / 已经重装过几次
     removeGuardSuspendedUntil: 0,
     removeGuardRetries: 0,
+    // v2.13.3：Bot主动补发Grenade 的熔断状态（连续失败 3 次 -> 本局停用，换局自动复位）
+    activeGiveBreakerOpen: false,
+    activeGiveFailStreak: 0,
     lastLockStatsAt: 0,
     explosionContexts: {},
     throwAnimContexts: {},
@@ -301,6 +313,8 @@ const Runtime = {
     botThrowDriveLast: {},
     botAiLastDrive: {},
     botAiOfficialVisible: {},
+    // v2.13.5：最近一次智能闸门跳过（日志静音后用它代替 per-event 日志，只在 status 里看）
+    smartAiLastSkip: null,
     botThrowStates: {},
     botLifeStates: {},
     stats: {
@@ -467,6 +481,9 @@ const Runtime = {
         smart_ai_eval: 0,
         smart_ai_allowed: 0,
         smart_ai_skipped_official_visibility: 0,
+        // v2.13.5：per-event 日志静音后，按"跳过原因"分开计数，避免跳过退化成黑盒。
+        smart_ai_skip_attack_target_false: 0,
+        smart_ai_skip_no_recent_visible: 0,
         smart_ai_official_visible_true: 0,
         smart_ai_official_visible_false: 0,
         smart_ai_position_ok: 0,
@@ -530,7 +547,10 @@ const NoisyInfoMessages = {
     "VirtualBotControl未接管": true,
     "BotGrenadeRecord跳过": true,
     "Bot生命周期已重置": true,
-    "Bot目标变化": true
+    "Bot目标变化": true,
+    // v2.13.5：这条按 bot+原因 限流 1 条/秒，单局实测 2775 条（占整份日志 1/3），且不改变任何行为。
+    // 默认不再输出；要看细节用 status 的 smart_ai_* / smart_ai_last_skip，或打开 verbose_log_enabled 临时恢复。
+    "SmartGrenadeAI跳过": true
 };
 function normalizeLogLevel(level) {
     const text = (level || "INFO").toString().toLowerCase();
@@ -997,6 +1017,24 @@ function setupNatives() {
     }
     if (!Runtime.natives.UnityEngine_Transform_get_position_Injected) {
         Runtime.natives.UnityEngine_Transform_get_position_Injected = new NativeFunction(addrOf(RVA.UnityEngine_Transform_get_position_Injected), "void", ["pointer", "pointer", "pointer"], CALL_CONV);
+    }
+    // v2.13.3 修复：v2.13 把 GameManager.GiveWeapon 从 Interceptor.replace 改成 Interceptor.attach 之后，
+    // 原来"替换时顺带生成 .original"的那份 Native 就没人创建了，但 tryGiveBotGrenadeForThrow 仍在调
+    // Runtime.natives.GameManager_GiveWeapon_Original → undefined → 调用即 "TypeError: not a function"。
+    // 日志实证（2026-11-14 10:39:47 新回合起 11 秒内 6950 条同名 ERROR）。
+    // 签名（dump.cs）：static Weapon GiveWeapon(Player player, int weaponIndex, bool autoGiveUp, bool autoSelect)
+    // 放在 setupNatives 最后：万一这个地址取不到，不能让前面那些 Native 一起创建失败。
+    if (!Runtime.natives.GameManager_GiveWeapon_Original) {
+        try {
+            Runtime.natives.GameManager_GiveWeapon_Original = new NativeFunction(
+                addrOf(RVA.GameManager_GiveWeapon), "pointer", ["pointer", "int", "int", "int", "pointer"], CALL_CONV
+            );
+        } catch (e) {
+            // 取地址失败也不能留 undefined：那会让每次调用都变成 "TypeError: not a function"。
+            // 放一个返回 0 的桩，调用方走"补发失败"分支，并且只报一次错。
+            Runtime.natives.GameManager_GiveWeapon_Original = function () { Runtime.stats.bot_grenade_active_give_failed += 1; return ptr(0); };
+            recordError("setupNatives:GameManager_GiveWeapon", e);
+        }
     }
 }
 function isOwnerLocalPlayer(missile) {
@@ -1622,6 +1660,13 @@ function getKnownGrenadeWeaponIndex(reason) {
 function tryGiveBotGrenadeForThrow(botPtr, playerWeaponsPtr, pwInfo, reason) {
     Runtime.stats.bot_grenade_active_give_attempts += 1;
     try {
+        // v2.13.3 熔断：这条路径曾经因为一个 TypeError 变成"每帧每Bot重试"的热循环，
+        // 一次新回合能刷出近 7000 条 ERROR。连续失败 3 次就在本回合停用它，
+        // 直到下一回合 / 重新开启功能再试（失败原因写进日志，不再逐次报错）。
+        if (Runtime.activeGiveBreakerOpen) {
+            Runtime.stats.bot_grenade_active_give_failed += 1;
+            return null;
+        }
         if (!Runtime.config.bot_grenade_active_give_enabled) {
             Runtime.stats.bot_grenade_active_give_failed += 1;
             return null;
@@ -1685,6 +1730,7 @@ function tryGiveBotGrenadeForThrow(botPtr, playerWeaponsPtr, pwInfo, reason) {
         const rec = getBotGrenadeRecordEx(playerWeaponsPtr, botPtr || ptr(0), pwInfo, reason + ".afterActiveGive");
         if (rec) {
             Runtime.stats.bot_grenade_active_give_success += 1;
+            Runtime.activeGiveFailStreak = 0;
             log("Bot主动补发Grenade成功", {
                 reason: reason,
                 bot: ptrStr(botPtr || ptr(0)),
@@ -1702,6 +1748,20 @@ function tryGiveBotGrenadeForThrow(botPtr, playerWeaponsPtr, pwInfo, reason) {
         return null;
     } catch (e) {
         Runtime.stats.bot_grenade_active_give_failed += 1;
+        Runtime.activeGiveFailStreak = (Runtime.activeGiveFailStreak || 0) + 1;
+        if (Runtime.activeGiveFailStreak >= 3) {
+            Runtime.activeGiveBreakerOpen = true;
+            // 熔断后不再走 recordError：那条路会累加全局错误阈值，
+            // 阈值一到 recoverRuntimeAfterErrorThreshold 就会清空 Bot 手雷记录表（本回合白干）。
+            warn("Bot主动补发Grenade连续失败，本回合已停用该补发路径", {
+                where: reason,
+                error: "" + e,
+                streak: Runtime.activeGiveFailStreak,
+                failed: Runtime.stats.bot_grenade_active_give_failed,
+                note: "v2.13.3：熔断只为阻止每帧刷错误；其余投掷路径（缓存/Select(3)/AI驱动）不受影响"
+            });
+            return null;
+        }
         recordError("tryGiveBotGrenadeForThrow:" + reason, e);
         return null;
     }
@@ -2192,7 +2252,14 @@ function installRemoveGuard() {
             Runtime.natives.PlayerWeapons_Remove_Original(thisPtr, weapon, recycle, methodInfo);
         } catch (e) {
             Runtime.stats.remove_original_error += 1;
-            recordError("PlayerWeapons.Remove.original", e);
+            // v2.13.4：这里的 "system error" 是**游戏自己**在 PlayerWeapons.Remove 内部抛的托管异常
+            // （IDA：0x10B164BA → sub_10167D60），已知且预期，不是我们的 bug。
+            // 之前走 recordError 会累加全局错误阈值（max_error_before_disable，默认 14）：
+            // 一局里攒够 14 次，recoverRuntimeAfterErrorThreshold 就会把本局 Bot 手雷记录表清空，
+            // 于是"纯噪音"也能让手雷模式突然失效（人机不投雷）。
+            // 现在只记数（remove_original_error / remove_original_error_recent）+ 走下面的窗口日志，
+            // 不再顶全局阈值；真正需要我们处理的自有异常仍然走 recordError。
+            Runtime.stats.known_game_error = (Runtime.stats.known_game_error || 0) + 1;
             // v2.13.2：不再"一次异常就撤销"。
             // 实测（v2.13.1 日志）：每次重装后几乎第一次放行的 Remove 就报 system error
             // （remove_original_error 与 replace_auto_reverted 计数完全相等），于是
@@ -2272,12 +2339,19 @@ function maybeLogLockStats() {
         remove_blocked: s.remove_blocked,
         remove_allowed: s.remove_allowed,
         remove_original_error: s.remove_original_error,
+        known_game_error: s.known_game_error || 0,
         remove_original_error_recent: s.remove_original_error_recent || 0,
         replace_auto_reverted: s.replace_auto_reverted,
         guard_installed: groupInstalled("removeGuard"),
         guard_retries: Runtime.removeGuardRetries || 0,
         protected_count: Object.keys(Runtime.protectedWeapons).length,
         last_snapshot: s.last_lock_snapshot || null,
+        smart_ai_eval: s.smart_ai_eval,
+        smart_ai_allowed: s.smart_ai_allowed,
+        smart_ai_skipped: s.smart_ai_skipped_official_visibility,
+        smart_ai_skip_attack_false: s.smart_ai_skip_attack_target_false,
+        smart_ai_skip_no_recent: s.smart_ai_skip_no_recent_visible,
+        smart_ai_last_skip: Runtime.smartAiLastSkip ? (Runtime.smartAiLastSkip.reason + "|" + Runtime.smartAiLastSkip.hook) : null,
         note: "lock_writes 不涨=一直没写进去；lock_snapshot_fail 涨=ammoData 读不到；remove_blocked 不涨=没人删武器"
     });
 }
@@ -2310,6 +2384,9 @@ function onGameManagerDestroy() {
     Runtime.touchedAnimators = {};
     Runtime.stats.teardown_clears = (Runtime.stats.teardown_clears || 0) + 1;
     Runtime.removeGuardRetries = 0;
+    // 换局/换房后重新给补发路径一次机会（熔断是按"局"生效的，不是永久关闭）。
+    Runtime.activeGiveBreakerOpen = false;
+    Runtime.activeGiveFailStreak = 0;
     try { uninstallGroup("removeGuard"); } catch (e) {}
     Runtime.removeGuardSuspendedUntil = Date.now() + (parseInt(Runtime.config.remove_guard_retry_ms, 10) || 3000);
     warn("GameManager 销毁：已清空手雷指针表并暂缓 Remove 守卫", {
@@ -2637,6 +2714,21 @@ function boolRetval(retval) {
     }
 }
 
+// v2.13.5：per-event 日志已静音，但"哪个 bot / 哪条钩子 / 为什么被跳过"仍要能查：
+// 只保留最近一条塞进 status（smart_ai_last_skip），不刷日志。
+function noteSmartAiSkip(botPtr, got, info, name, reason) {
+    try {
+        Runtime.smartAiLastSkip = {
+            reason: reason,
+            hook: name,
+            bot: ptrStr(botPtr),
+            playerWeapons: ptrStr(got && got.pwPtr),
+            attackTarget: (info && info.attackTarget) || "0x0",
+            ts: Date.now()
+        };
+    } catch (e) {}
+}
+
 function evaluateSmartGrenadeAI(botPtr, got, info, name, retval) {
     const result = {
         allow: true,
@@ -2666,6 +2758,8 @@ function evaluateSmartGrenadeAI(botPtr, got, info, name, retval) {
 
             if (Runtime.config.smart_grenade_require_official_visible && !ok) {
                 Runtime.stats.smart_ai_skipped_official_visibility += 1;
+                Runtime.stats.smart_ai_skip_attack_target_false += 1;
+                noteSmartAiSkip(botPtr, got, info, name, "official_checkattack_false");
                 result.allow = false;
                 result.reason = "official_checkattack_false";
                 return result;
@@ -2675,6 +2769,8 @@ function evaluateSmartGrenadeAI(botPtr, got, info, name, retval) {
             const freshMs = Runtime.config.smart_grenade_recent_visible_ms || 350;
             if (!last || !last.ok || (now - last.ts) > freshMs) {
                 Runtime.stats.smart_ai_skipped_official_visibility += 1;
+                Runtime.stats.smart_ai_skip_no_recent_visible += 1;
+                noteSmartAiSkip(botPtr, got, info, name, "no_recent_official_visible");
                 result.allow = false;
                 result.reason = "no_recent_official_visible";
                 return result;
@@ -3145,16 +3241,20 @@ function driveBotThrowFromAIHook(botPtr, name, methodInfo, retval) {
             return false;
         }
 
-        const smartEval = Runtime.config.smart_grenade_ai_enabled ? evaluateSmartGrenadeAI(botPtr, info, got, name, retval) : { allow: true, reason: "disabled" };
+        // v2.13.5：此前这里把 (info, got) 传反了，evaluate 里的 info.hasAttackTarget 永远 undefined → 闸门恒 false。
+        const smartEval = Runtime.config.smart_grenade_ai_enabled ? evaluateSmartGrenadeAI(botPtr, got, info, name, retval) : { allow: true, reason: "disabled" };
         if (!smartEval.allow) {
-            logOnce("smart_grenade_skip:" + name + ":" + ptrStr(got.pwPtr) + ":" + smartEval.reason, "SmartGrenadeAI跳过", Runtime.config.bot_ai_probe_log_interval_ms || 1000, {
-                name: name,
-                bot: ptrStr(botPtr),
-                playerWeapons: ptrStr(got.pwPtr),
-                attackTarget: info.attackTarget,
-                reason: smartEval.reason,
-                eval: smartEval
-            });
+            // v2.13.5：默认不输出（见 NoisyInfoMessages）；要逐条看明细就打开 verbose_log_enabled。
+            if (Runtime.config.verbose_log_enabled) {
+                logOnce("smart_grenade_skip:" + name + ":" + ptrStr(got.pwPtr) + ":" + smartEval.reason, "SmartGrenadeAI跳过", Runtime.config.bot_ai_probe_log_interval_ms || 1000, {
+                    name: name,
+                    bot: ptrStr(botPtr),
+                    playerWeapons: ptrStr(got.pwPtr),
+                    attackTarget: info.attackTarget,
+                    reason: smartEval.reason,
+                    eval: smartEval
+                });
+            }
             return false;
         }
 
@@ -3466,7 +3566,14 @@ function resetVolatileRuntimeState(reason, options) {
         Runtime.knownGrenadeWeaponIndexes = {};
         Runtime.lastBotGrenadeWeaponIndex = -1;
     }
-    Runtime.botGrenadeGiveLast = {};
+    // v2.13.3：错误阈值触发的清理不能顺手把"补发冷却"也清掉。
+    // 之前的写法是任何一次异常都会立刻解除冷却 → 立刻重试 → 再异常 → 再清冷却，
+    // 于是一个必然失败的调用能在一局里自激成 6950 条 ERROR（2026-11-14 10:39 日志）。
+    if ((reason || "").indexOf("error_threshold") !== 0) {
+        Runtime.botGrenadeGiveLast = {};
+        Runtime.activeGiveBreakerOpen = false;
+        Runtime.activeGiveFailStreak = 0;
+    }
     Runtime.classCounts = {};
     Runtime.observerLast = {};
     Runtime.stats.protected_count = 0;
@@ -3476,7 +3583,7 @@ function resetVolatileRuntimeState(reason, options) {
 }
 function resetRuntime(reason) { resetVolatileRuntimeState(reason); }
 function recoverRuntimeAfterErrorThreshold(reason) { const count = Runtime.stats.error_count; resetVolatileRuntimeState("error_threshold:" + reason, { keepKnownGrenadeIndexes: true }); Runtime.stats.error_count = 0; Runtime.stats.last_error = ""; warn("错误过多，已清理本局运行缓存并继续保持功能开启", { reason: reason, error_count: count, enabled: Runtime.enabled }); }
-function enableFeature(config) { setConfig(config); installHooks(); Runtime.enabled = true; Runtime.stats.error_count = 0; Runtime.stats.last_error = ""; resetRuntime("enable"); log("手雷模式v2.13.0 分组安装版已开启（只装当前配置需要的 Hook/Replace）", { config: Runtime.config, installed_groups: Object.keys(Runtime.groups).filter(function (n) { return groupInstalled(n); }), replacements: Runtime.replacements.map(function (i) { return i.name; }) }); return true; }
+function enableFeature(config) { setConfig(config); installHooks(); Runtime.enabled = true; Runtime.stats.error_count = 0; Runtime.stats.last_error = ""; resetRuntime("enable"); log("手雷模式v" + VERSION + " 分组安装版已开启（只装当前配置需要的 Hook/Replace）", { config: Runtime.config, installed_groups: Object.keys(Runtime.groups).filter(function (n) { return groupInstalled(n); }), replacements: Runtime.replacements.map(function (i) { return i.name; }) }); return true; }
 function disableFeature() { Runtime.enabled = false; resetRuntime("disable"); cleanupHooks(); log("功能已关闭"); return true; }
 function cleanupFeature() { Runtime.enabled = false; Runtime.stats.cleanup_count += 1; resetRuntime("cleanup"); cleanupHooks(); Runtime.moduleBase = ptr(0); log("cleanup 完成", { cleanup_count: Runtime.stats.cleanup_count }); return true; }
 function setConfig(config) {
@@ -3505,6 +3612,8 @@ function getStatus() {
         group_needs: Runtime.groupNeeds,
         replacement_names: Runtime.replacements.map(function (i) { return i.name; }),
         replace_auto_reverted: Runtime.stats.replace_auto_reverted, remove_original_error: Runtime.stats.remove_original_error,
+        active_give_breaker_open: Runtime.activeGiveBreakerOpen, active_give_fail_streak: Runtime.activeGiveFailStreak,
+        bot_grenade_active_give_attempts: Runtime.stats.bot_grenade_active_give_attempts, bot_grenade_active_give_success: Runtime.stats.bot_grenade_active_give_success, bot_grenade_active_give_failed: Runtime.stats.bot_grenade_active_give_failed,
         hook_hits: Runtime.stats.hook_hits,
         lock_attempts: Runtime.stats.lock_attempts, lock_writes: Runtime.stats.lock_writes, lock_skipped_same: Runtime.stats.lock_skipped_same,
         remove_hits: Runtime.stats.remove_hits, remove_blocked: Runtime.stats.remove_blocked, remove_allowed: Runtime.stats.remove_allowed,
@@ -3523,6 +3632,8 @@ function getStatus() {
         bot_grenade_known_index_hits: Runtime.stats.bot_grenade_known_index_hits, bot_grenade_active_give_attempts: Runtime.stats.bot_grenade_active_give_attempts, bot_grenade_active_give_success: Runtime.stats.bot_grenade_active_give_success, bot_grenade_active_give_failed: Runtime.stats.bot_grenade_active_give_failed, bot_grenade_active_give_cooldown: Runtime.stats.bot_grenade_active_give_cooldown,
         bot_grenade_reacquire_attempts: Runtime.stats.bot_grenade_reacquire_attempts, bot_grenade_reacquire_success: Runtime.stats.bot_grenade_reacquire_success, bot_grenade_reacquire_failed: Runtime.stats.bot_grenade_reacquire_failed,
         vbc_gun_botcontrol_hits: Runtime.stats.vbc_gun_botcontrol_hits, vbc_sniper_botcontrol_hits: Runtime.stats.vbc_sniper_botcontrol_hits, vbc_rpg_botcontrol_hits: Runtime.stats.vbc_rpg_botcontrol_hits, vbc_attempts: Runtime.stats.vbc_attempts, vbc_success: Runtime.stats.vbc_success, vbc_original_calls: Runtime.stats.vbc_original_calls, vbc_suppressed_original_calls: Runtime.stats.vbc_suppressed_original_calls, vbc_suppress_no_grenade: Runtime.stats.vbc_suppress_no_grenade, vbc_suppress_cooldown: Runtime.stats.vbc_suppress_cooldown, vbc_skipped_disabled: Runtime.stats.vbc_skipped_disabled, vbc_skipped_no_bot: Runtime.stats.vbc_skipped_no_bot, vbc_skipped_no_pw: Runtime.stats.vbc_skipped_no_pw, vbc_skipped_no_grenade: Runtime.stats.vbc_skipped_no_grenade, vbc_skipped_cooldown: Runtime.stats.vbc_skipped_cooldown, vbc_errors: Runtime.stats.vbc_errors,
+        // v2.13.5：智能闸门的 per-event 日志已静音，计数与最近一次跳过原因必须一直可见
+        smart_ai_eval: Runtime.stats.smart_ai_eval, smart_ai_allowed: Runtime.stats.smart_ai_allowed, smart_ai_skipped_official_visibility: Runtime.stats.smart_ai_skipped_official_visibility, smart_ai_skip_attack_target_false: Runtime.stats.smart_ai_skip_attack_target_false, smart_ai_skip_no_recent_visible: Runtime.stats.smart_ai_skip_no_recent_visible, smart_ai_official_visible_true: Runtime.stats.smart_ai_official_visible_true, smart_ai_official_visible_false: Runtime.stats.smart_ai_official_visible_false, smart_ai_last_skip: Runtime.smartAiLastSkip, bot_ai_target_seen: Runtime.stats.bot_ai_target_seen, bot_ai_target_missing: Runtime.stats.bot_ai_target_missing,
         bot_ai_hook_drive_attempts: Runtime.stats.bot_ai_hook_drive_attempts, bot_ai_hook_drive_success: Runtime.stats.bot_ai_hook_drive_success, bot_ai_checkattack_drive_success: Runtime.stats.bot_ai_checkattack_drive_success, bot_ai_camerarotation_drive_success: Runtime.stats.bot_ai_camerarotation_drive_success, bot_ai_trysettarget_drive_success: Runtime.stats.bot_ai_trysettarget_drive_success, bot_ai_hook_drive_skipped_disabled: Runtime.stats.bot_ai_hook_drive_skipped_disabled, bot_ai_hook_drive_skipped_no_target: Runtime.stats.bot_ai_hook_drive_skipped_no_target, bot_ai_hook_drive_skipped_no_pw: Runtime.stats.bot_ai_hook_drive_skipped_no_pw, bot_ai_hook_drive_skipped_no_grenade: Runtime.stats.bot_ai_hook_drive_skipped_no_grenade, bot_ai_hook_drive_skipped_cooldown: Runtime.stats.bot_ai_hook_drive_skipped_cooldown,
         bot_throw_sm_eval: Runtime.stats.bot_throw_sm_eval, bot_throw_sm_started: Runtime.stats.bot_throw_sm_started, bot_throw_sm_ready: Runtime.stats.bot_throw_sm_ready, bot_throw_sm_success: Runtime.stats.bot_throw_sm_success, bot_throw_sm_cooldown: Runtime.stats.bot_throw_sm_cooldown, bot_throw_sm_timeout: Runtime.stats.bot_throw_sm_timeout, bot_throw_sm_select_fail: Runtime.stats.bot_throw_sm_select_fail, bot_throw_sm_throw_fail: Runtime.stats.bot_throw_sm_throw_fail, bot_throw_spawn_first_seen: Runtime.stats.bot_throw_spawn_first_seen, bot_throw_spawn_grace_skipped: Runtime.stats.bot_throw_spawn_grace_skipped, bot_throw_target_changed: Runtime.stats.bot_throw_target_changed, bot_throw_target_stable_skipped: Runtime.stats.bot_throw_target_stable_skipped, bot_life_first_seen: Runtime.stats.bot_life_first_seen, bot_throw_gate_eval: Runtime.stats.bot_throw_gate_eval, bot_throw_gate_allowed: Runtime.stats.bot_throw_gate_allowed, bot_throw_gate_block_spawn: Runtime.stats.bot_throw_gate_block_spawn, bot_throw_gate_block_first_extra: Runtime.stats.bot_throw_gate_block_first_extra, bot_throw_gate_block_target_unstable: Runtime.stats.bot_throw_gate_block_target_unstable, bot_throw_gate_block_cooldown: Runtime.stats.bot_throw_gate_block_cooldown, bot_throw_gate_block_no_grenade: Runtime.stats.bot_throw_gate_block_no_grenade, bot_throw_gate_block_unknown_bot: Runtime.stats.bot_throw_gate_block_unknown_bot, bot_life_respawn_reset: Runtime.stats.bot_life_respawn_reset, bot_life_reset_removeall: Runtime.stats.bot_life_reset_removeall, bot_life_reset_giveweapon: Runtime.stats.bot_life_reset_giveweapon, bot_life_reset_grenade_change: Runtime.stats.bot_life_reset_grenade_change, bot_life_reset_cooldown_skip: Runtime.stats.bot_life_reset_cooldown_skip, botThrowStates: Runtime.botThrowStates, botLifeStates: Runtime.botLifeStates,
         botGrenadeWeapons: Runtime.botGrenadeWeapons, botGrenadeWeaponIndex: Runtime.botGrenadeWeaponIndex, knownGrenadeWeaponIndexes: Runtime.knownGrenadeWeaponIndexes, lastBotGrenadeWeaponIndex: Runtime.lastBotGrenadeWeaponIndex,
@@ -3533,4 +3644,4 @@ function getStatus() {
 }
 
 rpc.exports = { enable(config){ return enableFeature(config); }, disable(){ return disableFeature(); }, status(){ return getStatus(); }, cleanup(){ return cleanupFeature(); }, setConfig(config){ return setConfig(config); }, set_config(config){ return setConfig(config); }, debugDump(){ return getStatus(); }, debug_dump(){ return getStatus(); } };
-log("锁999+保护武器+手雷伤害范围速度+动作加速脚本已加载（v2.13 分组安装）", { version: VERSION });
+log("锁999+保护武器+手雷伤害范围速度+动作加速脚本已加载（v" + VERSION + " 分组安装）", { version: VERSION });

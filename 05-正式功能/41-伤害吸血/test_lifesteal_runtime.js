@@ -431,7 +431,30 @@ damage(ADDR.localPlayer, ADDR.victimPlayer, 1, 42, 100);
 status = api.status();
 check('比例 0% 不回血', state.healCalls.length === 0, state.healCalls);
 
-// 12. 清理后 Hook 全部 detach
+// 12. 明细与汇总成对出现，且明细带 hp_max（日志层契约）
+//     2026-11-14 实机日志复查：以前 diag(400ms) 与汇总(500ms) 各自节流，
+//     出现过 diag damage=21 配到另一发 damage=36，以及"有汇总没明细"的缺口。
+resetGame();
+enableWith({ lifesteal_percent: 10, diagnostic_log: true });
+// 闸门是全局的，先等过上一个窗口，保证这条明细能落下来
+{
+  const waitUntil = Date.now() + 450;
+  while (Date.now() < waitUntil) { /* 等待节流窗口 */ }
+}
+logs.length = 0;
+damage(ADDR.localPlayer, ADDR.victimPlayer, 1, 42, 100);
+const pick = (prefix) => logs.filter((p) => typeof p.message === 'string' && p.message.indexOf(prefix) === 0);
+const diagMsgs = pick('lifesteal_diag');
+const sumMsgs = pick('lifesteal [');
+check('结算落一条明细', diagMsgs.length === 1, diagMsgs);
+check('明细带 hp_max', diagMsgs.length === 1 && diagMsgs[0].message.indexOf('hp_max=100') >= 0, diagMsgs[0] && diagMsgs[0].message);
+check('明细与汇总成对出现', sumMsgs.length === 1, sumMsgs);
+// 同一窗口内再打一发：两条一起被省略，不会只漏一条
+damage(ADDR.localPlayer, ADDR.victimPlayer, 1, 42, 100);
+check('节流时明细与汇总一起省略', pick('lifesteal_diag').length === 1 && pick('lifesteal [').length === 1,
+  { diag: pick('lifesteal_diag').length, sum: pick('lifesteal [').length });
+
+// 13. 清理后 Hook 全部 detach
 api.cleanup();
 check('cleanup 后 Hook 全部卸载', hooksByRva.size === 0, hooksByRva.size);
 

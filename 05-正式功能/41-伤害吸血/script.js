@@ -130,6 +130,9 @@
         infect: '感染'
     };
 
+    // 1.1.1：单次回血上限 5000→20000；明细补 hp_max；明细与汇总共用节流；比例调整落 INFO（UI 侧）
+    var SCRIPT_VERSION = '1.1.1';
+
     var CATEGORY_KEYS = ['gun_primary', 'gun_secondary', 'gun_stock', 'knife', 'grenade', 'special', 'infect'];
 
     var RVA = {
@@ -236,7 +239,11 @@
             src_infect_enabled: false,
             only_enemy_victim: true,
             diagnostic_log: true,
-            max_pending_heal: 5000.0
+            // 单次结算的回血上限。生化/终结者模式一刀 7000~15000 很常见，
+            // 5000 会把伤害截掉一大半（实测 15000 只回 5000），所以放到 20000。
+            max_pending_heal: 20000.0,
+            // 周期统计日志间隔（毫秒）；只影响日志，不影响功能
+            stats_log_interval_ms: 15000
         },
 
         stats: {
@@ -320,13 +327,108 @@
         try { send({ type: 'status', feature: Runtime.feature_id, enabled: enabled }); } catch (_) {}
     }
 
-    function logLimited(key, level, message, intervalMs) {
+    // 节流判定：窗口内第一次返回 true 并记时间戳，其余返回 false。
+    // 抽出来是为了让"多条必须成对出现"的日志共用同一道闸门（见 logHealOutcome）。
+    function shouldLog(key, intervalMs) {
         var now = Date.now();
         var wait = intervalMs || 1000;
         if (!LogLimiter[key] || now - LogLimiter[key] >= wait) {
             LogLimiter[key] = now;
-            log(level, message);
+            return true;
         }
+        return false;
+    }
+
+    function logLimited(key, level, message, intervalMs) {
+        if (!shouldLog(key, intervalMs)) return;
+        log(level, message);
+    }
+
+    // ------------------------------------------------------------------
+    // 运行统计（周期写一条，持久化到运行日志）
+    //   目的：测试时不用盯着 UI，事后翻日志就能判断"到底哪一步没生效"——
+    //   是 Hook 没命中（hurt_hits 不涨）、还是伤口不是本地玩家（skip.*）、
+    //   还是分类被关掉（cat.*）、还是回血被钳成 0（zero）。
+    // ------------------------------------------------------------------
+    var StatsLogIntervalMs = 15000;
+    var StatsLoggedAt = 0;
+    var StatsTimer = null;
+
+    // 周期统计定时器：开启时装，关闭/清理时卸，避免功能关了还在写日志。
+    // unref()：离线逻辑测试（node 里跑 script.js）时不要把进程挂住。
+    function startStatsTimer() {
+        if (StatsTimer !== null || typeof setInterval !== 'function') return;
+        try {
+            StatsTimer = setInterval(function () {
+                try {
+                    if (!Runtime.enabled) return;
+                    var wait = Math.max(3000, parseInt(Runtime.config.stats_log_interval_ms, 10) || StatsLogIntervalMs);
+                    var now = Date.now();
+                    if (StatsLoggedAt && now - StatsLoggedAt < wait) return;
+                    StatsLoggedAt = now;
+                    logStats('periodic');
+                } catch (_) {
+                }
+            }, 2000);
+            if (StatsTimer && typeof StatsTimer.unref === 'function') StatsTimer.unref();
+        } catch (_) {
+            StatsTimer = null;
+        }
+    }
+
+    function stopStatsTimer() {
+        if (StatsTimer === null) return;
+        try { clearInterval(StatsTimer); } catch (_) {}
+        StatsTimer = null;
+    }
+
+    function enabledSourcesText() {
+        var list = [];
+        for (var i = 0; i < CATEGORY_KEYS.length; i++) {
+            var key = CATEGORY_KEYS[i];
+            if (Runtime.config['src_' + key + '_enabled']) list.push(key);
+        }
+        return list.length ? list.join(',') : '-';
+    }
+
+    function logStats(reason) {
+        var s = Runtime.stats;
+        var cats = [];
+        for (var i = 0; i < CATEGORY_KEYS.length; i++) {
+            var key = CATEGORY_KEYS[i];
+            var events = s.catEvents[key] || 0;
+            var heals = s.catHeals[key] || 0;
+            if (events || heals) cats.push(key + ':' + events + '/' + heals);
+        }
+        log('info', '[统计] ' + (reason || 'periodic') +
+            ' enabled=' + (Runtime.enabled ? 1 : 0) +
+            ' percent=' + formatFloat(Runtime.config.lifesteal_percent) +
+            ' only_enemy_victim=' + (Runtime.config.only_enemy_victim ? 1 : 0) +
+            ' sources=' + enabledSourcesText() +
+            ' hurt_hits=' + s.hurtHookHits +
+            ' local_events=' + s.localDamageEvents +
+            ' heal_calls=' + s.healCalls +
+            ' healed_total=' + s.healedTotal +
+            ' pending=' + formatFloat(Runtime.pendingHeal) +
+            ' attacker_missile=' + s.attackerMissileResolved +
+            ' attacker_sentry=' + s.attackerSentryResolved +
+            ' skip{disabled=' + s.skippedDisabled +
+            ',no_ctx=' + s.skippedNoContext +
+            ',malformed=' + s.skippedInvalidEvent +
+            ',bad_dmg=' + s.skippedInvalidDamage +
+            ',not_local=' + s.skippedNotLocal +
+            ',mate=' + s.skippedMateVictim +
+            ',self=' + s.skippedSelfVictim +
+            ',cat_off=' + s.skippedCategoryDisabled +
+            ',unknown_cat=' + s.skippedUnknownCategory +
+            ',no_vhp=' + s.skippedNoVictimHealth +
+            ',no_local=' + s.skippedNoLocal +
+            ',dead=' + s.skippedDead +
+            ',dup=' + s.skippedDuplicate +
+            ',zero=' + s.skippedZeroHeal + '}' +
+            ' wpn_map{refresh=' + s.weaponMapRefreshes + ',miss=' + s.weaponMapMisses + '}' +
+            ' cats=' + (cats.length ? cats.join(',') : '-') +
+            ' errors=' + s.errorCount);
     }
 
     function setError(label, error) {
@@ -942,7 +1044,7 @@
         Runtime.stats.lastDecision = decision || '';
     }
 
-    function logDiagnostic(ctx, damage, heal, hpBefore, hpAfter) {
+    function logDiagnostic(ctx, damage, heal, hpBefore, hpAfter, hpMax) {
         if (!Runtime.config.diagnostic_log) return;
         var label = CATEGORY_LABEL[ctx.category] || ctx.category;
         var message = 'lifesteal_diag source=' + ctx.category + '(' + label + ')' +
@@ -955,8 +1057,22 @@
             ' heal=' + formatFloat(heal) +
             ' hp_before=' + (hpBefore === null ? '?' : hpBefore) +
             ' hp_after=' + (hpAfter === null ? '?' : hpAfter) +
+            // hp_max 用来区分"回血被单次上限截断"还是"被满血截断"：
+            // 只看 before/after 时，一刀 +3000 到底是撞了上限，还是只差 3000 到满血，没法判断。
+            ' hp_max=' + (hpMax === null || hpMax === undefined ? '?' : hpMax) +
             ' percent=' + formatFloat(Runtime.config.lifesteal_percent);
-        logLimited('lifesteal_diag', 'info', message, 400);
+        log('info', message);
+    }
+
+    // 明细与汇总必须成对出现，所以共用同一道节流闸门。
+    // 以前两条各自节流（diag 400ms / 汇总 500ms），实测会出现 diag 与汇总错位配套
+    // （diag damage=21 后面跟的是另一发的 damage=36），以及"只有汇总没有明细"的缺口，
+    // 事后拿日志对账对不上。
+    function logHealOutcome(ctx, damage, actualHeal, hpBefore, hpAfter) {
+        if (!shouldLog('heal_outcome', 400)) return;
+        logDiagnostic(ctx, damage, actualHeal, hpBefore.hp, hpAfter.hp, hpAfter.maxHp);
+        log('info', 'lifesteal [' + (CATEGORY_LABEL[ctx.category] || ctx.category) + '] damage=' + damage +
+            ' -> heal +' + actualHeal + ' (percent=' + formatFloat(Runtime.config.lifesteal_percent) + '%)');
     }
 
     function onHealthHurt(healthData, damage) {
@@ -1063,14 +1179,7 @@
 
         recordLast(ctx, damage, actualHeal, hpAfter.hp, hpAfter.maxHp, 'healed');
 
-        logDiagnostic(ctx, damage, actualHeal, hpBefore.hp, hpAfter.hp);
-        logLimited(
-            'healed',
-            'info',
-            'lifesteal [' + (CATEGORY_LABEL[ctx.category] || ctx.category) + '] damage=' + damage +
-            ' -> heal +' + actualHeal + ' (percent=' + formatFloat(percent) + '%)',
-            500
-        );
+        logHealOutcome(ctx, damage, actualHeal, hpBefore, hpAfter);
     }
 
     // ------------------------------------------------------------------
@@ -1200,7 +1309,11 @@
         Runtime.stats.lastError = '';
         Runtime.pendingHeal = 0.0;
         sendStatus(true);
-        log('success', 'lifesteal enabled, percent=' + formatFloat(Runtime.config.lifesteal_percent) + '%');
+        log('success', 'lifesteal enabled, percent=' + formatFloat(Runtime.config.lifesteal_percent) + '%' +
+            ', only_enemy_victim=' + (Runtime.config.only_enemy_victim ? 1 : 0) +
+            ', sources=' + enabledSourcesText());
+        logStats('enabled');
+        startStatsTimer();
         return getStatus();
     }
 
@@ -1210,11 +1323,14 @@
         Runtime.pendingHeal = 0.0;
         sendStatus(false);
         log('info', 'lifesteal disabled');
+        logStats('disabled');
+        stopStatsTimer();
         return getStatus();
     }
 
     function cleanupFeature() {
         Runtime.enabled = false;
+        stopStatsTimer();
         cleanupHooks();
         resetRuntime('cleanup');
         Runtime.stats.cleanupCount += 1;
@@ -1250,6 +1366,13 @@
         }
         if (config.max_pending_heal !== undefined) {
             Runtime.config.max_pending_heal = clampFloat(config.max_pending_heal, 100.0, 1000000.0);
+        }
+        if (config.stats_log_interval_ms !== undefined) {
+            // 只影响日志节奏，给个安全区间：最快 3s，最慢 10min
+            var interval = parseInt(config.stats_log_interval_ms, 10);
+            if (isFinite(interval)) {
+                Runtime.config.stats_log_interval_ms = Math.max(3000, Math.min(600000, interval));
+            }
         }
 
         return getStatus();
@@ -1339,7 +1462,11 @@
             last_wpn_index: Runtime.stats.lastWpnIndex,
             last_wpn_class: Runtime.stats.lastWpnClass,
             last_wpn_name: Runtime.stats.lastWpnName,
-            last_decision: Runtime.stats.lastDecision
+            last_decision: Runtime.stats.lastDecision,
+
+            version: SCRIPT_VERSION,
+            enabled_sources: enabledSourcesText(),
+            stats_log_interval_ms: Runtime.config.stats_log_interval_ms
         };
 
         var categoryStatus = buildCategoryStatus();
@@ -1399,5 +1526,5 @@
         Runtime.stats.catEvents[key] = 0;
     });
 
-    log('info', 'script loaded');
+    log('info', 'script loaded, version=' + SCRIPT_VERSION);
 })();
