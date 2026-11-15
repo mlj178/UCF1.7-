@@ -1,0 +1,12 @@
+import importlib.util, tempfile, os, sys
+spec = importlib.util.spec_from_file_location("wp", r"D:\trae_project\ucf1.7-modifier\05-正式功能\42-路点体检\AAAAA-waypoint_probe_ui.py")
+m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
+d = tempfile.mkdtemp()
+p = os.path.join(d, "probe_cmd.ini")
+cfg = m.read_ini(p); print("defaults:", cfg)
+cfg["pacify"]=0; cfg["probe_once"]=12345; m.write_ini(p, cfg)
+print("reread:", m.read_ini(p))
+st = os.path.join(d, "probe_status.txt")
+open(st,"w",encoding="utf-8").write("# h\nmap=TransportShip\nfp=n786-x\npass=1300\nblock=61\n")
+print("status:", m.parse_status(st))
+print("UI_HELPERS_OK")

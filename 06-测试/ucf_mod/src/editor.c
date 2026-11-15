@@ -84,6 +84,8 @@ static P g_hud;          /* UGUI Text component: status panel */
 static P g_hudGo;
 static P g_keys;         /* UGUI Text component: hotkey panel */
 static P g_keysGo;
+static P g_cat;          /* UGUI Text component: D-layer category list (left edge) */
+static P g_catGo;
 static P g_guiFont;      /* font borrowed from the game UI (has CJK glyphs) */
 static int g_cjk;        /* 1 = game font available, hint text in Chinese */
 static int g_tintLogged; /* one-shot material/shader diagnostic */
@@ -660,7 +662,10 @@ static P g_lblComp[VIS_MAXF];
 static unsigned char g_lblHidden[VIS_MAXF];
 static int g_lblShown;
 
-static int g_visOn, g_lay = LAY_A | LAY_B | LAY_C | LAY_D | LAY_E, g_lblMode = 0;  /* 0 = no world-space text: it clutters the view */
+static int g_visOn, g_lay = LAY_A, g_lblMode = 0;  /* 0 = no world-space text: it clutters the view
+                                                * Ctrl+V 第一次只开 A 层，其余层按需 Ctrl+Shift+2..5 打开 */
+/* C 层细分：1 守区框 2 守点 4 邻区线 8 入口·撤离线；默认只开「区+点」，线要自己开 */
+static int g_csub = 3;
 static int g_visDirty, g_visNoMesh;
 static int g_autoExport = 1;      /* 图有节点且稳定后自动导出一份路点 JSON */
 static int g_aeNodes = -1;        /* 自动导出：上次看到的节点数 */
@@ -725,7 +730,14 @@ static void bs_line(V3 a, V3 b, float w) {
   if (fabsf(d.y) < 0.9f * len) { u.x = 0.0f; u.y = -d.z; u.z = d.y; }
   else { u.x = -d.z; u.y = 0.0f; u.z = d.x; }
   ul = sqrtf(u.x * u.x + u.y * u.y + u.z * u.z);
-  if (ul < 1e-6f) return;
+  /* 水平且沿 X 的边 (dy==dz==0) 在第一个分支里得到 (0,0,0)：必须回退到
+   * 另一个轴的构造，否则所有「纯 X 方向」的边会被静默丢掉（路点图看起来
+   * 只剩一排排平行的横线）。 */
+  if (ul < 1e-6f) {
+    u.x = -d.z; u.y = 0.0f; u.z = d.x;
+    ul = sqrtf(u.x * u.x + u.y * u.y + u.z * u.z);
+    if (ul < 1e-6f) return;
+  }
   u.x /= ul; u.y /= ul; u.z /= ul;
   v.x = d.y * u.z - d.z * u.y;
   v.y = d.z * u.x - d.x * u.z;
@@ -863,14 +875,24 @@ static P vis_label_make(int i, const COL* c) {
   return comp;
 }
 
-static const COL* label_col(int kind) {
+static const COL* label_col(int kind, int aux) {
   switch (kind) {
     case K_NAREA:  return &COL_POS;
     case K_NPOS:   return &COL_CYAN;
     case K_CROUCH: return &COL_CROUCH;
     case K_GUARD:  return &COL_NODE1;
     case K_GAREA:  return &COL_PURPLE;
-    case K_SPAWN:  return &COL_GOLD;
+    case K_SPAWN:
+      /* keep each D-layer group visually separate instead of one gold blob */
+      switch (aux) {
+        case 0:  return &COL_AREA;    /* 保卫者出生  blue   */
+        case 1:  return &COL_CROUCH;  /* 幽灵出生    red    */
+        case 2:  return &COL_GRAY;    /* 中立点      gray   */
+        case 3:  return &COL_GOLD;    /* 普通补给箱  gold   */
+        case 4:  return &COL_PINK;    /* 红色补给箱  pink   */
+        case 5:  return &COL_CYAN;    /* 蓝色补给箱  cyan   */
+        default: return &COL_GOLD;
+      }
     case K_JUMP:   return &COL_JUMP;
     case K_TAG:    return &COL_NODE1;
     default:       return &COL_WHITE;
@@ -884,7 +906,7 @@ static void vis_label_build(int i) {
   if (f->kind == K_NPOS) sprintf(buf, "%s#%d\n%.1f,%.1f,%.1f\nsafe=%d", f->name, i, f->p.x, f->p.y, f->p.z, f->aux);
   else if (f->kind == K_TAG) sprintf(buf, "%s#%d\n%.1f,%.1f,%.1f\ntag=%d", f->name, i, f->p.x, f->p.y, f->p.z, f->aux);
   else sprintf(buf, "%s#%d\n%.1f,%.1f,%.1f", f->name, i, f->p.x, f->p.y, f->p.z);
-  comp = vis_label_make(i, label_col(f->kind));
+  comp = vis_label_make(i, label_col(f->kind, f->aux));
   if (!comp) return;
   ((set_txt_t)RVA(R_TEXT_SETTEXT))(comp, x_string_new(buf), 0);
   g_lblComp[i] = comp;
@@ -1302,14 +1324,14 @@ static void vis_draw(void) {
     draw_vf(K_GAREA, 8, 1, 1.8f, 1.3f, 1.8f);
   }
   if (g_lay & LAY_C) {
-    draw_vf(K_NAREA, 2, 1, 2.4f, 1.7f, 2.4f);
-    draw_vf(K_NPOS, 6, 0, 0.16f, 0.26f, 0.16f);
-    if (g_eN) {
+    if (g_csub & 1) draw_vf(K_NAREA, 2, 1, 2.4f, 1.7f, 2.4f);
+    if (g_csub & 2) draw_vf(K_NPOS, 6, 0, 0.16f, 0.26f, 0.16f);
+    if (g_eN && (g_csub & 8)) {
       bs_reset();
       for (i = 0; i < g_eN; i++) bs_line(g_eA[i], g_eB[i], 0.05f);
       vis_flush_mesh("vis_entr", 9, g_eN);
     }
-    if (g_nN) {
+    if (g_nN && (g_csub & 4)) {
       bs_reset();
       for (i = 0; i < g_nN; i++) bs_line(g_nA[i], g_nB[i], 0.06f);
       vis_flush_mesh("vis_nb", 7, g_nN);
@@ -1377,6 +1399,16 @@ static void vis_rebuild(void) {
   vis_show(1);
   elog("vis: nodes=%d edges=%d labels=%d (area=%d pos=%d crouch=%d guard=%d spawn=%d jump=%d tag=%d) missing=[%s]",
        g_vnN, g_veN, g_vfN, g_cArea, g_cPos, g_cCrouch, g_cGuard, g_cSpawn, g_cJump, g_cTag, g_miss);
+  {
+    int i, s0 = 0, s1 = 0, s2 = 0;
+    for (i = 0; i < g_vfN; i++) {
+      if (g_vf[i].kind != K_SPAWN) continue;
+      if (g_vf[i].aux <= 2) s0++;
+      else if (g_vf[i].aux == 3) s1++;
+      else s2++;
+    }
+    elog("vis: spawn groups = 出生点%d 普通补给箱%d 红蓝补给箱%d", s0, s1, s2);
+  }
   hud_refresh();
 }
 
@@ -1404,6 +1436,16 @@ static void vis_toggle_layer(int bit) {
   g_lay ^= bit;
   if (g_visOn) { g_visDirty = 0; vis_rebuild(); }
   elog("vis layers=0x%X (toggled 0x%X)", g_lay, bit);
+  hud_refresh();
+}
+
+/* C 层内部再分四档：守区框 / 守点 / 邻区线 / 入口·撤离线 */
+static void vis_toggle_csub(int bit) {
+  g_csub ^= bit;
+  if (!(g_lay & LAY_C)) g_lay |= LAY_C;   /* 按子开关时顺手把 C 层打开 */
+  if (g_visOn) { g_visDirty = 0; vis_rebuild(); }
+  elog("vis csub=0x%X (toggled 0x%X) area=%d pos=%d neighbor=%d entr=%d", g_csub, bit,
+       !!(g_csub & 1), !!(g_csub & 2), !!(g_csub & 4), !!(g_csub & 8));
   hud_refresh();
 }
 
@@ -1686,13 +1728,48 @@ static int hud_init(void) {
   g_keys = mk_text_ui(canvasTr, "UCF_HUD_Keys", 0.0f, 1.0f, 0.0f, 1.0f, 14.0f, -108.0f, 1180.0f, 74.0f, 14);
   if (g_keys) elog("hud: keys go=%p font=%p", g_keysGo, ((get_font_t)RVA(R_TEXT_GETFONT))(g_keys, 0));
   g_keysGo = g_keys ? ((get_go_t)RVA(R_GETGO))(g_keys, 0) : 0;
-  elog("hud: ready font=%p (%s) keys=%p", g_guiFont, g_cjk ? "game/CJK" : "builtin/ASCII", g_keys);
+  /* left-edge legend: three horizontal rows, stacked vertically (D layer split) */
+  g_cat = mk_text_ui(canvasTr, "UCF_HUD_Cats", 0.0f, 0.5f, 0.0f, 0.5f, 14.0f, -140.0f, 520.0f, 132.0f, 26);
+  if (g_cat) {
+    ((set_int1_t)RVA(R_TEXT_ALIGN))(g_cat, 3, 0);   /* MiddleLeft */
+    g_catGo = ((get_go_t)RVA(R_GETGO))(g_cat, 0);
+  }
+  elog("hud: ready font=%p (%s) keys=%p cats=%p", g_guiFont, g_cjk ? "game/CJK" : "builtin/ASCII", g_keys, g_cat);
   return 1;
+}
+
+static int cat_count(int lo, int hi) {
+  int i, n = 0;
+  for (i = 0; i < g_vfN; i++)
+    if (g_vf[i].kind == K_SPAWN && g_vf[i].aux >= lo && g_vf[i].aux <= hi) n++;
+  return n;
+}
+
+/* D layer was one merged counter ("出生 105"); the left edge now lists the
+ * three real groups as three horizontal rows, stacked vertically. */
+static void cat_refresh(void) {
+  char s[512];
+  int spawn, box, color;
+  if (!g_cat) return;
+  if (!g_visOn || !(g_lay & LAY_D)) {
+    ((set_txt_t)RVA(R_TEXT_SETTEXT))(g_cat, x_string_new(""), 0);
+    return;
+  }
+  spawn = cat_count(0, 2);   /* 保卫者出生 / 幽灵出生 / 中立点 */
+  box   = cat_count(3, 3);   /* 普通补给箱 */
+  color = cat_count(4, 5);   /* 红色补给箱 / 蓝色补给箱 */
+  sprintf(s,
+    "<color=#6EC6FF>出生点  %d</color>\n"
+    "<color=#FFD24A>普通补给箱  %d</color>\n"
+    "<color=#FF6FB5>红色</color><color=#B9C2CE>/</color><color=#4FE3E3>蓝色</color><color=#EDEDED>补给箱  %d</color>",
+    spawn, box, color);
+  ((set_txt_t)RVA(R_TEXT_SETTEXT))(g_cat, x_string_new(s), 0);
 }
 
 static void hud_refresh(void) {
   char s[1500];
   char miss[200];
+  char csub[16];
   int c1 = 0, c2 = 0, c3 = 0, i;
   if (!g_hud && !hud_init()) return;
   for (i = 0; i < g_n; i++) {
@@ -1702,36 +1779,39 @@ static void hud_refresh(void) {
   }
   if (g_miss[0]) sprintf(miss, "   缺:%s", g_miss);
   else miss[0] = 0;
+  sprintf(csub, "%s%s%s%s", (g_csub & 1) ? "区" : "-", (g_csub & 2) ? "点" : "-",
+          (g_csub & 4) ? "邻" : "-", (g_csub & 8) ? "出" : "-");
   if (g_cjk) {
     sprintf(s,
-      "可视化 %s   A路点:%s B人类:%s C幽灵:%s D出生:%s E模式:%s   标签:%s\n"
-      "节点 %d  连接 %d  守区 %d  守点 %d  蹲守 %d  守卫 %d  出生 %d  跳链 %d  标签区 %d%s\n"
+      "可视化 %s   A路点:%s B人类:%s C幽灵:%s D出生/箱:%s E模式:%s   标签:%s\n"
+      "节点 %d  连接 %d  守区 %d  守点 %d  蹲守 %d  守卫 %d  跳链 %d  标签区 %d  C子层:%s%s\n"
       "编辑 %s   已放标记 %d (蹲%d/守%d/区%d)   屏上标签 %d/%d%s",
       g_visOn ? "开" : "关",
       (g_lay & LAY_A) ? "开" : "关", (g_lay & LAY_B) ? "开" : "关",
       (g_lay & LAY_C) ? "开" : "关", (g_lay & LAY_D) ? "开" : "关",
       (g_lay & LAY_E) ? "开" : "关",
       g_lblMode == 0 ? "关" : (g_lblMode == 1 ? "近距" : "全部"),
-      g_vnN, g_veN, g_cArea, g_cPos, g_cCrouch, g_cGuard, g_cSpawn, g_cJump, g_cTag, miss,
+      g_vnN, g_veN, g_cArea, g_cPos, g_cCrouch, g_cGuard, g_cJump, g_cTag, csub, miss,
       g_on ? "开" : "关", g_n, c1, c2, c3, g_lblShown, g_vfN,
       g_visOn && g_visDirty ? "  [待重建]" : "");
   } else {
     sprintf(s,
       "VIS %s | A %s B %s C %s D %s E %s | labels %s\n"
-      "nodes %d edges %d nano %d/%d crouch %d guard %d spawn %d jump %d tag %d%s\n"
+      "nodes %d edges %d nano %d/%d crouch %d guard %d jump %d tag %d csub:%s%s\n"
       "edit %s markers %d (c %d/p %d/a %d) on-screen labels %d/%d",
       g_visOn ? "ON" : "OFF",
       (g_lay & LAY_A) ? "on" : "off", (g_lay & LAY_B) ? "on" : "off",
       (g_lay & LAY_C) ? "on" : "off", (g_lay & LAY_D) ? "on" : "off",
       (g_lay & LAY_E) ? "on" : "off",
       g_lblMode == 0 ? "off" : (g_lblMode == 1 ? "near" : "all"),
-      g_vnN, g_veN, g_cArea, g_cPos, g_cCrouch, g_cGuard, g_cSpawn, g_cJump, g_cTag, miss,
+      g_vnN, g_veN, g_cArea, g_cPos, g_cCrouch, g_cGuard, g_cJump, g_cTag, csub, miss,
       g_on ? "ON" : "OFF", g_n, c1, c2, c3, g_lblShown, g_vfN);
   }
   ((set_txt_t)RVA(R_TEXT_SETTEXT))(g_hud, x_string_new(s), 0);
   if (g_keys) {
     if (g_helpOn) {
-      const char* k = "Ctrl+V 可视化总开关   Ctrl+Shift+1..5  A路点/B人类/C幽灵/D出生/E模式   Ctrl+Shift+L 文字标签 关/近距/全部\n"
+      const char* k = "Ctrl+V 可视化总开关（首次只开 A 层）   Ctrl+Shift+1..5  A路点/B人类/C幽灵/D出生/箱/E模式   Ctrl+Shift+L 文字标签 关/近距/全部\n"
+                      "Ctrl+Shift+6/7/8/9  C层细分: 绿守区框 / 青守点 / 橙邻区线 / 粉入口·撤离线（默认只开区+点）\n"
                       "Ctrl+E 导出数据   Ctrl+H 本面板开关   Delete 删除准星最近标记   Ctrl+0 显示/隐藏已放标记\n"
                       "Ctrl+1 编辑模式  Ctrl+2 蹲守点  Ctrl+4 幽灵守区  Ctrl+5 撤销  Ctrl+6 保存  Ctrl+7 重载  Ctrl+8 阵营  Ctrl+9 状态";
       ((set_txt_t)RVA(R_TEXT_SETTEXT))(g_keys, x_string_new(k), 0);
@@ -1739,9 +1819,10 @@ static void hud_refresh(void) {
       ((set_txt_t)RVA(R_TEXT_SETTEXT))(g_keys, x_string_new("Ctrl+H 显示快捷键"), 0);
     }
   }
+  cat_refresh();
 }
 
-static void hud_reset(void) { g_hud = 0; g_hudGo = 0; g_keys = 0; g_keysGo = 0; g_lblCanvas = 0; g_lblTr = 0; }
+static void hud_reset(void) { g_hud = 0; g_hudGo = 0; g_keys = 0; g_keysGo = 0; g_cat = 0; g_catGo = 0; g_lblCanvas = 0; g_lblTr = 0; }
 
 /* ---- marker store ------------------------------------------------------- */
 static int add_mk(int type, V3 p, int aid, int parent, int prm, P go, P comp, P vis) {
@@ -2143,6 +2224,10 @@ void editor_on_key_mod(unsigned vk, int shift) {
   }
   if (shift && vk >= '1' && vk <= '5') {
     vis_toggle_layer(1 << (vk - '1'));
+    return;
+  }
+  if (shift && vk >= '6' && vk <= '9') {
+    vis_toggle_csub(1 << (vk - '6'));
     return;
   }
 
