@@ -1,0 +1,635 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>UCF 导航数据查看器 v1</title>
+<style>
+  :root {
+    --bg:#0e1116; --panel:#151a22; --line:#232b37; --txt:#c9d3e0; --dim:#7b8798;
+    --acc:#4d8dff; --warn:#ffb020; --bad:#ff4d4f; --ok:#3ddc84;
+  }
+  * { box-sizing:border-box; }
+  html,body { margin:0; height:100%; background:var(--bg); color:var(--txt);
+    font:13px/1.5 "Segoe UI","Microsoft YaHei",system-ui,sans-serif; overflow:hidden; }
+  #app { display:flex; height:100%; }
+  #side { width:280px; min-width:280px; background:var(--panel); border-right:1px solid var(--line);
+    display:flex; flex-direction:column; overflow:hidden; }
+  #side h1 { font-size:13px; font-weight:600; margin:0; padding:10px 12px; border-bottom:1px solid var(--line);
+    letter-spacing:.5px; color:#e8eef7; }
+  #side .scroll { overflow:auto; padding:10px 12px 40px; flex:1; }
+  .sec { margin-bottom:14px; }
+  .sec > .t { font-size:11px; text-transform:uppercase; letter-spacing:.08em; color:var(--dim); margin:0 0 6px; }
+  .kv { display:flex; justify-content:space-between; gap:8px; font-variant-numeric:tabular-nums; }
+  .kv b { font-weight:500; color:#e8eef7; }
+  label.chk { display:flex; align-items:center; gap:6px; padding:2px 0; cursor:pointer; user-select:none; }
+  label.chk input { accent-color:var(--acc); }
+  .dot { width:10px; height:10px; border-radius:2px; display:inline-block; }
+  #drop { border:1px dashed var(--line); border-radius:6px; padding:10px; text-align:center; color:var(--dim);
+    cursor:pointer; font-size:12px; }
+  #drop:hover, #drop.hot { border-color:var(--acc); color:var(--acc); }
+  #list { max-height:180px; overflow:auto; border:1px solid var(--line); border-radius:6px; }
+  #list .row { padding:3px 8px; cursor:pointer; display:flex; justify-content:space-between; gap:6px; font-size:12px; }
+  #list .row:hover { background:#1d2532; }
+  #list .row .n { color:var(--dim); font-variant-numeric:tabular-nums; }
+  .issue { padding:3px 0; font-size:12px; cursor:pointer; }
+  .issue:hover { color:#fff; }
+  .issue.bad { color:var(--bad); } .issue.warn { color:var(--warn); } .issue.ok { color:var(--ok); }
+  #stage { position:relative; flex:1; }
+  canvas { display:block; width:100%; height:100%; cursor:crosshair; }
+  #hud { position:absolute; left:10px; bottom:10px; font-variant-numeric:tabular-nums; font-size:12px;
+    color:var(--dim); background:rgba(14,17,22,.75); padding:4px 8px; border-radius:4px; pointer-events:none; }
+  #sel { position:absolute; right:10px; bottom:10px; width:250px; background:rgba(21,26,34,.94);
+    border:1px solid var(--line); border-radius:6px; padding:8px 10px; font-size:12px; display:none;
+    font-variant-numeric:tabular-nums; }
+  #sel .id { color:var(--acc); word-break:break-all; }
+  #sel .close { float:right; cursor:pointer; color:var(--dim); }
+  #legend { position:absolute; right:10px; top:10px; background:rgba(21,26,34,.9); border:1px solid var(--line);
+    border-radius:6px; padding:8px 10px; font-size:12px; pointer-events:none; }
+  #legend .r { display:flex; align-items:center; gap:6px; }
+  #top { position:absolute; left:10px; top:10px; font-size:12px; color:var(--dim);
+    background:rgba(21,26,34,.9); border:1px solid var(--line); border-radius:6px; padding:6px 10px; }
+  #top b { color:#e8eef7; font-weight:500; }
+  .pill { display:inline-block; padding:0 6px; border-radius:9px; background:#1d2532; font-size:11px; color:var(--dim); }
+</style>
+</head>
+<body>
+<div id="app">
+  <aside id="side">
+    <h1>UCF 导航数据查看器</h1>
+    <div class="scroll">
+      <div class="sec">
+        <div id="drop">把 nav_*.json 拖进来，或点击选择</div>
+        <input id="file" type="file" accept=".json" style="display:none">
+      </div>
+      <div class="sec" id="mapsec" style="display:none">
+        <p class="t">地图</p>
+        <div class="kv"><span>名称</span><b id="m-name">-</b></div>
+        <div class="kv"><span>指纹</span><b id="m-fp" style="font-size:11px">-</b></div>
+        <div class="kv"><span>来源</span><b id="m-src">-</b></div>
+        <div class="kv"><span>节点 / 边</span><b id="m-cnt">-</b></div>
+        <div class="kv"><span>包围盒</span><b id="m-bbox" style="font-size:11px">-</b></div>
+        <div class="kv"><span>id 自检</span><b id="m-idchk">-</b></div>
+      </div>
+      <div class="sec">
+        <p class="t">图层</p>
+        <label class="chk"><input type="checkbox" id="c-node" checked><span class="dot" style="background:#cdd6ff"></span>可走路点</label>
+        <label class="chk"><input type="checkbox" id="c-tagged" checked><span class="dot" style="background:#ff9a2e"></span>带 tag 路点</label>
+        <label class="chk"><input type="checkbox" id="c-blocked" checked><span class="dot" style="background:#ff3b30"></span>不可走路点</label>
+        <label class="chk"><input type="checkbox" id="c-edge" checked><span class="dot" style="background:#4d7dff"></span>连接边</label>
+        <label class="chk"><input type="checkbox" id="c-nano_area" checked><span class="dot" style="background:#3ddc84"></span>幽灵守区</label>
+        <label class="chk"><input type="checkbox" id="c-nano_pos" checked><span class="dot" style="background:#19f2f2"></span>幽灵守点</label>
+        <label class="chk"><input type="checkbox" id="c-crouch" checked><span class="dot" style="background:#ff3b30"></span>蹲守点</label>
+        <label class="chk"><input type="checkbox" id="c-guard" checked><span class="dot" style="background:#ff9a2e"></span>守卫点</label>
+        <label class="chk"><input type="checkbox" id="c-guard_area" checked><span class="dot" style="background:#b06bff"></span>守卫区域</label>
+        <label class="chk"><input type="checkbox" id="c-spawn" checked><span class="dot" style="background:#ffd633"></span>出生点</label>
+        <label class="chk"><input type="checkbox" id="c-jump" checked><span class="dot" style="background:#ffe400"></span>跳跃链接</label>
+        <label class="chk"><input type="checkbox" id="c-tag_region" checked><span class="dot" style="background:#ff9a2e"></span>标签区</label>
+        <label class="chk"><input type="checkbox" id="c-lines" checked><span class="dot" style="background:#ff5bb0"></span>守区连线</label>
+        <label class="chk"><input type="checkbox" id="c-isolated" checked><span class="dot" style="background:#ff4d4f"></span>标红孤立节点</label>
+      </div>
+      <div class="sec" id="valsec" style="display:none">
+        <p class="t">校验</p>
+        <div id="issues"></div>
+      </div>
+      <div class="sec" id="featsec" style="display:none">
+        <p class="t">特征点（点击定位）</p>
+        <div id="list"></div>
+      </div>
+      <div class="sec">
+        <p class="t">操作</p>
+        <div style="font-size:12px; color:var(--dim); line-height:1.7">
+          滚轮缩放 · 拖动平移 · 单击选中<br>
+          双击聚焦 · F 适应视图 · G 下一个孤立点<br>
+          Esc 取消选中 · 空格 居中
+        </div>
+      </div>
+    </div>
+  </aside>
+  <main id="stage">
+    <canvas id="cv"></canvas>
+    <div id="top">等待载入 <b>JSON</b></div>
+    <div id="legend"></div>
+    <div id="hud"></div>
+    <div id="sel"></div>
+  </main>
+</div>
+<script>
+"use strict";
+var MASK = (1n << 64n) - 1n;
+function fnvU32(h, q) {
+  q = q >>> 0;
+  for (var i = 0; i < 4; i++) h = ((h ^ BigInt((q >>> (i * 8)) & 0xff)) * 1099511628211n) & MASK;
+  return h;
+}
+function qcm(v) { return Math.floor(Number(Number(v).toFixed(2)) * 100 + 0.5); }
+function nodeId(p, seed) {
+  seed = seed || 0;
+  var h = 14695981039346656037n;
+  h = fnvU32(h, seed); h = fnvU32(h, qcm(p[0])); h = fnvU32(h, qcm(p[1])); h = fnvU32(h, qcm(p[2]));
+  return h.toString(16).padStart(16, "0");
+}
+var KIND_LEGACY = {1:"nano_area",2:"nano_pos",3:"crouch",4:"guard",5:"guard_area",6:"spawn",7:"jump",8:"tag_region"};
+var KIND_SEED = {nano_area:1,nano_pos:2,crouch:3,guard:4,guard_area:5,spawn:6,jump:7,tag_region:8,unknown:0};
+function kindSeed(k) { return KIND_SEED[k] || 0; }
+var KIND_COLOR = {
+  nano_area:"#3ddc84", nano_pos:"#19f2f2", crouch:"#ff3b30", guard:"#ff9a2e",
+  guard_area:"#b06bff", spawn:"#ffd633", jump:"#ffe400", tag_region:"#ff9a2e"
+};
+var SPAWN_COLOR = ["#4d7dff","#ff3b30","#9aa4b2","#ffd633","#ff5bb0","#19f2f2"];
+var SPAWN_NAME = ["保卫者出生","幽灵出生","中立点","补给箱","红箱","蓝箱"];
+
+var S = {
+  doc:null, map:{}, nodes:[], byId:new Map(), edges:[], adj:new Map(),
+  features:[], lines:{nano_neighbor:[],entrance_escape:[],jump:[]},
+  view:{cx:0, cz:0, s:2}, sel:null, hover:null, mouse:{x:0,y:0,wx:0,wz:0},
+  flag:{}
+};
+var CV = document.getElementById("cv"), CX = CV.getContext("2d");
+var W = 0, H = 0, DPR = 1;
+
+function el(id) { return document.getElementById(id); }
+function fmt(n, d) { return Number(n).toFixed(d === undefined ? 2 : d); }
+
+function resize() {
+  var st = el("stage");
+  DPR = window.devicePixelRatio || 1;
+  W = st.clientWidth; H = st.clientHeight;
+  CV.width = Math.round(W * DPR); CV.height = Math.round(H * DPR);
+  CV.style.width = W + "px"; CV.style.height = H + "px";
+  CX.setTransform(DPR, 0, 0, DPR, 0, 0);
+  render();
+}
+window.addEventListener("resize", resize);
+
+function norm(j) {
+  var out = { map:{}, nodes:[], edges:[], features:[], lines:{nano_neighbor:[],entrance_escape:[],jump:[]}, legacy:false };
+  if (j.format === "ucf-navgraph") {
+    out.map = j.map || {};
+    out.nodes = (j.nodes || []).map(function (n) {
+      var p = n.p || n;
+      return { id: n.id || nodeId(p, 0), p: [Number(p[0]), Number(p[1]), Number(p[2])],
+               tag: n.tag | 0, walk: n.walk === undefined ? 1 : (n.walk | 0), pen: n.pen | 0 };
+    });
+    out.edges = (j.edges || []).map(function (e) { return [e[0], e[1]]; });
+    out.features = (j.features || []).map(function (f) {
+      var p = f.p;
+      return { id: f.id || nodeId(p, kindSeed(f.kind) * 100 + (f.aux | 0)), kind: f.kind, name: f.name || "",
+               aux: f.aux | 0, p: [Number(p[0]), Number(p[1]), Number(p[2])] };
+    });
+    if (j.lines) out.lines = { nano_neighbor: j.lines.nano_neighbor || [],
+                               entrance_escape: j.lines.entrance_escape || [],
+                               jump: j.lines.jump || [] };
+  } else {
+    out.legacy = true;
+    out.map = { name: "legacy", fingerprint: "legacy", source: "game" };
+    (j.nodes || []).forEach(function (n) {
+      var p = [n[0], n[1], n[2]];
+      out.nodes.push({ id: nodeId(p, 0), p: p, tag: n[3] | 0, walk: n[4] | 0, pen: n[5] | 0 });
+    });
+    (j.edges || []).forEach(function (e) {
+      var a = out.nodes[e[0]], b = out.nodes[e[1]];
+      if (a && b) out.edges.push([a.id, b.id]);
+    });
+    (j.features || []).forEach(function (f) {
+      out.features.push({ id: nodeId(f.p, 0), kind: KIND_LEGACY[f.kind] || "unknown",
+                          name: f.name || "", aux: f.aux | 0, p: [f.p[0], f.p[1], f.p[2]] });
+    });
+    if (j.nano_neighbor_lines) out.lines.nano_neighbor = j.nano_neighbor_lines;
+    if (j.entrance_escape_lines) out.lines.entrance_escape = j.entrance_escape_lines;
+    if (j.jump_lines) out.lines.jump = j.jump_lines;
+  }
+  return out;
+}
+
+function buildIndex() {
+  S.byId = new Map();
+  S.adj = new Map();
+  S.nodes.forEach(function (n) { S.byId.set(n.id, n); S.adj.set(n.id, []); });
+  S.edges = S.edges.filter(function (e) { return S.byId.has(e[0]) && S.byId.has(e[1]); });
+  S.edges.forEach(function (e) {
+    S.adj.get(e[0]).push(e[1]);
+    S.adj.get(e[1]).push(e[0]);
+  });
+  // union-find over edges
+  var parent = new Map();
+  S.nodes.forEach(function (n) { parent.set(n.id, n.id); });
+  function find(a) { while (parent.get(a) !== a) { parent.set(a, parent.get(parent.get(a))); a = parent.get(a); } return a; }
+  S.edges.forEach(function (e) {
+    var ra = find(e[0]), rb = find(e[1]);
+    if (ra !== rb) parent.set(ra, rb);
+  });
+  var comp = new Map();
+  S.nodes.forEach(function (n) {
+    var r = find(n.id);
+    if (!comp.has(r)) comp.set(r, []);
+    comp.get(r).push(n.id);
+  });
+  var comps = Array.from(comp.values()).sort(function (a, b) { return b.length - a.length; });
+  S.comps = comps;
+  S.isolated = S.nodes.filter(function (n) { return (S.adj.get(n.id) || []).length === 0; });
+  S.longEdges = S.edges.filter(function (e) {
+    var a = S.byId.get(e[0]).p, b = S.byId.get(e[1]).p;
+    var dx = a[0]-b[0], dy = a[1]-b[1], dz = a[2]-b[2];
+    return Math.sqrt(dx*dx + dy*dy + dz*dz) > 8;
+  });
+  S.blockedLinked = S.nodes.filter(function (n) {
+    return n.walk === 0 && (S.adj.get(n.id) || []).length > 0;
+  });
+  S.floating = S.features.filter(function (f) {
+    var best = 1e9;
+    S.nodes.forEach(function (n) {
+      var dx = n.p[0]-f.p[0], dy = n.p[1]-f.p[1], dz = n.p[2]-f.p[2];
+      var d = dx*dx + dy*dy + dz*dz;
+      if (d < best) best = d;
+    });
+    return Math.sqrt(best) > 1.5;
+  });
+  // spawn points outside the largest component
+  var largest = comps.length ? new Set(comps[0]) : new Set();
+  S.spawnOutside = S.features.filter(function (f) {
+    if (f.kind !== "spawn") return false;
+    var best = 1e9, bid = null;
+    S.nodes.forEach(function (n) {
+      var dx = n.p[0]-f.p[0], dy = n.p[1]-f.p[1], dz = n.p[2]-f.p[2];
+      var d = dx*dx + dy*dy + dz*dz;
+      if (d < best) { best = d; bid = n.id; }
+    });
+    return bid && !largest.has(bid);
+  });
+  // id self-check (only meaningful for v1 files)
+  S.idBad = 0;
+  S.nodes.forEach(function (n) { if (nodeId(n.p, 0) !== n.id) S.idBad++; });
+}
+
+function bbox() {
+  var lo = [1e9,1e9,1e9], hi = [-1e9,-1e9,-1e9];
+  S.nodes.forEach(function (n) {
+    for (var i = 0; i < 3; i++) { if (n.p[i] < lo[i]) lo[i] = n.p[i]; if (n.p[i] > hi[i]) hi[i] = n.p[i]; }
+  });
+  if (!S.nodes.length) return [[0,0,0],[0,0,0]];
+  return [lo, hi];
+}
+function fit() {
+  var b = bbox();
+  S.view.cx = (b[0][0] + b[1][0]) / 2;
+  S.view.cz = (b[0][2] + b[1][2]) / 2;
+  var w = Math.max(b[1][0] - b[0][0], 1), d = Math.max(b[1][2] - b[0][2], 1);
+  S.view.s = Math.min(W / w, H / d) * 0.9;
+  render();
+}
+
+function sx(x) { return (x - S.view.cx) * S.view.s + W / 2; }
+function sy(z) { return (z - S.view.cz) * S.view.s + H / 2; }
+function wx(px) { return (px - W / 2) / S.view.s + S.view.cx; }
+function wz(py) { return (py - H / 2) / S.view.s + S.view.cz; }
+
+function on(id) { var e = el("c-" + id); return e ? e.checked : true; }
+
+function render() {
+  CX.clearRect(0, 0, W, H);
+  CX.fillStyle = "#0e1116";
+  CX.fillRect(0, 0, W, H);
+  if (!S.nodes.length) { return; }
+
+  // grid every 10 m
+  var step = 10 * S.view.s;
+  if (step > 8) {
+    var b = bbox();
+    var x0 = Math.floor(b[0][0] / 10) * 10, x1 = Math.ceil(b[1][0] / 10) * 10;
+    var z0 = Math.floor(b[0][2] / 10) * 10, z1 = Math.ceil(b[1][2] / 10) * 10;
+    CX.strokeStyle = "rgba(255,255,255,0.05)";
+    CX.lineWidth = 1;
+    CX.beginPath();
+    for (var gx = x0; gx <= x1; gx += 10) { CX.moveTo(sx(gx), 0); CX.lineTo(sx(gx), H); }
+    for (var gz = z0; gz <= z1; gz += 10) { CX.moveTo(0, sy(gz)); CX.lineTo(W, sy(gz)); }
+    CX.stroke();
+  }
+
+  var selNbr = S.sel ? new Set(S.adj.get(S.sel) || []) : null;
+
+  if (on("edge")) {
+    CX.lineWidth = Math.max(0.6, Math.min(2.2, S.view.s * 0.12));
+    CX.strokeStyle = "rgba(77,125,255,0.45)";
+    CX.beginPath();
+    for (var i = 0; i < S.edges.length; i++) {
+      var a = S.byId.get(S.edges[i][0]).p, c = S.byId.get(S.edges[i][1]).p;
+      CX.moveTo(sx(a[0]), sy(a[2])); CX.lineTo(sx(c[0]), sy(c[2]));
+    }
+    CX.stroke();
+  }
+
+  if (on("lines")) {
+    var L = S.lines;
+    CX.lineWidth = 1;
+    CX.strokeStyle = "rgba(255,154,46,0.35)";
+    CX.beginPath();
+    L.nano_neighbor.forEach(function (l) {
+      CX.moveTo(sx(l[0][0]), sy(l[0][2])); CX.lineTo(sx(l[1][0]), sy(l[1][2]));
+    });
+    CX.stroke();
+    CX.strokeStyle = "rgba(255,91,176,0.35)";
+    CX.beginPath();
+    L.entrance_escape.forEach(function (l) {
+      CX.moveTo(sx(l[0][0]), sy(l[0][2])); CX.lineTo(sx(l[1][0]), sy(l[1][2]));
+    });
+    CX.stroke();
+  }
+
+  // nodes: three groups in one pass each
+  var sz = Math.max(2, Math.min(12, S.view.s * 0.3));
+  var groups = [
+    { key:"node",   color:"#cdd6ff", test:function (n) { return n.walk && !n.tag; } },
+    { key:"tagged", color:"#ff9a2e", test:function (n) { return n.walk && n.tag; } },
+    { key:"blocked",color:"#ff3b30", test:function (n) { return !n.walk; } }
+  ];
+  groups.forEach(function (g) {
+    if (!on(g.key)) return;
+    CX.fillStyle = g.color;
+    for (var i = 0; i < S.nodes.length; i++) {
+      var n = S.nodes[i];
+      if (!g.test(n)) continue;
+      CX.fillRect(sx(n.p[0]) - sz / 2, sy(n.p[2]) - sz / 2, sz, sz);
+    }
+  });
+
+  // isolated markers
+  if (on("isolated")) {
+    CX.strokeStyle = "#ff4d4f";
+    CX.lineWidth = 1.5;
+    CX.beginPath();
+    S.isolated.forEach(function (n) {
+      CX.moveTo(sx(n.p[0]) + 5, sy(n.p[2]) - 5);
+      CX.arc(sx(n.p[0]), sy(n.p[2]), 5, 0, Math.PI * 2);
+    });
+    CX.stroke();
+  }
+
+  // features
+  S.features.forEach(function (f) {
+    if (!on(f.kind)) return;
+    var col = f.kind === "spawn" ? (f.aux >= 0 && f.aux < 6 ? SPAWN_COLOR[f.aux] : "#ffd633") : KIND_COLOR[f.kind];
+    if (!col) col = "#888";
+    var x = sx(f.p[0]), y = sy(f.p[2]);
+    if (x < -40 || y < -40 || x > W + 40 || y > H + 40) return;
+    CX.strokeStyle = col; CX.fillStyle = col;
+    if (f.kind === "nano_area" || f.kind === "guard_area") {
+      var r = Math.max(4, 2.4 * S.view.s);
+      CX.lineWidth = 1.5; CX.globalAlpha = 0.85;
+      CX.strokeRect(x - r, y - r, r * 2, r * 2);
+      CX.globalAlpha = 1;
+    } else if (f.kind === "spawn") {
+      var h = Math.max(3, S.view.s * 0.3);
+      CX.fillRect(x - h, y - h, h * 2, h * 2);
+    } else {
+      CX.beginPath(); CX.arc(x, y, 3, 0, Math.PI * 2); CX.fill();
+    }
+  });
+
+  // selection
+  if (S.sel) {
+    var n = S.byId.get(S.sel);
+    if (n) {
+      if (selNbr) {
+        CX.strokeStyle = "rgba(255,214,51,0.85)";
+        CX.lineWidth = 2;
+        CX.beginPath();
+        selNbr.forEach(function (id) {
+          var m = S.byId.get(id);
+          CX.moveTo(sx(n.p[0]), sy(n.p[2])); CX.lineTo(sx(m.p[0]), sy(m.p[2]));
+        });
+        CX.stroke();
+        CX.fillStyle = "rgba(255,214,51,0.9)";
+        selNbr.forEach(function (id) {
+          var m = S.byId.get(id);
+          CX.beginPath(); CX.arc(sx(m.p[0]), sy(m.p[2]), 2.5, 0, Math.PI * 2); CX.fill();
+        });
+      }
+      CX.strokeStyle = "#ffd633"; CX.lineWidth = 2;
+      CX.beginPath(); CX.arc(sx(n.p[0]), sy(n.p[2]), 8, 0, Math.PI * 2); CX.stroke();
+    }
+  }
+  drawHud();
+}
+
+function drawHud() {
+  el("hud").textContent = "x " + fmt(S.mouse.wx, 1) + "  z " + fmt(S.mouse.wz, 1) +
+    "   缩放 " + fmt(S.view.s, 2) + " px/m   " + (S.nodes.length ? "节点 " + S.nodes.length : "");
+}
+
+function pick(px, py) {
+  var best = null, bd = 14 * 14;
+  for (var i = 0; i < S.nodes.length; i++) {
+    var n = S.nodes[i];
+    var dx = sx(n.p[0]) - px, dy = sy(n.p[2]) - py;
+    var d = dx * dx + dy * dy;
+    if (d < bd) { bd = d; best = n; }
+  }
+  return best;
+}
+
+function select(id) {
+  S.sel = id;
+  var box = el("sel");
+  if (!id) { box.style.display = "none"; render(); return; }
+  var n = S.byId.get(id);
+  var nb = S.adj.get(id) || [];
+  box.style.display = "block";
+  box.innerHTML = "<span class='close' onclick='select(null)'>×</span>" +
+    "<div class='id'>" + n.id + "</div>" +
+    "<div>坐标 " + fmt(n.p[0]) + ", " + fmt(n.p[1]) + ", " + fmt(n.p[2]) + "</div>" +
+    "<div>tag " + n.tag + " · walk " + n.walk + " · pen " + n.pen + "</div>" +
+    "<div>邻居 " + nb.length + " 个" + (nb.length ? "" : " <span style='color:#ff4d4f'>（孤立！）</span>") + "</div>";
+  render();
+}
+
+function issues() {
+  if (!S.doc) return;
+  var out = [];
+  var pct = S.nodes.length ? Math.round(1000 * S.isolated.length / S.nodes.length) / 10 : 0;
+  out.push({ cls: S.isolated.length ? "bad" : "ok",
+             txt: "V2 孤立节点 " + S.isolated.length + " / " + S.nodes.length + " (" + pct + "%)",
+             act: function () { nextIsolated(); } });
+  out.push({ cls: S.comps.length > 1 ? "warn" : "ok",
+             txt: "V3 连通分量 " + S.comps.length + (S.comps.length ? "  最大 " + S.comps[0].length : ""),
+             act: function () { if (S.comps.length) { focusNode(S.comps[0][0]); } } });
+  out.push({ cls: S.spawnOutside.length ? "bad" : "ok",
+             txt: "V4 出生点不在主分量 " + S.spawnOutside.length,
+             act: function () { if (S.spawnOutside.length) { focus(S.spawnOutside[0].p); } } });
+  out.push({ cls: S.blockedLinked.length ? "warn" : "ok",
+             txt: "V1 不可走但仍连边 " + S.blockedLinked.length,
+             act: function () { if (S.blockedLinked.length) { focusNode(S.blockedLinked[0].id); } } });
+  out.push({ cls: S.longEdges.length ? "warn" : "ok",
+             txt: "V5 超长边 >8m " + S.longEdges.length,
+             act: function () { if (S.longEdges.length) { focusNode(S.longEdges[0][0]); } } });
+  out.push({ cls: S.floating.length ? "warn" : "ok",
+             txt: "V6 悬空特征点 " + S.floating.length,
+             act: function () { if (S.floating.length) { focus(S.floating[0].p); } } });
+  var box = el("issues");
+  box.innerHTML = "";
+  out.forEach(function (o) {
+    var d = document.createElement("div");
+    d.className = "issue " + o.cls;
+    d.textContent = o.txt;
+    d.onclick = o.act;
+    box.appendChild(d);
+  });
+}
+
+function focus(p) {
+  S.view.cx = p[0]; S.view.cz = p[2];
+  if (S.view.s < 1.5) S.view.s = 3;
+  render();
+}
+function focusNode(id) { var n = S.byId.get(id); if (n) { focus(n.p); select(id); } }
+
+var isoIdx = -1;
+function nextIsolated() {
+  if (!S.isolated.length) return;
+  isoIdx = (isoIdx + 1) % S.isolated.length;
+  focusNode(S.isolated[isoIdx].id);
+}
+
+function load(j, name) {
+  S.doc = j;
+  var d = norm(j);
+  S.map = d.map; S.nodes = d.nodes; S.edges = d.edges; S.features = d.features; S.lines = d.lines;
+  buildIndex();
+  fit();
+  // sidebar
+  el("mapsec").style.display = "block";
+  el("valsec").style.display = "block";
+  el("featsec").style.display = "block";
+  el("m-name").textContent = d.map.name || "（无名）";
+  el("m-fp").textContent = d.map.fingerprint || "-";
+  el("m-src").textContent = (d.map.source || "-") + (d.legacy ? " (旧格式)" : "");
+  el("m-cnt").textContent = S.nodes.length + " / " + S.edges.length;
+  var b = bbox();
+  el("m-bbox").textContent = fmt(b[0][0],0) + ".." + fmt(b[1][0],0) + " , " + fmt(b[0][2],0) + ".." + fmt(b[1][2],0);
+  el("m-idchk").textContent = S.idBad ? ("不一致 " + S.idBad + " 个") : "OK";
+  el("m-idchk").style.color = S.idBad ? "#ff4d4f" : "#3ddc84";
+  el("top").innerHTML = "<b>" + (d.map.name || name) + "</b> &nbsp;" +
+    "<span class='pill'>" + S.nodes.length + " 节点</span> " +
+    "<span class='pill'>" + S.edges.length + " 边</span> " +
+    "<span class='pill'>" + S.features.length + " 特征</span>";
+  issues();
+  // feature list
+  var list = el("list");
+  list.innerHTML = "";
+  var counts = {};
+  S.features.forEach(function (f) { counts[f.kind] = (counts[f.kind] || 0) + 1; });
+  Object.keys(counts).forEach(function (k) {
+    var row = document.createElement("div");
+    row.className = "row";
+    row.innerHTML = "<span>" + k + "</span><span class='n'>" + counts[k] + "</span>";
+    row.onclick = function () {
+      var f = S.features.filter(function (x) { return x.kind === k; })[0];
+      if (f) focus(f.p);
+    };
+    list.appendChild(row);
+  });
+  var lg = el("legend");
+  lg.innerHTML = "<div class='r'><span class='dot' style='background:#cdd6ff'></span>可走</div>" +
+    "<div class='r'><span class='dot' style='background:#ff9a2e'></span>带 tag</div>" +
+    "<div class='r'><span class='dot' style='background:#ff3b30'></span>不可走</div>";
+  render();
+}
+
+function readFile(f) {
+  var r = new FileReader();
+  r.onload = function () {
+    try {
+      var j = JSON.parse(r.result);
+      load(j, f.name);
+    } catch (e) {
+      alert("解析失败: " + e.message);
+    }
+  };
+  r.readAsText(f, "utf-8");
+}
+
+el("drop").onclick = function () { el("file").click(); };
+el("file").onchange = function (e) { if (e.target.files[0]) readFile(e.target.files[0]); };
+["dragenter","dragover"].forEach(function (k) {
+  el("drop").addEventListener(k, function (e) { e.preventDefault(); el("drop").classList.add("hot"); });
+});
+["dragleave","drop"].forEach(function (k) {
+  el("drop").addEventListener(k, function (e) { e.preventDefault(); el("drop").classList.remove("hot"); });
+});
+el("drop").addEventListener("drop", function (e) {
+  if (e.dataTransfer.files[0]) readFile(e.dataTransfer.files[0]);
+});
+document.addEventListener("dragover", function (e) { e.preventDefault(); });
+document.addEventListener("drop", function (e) {
+  e.preventDefault();
+  if (e.dataTransfer.files[0]) readFile(e.dataTransfer.files[0]);
+});
+
+var drag = null;
+CV.addEventListener("mousedown", function (e) {
+  if (e.button === 0) { drag = { x:e.clientX, y:e.clientY, cx:S.view.cx, cz:S.view.cz, moved:false }; }
+});
+window.addEventListener("mousemove", function (e) {
+  var r = CV.getBoundingClientRect();
+  S.mouse.x = e.clientX - r.left; S.mouse.y = e.clientY - r.top;
+  S.mouse.wx = wx(S.mouse.x); S.mouse.wz = wz(S.mouse.y);
+  if (drag) {
+    var dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+    if (Math.abs(dx) + Math.abs(dy) > 3) drag.moved = true;
+    S.view.cx = drag.cx - dx / S.view.s;
+    S.view.cz = drag.cz - dy / S.view.s;
+    render();
+  } else if (S.nodes.length) {
+    drawHud();
+  }
+});
+window.addEventListener("mouseup", function (e) {
+  if (drag && !drag.moved && e.button === 0) {
+    var r = CV.getBoundingClientRect();
+    var n = pick(e.clientX - r.left, e.clientY - r.top);
+    select(n ? n.id : null);
+  }
+  drag = null;
+});
+CV.addEventListener("wheel", function (e) {
+  e.preventDefault();
+  var r = CV.getBoundingClientRect();
+  var mx = e.clientX - r.left, my = e.clientY - r.top;
+  var before = { x: wx(mx), z: wz(my) };
+  var k = e.deltaY < 0 ? 1.15 : 1 / 1.15;
+  S.view.s = Math.max(0.05, Math.min(120, S.view.s * k));
+  S.view.cx += before.x - wx(mx);
+  S.view.cz += before.z - wz(my);
+  render();
+}, { passive:false });
+CV.addEventListener("dblclick", function (e) {
+  var r = CV.getBoundingClientRect();
+  var n = pick(e.clientX - r.left, e.clientY - r.top);
+  if (n) { S.view.cx = n.p[0]; S.view.cz = n.p[2]; S.view.s = Math.max(S.view.s, 6); select(n.id); }
+});
+window.addEventListener("keydown", function (e) {
+  if (e.target.tagName === "INPUT") return;
+  if (e.key === "f" || e.key === "F") { fit(); }
+  else if (e.key === "g" || e.key === "G") { nextIsolated(); }
+  else if (e.key === "Escape") { select(null); }
+  else if (e.key === " ") { e.preventDefault(); fit(); }
+});
+
+Array.prototype.forEach.call(document.querySelectorAll("#side input[type=checkbox]"), function (c) {
+  c.addEventListener("change", render);
+});
+
+resize();
+
+// 允许用 ?data=<url> 直接打开
+(function () {
+  var m = /[?&]data=([^&]+)/.exec(location.search);
+  if (!m) return;
+  fetch(decodeURIComponent(m[1])).then(function (r) { return r.json(); }).then(function (j) {
+    load(j, decodeURIComponent(m[1]).split("/").pop());
+  }).catch(function () {});
+})();
+
+window.NAVVIEW = { load: load, S: S, nodeId: nodeId };
+</script>
+</body>
+</html>
