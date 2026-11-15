@@ -1,0 +1,324 @@
+// navfix.c - build A* PointGraph waypoints for maps that have none (e.g. hidden map level9)
+#include <windows.h>
+#include <stdio.h>
+#include <string.h>
+#include <stdarg.h>
+
+typedef void* P;
+typedef struct { float x, y, z; } V3;
+
+static HMODULE g_ga;
+static char g_log[MAX_PATH];
+static int g_ready;
+
+static void nlog(const char* fmt, ...) {
+  FILE* f = fopen(g_log, "a");
+  if (!f) return;
+  SYSTEMTIME st; GetLocalTime(&st);
+  fprintf(f, "%04d-%02d-%02d %02d:%02d:%02d [nav] ", st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond);
+  va_list ap; va_start(ap, fmt); vfprintf(f, fmt, ap); va_end(ap);
+  fprintf(f, "\n"); fclose(f);
+}
+
+static P (*i_domain_get)(void);
+static P (*i_domain_get_assemblies)(P,int*);
+static P (*i_assembly_get_image)(P);
+static const char* (*i_image_get_name)(P);
+static P (*i_class_from_name)(P,const char*,const char*);
+static P (*i_class_get_field_from_name)(P,const char*);
+static void (*i_field_static_get_value)(P,void*);
+static void (*i_wbarrier)(P,P,P);
+static P (*i_object_new)(P);
+static P (*i_string_new)(const char*);
+static P (*i_thread_attach)(P);
+static const char* (*i_class_get_name)(P);
+
+#define RVA(x) ((void*)((char*)g_ga + (unsigned)(x)))
+
+typedef unsigned char (*raycast_t)(V3, V3, void*, float, int, void*);
+typedef void (*ctor_str_t)(P, P, void*);
+typedef P    (*get_tr_t)(P, void*);
+typedef void (*set_pos_t)(P, V3, void*);
+typedef void (*set_parent_t)(P, P, unsigned char, void*);
+typedef void (*scan_t)(P, void*);
+
+static P g_goCls;
+static P g_astarCls;
+static P g_crouchCls;
+static P (*i_class_get_type)(P);
+static P (*i_type_get_object)(P);
+
+static P find_image(const char* name) {
+  int n = 0;
+  P arr = i_domain_get_assemblies(i_domain_get(), &n);
+  if (!arr) return 0;
+  for (int i = 0; i < n; i++) {
+    P asm_ = *(P*)((char*)arr + 0x10 + i*4);
+    P img = i_assembly_get_image(asm_);
+    if (img && strcmp(i_image_get_name(img), name) == 0) return img;
+  }
+  return 0;
+}
+
+static P astar_active(void) {
+  if (!g_astarCls) return 0;
+  static P f = 0;
+  if (!f) f = i_class_get_field_from_name(g_astarCls, "active");
+  if (!f) return 0;
+  P v = 0;
+  i_field_static_get_value(f, &v);
+  return v;
+}
+
+static P point_graph(P astar) {
+  if (!astar) return 0;
+  P data = *(P*)((char*)astar + 0x10);
+  if (!data) return 0;
+  P graphs = *(P*)((char*)data + 0x20);
+  if (!graphs) return 0;
+  int n = *(int*)((char*)graphs + 0xC);
+  P pg = 0;
+  for (int i = 0; i < n; i++) {
+    P g = *(P*)((char*)graphs + 0x10 + i*4);
+    if (!g) continue;
+    P k = *(P*)g;
+    const char* cn = k ? i_class_get_name(k) : 0;
+    if (cn && strcmp(cn, "PointGraph") == 0) pg = g;
+  }
+  return pg;
+}
+
+static void build_waypoints(void) {
+  P astar = astar_active();
+  if (!astar) { nlog("no AstarPath.active"); return; }
+  P pg = point_graph(astar);
+  if (!pg) { nlog("no PointGraph in scene"); return; }
+  int before = *(int*)((char*)pg + 0xEC);
+  if (before > 0) { nlog("point graph already has %d nodes, skip", before); return; }
+  if (!g_goCls) { nlog("GameObject class missing"); return; }
+
+  raycast_t rc = (raycast_t)RVA(0xABB0A0);
+  char hit[96];
+  float minX = 1e9f, maxX = -1e9f, minZ = 1e9f, maxZ = -1e9f;
+  int ch = 0;
+  for (float x = -250.0f; x <= 250.0f; x += 20.0f)
+    for (float z = -250.0f; z <= 250.0f; z += 20.0f) {
+      V3 o = { x, 300.0f, z }, d = { 0.0f, -1.0f, 0.0f };
+      if (!rc(o, d, hit, 700.0f, 1, 0)) continue;
+      if (*(float*)(hit + 16) < 0.6f) continue;
+      ch++;
+      float hx = *(float*)hit, hz = *(float*)(hit + 8);
+      if (hx < minX) minX = hx; if (hx > maxX) maxX = hx;
+      if (hz < minZ) minZ = hz; if (hz > maxZ) maxZ = hz;
+    }
+  nlog("coarse hits=%d bounds x[%.1f,%.1f] z[%.1f,%.1f]", ch, minX, maxX, minZ, maxZ);
+  if (ch < 8) { nlog("too few ground hits, retry later"); return; }
+
+  ctor_str_t ctor = (ctor_str_t)RVA(0x331EA0);
+  get_tr_t gtr = (get_tr_t)RVA(0x332010);
+  set_pos_t sp = (set_pos_t)RVA(0x3F4840);
+  set_parent_t sparent = (set_parent_t)RVA(0x3F3AB0);
+
+  P root = i_object_new(g_goCls);
+  ctor(root, i_string_new("UCF_WayPoints"), 0);
+  P rootTr = gtr(root, 0);
+  V3 zero = { 0, 0, 0 };
+  sp(rootTr, zero, 0);
+
+  P childName = i_string_new("wp");
+  int made = 0;
+  for (float x = minX - 4.0f; x <= maxX + 4.0f; x += 4.0f)
+    for (float z = minZ - 4.0f; z <= maxZ + 4.0f; z += 4.0f) {
+      V3 o = { x, 300.0f, z }, d = { 0.0f, -1.0f, 0.0f };
+      if (!rc(o, d, hit, 700.0f, 1, 0)) continue;
+      if (*(float*)(hit + 16) < 0.65f) continue;
+      P c = i_object_new(g_goCls);
+      ctor(c, childName, 0);
+      P t = gtr(c, 0);
+      V3 pos = { *(float*)hit, *(float*)(hit + 4) + 0.2f, *(float*)(hit + 8) };
+      sp(t, pos, 0);
+      sparent(t, rootTr, 0, 0);
+      made++;
+    }
+  nlog("waypoint objects created=%d", made);
+  if (made < 8) { nlog("waypoints too few, abort"); return; }
+
+  if (i_wbarrier) i_wbarrier(pg, (char*)pg + 0xB8, rootTr);
+  *(P*)((char*)pg + 0xB8) = rootTr;
+  /* ---- AI 行为点位：蹲守点 (Bot_CrouchPos)，仅当这张图没有任何蹲守点时补 ---- */
+  if (g_crouchCls && i_class_get_type && i_type_get_object) {
+    P spareField = i_class_get_field_from_name(g_crouchCls, "SpareList_BL");
+    P spareList = 0;
+    if (spareField) i_field_static_get_value(spareField, &spareList);
+    int existing = spareList ? *(int*)((char*)spareList + 0xC) : -1;
+    {
+      extern int editor_crouch_made(void);
+      int own = editor_crouch_made();
+      nlog("crouch: existing SpareList_BL count=%d (editor-made=%d)", existing, own);
+      if (existing > 0 && own > 0) existing -= own;
+    }
+    if (existing <= 0) {  /* null list (cctor not run yet) or empty -> map has none */
+      P typeObj = i_type_get_object(i_class_get_type(g_crouchCls));
+      typedef P (*addcomp_t)(P, P, void*);
+      addcomp_t addComp = (addcomp_t)RVA(0x331A90);
+      P nameStr = i_string_new("CrouchPos");
+      int made2 = 0;
+      for (float cx = minX - 2.0f; cx <= maxX + 2.0f; cx += 9.0f)
+        for (float cz = minZ - 2.0f; cz <= maxZ + 2.0f; cz += 9.0f) {
+          V3 o = { cx, 300.0f, cz }, d = { 0.0f, -1.0f, 0.0f };
+          if (!rc(o, d, hit, 700.0f, 1, 0)) continue;
+          if (*(float*)(hit + 16) < 0.8f) continue;
+          P co = i_object_new(g_goCls);
+          ctor(co, nameStr, 0);
+          P comp = addComp(co, typeObj, 0);
+          if (!comp) continue;
+          P ct = gtr(co, 0);
+          V3 cpos = { *(float*)hit, *(float*)(hit + 4) + 0.05f, *(float*)(hit + 8) };
+          sp(ct, cpos, 0);
+          made2++;
+        }
+      P spareList2 = 0;
+      if (spareField) i_field_static_get_value(spareField, &spareList2);
+      int now = spareList2 ? *(int*)((char*)spareList2 + 0xC) : -1;
+      nlog("crouch: created=%d registered=%d", made2, now);
+    }
+  }
+
+  /* connections are only created for nodes within maxDistance; 4m grid needs > 4 */
+  *(float*)((char*)pg + 0xC0) = 6.0f;
+
+  scan_t scan = (scan_t)RVA(0x581640);
+  scan(pg, 0);
+  nlog("scan done: nodes=%d (was %d)", *(int*)((char*)pg + 0xEC), before);
+
+  /* ScanInternal only creates nodes; ConnectNodes() builds the actual links */
+  {
+    typedef void (*connect_t)(P, void*);
+    connect_t connectNodes = (connect_t)RVA(0x5EE8E0);
+    connectNodes(pg, 0);
+    P nodes = *(P*)((char*)pg + 0xE8);
+    int cnt2 = nodes ? *(int*)((char*)nodes + 0xC) : 0;
+    int withLinks = 0, totalLinks = 0, sampleN = cnt2 < 300 ? cnt2 : 300;
+    for (int i = 0; i < sampleN; i++) {
+      P nd = *(P*)((char*)nodes + 0x10 + i*4);
+      if (!nd) continue;
+      P cc = *(P*)((char*)nd + 0x20);
+      if (cc) { int L = *(int*)((char*)cc + 0xC); if (L > 0) withLinks++; totalLinks += L; }
+    }
+    nlog("connected: sampled=%d withLinks=%d totalLinks=%d", sampleN, withLinks, totalLinks);
+  }
+}
+
+static WNDPROC g_oldProc;
+static HWND g_hwnd;
+static volatile LONG g_buildCount;
+
+static LRESULT CALLBACK NavProc(HWND h, UINT msg, WPARAM w, LPARAM l) {
+  if (msg == WM_APP + 0x51) {
+    if (!g_oldProc) return 0;
+    InterlockedIncrement(&g_buildCount);
+    nlog("build request #%d", g_buildCount);
+    build_waypoints();
+    return 0;
+  }
+  if (msg == WM_APP + 0x52) {
+    void editor_on_scene(void*);
+    editor_on_scene((void*)w);
+    return 0;
+  }
+  if (msg == WM_APP + 0x53) {   /* headless editor key: wParam = virtual key */
+    void editor_on_key_any(unsigned);
+    editor_on_key_any((unsigned)w);
+    return 0;
+  }
+  if (msg == WM_KEYDOWN) {
+    if (GetAsyncKeyState(VK_CONTROL) & 0x8000) {
+      void editor_on_key(unsigned);
+      editor_on_key((unsigned)w);
+    }
+  }
+  return CallWindowProcA(g_oldProc, h, msg, w, l);
+}
+
+typedef struct { DWORD pid; HWND hwnd; } FindCtx;
+static BOOL CALLBACK EnumProc(HWND h, LPARAM lp) {
+  FindCtx* c = (FindCtx*)lp;
+  DWORD pid = 0;
+  GetWindowThreadProcessId(h, &pid);
+  if (pid != c->pid) return TRUE;
+  if (!IsWindowVisible(h)) return TRUE;
+  if (GetWindowTextLengthA(h) == 0) return TRUE;
+  RECT r; GetClientRect(h, &r);
+  if (r.right - r.left < 200) return TRUE;
+  c->hwnd = h;
+  return FALSE;
+}
+
+static HWND find_window(void) {
+  FindCtx c; c.pid = GetCurrentProcessId(); c.hwnd = 0;
+  EnumWindows(EnumProc, (LPARAM)&c);
+  return c.hwnd;
+}
+
+static DWORD WINAPI nav_worker(LPVOID x) {
+  for (int i = 0; i < 600 && !g_ga; i++) { g_ga = GetModuleHandleA("GameAssembly.dll"); if (!g_ga) Sleep(200); }
+  if (!g_ga) { nlog("GameAssembly not found"); return 0; }
+#define RE(n) *(void**)&i_##n = GetProcAddress(g_ga, "il2cpp_" #n)
+  RE(domain_get); RE(domain_get_assemblies); RE(assembly_get_image); RE(image_get_name);
+  RE(class_from_name); RE(class_get_field_from_name); RE(field_static_get_value);
+  RE(object_new); RE(string_new); RE(thread_attach); RE(class_get_name);
+  *(void**)&i_wbarrier = GetProcAddress(g_ga, "il2cpp_gc_wbarrier_set_field");
+  *(void**)&i_class_get_type = GetProcAddress(g_ga, "il2cpp_class_get_type");
+  *(void**)&i_type_get_object = GetProcAddress(g_ga, "il2cpp_type_get_object");
+#undef RE
+  if (!i_domain_get || !i_class_from_name) { nlog("il2cpp exports missing"); return 0; }
+  for (int i = 0; i < 600; i++) { if (i_domain_get()) break; Sleep(200); }
+  if (!i_domain_get()) { nlog("domain not ready"); return 0; }
+  if (i_thread_attach) i_thread_attach(i_domain_get());
+
+  P imgUE = find_image("UnityEngine.CoreModule.dll");
+  if (imgUE) g_goCls = i_class_from_name(imgUE, "UnityEngine", "GameObject");
+  {
+    P imgCS = find_image("Assembly-CSharp.dll");
+    if (imgCS) g_crouchCls = i_class_from_name(imgCS, "", "Bot_CrouchPos");
+  }
+  int n = 0; P arr = i_domain_get_assemblies(i_domain_get(), &n);
+  for (int i = 0; i < n && !g_astarCls; i++) {
+    P asm_ = *(P*)((char*)arr + 0x10 + i*4);
+    P img = i_assembly_get_image(asm_);
+    if (!img) continue;
+    g_astarCls = i_class_from_name(img, "", "AstarPath");
+  }
+  nlog("ready: GameObject=%p AstarPath=%p", g_goCls, g_astarCls);
+  if (!g_goCls || !g_astarCls) return 0;
+
+  for (int i = 0; i < 200 && !g_hwnd; i++) { g_hwnd = find_window(); if (!g_hwnd) Sleep(300); }
+  if (!g_hwnd) { nlog("game window not found"); return 0; }
+  g_oldProc = (WNDPROC)SetWindowLongPtrA(g_hwnd, GWLP_WNDPROC, (LONG_PTR)NavProc);
+  nlog("window hooked %p old=%p", g_hwnd, g_oldProc);
+  g_ready = 1;
+
+  P last = 0;
+  int zeroStreak = 0;
+  for (;;) {
+    P a = astar_active();
+    if (a && a != last) { last = a; zeroStreak = 0; nlog("scene astar=%p", a); PostMessageA(g_hwnd, WM_APP + 0x52, (WPARAM)a, 0); }
+    P pg = point_graph(a);
+    int nodes = pg ? *(int*)((char*)pg + 0xEC) : -1;
+    if (pg && nodes == 0) {
+      zeroStreak++;
+      if (zeroStreak == 4 || (zeroStreak > 4 && (zeroStreak % 10) == 0)) {
+        PostMessageA(g_hwnd, WM_APP + 0x51, 0, 0);
+      }
+    } else {
+      zeroStreak = 0;
+    }
+    Sleep(500);
+  }
+  return 0;
+}
+
+void navfix_start(const char* modDir) {
+  sprintf(g_log, "%s\\ucf_mod.log", modDir);
+  CreateThread(0, 0, nav_worker, 0, 0, 0);
+}

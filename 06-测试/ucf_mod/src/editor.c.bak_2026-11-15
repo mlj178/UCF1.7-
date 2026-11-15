@@ -1,0 +1,949 @@
+/* editor.c - ucf_mod in-game AI marker editor
+ *
+ * phase 1: crouch / nano guard pos / nano guard area placement + save/load
+ * phase 2: per-type colours, delete ANY marker near the crosshair, on-screen HUD
+ *
+ * Ctrl+1  toggle edit mode        Ctrl+2  place Bot_CrouchPos (crosshair ground)
+ * Ctrl+3  place Bot_NanoGuardPos  Ctrl+4  new Bot_NanoGuardArea
+ * Ctrl+5  undo last marker        Ctrl+6  save markers file
+ * Ctrl+7  reload markers file     Ctrl+8  team BL/GR for new crouch points
+ * Ctrl+9  status log              Ctrl+0  show/hide every marker visual
+ * Ctrl+Del remove the marker nearest the crosshair (within 3 m)
+ *
+ * Marker colours: crouch=red  nanopos=green  area=blue  jumplink=yellow
+ */
+#include <windows.h>
+#include <stdio.h>
+#include <string.h>
+#include <stdarg.h>
+#include <stdlib.h>
+#include <math.h>
+
+typedef void* P;
+typedef struct { float x, y, z; } V3;
+typedef struct { float x, y; } V2;
+typedef struct { float r, g, b, a; } COL;
+
+#define MAXM      600
+#define MAX_AID   64
+#define DEL_RADIUS 3.0f
+
+/* Nano guard area / position creation is DISABLED in this build.
+ * Reason (verified from GameAssembly decompilation on 2026-11-14):
+ *   Bot_NanoGuardArea.Awake() reads this.posList FIRST and only fills it
+ *   (GetComponentsInChildren + Init loop) when the field is non-null; a
+ *   runtime AddComponent() leaves it null, so the area stays registered but
+ *   posless -> Bot.Update throws NullReferenceException every frame.
+ *   Bot_NanoGuardPos.Init() additionally does List.AddRange(zoomPos) and
+ *   List.AddRange(area.entrancePos), both of which throw on null, and
+ *   GetRandomZoomPos() indexes zoomPos[0], so a pos needs >=1 zoom target.
+ * Re-enable only after posList / entrancePos / zoomPos are constructed properly. */
+#define ED_AREA_ENABLED 0
+
+static HMODULE g_ga;
+static char g_log[MAX_PATH];
+static char g_dir[MAX_PATH];
+static char g_file[MAX_PATH];
+static int  g_inited, g_initFail;
+static int  g_on, g_team, g_vis = 1;
+static int  g_n, g_areaCount, g_curArea = -1;
+static P    g_lastAstar;
+
+static P (*x_domain_get)(void);
+static P (*x_domain_get_assemblies)(P, int*);
+static P (*x_assembly_get_image)(P);
+static const char* (*x_image_get_name)(P);
+static P (*x_class_from_name)(P, const char*, const char*);
+static P (*x_class_get_type)(P);
+static P (*x_type_get_object)(P);
+static P (*x_object_new)(P);
+static P (*x_string_new)(const char*);
+static P (*x_thread_attach)(P);
+static P (*x_class_get_field_from_name)(P, const char*);
+static void (*x_field_static_get_value)(P, void*);
+
+static P g_goCls, g_camCls, g_colCls, g_boxCls, g_crouchCls, g_areaCls, g_posCls;
+static P g_colType, g_boxType, g_crouchType, g_areaType, g_posType;
+static P g_rendCls, g_rendType, g_textCls, g_textType, g_canvasCls, g_canvasType, g_fontCls, g_fontType;
+
+static P g_matCls;
+static P g_matProto;     /* working template material (game shader) */
+static P g_matSlot[5];   /* cached material per marker type 1..4    */
+static int g_matReady;
+
+static P g_hud;          /* UGUI Text component of the mode hint */
+static P g_hudGo;
+static P g_guiFont;      /* font borrowed from the game UI (has CJK glyphs) */
+static int g_cjk;        /* 1 = game font available, hint text in Chinese */
+static int g_tintLogged; /* one-shot material/shader diagnostic */
+
+#define RVA(x) ((void*)((char*)g_ga + (unsigned)(x)))
+
+#define R_GOCREATE    0x331AF0
+#define R_ADDCOMP     0x331A90
+#define R_GETCOMP     0x331C10
+#define R_CTOR_STR    0x331EA0
+#define R_GET_TR      0x332010
+#define R_SETACTIVE   0x331CF0
+#define R_SETLAYER    0x332040
+#define R_GETGO       0x32CEB0
+#define R_SET_POS     0x3F4840
+#define R_GET_POS_INJ 0x3F4280
+#define R_TDIR_INJ    0x3F3B70
+#define R_SET_SCALE   0x3F4730
+#define R_SET_PARENT  0x3F3AB0
+#define R_CAM_MAIN    0x328310
+#define R_DESTROY     0x4E9210
+#define R_IS_TRIGGER  0xAB86E0
+#define R_RAYCAST     0xABB0A0
+#define R_POS_INIT    0xB30E80
+/* phase 2: colours + HUD */
+#define R_REND_GETMAT  0x3E4BE0   /* Renderer.get_material  (instanced)      */
+#define R_REND_SHADOW  0x3E50C0   /* Renderer.set_shadowCastingMode(enum)    */
+#define R_MAT_HASPROP  0x4E1830   /* Material.HasProperty(string)            */
+#define R_MAT_SETCOL_S 0x4E18D0   /* Material.SetColor(string, Color)        */
+#define R_MAT_SETCOL   0x4E25C0   /* Material.set_color(Color)               */
+#define R_CANVAS_MODE  0xAC6D10   /* Canvas.set_renderMode                   */
+#define R_CANVAS_SORT  0xAC6DB0   /* Canvas.set_sortingOrder                 */
+#define R_TEXT_GETFONT 0x9621D0
+#define R_TEXT_SETFONT 0x9629D0
+#define R_TEXT_SETTEXT 0x962CE0
+#define R_TEXT_SETSIZE 0x962930
+#define R_TEXT_ALIGN   0x9628E0
+#define R_TEXT_HOVER   0x962AF0
+#define R_TEXT_VOVER   0x962DA0
+#define R_GRAPHIC_COL  0x321260   /* Graphic.set_color(Color)                */
+#define R_GRAPHIC_RAY  0x321340   /* Graphic.set_raycastTarget(bool)         */
+#define R_RT_AMIN      0x4F4AB0
+#define R_RT_AMAX      0x4F4A50
+#define R_RT_PIVOT     0x4F5030
+#define R_RT_APOS      0x4F4B90
+#define R_RT_SDELTA    0x4F5090
+#define R_FINDOBJ      0x4E95A0   /* Object.FindObjectOfType(Type, bool)     */
+#define R_RES_BUILTIN  0x3E5530   /* Resources.GetBuiltinResource(Type,str)  */
+#define R_MAT_GETSH   0x4E2590   /* Material.get_shader                     */
+#define R_SHADER_FIND 0x3E8A70   /* Shader.Find(string)                     */
+#define R_MAT_CTOR_SH 0x4E21F0   /* Material..ctor(Shader)                  */
+#define R_MAT_CTOR_MT 0x4E2170   /* Material..ctor(Material source)         */
+#define R_REND_GETSM  0x3E4C40   /* Renderer.get_sharedMaterial             */
+#define R_REND_SETSM  0x3E4CA0   /* Renderer.set_sharedMaterial             */
+#define R_OBJ_NAME    0x4EA1B0   /* Object.get_name                         */
+
+typedef unsigned char (*raycast_t)(V3, V3, void*, float, int, void*);
+typedef void (*ctor_str_t)(P, P, void*);
+typedef P    (*get_tr_t)(P, void*);
+typedef P    (*get_go_t)(P, void*);
+typedef void (*set_pos_t)(P, V3, void*);
+typedef void (*get_pos_t)(P, V3*, void*);
+typedef void (*tdir_t)(P, V3*, V3*, void*);
+typedef void (*set_parent_t)(P, P, unsigned char, void*);
+typedef void (*set_scale_t)(P, V3, void*);
+typedef void (*set_active_t)(P, unsigned char, void*);
+typedef void (*set_layer_t)(P, int, void*);
+typedef void (*set_trigger_t)(P, unsigned char, void*);
+typedef void (*destroy_t)(P, void*);
+typedef P    (*create_prim_t)(int, void*);
+typedef P    (*addcomp_t)(P, P, void*);
+typedef P    (*getcomp_t)(P, P, void*);
+typedef P    (*cam_main_t)(void*);
+typedef void (*pos_init_t)(P, P, void*);
+typedef P    (*get_mat_t)(P, void*);
+typedef void (*set_int1_t)(P, int, void*);
+typedef unsigned char (*has_prop_t)(P, P, void*);
+typedef void (*set_col_s_t)(P, P, COL, void*);
+typedef void (*set_col_t)(P, COL, void*);
+typedef P    (*find_obj_t)(P, unsigned char, void*);
+typedef P    (*builtin_t)(P, P, void*);
+typedef void (*set_txt_t)(P, P, void*);
+typedef P    (*get_font_t)(P, void*);
+typedef void (*set_font_t)(P, P, void*);
+typedef void (*set_v2_t)(P, V2, void*);
+typedef P    (*get_name_t)(P, void*);
+typedef P    (*get_shader_t)(P, void*);
+typedef P    (*shader_find_t)(P, void*);
+typedef void (*ctor_sh_t)(P, P, void*);
+typedef void (*ctor_mat_t)(P, P, void*);
+typedef P    (*get_shmat_t)(P, void*);
+typedef void (*set_shmat_t)(P, P, void*);
+
+typedef struct {
+  int type;     /* 1=crouch 2=nanopos 3=area 4=jumplink */
+  V3  p;
+  int aid;
+  int parent;
+  int prm;
+  P   go;
+  P   comp;
+  P   vis;
+} MK;
+
+static MK g_mk[MAXM];
+static P  g_aidMk[MAX_AID];
+
+/* marker type colours */
+static const COL COL_CROUCH = { 1.00f, 0.15f, 0.12f, 1.0f };  /* red    */
+static const COL COL_POS    = { 0.10f, 1.00f, 0.25f, 1.0f };  /* green  */
+static const COL COL_AREA   = { 0.15f, 0.40f, 1.00f, 1.0f };  /* blue   */
+static const COL COL_JUMP   = { 1.00f, 0.88f, 0.05f, 1.0f };  /* yellow */
+static const COL COL_WHITE  = { 1.00f, 1.00f, 1.00f, 1.0f };
+
+static void elog(const char* fmt, ...) {
+  FILE* f;
+  SYSTEMTIME st;
+  va_list ap;
+  if (!g_log[0]) return;
+  f = fopen(g_log, "a");
+  if (!f) return;
+  GetLocalTime(&st);
+  fprintf(f, "%04d-%02d-%02d %02d:%02d:%02d [edit] ", st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond);
+  va_start(ap, fmt);
+  vfprintf(f, fmt, ap);
+  va_end(ap);
+  fprintf(f, "\n");
+  fclose(f);
+}
+
+static P find_img(const char* name) {
+  int n = 0;
+  P arr;
+  int i;
+  if (!x_domain_get || !x_domain_get_assemblies) return 0;
+  arr = x_domain_get_assemblies(x_domain_get(), &n);
+  if (!arr) return 0;
+  for (i = 0; i < n; i++) {
+    P asm_ = *(P*)((char*)arr + 0x10 + i * 4);
+    P img = x_assembly_get_image(asm_);
+    if (img && strcmp(x_image_get_name(img), name) == 0) return img;
+  }
+  return 0;
+}
+
+static P find_cls(const char* ns, const char* name) {
+  int n = 0;
+  P arr;
+  int i;
+  if (!x_domain_get) return 0;
+  arr = x_domain_get_assemblies(x_domain_get(), &n);
+  if (!arr) return 0;
+  for (i = 0; i < n; i++) {
+    P asm_ = *(P*)((char*)arr + 0x10 + i * 4);
+    P img = x_assembly_get_image(asm_);
+    P c;
+    if (!img) continue;
+    c = x_class_from_name(img, ns, name);
+    if (c) return c;
+  }
+  return 0;
+}
+
+#define RESOLVE(n) do { *(void**)&x_##n = GetProcAddress(g_ga, "il2cpp_" #n); } while (0)
+
+static int ed_init(void) {
+  if (g_inited) return 1;
+  if (!g_ga) g_ga = GetModuleHandleA("GameAssembly.dll");
+  if (!g_ga) return 0;
+  if (g_initFail) return 0;
+
+  RESOLVE(domain_get);
+  RESOLVE(domain_get_assemblies);
+  RESOLVE(assembly_get_image);
+  RESOLVE(image_get_name);
+  RESOLVE(class_from_name);
+  RESOLVE(class_get_type);
+  RESOLVE(type_get_object);
+  RESOLVE(object_new);
+  RESOLVE(string_new);
+  RESOLVE(thread_attach);
+  RESOLVE(class_get_field_from_name);
+  RESOLVE(field_static_get_value);
+  if (!x_domain_get || !x_object_new || !x_string_new || !x_class_from_name || !x_class_get_type) {
+    g_initFail = 1;
+    elog("il2cpp exports missing");
+    return 0;
+  }
+  if (!x_domain_get()) return 0;
+  if (x_thread_attach) x_thread_attach(x_domain_get());
+
+  g_goCls = find_cls("UnityEngine", "GameObject");
+  g_camCls = find_cls("UnityEngine", "Camera");
+  g_colCls = find_cls("UnityEngine", "Collider");
+  g_boxCls = find_cls("UnityEngine", "BoxCollider");
+  g_crouchCls = find_cls("", "Bot_CrouchPos");
+  g_areaCls = find_cls("", "Bot_NanoGuardArea");
+  g_posCls = find_cls("", "Bot_NanoGuardPos");
+  g_rendCls = find_cls("UnityEngine", "Renderer");
+  g_matCls = find_cls("UnityEngine", "Material");
+  g_textCls = find_cls("UnityEngine.UI", "Text");
+  g_canvasCls = find_cls("UnityEngine", "Canvas");
+  g_fontCls = find_cls("UnityEngine", "Font");
+
+  if (g_colCls) g_colType = x_type_get_object(x_class_get_type(g_colCls));
+  if (g_boxCls) g_boxType = x_type_get_object(x_class_get_type(g_boxCls));
+  if (g_crouchCls) g_crouchType = x_type_get_object(x_class_get_type(g_crouchCls));
+  if (g_areaCls) g_areaType = x_type_get_object(x_class_get_type(g_areaCls));
+  if (g_posCls) g_posType = x_type_get_object(x_class_get_type(g_posCls));
+  if (g_rendCls) g_rendType = x_type_get_object(x_class_get_type(g_rendCls));
+  if (g_textCls) g_textType = x_type_get_object(x_class_get_type(g_textCls));
+  if (g_canvasCls) g_canvasType = x_type_get_object(x_class_get_type(g_canvasCls));
+  if (g_fontCls) g_fontType = x_type_get_object(x_class_get_type(g_fontCls));
+
+  g_inited = 1;
+  elog("init: GameObject=%p Camera=%p Collider=%p Box=%p crouch=%p area=%p pos=%p renderer=%p text=%p canvas=%p font=%p",
+       g_goCls, g_camCls, g_colCls, g_boxCls, g_crouchCls, g_areaCls, g_posCls, g_rendCls, g_textCls, g_canvasCls, g_fontCls);
+  if (!g_goCls || !g_camCls || !g_crouchType || !g_areaType || !g_posType) {
+    elog("init: REQUIRED class missing - editor disabled");
+    g_initFail = 1;
+    return 0;
+  }
+  return 1;
+}
+
+static P get_tr(P go) { return go ? ((get_tr_t)RVA(R_GET_TR))(go, 0) : 0; }
+static P new_go(const char* name) {
+  P go = x_object_new(g_goCls);
+  if (!go) return 0;
+  ((ctor_str_t)RVA(R_CTOR_STR))(go, x_string_new(name), 0);
+  return go;
+}
+
+static int cam_ray(V3* cpos, V3* fwd) {
+  P cam, go, tr;
+  V3 dir;
+  cam = ((cam_main_t)RVA(R_CAM_MAIN))(0);
+  if (!cam) return 0;
+  go = ((get_go_t)RVA(R_GETGO))(cam, 0);
+  tr = get_tr(go);
+  if (!tr) return 0;
+  ((get_pos_t)RVA(R_GET_POS_INJ))(tr, cpos, 0);
+  dir.x = 0.0f; dir.y = 0.0f; dir.z = 1.0f;
+  ((tdir_t)RVA(R_TDIR_INJ))(tr, &dir, fwd, 0);
+  return 1;
+}
+
+static int cam_point(V3* out) {
+  P cam, go, tr;
+  V3 pos, dir, fw;
+  char hit[128];
+  raycast_t rc = (raycast_t)RVA(R_RAYCAST);
+  cam = ((cam_main_t)RVA(R_CAM_MAIN))(0);
+  if (!cam) return 0;
+  go = ((get_go_t)RVA(R_GETGO))(cam, 0);
+  tr = get_tr(go);
+  if (!tr) return 0;
+  ((get_pos_t)RVA(R_GET_POS_INJ))(tr, &pos, 0);
+  dir.x = 0.0f; dir.y = 0.0f; dir.z = 1.0f;
+  ((tdir_t)RVA(R_TDIR_INJ))(tr, &dir, &fw, 0);
+  pos.x += fw.x * 0.4f; pos.y += fw.y * 0.4f; pos.z += fw.z * 0.4f;
+  if (rc(pos, fw, hit, 300.0f, 1, 0)) { *out = *(V3*)hit; return 1; }
+  dir.x = 0.0f; dir.y = -1.0f; dir.z = 0.0f;
+  if (rc(pos, dir, hit, 120.0f, 1, 0)) { *out = *(V3*)hit; return 1; }
+  return 0;
+}
+
+/* ---- per-type colour ---------------------------------------------------- */
+static void str_ascii(P s, char* out, int cap) {
+  int i, n;
+  if (!s || cap <= 0) { if (cap > 0) out[0] = 0; return; }
+  n = *(int*)((char*)s + 0x08);
+  if (n < 0) n = 0;
+  if (n > cap - 1) n = cap - 1;
+  for (i = 0; i < n; i++) {
+    unsigned short ch = *(unsigned short*)((char*)s + 0x0C + i * 2);
+    out[i] = (ch > 0 && ch < 128) ? (char)ch : '?';
+  }
+  out[n] = 0;
+}
+
+static const COL* col_of(int slot) {
+  switch (slot) {
+    case 1: return &COL_CROUCH;
+    case 2: return &COL_POS;
+    case 3: return &COL_AREA;
+    case 4: return &COL_JUMP;
+    default: return &COL_WHITE;
+  }
+}
+
+static int mat_usable(P m) {
+  has_prop_t hasProp = (has_prop_t)RVA(R_MAT_HASPROP);
+  if (!m) return 0;
+  return hasProp(m, x_string_new("_BaseColor"), 0) || hasProp(m, x_string_new("_Color"), 0);
+}
+
+/* The runtime primitive ships with Hidden/InternalErrorShader (the build stripped
+ * Unity's default material), so every marker gets a material we build ourselves. */
+static int mat_setup(void) {
+  static const char* cand[] = {
+    "Universal Render Pipeline/Unlit",
+    "Universal Render Pipeline/Lit",
+    "Universal Render Pipeline/Simple Lit",
+    "Sprites/Default",
+    "Unlit/Color",
+    "Standard",
+    "Legacy Shaders/Diffuse",
+    "Hidden/Internal-Colored"
+  };
+  int i;
+  if (g_matReady) return 1;
+  if (!g_matCls) { elog("mat: no Material class"); return 0; }
+  for (i = 0; i < (int)(sizeof(cand) / sizeof(cand[0])); i++) {
+    P sh = ((shader_find_t)RVA(R_SHADER_FIND))(x_string_new(cand[i]), 0);
+    P m;
+    if (!sh) continue;
+    m = x_object_new(g_matCls);
+    if (!m) continue;
+    ((ctor_sh_t)RVA(R_MAT_CTOR_SH))(m, sh, 0);
+    if (mat_usable(m)) {
+      g_matProto = m;
+      g_matReady = 1;
+      elog("mat: using shader '%s' (candidate #%d)", cand[i], i);
+      return 1;
+    }
+  }
+  if (g_rendType) {   /* fallback: clone a material the scene already renders with */
+    P any = ((find_obj_t)RVA(R_FINDOBJ))(g_rendType, 1, 0);
+    P src = any ? ((get_shmat_t)RVA(R_REND_GETSM))(any, 0) : 0;
+    if (src && mat_usable(src)) {
+      P m = x_object_new(g_matCls);
+      if (m) {
+        char nm[96];
+        ((ctor_mat_t)RVA(R_MAT_CTOR_MT))(m, src, 0);
+        g_matProto = m;
+        g_matReady = 1;
+        str_ascii(((get_name_t)RVA(R_OBJ_NAME))(src, 0), nm, sizeof(nm));
+        elog("mat: cloned scene material '%s'", nm);
+        return 1;
+      }
+    }
+  }
+  elog("mat: no usable shader - markers stay invisible");
+  return 0;
+}
+
+static P mat_for(int slot) {
+  COL c;
+  P m;
+  has_prop_t hasProp;
+  set_col_s_t setColS;
+  if (slot < 0 || slot > 4) slot = 0;
+  if (g_matSlot[slot]) return g_matSlot[slot];
+  if (!g_matReady && !mat_setup()) return 0;
+  c = *col_of(slot);
+  m = x_object_new(g_matCls);
+  if (!m) return 0;
+  ((ctor_mat_t)RVA(R_MAT_CTOR_MT))(m, g_matProto, 0);
+  hasProp = (has_prop_t)RVA(R_MAT_HASPROP);
+  setColS = (set_col_s_t)RVA(R_MAT_SETCOL_S);
+  if (hasProp(m, x_string_new("_BaseColor"), 0)) setColS(m, x_string_new("_BaseColor"), c, 0);
+  if (hasProp(m, x_string_new("_Color"), 0)) setColS(m, x_string_new("_Color"), c, 0);
+  g_matSlot[slot] = m;
+  return m;
+}
+
+static void tint(P go, int slot) {
+  P rend, mat;
+  if (!go || !g_rendType) return;
+  rend = ((getcomp_t)RVA(R_GETCOMP))(go, g_rendType, 0);
+  if (!rend) return;
+  ((set_int1_t)RVA(R_REND_SHADOW))(rend, 0, 0);      /* no shadows */
+  mat = mat_for(slot);
+  if (mat) {
+    ((set_shmat_t)RVA(R_REND_SETSM))(rend, mat, 0);
+    if (!g_tintLogged) {
+      char mn[96], sn[96];
+      P sh = ((get_shader_t)RVA(R_MAT_GETSH))(mat, 0);
+      str_ascii(((get_name_t)RVA(R_OBJ_NAME))(mat, 0), mn, sizeof(mn));
+      if (sh) str_ascii(((get_name_t)RVA(R_OBJ_NAME))(sh, 0), sn, sizeof(sn)); else strcpy(sn, "<null>");
+      elog("tint: slot=%d material='%s' shader='%s'", slot, mn, sn);
+      g_tintLogged = 1;
+    }
+    return;
+  }
+  mat = ((get_mat_t)RVA(R_REND_GETMAT))(rend, 0);
+  if (mat) ((set_col_t)RVA(R_MAT_SETCOL))(mat, *col_of(slot), 0);
+}
+
+static P spawn_vis(V3 p, float s, int slot) {
+  P go, tr, col;
+  V3 sc = { s, s, s }, up = { p.x, p.y + 0.45f, p.z };
+  if (!g_vis) return 0;
+  go = ((create_prim_t)RVA(R_GOCREATE))(0, 0);
+  if (!go) return 0;
+  /* layer must be inside Camera.cullingMask (measured 0x1f3 - layer 2 "Ignore
+   * Raycast" is NOT included, which made phase-1 markers invisible) */
+  ((set_layer_t)RVA(R_SETLAYER))(go, 0, 0);
+  tr = get_tr(go);
+  if (tr) {
+    ((set_scale_t)RVA(R_SET_SCALE))(tr, sc, 0);
+    ((set_pos_t)RVA(R_SET_POS))(tr, up, 0);
+  }
+  if (g_colType) {
+    col = ((getcomp_t)RVA(R_GETCOMP))(go, g_colType, 0);
+    if (col) ((destroy_t)RVA(R_DESTROY))(col, 0);
+  }
+  tint(go, slot);
+  return go;
+}
+
+/* ---- on-screen mode hint ------------------------------------------------ */
+static int hud_init(void) {
+  P canvasGo, canvasTr, txtGo, tr, comp;
+  V2 v;
+  if (g_hud) return 1;
+  if (!g_textType || !g_canvasType) { elog("hud: UGUI Text/Canvas class missing"); return 0; }
+
+  if (!g_guiFont && g_textType) {
+    P any = ((find_obj_t)RVA(R_FINDOBJ))(g_textType, 1, 0);
+    if (any) {
+      g_guiFont = ((get_font_t)RVA(R_TEXT_GETFONT))(any, 0);
+      if (g_guiFont) g_cjk = 1;
+    }
+  }
+  if (!g_guiFont && g_fontType) {
+    P p1 = x_string_new("Arial.ttf"), p2 = x_string_new("LegacyRuntime.ttf");
+    g_guiFont = ((builtin_t)RVA(R_RES_BUILTIN))(g_fontType, p1, 0);
+    if (!g_guiFont) g_guiFont = ((builtin_t)RVA(R_RES_BUILTIN))(g_fontType, p2, 0);
+  }
+  if (!g_guiFont) { elog("hud: no usable font"); return 0; }
+
+  canvasGo = new_go("UCF_HUD");
+  if (!canvasGo) { elog("hud: canvas go failed"); return 0; }
+  comp = ((addcomp_t)RVA(R_ADDCOMP))(canvasGo, g_canvasType, 0);
+  if (!comp) { elog("hud: Canvas AddComponent failed"); return 0; }
+  ((set_int1_t)RVA(R_CANVAS_MODE))(comp, 0, 0);            /* ScreenSpaceOverlay */
+  ((set_int1_t)RVA(R_CANVAS_SORT))(comp, 30000, 0);
+  canvasTr = get_tr(canvasGo);
+
+  txtGo = new_go("UCF_HUD_Text");
+  if (!txtGo) { elog("hud: text go failed"); return 0; }
+  comp = ((addcomp_t)RVA(R_ADDCOMP))(txtGo, g_textType, 0);
+  if (!comp) { elog("hud: Text AddComponent failed"); return 0; }
+  tr = get_tr(txtGo);
+  if (canvasTr && tr) ((set_parent_t)RVA(R_SET_PARENT))(tr, canvasTr, 0, 0);
+
+  v.x = 0.0f; v.y = 1.0f;
+  ((set_v2_t)RVA(R_RT_AMIN))(tr, v, 0);
+  ((set_v2_t)RVA(R_RT_AMAX))(tr, v, 0);      /* top-left anchored */
+  v.x = 0.0f; v.y = 1.0f;
+  ((set_v2_t)RVA(R_RT_PIVOT))(tr, v, 0);
+  v.x = 14.0f; v.y = -10.0f;
+  ((set_v2_t)RVA(R_RT_APOS))(tr, v, 0);
+  v.x = 720.0f; v.y = 110.0f;
+  ((set_v2_t)RVA(R_RT_SDELTA))(tr, v, 0);
+
+  ((set_font_t)RVA(R_TEXT_SETFONT))(comp, g_guiFont, 0);
+  ((set_int1_t)RVA(R_TEXT_SETSIZE))(comp, 20, 0);
+  ((set_int1_t)RVA(R_TEXT_ALIGN))(comp, 0, 0);    /* UpperLeft  */
+  ((set_int1_t)RVA(R_TEXT_HOVER))(comp, 1, 0);    /* Overflow   */
+  ((set_int1_t)RVA(R_TEXT_VOVER))(comp, 1, 0);
+  ((set_int1_t)RVA(R_GRAPHIC_RAY))(comp, 0, 0);   /* no raycast */
+  ((set_col_t)RVA(R_GRAPHIC_COL))(comp, COL_WHITE, 0);
+
+  g_hud = comp;
+  g_hudGo = txtGo;
+  elog("hud: ready font=%p (%s)", g_guiFont, g_cjk ? "game/CJK" : "builtin/ASCII");
+  return 1;
+}
+
+static void hud_refresh(void) {
+  char s[600];
+  int c1 = 0, c2 = 0, c3 = 0, i;
+  if (!g_hud && !hud_init()) return;
+  for (i = 0; i < g_n; i++) {
+    if (g_mk[i].type == 1) c1++;
+    else if (g_mk[i].type == 2) c2++;
+    else if (g_mk[i].type == 3) c3++;
+  }
+  if (g_cjk)
+    sprintf(s, "\xE7\xBC\x96\xE8\xBE\x91\xE6\xA8\xA1\xE5\xBC\x8F: %s   \xE9\x98\xB5\xE8\x90\xA5: %s   \xE5\x8F\xAF\xE8\xA7\x86: %s\n"
+               "\xE6\xA0\x87\xE8\xAE\xB0: %d  (\xE8\xB9\xB2 %d / \xE5\xB9\xBD %d / \xE5\x8C\xBA %d)\n"
+               "Ctrl+2 \xE8\xB9\xB2\xE5\xAE\x88   Ctrl+Del \xE5\x88\xA0\xE9\x99\xA4   Ctrl+6 \xE4\xBF\x9D\xE5\xAD\x98   Ctrl+0 \xE6\x98\xBE\xE7\xA4\xBA",
+            g_on ? "\xE5\xBC\x80" : "\xE5\x85\xB3", g_team ? "GR" : "BL", g_vis ? "\xE5\xBC\x80" : "\xE5\x85\xB3",
+            g_n, c1, c2, c3);
+  else
+    sprintf(s, "EDIT %s | team %s | vis %s\nmarkers %d (crouch %d / pos %d / area %d)\n"
+               "Ctrl+2 crouch  Ctrl+Del delete  Ctrl+6 save  Ctrl+0 visuals",
+            g_on ? "ON" : "OFF", g_team ? "GR" : "BL", g_vis ? "ON" : "OFF",
+            g_n, c1, c2, c3);
+  ((set_txt_t)RVA(R_TEXT_SETTEXT))(g_hud, x_string_new(s), 0);
+}
+
+static void hud_reset(void) { g_hud = 0; g_hudGo = 0; }
+
+/* ---- marker store ------------------------------------------------------- */
+static int add_mk(int type, V3 p, int aid, int parent, int prm, P go, P comp, P vis) {
+  MK* m;
+  if (g_n >= MAXM) { elog("marker store full (%d)", MAXM); return 0; }
+  m = &g_mk[g_n];
+  m->type = type; m->p = p; m->aid = aid; m->parent = parent; m->prm = prm;
+  m->go = go; m->comp = comp; m->vis = vis;
+  g_n++;
+  return 1;
+}
+
+static int make_crouch(V3 p) {
+  P go, comp;
+  go = new_go("UCF_CrouchPos");
+  if (!go) return 0;
+  ((set_active_t)RVA(R_SETACTIVE))(go, 0, 0);
+  comp = ((addcomp_t)RVA(R_ADDCOMP))(go, g_crouchType, 0);
+  if (!comp) { elog("crouch: AddComponent failed"); return 0; }
+  *(int*)((char*)comp + 0x0C) = g_team;
+  ((set_pos_t)RVA(R_SET_POS))(get_tr(go), p, 0);
+  ((set_active_t)RVA(R_SETACTIVE))(go, 1, 0);
+  if (!add_mk(1, p, -1, -1, g_team, go, comp, spawn_vis(p, 0.24f, 1))) return 0;
+  elog("crouch #%d at %.2f %.2f %.2f team=%d", g_n, p.x, p.y, p.z, g_team);
+  hud_refresh();
+  return 1;
+}
+
+static int make_area(int scale10, V3 p) {
+  P go, comp, box;
+  V3 sc;
+  int aid = g_areaCount;
+  float s = scale10 / 10.0f;
+  if (aid >= MAX_AID) { elog("area limit %d", MAX_AID); return 0; }
+  if (s < 1.0f) s = 1.0f;
+  go = new_go("UCF_GuardArea");
+  if (!go) return 0;
+  sc.x = s; sc.y = s; sc.z = s;
+  ((set_scale_t)RVA(R_SET_SCALE))(get_tr(go), sc, 0);
+  ((set_pos_t)RVA(R_SET_POS))(get_tr(go), p, 0);
+  comp = ((addcomp_t)RVA(R_ADDCOMP))(go, g_areaType, 0);
+  if (!comp) { elog("area: AddComponent failed"); return 0; }
+  if (g_boxType) {
+    box = ((addcomp_t)RVA(R_ADDCOMP))(go, g_boxType, 0);
+    if (box) ((set_trigger_t)RVA(R_IS_TRIGGER))(box, 1, 0);
+    else elog("area: BoxCollider add failed");
+  }
+  g_areaCount++;
+  g_aidMk[aid] = (P)(g_n);
+  if (!add_mk(3, p, aid, -1, scale10, go, comp, spawn_vis(p, 0.42f, 3))) return 0;
+  g_curArea = g_n - 1;
+  elog("area #%d (aid=%d scale=%.1f) at %.2f %.2f %.2f -> current", g_n - 1, aid, s, p.x, p.y, p.z);
+  hud_refresh();
+  return 1;
+}
+
+static int make_nanopos(int aid, V3 p, int safety) {
+  P go, comp, areaGo, areaComp, areaTr, tr;
+  int parent;
+  if (aid < 0 || aid >= g_areaCount) { elog("nanopos: no area aid=%d", aid); return 0; }
+  parent = (int)(INT_PTR)g_aidMk[aid];
+  if (parent < 0 || parent >= g_n || g_mk[parent].type != 3) { elog("nanopos: bad parent aid=%d", aid); return 0; }
+  areaGo = g_mk[parent].go;
+  areaComp = g_mk[parent].comp;
+  go = new_go("UCF_NanoGuardPos");
+  if (!go) return 0;
+  comp = ((addcomp_t)RVA(R_ADDCOMP))(go, g_posType, 0);
+  if (!comp) { elog("nanopos: AddComponent failed"); return 0; }
+  if (safety) *(int*)((char*)comp + 0x1C) = safety;
+  areaTr = get_tr(areaGo);
+  tr = get_tr(go);
+  if (areaTr && tr) ((set_parent_t)RVA(R_SET_PARENT))(tr, areaTr, 0, 0);
+  if (tr) ((set_pos_t)RVA(R_SET_POS))(tr, p, 0);
+  ((pos_init_t)RVA(R_POS_INIT))(comp, areaComp, 0);
+  if (!add_mk(2, p, aid, parent, safety, go, comp, spawn_vis(p, 0.32f, 2))) return 0;
+  {
+    P list = *(P*)((char*)areaComp + 0x10);
+    int cnt = list ? *(int*)((char*)list + 0x0C) : -1;
+    elog("nanopos #%d at %.2f %.2f %.2f aid=%d safety=%d areaPosList=%d", g_n, p.x, p.y, p.z, aid, safety, cnt);
+  }
+  hud_refresh();
+  return 1;
+}
+
+/* delete marker at idx, its children, and fix every index reference */
+static void del_index(int idx);
+
+static void kill_children(int idx) {
+  int i = 0;
+  while (i < g_n) {
+    if (g_mk[i].parent == idx) del_index(i);
+    else i++;
+  }
+}
+
+static void del_index(int idx) {
+  MK* m;
+  int i;
+  if (idx < 0 || idx >= g_n) return;
+  m = &g_mk[idx];
+  kill_children(idx);
+  if (m->vis) ((destroy_t)RVA(R_DESTROY))(m->vis, 0);
+  if (m->go) ((destroy_t)RVA(R_DESTROY))(m->go, 0);
+  if (m->type == 3) {
+    if (m->aid >= 0 && m->aid < MAX_AID) g_aidMk[m->aid] = 0;
+    if (g_areaCount > 0) g_areaCount--;
+  }
+  for (i = idx; i < g_n - 1; i++) g_mk[i] = g_mk[i + 1];
+  g_n--;
+  for (i = 0; i < g_n; i++) if (g_mk[i].parent > idx) g_mk[i].parent--;
+  for (i = 0; i < MAX_AID; i++) {
+    int v = (int)(INT_PTR)g_aidMk[i];
+    if (v > idx) g_aidMk[i] = (P)(v - 1);
+  }
+  if (g_curArea == idx) g_curArea = -1;
+  else if (g_curArea > idx) g_curArea--;
+}
+
+static void undo_last(void) {
+  if (g_n <= 0) { elog("undo: nothing to undo"); return; }
+  elog("undo: removing marker #%d type=%d", g_n - 1, g_mk[g_n - 1].type);
+  del_index(g_n - 1);
+  hud_refresh();
+}
+
+static void delete_nearest(void) {
+  V3 cp, fw, hp;
+  int i, byRay = -1, byHit = -1, target = -1;
+  float bestPerp = 1e9f, bestHit = 1e9f, bestCam = 1e9f;
+  int haveHit, byCam = -1;
+  if (!g_n) { elog("delete: no markers"); return; }
+  if (!cam_ray(&cp, &fw)) { elog("delete: no camera"); return; }
+  haveHit = cam_point(&hp);
+  for (i = 0; i < g_n; i++) {
+    float vx = g_mk[i].p.x - cp.x, vy = g_mk[i].p.y - cp.y, vz = g_mk[i].p.z - cp.z;
+    float t = vx * fw.x + vy * fw.y + vz * fw.z;
+    if (t > 0.3f && t < 60.0f) {
+      float px = vx - fw.x * t, py = vy - fw.y * t, pz = vz - fw.z * t;
+      float perp = sqrtf(px * px + py * py + pz * pz);
+      if (perp < bestPerp) { bestPerp = perp; byRay = i; }
+    }
+    if (haveHit) {
+      float dx = g_mk[i].p.x - hp.x, dy = g_mk[i].p.y - hp.y, dz = g_mk[i].p.z - hp.z;
+      float d2 = dx * dx + dy * dy + dz * dz;
+      if (d2 < bestHit) { bestHit = d2; byHit = i; }
+    }
+    {
+      float d2 = vx * vx + vy * vy + vz * vz;
+      if (d2 < bestCam) { bestCam = d2; byCam = i; }
+    }
+  }
+  if (byRay >= 0 && bestPerp <= 1.0f) {
+    target = byRay;
+    elog("delete: aimed at marker #%d (ray offset %.2f m)", byRay, bestPerp);
+  } else if (byHit >= 0 && bestHit <= 144.0f) {
+    target = byHit;
+    elog("delete: nearest marker #%d to aim point (%.2f m)", byHit, sqrt(bestHit));
+  } else if (byCam >= 0 && bestCam <= 16.0f) {
+    target = byCam;
+    elog("delete: closest marker #%d to camera (%.2f m)", byCam, sqrt(bestCam));
+  } else {
+    elog("delete: nothing chosen (ray %.2f m, aim %.2f m, cam %.2f m) - aim at a marker",
+         byRay >= 0 ? bestPerp : -1.0f,
+         haveHit ? sqrt(bestHit) : -1.0f,
+         byCam >= 0 ? sqrt(bestCam) : -1.0f);
+    return;
+  }
+  if (target >= 0) {
+    elog("delete: removing #%d type=%d at %.2f %.2f %.2f", target, g_mk[target].type,
+         g_mk[target].p.x, g_mk[target].p.y, g_mk[target].p.z);
+    del_index(target);
+    hud_refresh();
+  }
+}
+
+static void toggle_visuals(void) {
+  int i;
+  g_vis = !g_vis;
+  for (i = 0; i < g_n; i++) {
+    P v = g_mk[i].vis;
+    if (!v) continue;
+    ((set_active_t)RVA(R_SETACTIVE))(v, (unsigned char)g_vis, 0);
+  }
+  elog("visuals %s (markers=%d)", g_vis ? "ON" : "OFF", g_n);
+  hud_refresh();
+}
+
+static int save_file(void) {
+  FILE* f;
+  int i, c1 = 0, c2 = 0, c3 = 0;
+  if (!g_file[0]) return 0;
+  CreateDirectoryA(g_dir, 0);
+  {
+    char dir[MAX_PATH];
+    strcpy(dir, g_file);
+    { char* s = strrchr(dir, '\\'); if (s) *s = 0; }
+    CreateDirectoryA(dir, 0);
+  }
+  f = fopen(g_file, "w");
+  if (!f) { elog("save: cannot open %s", g_file); return 0; }
+  for (i = 0; i < g_n; i++) {
+    if (g_mk[i].type == 1) c1++;
+    else if (g_mk[i].type == 2) c2++;
+    else if (g_mk[i].type == 3) c3++;
+  }
+  fprintf(f, "# ucf_mod markers v1  crouch=%d nanopos=%d area=%d\n", c1, c2, c3);
+  fprintf(f, "# crouch <team> <x> <y> <z>\n");
+  fprintf(f, "# area <scale*10> <x> <y> <z>\n");
+  fprintf(f, "# nanopos <areaId> <x> <y> <z> <safety>\n");
+  for (i = 0; i < g_n; i++) {
+    MK* m = &g_mk[i];
+    if (m->type == 1) fprintf(f, "crouch %d %.3f %.3f %.3f\n", m->prm, m->p.x, m->p.y, m->p.z);
+    else if (m->type == 3) fprintf(f, "area %d %.3f %.3f %.3f\n", m->prm, m->p.x, m->p.y, m->p.z);
+    else if (m->type == 2) fprintf(f, "nanopos %d %.3f %.3f %.3f %d\n", m->aid, m->p.x, m->p.y, m->p.z, m->prm);
+  }
+  fclose(f);
+  elog("saved %d markers (crouch=%d nanopos=%d area=%d) -> %s", g_n, c1, c2, c3, g_file);
+  hud_refresh();
+  return 1;
+}
+
+static void reset_markers(void) {
+  g_n = 0;
+  g_areaCount = 0;
+  g_curArea = -1;
+  memset(g_aidMk, 0, sizeof(g_aidMk));
+}
+
+static int load_file(void) {
+  FILE* f;
+  char line[256];
+  int made = 0;
+  if (!g_file[0]) return 0;
+  f = fopen(g_file, "r");
+  if (!f) { elog("load: no markers file yet (%s)", g_file); return 0; }
+  while (fgets(line, sizeof(line), f)) {
+    float x, y, z;
+    int a, b;
+    if (line[0] == '#' || line[0] == '\n' || line[0] == '\r') continue;
+    if (sscanf(line, "area %d %f %f %f", &a, &x, &y, &z) == 4) {
+      V3 p; p.x = x; p.y = y; p.z = z;
+      if (make_area(a, p)) made++;
+    } else if (sscanf(line, "nanopos %d %f %f %f %d", &a, &x, &y, &z, &b) == 5) {
+      V3 p; p.x = x; p.y = y; p.z = z;
+      if (make_nanopos(a, p, b)) made++;
+    } else if (sscanf(line, "crouch %d %f %f %f", &a, &x, &y, &z) == 4) {
+      V3 p; p.x = x; p.y = y; p.z = z;
+      if (make_crouch(p)) made++;
+    }
+  }
+  fclose(f);
+  elog("loaded %d markers from %s", made, g_file);
+  hud_refresh();
+  return made;
+}
+
+static void status(void) {
+  int c1 = 0, c2 = 0, c3 = 0, i;
+  for (i = 0; i < g_n; i++) {
+    if (g_mk[i].type == 1) c1++;
+    else if (g_mk[i].type == 2) c2++;
+    else if (g_mk[i].type == 3) c3++;
+  }
+  elog("status: edit=%d vis=%d team=%d markers=%d (crouch=%d nanopos=%d area=%d) curAreaAid=%d hud=%d",
+       g_on, g_vis, g_team, g_n, c1, c2, c3,
+       (g_curArea >= 0 && g_curArea < g_n) ? g_mk[g_curArea].aid : -1, g_hud ? 1 : 0);
+  if (g_areaCls && x_class_get_field_from_name) {
+    P f = x_class_get_field_from_name(g_areaCls, "SpareAreaList");
+    if (f) {
+      P l = 0;
+      x_field_static_get_value(f, &l);
+      elog("status: SpareAreaList=%d", l ? *(int*)((char*)l + 0x0C) : -1);
+    }
+  }
+  if (g_crouchCls && x_class_get_field_from_name) {
+    P f = x_class_get_field_from_name(g_crouchCls, "SpareList_BL");
+    if (f) {
+      P l = 0;
+      x_field_static_get_value(f, &l);
+      elog("status: SpareList_BL=%d", l ? *(int*)((char*)l + 0x0C) : -1);
+    }
+  }
+  elog("status: file=%s", g_file);
+}
+
+/* how many crouch markers this editor created (so navfix can tell them apart
+ * from the map's own points before deciding to bulk-inject its draft grid) */
+int editor_crouch_made(void) {
+  int i, c = 0;
+  for (i = 0; i < g_n; i++) if (g_mk[i].type == 1) c++;
+  return c;
+}
+
+void editor_on_scene(void* astar) {
+  if (!astar) return;
+  if (!ed_init()) return;
+  if (astar == g_lastAstar) return;
+  g_lastAstar = (P)astar;
+  reset_markers();
+  hud_reset();
+  elog("scene changed (astar=%p) - loading markers", astar);
+  load_file();
+  hud_refresh();
+}
+
+void editor_on_key(unsigned vk) {
+  V3 p;
+  if (!ed_init()) return;
+  if (vk == '1') {
+    g_on = !g_on;
+    elog("editor %s (markers=%d)", g_on ? "ON" : "OFF", g_n);
+    hud_refresh();
+    return;
+  }
+  if (vk == '9') { status(); hud_refresh(); return; }
+  if (!g_on) return;
+  switch (vk) {
+    case '0':
+      toggle_visuals();
+      break;
+    case '2':
+      if (!cam_point(&p)) { elog("crouch: no ground under crosshair"); break; }
+      make_crouch(p);
+      break;
+    case '3':
+#if ED_AREA_ENABLED
+      if (g_curArea < 0) { elog("nanopos: create an area first (Ctrl+4)"); break; }
+      if (!cam_point(&p)) { elog("nanopos: no ground under crosshair"); break; }
+      make_nanopos(g_mk[g_curArea].aid, p, 0);
+#else
+      elog("nanopos: DISABLED in this build (needs posList/zoomPos wiring)");
+#endif
+      break;
+    case '4':
+#if ED_AREA_ENABLED
+      if (!cam_point(&p)) { elog("area: no ground under crosshair"); break; }
+      make_area(80, p);
+#else
+      elog("area: DISABLED in this build (needs posList/zoomPos wiring)");
+#endif
+      break;
+    case 0x2E:  /* VK_DELETE */
+      delete_nearest();
+      break;
+    case '5':
+      undo_last();
+      break;
+    case '6':
+      save_file();
+      break;
+    case '7':
+      reset_markers();
+      load_file();
+      break;
+    case '8':
+      g_team = g_team ? 0 : 1;
+      elog("team -> %d (%s) for new crouch points", g_team, g_team ? "GR" : "BL");
+      hud_refresh();
+      break;
+    default:
+      break;
+  }
+}
+
+/* headless entry used by the WM_APP+0x53 test hook (no keyboard focus needed) */
+void editor_on_key_any(unsigned vk) {
+  if (!ed_init()) return;
+  elog("test-key vk=0x%02X", vk & 0xFF);
+  editor_on_key(vk);
+}
+
+void editor_start(const char* modDir) {
+  if (!modDir) return;
+  strncpy(g_dir, modDir, sizeof(g_dir) - 1);
+  sprintf(g_log, "%s\\ucf_mod.log", g_dir);
+  sprintf(g_file, "%s\\markers\\markers.txt", g_dir);
+  elog("editor ready: Ctrl+1..9 + Ctrl+Del, file=%s", g_file);
+}
