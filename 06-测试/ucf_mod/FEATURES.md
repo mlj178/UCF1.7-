@@ -22,6 +22,10 @@
 | `editor` | 开 | 游戏内编辑 | Ctrl+1 失效 |
 | `collect_only` | 关 | 只读采集 | —— 开启后只导出、不改游戏 |
 
+> **启动通行证**：只有从 `tools\启动控制台.bat` 启动游戏时，才会递入环境变量 `UCF_MOD=1`。
+> 直接双击 `UnityCrossFire.exe` 时插件在 `DllMain` 第一句就返回 —— 不起线程、不读配置、
+> 不写日志、不装钩子，等于没装。（加载器 `winhttp.dll` 仍会被游戏加载，它只做纯转发。）
+
 > `auto_waypoints` / `auto_crouch` / `ghost_areas` 原来写在同一个函数里，
 > 关掉第一个后两个永远不会执行（假开关）。现已拆成 `survey()` + 三个独立动作。
 

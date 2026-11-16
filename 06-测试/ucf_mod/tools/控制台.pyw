@@ -6,6 +6,9 @@
 的标记文件，而且 ucf_mod.json 压根没被读。现在整份配置只有一个文件，
 这个窗口就是它的人话界面：勾选即写盘，游戏下次启动生效。
 
+启动游戏时会带上环境变量 UCF_MOD=1 —— 插件看到它才工作；
+直接双击 UnityCrossFire.exe 没有这枚令牌，插件立刻返回，游戏就是原版。
+
 只依赖 customtkinter（本机已有 5.2.2），不联网、不监听端口。
 """
 import json
@@ -115,8 +118,11 @@ class App(ctk.CTk):
                       font=FONT, progress_color="#2f9e44",
                       command=self.on_master).pack(side="right")
 
-        ctk.CTkLabel(self, text="改完直接进游戏就生效；游戏正开着时需要重启游戏。",
-                     font=FONT_S, text_color="#9aa0a6").pack(anchor="w", padx=20)
+        ctk.CTkLabel(
+            self,
+            text="只有从本窗口「开始游戏」才会加载 mod；直接双击 UnityCrossFire.exe 是原版。\n"
+                 "开关改完存进 ucf_mod.json，下次启动生效（游戏开着时要重开）。",
+            font=FONT_S, text_color="#9aa0a6", justify="left").pack(anchor="w", padx=20)
 
         self.body = ctk.CTkScrollableFrame(self, fg_color="transparent")
         self.body.pack(fill="both", expand=True, padx=14, pady=(8, 4))
@@ -157,7 +163,7 @@ class App(ctk.CTk):
         # ---- 按钮 ----
         bar = ctk.CTkFrame(self, fg_color="transparent")
         bar.pack(fill="x", padx=14, pady=(0, 14))
-        self.btn_game = ctk.CTkButton(bar, text="开始游戏", font=FONT, height=42,
+        self.btn_game = ctk.CTkButton(bar, text="开始游戏（加载 mod）", font=FONT, height=42,
                                       fg_color="#2f6fdb", hover_color="#255bb4",
                                       command=self.launch_game)
         self.btn_game.pack(side="left", fill="x", expand=True, padx=(0, 6))
@@ -198,7 +204,7 @@ class App(ctk.CTk):
         if game_running():
             self.btn_game.configure(text="游戏运行中", state="disabled")
         else:
-            self.btn_game.configure(text="开始游戏", state="normal")
+            self.btn_game.configure(text="开始游戏（加载 mod）", state="normal")
         lines = tail_log(6)
         self.logbox.configure(state="normal")
         self.logbox.delete("1.0", "end")
@@ -213,9 +219,12 @@ class App(ctk.CTk):
         if not os.path.isfile(GAME_EXE):
             self.set_status("找不到 %s" % GAME_EXE)
             return
+        # 通行证：只有这里启动才会带上 UCF_MOD=1，插件据此决定是否工作
+        env = dict(os.environ)
+        env["UCF_MOD"] = "1"
         try:
-            subprocess.Popen([GAME_EXE], cwd=os.path.dirname(GAME_EXE))
-            self.set_status("游戏已启动")
+            subprocess.Popen([GAME_EXE], cwd=os.path.dirname(GAME_EXE), env=env)
+            self.set_status("游戏已启动（mod 已启用）")
         except OSError as exc:
             self.set_status("启动失败：%s" % exc)
         self.after(1500, self.refresh_status)

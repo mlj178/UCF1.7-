@@ -188,6 +188,16 @@ static DWORD WINAPI worker(LPVOID x) {
 
 BOOL APIENTRY DllMain(HMODULE h, DWORD reason, LPVOID reserved) {
   if (reason == DLL_PROCESS_ATTACH) {
+    /* ---- 通行证 ----
+     * 只有从「UCF 控制台」启动游戏时，父进程才会把这枚环境变量递进来。
+     * 直接双击 UnityCrossFire.exe：这里立刻返回 —— 不起线程、不读配置、
+     * 不写日志、不装窗口钩子。游戏行为和原版一致。
+     * （加载器 winhttp.dll 仍然会被加载，它只做纯转发，不会碰 ucf_mod.dll 以外的东西） */
+    {
+      char gate[8];
+      DWORD n = GetEnvironmentVariableA("UCF_MOD", gate, sizeof(gate));
+      if (n == 0 || gate[0] != '1') return TRUE;   /* 原版模式：到此为止 */
+    }
     char path[MAX_PATH]; GetModuleFileNameA(h, path, MAX_PATH);
     char* p = strrchr(path, '\\'); if (p) *p = 0;
     strcpy(gDir, path);
