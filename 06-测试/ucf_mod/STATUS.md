@@ -1,7 +1,7 @@
 # STATUS · 当前生效状态
 
 > **唯一权威**的"现在是什么"。每次构建 / 部署 / 改运行时数据后更新本文件。
-> 最后更新：2026-11-16 18:36
+> 最后更新：2026-11-16 18:43
 
 ## 1. 跑的是哪个 DLL
 
@@ -9,10 +9,11 @@
 | --- | --- |
 | 部署位置 | 游戏目录 `ucf_mod\ucf_mod.dll` |
 | 大小 | **246163 B**（上一版 240,960 B）|
-| SHA256 | `77AF522114E465EF…` |
-| 部署时间 | 2026-11-16 18:35:02 |
+| SHA256 | `EF3C1113A4C98D7D…` |
+| 部署时间 | 2026-11-16 18:42:55 |
 | 源码 | `src/cfg.c`（新）+ `plugin.c` + `navfix.c` + `editor.c` |
-| 回滚点 | `ucf_mod\ucf_mod.dll.deployed_20261116_183359`（旧版 240,960 B，18:33 部署前的）|
+| 回滚点 | `ucf_mod\ucf_mod.dll.deployed_20261116_183359`（**改动前**的 240,960 B 版本）|
+| 中间版本 | `…deployed_20261116_184234` / `…184255`（同一份新代码的两次构建，可忽略）|
 | 构建方式 | `tools\build.ps1 -Deploy` → `build/build.json` 记录来源 |
 
 > **可复现性说明**：同一份源码连续编译，字节数恒定（246,163 B）但 SHA256 每次不同。
@@ -87,14 +88,37 @@ run_setup()       按开关各跑各的，日志里各打一行
 | Bot_JumpLink 跳台 | ❌ 未做 | |
 | SP_RedBox / SP_BlueBox | ❌ 未做 | HUD 里 `缺:` 那行就是它 |
 
-## 7. 已知未解决
+## 7. 死代码清理 + 编译闸门（18:42）
+
+删掉 6 处「定义了但没人用」的代码，并给 gcc 加了闸门，防止同类问题再悄悄进来。
+
+| 位置 | 删了什么 | 为什么要删 |
+| --- | --- | --- |
+| `plugin.c` | `read_config()`（上一轮已删）| 从没被调用，是 `ucf_mod.json` 变死的元凶 |
+| `navfix.c` | `rptr()` | 一行取值辅助，早已被直接强制转换取代 |
+| `navfix.c` | `make_guard_area` 的 `tr` / `zero` | 从没用过的局部变量 |
+| `editor.c` | `find_img()` | 整段 il2cpp image 查找，**从头到尾没被调用** |
+| `editor.c` | `x_image_get_name` 指针 + `RESOLVE(image_get_name)` | 仅被 `find_img` 使用，随之死亡 |
+| `editor.c` | 解析 `nav/*.txt` 时的 `k2` | 读进来就丢，格式里没有第二个 key |
+
+**闸门**：`build.ps1` 现在带 `-Werror=unused-function -Werror=unused-variable`。
+验证过——往 `cfg.c` 塞一个 `static int ucf_dead_probe(void)`，编译直接失败：
+
+```
+cfg.c:126:12: error: 'ucf_dead_probe' defined but not used [-Werror=unused-function]
+```
+
+> 删完后 DLL 字节数 **仍然 246,163 B，一个字节没变** —— 说明删掉的东西从来没进过产物，
+> 是真的死代码，行为零风险。
+
+## 8. 已知未解决
 
 1. 部分 bot 卡在出生洞穴。
 2. `Bot_JumpLink`、补给箱/出生点全量注册未实现。
 3. 隐藏图缺 `MapManager.pointDic` 的 SupplyBox → 偶发空引用（不影响游玩）。
 4. 日志中文偶发乱码（GBK/UTF-8 混写）。
 
-## 8. 下一步
+## 9. 下一步
 
 - [ ] **验证本次改动**：进一次图，确认 `ucf_mod.log` 开头出现 `[cfg] ======== ucf_mod.json loaded` 与 10 行开关。
 - [ ] 逐个关开关试：关 `auto_crouch` 后日志应出现 `[cfg] auto_crouch = off, skip crouch points`。

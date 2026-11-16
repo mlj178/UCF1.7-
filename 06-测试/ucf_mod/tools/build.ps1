@@ -37,7 +37,10 @@ New-Item -ItemType Directory -Force -Path $build | Out-Null
 # ---- 编译 ----
 Push-Location $src
 try {
-    & $Gcc -O2 -shared -o $out @sources -luser32 -lgdi32 -static-libgcc
+    # -Werror=unused-function / unused-variable：定义了没人用的函数或变量直接编译失败。
+    # 2026-11-16 的教训：plugin.c 里有个 read_config() 从没被调用，导致
+    # ucf_mod.json 整个文件是死的却没人发现。用它防复发。
+    & $Gcc -O2 -shared -o $out @sources -Werror=unused-function -Werror=unused-variable -luser32 -lgdi32 -static-libgcc
     if ($LASTEXITCODE -ne 0) { throw "gcc 失败（exit $LASTEXITCODE）" }
 } finally { Pop-Location }
 

@@ -82,7 +82,6 @@ static P    g_lastAstar;
 static P (*x_domain_get)(void);
 static P (*x_domain_get_assemblies)(P, int*);
 static P (*x_assembly_get_image)(P);
-static const char* (*x_image_get_name)(P);
 static P (*x_class_from_name)(P, const char*, const char*);
 static P (*x_class_get_type)(P);
 static P (*x_type_get_object)(P);
@@ -306,23 +305,6 @@ static void elog(const char* fmt, ...) {
   log_ring_push(buf);
 }
 
-static P find_img(const char* name) {
-  int n = 0;
-  P arr;
-  int i;
-  if (!x_domain_get || !x_domain_get_assemblies) return 0;
-  arr = x_domain_get_assemblies(x_domain_get(), &n);
-  if (!arr) return 0;
-  for (i = 0; i < n; i++) {
-    P asm_ = *(P*)((char*)arr + 0x10 + i * 4);
-    P img;
-    if (!asm_) break;
-    img = x_assembly_get_image(asm_);
-    if (img && strcmp(x_image_get_name(img), name) == 0) return img;
-  }
-  return 0;
-}
-
 static int g_clsProbe;
 
 static P find_cls(const char* ns, const char* name) {
@@ -360,7 +342,6 @@ static int ed_init(void) {
   RESOLVE(domain_get);
   RESOLVE(domain_get_assemblies);
   RESOLVE(assembly_get_image);
-  RESOLVE(image_get_name);
   RESOLVE(class_from_name);
   RESOLVE(class_get_type);
   RESOLVE(type_get_object);
@@ -2735,8 +2716,9 @@ static void nav_edit_load(const char* path) {
   if (!f) return;
   while (fgets(line, sizeof(line), f)) {
     NAVED e;
-    char k1[16], k2[16];
+
     float x, y, z, x2, y2, z2;
+    char k1[16];
     if (line[0] == '#' || line[0] == '\n') continue;
     memset(&e, 0, sizeof(e));
     if (sscanf(line, "node %15s %f %f %f", k1, &x, &y, &z) == 4) {

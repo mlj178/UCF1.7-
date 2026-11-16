@@ -7,6 +7,18 @@
 
 ## 2026-11-16
 
+### 18:42 · 死代码清理 + 编译闸门
+- 删掉 6 处「定义了但没人用」的代码：
+  `navfix.c` 的 `rptr()` 与 `make_guard_area` 里的 `tr`/`zero`；
+  `editor.c` 的 `find_img()`（整段 il2cpp 图像查找，从未被调用）、
+  随之失效的 `x_image_get_name` 指针与 `RESOLVE(image_get_name)`、
+  解析 `nav/*.txt` 时读进来就丢的 `k2`。
+- `build.ps1` 增加 `-Werror=unused-function -Werror=unused-variable`。
+  **验证过闸门有效**：注入 `static int ucf_dead_probe(void)` 后编译立即失败，
+  随后还原（SHA256 与注入前一致）。
+- 删完 DLL 仍是 **246,163 B，字节数不变** —— 删掉的确实从未进入产物，行为零风险。
+- 产物：`ucf_mod.dll` 246,163 B，部署 18:42:55，SHA256 `EF3C1113…`。
+
 ### 18:35 · 功能开关化（cfg.c + 控制台 + 拆分建图动作）
 - **发现**：`plugin.c` 的 `read_config()` 从未被调用 —— 整个 `ucf_mod.json` 是死的，
   `enabled` / `scene` / `game_mode` 一直用硬编码默认值（`Nano30_Storm` / 6）。
