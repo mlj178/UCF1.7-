@@ -46,15 +46,28 @@ ROW_RE = re.compile(r"^\|\s*(\d{1,3})\s*\|\s*(level\d+)\s*\|\s*([^|]+?)\s*\|\s*(
 
 
 def load_table(path=None):
-    """从「地图对照表.md」读 [序号, 关卡, 中文名, 场景名, 备注]。读不到就返回 []。"""
+    """从「地图对照表.md」读 [序号, 关卡, 中文名, 场景名, 备注]。读不到就返回 []。
+
+    只读**第一张表**（那个 5 列的权威表）：同一份 md 后面还有「原生可通行空间」等表格，
+    它们的第 1/2/3 列也是 序号/关卡/中文名，一起读会把每张图重复一遍（序号算错、文件名也跟着乱）。
+    """
     path = path or TABLE_FILE
     rows = []
+    started = False
     try:
         with io.open(path, "r", encoding="utf-8") as f:
             for line in f:
-                m = ROW_RE.match(line.strip())
-                if not m:
+                s = line.strip()
+                if not s:
+                    if started:
+                        break           # 空行 = 第一张表结束
                     continue
+                m = ROW_RE.match(s)
+                if not m:
+                    if started and not s.startswith("|"):
+                        break           # 表格后面接了别的内容，也停
+                    continue
+                started = True
                 name = m.group(3).strip()
                 if not name:
                     continue
@@ -73,11 +86,11 @@ _BUILTIN_LEVELS = [
     ("level4", "胜利广场", "NY_TM", ""),
     ("level5", "竞技场", "Arena", ""),
     ("level6", "刀锋寨", "GrimReaperKM", ""),
+    ("level11", "死亡擂台", "DeathRing", ""),
     ("level7", "沙漠要塞", "DesertFort", ""),
     ("level8", "生化酒店", "NanoResort", ""),
     ("level9", "暴风", "Nano30_Storm", "隐藏地图（插件注入）"),
     ("level10", "新寂静村", "Nano_DawnVillage", ""),
-    ("level11", "死亡擂台", "DeathRing", ""),
 ]
 
 
@@ -99,10 +112,21 @@ NO_OF = {lv: i + 1 for i, (lv, *_r) in enumerate(LEVELS)}
 ALIAS = {"nano30_storm": "level9", "nano30storm": "level9", "storm": "level9"}
 MIN_NODES = 8          # 少于这个点数的导出当垃圾（n0 那种）
 TRUST_NODES = 100      # 低于这个点数：多半是菜单/大厅场景采到的，只在索引里标「可疑」，不进数据集
+# 进图加载中按 Ctrl+E 会拿到「扫到一半」的点图（运输船 27 点 vs 完整 786 点）。这种残缺导出点数
+# 远小于同图其它导出，而且坐标不是它们的子集（编辑只会加点，原图一定是「原图+编辑」的子集）→ 丢掉。
+PARTIAL_RATIO = 0.5
 SUSPECT_DIR = os.path.join(MAPS, "_suspect")   # 被移出 maps/ 的可疑整理文件放这（不删）
 # 少数图本身路点就极少（椰岛之巅 Cebu_City 场景里只有 2 个 WayPoint 对象），
 # 这些指纹即使低于 MIN_NODES 也要收，且直接指定关卡（几何匹配对小样本无效）。
 KEEP_FP = {"n2-24a647eff15d6ca4": "level3"}
+
+
+def points_subset(small, big, q=0.05):
+    """small 的点是否全部落在 big 里（按 0.05 m 量化后比，容忍两位小数的抖动）。"""
+    def key(p):
+        return (round(p[0] / q), round(p[1] / q), round(p[2] / q))
+    have = set(key(p) for p in big)
+    return all(key(p) in have for p in small)
 
 
 def norm_level(lv):
@@ -337,7 +361,7 @@ def build_index(rows, suspect=None, extras=None):
     save_json(os.path.join(MAPS, "_index.json"), doc)
     md = ["# 原始地图数据集（自动生成，勿手改）", "",
           "生成时间：" + doc["generated"], "",
-          "序号 / 关卡 / 中文名 / 场景名的**权威表**在 ../地图对照表.md（手写、持久）；",
+          "序号 / 关卡 / 中文名 / 场景名的**权威表**在 ../docs/地图对照表.md（手写、持久）；",
           "本文件只是按那张表整理出来的结果，每次跑脚本都会重写。", "",
           "| 序号 | 关卡 | 中文名 | 场景名 | 节点 | 边 | 特征 | 文件 | 状态 | 备注 |",
           "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |"]
@@ -346,7 +370,7 @@ def build_index(rows, suspect=None, extras=None):
         if it["source"] == "ours":
             note = (note + "；" if note else "") + "插件铺的点（游戏原图没有导航）"
         if it["file"] and 0 < it["nodes"] < 100:
-            note = (note + "；" if note else "") + "样本很小，可能只扫到局部"
+            note = (note + "；" if note else "") + "样本很小（可能只扫到局部，或这张图的点图本来就只做 node link 端点）"
         if not note and it["edits_on_top"]:
             note = "游戏现在还会套 %d 条编辑" % it["edits_on_top"]
         if it.get("suspect") and not it["file"]:
@@ -362,8 +386,9 @@ def build_index(rows, suspect=None, extras=None):
            "- edits_on_top：这份原图之上，游戏现在还套着几条编辑。",
            "- 想让游戏回到原图：删掉 ucf_mod/nav/<指纹>.txt，下次进图就是干净的原始点图。",
            "- 只读还原点：ucf_mod/backup/maps_original_<日期>/（含 sha256 清单）。",
-           "- 已确认是菜单/大厅数据、不当地图用的导出在 ucf_mod/backup/review_20261116/（不进数据集）。",
-           "- 序号/关卡/中文名/场景名以 ucf_mod/地图对照表.md 为准，本文件不定义名字。"]
+           "- 早先标成「疑似大厅数据」、还没进数据集的导出在 ucf_mod/backup/review_20261116/；",
+           "  其中小型工厂那 12 点已证实是 node link 端点（真数据），已经收进数据集。",
+           "- 序号/关卡/中文名/场景名以 ucf_mod/docs/地图对照表.md 为准，本文件不定义名字。"]
     if extras:
         md += ["", "## maps/ 里的其它文件（不在对照表里，原样保留）", "",
                "| 文件 | 关卡 | 说明 | 节点 |", "| --- | --- | --- | --- |"]
@@ -631,19 +656,34 @@ def main():
         for s in unknown[:8]:
             log("   ", s["file"], "fp=" + (s["fp"] or "-"), "nodes=%d" % s["nodes"])
 
-    best = {}
+    cand = {}
     for s in snaps:
         if not s["level"]:
             continue
         if s["nodes"] < MIN_NODES and s["fp"] not in KEEP_FP:
             log("  跳过样本太小：%s（%d 点）" % (s["file"], s["nodes"]))
             continue
-        cur = best.get(s["level"])
-        if cur is None or (s["nodes"], s["generated"]) < (cur["nodes"], cur["generated"]):
-            best[s["level"]] = s
+        cand.setdefault(s["level"], []).append(s)
+
+    best = {}
+    for lv, lst in cand.items():
+        # 「原始」= 同一张图里节点最少的那份（插件编辑只会往上加点）；
+        # 但先把「进图加载中扫到一半」的残缺导出剔掉，否则它会冒充成最原始的那份。
+        lst.sort(key=lambda s: (s["nodes"], s["generated"]))
+        while len(lst) > 1:
+            small, big = lst[0], lst[-1]
+            if small["fp"] in KEEP_FP or small["nodes"] >= big["nodes"]:
+                break
+            if small["nodes"] < PARTIAL_RATIO * big["nodes"] and not points_subset(small["points"], big["points"]):
+                log("  忽略疑似扫到一半的导出：%s（%d 点；同一张图已有 %d 点的导出）"
+                    % (small["file"], small["nodes"], big["nodes"]))
+                lst.pop(0)
+                continue
+            break
+        best[lv] = lst[0]
     for lv in sorted(best, key=lambda x: LEVEL_ORDER.get(x, 99)):
         s = best[lv]
-        sibs = [x for x in snaps if x["level"] == lv and (x["nodes"] >= MIN_NODES or x["fp"] in KEEP_FP)]
+        sibs = cand[lv]
         s["edits_on_top"] = count_txt(os.path.join(NAV, (s["fp"] or "x") + ".txt"))
         log("  %-8s %-8s 原始=%d 点 / %d 边（同图 %d 份导出，最多 %d 点）%s" % (
             lv, NAME_OF.get(lv, "?"), s["nodes"], s["edges"], len(sibs),
@@ -688,6 +728,28 @@ def main():
                     pass
         if moved:
             log("  移到 maps/_suspect/（低于可信线或不再采用，没删）：%s" % ", ".join(moved))
+
+        # 同一张图只留一个编号文件名。改序号/改名字之后，旧文件名和重复副本搬进 backup/stale_*，不删。
+        stale_dir = os.path.join(BACKUP, "stale_" + time.strftime("%Y%m%d_%H%M%S"))
+        stale = []
+        if os.path.isdir(MAPS):
+            for fn in sorted(os.listdir(MAPS)):
+                p = os.path.join(MAPS, fn)
+                if not os.path.isfile(p) or not fn.lower().endswith(".json") or fn.startswith("_"):
+                    continue
+                info = snapshot_info(p) or {}
+                lv = str((info.get("doc", {}).get("map") or {}).get("level") or "")
+                keep_name = (rows.get(lv) or {}).get("fname") or ""
+                if not keep_name or fn == keep_name:
+                    continue
+                os.makedirs(stale_dir, exist_ok=True)
+                try:
+                    shutil.move(p, os.path.join(stale_dir, fn))
+                    stale.append(fn)
+                except OSError:
+                    pass
+        if stale:
+            log("  旧编号/重复副本移到 %s（没删）：%s" % (stale_dir, ", ".join(stale)))
         extras = []
         if os.path.isdir(MAPS):
             for fn in sorted(os.listdir(MAPS)):

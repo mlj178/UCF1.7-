@@ -29,10 +29,63 @@ from urllib.parse import urlparse, parse_qs, unquote
 ROOT = os.path.dirname(os.path.abspath(__file__))   # 工程端 tools/
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
-from ucf_paths import DEPLOY as UCF, GEO, VIS, NAV, MAPS  # noqa: E402
+from ucf_paths import DEPLOY as UCF, GEO, VIS, NAV, MAPS, doc  # noqa: E402
 
 GEOWEB = os.path.join(GEO, "web")
 NAMES_FILE = os.path.join(NAV, "names.json")
+
+# ---------------------------------------------------------------- 可走面（NavMeshGraph）
+# 原生 A* 顶点数（网格顶点去重后），逐张图实测，见 docs/地图对照表.md
+# §「原生可通行空间（A* 图）」；重新核对：python tools/scan_native_nav.py
+NATIVE_VERTS = {
+    "level2": 840, "level3": 532, "level4": 716, "level5": 683,
+    "level6": 559, "level7": 919, "level10": 944, "level11": 60,
+}
+
+
+def navmesh_for(level):
+    """level -> vis/navmesh_*.bin，找不到返回 None。
+
+    回退顺序：
+      1) maps/*.json 里记录的原导出名（organize_maps.py 整理时留下的 navmesh.file）；
+      2) 按原生顶点数对号：插件落盘的文件叫 navmesh_nm<顶点数>-<指纹>.bin，
+         例如小型工厂 840 -> navmesh_nm840-40749e0342e84cbd.bin。
+    运输船/生化酒店/暴风本来就没有 NavMeshGraph，永远返回 None。
+    """
+    # 1) 整理后的地图数据里带 navmesh.file
+    try:
+        for name in sorted(os.listdir(MAPS)):
+            if not name.endswith(".json") or name.startswith("_"):
+                continue
+            try:
+                with open(os.path.join(MAPS, name), "r", encoding="utf-8") as f:
+                    d = json.load(f)
+            except (OSError, ValueError):
+                continue
+            m = d.get("map") or {}
+            if m.get("level") != level:
+                continue
+            fn = (d.get("navmesh") or {}).get("file")
+            if not fn:
+                continue
+            for base in (VIS, os.path.join(UCF, "backup"), GEOWEB):
+                p = os.path.join(base, os.path.basename(fn))
+                if os.path.isfile(p):
+                    return p
+    except OSError:
+        pass
+    # 2) 按原生顶点数对号
+    v = NATIVE_VERTS.get(level)
+    if v:
+        try:
+            prefix = "navmesh_nm%d-" % v
+            for name in sorted(os.listdir(VIS)):
+                if name.startswith(prefix) and name.endswith(".bin"):
+                    return os.path.join(VIS, name)
+        except OSError:
+            pass
+    return None
+
 
 # ------------------------------------------------------- 日志 / 自动归档（新增）
 AUTO = {"running": False, "at": "", "out": "", "runs": 0}
@@ -125,13 +178,15 @@ BUILTIN_DEFAULT_NAMES = {
     "level0": "主菜单",
 }
 
-# 权威对照表（手写在 mod 根目录，持久保存；改了不用重启服务，下次请求就生效）
-TABLE_FILE = os.path.join(UCF, "地图对照表.md")
+# 权威对照表（手写在工程端 docs/，持久保存；改了不用重启服务，下次请求就生效）
+TABLE_FILE = doc("地图对照表.md")
 TABLE_ROW_RE = re.compile(r"^\|\s*(\d{1,3})\s*\|\s*(level\d+)\s*\|\s*([^|]+?)\s*\|\s*([^|]*?)\s*\|\s*([^|]*?)\s*\|")
 _table_cache = {"mtime": -1.0, "rows": []}
 
 
 def load_map_table(path=None):
+    """只读 md 里的第一张表（5 列权威表）。后面的「原生可通行空间」表也有 序号/关卡/中文名，
+    一起读会把每张图重复一遍。"""
     path = path or TABLE_FILE
     try:
         m = os.path.getmtime(path)
@@ -140,12 +195,21 @@ def load_map_table(path=None):
     if m == _table_cache["mtime"]:
         return _table_cache["rows"]
     rows = []
+    started = False
     try:
         with open(path, "r", encoding="utf-8") as f:
             for line in f:
-                hit = TABLE_ROW_RE.match(line.strip())
-                if not hit:
+                s = line.strip()
+                if not s:
+                    if started:
+                        break
                     continue
+                hit = TABLE_ROW_RE.match(s)
+                if not hit:
+                    if started and not s.startswith("|"):
+                        break
+                    continue
+                started = True
                 name = hit.group(3).strip()
                 if not name:
                     continue
@@ -594,6 +658,33 @@ class Handler(SimpleHTTPRequestHandler):
                     }, 404)
                 with open(p, "rb") as f:
                     body = f.read()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/octet-stream")
+                self.send_header("Content-Length", str(len(body)))
+                self.send_header("Cache-Control", "no-store")
+                self.end_headers()
+                try:
+                    self.wfile.write(body)
+                except (BrokenPipeError, ConnectionResetError):
+                    pass
+                return
+            if path == "/api/navmesh":
+                level = safe_token((q.get("level") or [""])[0])
+                if not level:
+                    return self.send_json({"ok": False, "error": "缺少 level"}, 400)
+                p = navmesh_for(level)
+                if not p:
+                    return self.send_json({
+                        "ok": False, "level": level,
+                        "error": "没有 %s 的可走面导出（这张图没有 NavMeshGraph，或还没进过图）" % level,
+                    }, 404)
+                with open(p, "rb") as f:
+                    body = f.read()
+                if (q.get("info") or [""])[0] in ("1", "true"):
+                    return self.send_json({
+                        "ok": True, "level": level, "file": os.path.basename(p),
+                        "bytes": len(body), "native_verts": NATIVE_VERTS.get(level),
+                    })
                 self.send_response(200)
                 self.send_header("Content-Type", "application/octet-stream")
                 self.send_header("Content-Length", str(len(body)))

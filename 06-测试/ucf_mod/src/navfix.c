@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdarg.h>
+#include <math.h>
 #include "cfg.h"
 
 typedef void* P;
@@ -452,12 +453,29 @@ static void setup_reset(void) {
   g_survOk = 0; g_crDone = 0; g_gaDone = 0;
   g_nall = 0; g_nspots = 0;
 }
+/* 2026-11-16：暴风图在细扫阶段把游戏卡死（WER AppHangB1）。
+ * 根因是 maxZ 的初值写成了 +1e9（应为 -1e9）：粗扫更新 maxZ 的条件是
+ * hit.z > maxZ，正常地图永远不成立，maxZ 一直是 1e9。
+ * 细扫 for (fz = minZ-4; fz <= maxZ+4; fz += 4) 于是从 -134 跑到 1e9，
+ * 约 (1e9/4) × 列数 ≈ 五十多亿次，主线程直接卡死。
+ * 日志里的 z[-130,1000000000] 就是初值，不是命中点。
+ * 现在：初值修正为 -1e9；再加命中点校验、包络校验、列数上限三重保险。 */
+static int hit_sane(const char* hit, float fx, float fz, V3* out) {
+  float hx = *(const float*)hit;
+  float hy = *(const float*)(hit + 4);
+  float hz = *(const float*)(hit + 8);
+  if (!isfinite(hx) || !isfinite(hy) || !isfinite(hz)) return 0;
+  if (fabsf(hx - fx) > 0.75f || fabsf(hz - fz) > 0.75f) return 0;
+  if (hy < -500.0f || hy > 500.0f) return 0;
+  if (out) { out->x = hx; out->y = hy; out->z = hz; }
+  return 1;
+}
 
 static int survey(void) {
   raycast_t rc;
   char hit[96];
-  float minX = 1e9f, maxX = -1e9f, minZ = 1e9f, maxZ = 1e9f;
-  int ch = 0;
+  float minX = 1e9f, maxX = -1e9f, minZ = 1e9f, maxZ = -1e9f;
+  int ch = 0, bad = 0, cols = 0;
   float fx, fz;
   int layer;
 
@@ -469,6 +487,10 @@ static int survey(void) {
     for (fz = -250.0f; fz <= 250.0f; fz += 20.0f) {
       V3 o = { fx, 300.0f, fz }, d = { 0.0f, -1.0f, 0.0f };
       if (!rc(o, d, hit, 700.0f, 1, 0)) continue;
+      if (!hit_sane(hit, fx, fz, 0)) {
+        if (!bad) nlog("survey: bad hit at %.1f,%.1f -> %.1f,%.1f,%.1f", fx, fz, *(float*)hit, *(float*)(hit + 4), *(float*)(hit + 8));
+        bad++; continue;
+      }
       if (*(float*)(hit + 16) < 0.6f) continue;
       ch++;
       if (*(float*)hit < minX) minX = *(float*)hit;
@@ -476,7 +498,15 @@ static int survey(void) {
       if (*(float*)(hit + 8) < minZ) minZ = *(float*)(hit + 8);
       if (*(float*)(hit + 8) > maxZ) maxZ = *(float*)(hit + 8);
     }
+  if (bad) nlog("survey: dropped %d bogus hits", bad);
   if (ch < 8) { nlog("survey: too few ground hits (%d), retry later", ch); return 0; }
+  {
+    float w = maxX - minX, h = maxZ - minZ;
+    if (!isfinite(w) || !isfinite(h) || w < 1.0f || h < 1.0f || w > 700.0f || h > 700.0f) {
+      nlog("survey: rejected bounds x[%.1f,%.1f] z[%.1f,%.1f]", minX, maxX, minZ, maxZ);
+      return 0;
+    }
+  }
   nlog("survey: coarse hits=%d bounds x[%.1f,%.1f] z[%.1f,%.1f]", ch, minX, maxX, minZ, maxZ);
   g_minX = minX; g_maxX = maxX; g_minZ = minZ; g_maxZ = maxZ;
 
@@ -486,14 +516,17 @@ static int survey(void) {
   for (fx = minX - 4.0f; fx <= maxX + 4.0f; fx += 4.0f)
     for (fz = minZ - 4.0f; fz <= maxZ + 4.0f; fz += 4.0f) {
       float y = 300.0f;
+      if (++cols > 50000) { nlog("survey: column cap %d hit, abort", cols); return 0; }
       for (layer = 0; layer < 5; layer++) {
         V3 o = { fx, y, fz }, d = { 0.0f, -1.0f, 0.0f };
         V3 pos;
         if (!rc(o, d, hit, 700.0f, 1, 0)) break;
+        if (!hit_sane(hit, fx, fz, &pos)) {
+          if (!bad) nlog("survey: bad hit at %.1f,%.1f -> %.1f,%.1f,%.1f", fx, fz, *(float*)hit, *(float*)(hit + 4), *(float*)(hit + 8));
+          bad++; break;
+        }
         if (*(float*)(hit + 16) < 0.65f) break;
-        pos.x = *(float*)hit;
         pos.y = *(float*)(hit + 4) + 0.2f;
-        pos.z = *(float*)(hit + 8);
         /* y=39..57 是天空盒/天花板碰撞体，不是可走的地面 */
         if (pos.y < -30.0f || pos.y > 15.0f) {
           y = *(float*)(hit + 4) - 1.5f;
@@ -507,7 +540,7 @@ static int survey(void) {
         if (y < -80.0f) break;
       }
     }
-  nlog("survey: spots=%d guardCandidates=%d", g_nall, g_nspots);
+  nlog("survey: spots=%d guardCandidates=%d dropped=%d", g_nall, g_nspots, bad);
   if (g_nall < 8) { nlog("survey: too few spots (%d), retry later", g_nall); return 0; }
   g_survOk = 1;
   return 1;

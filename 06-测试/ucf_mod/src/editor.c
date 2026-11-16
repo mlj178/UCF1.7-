@@ -133,7 +133,9 @@ static P g_keysGo;
 static P g_cat;          /* UGUI Text: D-layer category list (left edge) */
 static P g_catGo;
 static P g_guiFont;      /* font borrowed from the game UI (has CJK glyphs) */
-static int g_cjk;        /* 1 = game font available, hint text in Chinese */
+static unsigned g_fontHandle; /* gchandle: keep the chosen font alive */
+static P g_fontRooted;   /* which font g_fontHandle roots */
+static int g_cjk;        /* 1 = chosen font really has 中, hint text in Chinese */
 static int g_tintLogged; /* one-shot material/shader diagnostic */
 
 #define RVA(x) ((void*)((char*)g_ga + (unsigned)(x)))
@@ -165,6 +167,7 @@ static int g_tintLogged; /* one-shot material/shader diagnostic */
 #define R_CANVAS_MODE  0xAC6D10   /* Canvas.set_renderMode                   */
 #define R_CANVAS_SORT  0xAC6DB0   /* Canvas.set_sortingOrder                 */
 #define R_TEXT_GETFONT 0x9621D0
+#define R_FONT_HASCHAR 0xAC7E00   /* Font.HasCharacter(char) —— 字体到底有没有中文字形 */
 #define R_TEXT_SETFONT 0x9629D0
 #define R_TEXT_SETTEXT 0x962CE0
 #define R_TEXT_SETSIZE 0x962930
@@ -225,6 +228,7 @@ typedef P    (*find_obj_t)(P, unsigned char, void*);
 typedef P    (*builtin_t)(P, P, void*);
 typedef void (*set_txt_t)(P, P, void*);
 typedef P    (*get_font_t)(P, void*);
+typedef unsigned char (*has_char_t)(P, unsigned short, void*);
 typedef void (*set_font_t)(P, P, void*);
 typedef void (*set_v2_t)(P, V2, void*);
 typedef P    (*get_name_t)(P, void*);
@@ -271,6 +275,7 @@ static const COL COL_PURPLE = { 0.75f, 0.35f, 1.00f, 1.0f };
 static const COL COL_PINK   = { 1.00f, 0.35f, 0.70f, 1.0f };
 static const COL COL_GOLD   = { 1.00f, 0.85f, 0.20f, 1.0f };
 static const COL COL_GRAY   = { 0.70f, 0.70f, 0.70f, 1.0f };
+static const COL COL_NAVM   = { 0.15f, 1.00f, 0.55f, 1.0f };  /* A* 可走面（NavMeshGraph 三角网） */
 
 /* --- 最近日志环形缓冲：游戏里 HUD 直接能看到，不用去翻 ucf_mod.log ------ */
 #define LOG_RING 8
@@ -510,6 +515,7 @@ static const COL* col_of(int slot) {
     case 12: return &COL_CROUCH;
     case 13: return &COL_GRAY;
     case 14: return &COL_GOLD;
+    case 15: return &COL_NAVM;
     default: return &COL_WHITE;
   }
 }
@@ -675,6 +681,8 @@ P navfix_add_guard_area(float x, float y, float z);
 #define LAY_C 0x04
 #define LAY_D 0x08
 #define LAY_E 0x10
+/* A* 可走面（NavMeshGraph 三角网线框）不在 A..E 图层里：
+ * 它是独立开关（cfg navmesh_show / Ctrl+Shift+6），可视化关着也能单独显示。 */
 
 #define K_NAREA   1
 #define K_NPOS    2
@@ -722,6 +730,11 @@ static int g_aeHold;              /* 自动导出：稳定倒计时（tick 数�
 static int g_collectOnly;         /* 只读采集：不建图/不建蹲点/不建守区/不建任何 UI 对象 */
 static int g_exportForce;         /* Ctrl+E 手动导出时绕过“已采过/太小”的过滤 */
 static int g_nmVert, g_nmTri;     /* 本次导出的 NavMeshGraph 顶点/三角形数 */
+static int g_nmShow = 1;          /* cfg: navmesh_show —— 画不画 A* 可走面线框 */
+static int g_nmWireTri, g_nmWireVert;  /* 可走面当前三角形/顶点数（HUD 显示） */
+static P   g_nmObj[16];           /* 可走面自己的网格对象（和可视化的 5 层分开） */
+static int g_nmObjN;
+static int g_nmDirty = 1;         /* 换图/开关变化后要重建 */
 static char g_nmFile[128];        /* 导航网格二进制文件名 */
 static unsigned long long nm_seenFp;  /* 已落盘的导航网格指纹 */
 static int nm_seen;
@@ -729,6 +742,10 @@ static int g_cArea, g_cPos, g_cCrouch, g_cSpawn, g_cJump, g_cTag, g_cGuard;
 static int g_helpOn = 1;
 
 static void hud_refresh(void);
+static void hud_reset(void);
+static void nm_tick(void);           /* A* 可走面：按需重建（定义在 nm_dump 之后） */
+static void nm_toggle(void);
+static void nm_walk(int draw);       /* 只统计 = 0 / 画 = 1 */
 static P comp_tr(P comp);
 /* 路点体检（实现在 probe.c，本文件末尾 #include） */
 
@@ -836,7 +853,7 @@ static void bs_wbox(V3 c, V3 h, float w) {
 }
 
 /* --- one batched mesh per colour ---------------------------------------- */
-static int vis_flush_mesh(const char* name, int slot, int items) {
+static int flush_mesh_to(const char* name, int slot, int items, P* list, int* count, int cap) {
   P go, mf, mr, mesh, av, ai, mat;
   if (g_bNI == 0) return 1;
   if (!g_meshCls || !g_mfType || !g_mrType || !g_vec3Cls || !g_i32Cls || !x_array_new) {
@@ -868,9 +885,14 @@ static int vis_flush_mesh(const char* name, int slot, int items) {
   mat = mat_for(slot);
   if (mat) ((set_shmat_t)RVA(R_REND_SETSM))(mr, mat, 0);
   ((set_int1_t)RVA(R_REND_SHADOW))(mr, 0, 0);
-  if (g_visObjN < 80) g_visObj[g_visObjN++] = go;
+  if (*count < cap) list[(*count)++] = go;
   elog("vis: mesh '%s' slot=%d items=%d verts=%d tris=%d", name, slot, items, g_bNV, g_bNI / 3);
   return 1;
+}
+
+/* 可视化 5 层用的批（对象汇入 g_visObj，Ctrl+V 统一显隐） */
+static int vis_flush_mesh(const char* name, int slot, int items) {
+  return flush_mesh_to(name, slot, items, g_visObj, &g_visObjN, 80);
 }
 
 static void draw_vf(int kind, int slot, int wire, float sx, float sy, float sz) {
@@ -1352,7 +1374,7 @@ static void vis_draw(void) {
   int i, g;
   /* create every layer material before the big vertex/index arrays exist, so a
    * GC during those allocations cannot invalidate a material we still need */
-  for (i = 1; i <= 14; i++) if (!g_matSlot[i]) mat_for(i);
+  for (i = 1; i <= 15; i++) if (!g_matSlot[i]) mat_for(i);
   if (g_lay & LAY_A) {
     for (g = 0; g < 3; g++) {
       int c = 0;
@@ -1493,6 +1515,9 @@ static void vis_scene_reset(void) {
   g_nN = g_eN = g_jN = g_tpN = 0;
   g_miss[0] = 0;
   g_visDirty = g_visOn;
+  /* 可走面的 Mesh 对象随旧场景一起被销毁：指针作废，下一帧重建 */
+  g_nmObjN = 0;
+  g_nmDirty = 1;
 }
 
 static void vis_toggle(void) {
@@ -1711,6 +1736,117 @@ static int nm_dump(const char* path, int* out_nv, int* out_nt) {
   return 1;
 }
 
+/* ---- A* 可走面：NavMeshGraph 三角网（人机真正在上面跑的那张网）----------
+ * 数据来源和 nm_dump 完全相同（运行时 NavmeshBase.tiles -> NavmeshTile），
+ * 区别是这里直接进几何批（bs_*）画在屏幕上：
+ *   * 只画三角形的边，不填面 —— 填面要吃材质透明度，游戏里那套 shader 不透明，
+ *     一填就把整张地图盖住；线框从任何角度看都清爽。
+ *   * 顶点是 Int3（1/1000 m，世界坐标）。多 tile 时索引高 12 位才是 tile 号，
+ *     低 12 位是 tile 内的顶点号 —— 和 nm_dump 的掩码一致。
+ *   * 抬高 5 cm，避免和地面/地形网格打架（z-fighting）。
+ * draw=0 时只统计不建面，给 HUD 报数用（可视化关着也能报）。 */
+static void nm_walk(int draw) {
+  extern P navfix_navmesh_graph(void);
+  P g, tiles;
+  int ntile, i, j, tri = 0;
+  g_nmWireTri = 0;
+  g_nmWireVert = 0;
+  g = navfix_navmesh_graph();
+  if (!g) return;
+  tiles = *(P*)((char*)g + 0xD0);
+  ntile = tiles ? *(int*)((char*)tiles + 0xC) : 0;
+  if (ntile <= 0 || ntile > 4096) return;
+  if (draw) bs_reset();
+  for (i = 0; i < ntile; i++) {
+    P tl = *(P*)((char*)tiles + 0x10 + i * 4);
+    P tr, vr;
+    int tv, tt, multi = ntile > 1;
+    int* vi;
+    int* ti;
+    if (!tl) continue;
+    tr = *(P*)((char*)tl + 0x8);
+    vr = *(P*)((char*)tl + 0xC);
+    tv = vr ? *(int*)((char*)vr + 0xC) : 0;
+    tt = tr ? *(int*)((char*)tr + 0xC) : 0;
+    if (tv <= 0 || tv > 200000 || tt <= 0 || tt > 200000) continue;
+    g_nmWireVert += tv;
+    g_nmWireTri += tt / 3;
+    if (!draw) continue;
+    vi = (int*)((char*)vr + 0x10);
+    ti = (int*)((char*)tr + 0x10);
+    for (j = 0; j + 2 < tt; j += 3) {
+      V3 a, b, c;
+      int ia = ti[j], ib = ti[j + 1], ic = ti[j + 2];
+      if (multi) { ia &= 0xFFF; ib &= 0xFFF; ic &= 0xFFF; }
+      if (ia < 0 || ib < 0 || ic < 0 || ia >= tv || ib >= tv || ic >= tv) continue;
+      a.x = vi[ia * 3] * 0.001f; a.y = vi[ia * 3 + 1] * 0.001f + 0.05f; a.z = vi[ia * 3 + 2] * 0.001f;
+      b.x = vi[ib * 3] * 0.001f; b.y = vi[ib * 3 + 1] * 0.001f + 0.05f; b.z = vi[ib * 3 + 2] * 0.001f;
+      c.x = vi[ic * 3] * 0.001f; c.y = vi[ic * 3 + 1] * 0.001f + 0.05f; c.z = vi[ic * 3 + 2] * 0.001f;
+      bs_line(a, b, 0.035f); bs_line(b, c, 0.035f); bs_line(c, a, 0.035f);
+      tri++;
+      /* 一条线 = 8 顶点 / 12 索引；批上限 20000 顶点、70000 索引。
+       * 到 16000/56000 就落一次，一张图分成两三块网格，不会静默丢三角形。 */
+      if (g_bNV > 16000 || g_bNI > 56000) {
+        flush_mesh_to("vis_navmesh", 15, tri, g_nmObj, &g_nmObjN, 16);
+        tri = 0;
+        bs_reset();
+      }
+    }
+  }
+  if (draw && g_bNI) flush_mesh_to("vis_navmesh", 15, tri, g_nmObj, &g_nmObjN, 16);
+  if (draw) elog("vis: navmesh wire tris=%d verts=%d meshes=%d", g_nmWireTri, g_nmWireVert, g_nmObjN);
+}
+
+/* ---- 可走面开关（独立于 Ctrl+V 的五层）--------------------------------
+ * cfg navmesh_show 决定进图默认开不开；Ctrl+Shift+6 随时开关，立即重建。
+ * 没有 NavMeshGraph 的图（运输船 / 生化酒店 / 暴风）什么都不画，HUD 会写
+ * 「无（这张图没有 NavMeshGraph）」。 */
+static void nm_clear(void) {
+  int i;
+  for (i = 0; i < g_nmObjN; i++) {
+    if (g_nmObj[i] && uobj_live(g_nmObj[i])) ((destroy_t)RVA(R_DESTROY))(g_nmObj[i], 0);
+    g_nmObj[i] = 0;
+  }
+  g_nmObjN = 0;
+}
+
+static void nm_build(void) {
+  extern P navfix_navmesh_graph(void);
+  int i;
+  nm_clear();
+  g_nmWireTri = g_nmWireVert = 0;
+  if (!g_nmShow || g_collectOnly) return;
+  if (!navfix_navmesh_graph()) return;
+  for (i = 1; i <= 15; i++) if (!g_matSlot[i]) mat_for(i);
+  nm_walk(1);
+}
+
+/* 主线程 tick：开关/换图之后按需重建一次 */
+static void nm_tick(void) {
+  extern P navfix_navmesh_graph(void);
+  if (!g_nmShow) {
+    if (g_nmObjN) nm_clear();
+    g_nmDirty = 0;
+    return;
+  }
+  if (!navfix_navmesh_graph()) {
+    if (g_nmObjN) nm_clear();
+    g_nmWireTri = g_nmWireVert = 0;
+    return;
+  }
+  if (g_nmObjN && !g_nmDirty) return;
+  g_nmDirty = 0;
+  nm_build();
+}
+
+static void nm_toggle(void) {
+  g_nmShow = !g_nmShow;
+  g_nmDirty = 1;
+  nm_tick();
+  elog("navmesh %s (%d tris / %d verts)", g_nmShow ? "ON" : "OFF", g_nmWireTri, g_nmWireVert);
+  hud_refresh();
+}
+
 static void vis_export(void) {
   char dir[MAX_PATH], path[MAX_PATH];
   char mapname[80], fname[80], fp[40], id1[24], id2[24], mark[MAX_PATH];
@@ -1877,25 +2013,71 @@ static P mk_text_ui(P canvasTr, const char* name, float ax, float ay, float px, 
   return comp;
 }
 
+/* 选一个真的带中文字形的字体。
+ * 2026-11-16：原来直接拿 FindObjectOfType(Text) 的第一个字体，常常拿到
+ * FPS/数字字体，HUD 的中文标签全被吞掉，屏幕上只剩 "00000000" 和 "|++|"。
+ * 这里遍历场景里所有 UGUI Text 的字体，用 Font.HasCharacter('中') 验证。 */
+static P find_cjk_font(void) {
+  P arr;
+  int n, i, j;
+  static const unsigned short probe[] = { 0x4E2D, 0x56FD, 0x7684, 0x623F, 0x95F4 };
+  if (!g_textType) return 0;
+  arr = ((find_objs_t)RVA(R_FINDOBJS))(g_textType, 1, 0);
+  if (!arr) return 0;
+  n = *(int*)((char*)arr + 0x0C);
+  if (n > 600) n = 600;
+  for (i = 0; i < n; i++) {
+    P t = *(P*)((char*)arr + 0x10 + i * 4);
+    P font;
+    if (!t || !uobj_live(t)) continue;
+    font = ((get_font_t)RVA(R_TEXT_GETFONT))(t, 0);
+    if (!font || !uobj_live(font)) continue;
+    for (j = 0; j < (int)(sizeof(probe) / sizeof(probe[0])); j++) {
+      if (((has_char_t)RVA(R_FONT_HASCHAR))(font, probe[j], 0)) {
+        elog("hud: cjk font %p from Text #%d (probe U+%04X)", font, i, probe[j]);
+        return font;
+      }
+    }
+  }
+  elog("hud: no cjk font among %d Text objects", n);
+  return 0;
+}
+
 static int hud_init(void) {
   P canvasGo, canvasTr, txtGo, tr, comp;
   V2 v;
   if (g_hud) return 1;
   if (!g_textType || !g_canvasType) { elog("hud: UGUI Text/Canvas class missing"); return 0; }
+  if (g_guiFont && !uobj_live(g_guiFont)) { g_guiFont = 0; g_cjk = 0; }  /* 上个场景的字体被卸载 */
 
+  /* 字体必须真的带中文字形。以前直接拿第一个 Text 的字体（常常是 FPS 数字字体），
+   * 中文标签全被吞掉，屏幕上只剩 "00000000" 和 "|++|" 这种残片。 */
+  if (!g_cjk) {
+    P cjk = find_cjk_font();
+    if (cjk) { g_guiFont = cjk; g_cjk = 1; }
+  }
   if (!g_guiFont && g_textType) {
     P any = ((find_obj_t)RVA(R_FINDOBJ))(g_textType, 1, 0);
-    if (any) {
-      g_guiFont = ((get_font_t)RVA(R_TEXT_GETFONT))(any, 0);
-      if (g_guiFont) g_cjk = 1;
+    if (any && uobj_live(any)) {
+      P f = ((get_font_t)RVA(R_TEXT_GETFONT))(any, 0);
+      if (f && uobj_live(f)) {
+        g_guiFont = f;
+        g_cjk = ((has_char_t)RVA(R_FONT_HASCHAR))(f, 0x4E2D, 0) ? 1 : 0;
+      }
     }
   }
   if (!g_guiFont && g_fontType) {
     P p1 = x_string_new("Arial.ttf"), p2 = x_string_new("LegacyRuntime.ttf");
     g_guiFont = ((builtin_t)RVA(R_RES_BUILTIN))(g_fontType, p1, 0);
     if (!g_guiFont) g_guiFont = ((builtin_t)RVA(R_RES_BUILTIN))(g_fontType, p2, 0);
+    if (g_guiFont) g_cjk = 0;
   }
   if (!g_guiFont) { elog("hud: no usable font"); return 0; }
+  if (x_gchandle_new && g_fontRooted != g_guiFont) {
+    if (g_fontHandle && x_gchandle_free) x_gchandle_free((P)g_fontHandle);
+    g_fontHandle = x_gchandle_new(g_guiFont, 0);
+    g_fontRooted = g_guiFont;
+  }
 
   canvasGo = new_go("UCF_HUD");
   if (!canvasGo) { elog("hud: canvas go failed"); return 0; }
@@ -1919,7 +2101,7 @@ static int hud_init(void) {
   ((set_v2_t)RVA(R_RT_PIVOT))(tr, v, 0);
   v.x = 14.0f; v.y = -10.0f;
   ((set_v2_t)RVA(R_RT_APOS))(tr, v, 0);
-  v.x = 760.0f; v.y = 230.0f;
+  v.x = 760.0f; v.y = 268.0f;
   ((set_v2_t)RVA(R_RT_SDELTA))(tr, v, 0);
 
   ((set_font_t)RVA(R_TEXT_SETFONT))(comp, g_guiFont, 0);
@@ -1963,11 +2145,15 @@ static void cat_refresh(void) {
   spawn = cat_count(0, 2);   /* 保卫者出生 / 幽灵出生 / 中立点 */
   box   = cat_count(3, 3);   /* 普通补给箱 */
   color = cat_count(4, 5);   /* 红色 / 蓝色补给箱 */
-  sprintf(s,
-    "<color=#6EC6FF>出生点  %d</color>\n"
-    "<color=#FFD24A>普通补给箱  %d</color>\n"
-    "<color=#FF6FB5>红色</color><color=#B9C2CE>/</color><color=#4FE3E3>蓝色</color><color=#EDEDED>补给箱  %d</color>",
-    spawn, box, color);
+  if (g_cjk) {
+    sprintf(s,
+      "<color=#6EC6FF>出生点  %d</color>\n"
+      "<color=#FFD24A>普通补给箱  %d</color>\n"
+      "<color=#FF6FB5>红色</color><color=#B9C2CE>/</color><color=#4FE3E3>蓝色</color><color=#EDEDED>补给箱  %d</color>",
+      spawn, box, color);
+  } else {
+    sprintf(s, "Spawn %d\nAmmo %d\nRed/Blue %d", spawn, box, color);
+  }
   ((set_txt_t)RVA(R_TEXT_SETTEXT))(g_cat, x_string_new(s), 0);
 }
 
@@ -1975,10 +2161,20 @@ static void hud_refresh(void) {
   char s[2400];
   char miss[200];
   int c1 = 0, c2 = 0, c3 = 0, i;
+  /* 大厅/房间没有 PointGraph：绝不在这里建 HUD。
+   * 2026-11-16 之前 editor_tick 不分场景，HUD 在大厅就建出来了；中文又缺字形，
+   * 屏幕上只剩 "00000000" / "|++|" 这种残片。 */
+  if (!navfix_point_graph()) return;
+  /* 换图后旧 Canvas 已被场景销毁，但 AstarPath 指针可能没变 -> editor_on_scene
+   * 不会 reset。这里先验活，避免对已销毁的 UGUI Text 调 SetText 直接崩溃。 */
+  if ((g_hud && !uobj_live(g_hud)) || (g_keys && !uobj_live(g_keys)) || (g_cat && !uobj_live(g_cat))) {
+    elog("hud: stale objects after scene change, rebuilding");
+    hud_reset();
+  }
   /* cfg: hud = off —— 不建对象、不定时刷新，只在屏幕上留一句怎么叫回来 */
   if (!g_hudOn) {
     if (g_hud)  ((set_txt_t)RVA(R_TEXT_SETTEXT))(g_hud, x_string_new(""), 0);
-    if (g_keys) ((set_txt_t)RVA(R_TEXT_SETTEXT))(g_keys, x_string_new("Ctrl+H 显示状态面板"), 0);
+    if (g_keys) ((set_txt_t)RVA(R_TEXT_SETTEXT))(g_keys, x_string_new(g_cjk ? "Ctrl+H 显示状态面板" : "Ctrl+H show panel"), 0);
     if (g_cat)  ((set_txt_t)RVA(R_TEXT_SETTEXT))(g_cat, x_string_new(""), 0);
     return;
   }
@@ -1990,30 +2186,35 @@ static void hud_refresh(void) {
   }
   if (g_miss[0]) sprintf(miss, "   缺:%s", g_miss);
   else miss[0] = 0;
+  nm_walk(0);   /* 只统计：可视化关着，HUD 也能报可走面有多少 */
   if (g_cjk) {
     sprintf(s,
-      "可视化 %s   A路点:%s B人类:%s C幽灵:%s D出生/箱:%s E模式:%s   标签:%s\n"
+      "可视化 %s   A路点:%s B人类:%s C幽灵:%s D出生/箱:%s E模式:%s   可走面:%s   标签:%s\n"
       "节点 %d  连接 %d  守区 %d  守点 %d  蹲守 %d  守卫 %d  跳链 %d  标签区 %d%s\n"
+      "可走面 %s  %d 三角 / %d 顶点  (A* NavMeshGraph，Ctrl+Shift+6 开关)\n"
       "编辑 %s   已放标记 %d (蹲%d/守%d/区%d)   屏上标签 %d/%d%s",
       g_visOn ? "开" : "关",
       (g_lay & LAY_A) ? "开" : "关", (g_lay & LAY_B) ? "开" : "关",
       (g_lay & LAY_C) ? "开" : "关", (g_lay & LAY_D) ? "开" : "关",
-      (g_lay & LAY_E) ? "开" : "关",
+      (g_lay & LAY_E) ? "开" : "关", g_nmShow ? "开" : "关",
       g_lblMode == 0 ? "关" : (g_lblMode == 1 ? "近距" : "全部"),
       g_vnN, g_veN, g_cArea, g_cPos, g_cCrouch, g_cGuard, g_cJump, g_cTag, miss,
+      g_nmWireTri ? "已载入" : "无（这张图没有 NavMeshGraph）", g_nmWireTri, g_nmWireVert,
       g_on ? "开" : "关", g_n, c1, c2, c3, g_lblShown, g_vfN,
       g_visOn && g_visDirty ? "  [待重建]" : "");
   } else {
     sprintf(s,
-      "VIS %s | A %s B %s C %s D %s E %s | labels %s\n"
+      "VIS %s | A %s B %s C %s D %s E %s | walk-srf %s | labels %s\n"
       "nodes %d edges %d nano %d/%d crouch %d guard %d jump %d tag %d%s\n"
+      "walkable %s %d tris / %d verts (NavMeshGraph, Ctrl+Shift+6)\n"
       "edit %s markers %d (c %d/p %d/a %d) on-screen labels %d/%d",
       g_visOn ? "ON" : "OFF",
       (g_lay & LAY_A) ? "on" : "off", (g_lay & LAY_B) ? "on" : "off",
       (g_lay & LAY_C) ? "on" : "off", (g_lay & LAY_D) ? "on" : "off",
-      (g_lay & LAY_E) ? "on" : "off",
+      (g_lay & LAY_E) ? "on" : "off", g_nmShow ? "on" : "off",
       g_lblMode == 0 ? "off" : (g_lblMode == 1 ? "near" : "all"),
       g_vnN, g_veN, g_cArea, g_cPos, g_cCrouch, g_cGuard, g_cJump, g_cTag, miss,
+      g_nmWireTri ? "yes" : "none", g_nmWireTri, g_nmWireVert,
       g_on ? "ON" : "OFF", g_n, c1, c2, c3, g_lblShown, g_vfN);
   }
   /* 最近日志 + 导出结果：进了图抬头就能看见，不用开文件、不用看控制台 */
@@ -2030,15 +2231,23 @@ static void hud_refresh(void) {
   }
   ((set_txt_t)RVA(R_TEXT_SETTEXT))(g_hud, x_string_new(s), 0);
   if (g_keys) {
+    const char* k;
     if (g_helpOn) {
-      const char* k = "Ctrl+V 可视化总开关   Ctrl+Shift+1..5  A路点/B人类/C幽灵/D出生/箱/E模式   Ctrl+Shift+L 文字标签 关/近距/全部\n"
-                      "Ctrl+E 手动导出   Ctrl+M 日志行开关   Ctrl+H 本面板开关   Delete 删除准星最近标记   Ctrl+0 显示/隐藏已放标记\n"
-                      "Ctrl+1 编辑模式  Ctrl+2 蹲守点  Ctrl+4 幽灵守区  Ctrl+5 撤销  Ctrl+6 保存  Ctrl+7 重载  Ctrl+8 阵营  Ctrl+9 状态\n"
-                      "路点编辑: Ctrl+Shift+A 选A点  Ctrl+Shift+N 加点  Ctrl+Shift+J A↔点 连/断  Ctrl+Shift+D 禁用点  Ctrl+Shift+Z 撤销  Ctrl+Shift+R 重套用（改完自动存盘）";
-      ((set_txt_t)RVA(R_TEXT_SETTEXT))(g_keys, x_string_new(k), 0);
+      if (g_cjk) {
+        k = "Ctrl+V 可视化总开关   Ctrl+Shift+1..6  A路点/B人类/C幽灵/D出生/箱/E模式/F可走面   Ctrl+Shift+L 文字标签 关/近距/全部\n"
+            "Ctrl+E 手动导出   Ctrl+M 日志行开关   Ctrl+H 本面板开关   Delete 删除准星最近标记   Ctrl+0 显示/隐藏已放标记\n"
+            "Ctrl+1 编辑模式  Ctrl+2 蹲守点  Ctrl+4 幽灵守区  Ctrl+5 撤销  Ctrl+6 保存  Ctrl+7 重载  Ctrl+8 阵营  Ctrl+9 状态\n"
+            "路点编辑: Ctrl+Shift+A 选A点  Ctrl+Shift+N 加点  Ctrl+Shift+J A↔点 连/断  Ctrl+Shift+D 禁用点  Ctrl+Shift+Z 撤销  Ctrl+Shift+R 重套用（改完自动存盘）";
+      } else {
+        k = "Ctrl+V visualizer   Ctrl+Shift+1..6  A/B/C/D/E/F layers   Ctrl+Shift+L labels\n"
+            "Ctrl+E export   Ctrl+M log lines   Ctrl+H this panel   Delete nearest marker   Ctrl+0 marker balls\n"
+            "Ctrl+1 edit   Ctrl+2 crouch   Ctrl+4 guard area   Ctrl+5 undo   Ctrl+6 save   Ctrl+7 reload   Ctrl+8 team   Ctrl+9 status\n"
+            "Waypoints: Ctrl+Shift+A select A   Ctrl+Shift+N add   Ctrl+Shift+J link/unlink   Ctrl+Shift+D disable   Ctrl+Shift+Z undo   Ctrl+Shift+R reapply";
+      }
     } else {
-      ((set_txt_t)RVA(R_TEXT_SETTEXT))(g_keys, x_string_new("Ctrl+H 显示快捷键"), 0);
+      k = g_cjk ? "Ctrl+H 显示快捷键" : "Ctrl+H show help";
     }
+    ((set_txt_t)RVA(R_TEXT_SETTEXT))(g_keys, x_string_new(k), 0);
   }
   cat_refresh();
 }
@@ -3070,6 +3279,7 @@ void editor_tick(void) {
     return;
   }
   nav_edit_tick();            /* 等图稳定后自动套用本图的编辑（不看 vis 开关） */
+  nm_tick();                  /* 可走面独立于可视化：Ctrl+V 关着也能显示 */
   if (!g_visOn) {
     if ((++ticks % 8) == 0) hud_refresh();   /* 可视化关着也保持面板数字是活的 */
     return;
@@ -3128,6 +3338,7 @@ void editor_on_key_mod(unsigned vk, int shift) {
     vis_toggle_layer(1 << (vk - '1'));
     return;
   }
+  if (shift && vk == '6') { nm_toggle(); return; }   /* 可走面独立开关 */
 
   /* ---- 路点编辑（Ctrl+Shift+字母） ---- */
   if (shift && vk == 'A') { nav_sel_a(); return; }        /* 选 A 点 */
@@ -3214,10 +3425,11 @@ void editor_start(const char* modDir) {
   g_hudOn      = cfg_bool("hud", 1);
   g_helpOn     = g_hudOn;
   g_visOn      = cfg_bool("visualizer", 0);
+  g_nmShow     = cfg_bool("navmesh_show", 1);
   g_autoExport = cfg_bool("auto_export", 1);
   g_editAllow  = cfg_bool("editor", 1);
-  elog("editor ready: hud=%d visualizer=%d auto_export=%d editor=%d file=%s",
-       g_hudOn, g_visOn, g_autoExport, g_editAllow, g_file);
+  elog("editor ready: hud=%d visualizer=%d navmesh=%d auto_export=%d editor=%d file=%s",
+       g_hudOn, g_visOn, g_nmShow, g_autoExport, g_editAllow, g_file);
   {
     char p[MAX_PATH];
     FILE* fh;

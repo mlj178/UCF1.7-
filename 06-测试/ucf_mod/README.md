@@ -32,11 +32,12 @@ ucf_mod/
 │   ├── navview.html     网页导航编辑器前端（俯视 + 3D）
 │   ├── geo2web.py       geo/*.npz → geo/web/*.bin（3D 地形）
 │   ├── 控制台.pyw        开关面板（CustomTkinter，双击 启动控制台.bat）
+│   ├── test_console_switches.py  cfg.c ↔ 控制台开关表一致性自检
 │   ├── extract_geo.py   从游戏资源抽几何 → geo/*.npz
 │   ├── organize_maps.py vis/ 导出 → maps/ 归档
 │   ├── make_practice.py 生成空白练习图
 │   └── 启动导航编辑器.bat
-├── docs/                各轮记录（历史证据，不作现状依据）
+├── docs/                各轮记录 + 地图对照表.md（★ 序号/关卡/中文名/场景名的唯一权威表）
 └── geo/                 *.npz 地形源；geo/web/ 由 geo2web.py 生成（gitignore）
 ```
 
@@ -66,4 +67,5 @@ ucf_mod/
 | [FEATURES.md](FEATURES.md) | 功能清单：怎么用、可用状态、明确未做项 |
 | [CHANGELOG.md](CHANGELOG.md) | 改动记录（时间倒序）+ 跨轮次关键坑 |
 | [FILE-INVENTORY.csv](FILE-INVENTORY.csv) | 2026-11-16 清理台账（1120 文件的分类与处置依据）|
+| [docs/地图对照表.md](docs/地图对照表.md) | ★ **唯一权威**：11 张图的 序号/关卡/中文名/场景名（手写，脚本都读它）+ 原生 A* 数据 |
 | [docs/](docs/) | 各轮详细记录（历史证据，不作现状依据）|
