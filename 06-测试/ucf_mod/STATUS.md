@@ -13,7 +13,8 @@
 | 构建时间 | 2026-11-16 16:53:15 |
 | 源码 | `src/plugin.c` + `navfix.c` + `editor.c`（editor.c 16:52）|
 | 源码↔产物一致性 | ✅ 已验证：用当前源码重建得到 240,960 B，字节数一致 |
-| 回滚点 | 历史 DLL 已于 2026-11-16 清理 —— 回滚方式改为「用对应版本源码重建」|
+| 构建方式 | `tools\build.ps1` → `build/ucf_mod-<日期>-<git短哈希>.dll` + `build/build.json`（含各源文件时间戳）|
+| 回滚点 | 历史 DLL 已于 2026-11-16 清理 —— 回滚方式改为「用对应版本源码重建」（git 有源码历史）|
 
 ## 2. 开关
 
@@ -60,7 +61,16 @@
 3. 隐藏图缺 `MapManager.pointDic` 的 SupplyBox → 偶发空引用（不影响游玩）。
 4. 日志中文偶发乱码（GBK/UTF-8 混写）。
 
-## 6. 下一步
+## 6. 目录布局
+
+| 端 | 位置 | 进 git | 内容 |
+| --- | --- | --- | --- |
+| 工程端 | `06-测试\ucf_mod` | ✅ | `src/` `tools/` `docs/` `geo/*.npz` 及根目录 4 个文档 |
+| 部署端 | 游戏目录 `ucf_mod\` | ❌ | 40 个文件：dll/config/log + `nav/` `markers/` `maps/` `vis/` `backup/` |
+
+数据（`nav/` `markers/` `maps/` `vis/`）**只在部署端**，工具通过 `tools/ucf_paths.py` 直接读写那边，工程端不留副本。
+
+## 7. 下一步
 
 - [ ] 复验 16:53 的「只走直线」修复：进运输船，`Player.log` 不应再出现 `Unhandled exception during pathfinding`。
 - [ ] 复验通过后，把运输船编辑草稿改回 `n786-57a46e3465c847cb.txt` 重新套用。

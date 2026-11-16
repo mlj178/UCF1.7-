@@ -54,6 +54,12 @@ ucf_mod/
 编辑路点/连边/删点/移动，保存写部署端 `nav\<指纹>.txt`（游戏内插件直接读）。
 `geo/web` 缺失时会自动用 `geo2web.py` 重建。
 
-## 当前状态
+## 文档
 
-**先看 [STATUS.md](STATUS.md)** —— DLL 版本、开关、生效数据、功能可用性、已知问题都在那里。
+| 文件 | 内容 |
+| --- | --- |
+| [STATUS.md](STATUS.md) | ★ 当前生效状态：DLL/开关/数据/功能可用性/已知问题 |
+| [FEATURES.md](FEATURES.md) | 功能清单：怎么用、可用状态、明确未做项 |
+| [CHANGELOG.md](CHANGELOG.md) | 改动记录（时间倒序）+ 跨轮次关键坑 |
+| [FILE-INVENTORY.csv](FILE-INVENTORY.csv) | 2026-11-16 清理台账（1120 文件的分类与处置依据）|
+| [docs/](docs/) | 各轮详细记录（历史证据，不作现状依据）|
