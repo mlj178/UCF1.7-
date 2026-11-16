@@ -7,6 +7,20 @@
 
 ## 2026-11-16
 
+### 19:00 · 启动通行证：直接双击 exe = 原版
+- 需求：`UnityCrossFire.exe` 直接启动应是原版；从控制台启动才加载 mod。
+- **为什么不改加载器**：游戏根的 `winhttp.dll` 是 51 KB 预编译代理，用 pefile 查过 ——
+  92 个导出**全部**是转发到 `winhttp_orig.<名字>`，导入只有 KERNEL32 + msvcrt，
+  DllMain 里用立即数拼出 `<dir>\ucf_mod\ucf_mod.dll` 再 LoadLibrary（所以字符串搜不到 "ucf_mod"）。
+  它能保证的只有"一定会被游戏加载"，载不载 ucf_mod.dll 由它单方面决定，没有源码就改不动。
+- **改法**：把闸门放进我们自己的 `ucf_mod.dll`。`DllMain` 第一句查环境变量
+  `UCF_MOD`，不是 `1` 就 `return TRUE` —— 不起线程、不读配置、不写日志、不装钩子。
+- 控制台 `launch_game()` 用 `env={"UCF_MOD":"1"}` 启动游戏，令牌只对这一次子进程有效。
+- **实测 A/B（真跑游戏）**：
+  - 直接双击 exe → 游戏正常运行，`ucf_mod.log` 新增 **0 行**；
+  - 带令牌启动 → 完整加载，`injected into MapAsset (mode=6) -> 2 entries`（4 秒内）。
+- 产物：`ucf_mod.dll` **246,387 B**，部署 18:56:46，SHA256 `5A4BB25D…`。
+
 ### 18:42 · 死代码清理 + 编译闸门
 - 删掉 6 处「定义了但没人用」的代码：
   `navfix.c` 的 `rptr()` 与 `make_guard_area` 里的 `tr`/`zero`；
