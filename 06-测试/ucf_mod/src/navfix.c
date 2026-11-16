@@ -76,7 +76,6 @@ static P g_botCls;
 static P g_stopField;
 static int g_stopHeld;
 
-static P rptr(P o, int off) { return *(P*)((char*)o + off); }
 /* UnityEngine.Object.m_CachedPtr; 0 means the native object was destroyed. */
 static int n_live(P o) { return o && *(P*)((char*)o + 0x8) != 0; }
 static void wfield(P o, int off, P v) {
@@ -297,8 +296,6 @@ static P make_guard_area(V3 p, int npos) {
   P go, comp, list, nameStr;
   P hlist = 0, hname = 0;
   P posgo[4];
-  P tr;
-  V3 zero = { 0, 0, 0 };
   int i;
   int madePos = 0;
   if (!g_areaCls || !g_posCls || !g_vec3Cls || !g_listCls || !g_listCtor || !g_listAdd) return 0;
