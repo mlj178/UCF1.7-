@@ -2,6 +2,29 @@
 
 > 只写「现在有什么、怎么用、可用状态」。改动沿革见 [CHANGELOG.md](CHANGELOG.md)，运行状态见 [STATUS.md](STATUS.md)。
 
+## 零、开关（2026-11-16 新增）
+
+全部开关在部署端 `ucf_mod.json` 的 `features` 里，由 `src/cfg.c` 读取，
+**启动时把每一项打进日志**（`[cfg]` 前缀），关掉哪个都看得见。
+
+界面：`tools\启动控制台.bat`（双击开窗，勾选即写盘）。
+
+| 键 | 默认 | 作用 | 关掉之后 |
+| --- | --- | --- | --- |
+| `enabled` | 开 | 总开关 | 插件加载后完全不动作 |
+| `hidden_map` | 开 | 注入隐藏地图 | 下拉框里没有「暴风」 |
+| `auto_waypoints` | 开 | 铺路点 + 连线 | 人机原地不动 |
+| `auto_crouch` | 开 | 自动补蹲守点 | 不布蹲点 |
+| `ghost_areas` | 开 | 造幽灵守卫区 | 幽灵没巡逻区 |
+| `auto_export` | 开 | 进图自动导出路点 | 不写 `vis\`（Ctrl+E 仍可） |
+| `hud` | 开 | 进图显示状态面板 | 不显示（Ctrl+H 可叫出） |
+| `visualizer` | 关 | 进图就画网格 | 不画（Ctrl+V 可开） |
+| `editor` | 开 | 游戏内编辑 | Ctrl+1 失效 |
+| `collect_only` | 关 | 只读采集 | —— 开启后只导出、不改游戏 |
+
+> `auto_waypoints` / `auto_crouch` / `ghost_areas` 原来写在同一个函数里，
+> 关掉第一个后两个永远不会执行（假开关）。现已拆成 `survey()` + 三个独立动作。
+
 ## 一、游戏内功能
 
 ### 1. 隐藏地图注入

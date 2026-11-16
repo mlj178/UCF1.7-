@@ -16,7 +16,7 @@ $tools = $PSScriptRoot
 $root  = Split-Path -Parent $tools
 $src   = Join-Path $root 'src'
 $build = Join-Path $root 'build'
-$sources = @('plugin.c', 'navfix.c', 'editor.c')
+$sources = @('cfg.c', 'plugin.c', 'navfix.c', 'editor.c')
 
 # ---- gcc ----
 if (-not (Test-Path -LiteralPath $Gcc)) {
@@ -66,16 +66,16 @@ Copy-Item -LiteralPath $out -Destination (Join-Path $build 'ucf_mod.dll') -Force
 if ($Deploy) {
     $cfg = Join-Path $tools 'deploy.json'
     if (-not (Test-Path -LiteralPath $cfg)) { throw "缺少 tools/deploy.json（复制 deploy.json.example 改成实际路径）" }
-    $deploy = (Get-Content -LiteralPath $cfg -Raw | ConvertFrom-Json).deploy
-    if (-not (Test-Path -LiteralPath $deploy)) { throw "部署端不存在：$deploy" }
+    $deployDir = (Get-Content -LiteralPath $cfg -Raw | ConvertFrom-Json).deploy
+    if (-not (Test-Path -LiteralPath $deployDir)) { throw "部署端不存在：$deployDir" }
 
     $proc = Get-Process UnityCrossFire -ErrorAction SilentlyContinue
     if ($proc) { "游戏在运行，先关闭..."; $proc | Stop-Process -Force; Start-Sleep -Seconds 2 }
 
-    $target = Join-Path $deploy 'ucf_mod.dll'
+    $target = Join-Path $deployDir 'ucf_mod.dll'
     if (Test-Path -LiteralPath $target) {
         $bak = 'ucf_mod.dll.deployed_' + (Get-Date -Format 'yyyyMMdd_HHmmss')
-        Copy-Item -LiteralPath $target -Destination (Join-Path $deploy $bak) -Force
+        Copy-Item -LiteralPath $target -Destination (Join-Path $deployDir $bak) -Force
         "旧 dll 备份: $bak"
     }
     Copy-Item -LiteralPath $out -Destination $target -Force

@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdarg.h>
+#include "cfg.h"
 
 typedef void* P;
 typedef struct { float x, y, z; } V3;
@@ -432,187 +433,289 @@ static int g_collectOnly; /* 1 = 只读采集：不改动游戏里的任何状�
 int  navfix_collect_only(void) { return g_collectOnly; }
 void navfix_set_collect_only(int on) { g_collectOnly = on ? 1 : 0; nlog("collect-only %s", on ? "ON" : "OFF"); }
 
-static void build_waypoints(void) {
-  if (InterlockedCompareExchange(&g_appQuit, 0, 0)) return;
-  if (g_collectOnly) { nlog("readonly: skip build (collect-only)"); return; }
-  P astar = astar_active();
-  if (!astar) { nlog("no AstarPath.active"); return; }
-  P pg = point_graph(astar);
-  if (!pg) { nlog("no PointGraph in scene"); return; }
-  int before = *(int*)((char*)pg + 0xEC);
-  if (before > 0) { nlog("point graph already has %d nodes, skip", before); return; }
-  if (!g_goCls) { nlog("GameObject class missing"); return; }
-  hold_bots(1);
+/* ===================== 地面采样 + 三个独立动作 ==========================
+ * 2026-11-16 拆解：原来 build_waypoints() 把「铺路点 / 补蹲守点 / 造守卫区」
+ * 写死在同一个函数里，第一个不跑后两个永远不会执行 —— 那三个开关是假的。
+ * 现在：
+ *     survey()          只做射线采样，把坐标填进 g_all[]，不创建任何对象
+ *     act_waypoints()   建 UCF_WayPoints + Scan + ConnectNodes
+ *     act_crouch()      补 Bot_CrouchPos
+ *     act_guard()       造 Bot_NanoGuardArea / Bot_NanoGuardPos
+ * 三者各自读自己的 cfg 开关，互不为前提；日志里各打一行，关掉也看得见。
+ */
+#define MAX_SPOTS 16384
+static V3   g_all[MAX_SPOTS];
+static int  g_nall;
+static float g_minX, g_maxX, g_minZ, g_maxZ;
+static int  g_survOk;   /* 本场景采样成功 */
+static int  g_crDone;   /* 本场景蹲守点已处理 */
+static int  g_gaDone;   /* 本场景守卫区已处理 */
 
-  raycast_t rc = (raycast_t)RVA(0xABB0A0);
+static void setup_reset(void) {
+  g_survOk = 0; g_crDone = 0; g_gaDone = 0;
+  g_nall = 0; g_nspots = 0;
+}
+
+static int survey(void) {
+  raycast_t rc;
   char hit[96];
-  float minX = 1e9f, maxX = -1e9f, minZ = 1e9f, maxZ = -1e9f;
+  float minX = 1e9f, maxX = -1e9f, minZ = 1e9f, maxZ = 1e9f;
   int ch = 0;
-  for (float x = -250.0f; x <= 250.0f; x += 20.0f)
-    for (float z = -250.0f; z <= 250.0f; z += 20.0f) {
-      V3 o = { x, 300.0f, z }, d = { 0.0f, -1.0f, 0.0f };
+  float fx, fz;
+  int layer;
+
+  if (g_survOk) return 1;
+  rc = (raycast_t)RVA(0xABB0A0);
+
+  /* 粗扫：确定这张图的可走范围 */
+  for (fx = -250.0f; fx <= 250.0f; fx += 20.0f)
+    for (fz = -250.0f; fz <= 250.0f; fz += 20.0f) {
+      V3 o = { fx, 300.0f, fz }, d = { 0.0f, -1.0f, 0.0f };
       if (!rc(o, d, hit, 700.0f, 1, 0)) continue;
       if (*(float*)(hit + 16) < 0.6f) continue;
       ch++;
-      float hx = *(float*)hit, hz = *(float*)(hit + 8);
-      if (hx < minX) minX = hx; if (hx > maxX) maxX = hx;
-      if (hz < minZ) minZ = hz; if (hz > maxZ) maxZ = hz;
+      if (*(float*)hit < minX) minX = *(float*)hit;
+      if (*(float*)hit > maxX) maxX = *(float*)hit;
+      if (*(float*)(hit + 8) < minZ) minZ = *(float*)(hit + 8);
+      if (*(float*)(hit + 8) > maxZ) maxZ = *(float*)(hit + 8);
     }
-  nlog("coarse hits=%d bounds x[%.1f,%.1f] z[%.1f,%.1f]", ch, minX, maxX, minZ, maxZ);
-  if (ch < 8) { nlog("too few ground hits, retry later"); hold_bots(0); return; }
+  if (ch < 8) { nlog("survey: too few ground hits (%d), retry later", ch); return 0; }
+  nlog("survey: coarse hits=%d bounds x[%.1f,%.1f] z[%.1f,%.1f]", ch, minX, maxX, minZ, maxZ);
+  g_minX = minX; g_maxX = maxX; g_minZ = minZ; g_maxZ = maxZ;
 
-  ctor_str_t ctor = (ctor_str_t)RVA(0x331EA0);
-  get_tr_t gtr = (get_tr_t)RVA(0x332010);
-  set_pos_t sp = (set_pos_t)RVA(0x3F4840);
-  set_parent_t sparent = (set_parent_t)RVA(0x3F3AB0);
-
-  P root = i_object_new(g_goCls);
-  ctor(root, i_string_new("UCF_WayPoints"), 0);
-  P rootTr = gtr(root, 0);
-  V3 zero = { 0, 0, 0 };
-  sp(rootTr, zero, 0);
-
-  P childName = i_string_new("wp");
-  P hchild = 0;
-  if (i_gchandle_new) hchild = (P)i_gchandle_new(childName, 0);
-  int made = 0;
-  g_nspots = 0;
-  /* Multi-layer sampling: a single downward ray from y=300 hits the roof first,
-   * which put most nodes on rooftops and left interiors (the ghost spawn cave)
-   * without any node. Cast again just below each surface, up to 5 layers. */
-  for (float x = minX - 4.0f; x <= maxX + 4.0f; x += 4.0f)
-    for (float z = minZ - 4.0f; z <= maxZ + 4.0f; z += 4.0f) {
-      V3 d = { 0.0f, -1.0f, 0.0f };
+  /* 细扫：单条向下射线只会打到屋顶，室内（幽灵出生洞）就没点了。
+   * 所以每列往下追射最多 5 层。 */
+  g_nall = 0; g_nspots = 0;
+  for (fx = minX - 4.0f; fx <= maxX + 4.0f; fx += 4.0f)
+    for (fz = minZ - 4.0f; fz <= maxZ + 4.0f; fz += 4.0f) {
       float y = 300.0f;
-      for (int layer = 0; layer < 5; layer++) {
-        V3 o = { x, y, z };
-        P c, t;
+      for (layer = 0; layer < 5; layer++) {
+        V3 o = { fx, y, fz }, d = { 0.0f, -1.0f, 0.0f };
         V3 pos;
         if (!rc(o, d, hit, 700.0f, 1, 0)) break;
         if (*(float*)(hit + 16) < 0.65f) break;
-        c = i_object_new(g_goCls);
-        ctor(c, childName, 0);
-        t = gtr(c, 0);
         pos.x = *(float*)hit;
         pos.y = *(float*)(hit + 4) + 0.2f;
         pos.z = *(float*)(hit + 8);
-        /* y=39..57 surfaces are skybox/ceiling colliders, not walkable map area */
+        /* y=39..57 是天空盒/天花板碰撞体，不是可走的地面 */
         if (pos.y < -30.0f || pos.y > 15.0f) {
           y = *(float*)(hit + 4) - 1.5f;
           if (y < -80.0f) break;
           continue;
         }
-        sp(t, pos, 0);
-        sparent(t, rootTr, 0, 0);
-        /* guard areas only on real ground: high spots made ghosts try to fly */
-        if ((made % 11) == 0 && g_nspots < 64 && pos.y > -3.0f && pos.y < 9.0f) g_spots[g_nspots++] = pos;
-        made++;
+        /* 守卫区只建在真正的地面上：高处会让幽灵尝试飞行 */
+        if ((g_nall % 11) == 0 && g_nspots < 64 && pos.y > -3.0f && pos.y < 9.0f) g_spots[g_nspots++] = pos;
+        if (g_nall < MAX_SPOTS) g_all[g_nall++] = pos;
         y = *(float*)(hit + 4) - 1.5f;
         if (y < -80.0f) break;
       }
     }
+  nlog("survey: spots=%d guardCandidates=%d", g_nall, g_nspots);
+  if (g_nall < 8) { nlog("survey: too few spots (%d), retry later", g_nall); return 0; }
+  g_survOk = 1;
+  return 1;
+}
+
+/* ---- 动作 1：铺 A* 路点 ---- */
+static void act_waypoints(void) {
+  P astar, pg, root, rootTr, childName, hchild = 0;
+  ctor_str_t ctor;
+  get_tr_t gtr;
+  set_pos_t sp;
+  set_parent_t sparent;
+  int before, made = 0, k;
+
+  if (!cfg_bool("auto_waypoints", 1)) { nlog("[cfg] auto_waypoints = off, skip waypoints"); return; }
+  astar = astar_active();
+  if (!astar) { nlog("waypoints: no AstarPath.active"); return; }
+  pg = point_graph(astar);
+  if (!pg) { nlog("waypoints: no PointGraph in scene"); return; }
+  before = *(int*)((char*)pg + 0xEC);
+  if (before > 0) { nlog("waypoints: graph already has %d nodes, skip", before); return; }
+  if (!g_goCls) { nlog("waypoints: GameObject class missing"); return; }
+
+  ctor = (ctor_str_t)RVA(0x331EA0);
+  gtr = (get_tr_t)RVA(0x332010);
+  sp = (set_pos_t)RVA(0x3F4840);
+  sparent = (set_parent_t)RVA(0x3F3AB0);
+
+  root = i_object_new(g_goCls);
+  ctor(root, i_string_new("UCF_WayPoints"), 0);
+  rootTr = gtr(root, 0);
+  { V3 zero = { 0, 0, 0 }; sp(rootTr, zero, 0); }
+
+  childName = i_string_new("wp");
+  if (i_gchandle_new) hchild = (P)i_gchandle_new(childName, 0);
+  for (k = 0; k < g_nall; k++) {
+    P c = i_object_new(g_goCls);
+    P t;
+    if (!c) break;
+    ctor(c, childName, 0);
+    t = gtr(c, 0);
+    sp(t, g_all[k], 0);
+    sparent(t, rootTr, 0, 0);
+    made++;
+  }
   nlog("waypoint objects created=%d", made);
   if (made < 8) {
     nlog("waypoints too few, abort");
     if (hchild && i_gchandle_free) i_gchandle_free(hchild);
-    hold_bots(0); return;
+    return;
   }
 
-  /* nodes on the map's own spawn points: guarantees Bot.Update's start node is non-null */
+  /* 地图自带的出生点上补节点：保证 Bot.Update 的起始节点非空 */
   add_spawn_nodes(rootTr);
-
   if (i_wbarrier) i_wbarrier(pg, (char*)pg + 0xB8, rootTr);
   *(P*)((char*)pg + 0xB8) = rootTr;
 
-  /* ---- AI 行为点位：蹲守点 (Bot_CrouchPos) ---- */
-  if (g_crouchCls && i_class_get_type && i_type_get_object) {
-    P spareField = i_class_get_field_from_name(g_crouchCls, "SpareList_BL");
-    P spareList = 0;
-    if (spareField) i_field_static_get_value(spareField, &spareList);
-    int existing = spareList ? *(int*)((char*)spareList + 0xC) : -1;
-    {
-      extern int editor_crouch_made(void);
-      int own = editor_crouch_made();
-      nlog("crouch: existing SpareList_BL count=%d (editor-made=%d)", existing, own);
-      if (existing > 0 && own > 0) existing -= own;
-    }
-    if (existing <= 0) {
-      P typeObj = i_type_get_object(i_class_get_type(g_crouchCls));
-      addcomp_t addComp = (addcomp_t)RVA(0x331A90);
-      P nameStr = i_string_new("CrouchPos");
-      P hname2 = 0;
-      if (i_gchandle_new) hname2 = (P)i_gchandle_new(nameStr, 0);
-      int made2 = 0;
-      for (float cx = minX - 2.0f; cx <= maxX + 2.0f; cx += 9.0f)
-        for (float cz = minZ - 2.0f; cz <= maxZ + 2.0f; cz += 9.0f) {
-          V3 o = { cx, 300.0f, cz }, d = { 0.0f, -1.0f, 0.0f };
-          if (!rc(o, d, hit, 700.0f, 1, 0)) continue;
-          if (*(float*)(hit + 16) < 0.8f) continue;
-          P co = i_object_new(g_goCls);
-          ctor(co, nameStr, 0);
-          P comp = addComp(co, typeObj, 0);
-          if (!comp) continue;
-          P ct = gtr(co, 0);
-          V3 cpos = { *(float*)hit, *(float*)(hit + 4) + 0.05f, *(float*)(hit + 8) };
-          sp(ct, cpos, 0);
-          made2++;
-        }
-      P spareList2 = 0;
-      if (spareField) i_field_static_get_value(spareField, &spareList2);
-      int now = spareList2 ? *(int*)((char*)spareList2 + 0xC) : -1;
-      nlog("crouch: created=%d registered=%d", made2, now);
-      if (hname2 && i_gchandle_free) i_gchandle_free(hname2);
-    }
-  }
-
-  *(float*)((char*)pg + 0xC0) = 4.6f;   /* maxDistance: 4m grid connects, 5m+ floor gaps do not */
-  /* Distance-only connections link nodes through walls/ceilings, so A* sends the
-   * ghost straight into a wall. PointGraph.raycast makes ConnectNodes linecast
-   * between nodes and drop blocked pairs. */
+  *(float*)((char*)pg + 0xC0) = 4.6f;        /* maxDistance：4m 栅格连得上，5m 以上地面缝连不上 */
+  /* 只按距离连线会穿墙，A* 会把幽灵直接送去撞墙。
+   * PointGraph.raycast 让 ConnectNodes 做线检测，被挡住的一对直接丢掉。 */
   *(unsigned char*)((char*)pg + 0xD0) = 1;   /* raycast */
   *(unsigned char*)((char*)pg + 0xD2) = 0;   /* thickRaycast */
-  *(int*)((char*)pg + 0xDC) = -1;            /* mask: everything */
+  *(int*)((char*)pg + 0xDC) = -1;            /* mask: 全部 */
 
-  scan_t scan = (scan_t)RVA(0x581640);
-  scan(pg, 0);
+  { scan_t scan = (scan_t)RVA(0x581640); scan(pg, 0); }
   nlog("scan done: nodes=%d (was %d)", *(int*)((char*)pg + 0xEC), before);
   g_graphOurs = 1;
 
   {
     typedef void (*connect_t)(P, void*);
     connect_t connectNodes = (connect_t)RVA(0x5EE8E0);
+    P nodes;
+    int cnt2, withLinks = 0, totalLinks = 0, sampleN, n2;
     connectNodes(pg, 0);
-    P nodes = *(P*)((char*)pg + 0xE8);
-    int cnt2 = nodes ? *(int*)((char*)nodes + 0xC) : 0;
-    int withLinks = 0, totalLinks = 0, sampleN = cnt2 < 300 ? cnt2 : 300;
-    for (int i = 0; i < sampleN; i++) {
-      P nd = *(P*)((char*)nodes + 0x10 + i*4);
+    nodes = *(P*)((char*)pg + 0xE8);
+    cnt2 = nodes ? *(int*)((char*)nodes + 0xC) : 0;
+    sampleN = cnt2 < 300 ? cnt2 : 300;
+    for (n2 = 0; n2 < sampleN; n2++) {
+      P nd = *(P*)((char*)nodes + 0x10 + n2*4);
+      P cc;
       if (!nd) continue;
-      P cc = *(P*)((char*)nd + 0x20);
+      cc = *(P*)((char*)nd + 0x20);
       if (cc) { int L = *(int*)((char*)cc + 0xC); if (L > 0) withLinks++; totalLinks += L; }
     }
     nlog("connected: sampled=%d withLinks=%d totalLinks=%d", sampleN, withLinks, totalLinks);
   }
-
-  /* ---- 幽灵守卫区: the hidden map has none at all, so every ghost just idles ---- */
-  if (g_areaCls && g_posCls && g_vec3Cls && g_listCls && g_listCtor && g_listAdd) {
-    int madeA = 0;
-    g_madeAreas = 0;
-    for (int i = 0; i < g_nspots && g_madeAreas < 64; i++) {
-      P comp = make_guard_area(g_spots[i], 1 + (i % 2));
-      if (comp) { g_areaComps[g_madeAreas++] = comp; madeA++; }
-    }
-    link_guard_areas();
-    P f = i_class_get_field_from_name(g_areaCls, "SpareAreaList");
-    P list = 0;
-    if (f) i_field_static_get_value(f, &list);
-    nlog("guard areas: created=%d spots=%d SpareAreaList=%d", madeA, g_nspots, list ? *(int*)((char*)list + 0xC) : -1);
-  } else {
-    nlog("guard areas: classes missing area=%p pos=%p vec3=%p list=%p", g_areaCls, g_posCls, g_vec3Cls, g_listCls);
-  }
   if (hchild && i_gchandle_free) i_gchandle_free(hchild);
+}
+
+/* ---- 动作 2：补蹲守点 ---- */
+static void act_crouch(void) {
+  P spareField, spareList = 0, typeObj, nameStr, hname2 = 0;
+  addcomp_t addComp;
+  ctor_str_t ctor;
+  get_tr_t gtr;
+  set_pos_t sp;
+  raycast_t rc;
+  char hit[96];
+  int existing, made2 = 0;
+  float cx, cz;
+
+  if (g_crDone) return;
+  g_crDone = 1;
+  if (!cfg_bool("auto_crouch", 1)) { nlog("[cfg] auto_crouch = off, skip crouch points"); return; }
+  if (!g_crouchCls || !i_class_get_type || !i_type_get_object) { nlog("crouch: Bot_CrouchPos class missing"); return; }
+
+  spareField = i_class_get_field_from_name(g_crouchCls, "SpareList_BL");
+  if (spareField) i_field_static_get_value(spareField, &spareList);
+  existing = spareList ? *(int*)((char*)spareList + 0xC) : -1;
+  {
+    extern int editor_crouch_made(void);
+    int own = editor_crouch_made();
+    nlog("crouch: existing SpareList_BL count=%d (editor-made=%d)", existing, own);
+    if (existing > 0 && own > 0) existing -= own;
+  }
+  if (existing > 0) { nlog("crouch: map already has %d, skip", existing); return; }
+
+  rc = (raycast_t)RVA(0xABB0A0);
+  ctor = (ctor_str_t)RVA(0x331EA0);
+  gtr = (get_tr_t)RVA(0x332010);
+  sp = (set_pos_t)RVA(0x3F4840);
+  typeObj = i_type_get_object(i_class_get_type(g_crouchCls));
+  addComp = (addcomp_t)RVA(0x331A90);
+  nameStr = i_string_new("CrouchPos");
+  if (i_gchandle_new) hname2 = (P)i_gchandle_new(nameStr, 0);
+
+  for (cx = g_minX - 2.0f; cx <= g_maxX + 2.0f; cx += 9.0f)
+    for (cz = g_minZ - 2.0f; cz <= g_maxZ + 2.0f; cz += 9.0f) {
+      V3 o = { cx, 300.0f, cz }, d = { 0.0f, -1.0f, 0.0f };
+      P co, comp, ct;
+      V3 cpos;
+      if (!rc(o, d, hit, 700.0f, 1, 0)) continue;
+      if (*(float*)(hit + 16) < 0.8f) continue;
+      co = i_object_new(g_goCls);
+      ctor(co, nameStr, 0);
+      comp = addComp(co, typeObj, 0);
+      if (!comp) continue;
+      ct = gtr(co, 0);
+      cpos.x = *(float*)hit;
+      cpos.y = *(float*)(hit + 4) + 0.05f;
+      cpos.z = *(float*)(hit + 8);
+      sp(ct, cpos, 0);
+      made2++;
+    }
+  {
+    P list2 = 0;
+    int now;
+    if (spareField) i_field_static_get_value(spareField, &list2);
+    now = list2 ? *(int*)((char*)list2 + 0xC) : -1;
+    nlog("crouch: created=%d registered=%d", made2, now);
+  }
+  if (hname2 && i_gchandle_free) i_gchandle_free(hname2);
+}
+
+/* ---- 动作 3：幽灵守卫区 ---- */
+static void act_guard(void) {
+  P f = 0, list = 0;
+  int madeA = 0, k, existing = -1;
+
+  if (g_gaDone) return;
+  g_gaDone = 1;
+  if (!cfg_bool("ghost_areas", 1)) { nlog("[cfg] ghost_areas = off, skip guard areas"); return; }
+  if (!g_areaCls || !g_posCls || !g_vec3Cls || !g_listCls || !g_listCtor || !g_listAdd) {
+    nlog("guard areas: classes missing area=%p pos=%p vec3=%p list=%p", g_areaCls, g_posCls, g_vec3Cls, g_listCls);
+    return;
+  }
+  if (g_nspots == 0) { nlog("guard areas: no candidate spots, skip"); return; }
+
+  f = i_class_get_field_from_name(g_areaCls, "SpareAreaList");
+  if (f) i_field_static_get_value(f, &list);
+  if (list) existing = *(int*)((char*)list + 0xC);
+  if (existing > 0) { nlog("guard areas: map already has %d, skip", existing); return; }
+
+  g_madeAreas = 0;
+  for (k = 0; k < g_nspots && g_madeAreas < 64; k++) {
+    P comp = make_guard_area(g_spots[k], 1 + (k % 2));
+    if (comp) { g_areaComps[g_madeAreas++] = comp; madeA++; }
+  }
+  link_guard_areas();
+  {
+    P l2 = 0;
+    if (f) i_field_static_get_value(f, &l2);
+    nlog("guard areas: created=%d spots=%d SpareAreaList=%d", madeA, g_nspots, l2 ? *(int*)((char*)l2 + 0xC) : -1);
+  }
+}
+
+/* ---- 调度：采样一次，三个动作按开关各跑各的 ---- */
+static void run_setup(void) {
+  int wp, cr, ga;
+  if (InterlockedCompareExchange(&g_appQuit, 0, 0)) return;
+  if (g_collectOnly) { nlog("readonly: skip setup (collect-only)"); return; }
+  wp = cfg_bool("auto_waypoints", 1);
+  cr = cfg_bool("auto_crouch", 1);
+  ga = cfg_bool("ghost_areas", 1);
+  if (!wp && !cr && !ga) { nlog("[cfg] all setup actions are off, nothing to do"); return; }
+  if (!astar_active()) { nlog("no AstarPath.active"); return; }
+  if (!survey()) return;
+
+  nlog("setup: waypoints=%s crouch=%s guard=%s spots=%d",
+       wp ? "on" : "off", cr ? "on" : "off", ga ? "on" : "off", g_nall);
+  hold_bots(1);
+  if (wp) act_waypoints();
+  if (cr) act_crouch();
+  if (ga) act_guard();
   hold_bots(0);
-  { void editor_mark_dirty(void); editor_mark_dirty(); }
 }
 
 /* ---- main-thread scene tick (all il2cpp calls happen here) -------------- */
@@ -628,6 +731,7 @@ static void nav_tick(void) {
     g_lastAstar = a;
     g_zeroStreak = 0;
     g_graphOurs = 0;
+    setup_reset();
     nlog("scene astar=%p (purge start)", a);
     if (!g_collectOnly) purge_guard_areas();
     nlog("scene astar=%p (purge done, notify editor)", a);
@@ -637,7 +741,7 @@ static void nav_tick(void) {
     {
       P pg0 = point_graph(a);
       { int editor_nogen(void);
-        if (!g_collectOnly && !editor_nogen() && pg0 && *(int*)((char*)pg0 + 0xEC) == 0) { nlog("scene change: building immediately"); build_waypoints(); } }
+        if (!g_collectOnly && !editor_nogen() && pg0 && *(int*)((char*)pg0 + 0xEC) == 0) { nlog("scene change: running setup immediately"); run_setup(); } }
     }
   }
   pg = point_graph(a);
@@ -648,7 +752,7 @@ static void nav_tick(void) {
       if ((g_zeroStreak % 20) == 0) nlog("collect-only: graph still empty (~%.0f s)", g_zeroStreak * 0.25f);
     } else { int editor_nogen(void);
       if (!editor_nogen() && (g_zeroStreak == 4 || (g_zeroStreak > 4 && (g_zeroStreak % 10) == 0))) {
-        build_waypoints();
+        run_setup();
       }
     }
   } else if (!pg) {
@@ -711,7 +815,8 @@ static LRESULT CALLBACK NavProc(HWND h, UINT msg, WPARAM w, LPARAM l) {
     if (!g_oldProc) return 0;
     InterlockedIncrement(&g_buildCount);
     nlog("build request #%d", g_buildCount);
-    build_waypoints();
+    setup_reset();
+    run_setup();
     return 0;
   }
   if (msg == WM_UCF_SCENE) {

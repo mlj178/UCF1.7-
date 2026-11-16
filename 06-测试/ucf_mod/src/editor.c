@@ -18,6 +18,7 @@
 #include <stdarg.h>
 #include <stdlib.h>
 #include <math.h>
+#include "cfg.h"
 
 typedef void* P;
 typedef struct { float x, y, z; } V3;
@@ -732,7 +733,9 @@ static int g_lblShown;
 static int g_exporting;            /* 正在导出：忽略图层开关，五层全读，绝不少导数据 */
 static int g_visOn, g_lay = LAY_A | LAY_B | LAY_C | LAY_D | LAY_E, g_lblMode = 0;  /* 0 = no world-space text: it clutters the view */
 static int g_visDirty, g_visNoMesh;
-static int g_autoExport = 1;      /* 图有节点且稳定后自动导出一份路点 JSON */
+static int g_autoExport = 1;      /* cfg: auto_export —— 图稳定后自动导出一份路点 JSON */
+static int g_hudOn = 1;           /* cfg: hud —— 状态面板总开关（Ctrl+H 可强行叫出） */
+static int g_editAllow = 1;       /* cfg: editor —— 是否允许进编辑模式 */
 static int g_aeNodes = -1;        /* 自动导出：上次看到的节点数 */
 static int g_aeHold;              /* 自动导出：稳定倒计时（tick 数） */
 static int g_collectOnly;         /* 只读采集：不建图/不建蹲点/不建守区/不建任何 UI 对象 */
@@ -1991,6 +1994,13 @@ static void hud_refresh(void) {
   char s[2400];
   char miss[200];
   int c1 = 0, c2 = 0, c3 = 0, i;
+  /* cfg: hud = off —— 不建对象、不定时刷新，只在屏幕上留一句怎么叫回来 */
+  if (!g_hudOn) {
+    if (g_hud)  ((set_txt_t)RVA(R_TEXT_SETTEXT))(g_hud, x_string_new(""), 0);
+    if (g_keys) ((set_txt_t)RVA(R_TEXT_SETTEXT))(g_keys, x_string_new("Ctrl+H 显示状态面板"), 0);
+    if (g_cat)  ((set_txt_t)RVA(R_TEXT_SETTEXT))(g_cat, x_string_new(""), 0);
+    return;
+  }
   if (!g_hud && !hud_init()) return;
   for (i = 0; i < g_n; i++) {
     if (g_mk[i].type == 1) c1++;
@@ -3078,7 +3088,10 @@ void editor_tick(void) {
     return;
   }
   nav_edit_tick();            /* 等图稳定后自动套用本图的编辑（不看 vis 开关） */
-  if (!g_visOn) return;
+  if (!g_visOn) {
+    if ((++ticks % 8) == 0) hud_refresh();   /* 可视化关着也保持面板数字是活的 */
+    return;
+  }
   if (g_visDirty) {
     g_visDirty = 0;
     vis_rebuild();
@@ -3116,7 +3129,12 @@ void editor_on_key_mod(unsigned vk, int shift) {
   if (vk == 'V') { vis_toggle(); return; }
   if (shift && vk == 'X') { set_collect_only(!g_collectOnly); return; }
   if (vk == 'E') { g_exportForce = 1; vis_export(); g_exportForce = 0; return; }
-  if (vk == 'H') { g_helpOn = !g_helpOn; hud_refresh(); return; }
+  if (vk == 'H') {
+    if (!g_hudOn) { g_hudOn = 1; g_helpOn = 1; elog("hud: on (was off by config)"); }
+    else g_helpOn = !g_helpOn;
+    hud_refresh();
+    return;
+  }
   if (vk == 'M') { g_logOn = !g_logOn; hud_refresh(); return; }
   if (shift && vk == 'L') {
     g_lblMode = (g_lblMode + 1) % 3;
@@ -3139,6 +3157,7 @@ void editor_on_key_mod(unsigned vk, int shift) {
   if (shift && vk == 'R') { nav_reapply(); return; }      /* 强制重新套用 */
 
   if (vk == '1') {
+    if (!g_editAllow) { elog("[cfg] editor = off, 游戏内编辑已关闭"); hud_refresh(); return; }
     g_on = !g_on;
     elog("editor %s (markers=%d)", g_on ? "ON" : "OFF", g_n);
     hud_refresh();
@@ -3208,12 +3227,21 @@ void editor_start(const char* modDir) {
   strncpy(g_dir, modDir, sizeof(g_dir) - 1);
   sprintf(g_log, "%s\\ucf_mod.log", g_dir);
   sprintf(g_file, "%s\\markers\\markers.txt", g_dir);
-  elog("editor ready: Ctrl+V vis, Ctrl+Shift+1..5 layers, Ctrl+E export, Delete remove, file=%s", g_file);
+  /* 开关全部来自 ucf_mod.json（cfg.c）：这里各取一次，日志里写清楚，
+   * 关掉哪个在日志里都看得见，不用猜。 */
+  g_hudOn      = cfg_bool("hud", 1);
+  g_helpOn     = g_hudOn;
+  g_visOn      = cfg_bool("visualizer", 0);
+  g_autoExport = cfg_bool("auto_export", 1);
+  g_editAllow  = cfg_bool("editor", 1);
+  elog("editor ready: hud=%d visualizer=%d auto_export=%d editor=%d file=%s",
+       g_hudOn, g_visOn, g_autoExport, g_editAllow, g_file);
   {
     char p[MAX_PATH];
     FILE* fh;
     extern void navfix_set_collect_only(int);
     sprintf(p, "%s\\collect.flag", g_dir);
+    if (cfg_bool("collect_only", 0)) g_collectOnly = 1;
     fh = fopen(p, "r");
     if (fh) { fclose(fh); g_collectOnly = 1; }
     navfix_set_collect_only(g_collectOnly);

@@ -2,12 +2,14 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdarg.h>
+#include "cfg.h"
 
 typedef void* P;
 static HMODULE GA;
 static char gDir[MAX_PATH];
 static char gLog[MAX_PATH];
 static int gGameMode = 6;
+static int g_hiddenMap = 1;   /* cfg: features.hidden_map */
 static char gScene[128] = "Nano30_Storm";
 static char gLabel[256] = "隐藏地图 暴风";
 
@@ -56,19 +58,8 @@ static int str_eq_il2cpp(P s, const char* ascii) {
   return (i == len && ascii[i] == 0);
 }
 
-static void read_config(const char* path) {
-  FILE* f = fopen(path, "rb");
-  if (!f) { logf_("config not found, using defaults"); return; }
-  static char buf[65536];
-  size_t n = fread(buf, 1, sizeof(buf)-1, f); fclose(f); buf[n] = 0;
-  char* p = strstr(buf, "\"game_mode\"");
-  if (p) { p = strchr(p, ':'); if (p) gGameMode = atoi(p+1); }
-  p = strstr(buf, "\"scene\"");
-  if (p) { p = strchr(p, ':'); if (p) { p = strchr(p, '"'); if (p) { p++; char* q = strchr(p, '"'); if (q && (size_t)(q-p) < sizeof(gScene)) { memcpy(gScene, p, q-p); gScene[q-p] = 0; } } } }
-  p = strstr(buf, "\"label\"");
-  if (p) { p = strchr(p, ':'); if (p) { p = strchr(p, '"'); if (p) { p++; char* q = strchr(p, '"'); if (q && (size_t)(q-p) < sizeof(gLabel)) { memcpy(gLabel, p, q-p); gLabel[q-p] = 0; } } } }
-  logf_("config: scene=%s label=%s game_mode=%d", gScene, gLabel, gGameMode);
-}
+/* 配置读取统一走 cfg.c（2026-11-16 之前这里的 read_config 从没被调用过，
+ * 所以 ucf_mod.json 整个文件是死的）。 */
 
 static P find_image(const char* name) {
   int n = 0;
@@ -132,6 +123,7 @@ void plugin_tick(void) {
   P inst = 0;
   if (InterlockedCompareExchange(&g_appQuit, 0, 0)) return;
   if (!g_field) return;
+  if (!g_hiddenMap) return;          /* cfg: hidden_map = off */
   p_field_static_get_value(g_field, &inst);
   if (!p_live(inst)) return;
   {
@@ -201,6 +193,22 @@ BOOL APIENTRY DllMain(HMODULE h, DWORD reason, LPVOID reserved) {
     strcpy(gDir, path);
     sprintf(gLog, "%s\\ucf_mod.log", gDir);
     DisableThreadLibraryCalls(h);
+
+    /* 配置必须最先读：三个子系统启动时都要看开关 */
+    cfg_init(gDir);
+    cfg_dump();
+    cfg_str("scene", "Nano30_Storm", gScene, sizeof(gScene));
+    cfg_str("label", "隐藏地图 暴风", gLabel, sizeof(gLabel));
+    gGameMode = cfg_int("game_mode", 6);
+    g_hiddenMap = cfg_bool("hidden_map", 1);
+    logf_("config: scene=%s label=%s game_mode=%d hidden_map=%d",
+          gScene, gLabel, gGameMode, g_hiddenMap);
+
+    if (!cfg_bool("enabled", 1)) {
+      logf_("master switch OFF (enabled=false) - loaded but idle, nothing will run");
+      return TRUE;
+    }
+
     CreateThread(0, 0, worker, 0, 0, 0);
     { void navfix_start(const char*); navfix_start(gDir); }
     { void editor_start(const char*); editor_start(gDir); }
