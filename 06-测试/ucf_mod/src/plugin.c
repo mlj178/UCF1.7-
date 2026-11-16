@@ -28,8 +28,15 @@ static P (*p_string_new)(const char*);
 static void (*p_wbarrier)(P, P, P);
 static P (*p_thread_attach)(P);
 static void (*p_runtime_class_init)(P);
+static P (*p_gchandle_new)(P, unsigned char);
+static void (*p_gchandle_free)(P);
 
 static P g_field;   /* UI_GameRoom singleton instance field */
+
+/* UnityEngine.Object.m_CachedPtr; destroyed components leave a fake-null
+ * managed wrapper.  Touching one from native code raises a managed
+ * MissingReferenceException and aborts the process. */
+static int p_live(P o) { return o && *(P*)((char*)o + 0x8) != 0; }
 
 static void logf_(const char* fmt, ...) {
   FILE* f = fopen(gLog, "a");
@@ -77,21 +84,46 @@ static P find_image(const char* name) {
 }
 
 static int inject_one(P ma) {
-  P arr = *(P*)((char*)ma + 0x14);
+  P arr, klass, elem, na, sScene, sLabel;
+  P hna = 0, hs = 0, hl = 0;
+  int n, i;
+  char* data;
+  if (!p_live(ma)) return 0;
+  arr = *(P*)((char*)ma + 0x14);
   if (!arr) return 0;
-  int n = *(int*)((char*)arr + 0xC);
-  char* data = (char*)arr + 0x10;
-  for (int i = 0; i < n; i++) if (str_eq_il2cpp(*(P*)(data + i*0x1C), gScene)) return 0;
-  P klass = *(P*)arr;
-  P elem = p_class_get_element_class(klass);
-  P na = p_array_new(elem, n+1);
-  if (!na) return 0;
+  n = *(int*)((char*)arr + 0xC);
+  data = (char*)arr + 0x10;
+  for (i = 0; i < n; i++) if (str_eq_il2cpp(*(P*)(data + i*0x1C), gScene)) return 0;
+
+  /* Strings/arrays are managed objects held only in native locals here.  Root
+   * them across the next allocations: a GC in p_array_new/p_string_new would
+   * otherwise free them and the MapAsset field would point at dead memory,
+   * which crashes the next GC (0xC0000005 in GameAssembly GC mark). */
+  sScene = p_string_new(gScene);
+  if (p_gchandle_new) hs = (P)p_gchandle_new(sScene, 0);
+  sLabel = p_string_new(gLabel);
+  if (p_gchandle_new) hl = (P)p_gchandle_new(sLabel, 0);
+
+  klass = *(P*)arr;
+  elem = p_class_get_element_class(klass);
+  na = p_array_new(elem, n+1);
+  if (!na) {
+    if (hs && p_gchandle_free) p_gchandle_free(hs);
+    if (hl && p_gchandle_free) p_gchandle_free(hl);
+    return 0;
+  }
+  if (p_gchandle_new) hna = (P)p_gchandle_new(na, 0);
+
   memcpy((char*)na + 0x10, data, n*0x1C);
   memcpy((char*)na + 0x10 + n*0x1C, data, 0x1C);
-  *(P*)((char*)na + 0x10 + n*0x1C) = p_string_new(gScene);
-  *(P*)((char*)na + 0x10 + n*0x1C + 4) = p_string_new(gLabel);
+  *(P*)((char*)na + 0x10 + n*0x1C) = sScene;
+  *(P*)((char*)na + 0x10 + n*0x1C + 4) = sLabel;
   p_wbarrier(ma, (char*)ma + 0x14, na);
   *(P*)((char*)ma + 0x14) = na;
+
+  if (hna && p_gchandle_free) p_gchandle_free(hna);
+  if (hl && p_gchandle_free) p_gchandle_free(hl);
+  if (hs && p_gchandle_free) p_gchandle_free(hs);
   return n + 1;
 }
 
@@ -101,14 +133,14 @@ void plugin_tick(void) {
   if (InterlockedCompareExchange(&g_appQuit, 0, 0)) return;
   if (!g_field) return;
   p_field_static_get_value(g_field, &inst);
-  if (!inst) return;
+  if (!p_live(inst)) return;
   {
     P mapDatas = *(P*)((char*)inst + 0x2C);
     if (mapDatas) {
       int n = *(int*)((char*)mapDatas + 0xC);
       for (int i = 0; i < n; i++) {
         P ma = *(P*)((char*)mapDatas + 0x10 + i*4);
-        if (!ma) continue;
+        if (!p_live(ma)) continue;
         int gm = *(int*)((char*)ma + 0xC);
         if (gGameMode >= 0 && gm != gGameMode) continue;
         int r = inject_one(ma);
@@ -131,6 +163,7 @@ static DWORD WINAPI worker(LPVOID x) {
   RE(class_from_name); RE(class_get_parent); RE(class_get_field_from_name);
   RE(field_static_get_value); RE(array_new); RE(class_get_element_class);
   RE(string_new); RE(thread_attach);
+  RE(gchandle_new); RE(gchandle_free);
   { FARPROC p = GetProcAddress(GA, "il2cpp_gc_wbarrier_set_field"); p_wbarrier = (void(*)(P,P,P))p; if (!p) logf_("missing wbarrier"); }
   { FARPROC p = GetProcAddress(GA, "il2cpp_runtime_class_init"); p_runtime_class_init = (void(*)(P))p; }
 #undef RE

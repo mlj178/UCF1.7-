@@ -123,9 +123,10 @@ class MainWindow(QtWidgets.QMainWindow):
 
         m2 = self.menuBar().addMenu("视图")
         for label, attr in (("显示地形", "show_mesh"), ("显示贴图", "show_tex"),
-                            ("显示阴影体", "show_shadow"), ("显示路点", "show_nodes"),
+                            ("显示阴影体", "show_shadow"), ("显示装饰板", "show_cards"),
+                            ("显示路点", "show_nodes"),
                             ("显示连线", "show_edges"), ("显示标记", "show_features"),
-                            ("显示网格", "show_grid")):
+                            ("显示网格", "show_grid"), ("天空背景", "sky")):
             act = m2.addAction(label)
             act.setCheckable(True)
             act.setChecked(bool(getattr(self.view, attr)))

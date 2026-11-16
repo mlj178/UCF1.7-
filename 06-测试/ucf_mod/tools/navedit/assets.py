@@ -30,7 +30,7 @@ try:
 except Exception:
     Image = None
 
-CACHE_VERSION = 5
+CACHE_VERSION = 7
 
 # Unity TextureFormat 枚举里我们会自己解码的几种
 FMT_RGB24 = 3
@@ -188,7 +188,7 @@ class Geo(object):
     """一块可供 GPU 直接吃的几何，按网格分块。"""
 
     def __init__(self, positions, normals, uvs, colors, indices, groups, bbox,
-                 chunks=None, mats=None, tex_dir=""):
+                 chunks=None, mats=None, tex_dir="", env=None):
         self.positions = positions
         self.normals = normals
         self.uvs = uvs
@@ -199,6 +199,7 @@ class Geo(object):
         self.chunks = chunks or []
         self.mats = mats or []
         self.tex_dir = tex_dir
+        self.env = env or {}
 
     @property
     def vertex_count(self):
@@ -287,6 +288,7 @@ class AssetDB(object):
         self.maps = []
         self.skipped_shells = 0
         self.batched_renderers = 0
+        self.card_triangles = 0
         self.last_extract_seconds = 0.0
 
     # ---- 索引 -------------------------------------------------------
@@ -613,7 +615,24 @@ class AssetDB(object):
         self.batched_renderers = batch_count
 
         parts = [raws[i] for i in keep]
-        tri_all = np.vstack([r["tris"] for r in parts])
+
+        # 装饰板/特效片的识别：单个三角形大到不可能是正常结构件，
+        # 又几乎没有碰撞体意义（灯塔光锥、玻璃、烟雾片、海面卡片之类）。
+        # 它们在游戏里多半是半透明或看不见的，硬画出来就是一片片糊住视线的板子。
+        alltri = np.vstack([r["tris"] for r in parts])
+        pa = pos_all[alltri[:, 0]].astype(np.float64)
+        pb = pos_all[alltri[:, 1]].astype(np.float64)
+        pc = pos_all[alltri[:, 2]].astype(np.float64)
+        e1 = pb - pa
+        e2 = pc - pa
+        maxedge = np.maximum(np.maximum(np.linalg.norm(e1, axis=1), np.linalg.norm(e2, axis=1)),
+                             np.linalg.norm(pc - pb, axis=1))
+        area = 0.5 * np.linalg.norm(np.cross(e1, e2), axis=1)
+        is_card = (maxedge > 25.0) | (area > 150.0)
+        self.card_triangles = int(is_card.sum())
+
+        cursor = 0
+        tri_all = alltri
         tri_group = np.zeros(len(tri_all), dtype=np.int32)
         chunks = []
         mats = []
@@ -626,28 +645,37 @@ class AssetDB(object):
                 mat_index[mk] = len(mats)
                 mats.append(m)
             mi = mat_index[mk]
-            n = len(r["tris"])
             is_shadow = m.shader.endswith("Shadow")
             is_water = "Water" in m.shader
             low = str(r["name"]).lower()
             is_blocker = any(k in low for k in ("blocker", "collision", "invisible", "invis_"))
             alpha_test = 0.35 if str(m.tex_fmt).upper() in ("DXT5", "BC3", "RGBA32", "BC7") else 0.0
             alpha = 0.55 if is_water else max(0.0, min(1.0, float(m.color[3])))
-            chunks.append({
-                "name": r["name"], "mesh": r["mesh"],
-                "mat": mi, "start": nt, "count": n,
-                "vstart": int(r["vbase"]), "vcount": int(r["vcount"]),
-                "tex": m.tex, "color": list(m.color),
-                "alpha": alpha,
-                "alpha_test": alpha_test,
-                "shadow": bool(is_shadow),
-                "water": bool(is_water),
-                "blocker": bool(is_blocker),
-                "transparent": bool(m.transparent or is_water or alpha < 0.99),
-            })
-            tri_group[nt:nt + n] = len(chunks) - 1
-            nt += n
+            # 该块的三角形切一段出来，再按"装饰板"拆成两块
+            n = len(r["tris"])
+            for card in (False, True):
+                sel = is_card[cursor:cursor + n] == card
+                if not sel.any():
+                    continue
+                idx = r["tris"][sel]
+                chunks.append({
+                    "name": r["name"], "mesh": r["mesh"],
+                    "mat": mi, "start": nt, "count": int(len(idx)),
+                    "vstart": int(r["vbase"]), "vcount": int(r["vcount"]),
+                    "tex": m.tex, "color": list(m.color),
+                    "alpha": alpha,
+                    "alpha_test": alpha_test,
+                    "shadow": bool(is_shadow),
+                    "water": bool(is_water),
+                    "blocker": bool(is_blocker),
+                    "card": bool(card),
+                    "transparent": bool(m.transparent or is_water or alpha < 0.99),
+                })
+                tri_group[nt:nt + len(idx)] = len(chunks) - 1
+                nt += len(idx)
+            cursor += n
 
+        env = _read_env(sf, trs, tr_of_go)
         nrm = _normals(pos_all, tri_all)
         rng = np.random.default_rng(11)
         tint = 0.82 + 0.18 * rng.random((max(1, len(chunks)), 3))
@@ -659,7 +687,7 @@ class AssetDB(object):
         bbox = np.array([pos_all.min(0), pos_all.max(0)])
         geo = Geo(pos_all.astype(np.float32), nrm, uv_all.astype(np.float32), vcol,
                   tri_all.astype(np.int32), tri_group.astype(np.int32), bbox.astype(np.float32),
-                  chunks=chunks, mats=mats, tex_dir=self.tex_dir(scene))
+                  chunks=chunks, mats=mats, tex_dir=self.tex_dir(scene), env=env)
         self.save_cache(scene, geo)
         self.last_extract_seconds = time.time() - t0
         return geo
@@ -672,6 +700,7 @@ class AssetDB(object):
             "mats": [m.to_dict() for m in geo.mats],
             "skipped_shells": self.skipped_shells,
             "batched": getattr(self, "batched_renderers", 0),
+            "env": geo.env,
         }
         try:
             np.savez_compressed(
@@ -695,11 +724,128 @@ class AssetDB(object):
         geo = Geo(z["p"], z["n"], z["uv"] if "uv" in z.files else np.zeros((len(z["p"]), 2), "f4"),
                   z["c"], z["i"], z["g"], z["b"],
                   chunks=meta.get("chunks", []), mats=mats,
-                  tex_dir=self.tex_dir(scene))
+                  tex_dir=self.tex_dir(scene), env=meta.get("env") or {})
         self.skipped_shells = int(meta.get("skipped_shells", 0))
         self.batched_renderers = int(meta.get("batched", 0))
         self.last_extract_seconds = time.time() - t0
         return geo
+
+
+LIGHT_DIRECTIONAL = 1
+LIGHT_POINT = 2
+
+
+def _read_env(sf, trs, tr_of_go):
+    """读场景的真实光照参数：RenderSettings 的三色环境光 + 各盏灯。
+
+    Unity 的 AmbientMode=3 是 Trilight（天空/赤道/地面三段插值），
+    方向光取它 Transform 的 +Z 方向，点光带范围和强度。
+    这些就是游戏里实际用的光，照搬过来比我自己瞎猜的"太阳+环境光"像得多。
+    """
+    env = {
+        "ambient": {"sky": (0.5, 0.5, 0.5), "equator": (0.3, 0.3, 0.3), "ground": (0.15, 0.15, 0.15)},
+        "fog": {"on": False, "color": (0.5, 0.5, 0.5), "start": 0.0, "end": 300.0, "density": 0.01, "mode": 3},
+        "sun": {"dir": (0.3, -0.9, 0.2), "color": (1.0, 1.0, 1.0)},
+        "points": [],
+    }
+    rs = None
+    for o in sf.objects.values():
+        if str(o.type.name) == "RenderSettings":
+            try:
+                rs = o.read()
+            except Exception:
+                rs = None
+            break
+    if rs is not None:
+        try:
+            a = env["ambient"]
+            for key, attr in (("sky", "m_AmbientSkyColor"), ("equator", "m_AmbientEquatorColor"),
+                              ("ground", "m_AmbientGroundColor")):
+                c = getattr(rs, attr, None)
+                if c is not None:
+                    a[key] = (float(c.r), float(c.g), float(c.b))
+            f = env["fog"]
+            f["on"] = bool(getattr(rs, "m_Fog", False))
+            c = getattr(rs, "m_FogColor", None)
+            if c is not None:
+                f["color"] = (float(c.r), float(c.g), float(c.b))
+            f["start"] = float(getattr(rs, "m_LinearFogStart", 0.0) or 0.0)
+            f["end"] = float(getattr(rs, "m_LinearFogEnd", 300.0) or 300.0)
+            f["density"] = float(getattr(rs, "m_FogDensity", 0.01) or 0.01)
+            f["mode"] = int(getattr(rs, "m_FogMode", 3) or 3)
+        except Exception:
+            pass
+
+    def light_dir(gid):
+        pid = tr_of_go.get(gid)
+        if pid not in trs:
+            return None
+        m = np.eye(4)
+        depth = 0
+        cur = pid
+        while cur in trs and depth < 64:
+            m = _local(trs[cur]) @ m
+            try:
+                f = int(trs[cur].m_Father.path_id)
+            except Exception:
+                f = 0
+            if not f:
+                break
+            cur = f
+            depth += 1
+        d = m[:3, 2]
+        n = float(np.linalg.norm(d))
+        return tuple((d / n).tolist()) if n > 1e-9 else None
+
+    def light_pos(gid):
+        pid = tr_of_go.get(gid)
+        if pid not in trs:
+            return None
+        m = np.eye(4)
+        depth = 0
+        cur = pid
+        while cur in trs and depth < 64:
+            m = _local(trs[cur]) @ m
+            try:
+                f = int(trs[cur].m_Father.path_id)
+            except Exception:
+                f = 0
+            if not f:
+                break
+            cur = f
+            depth += 1
+        return tuple(float(x) for x in m[:3, 3])
+
+    pts = []
+    for o in sf.objects.values():
+        if str(o.type.name) != "Light":
+            continue
+        try:
+            d = o.read()
+        except Exception:
+            continue
+        try:
+            gid = int(d.m_GameObject.path_id)
+        except Exception:
+            continue
+        lt = int(getattr(d, "m_Type", -1))
+        col = getattr(d, "m_Color", None)
+        rgb = (float(col.r), float(col.g), float(col.b)) if col is not None else (1.0, 1.0, 1.0)
+        inten = float(getattr(d, "m_Intensity", 1.0) or 1.0)
+        enabled = bool(getattr(d, "m_Enabled", True))
+        if not enabled:
+            continue
+        if lt == LIGHT_DIRECTIONAL:
+            d3 = light_dir(gid)
+            if d3:
+                env["sun"] = {"dir": d3, "color": tuple(c * inten for c in rgb)}
+        elif lt == LIGHT_POINT:
+            p3 = light_pos(gid)
+            rng = float(getattr(d, "m_Range", 10.0) or 10.0)
+            if p3 and rng > 0:
+                pts.append({"pos": p3, "range": rng, "color": tuple(c * inten for c in rgb)})
+    env["points"] = pts[:8]
+    return env
 
 
 def _submesh_ranges(mesh, ntri):

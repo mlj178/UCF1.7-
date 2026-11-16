@@ -7,13 +7,13 @@
   "tab_title": "游戏测试",
   "tab_order": 70,
   "order": 150,
-  "desc": "物理探针 + 停战 + 跟随 + 采样。只在开启后生效；结果写进修改器日志，便于事后分析。",
+  "desc": "物理探针 + 停战 + 冻结 + 跟随。只在开启后生效；结果写进修改器日志，便于事后分析。",
   "ui_text": {
     "lines": [
       "跑一次物理探针：按人机体积检查每条路点边",
-      "停战：接管 Bot.CheckAttackTarget，人机不再选敌/开火（+ 无敌）",
-      "冻结：Bot.stopAllBot，人机不寻敌/不巡逻/不开火",
-      "跟随：所有人机都朝你走（配停战时不会开火）",
+      "停战：清空 enemyInfo.enemy + 全员无敌，人机不开火",
+      "冻结：Bot.stopAllBot（游戏自带），人机连走都不走",
+      "跟随：用游戏自己的 Seeker 给人机下一条到你的路径，人机沿路点图走过来，全程不开火",
       "采样：记录 bot 走过哪些边"
     ]
   },
@@ -46,7 +46,7 @@
     {
       "type": "switch",
       "key": "follow",
-      "label": "跟随我（每个阵营 1 个）",
+      "label": "跟随我（沿路点图走到你身边）",
       "default": false
     },
     {
@@ -75,6 +75,8 @@
     "setconfig",
     "runProbe",
     "runprobe",
+    "pathProbe",
+    "pathprobe",
     "status",
     "cleanup"
   ],

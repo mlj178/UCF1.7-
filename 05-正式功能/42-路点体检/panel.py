@@ -64,9 +64,9 @@ def build_card(scroll, manifest, row, col, colspan, callbacks, card_builder):
         handles[f"{feature_id}_{key}_var"] = var
         return switch
 
-    _add_switch("pacify", "停战（人机不再选敌/开火 + 无敌）", False)
-    _add_switch("freeze", "冻结人机行为（人机完全不行动）", False)
-    _add_switch("follow", "跟随我（所有人机都朝我走）", False)
+    _add_switch("pacify", "停战（清目标 + 全员无敌，不开火）", False)
+    _add_switch("freeze", "冻结人机行为（stopAllBot，连走都不走）", False)
+    _add_switch("follow", "跟随我（接管寻路，沿路点走到你身边）", False)
     _add_switch("walk", "人机采样（记录 bot 走过哪些边）", False)
 
     button = ctk.CTkButton(
