@@ -46,6 +46,8 @@ static P (*i_class_from_il2cpp_type)(P);
 static P (*i_array_new)(P,unsigned int);
 static P (*i_class_get_element_class)(P);
 static void (*i_field_static_set_value)(P,void*);
+static P (*i_gchandle_new)(P,unsigned char);
+static void (*i_gchandle_free)(P);
 
 #define RVA(x) ((void*)((char*)g_ga + (unsigned)(x)))
 
@@ -74,6 +76,8 @@ static P g_stopField;
 static int g_stopHeld;
 
 static P rptr(P o, int off) { return *(P*)((char*)o + off); }
+/* UnityEngine.Object.m_CachedPtr; 0 means the native object was destroyed. */
+static int n_live(P o) { return o && *(P*)((char*)o + 0x8) != 0; }
 static void wfield(P o, int off, P v) {
   if (i_wbarrier) i_wbarrier(o, (char*)o + off, v);
   *(P*)((char*)o + off) = v;
@@ -115,11 +119,11 @@ static P astar_active(void) {
   if (!f) return 0;
   P v = 0;
   i_field_static_get_value(f, &v);
-  return v;
+  return n_live(v) ? v : 0;
 }
 
 static P point_graph(P astar) {
-  if (!astar) return 0;
+  if (!n_live(astar)) return 0;
   P data = *(P*)((char*)astar + 0x10);
   if (!data) return 0;
   P graphs = *(P*)((char*)data + 0x20);
@@ -135,6 +139,73 @@ static P point_graph(P astar) {
   }
   return pg;
 }
+
+/* 诊断：把 AstarPath 里每一张图都打出来（类型名 + 关键字段），
+ * 用来确认“真实的路点图”到底是哪一张、是不是 PointGraph。 */
+void navfix_diag_graphs(void) {
+  P a = astar_active();
+  if (!a) { nlog("diag: no AstarPath.active"); return; }
+  P data = *(P*)((char*)a + 0x10);
+  if (!data) { nlog("diag: AstarPath.data null"); return; }
+  P graphs = *(P*)((char*)data + 0x20);
+  int n = graphs ? *(int*)((char*)graphs + 0xC) : -1;
+  nlog("diag: graphs=%d", n);
+  for (int i = 0; i < n && i < 10; i++) {
+    P g = *(P*)((char*)graphs + 0x10 + i * 4);
+    if (!g) { nlog("diag:  [%d] null", i); continue; }
+    P k = *(P*)g;
+    const char* cn = k ? i_class_get_name(k) : 0;
+    nlog("diag:  [%d] %-22s +E8=%p +EC=%-7d +C0=%-7d +D0=%d",
+         i, cn ? cn : "?",
+         *(P*)((char*)g + 0xE8), *(int*)((char*)g + 0xEC),
+         *(int*)((char*)g + 0xC0), *(unsigned char*)((char*)g + 0xD0));
+    if (cn && strstr(cn, "NavMesh")) {
+      P tiles = *(P*)((char*)g + 0xD0);
+      int ntile = tiles ? *(int*)((char*)tiles + 0xC) : 0;
+      int nv = 0, ntr = 0;
+      if (ntile > 0) {
+        P t0 = *(P*)((char*)tiles + 0x10);
+        if (t0) {
+          P tr = *(P*)((char*)t0 + 0x8), vr = *(P*)((char*)t0 + 0xC);
+          ntr = tr ? *(int*)((char*)tr + 0xC) : 0;
+          nv = vr ? *(int*)((char*)vr + 0xC) : 0;
+        }
+      }
+      nlog("diag:      tileX=%d tileZ=%d tiles=%d  tile0: verts=%d tris=%d",
+           *(int*)((char*)g + 0xC8), *(int*)((char*)g + 0xCC), ntile, nv, ntr);
+    }
+  }
+}
+
+/* ---- NavMeshGraph（A* 烘焙出来的可走面）-------------------------------
+ * 偏移来自 dump.cs：NavmeshBase{tileXCount 0xC8, tileZCount 0xCC, tiles 0xD0}
+ *                   NavmeshTile{tris 0x8, verts 0xC, nodes 0x24}
+ *                   TriangleMeshNode{v0 0x24, v1 0x28, v2 0x2C}
+ * Int3 = 3 个 int32，单位 1/1000 m。写出的二进制：
+ *   "UCFNM1\0" | int32 nv | int32 nt | int32 verts[nv*3] | int32 tris[nt*3]
+ */
+static P find_navmesh_graph(P astar) {
+  P data, graphs, g = 0;
+  int n, i;
+  if (!astar) return 0;
+  data = *(P*)((char*)astar + 0x10);
+  if (!data) return 0;
+  graphs = *(P*)((char*)data + 0x20);
+  if (!graphs) return 0;
+  n = *(int*)((char*)graphs + 0xC);
+  for (i = 0; i < n; i++) {
+    P gg = *(P*)((char*)graphs + 0x10 + i * 4);
+    P k;
+    const char* cn;
+    if (!gg) continue;
+    k = *(P*)gg;
+    cn = k ? i_class_get_name(k) : 0;
+    if (cn && strstr(cn, "NavMesh")) g = gg;
+  }
+  return g;
+}
+
+/* 导出逻辑移到 editor.c（那里有 Transform / 矩阵的调用约定） */
 
 static P new_go(const char* name) {
   P go = i_object_new(g_goCls);
@@ -175,7 +246,7 @@ static P get_mm(void) {
   P v = 0;
   if (!g_mmInstField) return 0;
   i_field_static_get_value(g_mmInstField, &v);
-  return v;
+  return n_live(v) ? v : 0;
 }
 
 static int add_spawn_nodes(P rootTr) {
@@ -223,6 +294,7 @@ static P vec3_arr(const V3* v, int n) {
 
 static P make_guard_area(V3 p, int npos) {
   P go, comp, list, nameStr;
+  P hlist = 0, hname = 0;
   P posgo[4];
   P tr;
   V3 zero = { 0, 0, 0 };
@@ -245,10 +317,12 @@ static P make_guard_area(V3 p, int npos) {
 
   list = i_object_new(g_listCls);
   if (!list) return 0;
+  if (i_gchandle_new) hlist = (P)i_gchandle_new(list, 0);   /* List is not native-rooted */
   i_runtime_invoke(g_listCtor, list, 0, 0);
   wfield(comp, 0x10, list);                       /* posList (non-null, Awake iterates it) */
 
   nameStr = i_string_new("UCF_GuardPos");
+  if (i_gchandle_new) hname = (P)i_gchandle_new(nameStr, 0);
   for (i = 0; i < npos; i++) {
     V3 zdir = { 0.0f, 0.0f, 1.0f };
     V3 pp;
@@ -271,11 +345,18 @@ static P make_guard_area(V3 p, int npos) {
     i_runtime_invoke(g_listAdd, list, args, 0);   /* posList.Add(pos) */
     posgo[madePos++] = pgo;
   }
-  if (madePos == 0) { nlog("area: no pos created"); return 0; }
+  if (madePos == 0) {
+    nlog("area: no pos created");
+    if (hname && i_gchandle_free) i_gchandle_free(hname);
+    if (hlist && i_gchandle_free) i_gchandle_free(hlist);
+    return 0;
+  }
 
   set_pos_of(go, p);
   ((set_active_t)RVA(0x331CF0))(go, 1, 0);        /* Awake: fills refs + registers area */
   for (i = 0; i < madePos; i++) ((set_active_t)RVA(0x331CF0))(posgo[i], 1, 0);
+  if (hname && i_gchandle_free) i_gchandle_free(hname);
+  if (hlist && i_gchandle_free) i_gchandle_free(hlist);
   return comp;
 }
 
@@ -291,9 +372,13 @@ static void purge_guard_areas(void) {
   items = *(P*)((char*)list + 0x8);
   n = *(int*)((char*)list + 0xC);
   if (!items || n <= 0) return;
+  {
+    int cap = *(int*)((char*)items + 0xC);   /* array length, not list size */
+    if (cap <= 0 || n > cap) { nlog("guard areas: bad list size %d/%d, skip purge", n, cap); return; }
+  }
   for (i = 0; i < n; i++) {
     P o = *(P*)((char*)items + 0x10 + i*4);
-    if (o && *(P*)((char*)o + 0x8)) *(P*)((char*)items + 0x10 + w++) = o;
+    if (n_live(o)) *(P*)((char*)items + 0x10 + w++) = o;
     else dead++;
   }
   if (w != n) {
@@ -314,8 +399,15 @@ static void link_guard_areas(void) {
   if (n < 2) return;
   for (i = 0; i < n; i++) {
     P arr = arr_new(g_areaCls, 3);
-    P esc = arr_new(g_areaCls, 2);
-    if (!arr) continue;
+    P esc = 0;
+    P harr = 0, hesc = 0;
+    if (arr && i_gchandle_new) harr = (P)i_gchandle_new(arr, 0);
+    esc = arr_new(g_areaCls, 2);
+    if (esc && i_gchandle_new) hesc = (P)i_gchandle_new(esc, 0);
+    if (!arr) {
+      if (hesc && i_gchandle_free) i_gchandle_free(hesc);
+      continue;
+    }
     {
       P* d = (P*)((char*)arr + 0x10);
       d[0] = g_areaComps[(i + 1) % n];
@@ -329,6 +421,8 @@ static void link_guard_areas(void) {
       e[1] = g_areaComps[(i + 7) % n];
       wfield(g_areaComps[i], 0x18, esc);
     }
+    if (hesc && i_gchandle_free) i_gchandle_free(hesc);
+    if (harr && i_gchandle_free) i_gchandle_free(harr);
   }
   nlog("guard areas: neighbour links set for %d areas", n);
 }
@@ -379,6 +473,8 @@ static void build_waypoints(void) {
   sp(rootTr, zero, 0);
 
   P childName = i_string_new("wp");
+  P hchild = 0;
+  if (i_gchandle_new) hchild = (P)i_gchandle_new(childName, 0);
   int made = 0;
   g_nspots = 0;
   /* Multi-layer sampling: a single downward ray from y=300 hits the roof first,
@@ -416,7 +512,11 @@ static void build_waypoints(void) {
       }
     }
   nlog("waypoint objects created=%d", made);
-  if (made < 8) { nlog("waypoints too few, abort"); hold_bots(0); return; }
+  if (made < 8) {
+    nlog("waypoints too few, abort");
+    if (hchild && i_gchandle_free) i_gchandle_free(hchild);
+    hold_bots(0); return;
+  }
 
   /* nodes on the map's own spawn points: guarantees Bot.Update's start node is non-null */
   add_spawn_nodes(rootTr);
@@ -440,6 +540,8 @@ static void build_waypoints(void) {
       P typeObj = i_type_get_object(i_class_get_type(g_crouchCls));
       addcomp_t addComp = (addcomp_t)RVA(0x331A90);
       P nameStr = i_string_new("CrouchPos");
+      P hname2 = 0;
+      if (i_gchandle_new) hname2 = (P)i_gchandle_new(nameStr, 0);
       int made2 = 0;
       for (float cx = minX - 2.0f; cx <= maxX + 2.0f; cx += 9.0f)
         for (float cz = minZ - 2.0f; cz <= maxZ + 2.0f; cz += 9.0f) {
@@ -459,6 +561,7 @@ static void build_waypoints(void) {
       if (spareField) i_field_static_get_value(spareField, &spareList2);
       int now = spareList2 ? *(int*)((char*)spareList2 + 0xC) : -1;
       nlog("crouch: created=%d registered=%d", made2, now);
+      if (hname2 && i_gchandle_free) i_gchandle_free(hname2);
     }
   }
 
@@ -507,6 +610,7 @@ static void build_waypoints(void) {
   } else {
     nlog("guard areas: classes missing area=%p pos=%p vec3=%p list=%p", g_areaCls, g_posCls, g_vec3Cls, g_listCls);
   }
+  if (hchild && i_gchandle_free) i_gchandle_free(hchild);
   hold_bots(0);
   { void editor_mark_dirty(void); editor_mark_dirty(); }
 }
@@ -528,10 +632,12 @@ static void nav_tick(void) {
     if (!g_collectOnly) purge_guard_areas();
     nlog("scene astar=%p (purge done, notify editor)", a);
     { void editor_on_scene(void*); editor_on_scene((void*)a); }
+    navfix_diag_graphs();
     nlog("scene astar=%p (editor notified)", a);
     {
       P pg0 = point_graph(a);
-      if (!g_collectOnly && pg0 && *(int*)((char*)pg0 + 0xEC) == 0) { nlog("scene change: building immediately"); build_waypoints(); }
+      { int editor_nogen(void);
+        if (!g_collectOnly && !editor_nogen() && pg0 && *(int*)((char*)pg0 + 0xEC) == 0) { nlog("scene change: building immediately"); build_waypoints(); } }
     }
   }
   pg = point_graph(a);
@@ -540,8 +646,10 @@ static void nav_tick(void) {
     g_zeroStreak++;
     if (g_collectOnly) {
       if ((g_zeroStreak % 20) == 0) nlog("collect-only: graph still empty (~%.0f s)", g_zeroStreak * 0.25f);
-    } else if (g_zeroStreak == 4 || (g_zeroStreak > 4 && (g_zeroStreak % 10) == 0)) {
-      build_waypoints();
+    } else { int editor_nogen(void);
+      if (!editor_nogen() && (g_zeroStreak == 4 || (g_zeroStreak > 4 && (g_zeroStreak % 10) == 0))) {
+        build_waypoints();
+      }
     }
   } else if (!pg) {
     g_zeroStreak++;
@@ -550,6 +658,10 @@ static void nav_tick(void) {
     g_zeroStreak = 0;
   }
   { void editor_tick(void); editor_tick(); }
+  if (g_collectOnly) {
+    static int diagTick;
+    if ((++diagTick % 40) == 0) navfix_diag_graphs();   /* 每 ~10 s 再打一次，看会不会后来长出来 */
+  }
 }
 
 static WNDPROC g_oldProc;
@@ -658,6 +770,7 @@ static DWORD WINAPI nav_worker(LPVOID x) {
   RE(class_from_il2cpp_type); RE(array_new); RE(class_get_element_class);
   RE(field_static_set_value);
   RE(field_static_get_value);
+  RE(gchandle_new); RE(gchandle_free);
   *(void**)&i_wbarrier = GetProcAddress(g_ga, "il2cpp_gc_wbarrier_set_field");
 #undef RE
   if (!i_domain_get || !i_class_from_name) { nlog("il2cpp exports missing"); return 0; }
@@ -721,6 +834,9 @@ static DWORD WINAPI nav_worker(LPVOID x) {
 
 /* ---- exports used by the in-game visual editor (editor.c) -------------- */
 P navfix_point_graph(void) { return point_graph(astar_active()); }
+
+/* 给 editor.c 用：A* 的第 [0] 张图 NavMeshGraph（真正的人机可走面） */
+P navfix_navmesh_graph(void) { return find_navmesh_graph(astar_active()); }
 
 /* 1 = the current graph was generated by build_waypoints (we own the points),
  * 0 = the game scanned its own scene graph.  The JSON exporter records this as

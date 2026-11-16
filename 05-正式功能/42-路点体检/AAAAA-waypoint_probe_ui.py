@@ -47,6 +47,8 @@ SETCONFIG_CANDIDATES = ("setConfig", "setconfig", "set_config")
 RUNPROBE_CANDIDATES = ("runProbe", "runprobe", "run_probe")
 STATUS_CANDIDATES = ("status",)
 SELFTEST_CANDIDATES = ("selfTest", "selftest", "self_test")
+PATH_PROBE_CANDIDATES = ("pathProbe", "pathprobe", "path_probe")
+BOTDUMP_CANDIDATES = ("botDump", "botdump", "bot_dump")
 CLEANUP_CANDIDATES = ("cleanup", "disable")
 
 
@@ -102,7 +104,7 @@ class WaypointProbeApp(ctk.CTk):
         ).grid(row=0, column=0, padx=18, pady=(16, 2), sticky="ew")
         ctk.CTkLabel(
             self,
-            text="物理探针判定每条路点边的可通行性；停战让 bot 不再打架；跟随让每个阵营派 1 个人机走到你身边",
+            text="物理探针判定路点边能不能走；跟随=接管人机的寻路，让它们沿着路点图走到你身边（不打架）；冻结=人机彻底不动（游戏自带的 stopAllBot）",
             font=ctk.CTkFont(family="Microsoft YaHei", size=12),
             text_color=DIM,
             wraplength=700,
@@ -143,11 +145,11 @@ class WaypointProbeApp(ctk.CTk):
         self.master_switch.grid(row=0, column=0, columnspan=2, padx=14, pady=(12, 8), sticky="w")
 
         self.pacify_var = ctk.BooleanVar(value=DEFAULT_CONFIG["pacify"])
-        self.pacify_switch = self._add_switch(controls, 1, "停战（人机不开火 + 全员不掉血）", self.pacify_var)
+        self.pacify_switch = self._add_switch(controls, 1, "停战（清目标 + 全员无敌，不打人）", self.pacify_var)
         self.freeze_var = ctk.BooleanVar(value=DEFAULT_CONFIG["freeze"])
-        self.freeze_switch = self._add_switch(controls, 2, "冻结人机行为（不寻敌/不巡逻/不行动）", self.freeze_var)
+        self.freeze_switch = self._add_switch(controls, 2, "冻结人机行为（stopAllBot，连走都不走）", self.freeze_var)
         self.follow_var = ctk.BooleanVar(value=DEFAULT_CONFIG["follow"])
-        self.follow_switch = self._add_switch(controls, 3, "跟随我（所有人机都朝我走）", self.follow_var)
+        self.follow_switch = self._add_switch(controls, 3, "跟随我（接管寻路，人机沿路点走到我身边）", self.follow_var)
         self.walk_var = ctk.BooleanVar(value=DEFAULT_CONFIG["walk"])
         self.walk_switch = self._add_switch(controls, 4, "人机采样（记录 bot 走过哪些边）", self.walk_var)
 
@@ -180,16 +182,27 @@ class WaypointProbeApp(ctk.CTk):
             font=ctk.CTkFont(family="Microsoft YaHei", size=13), command=self._stop_and_restore,
         )
         self.restore_button.grid(row=0, column=2, padx=8, pady=(12, 4), sticky="ew")
+        self.pathprobe_button = ctk.CTkButton(
+            actions, text="路径自检（先试 1~3 个人机）", height=30, fg_color="#b45309", hover_color="#92400e",
+            font=ctk.CTkFont(family="Microsoft YaHei", size=13), command=self._run_path_probe,
+        )
+        self.pathprobe_button.grid(row=1, column=0, padx=8, pady=(0, 10), sticky="ew")
         self.save_button = ctk.CTkButton(
             actions, text="另存日志", height=30, fg_color="#374151", hover_color="#4b5563",
             font=ctk.CTkFont(family="Microsoft YaHei", size=13), command=self._save_log,
         )
-        self.save_button.grid(row=1, column=0, padx=8, pady=(0, 10), sticky="ew")
+        self.save_button.grid(row=1, column=1, padx=8, pady=(0, 10), sticky="ew")
         self.openlog_button = ctk.CTkButton(
             actions, text="打开日志目录", height=30, fg_color="#374151", hover_color="#4b5563",
             font=ctk.CTkFont(family="Microsoft YaHei", size=13), command=self._open_log_dir,
         )
-        self.openlog_button.grid(row=1, column=1, columnspan=2, padx=8, pady=(0, 10), sticky="ew")
+        self.openlog_button.grid(row=1, column=2, padx=8, pady=(0, 10), sticky="ew")
+        self.botdump_button = ctk.CTkButton(
+            actions, text="人机快照（把每个人机的字段全打出来）", height=30, fg_color="#374151",
+            hover_color="#4b5563", font=ctk.CTkFont(family="Microsoft YaHei", size=13),
+            command=self._run_bot_dump,
+        )
+        self.botdump_button.grid(row=2, column=0, columnspan=3, padx=8, pady=(0, 10), sticky="ew")
 
         result = ctk.CTkFrame(self, corner_radius=8, fg_color=PANEL)
         result.grid(row=6, column=0, padx=18, pady=4, sticky="ew")
@@ -597,6 +610,18 @@ class WaypointProbeApp(ctk.CTk):
             return
         self._log("开始自检 ...")
         self._call(SELFTEST_CANDIDATES)
+
+    def _run_path_probe(self):
+        if not self.connected:
+            return
+        self._log("路径自检：1~3 个人机各试一次（游戏 StartPath + 我们自己的 JS 路线各报一行）...")
+        self._call(PATH_PROBE_CANDIDATES)
+
+    def _run_bot_dump(self):
+        if not self.connected:
+            return
+        self._log("人机快照：把 enemy/tryFindEnemy/path/id/isStopped/ghost/inv/队伍的当前值写进日志...")
+        self._call(BOTDUMP_CANDIDATES)
 
     def _run_probe(self):
         if not self.connected:

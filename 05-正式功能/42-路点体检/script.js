@@ -34,7 +34,11 @@
         Object_FindObjectsOfType: 0x004E9620,
         Component_get_transform: 0x0032CF40,
         Transform_get_position_Injected: 0x003F4280,
-        Player_get_isMyPlayer: 0x00B55FD0
+        Player_get_isMyPlayer: 0x00B55FD0,
+        Time_get_time: 0x003F2540,
+        Bot_get_isStopped: 0x00B34080,
+        Seeker_StartPath: 0x005A4260,
+        Bot_OnPathComplete: 0x00B31950
     };
 
     var OFF = {
@@ -64,7 +68,15 @@
         Bot_faceToEnemy: 0x30,
         Bot_nextCheckEnemyInViewTime: 0x38,
         Bot_nextAttackTime: 0x3C,
+        Bot_seeker: 0x78,
+        Bot_path: 0x80,
+        Bot_nextPathVectorID: 0x90,
+        Bot_nextFindPathTime: 0xB8,
+        Path_completeState: 0x20,
+        Path_vectorPath: 0x2C,
+        List_size: 0x0C,
         Entity_isInvincible: 0x18,
+        Entity_isGhost: 0x30,
         Entity_team: 0x20,
         GameManager_myPlayer: 0x00
     };
@@ -97,6 +109,15 @@
         probe: { edges: [], summary: {}, ranAt: 0, fp: "" },
         botCache: [],
         botCacheAt: 0,
+        /* 跟随用的原生调用状态（只调用游戏自己的两个函数，不改任何代码） */
+        nav: {
+            pending: {}, lastReq: {}, bufStart: null, bufEnd: null,
+            req: 0, adopt: 0, pathErr: 0, timeout: 0, startNull: 0,
+            obj: {}, objMade: 0, written: 0, unreachable: 0,
+            listKlass: null, pathKlass: null
+        },
+        adj: null,
+        freezeVerified: false,
         nodeCache: [],
         nodeCacheG: null,
         followLast: {},
@@ -185,6 +206,57 @@
         return code;
     }
 
+    /* Seeker.StartPath(Seeker* this, Vector3 start, Vector3 end, OnPathDelegate* cb, MethodInfo*)
+       RVA 0x5A4260。IL2CPP 的 x86 调用约定：Vector3 按值压在栈上（3 个 float），
+       cdecl 从右往左压，所以顺序是 method, cb, end.z/y/x, start.z/y/x, this。
+       桩从自己栈帧里取参数指针再按这个顺序压，避免在 JS 里碰结构体传参。 */
+    function buildStartPathStub(target) {
+        var code = Memory.alloc(64);
+        Memory.protect(code, 64, "rwx");
+        var head = [
+            0x55,                   // push ebp
+            0x89, 0xE5,             // mov ebp, esp
+            0xFF, 0x75, 0x14,       // push [ebp+0x14]  method
+            0x6A, 0x00,             // push 0           callback（不要回调，路径算完自己读）
+            0x8B, 0x45, 0x10,       // mov eax,[ebp+0x10] end*
+            0xFF, 0x70, 0x08,
+            0xFF, 0x70, 0x04,
+            0xFF, 0x30,
+            0x8B, 0x45, 0x0C,       // mov eax,[ebp+0x0C] start*
+            0xFF, 0x70, 0x08,
+            0xFF, 0x70, 0x04,
+            0xFF, 0x30,
+            0xFF, 0x75, 0x08,       // push [ebp+0x08]  this(seeker)
+            0xB8                    // mov eax, imm32
+        ];
+        var tail = [0xFF, 0xD0, 0x83, 0xC4, 0x24, 0x5D, 0xC3];   // call eax / add esp,0x24 / pop ebp / ret
+        code.writeByteArray(head);
+        code.add(head.length).writePointer(target);
+        code.add(head.length + 4).writeByteArray(tail);
+        return code;
+    }
+
+    /* Bot.OnPathComplete(Bot* this, Path* newPath, MethodInfo*) RVA 0xB31950
+       这是游戏收到路径后自己用的“装车”函数：path=新路径、nextPathVectorID=0、
+       pathLength 重算、interpolator.SetPath(vectorPath)、算 nextPathPos。 */
+    function buildOnPathCompleteStub(target) {
+        var code = Memory.alloc(64);
+        Memory.protect(code, 64, "rwx");
+        var head = [
+            0x55,                   // push ebp
+            0x89, 0xE5,             // mov ebp, esp
+            0xFF, 0x75, 0x10,       // push [ebp+0x10] method
+            0xFF, 0x75, 0x0C,       // push [ebp+0x0C] path
+            0xFF, 0x75, 0x08,       // push [ebp+0x08] bot
+            0xB8                    // mov eax, imm32
+        ];
+        var tail = [0xFF, 0xD0, 0x83, 0xC4, 0x0C, 0x5D, 0xC3];   // call eax / add esp,0xC / pop ebp / ret
+        code.writeByteArray(head);
+        code.add(head.length).writePointer(target);
+        code.add(head.length + 4).writeByteArray(tail);
+        return code;
+    }
+
     // Frida 17 移除了 Module.getExportByName / Module.findExportByName；
     // 新 API 是 mod.getExportByName 或 Module.getGlobalExportByName。这里三种都试。
     function resolveExport(mod, name) {
@@ -261,6 +333,33 @@
             Runtime.native.isMyPlayer = new NativeFunction(
                 Runtime.base.add(RVA.Player_get_isMyPlayer), "bool",
                 ["pointer", "pointer"], CALL_CONV);
+            /* 跟随用的三个调用：取游戏时间 / 读 isStopped / 下单路径 + 装车 */
+            Runtime.native.timeNow = new NativeFunction(
+                Runtime.base.add(RVA.Time_get_time), "float", ["pointer"], CALL_CONV);
+            Runtime.native.botIsStopped = new NativeFunction(
+                Runtime.base.add(RVA.Bot_get_isStopped), "bool",
+                ["pointer", "pointer"], CALL_CONV);
+            Runtime.native.startPath = new NativeFunction(
+                buildStartPathStub(Runtime.base.add(RVA.Seeker_StartPath)), "pointer",
+                ["pointer", "pointer", "pointer", "pointer"], CALL_CONV);
+            Runtime.native.onPathComplete = new NativeFunction(
+                buildOnPathCompleteStub(Runtime.base.add(RVA.Bot_OnPathComplete)), "void",
+                ["pointer", "pointer", "pointer"], CALL_CONV);
+            Runtime.nav.bufStart = Memory.alloc(12);
+            Runtime.nav.bufEnd = Memory.alloc(12);
+            /* 纯数据方案要用的两个分配器：造 List<Vector3> / Path 对象、造 Vector3[] */
+            var eObjNew = resolveExport(mod, "il2cpp_object_new");
+            var eArrNew = resolveExport(mod, "il2cpp_array_new");
+            if (eObjNew) {
+                Runtime.native.objectNew = new NativeFunction(eObjNew, "pointer", ["pointer"], CALL_CONV);
+            } else {
+                log("warn", "il2cpp_object_new 不可用");
+            }
+            if (eArrNew) {
+                Runtime.native.arrayNew = new NativeFunction(eArrNew, "pointer", ["pointer", "uint"], CALL_CONV);
+            } else {
+                log("warn", "il2cpp_array_new 不可用");
+            }
             var stub = buildRaycastStub(Runtime.base.add(RVA.Physics_Raycast));
             Runtime.native.raycast = new NativeFunction(stub, "uint8",
                 ["pointer", "pointer", "pointer", "float", "int"], CALL_CONV);
@@ -760,7 +859,7 @@
 
     function pacifyOnce() {
         var me = myPlayer();
-        var bots = allBots();
+        var bots = allBotsCached(1000);
         var i, changed = 0;
         if (!me && bots.length === 0) {
             /* 还没进对局：没有任何可操作对象，安静退出，别每 100ms 报一次错 */
@@ -768,12 +867,10 @@
             return;
         }
         var following = !!Runtime.config.follow;
-        /* 只开停战（没开跟随）时，直接用游戏自带的全局暂停；一开跟随就得解冻，否则人机不能动 */
-        if (Runtime.config.pacify && !following) {
-            if (setStopAllBot(true)) log("info", "Bot.stopAllBot = true（人机全部暂停）");
-        } else {
-            setStopAllBot(false);
-        }
+        /* 停战不再动 stopAllBot：它只是“清目标 + 无敌”，人机照样按自己的 AI 走动、但没敌人可打。
+           要彻底静默请用「冻结人机行为」（stopAllBot 会让 Bot.Move 直接 return）。
+           冻结开着时这里也不许动 stopAllBot，否则两边每 300ms 互相覆盖。 */
+        if (!Runtime.config.freeze) setStopAllBot(false);
         if (me && Runtime.myTeam === null) {
             Runtime.myTeam = me.add(OFF.Entity_team).readS32();
             log("info", "my_team=" + Runtime.myTeam);
@@ -852,45 +949,321 @@
         log("info", "node cache built: " + out.length + " nodes");
         return out;
     }
+    /* ---------------- 跟随：在 JS 里算好路线，直接塞进 Bot.path ----------------
+       为什么不用 Seeker.StartPath：实测从 Frida 线程调它一律返回 null（日志 PATH_PROBE|...|path=null），
+       不冒这个险。改成纯数据方案：
+         1) 用点图（和游戏寻路同一张 PointGraph）在 JS 里跑 Dijkstra，得到节点序列；
+         2) 用 il2cpp_object_new / il2cpp_array_new 造一个真的 List<Vector3> + Path 对象，
+            把节点坐标写进数组，list._size=n，path.vectorPath=list；
+         3) 把 bot.path 指向它、nextPathVectorID=0；
+         4) Bot.Update 第一行的 Bot.Move() 会读 path.vectorPath[id] 自己走过去。
+       全程只有“分配对象 + 写字段”，不调用任何游戏逻辑函数，所以没有被反作弊还原/线程不安全的问题。 */
 
-    /* ---------------- 跟随：所有人机都朝我走 ---------------- */
+    function gameTime() {
+        if (!Runtime.native.timeNow) return Date.now() / 1000;
+        try { return Runtime.native.timeNow(ptr(0)); } catch (e) { return Date.now() / 1000; }
+    }
+
+    function botPathPtr(b) {
+        return safe(function () { return b.add(OFF.Bot_path).readPointer(); }, ptr(0));
+    }
+
+    /* ---- 点图邻接表（按图指针缓存） ---- */
+    function graphAdjacency(g) {
+        var n = nodeCount(g);
+        if (Runtime.adj && Runtime.adj.g && Runtime.adj.g.equals(g) && Runtime.adj.n === n) return Runtime.adj;
+        var ptrs = [], idx = {}, i, j;
+        for (i = 0; i < n; i++) {
+            var nd = nodeAt(g, i);
+            ptrs.push(nd);
+            if (nd) idx[nd.toString()] = i;
+        }
+        var adj = new Array(n), pos = nodePositions(g);
+        for (i = 0; i < n; i++) {
+            var node = ptrs[i];
+            if (!node) { adj[i] = null; continue; }
+            var cnt = connCount(node), list = [];
+            for (j = 0; j < cnt; j++) {
+                var np = connNode(node, j);
+                if (!np) continue;
+                var k = idx[np.toString()];
+                if (k === undefined || k === i) continue;
+                list.push(k);
+            }
+            adj[i] = list;
+        }
+        Runtime.adj = { g: g, n: n, adj: adj, pos: pos, ptrs: ptrs };
+        log("info", "GRAPH|cache|nodes=" + n);
+        return Runtime.adj;
+    }
+
+    function nearestNodeIndex(pos, posList) {
+        if (!pos || !posList) return -1;
+        var best = -1, bd = 1e18, i;
+        for (i = 0; i < posList.length; i++) {
+            var q = posList[i];
+            if (!q) continue;
+            var dx = pos.x - q.x, dy = pos.y - q.y, dz = pos.z - q.z;
+            var d = dx * dx + dy * dy + dz * dz;
+            if (d < bd) { bd = d; best = i; }
+        }
+        return best;
+    }
+
+    /* 最小堆 Dijkstra，返回节点下标序列（含首尾），不连通返回 null */
+    function dijkstra(A, from, to) {
+        var n = A.n, adj = A.adj, pos = A.pos;
+        if (from < 0 || to < 0 || from >= n || to >= n) return null;
+        if (from === to) return [from];
+        var dist = new Float64Array(n), prev = new Int32Array(n), done = new Uint8Array(n);
+        var i;
+        for (i = 0; i < n; i++) { dist[i] = Infinity; prev[i] = -1; }
+        var hd = [], hn = [];
+        function push(d, v) {
+            hd.push(d); hn.push(v);
+            var c = hd.length - 1;
+            while (c > 0) {
+                var p = (c - 1) >> 1;
+                if (hd[p] <= hd[c]) break;
+                var td = hd[p], tn = hn[p];
+                hd[p] = hd[c]; hn[p] = hn[c]; hd[c] = td; hn[c] = tn;
+                c = p;
+            }
+        }
+        function pop() {
+            var topD = hd[0], topN = hn[0];
+            var ld = hd.pop(), ln = hn.pop();
+            if (hd.length) {
+                hd[0] = ld; hn[0] = ln;
+                var c = 0;
+                for (;;) {
+                    var l = c * 2 + 1, r = l + 1, m = c;
+                    if (l < hd.length && hd[l] < hd[m]) m = l;
+                    if (r < hd.length && hd[r] < hd[m]) m = r;
+                    if (m === c) break;
+                    var td = hd[m], tn = hn[m];
+                    hd[m] = hd[c]; hn[m] = hn[c]; hd[c] = td; hn[c] = tn;
+                    c = m;
+                }
+            }
+            return [topD, topN];
+        }
+        dist[from] = 0; push(0, from);
+        while (hd.length) {
+            var cur = pop(), d = cur[0], u = cur[1];
+            if (done[u]) continue;
+            done[u] = 1;
+            if (u === to) break;
+            var nb = adj[u];
+            if (!nb) continue;
+            var pu = pos[u];
+            if (!pu) continue;
+            for (i = 0; i < nb.length; i++) {
+                var v = nb[i];
+                if (done[v]) continue;
+                var pv = pos[v];
+                if (!pv) continue;
+                var dx = pu.x - pv.x, dy = pu.y - pv.y, dz = pu.z - pv.z;
+                var ndist = d + Math.sqrt(dx * dx + dy * dy + dz * dz);
+                if (ndist < dist[v]) { dist[v] = ndist; prev[v] = u; push(ndist, v); }
+            }
+        }
+        if (prev[to] === -1) return null;
+        var out = [], c2 = to, guard = 0;
+        while (c2 !== -1 && guard++ < 5000) { out.push(c2); c2 = prev[c2]; }
+        out.reverse();
+        return out;
+    }
+
+    /* 从 fromPos 走到 toPos 的世界坐标点列（末尾补上 toPos 本身） */
+    function routePoints(fromPos, toPos) {
+        var g = pointGraph();
+        if (!g || !fromPos || !toPos) return null;
+        var A = graphAdjacency(g);
+        var a = nearestNodeIndex(fromPos, A.pos);
+        var b2 = nearestNodeIndex(toPos, A.pos);
+        if (a < 0 || b2 < 0) return null;
+        var idxs = dijkstra(A, a, b2);
+        if (!idxs) return null;
+        var pts = [], i;
+        for (i = 0; i < idxs.length; i++) {
+            var q = A.pos[idxs[i]];
+            if (q) pts.push({ x: q.x, y: q.y, z: q.z });
+        }
+        pts.push({ x: toPos.x, y: toPos.y, z: toPos.z });
+        return pts;
+    }
+
+    /* ---- 造人机自己的 Path / List<Vector3>（从一个活着的 path 上取类） ---- */
+    function navSampleCls() {
+        if (Runtime.nav.listKlass && Runtime.nav.pathKlass) return Runtime.nav;
+        var bots = allBotsCached(1000), i;
+        for (i = 0; i < bots.length; i++) {
+            var p = safe(function () { return bots[i].add(OFF.Bot_path).readPointer(); }, null);
+            if (!isPtr(p)) continue;
+            var vp = safe(function () { return p.add(OFF.Path_vectorPath).readPointer(); }, null);
+            if (!isPtr(vp)) continue;
+            var lk = safe(function () { return vp.readPointer(); }, null);
+            var pk = safe(function () { return p.readPointer(); }, null);
+            if (!isPtr(lk) || !isPtr(pk)) continue;
+            Runtime.nav.listKlass = lk;
+            Runtime.nav.pathKlass = pk;
+            log("info", "NAV|cls|list=" + lk + "|path=" + pk);
+            return Runtime.nav;
+        }
+        return null;
+    }
+
+    function ensureNavObj(b) {
+        var key = b.toString();
+        var o = Runtime.nav.obj[key];
+        if (o) return o;
+        if (!Runtime.native.objectNew || !Runtime.native.arrayNew) { noteOnce("noobjnew", "il2cpp_object_new 不可用，无法造路径对象"); return null; }
+        var s = navSampleCls();
+        if (!s) { noteOnce("nosample", "还没有任何活着的 Path 可取样（等游戏自己给一次路径）"); return null; }
+        var list = safe(function () { return Runtime.native.objectNew(s.listKlass); }, null);
+        var path = safe(function () { return Runtime.native.objectNew(s.pathKlass); }, null);
+        if (!isPtr(list) || !isPtr(path)) return null;
+        safe(function () { path.add(OFF.Path_vectorPath).writePointer(list); }, null);
+        safe(function () { path.add(OFF.Path_completeState).writeS32(2); }, null);
+        o = { list: list, path: path, arr: ptr(0), cap: 0, lastAt: 0, lastLen: 0 };
+        Runtime.nav.obj[key] = o;
+        Runtime.nav.objMade += 1;
+        if (Runtime.nav.objMade <= 6) log("info", "NAV|obj|bot=" + key + "|list=" + list + "|path=" + path);
+        return o;
+    }
+
+    function writeRoute(b, pts) {
+        if (!pts || !pts.length) return false;
+        var o = ensureNavObj(b);
+        if (!o) return false;
+        var i, off;
+        if (!isPtr(o.arr) || o.cap < pts.length) {
+            var vec3 = classPtr("Vector3");
+            if (!vec3) { noteOnce("novec3", "找不到 Vector3 类，写不了路径点"); return false; }
+            var want = pts.length + 16;
+            var arr = safe(function () { return Runtime.native.arrayNew(vec3, want); }, null);
+            if (!isPtr(arr)) { noteOnce("noarr", "il2cpp_array_new 失败"); return false; }
+            o.arr = arr; o.cap = want;
+            safe(function () { o.list.add(0x08).writePointer(arr); }, null);
+        }
+        for (i = 0; i < pts.length; i++) {
+            off = OFF.Array_items + i * 12;
+            o.arr.add(off).writeFloat(pts[i].x);
+            o.arr.add(off + 4).writeFloat(pts[i].y);
+            o.arr.add(off + 8).writeFloat(pts[i].z);
+        }
+        safe(function () { o.list.add(OFF.List_size).writeS32(pts.length); }, null);
+        var cur = botPathPtr(b);
+        if (!isPtr(cur) || !cur.equals(o.path)) {
+            safe(function () { b.add(OFF.Bot_path).writePointer(o.path); }, null);
+        }
+        safe(function () { b.add(OFF.Bot_nextPathVectorID).writeS32(0); }, null);
+        o.lastAt = Date.now();
+        o.lastLen = pts.length;
+        return true;
+    }
+
+    /* 路径自检的异步状态：只报状态，不装车 */
+    function adoptPaths() {
+        var keys = Object.keys(Runtime.nav.pending);
+        var i;
+        for (i = 0; i < keys.length; i++) {
+            var k = keys[i], rec = Runtime.nav.pending[k];
+            if (!rec) continue;
+            var age = Date.now() - rec.at;
+            var path = rec.path;
+            if (!isPtr(path)) { delete Runtime.nav.pending[k]; continue; }
+            var cs = safe(function () { return path.add(OFF.Path_completeState).readS32(); }, 0);
+            var vp = safe(function () { return path.add(OFF.Path_vectorPath).readPointer(); }, ptr(0));
+            var cnt = isPtr(vp) ? safe(function () { return vp.add(OFF.List_size).readS32(); }, 0) : 0;
+            if (cs !== 0 || age > 4000) {
+                log(cs === 1 ? "warn" : "info", "PATH_PROBE|result|i=" + rec.i + "|state=" + cs +
+                    "|pts=" + cnt + "|wait=" + fmt(age / 1000) + "s");
+                delete Runtime.nav.pending[k];
+            }
+        }
+    }
+
     function followOnce() {
         var me = myPlayer();
         if (!me) return;
-        var bots = allBotsCached(1000);
         var mp = playerPos(me);
-        var i;
-        Runtime.followTargets = bots.length;
+        if (!mp) return;
+        var g = pointGraph();
+        if (!g) { noteOnce("nograph_follow", "还没有点图（没进对局），先不接管"); return; }
+        if (Runtime.config.freeze) { noteOnce("freeze_follow2", "冻结开着，跟随暂时不生效"); return; }
+        setStopAllBot(false);
+        if (!Runtime.savedInv["__me"] && isPtr(me)) {
+            Runtime.savedInv["__me"] = { p: me, inv: safe(function () { return me.add(OFF.Entity_isInvincible).readU8(); }, 0) };
+        }
+        if (safe(function () { return me.add(OFF.Entity_isInvincible).readU8(); }, 0) === 0) {
+            safe(function () { me.add(OFF.Entity_isInvincible).writeU8(1); }, null);
+        }
+        var bots = allBotsCached(1000);
+        var nowT = gameTime();
+        var A = graphAdjacency(g);
+        /* 还没抓到 List<Vector3>/Path 的类样本时，先别挡 AI 的寻路，让它自己算一次，
+           这样下一拍就能从活着的 path 上取类，开始接管 */
+        var haveCls = !!navSampleCls();
+        if (!haveCls) noteOnce("nosample2", "还没抓到 Path 类样本，先放行一次游戏自己的寻路");
+        var meIdx = nearestNodeIndex(mp, A.pos);
+        if (meIdx < 0) return;
+        var i, wrote = 0, skipped = 0;
         for (i = 0; i < bots.length; i++) {
             var b = bots[i];
-            var info = safe(function () { return b.add(OFF.Bot_enemyInfo).readPointer(); }, null);
-            if (!isPtr(info)) continue;
-            var dist = 3.0;
-            if (mp) {
-                var bp = playerPos(b);
-                if (bp) {
-                    var dx = mp.x - bp.x, dy = mp.y - bp.y, dz = mp.z - bp.z;
-                    dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+            if (!botPlayer(b)) continue;
+            var key = b.toString();
+            var pl0 = botPlayer(b);
+            safe(function () {
+                var info = b.add(OFF.Bot_enemyInfo).readPointer();
+                if (isPtr(info)) info.add(OFF.BotEnemyInfo_enemy).writePointer(ptr(0));
+                b.add(OFF.Bot_tryFindEnemy).writePointer(ptr(0));
+                b.add(OFF.Bot_faceToEnemy).writeU8(0);
+                b.add(OFF.Bot_nextAttackTime).writeFloat(nowT + 60);
+                b.add(OFF.Bot_nextCheckEnemyInViewTime).writeFloat(nowT + 60);
+                b.add(OFF.Bot_nextFindPathTime).writeFloat(haveCls ? (nowT + 20) : 0);
+            }, null);
+            /* 顺手给无敌：万一某一帧又把目标捡回来开了枪，也打不死人（关功能时按记录还原） */
+            if (pl0) {
+                if (!Runtime.savedInv[key]) {
+                    Runtime.savedInv[key] = {
+                        p: pl0,
+                        team: safe(function () { return pl0.add(OFF.Entity_team).readS32(); }, 0),
+                        inv: safe(function () { return pl0.add(OFF.Entity_isInvincible).readU8(); }, 0)
+                    };
+                }
+                if (safe(function () { return pl0.add(OFF.Entity_isInvincible).readU8(); }, 0) === 0) {
+                    safe(function () { pl0.add(OFF.Entity_isInvincible).writeU8(1); }, null);
                 }
             }
-            safe(function () {
-                /* 目标锁死成我：这样它们不会再去寻别的敌人，也不会互相打 */
-                info.add(OFF.BotEnemyInfo_enemy).writePointer(me);
-                info.add(OFF.BotEnemyInfo_isPlayer).writeU8(1);
-                info.add(OFF.BotEnemyInfo_findTime).writeFloat(1.0e9);
-                info.add(OFF.BotEnemyInfo_lastLostTime).writeFloat(1.0e9);
-                info.add(OFF.BotEnemyInfo_nextCheckVisibleTime).writeFloat(1.0e9);
-                info.add(OFF.BotEnemyInfo_distance).writeFloat(dist);
-                if (mp) {
-                    info.add(OFF.BotEnemyInfo_enemyPos).writeFloat(mp.x);
-                    info.add(OFF.BotEnemyInfo_enemyPos + 4).writeFloat(mp.y);
-                    info.add(OFF.BotEnemyInfo_enemyPos + 8).writeFloat(mp.z);
-                }
-                b.add(OFF.Bot_tryFindEnemy).writePointer(me);
-                b.add(OFF.Bot_nextCheckEnemyInViewTime).writeFloat(1.0e9);
-                b.add(OFF.Bot_nextAttackTime).writeFloat(1.0e9);
-                b.add(OFF.Bot_faceToEnemy).writeU8(0);
-            }, null);
+            var o = Runtime.nav.obj[key];
+            var idNow = safe(function () { return b.add(OFF.Bot_nextPathVectorID).readS32(); }, -1);
+            var stale = 2500 + ((i * 137) % 900);      /* 错开重算，别 15 个人机同一帧一起跑 Dijkstra */
+            var need = !o || !isPtr(botPathPtr(b)) || idNow < 0 || (Date.now() - o.lastAt) > stale;
+            if (!need) continue;
+            var bp = playerPos(b);
+            if (!bp) continue;
+            var bi = nearestNodeIndex(bp, A.pos);
+            if (bi < 0) continue;
+            var idxs = dijkstra(A, bi, meIdx);
+            if (!idxs) { skipped += 1; continue; }
+            var pts = [], j;
+            for (j = 0; j < idxs.length; j++) {
+                var q = A.pos[idxs[j]];
+                if (q) pts.push({ x: q.x, y: q.y, z: q.z });
+            }
+            pts.push({ x: mp.x, y: mp.y, z: mp.z });
+            if (writeRoute(b, pts)) wrote += 1;
+        }
+        Runtime.nav.written += wrote;
+        Runtime.nav.unreachable += skipped;
+        Runtime.followTargets = bots.length;
+        if (wrote && Runtime.nav.written <= 30) {
+            log("info", "NAV|write|n=" + wrote + "|bots=" + bots.length + "|meNode=" + meIdx + "|nodes=" + A.n);
+        }
+        if (skipped && Runtime.nav.unreachable <= 5) {
+            noteOnce("unreach", "有 " + skipped + " 个人机和我之间路点不连通（先用物理探针查断点）");
         }
     }
 
@@ -900,7 +1273,7 @@
         var mp = playerPos(me);
         if (!mp) return;
         var bots = allBotsCached(1000);
-        var max = bots.length < 4 ? bots.length : 4;
+        var max = bots.length < 5 ? bots.length : 5;
         var i, shown = 0;
         for (i = 0; i < bots.length && shown < max; i++) {
             var b = bots[i];
@@ -914,12 +1287,22 @@
             if (moved > 0.4) Runtime.stats.followMoves += 1;
             var info = safe(function () { return b.add(OFF.Bot_enemyInfo).readPointer(); }, null);
             var en = isPtr(info) ? safe(function () { return info.add(OFF.BotEnemyInfo_enemy).readPointer(); }, ptr(0)) : ptr(0);
-            var own = (isPtr(en) && en.equals(me)) ? 1 : 0;
-            log("info", "FOLLOW|i=" + shown + "|dist=" + fmt(d) + "|moved=" + fmt(moved) + "|own=" + own);
+            var path = botPathPtr(b);
+            var o = Runtime.nav.obj[key];
+            var mine = (o && isPtr(path) && path.equals(o.path)) ? 1 : 0;
+            var id = safe(function () { return b.add(OFF.Bot_nextPathVectorID).readS32(); }, -99);
+            var pts = 0;
+            if (isPtr(path)) {
+                var vp = safe(function () { return path.add(OFF.Path_vectorPath).readPointer(); }, ptr(0));
+                pts = isPtr(vp) ? safe(function () { return vp.add(OFF.List_size).readS32(); }, 0) : 0;
+            }
+            log("info", "FOLLOW|i=" + shown + "|dist=" + fmt(d) + "|moved=" + fmt(moved) +
+                "|path=" + (isPtr(path) ? 1 : 0) + "|mine=" + mine + "|pts=" + pts + "|id=" + id + "|enemy=" + (isPtr(en) ? 1 : 0));
             shown += 1;
         }
         if (shown === 0) noteOnce("nofollownone", "跟随开着但一个可跟的人机都没找到");
     }
+
 
     /* ---------------- 采样（吃缓存的节点坐标，别每 tick 重读） ---------------- */
     function walkOnce() {
@@ -966,12 +1349,32 @@
     /* ---------------- 冻结人机行为 ---------------- */
     function freezeOnce() {
         setStopAllBot(true);
+        var bots = allBotsCached(1000);
+        var nowT = gameTime();
+        var i;
+        for (i = 0; i < bots.length; i++) {
+            var b = bots[i];
+            safe(function () {
+                var info = b.add(OFF.Bot_enemyInfo).readPointer();
+                if (isPtr(info)) info.add(OFF.BotEnemyInfo_enemy).writePointer(ptr(0));
+                b.add(OFF.Bot_tryFindEnemy).writePointer(ptr(0));
+                b.add(OFF.Bot_nextAttackTime).writeFloat(nowT + 60);
+            }, null);
+        }
         if (!Runtime.freezeLogged) {
             Runtime.freezeLogged = true;
-            log("info", "冻结人机行为：Bot.stopAllBot=true（不寻敌/不巡逻/不开火）");
+            log("info", "冻结人机行为：Bot.stopAllBot=true（Move/寻敌/开火全部停）");
+        }
+        /* 自证：直接调游戏自己的 Bot.get_isStopped，看它认不认这个值 */
+        if (!Runtime.freezeVerified && bots.length) {
+            Runtime.freezeVerified = true;
+            var st = safe(function () {
+                return Runtime.native.botIsStopped ? Runtime.native.botIsStopped(bots[0], ptr(0)) : -1;
+            }, -1);
+            log("info", "冻结自证：Bot.get_isStopped(第一个人机)=" + st + "（1=游戏已经认了）");
         }
         if (Runtime.config.follow) {
-            noteOnce("freeze_follow", "冻结和跟随同时打开时以冻结为准，人机不会走过来");
+            noteOnce("freeze_follow", "冻结和跟随同时打开时以冻结为准：人机不会走过来");
         }
     }
 
@@ -989,24 +1392,37 @@
         var cfg = Runtime.config;
         if (cfg.freeze) {
             Runtime.freezeLogged = false;
+            Runtime.freezeVerified = false;
             Runtime.timers.push(setInterval(function () {
                 try { freezeOnce(); } catch (e) { setError("freeze", e); }
             }, 300));
         } else {
+            Runtime.freezeVerified = false;
             setStopAllBot(false);
         }
         if (cfg.pacify) {
             Runtime.timers.push(setInterval(function () {
                 try { pacifyOnce(); } catch (e) { setError("pacify", e); }
-            }, 200));
+            }, 150));
         }
         if (cfg.follow) {
+            /* 150ms：主要是尽快把 enemyInfo.enemy 清掉（枪只要有敌人就会开火），
+               路径本身 12 秒才重下一次 */
             Runtime.timers.push(setInterval(function () {
                 try { followOnce(); } catch (e) { setError("follow", e); }
+            }, 120));
+            /* 路径算完要马上装车，单独一个 100ms 的轻量轮询 */
+            Runtime.timers.push(setInterval(function () {
+                try { adoptPaths(); } catch (e) { setError("adopt", e); }
             }, 100));
             Runtime.timers.push(setInterval(function () {
                 try { followLog(); } catch (e) { setError("followLog", e); }
             }, 1000));
+        } else {
+            Runtime.nav.pending = {};
+        }
+        if (!cfg.pacify && !cfg.freeze && !cfg.follow) {
+            try { resumeBotAI(); } catch (e) { setError("resumeAI", e); }
         }
         if (cfg.walk) {
             var ms = Math.max(300, cfg.sample_ms || 300);
@@ -1025,16 +1441,48 @@
         return { ok: true };
     }
 
+    /* 关掉功能后把人机 AI 的“时间窗”复位，否则会在 60 秒内不攻击/不寻路 */
+    function resumeBotAI() {
+        var bots = allBots();
+        var i;
+        for (i = 0; i < bots.length; i++) {
+            var b = bots[i];
+            safe(function () {
+                b.add(OFF.Bot_nextAttackTime).writeFloat(0);
+                b.add(OFF.Bot_nextCheckEnemyInViewTime).writeFloat(0);
+                b.add(OFF.Bot_nextFindPathTime).writeFloat(0);
+                /* 我们塞进去的路径要撤掉，否则关了功能还按旧路线走 */
+                var key = b.toString();
+                var o = Runtime.nav.obj[key];
+                var cur = botPathPtr(b);
+                if (o && isPtr(cur) && cur.equals(o.path)) {
+                    b.add(OFF.Bot_path).writePointer(ptr(0));
+                    b.add(OFF.Bot_nextPathVectorID).writeS32(-1);
+                }
+            }, null);
+        }
+        Runtime.nav.obj = {};
+        Runtime.nav.written = 0;
+        Runtime.nav.unreachable = 0;
+        Runtime.nav.listKlass = null;
+        Runtime.nav.pathKlass = null;
+        if (bots.length) log("info", "人机 AI 时间窗已复位、接管路径已撤 bots=" + bots.length);
+    }
+
     function apiDisable() {
         Runtime.enabled = false;
         clearTimers();
+        try { resumeBotAI(); } catch (e) { setError("resumeAI", e); }
         try { restoreAll(); } catch (e) { setError("restore", e); }
         Runtime.botCache = [];
         Runtime.botCacheAt = 0;
         Runtime.followLast = {};
         Runtime.lastNode = {};
         Runtime.lastPos = {};
-        log("info", "disabled");
+        Runtime.nav.pending = {};
+        Runtime.nav.lastReq = {};
+        log("info", "disabled nav req=" + Runtime.nav.req + " adopt=" + Runtime.nav.adopt +
+            " pathErr=" + Runtime.nav.pathErr + " timeout=" + Runtime.nav.timeout);
         return { ok: true };
     }
 
@@ -1064,7 +1512,16 @@
             edges: Runtime.probe.edges.length,
             probeRanAt: Runtime.probe.ranAt,
             errors: Runtime.stats.errors || 0,
-            lastError: Runtime.stats.lastError
+            lastError: Runtime.stats.lastError,
+            nav: {
+                req: Runtime.nav.req, adopt: Runtime.nav.adopt,
+                pending: Object.keys(Runtime.nav.pending).length,
+                pathErr: Runtime.nav.pathErr, timeout: Runtime.nav.timeout,
+                startNull: Runtime.nav.startNull, setFail: Runtime.nav.setFail || 0,
+                onpcErr: Runtime.nav.onpcErr || 0,
+                objMade: Runtime.nav.objMade, written: Runtime.nav.written,
+                unreachable: Runtime.nav.unreachable
+            }
         };
     }
 
@@ -1097,6 +1554,50 @@
         step("stopallbot", function () {
             var sfb = botStaticFields();
             return sfb.isNull() ? "no-static-fields" : sfb.add(OFF.Bot_stopAllBot).readU8();
+        });
+        step("bot_isstopped", function () {
+            if (!Runtime.native.botIsStopped) return "native_not_ready";
+            var bs = allBots();
+            if (!bs.length) return "no_bots";
+            return Runtime.native.botIsStopped(bs[0], ptr(0));
+        });
+        step("bot_seeker", function () {
+            var bs = allBots();
+            if (!bs.length) return "no_bots";
+            var s = bs[0].add(OFF.Bot_seeker).readPointer();
+            return s.isNull() ? "null" : s.toString();
+        });
+        step("game_time", function () {
+            if (!Runtime.native.timeNow) return "native_not_ready";
+            return fmt(Runtime.native.timeNow(ptr(0)));
+        });
+        step("nav_stub", function () {
+            return (Runtime.native.startPath ? "startpath" : "no-startpath") + "/" +
+                   (Runtime.native.onPathComplete ? "onpc" : "no-onpc") + "/" +
+                   (Runtime.native.timeNow ? "time" : "no-time") + "/" +
+                   (Runtime.native.objectNew ? "objnew" : "no-objnew") + "/" +
+                   (Runtime.native.arrayNew ? "arrnew" : "no-arrnew");
+        });
+        step("graph_adj", function () {
+            if (!pointGraph()) return "no_map";
+            var A = graphAdjacency(pointGraph());
+            var e = 0, i;
+            for (i = 0; i < A.n; i++) if (A.adj[i]) e += A.adj[i].length;
+            return "nodes=" + A.n + "|edges=" + e;
+        });
+        step("route", function () {
+            var g = pointGraph();
+            if (!g) return "no_map";
+            var me = myPlayer();
+            if (!me) return "no_me";
+            var mp = playerPos(me);
+            if (!mp) return "no_my_pos";
+            var bs = allBots();
+            if (!bs.length) return "no_bots";
+            var bp = playerPos(bs[0]);
+            if (!bp) return "no_bot_pos";
+            var r = routePoints(bp, mp);
+            return r ? ("pts=" + r.length) : "unreachable";
         });
         step("il2cpp_api", function () {
             var mod = Process.findModuleByName(MODULE_NAME);
@@ -1145,6 +1646,101 @@
         return { ok: ok, line: line, steps: steps };
     }
 
+    /* 路径自检：只对 1~3 个人机下一个路径，看返回值/完成状态/点数，不装车。
+       用途：确认“从我们的线程调 Seeker.StartPath 到底行不行”，行再开跟随。 */
+    function apiPathProbe() {
+        if (!initNative()) return { ok: false, reason: Runtime.stats.lastError };
+        if (!astarPath()) return { ok: false, reason: "no_astar_path" };
+        var me = myPlayer();
+        var mp = me ? playerPos(me) : null;
+        if (!mp) return { ok: false, reason: "no_my_player" };
+        var bots = allBots();
+        if (!bots.length) return { ok: false, reason: "no_bots" };
+        var tryN = bots.length < 3 ? bots.length : 3;
+        var out = [], i;
+        for (i = 0; i < tryN; i++) {
+            var b = bots[i];
+            var seeker = safe(function () { return b.add(OFF.Bot_seeker).readPointer(); }, ptr(0));
+            var bp = playerPos(b);
+            if (!isPtr(seeker) || !bp) { out.push({ i: i, skip: "no_seeker_or_pos" }); continue; }
+            var d = Math.sqrt((bp.x - mp.x) * (bp.x - mp.x) + (bp.y - mp.y) * (bp.y - mp.y) + (bp.z - mp.z) * (bp.z - mp.z));
+            var st = Runtime.nav.bufStart, en = Runtime.nav.bufEnd;
+            st.writeFloat(bp.x); st.add(4).writeFloat(bp.y); st.add(8).writeFloat(bp.z);
+            en.writeFloat(mp.x); en.add(4).writeFloat(mp.y); en.add(8).writeFloat(mp.z);
+            var p = null, perr = null;
+            try { p = Runtime.native.startPath(seeker, st, en, ptr(0)); }
+            catch (e) { perr = e; }
+            Runtime.nav.req += 1;
+            if (perr) {
+                Runtime.nav.startNull += 1;
+                log("warn", "PATH_PROBE|native_error|" + (perr && perr.message ? perr.message : String(perr)));
+            }
+            /* 同时报一下我们自己的 JS 路线能不能算出来（不依赖任何游戏函数） */
+            var route = safe(function () { return routePoints(bp, mp); }, null);
+            out.push({
+                i: i, dist: fmt(d),
+                path: isPtr(p) ? p.toString() : ("raw:" + String(p)),
+                route: route ? route.length : -1
+            });
+            if (isPtr(p)) Runtime.nav.pending["probe" + i] = { bot: b, path: p, at: Date.now(), probe: true, i: i };
+        }
+        log("info", "PATH_PROBE|ask|" + JSON.stringify(out));
+        return { ok: true, results: out };
+    }
+
+    /* 人机快照：把每个关键字段都打一行，用来定位“为什么它们还在打/不动” */
+    function apiBotDump() {
+        if (!initNative()) return { ok: false, reason: Runtime.stats.lastError };
+        var me = myPlayer();
+        var mp = me ? playerPos(me) : null;
+        var bots = allBots();
+        var nowT = gameTime();
+        log("info", "BOTDUMP|time=" + fmt(nowT) + "|bots=" + bots.length +
+            "|myTeam=" + (me ? me.add(OFF.Entity_team).readS32() : -1) +
+            "|stopAllBot=" + (safe(function () { return botStaticFields().add(OFF.Bot_stopAllBot).readU8(); }, -1)));
+        var max = bots.length < 12 ? bots.length : 12;
+        var i;
+        for (i = 0; i < max; i++) {
+            var b = bots[i];
+            var key = b.toString();
+            var pl = botPlayer(b);
+            var info = safe(function () { return b.add(OFF.Bot_enemyInfo).readPointer(); }, ptr(0));
+            var en = isPtr(info) ? safe(function () { return info.add(OFF.BotEnemyInfo_enemy).readPointer(); }, ptr(0)) : ptr(0);
+            var tfe = safe(function () { return b.add(OFF.Bot_tryFindEnemy).readPointer(); }, ptr(0));
+            var seeker = safe(function () { return b.add(OFF.Bot_seeker).readPointer(); }, ptr(0));
+            var path = botPathPtr(b);
+            var o = Runtime.nav.obj[key];
+            var id = safe(function () { return b.add(OFF.Bot_nextPathVectorID).readS32(); }, -99);
+            var pts = 0;
+            if (isPtr(path)) {
+                var vp = safe(function () { return path.add(OFF.Path_vectorPath).readPointer(); }, ptr(0));
+                pts = isPtr(vp) ? safe(function () { return vp.add(OFF.List_size).readS32(); }, 0) : 0;
+            }
+            var stopped = safe(function () { return Runtime.native.botIsStopped ? Runtime.native.botIsStopped(b, ptr(0)) : -1; }, -1);
+            var ghost = pl ? safe(function () { return pl.add(OFF.Entity_isGhost).readU8(); }, -1) : -1;
+            var inv = pl ? safe(function () { return pl.add(OFF.Entity_isInvincible).readU8(); }, -1) : -1;
+            var team = pl ? safe(function () { return pl.add(OFF.Entity_team).readS32(); }, -1) : -1;
+            var d = -1;
+            if (mp && pl) {
+                var bp2 = playerPos(b);
+                if (bp2) d = Math.sqrt((bp2.x - mp.x) * (bp2.x - mp.x) + (bp2.y - mp.y) * (bp2.y - mp.y) + (bp2.z - mp.z) * (bp2.z - mp.z));
+            }
+            log("info", "BOT|i=" + i + "|bot=" + key +
+                "|team=" + team + "|ghost=" + ghost + "|inv=" + inv + "|stopped=" + stopped +
+                "|dist=" + fmt(d) + "|enemy=" + (isPtr(en) ? en.toString() : "0") +
+                "|try=" + (isPtr(tfe) ? tfe.toString() : "0") +
+                "|seeker=" + (isPtr(seeker) ? "1" : "0") +
+                "|path=" + (isPtr(path) ? 1 : 0) + "|mine=" + (o && isPtr(path) && path.equals(o.path) ? 1 : 0) +
+                "|pts=" + pts + "|id=" + id +
+                "|nextAttack=" + fmt(safe(function () { return b.add(OFF.Bot_nextAttackTime).readFloat(); }, 0)) +
+                "|nextFindPath=" + fmt(safe(function () { return b.add(OFF.Bot_nextFindPathTime).readFloat(); }, 0)) +
+                "|nextCheckView=" + fmt(safe(function () { return b.add(OFF.Bot_nextCheckEnemyInViewTime).readFloat(); }, 0)) +
+                "|einfoDist=" + (isPtr(info) ? fmt(safe(function () { return info.add(OFF.BotEnemyInfo_distance).readFloat(); }, 0)) : "-") +
+                "|einfo3C=" + (isPtr(info) ? safe(function () { return info.add(0x3C).readS32(); }, -1) : "-"));
+        }
+        return { ok: true, bots: bots.length };
+    }
+
     function apiCleanup() {
         return apiDisable();
     }
@@ -1158,6 +1754,10 @@
         runprobe: runProbe,
         selfTest: apiSelfTest,
         selftest: apiSelfTest,
+        pathProbe: apiPathProbe,
+        pathprobe: apiPathProbe,
+        botDump: apiBotDump,
+        botdump: apiBotDump,
         status: apiStatus,
         cleanup: apiCleanup
     };

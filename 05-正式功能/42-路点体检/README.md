@@ -36,8 +36,9 @@ python AAAAA-waypoint_probe_ui.py
 | 控件 | 作用 |
 | --- | --- |
 | 总开关 | 功能开关；关掉会停止所有定时器并**还原**改过的队伍/无敌 |
-| 停战（同队 + 无敌） | bot 之间不再互相锁定、打不死；只关战斗不动移动 |
-| 跟随我（每个阵营 1 个） | 每个阵营挑一个 bot，把它“敌人”字段指向你，让它自己寻路跟过来 |
+| 停战 | 清空每个 bot 的 `enemyInfo.enemy` + 全员 `isInvincible=1`；没开跟随时顺带 `stopAllBot=true`（游戏自带的全体静默） |
+| 冻结人机行为 | 只写 `Bot.stopAllBot=true`：连 `Bot.Move()` 都会 return，人机彻底不动 |
+| 跟随我 | **接管寻路**：调游戏自己的 `Seeker.StartPath(人机脚下 → 你)`，路径算完再调 `Bot.OnPathComplete(bot, path)` 装车，`Bot.Move()` 沿路点图走过来；全程清空 enemy，不开火 |
 | 人机采样 | 定时记录 bot 所在节点，跨节点时记一条边 |
 | 跑一次物理探针 | 按人机体积沿每条边扫，判定 PASS/BLOCK/GAP/STEP/STEEP |
 
@@ -78,10 +79,13 @@ pacify bots=29 changed=12
 
 1. 启动游戏并**进入一张地图**（大厅里 `AstarPath.active` 是空的，探针会返回 `no_point_graph`）；
 2. 启动独立界面（或修改器卡片）；
-3. 先开总开关 → 开「停战」，确认 bot 不再互相打；
-4. 开「跟随我」，看日志 `FOLLOW` 行的 `moved` 是否 > 0；
-5. 点「跑一次物理探针」（约 1~3 秒卡一下）；
-6. 走几分钟后看日志；关总开关会自动还原队伍/无敌。
+3. 先点「路径自检（先试 1~3 个人机）」：日志里要出现 `PATH_PROBE|result|...|state=2|pts=37`，
+   这一行代表“从我们这边下路径 → A* 算出点列”整条链路通了；
+4. 开总开关 → 开「跟随我」：看 `FOLLOW|adopt|...|set=1` 和每秒的 `FOLLOW|i=0|dist=..|moved=..`，
+   `dist` 应该持续变小；人机不开火（`enemy=0`）；
+5. 想让人机完全不动 → 开「冻结人机行为」（此时跟随之类全部让位）；
+6. 点「跑一次物理探针」（约 1~3 秒卡一下）；
+7. 关总开关：`stopAllBot`、无敌、队伍、以及人机 AI 的时间窗全部复原。
 
 ## 2026-11-15 真机验证记录
 
@@ -265,18 +269,24 @@ Bot.CheckAttackTarget : 55 8b ec 51 80 3d ...   ← 被游戏自己还原了
 `Bot.Update`（0x10B33370）每帧的顺序：
 
 ```
-Move()                        ← 永远执行（按 path 走）
-BotEnemyInfo.Update()         ← 更新目标距离/可见性
-武器 BotControl(bot)          ← 开火/挥刀（武器类的虚函数，slot 39）
+Move()                        ← 第一行就无条件调用；但内部 0xB2FC56 会读 get_isStopped，
+                                为真 → 直接 SetMoveState(默认值) 然后返回（一步不走）
+BotEnemyInfo.Update()         ← 只更新现有目标的距离；enemy==null 时把 distance 写成 +Inf
+武器 BotControl(bot)          ← 开火/挥刀（武器虚函数 slot 39）。枪内部也会再读一次
+                                get_isStopped（0xB633C5），而且要有 enemyInfo.haveEnemy() 才开火
 if (!get_isStopped()) {       ← Bot.stopAllBot 为真就整段跳过
-    PathSetting()             ← seeker 算路
-    CheckAttackTarget()       ← 选敌/决定攻击
-    UseWeapon() / UseSkill() / UpdateAction() / JumpCheck() / TryCrouch() ...
+    GetNearest → PathSetting()   ← 寻路（第一行：now < nextFindPathTime 就 return）
+    CheckAttackTarget()          ← 选敌 / 决定攻击
+    CameraRotation / SelectWeapon / UpdateAction(动作列表) / NanoGuard.Update ...
 }
 ```
 
-也就是说：**`Bot.stopAllBot = true` 一开，除了 `Move()` 之外所有决策都被游戏自己跳过了**
-（不寻敌、不开火、不巡逻、不用技能、不跳不蹲）。
+结论两条：
+
+1. **`Bot.stopAllBot = true` 是彻底冻结**：`Move()` 里的 moveState 被复位，人机连挪都不挪，
+   寻敌、开火、巡逻、技能、跳跃全跳过 —— 这就是「冻结人机行为」；
+2. **想让人机动，就绝不能开 stopAllBot**；要它们“走过来又不开火”，只能自己下路径，
+   同时把 `enemyInfo.enemy` 清空（`haveEnemy()`=false → 武器 BotControl 走停火分支）。
 
 ### 3. 加载时机
 
@@ -300,3 +310,121 @@ if (!get_isStopped()) {       ← Bot.stopAllBot 为真就整段跳过
 - 射线：`Physics.Raycast`(0xABB0A0) 是 Vector3 传值的重载，Frida 不能直接按值传结构，所以脚本里用一段自己拼的 x86 thunk（`buildRaycastStub`）把指针参数展开成按值参数；
 - bot：`Bot_TypeInfo`(0xE25F44) + `Object.FindObjectsOfType`(0x4E9620)；字段 `thisPlayer` 0x24、`tryFindEnemy` 0x2C、`faceToEnemy` 0x30、两个计时器 0x38/0x3C；
 - 队伍/无敌：`Entity.team` 0x20、`Entity.isInvincible` 0x18；本地玩家取 `GameManager.myPlayer`（static+0），取不到就用 `Player.get_isMyPlayer`(0xB55FD0) 兜底。
+
+---
+
+## 2026-11-15 第 8 轮：为什么之前「没效果」，现在怎么让它们跟过来
+
+### 1. 之前的三个错判（都用 IDA 反汇编纠正了）
+
+| 原来的说法 | 反汇编事实 | 后果 |
+| --- | --- | --- |
+| 「`Move()` 永远执行，冻结只停决策」 | `Bot.Move` 0x10B2FC56 `call Bot.get_isStopped`，为真 → 跳 0x10B30071 → `Player.SetMoveState(默认)` 后返回 | 冻结时人机**一步都不走**，靠“冻结+给路径”永远不可能跟上 |
+| 「冻结是万能的」 | 武器 `BotControl` 在 `Update` 里被**无条件**调用（0xB333F6 虚表 slot 39），冻结只让枪进入停火分支 | 看门狗式地“冻结还想动”必然失败 |
+| 「`enemyInfo.enemy` 指向我 = 跟随」 | `BotEnemyInfo.Update` 只算距离；真正决定路线的是 `PathSetting`，它的目的地来自 ①`enemyInfo`(优先级5) ②`tryFindEnemy`(5) ③`Destination_Listener` 事件(≤7)，而且 `enemyInfo+0x3C` 每帧先被武器清零 | 只写 `enemy` 大多数帧拿不到目的地，人机原地不动 |
+
+### 2. 现在的跟随怎么做的（不写一行代码，不改一个字节）
+
+复用游戏自己的整条链路：
+
+```
+Seeker.StartPath(seeker, 人机脚下, 我的位置, callback=null)   → 0x105A4260，A* 异步算路
+轮询 Path.completeState（+0x20）到 Complete/Partial 且 vectorPath(List,+0x2C).size>0
+Bot.OnPathComplete(bot, path)                                  → 0x10B31950，游戏自己的装车函数：
+    bot.path = path; nextPathVectorID = 0; pathLength 重算;
+    interpolator.SetPath(vectorPath); 算出 nextPathPos / dirToNextNode
+下一帧 Bot.Update 第一行 Bot.Move() 沿 vectorPath 走（setMoveState）
+```
+
+配套的两个数据写入（缺一不可）：
+
+- `enemyInfo.enemy = 0`（+0x0C）、`tryFindEnemy = 0`（+0x2C）→ `haveEnemy()` 返回 false → 枪/刀走停火分支，人机不开火；
+- `nextFindPathTime = 游戏时间 + 20`（+0xB8）→ `PathSetting` 第一行 `now < nextFindPathTime` 就 return，AI 不会用它的目的地把我们下的路径顶掉（跟随期间每 300ms 续一次）。
+
+### 3. 新增：路径自检按钮
+
+界面上「路径自检（先试 1~3 个人机）」只做一件事：对前 1~3 个人机各下一次路径，**不装车**，把返回值、完成状态、路径点数写进日志：
+
+```
+PATH_PROBE|ask|[{"i":0,"dist":42.31,"path":"0x..."}, ...]
+PATH_PROBE|result|i=0|state=2|pts=37|wait=0.21s
+```
+
+- `state=2/3` + `pts>0` → 寻路链路通了，可以开「跟随我」；
+- `path=null` → `Seeker.StartPath` 返回空（地图没加载/点在图外）；
+- `state=1` → 路径出错（起点或终点不在路点图上，`AstarPath.active` 里没有可走节点）。
+
+### 4. 跟随日志怎么读
+
+```
+FOLLOW|ask|n=15|bots=15|req=15            下单
+FOLLOW|adopt|bot=0x...|pts=37|wait=0.21s   路径算完并已装车
+FOLLOW|i=0|dist=41.2|moved=0.35|path=1|pts=37|id=3|enemy=0
+```
+
+- `moved` 每秒都 > 0.4 → 在走路；`dist` 应该单调下降；
+- `path=0` → 路径走完了（`Move` 到终点会把 `path` 置空），下一轮自动再下单；
+- `id` 是 `nextPathVectorID`，走完会变成 -1；
+- `enemy=0` 表示目标已被清空，不会开火。
+
+### 5. 关掉之后会自动复原
+
+- `stopAllBot` 写回进入功能前的值；
+- 每个人机 / 我的 `isInvincible`、`team` 写回原值；
+- `nextAttackTime` / `nextCheckEnemyInViewTime` / `nextFindPathTime` 全部写 0，人机 AI 立刻恢复（不会“关了还在发呆 60 秒”）。
+
+---
+
+## 2026-11-15 第 9 轮：Seeker.StartPath 走不通，改成“自己算路 + 直接塞 Bot.path”
+
+### 1. 真机日志给出的结论
+
+```
+PATH_PROBE|ask|[{"i":0,"dist":"82.56","path":"null"},{"i":1,"dist":"50.93","path":"null"}]
+```
+
+三个人机、三次调用，`Seeker.StartPath` 全部返回 `null`（不是“算失败”，是连 Path 对象都没拿回来）。
+反汇编 0x105A4260 可以确认它内部是 `ABPath.Construct` → `StartPath(p)` → `mov eax, esi` 返回，
+**任何一步为空都会走 `il2cpp_codegen_no_return`（进程直接挂）**，所以能安全返回 0 只有一种解释：
+从 Frida 自己的线程发起的这次调用没有真正跑进函数体，返回值是垃圾 0。
+结论：外部线程调游戏寻路这条路不走了（再试只是拿游戏进程冒险）。
+
+### 2. 新方案：完全不调用游戏函数
+
+```
+① JS 里用点图跑 Dijkstra（同一张 PointGraph、同一批连接）→ 节点下标序列
+② 坐标写进我们自己造的 Vector3[]（il2cpp_array_new）
+③ 自己造 List<Vector3>（il2cpp_object_new，类从一个活着的 path.vectorPath 上取样）
+   把 _items 指到②、_size 写成点数
+④ 自己造一个 Path（il2cpp_object_new，同样取样），vectorPath=③、completeState=2
+⑤ bot.path = ④，nextPathVectorID = 0
+⑥ 下一帧 Bot.Update 第一行 Bot.Move() 自己按 vectorPath 走
+```
+
+全流程只做 **分配对象 + 写字段**，一次游戏逻辑函数都不调；反作弊没有可还原的东西，也没有线程问题。
+
+### 3. 这次新加的两个诊断
+
+- `PATH_PROBE|ask|...|route=37`：`route` 是我们自己 JS 算出来的点数；`-1` 表示不连通。
+  只要 `route>0`，就说明“同一张图上是连通的”，跟游戏的 StartPath 是否可用无关；
+- **人机快照**按钮：每个人机一行
+  ```
+  BOT|i=0|bot=0x...|team=1|ghost=0|inv=1|stopped=0|dist=82.5|enemy=0|try=0|seeker=1|
+     path=1|mine=1|pts=37|id=3|nextAttack=..|nextFindPath=..|nextCheckView=..|einfoDist=..|einfo3C=..
+  ```
+  - `enemy=0`：目标已清空（枪打不了）；
+  - `mine=1`：`bot.path` 就是我们塞进去的那个对象；
+  - `pts/id`：路径点数和当前走到第几个；
+  - `inv=1`：无敌已生效；
+  - `einfo3C`：武器每帧清零的那个标志，用来确认是不是它让 AI 重新选敌。
+
+### 4. 跟随模式现在同时做三件事
+
+1. 每 120ms：`enemyInfo.enemy=0`、`tryFindEnemy=0`、`nextAttackTime` / `nextCheckEnemyInViewTime` 推远；
+2. 每 120ms：全员（含我）`isInvincible=1`，写前记录原值，关功能还原；
+3. 需要时：重算路线并写进 `bot.path`（2.5 秒一次，或路径走完/被清空时立刻补）。
+
+关掉功能时会把 `bot.path` 撤掉、`nextPathVectorID=-1`、AI 三个时间窗写 0，
+人机会立刻恢复自己寻路，不会“关了还在按旧路线走”。
+
+

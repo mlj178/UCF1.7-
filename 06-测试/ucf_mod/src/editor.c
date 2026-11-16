@@ -24,6 +24,35 @@ typedef struct { float x, y, z; } V3;
 typedef struct { float x, y; } V2;
 typedef struct { float r, g, b, a; } COL;
 
+/* UnityEngine.Object.m_CachedPtr (+0x8) is cleared when the native object is
+ * destroyed.  Touching a destroyed component from native code raises a managed
+ * MissingReferenceException; IL2CPP cannot unwind into C, so it aborts. */
+static int uobj_live(P o) { return o && *(P*)((char*)o + 0x8) != 0; }
+
+/* Conservative readability probe.  Any mangled pointer inside the il2cpp heap
+ * turns a plain dereference into an access violation, and IL2CPP cannot unwind
+ * back into C - the game just disappears.  Walk the page tables first.
+ * 2026-11-16: Ctrl+V crashed at 'mov (%ebx),%ecx' in read_nav (crash.dmp
+ * 0x68985C60): a PointNode's connections array had a garbage length and the
+ * scan walked 40k entries past it into an uncommitted page. */
+static int mem_ok(const void* p, size_t n) {
+  MEMORY_BASIC_INFORMATION mbi;
+  const char* q = (const char*)p;
+  size_t left = n;
+  if (!p || !n) return 0;
+  while (left) {
+    size_t avail;
+    if (!VirtualQuery((LPCVOID)q, &mbi, sizeof(mbi))) return 0;
+    if (mbi.State != MEM_COMMIT) return 0;
+    if (mbi.Protect & (PAGE_NOACCESS | PAGE_GUARD)) return 0;
+    avail = (size_t)((const char*)mbi.BaseAddress + mbi.RegionSize - q);
+    if (avail > left) avail = left;
+    left -= avail;
+    q += avail;
+  }
+  return 1;
+}
+
 #define MAXM      600
 #define MAX_AID   64
 #define DEL_RADIUS 3.0f
@@ -65,6 +94,7 @@ static P (*x_array_new)(P, unsigned int);
 static P (*x_class_get_parent)(P);
 static P (*x_domain_assembly_open)(P, const char*);
 static unsigned (*x_gchandle_new)(P, unsigned char);
+static void (*x_gchandle_free)(P);
 
 static P g_goCls, g_camCls, g_colCls, g_boxCls, g_crouchCls, g_areaCls, g_posCls;
 static P g_colType, g_boxType, g_crouchType, g_areaType, g_posType;
@@ -80,11 +110,27 @@ static char g_shaderName[96]; /* cached shader path, so materials survive asset 
 static P g_matSlot[16];  /* cached material per marker type 1..15   */
 static int g_matReady;
 
+/* 路点图编辑（定义在文件后半段，这里提前声明给 ed_init/editor_on_scene 用） */
+typedef struct { int kind; V3 a, b; } NAVED;
+#define NAV_ED_MAX 4096
+static NAVED g_ned[NAV_ED_MAX];
+static int g_nedN;
+static char g_nedPath[MAX_PATH];
+static char g_nedFp[48];
+static int g_nedBaseN;
+static int g_nedExpect;     /* 套用后应有的节点数：用来判断图是否被游戏重扫过 */
+static int g_nedApplied;
+static int g_nedWaitN;
+static P   g_nedGraph;
+static int g_nedHasA;
+static V3  g_nedA;
+static P   g_pnodeCls, g_connCls;
+
 static P g_hud;          /* UGUI Text component: status panel */
 static P g_hudGo;
 static P g_keys;         /* UGUI Text component: hotkey panel */
 static P g_keysGo;
-static P g_cat;          /* UGUI Text component: D-layer category list (left edge) */
+static P g_cat;          /* UGUI Text: D-layer category list (left edge) */
 static P g_catGo;
 static P g_guiFont;      /* font borrowed from the game UI (has CJK glyphs) */
 static int g_cjk;        /* 1 = game font available, hint text in Chinese */
@@ -226,20 +272,37 @@ static const COL COL_PINK   = { 1.00f, 0.35f, 0.70f, 1.0f };
 static const COL COL_GOLD   = { 1.00f, 0.85f, 0.20f, 1.0f };
 static const COL COL_GRAY   = { 0.70f, 0.70f, 0.70f, 1.0f };
 
+/* --- 最近日志环形缓冲：游戏里 HUD 直接能看到，不用去翻 ucf_mod.log ------ */
+#define LOG_RING 8
+static char g_ring[LOG_RING][128];
+static int  g_ringN = 0;
+static int  g_logOn = 1;          /* Ctrl+M 开关 */
+static char g_expStat[160];       /* 最近一次导出结果，HUD 单独一行 */
+
+static void log_ring_push(const char* s) {
+  int i = g_ringN % LOG_RING, n = 0;
+  while (s[n] && n < (int)sizeof(g_ring[0]) - 1) { g_ring[i][n] = s[n]; n++; }
+  g_ring[i][n] = 0;
+  g_ringN++;
+}
+
 static void elog(const char* fmt, ...) {
-  FILE* f;
-  SYSTEMTIME st;
+  char buf[512];
   va_list ap;
-  if (!g_log[0]) return;
-  f = fopen(g_log, "a");
-  if (!f) return;
-  GetLocalTime(&st);
-  fprintf(f, "%04d-%02d-%02d %02d:%02d:%02d [edit] ", st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond);
   va_start(ap, fmt);
-  vfprintf(f, fmt, ap);
+  vsnprintf(buf, sizeof buf, fmt, ap);
   va_end(ap);
-  fprintf(f, "\n");
-  fclose(f);
+  if (g_log[0]) {
+    FILE* f = fopen(g_log, "a");
+    if (f) {
+      SYSTEMTIME st;
+      GetLocalTime(&st);
+      fprintf(f, "%04d-%02d-%02d %02d:%02d:%02d [edit] %s\n",
+              st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond, buf);
+      fclose(f);
+    }
+  }
+  log_ring_push(buf);
 }
 
 static P find_img(const char* name) {
@@ -309,6 +372,7 @@ static int ed_init(void) {
   RESOLVE(class_get_parent);
   RESOLVE(domain_assembly_open);
   RESOLVE(gchandle_new);
+  RESOLVE(gchandle_free);
   if (!x_domain_get || !x_object_new || !x_string_new || !x_class_from_name || !x_class_get_type) {
     g_initFail = 1;
     elog("il2cpp exports missing");
@@ -351,6 +415,9 @@ static int ed_init(void) {
     }
   }
   elog("init: i32=%p", g_i32Cls);
+  g_pnodeCls = find_cls("Pathfinding", "PointNode");
+  g_connCls = find_cls("Pathfinding", "Connection");
+  elog("init: pointnode=%p connection=%p", g_pnodeCls, g_connCls);
   g_guardCls = find_cls("", "Bot_GuardPos");
   g_jumpCls = find_cls("", "Bot_JumpLink");
   g_tagCls = find_cls("", "PointNodeTagModifier");
@@ -662,20 +729,24 @@ static P g_lblComp[VIS_MAXF];
 static unsigned char g_lblHidden[VIS_MAXF];
 static int g_lblShown;
 
-static int g_visOn, g_lay = LAY_A, g_lblMode = 0;  /* 0 = no world-space text: it clutters the view
-                                                * Ctrl+V 第一次只开 A 层，其余层按需 Ctrl+Shift+2..5 打开 */
-/* C 层细分：1 守区框 2 守点 4 邻区线 8 入口·撤离线；默认只开「区+点」，线要自己开 */
-static int g_csub = 3;
+static int g_exporting;            /* 正在导出：忽略图层开关，五层全读，绝不少导数据 */
+static int g_visOn, g_lay = LAY_A | LAY_B | LAY_C | LAY_D | LAY_E, g_lblMode = 0;  /* 0 = no world-space text: it clutters the view */
 static int g_visDirty, g_visNoMesh;
 static int g_autoExport = 1;      /* 图有节点且稳定后自动导出一份路点 JSON */
 static int g_aeNodes = -1;        /* 自动导出：上次看到的节点数 */
 static int g_aeHold;              /* 自动导出：稳定倒计时（tick 数） */
 static int g_collectOnly;         /* 只读采集：不建图/不建蹲点/不建守区/不建任何 UI 对象 */
+static int g_exportForce;         /* Ctrl+E 手动导出时绕过“已采过/太小”的过滤 */
+static int g_nmVert, g_nmTri;     /* 本次导出的 NavMeshGraph 顶点/三角形数 */
+static char g_nmFile[128];        /* 导航网格二进制文件名 */
+static unsigned long long nm_seenFp;  /* 已落盘的导航网格指纹 */
+static int nm_seen;
 static int g_cArea, g_cPos, g_cCrouch, g_cSpawn, g_cJump, g_cTag, g_cGuard;
 static int g_helpOn = 1;
 
 static void hud_refresh(void);
 static P comp_tr(P comp);
+/* 路点体检（实现在 probe.c，本文件末尾 #include） */
 
 /* --- geometry batch ----------------------------------------------------- */
 static V3 g_bV[MB_MAXV];
@@ -883,14 +954,13 @@ static const COL* label_col(int kind, int aux) {
     case K_GUARD:  return &COL_NODE1;
     case K_GAREA:  return &COL_PURPLE;
     case K_SPAWN:
-      /* keep each D-layer group visually separate instead of one gold blob */
       switch (aux) {
-        case 0:  return &COL_AREA;    /* 保卫者出生  blue   */
-        case 1:  return &COL_CROUCH;  /* 幽灵出生    red    */
-        case 2:  return &COL_GRAY;    /* 中立点      gray   */
-        case 3:  return &COL_GOLD;    /* 普通补给箱  gold   */
-        case 4:  return &COL_PINK;    /* 红色补给箱  pink   */
-        case 5:  return &COL_CYAN;    /* 蓝色补给箱  cyan   */
+        case 0:  return &COL_AREA;    /* 保卫者出生 */
+        case 1:  return &COL_CROUCH;  /* 幽灵出生   */
+        case 2:  return &COL_GRAY;    /* 中立点     */
+        case 3:  return &COL_GOLD;    /* 普通补给箱 */
+        case 4:  return &COL_PINK;    /* 红色补给箱 */
+        case 5:  return &COL_CYAN;    /* 蓝色补给箱 */
         default: return &COL_GOLD;
       }
     case K_JUMP:   return &COL_JUMP;
@@ -929,7 +999,7 @@ static void vis_label_tick(void) {
   int i, shown = 0;
   if (!g_visOn || g_lblMode == 0 || !g_vfN) return;
   cam = ((cam_main_t)RVA(R_CAM_MAIN))(0);
-  if (!cam) return;
+  if (!uobj_live(cam)) return;
   ctr = get_tr(((get_go_t)RVA(R_GETGO))(cam, 0));
   if (!ctr) return;
   ((get_pos_t)RVA(R_GET_POS_INJ))(ctr, &cp, 0);
@@ -974,7 +1044,16 @@ static P static_obj(P cls, const char* field) {
 }
 static int list_n(P l) { return l ? *(int*)((char*)l + 0x0C) : 0; }
 static P list_items(P l) { return l ? *(P*)((char*)l + 0x08) : 0; }
-static P comp_tr(P comp) { return ((get_tr_t)RVA(R_COMP_TR))(comp, 0); }
+/* A destroyed UnityEngine.Object keeps its managed wrapper but clears
+ * m_CachedPtr (+0x8).  Calling GetComponent/GetPosition on it raises a
+ * managed MissingReferenceException.  There is no managed catch here, so
+ * IL2CPP calls abort() -> the "Microsoft Visual C++ Runtime Library"
+ * dialog.  This happens right after a scene change, when SpareAreaList /
+ * SpareList_BL/GR still hold components from the previous level. */
+static P comp_tr(P comp) {
+  if (!uobj_live(comp)) return 0;
+  return ((get_tr_t)RVA(R_COMP_TR))(comp, 0);
+}
 static int comp_pos(P comp, V3* out) {
   P tr = comp_tr(comp);
   if (!tr) return 0;
@@ -1018,22 +1097,28 @@ static int pm_get(P k) {
   return -1;
 }
 
+static int nav_conn_get(P nd, P* out);    /* 定义在后面（跨边表校验） */
+static int g_navBadNode, g_navBadConn;   /* 读图时发现的坏节点/坏连接表 */
 static void read_nav(void) {
   P pg, arr;
   int n, i;
-  if (!(g_lay & LAY_A)) return;
+  if (!(g_lay & LAY_A) && !g_exporting) return;   /* 导出时忽略图层开关 */
   pg = navfix_point_graph();
   if (!pg) { miss("pointgraph"); return; }
+  if (!mem_ok(pg, 0xF0)) { miss("badgraph"); return; }
   n = *(int*)((char*)pg + 0xEC);
   arr = *(P*)((char*)pg + 0xE8);
   if (!arr || n <= 0) { miss("nodes0"); return; }
   if (n > VIS_MAXN) n = VIS_MAXN;
+  if (!mem_ok(arr, 0x10 + (size_t)n * 4)) { miss("badnodes"); return; }
+  g_navBadNode = g_navBadConn = 0;
   pm_reset();
   memset(g_vn, 0, sizeof(VN) * (size_t)(n > 0 ? n : 1));
   for (i = 0; i < n; i++) {
     P nd = *(P*)((char*)arr + 0x10 + i * 4);
     unsigned fl;
     if (!nd) continue;
+    if (!mem_ok(nd, 0x28)) { g_navBadNode++; continue; }
     fl = *(unsigned*)((char*)nd + 0x0C);
     g_vn[i].p.x = *(int*)((char*)nd + 0x14) * 0.001f;
     g_vn[i].p.y = *(int*)((char*)nd + 0x18) * 0.001f;
@@ -1046,12 +1131,11 @@ static void read_nav(void) {
   g_vnN = n;
   for (i = 0; i < n && g_veN < VIS_MAXE; i++) {
     P nd = *(P*)((char*)arr + 0x10 + i * 4);
-    P cons;
+    P cons = 0;
     int cn, j;
     if (!nd) continue;
-    cons = *(P*)((char*)nd + 0x20);
-    if (!cons) continue;
-    cn = *(int*)((char*)cons + 0x0C);
+    cn = nav_conn_get(nd, &cons);     /* 不可信的连接表直接跳过（曾因此闪退） */
+    if (cn <= 0) { if (cn < 0) g_navBadConn++; continue; }
     for (j = 0; j < cn && g_veN < VIS_MAXE; j++) {
       P other = *(P*)((char*)cons + 0x10 + j * 12);
       int oi = pm_get(other);
@@ -1068,7 +1152,7 @@ static void read_nano(void) {
   P l, items, aptr[VIS_MAXF];
   V3 apos[VIS_MAXF];
   int n, an = 0, i;
-  if (!(g_lay & LAY_C) || !g_areaCls) return;
+  if ((!(g_lay & LAY_C) && !g_exporting) || !g_areaCls) return;
   l = static_obj(g_areaCls, "SpareAreaList");
   if (!l) { miss("SpareAreaList"); return; }
   n = list_n(l);
@@ -1156,7 +1240,7 @@ static void read_crouch(void) {
   static const char* fld[2] = { "SpareList_BL", "SpareList_GR" };
   static const char* nm[2] = { "蹲守点BL", "蹲守点GR" };
   int k;
-  if (!(g_lay & LAY_B) || !g_crouchCls) return;
+  if ((!(g_lay & LAY_B) && !g_exporting) || !g_crouchCls) return;
   for (k = 0; k < 2; k++) {
     P l = static_obj(g_crouchCls, fld[k]);
     int n = list_n(l), i;
@@ -1196,7 +1280,7 @@ static void read_typed(P type, P cls, int kind, const char* nm, int skip_crouch)
 }
 
 static void read_guardareas(void) {
-  if (!(g_lay & LAY_B)) return;
+  if (!(g_lay & LAY_B) && !g_exporting) return;
   read_typed(g_gareaType, g_gareaCls, K_GAREA, "守卫区域", 0);
 }
 
@@ -1205,9 +1289,9 @@ static void read_spawns(void) {
   static const int off[6] = { 0x10, 0x14, 0x18, 0x1C, 0x20, 0x24 };
   P mm = 0;
   int k;
-  if (!(g_lay & LAY_D)) return;
+  if (!(g_lay & LAY_D) && !g_exporting) return;
   if (g_mmInstField) x_field_static_get_value(g_mmInstField, &mm);
-  if (!mm) { miss("MapManager"); return; }
+  if (!uobj_live(mm)) { miss("MapManager"); return; }
   for (k = 0; k < 6; k++) {
     P arr = *(P*)((char*)mm + off[k]);
     int n, i;
@@ -1225,7 +1309,7 @@ static void read_spawns(void) {
 static void read_jump(void) {
   P arr;
   int n, i;
-  if (!(g_lay & LAY_A) || !g_jumpType) return;
+  if ((!(g_lay & LAY_A) && !g_exporting) || !g_jumpType) return;
   arr = ((find_objs_t)RVA(R_FINDOBJS))(g_jumpType, 1, 0);
   if (!arr) return;
   n = *(int*)((char*)arr + 0x0C);
@@ -1244,7 +1328,7 @@ static void read_jump(void) {
     for (j = 0; j < ln && j < 8 && g_jN < 512; j++) {
       P endTr = *(P*)((char*)links + 0x10 + j * 28);
       V3 ep;
-      if (!endTr) continue;
+      if (!uobj_live(endTr)) continue;
       ((get_pos_t)RVA(R_GET_POS_INJ))(endTr, &ep, 0);
       g_jA[g_jN] = p;
       g_jB[g_jN] = ep;
@@ -1256,7 +1340,7 @@ static void read_jump(void) {
 static void read_tags(void) {
   P arr;
   int n, i;
-  if (!(g_lay & LAY_A) || !g_tagType) return;
+  if ((!(g_lay & LAY_A) && !g_exporting) || !g_tagType) return;
   arr = ((find_objs_t)RVA(R_FINDOBJS))(g_tagType, 1, 0);
   if (!arr) return;
   n = *(int*)((char*)arr + 0x0C);
@@ -1324,14 +1408,14 @@ static void vis_draw(void) {
     draw_vf(K_GAREA, 8, 1, 1.8f, 1.3f, 1.8f);
   }
   if (g_lay & LAY_C) {
-    if (g_csub & 1) draw_vf(K_NAREA, 2, 1, 2.4f, 1.7f, 2.4f);
-    if (g_csub & 2) draw_vf(K_NPOS, 6, 0, 0.16f, 0.26f, 0.16f);
-    if (g_eN && (g_csub & 8)) {
+    draw_vf(K_NAREA, 2, 1, 2.4f, 1.7f, 2.4f);
+    draw_vf(K_NPOS, 6, 0, 0.16f, 0.26f, 0.16f);
+    if (g_eN) {
       bs_reset();
       for (i = 0; i < g_eN; i++) bs_line(g_eA[i], g_eB[i], 0.05f);
       vis_flush_mesh("vis_entr", 9, g_eN);
     }
-    if (g_nN && (g_csub & 4)) {
+    if (g_nN) {
       bs_reset();
       for (i = 0; i < g_nN; i++) bs_line(g_nA[i], g_nB[i], 0.06f);
       vis_flush_mesh("vis_nb", 7, g_nN);
@@ -1370,8 +1454,10 @@ static void vis_clear(void) {
   int i;
   for (i = 0; i < g_vfN; i++) {
     if (g_lblComp[i]) {
-      P go = ((get_go_t)RVA(R_GETGO))(g_lblComp[i], 0);
-      if (go) ((destroy_t)RVA(R_DESTROY))(go, 0);
+      if (uobj_live(g_lblComp[i])) {
+        P go = ((get_go_t)RVA(R_GETGO))(g_lblComp[i], 0);
+        if (uobj_live(go)) ((destroy_t)RVA(R_DESTROY))(go, 0);
+      }
       g_lblComp[i] = 0;
       g_lblHidden[i] = 0;
     }
@@ -1397,8 +1483,9 @@ static void vis_rebuild(void) {
   read_tags();
   vis_draw();
   vis_show(1);
-  elog("vis: nodes=%d edges=%d labels=%d (area=%d pos=%d crouch=%d guard=%d spawn=%d jump=%d tag=%d) missing=[%s]",
-       g_vnN, g_veN, g_vfN, g_cArea, g_cPos, g_cCrouch, g_cGuard, g_cSpawn, g_cJump, g_cTag, g_miss);
+  elog("vis: nodes=%d edges=%d labels=%d (area=%d pos=%d crouch=%d guard=%d spawn=%d jump=%d tag=%d) badnode=%d badconn=%d missing=[%s]",
+       g_vnN, g_veN, g_vfN, g_cArea, g_cPos, g_cCrouch, g_cGuard, g_cSpawn, g_cJump, g_cTag,
+       g_navBadNode, g_navBadConn, g_miss);
   {
     int i, s0 = 0, s1 = 0, s2 = 0;
     for (i = 0; i < g_vfN; i++) {
@@ -1436,16 +1523,6 @@ static void vis_toggle_layer(int bit) {
   g_lay ^= bit;
   if (g_visOn) { g_visDirty = 0; vis_rebuild(); }
   elog("vis layers=0x%X (toggled 0x%X)", g_lay, bit);
-  hud_refresh();
-}
-
-/* C 层内部再分四档：守区框 / 守点 / 邻区线 / 入口·撤离线 */
-static void vis_toggle_csub(int bit) {
-  g_csub ^= bit;
-  if (!(g_lay & LAY_C)) g_lay |= LAY_C;   /* 按子开关时顺手把 C 层打开 */
-  if (g_visOn) { g_visDirty = 0; vis_rebuild(); }
-  elog("vis csub=0x%X (toggled 0x%X) area=%d pos=%d neighbor=%d entr=%d", g_csub, bit,
-       !!(g_csub & 1), !!(g_csub & 2), !!(g_csub & 4), !!(g_csub & 8));
   hud_refresh();
 }
 
@@ -1542,9 +1619,117 @@ static void collect_read(void) {
   read_tags();
 }
 
+/* ---- NavMeshGraph 导出（A* 烘焙出来的人机可走面）----------------------
+ * NavmeshBase{tileXCount 0xC8, tileZCount 0xCC, tiles 0xD0, transform 0xE8}
+ *   transform 是 A* 的 GraphTransform 类，不是 Unity 的 Transform：
+ *   GraphTransform{identity 0x8, onlyTranslational 0x9, isXY 0xA, isXZ 0xB,
+ *                  matrix 0xC (Matrix4x4), inverseMatrix 0x4C,
+ *                  up 0x8C, translation 0x98, i3translation 0xA4}
+ * NavmeshTile{tris 0x8, verts 0xC, vertsInGraphSpace 0x10}
+ *   verts 已经是世界坐标（Int3，1/1000 m），vertsInGraphSpace 是图空间。
+ * 二进制 UCFNM3：
+ *   "UCFNM3\0" | int32 nv | int32 nt | int32 ntile | uint8 id,ot,xy,xz
+ *   | float matrix[16] | float translation[3]
+ *   | int32 verts[nv*3] | int32 gverts[nv*3] | int32 tris[nt*3]
+ * 两张顶点表都写：万一 verts 不是世界坐标，离线还能用 matrix 自己算。 */
+#define NM_MAGIC "UCFNM3"
+
+static int nm_dump(const char* path, int* out_nv, int* out_nt) {
+  extern P navfix_navmesh_graph(void);
+  P g, tiles, gt;
+  int ntile, i, j, nv = 0, nt = 0, vbase = 0, wbase = 0, ok = 1;
+  int *vb = 0, *tb = 0, *gb = 0;
+  float m[16], t[3];
+  unsigned char fl[4];
+  FILE* f;
+  *out_nv = *out_nt = 0;
+  g = navfix_navmesh_graph();
+  if (!g) return 0;
+  tiles = *(P*)((char*)g + 0xD0);
+  ntile = tiles ? *(int*)((char*)tiles + 0xC) : 0;
+  if (ntile <= 0 || ntile > 4096) return 0;
+  for (i = 0; i < ntile; i++) {
+    P tl = *(P*)((char*)tiles + 0x10 + i * 4);
+    P tr, vr;
+    if (!tl) continue;
+    tr = *(P*)((char*)tl + 0x8);
+    vr = *(P*)((char*)tl + 0xC);
+    nv += vr ? *(int*)((char*)vr + 0xC) : 0;
+    nt += tr ? *(int*)((char*)tr + 0xC) : 0;
+  }
+  if (nv <= 0 || nt <= 0 || nv > 3000000 || nt > 3000000) return 0;
+
+  vb = (int*)malloc((size_t)nv * 3 * sizeof(int));
+  gb = (int*)malloc((size_t)nv * 3 * sizeof(int));
+  tb = (int*)malloc((size_t)nt * 3 * sizeof(int));
+  if (!vb || !gb || !tb) { free(vb); free(gb); free(tb); return 0; }
+  for (i = 0; i < nv * 3; i++) { vb[i] = 0; gb[i] = 0; }
+
+  for (i = 0; i < ntile && ok; i++) {
+    P tl = *(P*)((char*)tiles + 0x10 + i * 4);
+    P tr, vr, vg;
+    int tv, tt;
+    if (!tl) continue;
+    tr = *(P*)((char*)tl + 0x8);
+    vr = *(P*)((char*)tl + 0xC);
+    vg = *(P*)((char*)tl + 0x10);
+    tv = vr ? *(int*)((char*)vr + 0xC) : 0;
+    tt = tr ? *(int*)((char*)tr + 0xC) : 0;
+    if (tv > 0) {
+      if (vbase + tv > nv) { ok = 0; break; }
+      memcpy(vb + vbase * 3, (char*)vr + 0x10, (size_t)tv * 12);
+      if (vg && *(int*)((char*)vg + 0xC) == tv)
+        memcpy(gb + vbase * 3, (char*)vg + 0x10, (size_t)tv * 12);
+      else
+        memcpy(gb + vbase * 3, (char*)vr + 0x10, (size_t)tv * 12);
+    }
+    for (j = 0; j < tt; j++) {
+      int vi = *(int*)((char*)tr + 0x10 + j * 4);
+      if (ntile > 1) vi &= 0xFFF;               /* 多 tile 时高位是 tile 索引 */
+      if (wbase + j >= nt * 3) { ok = 0; break; }
+      tb[wbase + j] = vi + vbase;
+    }
+    vbase += tv;
+    wbase += tt;
+  }
+  if (!ok) { free(vb); free(gb); free(tb); return 0; }
+
+  /* GraphTransform：直接读内存，不调 il2cpp */
+  gt = *(P*)((char*)g + 0xE8);
+  for (i = 0; i < 4; i++) fl[i] = 0;
+  for (i = 0; i < 16; i++) m[i] = (i % 5) ? 0.0f : 1.0f;
+  t[0] = t[1] = t[2] = 0.0f;
+  if (gt) {
+    fl[0] = *(unsigned char*)((char*)gt + 0x8);
+    fl[1] = *(unsigned char*)((char*)gt + 0x9);
+    fl[2] = *(unsigned char*)((char*)gt + 0xA);
+    fl[3] = *(unsigned char*)((char*)gt + 0xB);
+    memcpy(m, (char*)gt + 0xC, 64);
+    memcpy(t, (char*)gt + 0x98, 12);
+  }
+
+  f = fopen(path, "wb");
+  if (!f) { free(vb); free(gb); free(tb); return 0; }
+  fwrite(NM_MAGIC, 1, 7, f);
+  fwrite(&nv, 4, 1, f);
+  fwrite(&nt, 4, 1, f);
+  fwrite(&ntile, 4, 1, f);
+  fwrite(fl, 1, 4, f);
+  fwrite(m, 4, 16, f);
+  fwrite(t, 4, 3, f);
+  fwrite(vb, 4, (size_t)nv * 3, f);
+  fwrite(gb, 4, (size_t)nv * 3, f);
+  fwrite(tb, 4, (size_t)nt * 3, f);
+  fclose(f);
+  free(vb); free(gb); free(tb);
+  *out_nv = nv;
+  *out_nt = nt;
+  return 1;
+}
+
 static void vis_export(void) {
   char dir[MAX_PATH], path[MAX_PATH];
-  char mapname[80], fname[80], fp[40], id1[24], id2[24];
+  char mapname[80], fname[80], fp[40], id1[24], id2[24], mark[MAX_PATH];
   FILE* f;
   SYSTEMTIME st;
   V3 lo, hi;
@@ -1552,9 +1737,17 @@ static void vis_export(void) {
   int i, ok, src;
   extern int navfix_graph_ours(void);
 
-  if (!g_visOn) {
-    if (g_collectOnly) collect_read();
-    else { vis_rebuild(); vis_show(0); }
+  /* 导出必须**重新读一遍**数据，而且只走只读通道：
+   *  - 以前这里看 g_visOn：开着可视化时整段跳过，导出的就是上一个场景的残留（实测写成 0 点的 n0 假文件，
+   *    还顺手写了个 _seen_n0 标记，把后面真正有 3063 个点的那张图当成"重复"跳过了 —— 数据就是这么丢的）。
+   *  - 也不再用 vis_rebuild()：它会建 Mesh + UGUI 文本，进图自动导出时正好赶上场景加载，是崩溃高发点。 */
+  g_exporting = 1;
+  collect_read();
+  g_exporting = 0;
+  if (g_vnN <= 0) {
+    elog("vis: export skipped: read 0 nodes (graph=%p) - no empty file, no _seen marker", navfix_point_graph());
+    sprintf(g_expStat, "读不到点，未导出（等图稳定再按 Ctrl+E）");
+    return;
   }
   GetLocalTime(&st);
   sprintf(dir, "%s\\vis", g_dir);
@@ -1577,12 +1770,39 @@ static void vis_export(void) {
   sprintf(fp, "n%d-%016llx", g_vnN, xr);
   src = navfix_graph_ours();
 
+  /* 同一张图只导一次：指纹相同说明节点位置完全一致 */
+  sprintf(mark, "%s\\vis\\_seen_%s", g_dir, fp);
+  if (!g_exportForce) {
+    FILE* mf = fopen(mark, "r");
+    if (mf) {
+      fclose(mf);
+      elog("vis: fp=%s already collected, skip duplicate", fp);
+      sprintf(g_expStat, "点%d 已采集过，跳过 %s", g_vnN, fp);
+      return;
+    }
+  }
+
   if (mapname[0]) strcpy(fname, mapname);
   else sprintf(fname, "map_%s", fp);   /* 小地图没名字时用指纹命名，免得一堆 unnamed 互相覆盖 */
 
   sprintf(path, "%s\\%s_%04d%02d%02d_%02d%02d%02d.json",
           dir, fname,
           st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond);
+  /* 顺带把 A* 烘焙的 NavMeshGraph（真正的人机可走面）导成二进制 */
+  {
+    char nmp[MAX_PATH];
+    const char* base;
+    strcpy(nmp, path);
+    { char* e = strrchr(nmp, '.'); if (e) strcpy(e, ".navmesh.bin"); }
+    g_nmVert = g_nmTri = 0;
+    g_nmFile[0] = 0;
+    if (nm_dump(nmp, &g_nmVert, &g_nmTri)) {
+      base = strrchr(nmp, '\\');
+      strncpy(g_nmFile, base ? base + 1 : nmp, sizeof(g_nmFile) - 1);
+      elog("vis: navmesh verts=%d tris=%d -> %s", g_nmVert, g_nmTri, nmp);
+    }
+  }
+
   f = fopen(path, "w");
   if (!f) { elog("vis: export failed %s", path); return; }
 
@@ -1597,8 +1817,9 @@ static void vis_export(void) {
   fprintf(f, "    \"fingerprint\": \"%s\",\n", fp);
   fprintf(f, "    \"source\": \"%s\",\n", src ? "ours" : "game");
   fprintf(f, "    \"node_count\": %d,\n", g_vnN);
-  fprintf(f, "    \"bbox\": [[%.2f,%.2f,%.2f],[%.2f,%.2f,%.2f]]\n",
-          lo.x, lo.y, lo.z, hi.x, hi.y, hi.z);
+  fprintf(f, "    \"bbox\": [[%.2f,%.2f,%.2f],[%.2f,%.2f,%.2f]]", lo.x, lo.y, lo.z, hi.x, hi.y, hi.z);
+  if (g_nmVert) fprintf(f, ",\n    \"navmesh\": {\"file\": \"%s\", \"verts\": %d, \"tris\": %d}", g_nmFile, g_nmVert, g_nmTri);
+  fprintf(f, "\n");
   fprintf(f, "  },\n");
   fprintf(f, "  \"counts\": {\"nodes\": %d, \"edges\": %d, \"features\": %d, \"nano_area\": %d, "
              "\"nano_pos\": %d, \"crouch\": %d, \"guard\": %d, \"spawn\": %d, \"jump\": %d, \"tag\": %d},\n",
@@ -1638,8 +1859,10 @@ static void vis_export(void) {
   fprintf(f, "\n    ]\n  }\n}\n");
   fclose(f);
   ok = 1;
+  { FILE* mf = fopen(mark, "w"); if (mf) { fprintf(mf, "%s\n", path); fclose(mf); } }
   elog("vis: exported nodes=%d edges=%d features=%d map='%s' fp=%s src=%s -> %s",
        g_vnN, g_veN, g_vfN, mapname, fp, src ? "ours" : "game", path);
+  sprintf(g_expStat, "点%d 边%d %s %s", g_vnN, g_veN, fp, src ? "(mod铺的点)" : "已写入");
   (void)ok;
   if (g_cjk && !g_collectOnly) hud_refresh();
 }
@@ -1712,7 +1935,7 @@ static int hud_init(void) {
   ((set_v2_t)RVA(R_RT_PIVOT))(tr, v, 0);
   v.x = 14.0f; v.y = -10.0f;
   ((set_v2_t)RVA(R_RT_APOS))(tr, v, 0);
-  v.x = 720.0f; v.y = 110.0f;
+  v.x = 760.0f; v.y = 230.0f;
   ((set_v2_t)RVA(R_RT_SDELTA))(tr, v, 0);
 
   ((set_font_t)RVA(R_TEXT_SETFONT))(comp, g_guiFont, 0);
@@ -1725,10 +1948,10 @@ static int hud_init(void) {
 
   g_hud = comp;
   g_hudGo = txtGo;
-  g_keys = mk_text_ui(canvasTr, "UCF_HUD_Keys", 0.0f, 1.0f, 0.0f, 1.0f, 14.0f, -108.0f, 1180.0f, 74.0f, 14);
+  g_keys = mk_text_ui(canvasTr, "UCF_HUD_Keys", 0.0f, 1.0f, 0.0f, 1.0f, 14.0f, -130.0f, 1180.0f, 96.0f, 14);
   if (g_keys) elog("hud: keys go=%p font=%p", g_keysGo, ((get_font_t)RVA(R_TEXT_GETFONT))(g_keys, 0));
   g_keysGo = g_keys ? ((get_go_t)RVA(R_GETGO))(g_keys, 0) : 0;
-  /* left-edge legend: three horizontal rows, stacked vertically (D layer split) */
+  /* left-edge legend: three horizontal rows, stacked vertically */
   g_cat = mk_text_ui(canvasTr, "UCF_HUD_Cats", 0.0f, 0.5f, 0.0f, 0.5f, 14.0f, -140.0f, 520.0f, 132.0f, 26);
   if (g_cat) {
     ((set_int1_t)RVA(R_TEXT_ALIGN))(g_cat, 3, 0);   /* MiddleLeft */
@@ -1745,8 +1968,6 @@ static int cat_count(int lo, int hi) {
   return n;
 }
 
-/* D layer was one merged counter ("出生 105"); the left edge now lists the
- * three real groups as three horizontal rows, stacked vertically. */
 static void cat_refresh(void) {
   char s[512];
   int spawn, box, color;
@@ -1757,7 +1978,7 @@ static void cat_refresh(void) {
   }
   spawn = cat_count(0, 2);   /* 保卫者出生 / 幽灵出生 / 中立点 */
   box   = cat_count(3, 3);   /* 普通补给箱 */
-  color = cat_count(4, 5);   /* 红色补给箱 / 蓝色补给箱 */
+  color = cat_count(4, 5);   /* 红色 / 蓝色补给箱 */
   sprintf(s,
     "<color=#6EC6FF>出生点  %d</color>\n"
     "<color=#FFD24A>普通补给箱  %d</color>\n"
@@ -1767,9 +1988,8 @@ static void cat_refresh(void) {
 }
 
 static void hud_refresh(void) {
-  char s[1500];
+  char s[2400];
   char miss[200];
-  char csub[16];
   int c1 = 0, c2 = 0, c3 = 0, i;
   if (!g_hud && !hud_init()) return;
   for (i = 0; i < g_n; i++) {
@@ -1779,41 +1999,51 @@ static void hud_refresh(void) {
   }
   if (g_miss[0]) sprintf(miss, "   缺:%s", g_miss);
   else miss[0] = 0;
-  sprintf(csub, "%s%s%s%s", (g_csub & 1) ? "区" : "-", (g_csub & 2) ? "点" : "-",
-          (g_csub & 4) ? "邻" : "-", (g_csub & 8) ? "出" : "-");
   if (g_cjk) {
     sprintf(s,
       "可视化 %s   A路点:%s B人类:%s C幽灵:%s D出生/箱:%s E模式:%s   标签:%s\n"
-      "节点 %d  连接 %d  守区 %d  守点 %d  蹲守 %d  守卫 %d  跳链 %d  标签区 %d  C子层:%s%s\n"
+      "节点 %d  连接 %d  守区 %d  守点 %d  蹲守 %d  守卫 %d  跳链 %d  标签区 %d%s\n"
       "编辑 %s   已放标记 %d (蹲%d/守%d/区%d)   屏上标签 %d/%d%s",
       g_visOn ? "开" : "关",
       (g_lay & LAY_A) ? "开" : "关", (g_lay & LAY_B) ? "开" : "关",
       (g_lay & LAY_C) ? "开" : "关", (g_lay & LAY_D) ? "开" : "关",
       (g_lay & LAY_E) ? "开" : "关",
       g_lblMode == 0 ? "关" : (g_lblMode == 1 ? "近距" : "全部"),
-      g_vnN, g_veN, g_cArea, g_cPos, g_cCrouch, g_cGuard, g_cJump, g_cTag, csub, miss,
+      g_vnN, g_veN, g_cArea, g_cPos, g_cCrouch, g_cGuard, g_cJump, g_cTag, miss,
       g_on ? "开" : "关", g_n, c1, c2, c3, g_lblShown, g_vfN,
       g_visOn && g_visDirty ? "  [待重建]" : "");
   } else {
     sprintf(s,
       "VIS %s | A %s B %s C %s D %s E %s | labels %s\n"
-      "nodes %d edges %d nano %d/%d crouch %d guard %d jump %d tag %d csub:%s%s\n"
+      "nodes %d edges %d nano %d/%d crouch %d guard %d jump %d tag %d%s\n"
       "edit %s markers %d (c %d/p %d/a %d) on-screen labels %d/%d",
       g_visOn ? "ON" : "OFF",
       (g_lay & LAY_A) ? "on" : "off", (g_lay & LAY_B) ? "on" : "off",
       (g_lay & LAY_C) ? "on" : "off", (g_lay & LAY_D) ? "on" : "off",
       (g_lay & LAY_E) ? "on" : "off",
       g_lblMode == 0 ? "off" : (g_lblMode == 1 ? "near" : "all"),
-      g_vnN, g_veN, g_cArea, g_cPos, g_cCrouch, g_cGuard, g_cJump, g_cTag, csub, miss,
+      g_vnN, g_veN, g_cArea, g_cPos, g_cCrouch, g_cGuard, g_cJump, g_cTag, miss,
       g_on ? "ON" : "OFF", g_n, c1, c2, c3, g_lblShown, g_vfN);
+  }
+  /* 最近日志 + 导出结果：进了图抬头就能看见，不用开文件、不用看控制台 */
+  if (g_logOn) {
+    int k, st0, len = (int)strlen(s);
+    if (g_expStat[0]) {
+      len += sprintf(s + len, "\n导出 %s", g_expStat);
+    }
+    st0 = g_ringN > 3 ? g_ringN - 3 : 0;
+    for (k = st0; k < g_ringN; k++) {
+      if (len > (int)sizeof(s) - 200) break;
+      len += sprintf(s + len, "\n%s", g_ring[k]);
+    }
   }
   ((set_txt_t)RVA(R_TEXT_SETTEXT))(g_hud, x_string_new(s), 0);
   if (g_keys) {
     if (g_helpOn) {
-      const char* k = "Ctrl+V 可视化总开关（首次只开 A 层）   Ctrl+Shift+1..5  A路点/B人类/C幽灵/D出生/箱/E模式   Ctrl+Shift+L 文字标签 关/近距/全部\n"
-                      "Ctrl+Shift+6/7/8/9  C层细分: 绿守区框 / 青守点 / 橙邻区线 / 粉入口·撤离线（默认只开区+点）\n"
-                      "Ctrl+E 导出数据   Ctrl+H 本面板开关   Delete 删除准星最近标记   Ctrl+0 显示/隐藏已放标记\n"
-                      "Ctrl+1 编辑模式  Ctrl+2 蹲守点  Ctrl+4 幽灵守区  Ctrl+5 撤销  Ctrl+6 保存  Ctrl+7 重载  Ctrl+8 阵营  Ctrl+9 状态";
+      const char* k = "Ctrl+V 可视化总开关   Ctrl+Shift+1..5  A路点/B人类/C幽灵/D出生/箱/E模式   Ctrl+Shift+L 文字标签 关/近距/全部\n"
+                      "Ctrl+E 手动导出   Ctrl+M 日志行开关   Ctrl+H 本面板开关   Delete 删除准星最近标记   Ctrl+0 显示/隐藏已放标记\n"
+                      "Ctrl+1 编辑模式  Ctrl+2 蹲守点  Ctrl+4 幽灵守区  Ctrl+5 撤销  Ctrl+6 保存  Ctrl+7 重载  Ctrl+8 阵营  Ctrl+9 状态\n"
+                      "路点编辑: Ctrl+Shift+A 选A点  Ctrl+Shift+N 加点  Ctrl+Shift+J A↔点 连/断  Ctrl+Shift+D 禁用点  Ctrl+Shift+Z 撤销  Ctrl+Shift+R 重套用（改完自动存盘）";
       ((set_txt_t)RVA(R_TEXT_SETTEXT))(g_keys, x_string_new(k), 0);
     } else {
       ((set_txt_t)RVA(R_TEXT_SETTEXT))(g_keys, x_string_new("Ctrl+H 显示快捷键"), 0);
@@ -2129,6 +2359,13 @@ void editor_on_scene(void* astar) {
   vis_scene_reset();
   elog("scene: vis reset");
   g_aeNodes = -1;
+  g_nedGraph = 0;
+  g_nedApplied = 0;
+  g_nedWaitN = -1;
+  g_nedHasA = 0;
+  g_nedN = 0;
+  g_nedPath[0] = 0;
+  nm_seen = 0;
   g_aeHold = 8;
   elog("scene changed (astar=%p) - loading markers", astar);
   if (g_collectOnly) {
@@ -2163,6 +2400,54 @@ static void auto_export_tick(void) {
   }
 }
 
+/* NavMeshGraph 自动落盘：和 PointGraph 无关。
+ * 很多图的 PointGraph 是空的或只剩十来个残点，但每张图都有 A* 烘焙的可走面，
+ * 人机真正在上面跑。场景里可走面的指纹一变就写一份 vis\navmesh_<fp>.bin。 */
+static void nm_auto_tick(void) {
+  extern P navfix_navmesh_graph(void);
+  P g, tiles;
+  int ntile, i, nv = 0, nt = 0;
+  unsigned long long h = 1469598103934665603ULL;
+  char fp[48], path[MAX_PATH];
+  g = navfix_navmesh_graph();
+  if (!g) { nm_seen = 0; return; }
+  tiles = *(P*)((char*)g + 0xD0);
+  ntile = tiles ? *(int*)((char*)tiles + 0xC) : 0;
+  if (ntile <= 0 || ntile > 4096) return;
+  for (i = 0; i < ntile; i++) {
+    P tl = *(P*)((char*)tiles + 0x10 + i * 4);
+    P tr, vr;
+    if (!tl) continue;
+    tr = *(P*)((char*)tl + 0x8);
+    vr = *(P*)((char*)tl + 0xC);
+    nv += vr ? *(int*)((char*)vr + 0xC) : 0;
+    nt += tr ? *(int*)((char*)tr + 0xC) : 0;
+  }
+  if (nv <= 0 || nt <= 0 || nv > 3000000 || nt > 3000000) return;
+  h ^= (unsigned long long)nv; h *= 1099511628211ULL;
+  h ^= (unsigned long long)nt; h *= 1099511628211ULL;
+  for (i = 0; i < ntile; i++) {
+    P tl = *(P*)((char*)tiles + 0x10 + i * 4);
+    P vr;
+    int k, tv;
+    if (!tl) continue;
+    vr = *(P*)((char*)tl + 0xC);
+    tv = vr ? *(int*)((char*)vr + 0xC) : 0;
+    if (tv > 64) tv = 64;
+    if (!vr) continue;
+    for (k = 0; k < tv * 3; k++) { h ^= (unsigned long long)((int*)((char*)vr + 0x10))[k]; h *= 1099511628211ULL; }
+  }
+  if (nm_seen && h == nm_seenFp) return;
+  nm_seenFp = h;
+  nm_seen = 1;
+  sprintf(fp, "nm%d-%016llx", nv, h);
+  sprintf(path, "%s\\vis\\navmesh_%s.bin", g_dir, fp);
+  if (nm_dump(path, &g_nmVert, &g_nmTri)) {
+    elog("nm: verts=%d tris=%d tiles=%d -> %s", g_nmVert, g_nmTri, ntile, path);
+    /* 这里不再 hud_refresh()：刚进图就 set UGUI 文本是历史崩溃点之一，HUD 下一次 tick 自己会刷 */
+  }
+}
+
 /* 只读采集模式开关：写/删 collect.flag，重启后保持 */
 static void set_collect_only(int on) {
   char p[MAX_PATH];
@@ -2176,11 +2461,613 @@ static void set_collect_only(int on) {
   hud_refresh();
 }
 
+/* ============ 路点图手动编辑（游戏内） + 进图自动套用 ==================
+ * 点图是运行期对象（AstarPath.active.graphs 里的 PointGraph），每次进图都会
+ * 重建，所以这里三件事一起做：
+ *   1) 编辑直接改活着的那张图 —— 立刻见效，人机马上能用新路线；
+ *   2) 每次编辑自动写 ucf_mod\nav\<图指纹>.txt —— 一张图一个文件，互不干扰；
+ *   3) 进图后等节点数稳定，自动把该图的编辑清单重新套用一遍。
+ * 布局（x86，dump.cs）：PointGraph.nodes +0xE8 / nodeCount +0xEC；
+ *   GraphNode: nodeIndex +0x8, flags +0xC, penalty +0x10, position +0x14；
+ *   PointNode: connections +0x20, gameObject +0x24；
+ *   Connection: node +0, cost +4, shapeEdge +8（步长 12）。
+ * 删除节点不改数组（避免所有 nodeIndex 位移），只把它标记成不可走并断开所有边，
+ * A* 的 GetNearest 用的是 NNConstraint.Default（constrainWalkability=1），
+ * 不可走的节点不会被选中。
+ */
+#define R_PG_REBUILD   0x5F0370
+#define NADD 1
+#define NDEL 2
+#define EADD 3
+#define EDEL 4
+
+
+static int nav_count(P g) { return g ? *(int*)((char*)g + 0xEC) : 0; }
+static P nav_arr(P g) { return g ? *(P*)((char*)g + 0xE8) : 0; }
+static P nav_node(P g, int i) {
+  P arr = nav_arr(g);
+  if (!arr || i < 0 || i >= nav_count(g)) return 0;
+  return *(P*)((char*)arr + 0x10 + i * 4);
+}
+static void nav_pos(P nd, V3* p) {
+  p->x = (float)*(int*)((char*)nd + 0x14) * 0.001f;
+  p->y = (float)*(int*)((char*)nd + 0x18) * 0.001f;
+  p->z = (float)*(int*)((char*)nd + 0x1C) * 0.001f;
+}
+static void nav_put_pos(P nd, const V3* p) {
+  *(int*)((char*)nd + 0x14) = (int)(p->x * 1000.0f);
+  *(int*)((char*)nd + 0x18) = (int)(p->y * 1000.0f);
+  *(int*)((char*)nd + 0x1C) = (int)(p->z * 1000.0f);
+}
+static float nav_d2(const V3* a, const V3* b) {
+  float dx = a->x - b->x, dy = a->y - b->y, dz = a->z - b->z;
+  return dx * dx + dy * dy + dz * dz;
+}
+static int nav_walk(P nd) { return (int)(*(unsigned*)((char*)nd + 0x0C) & 1u); }
+static void nav_set_walk(P nd, int on) {
+  unsigned f = *(unsigned*)((char*)nd + 0x0C);
+  *(unsigned*)((char*)nd + 0x0C) = on ? (f | 1u) : (f & ~1u);
+}
+/* 最近的可走节点；maxd<=0 表示不限距离 */
+static int nav_find(P g, const V3* p, float maxd) {
+  int i, best = -1;
+  float bestd = (maxd > 0.0f) ? maxd * maxd : 1e18f;
+  for (i = 0; i < nav_count(g); i++) {
+    P nd = nav_node(g, i);
+    V3 q;
+    float d;
+    if (!nd || !nav_walk(nd)) continue;
+    nav_pos(nd, &q);
+    d = nav_d2(p, &q);
+    if (d < bestd) { bestd = d; best = i; }
+  }
+  return best;
+}
+static int nav_conn_has(P nd, P other);
+static int nav_find_any(P g, const V3* p, float maxd) {
+  int i, best = -1;
+  float bestd = (maxd > 0.0f) ? maxd * maxd : 1e18f;
+  for (i = 0; i < nav_count(g); i++) {
+    P nd = nav_node(g, i);
+    V3 q;
+    float d;
+    if (!nd) continue;
+    nav_pos(nd, &q);
+    d = nav_d2(p, &q);
+    if (d < bestd) { bestd = d; best = i; }
+  }
+  return best;
+}
+/* 清单里的改动是否还在图上（用来判断图是不是被游戏重扫掉了） */
+static int nav_needs_apply(P g) {
+  int i, ia, ib, n;
+  if (!g || !g_nedN) return 0;
+  n = nav_count(g);
+  if (n != g_nedExpect) return 1;   /* 图被重扫/重建过：节点数不再是我们套完的样子 */
+  for (i = 0; i < g_nedN; i++) {
+    NAVED* e = &g_ned[i];
+    if (e->kind == NADD) {
+      if (nav_find_any(g, &e->a, 0.35f) < 0) return 1;
+    } else if (e->kind == NDEL) {
+      ia = nav_find_any(g, &e->a, 0.35f);
+      if (ia >= 0 && nav_walk(nav_node(g, ia))) return 1;
+    } else {
+      ia = nav_find_any(g, &e->a, 0.35f);
+      ib = nav_find_any(g, &e->b, 0.35f);
+      if (ia >= 0 && ib >= 0) {
+        int has = nav_conn_has(nav_node(g, ia), nav_node(g, ib));
+        if (e->kind == EADD && !has) return 1;
+        if (e->kind == EDEL && has) return 1;
+      }
+    }
+  }
+  return 0;
+}
+/* 一个节点的连接数上限：超过就是数据坏了（A* 里最多几十条）。
+ * 返回 -1 = 指针/长度不可信，0 = 没有连接，>0 = 连接数（*out 给出数组指针）。 */
+#define NAV_CONN_MAX 2048
+static int nav_conn_get(P nd, P* out) {
+  P c;
+  int n;
+  if (!nd || !mem_ok(nd, 0x28)) return -1;
+  c = *(P*)((char*)nd + 0x20);
+  if (!c) return 0;
+  if (!mem_ok(c, 0x10)) return -1;
+  n = *(int*)((char*)c + 0x0C);
+  if (n < 0 || n > NAV_CONN_MAX) return -1;
+  if (n && !mem_ok((char*)c + 0x10, (size_t)n * 12)) return -1;
+  if (out) *out = c;
+  return n;
+}
+static int nav_conn_has(P nd, P other) {
+  P c = 0;
+  int n, i;
+  if (!other) return 0;
+  n = nav_conn_get(nd, &c);
+  if (n <= 0) return 0;
+  for (i = 0; i < n; i++)
+    if (*(P*)((char*)c + 0x10 + i * 12) == other) return 1;
+  return 0;
+}
+/* add=1 连边 / add=0 断边；返回 1 表示有改动 */
+static int nav_conn_set(P nd, P other, int add) {
+  P c = 0;
+  int n, i, cnt = 0, hnd = 0;
+  P nc;
+  V3 pa, pb;
+  unsigned cost;
+  if (!nd || !other || !g_connCls || !x_array_new) return 0;
+  n = nav_conn_get(nd, &c);
+  if (n < 0) return 0;              /* 数据坏了：宁可不连，也不越界写 */
+  if (add) {
+    if (nav_conn_has(nd, other)) return 0;
+    nav_pos(nd, &pa); nav_pos(other, &pb);
+    cost = (unsigned)(sqrtf(nav_d2(&pa, &pb)) * 1000.0f + 0.5f);
+    if (cost < 1u) cost = 1u;
+    nc = x_array_new(g_connCls, (unsigned)(n + 1));
+    if (!nc) return 0;
+    if (x_gchandle_new) hnd = (int)x_gchandle_new(nc, 0);
+    if (n) memcpy((char*)nc + 0x10, (char*)c + 0x10, (size_t)n * 12);
+    *(P*)((char*)nc + 0x10 + n * 12) = other;
+    *(unsigned*)((char*)nc + 0x14 + n * 12) = cost;
+    *(unsigned char*)((char*)nc + 0x18 + n * 12) = 0xFF;
+  } else {
+    if (!nav_conn_has(nd, other)) return 0;
+    nc = x_array_new(g_connCls, (unsigned)(n - 1));
+    if (!nc) return 0;
+    if (x_gchandle_new) hnd = (int)x_gchandle_new(nc, 0);
+    for (i = 0; i < n; i++) {
+      P t = *(P*)((char*)c + 0x10 + i * 12);
+      if (t == other) continue;
+      *(P*)((char*)nc + 0x10 + cnt * 12) = t;
+      *(unsigned*)((char*)nc + 0x14 + cnt * 12) = *(unsigned*)((char*)c + 0x14 + i * 12);
+      *(unsigned char*)((char*)nc + 0x18 + cnt * 12) = *(unsigned char*)((char*)c + 0x18 + i * 12);
+      cnt++;
+    }
+  }
+  *(P*)((char*)nd + 0x20) = nc;
+  if (hnd && x_gchandle_free) x_gchandle_free((P)hnd);
+  return 1;
+}
+static int nav_conn_clear(P nd) {
+  P nc;
+  if (!nd || !g_connCls || !x_array_new) return 0;
+  nc = x_array_new(g_connCls, 0);
+  if (!nc) return 0;
+  *(P*)((char*)nd + 0x20) = nc;
+  return 1;
+}
+/* 新建一个点；返回槽位下标，失败 -1。
+ * 运行期**绝不增长 nodes 数组**：A* 的 PathHandler.pathNodes 只在 AstarPath.Awake
+ * 里按「进图那一刻的节点数」分配（0x104477A0，之后 Scan 也不重建）。append 出来的点
+ * nodeIndex 会超出 pathNodes 长度，寻路线程在 PointNode.Open → GetPathNode(idx) 里
+ * 直接 IndexOutOfRangeException，A* 打 "Unhandled exception during pathfinding.
+ * Terminating." 后寻路线程永久停摆 —— 人机从此拿不到 path，Bot.Update 第一行的
+ * Move() 只能沿旧方向直着走（2026-11-16 的「复活后只会直走」就是这个）。
+ * 所以这里复用第一个「不可走」的槽位：改坐标 + 标可走 + 清连接，nodeIndex 保持不变。 */
+static int nav_add_node(P g, const V3* p) {
+  int i, n = nav_count(g);
+  if (!g || !g_connCls || !x_array_new) return -1;
+  for (i = 0; i < n; i++) {
+    P nd = nav_node(g, i);
+    if (!nd || nav_walk(nd)) continue;
+    nav_set_walk(nd, 1);
+    nav_put_pos(nd, p);
+    nav_conn_clear(nd);
+    return i;
+  }
+  elog("naved: add refused: no free slot (graph full, %d nodes) - delete a node first; "
+       "runtime graph must not grow (PathHandler is sized in AstarPath.Awake)", n);
+  return -1;
+}
+static void nav_refresh(P g) {
+  if (g && g_ga) ((void (*)(P))RVA(R_PG_REBUILD))(g);
+  g_visDirty = 1;
+}
+/* 彻底断开一个节点（不可走 + 清连接 + 清别人的反向引用） */
+static void nav_kill_node(P g, P nd) {
+  int i, n = nav_count(g);
+  nav_set_walk(nd, 0);
+  nav_conn_clear(nd);
+  for (i = 0; i < n; i++) {
+    P q = nav_node(g, i);
+    if (q && q != nd && nav_conn_has(q, nd)) nav_conn_set(q, nd, 0);
+  }
+}
+static void nav_edge(P g, P a, P b, int on) {
+  if (a && b && a != b) {
+    nav_conn_set(a, b, on);
+    nav_conn_set(b, a, on);
+    nav_refresh(g);
+  }
+}
+/* ---- 编辑清单的落盘/读取（每张图一个文件） ---- */
+static void nav_fp(char* out, int cap) {
+  P g = navfix_point_graph();
+  unsigned long long xr = 0;
+  int i, n = nav_count(g);
+  for (i = 0; i < n; i++) {
+    P nd = nav_node(g, i);
+    V3 p;
+    if (!nd) continue;
+    nav_pos(nd, &p);
+    xr ^= pt_hash(&p, 0);
+  }
+  sprintf(out, "n%d-%016llx", n, xr);
+  (void)cap;
+}
+static void nav_save(void) {
+  FILE* f;
+  int i;
+  if (!g_nedPath[0]) return;
+  if (!g_nedN) { DeleteFileA(g_nedPath); return; }
+  f = fopen(g_nedPath, "w");
+  if (!f) { elog("naved: save failed %s", g_nedPath); return; }
+  fprintf(f, "# ucf-navedit v1 fp=%s\n", g_nedFp);
+  for (i = 0; i < g_nedN; i++) {
+    NAVED* e = &g_ned[i];
+    if (e->kind == NADD)
+      fprintf(f, "node add %.3f %.3f %.3f\n", e->a.x, e->a.y, e->a.z);
+    else if (e->kind == NDEL)
+      fprintf(f, "node del %.3f %.3f %.3f\n", e->a.x, e->a.y, e->a.z);
+    else
+      fprintf(f, "edge %s %.3f %.3f %.3f %.3f %.3f %.3f\n",
+              e->kind == EADD ? "add" : "del",
+              e->a.x, e->a.y, e->a.z, e->b.x, e->b.y, e->b.z);
+  }
+  fclose(f);
+  elog("naved: saved %d edits -> %s", g_nedN, g_nedPath);
+}
+static void nav_edit_load(const char* path) {
+  FILE* f = fopen(path, "r");
+  char line[256];
+  g_nedN = 0;
+  if (!f) return;
+  while (fgets(line, sizeof(line), f)) {
+    NAVED e;
+    char k1[16], k2[16];
+    float x, y, z, x2, y2, z2;
+    if (line[0] == '#' || line[0] == '\n') continue;
+    memset(&e, 0, sizeof(e));
+    if (sscanf(line, "node %15s %f %f %f", k1, &x, &y, &z) == 4) {
+      e.kind = (k1[0] == 'a') ? NADD : NDEL;
+      e.a.x = x; e.a.y = y; e.a.z = z;
+    } else if (sscanf(line, "edge %15s %f %f %f %f %f %f", k1, &x, &y, &z, &x2, &y2, &z2) == 7) {
+      e.kind = (k1[0] == 'a') ? EADD : EDEL;
+      e.a.x = x; e.a.y = y; e.a.z = z;
+      e.b.x = x2; e.b.y = y2; e.b.z = z2;
+    } else {
+      continue;
+    }
+    if (g_nedN < NAV_ED_MAX) g_ned[g_nedN++] = e;
+  }
+  fclose(f);
+  elog("naved: loaded %d edits from %s", g_nedN, path);
+}
+/* 只处理 edge 条目；返回真正改变的条数 */
+static int nav_apply_edges(P g) {
+  int i, ia, ib, ok = 0;
+  for (i = 0; i < g_nedN; i++) {
+    NAVED* e = &g_ned[i];
+    int ch = 0;
+    if (e->kind != EADD && e->kind != EDEL) continue;
+    ia = nav_find(g, &e->a, 0.35f);
+    ib = nav_find(g, &e->b, 0.35f);
+    if (ia < 0 || ib < 0) continue;
+    ch |= nav_conn_set(nav_node(g, ia), nav_node(g, ib), e->kind == EADD);
+    ch |= nav_conn_set(nav_node(g, ib), nav_node(g, ia), e->kind == EADD);
+    if (ch) ok++;
+  }
+  if (ok) nav_refresh(g);
+  return ok;
+}
+
+/* ---- 套用编辑清单（运行期改图的唯一安全写法）-------------------------
+ * A* 的 PathHandler.pathNodes 只在 AstarPath.Awake → InitializePathProcessor
+ * (0x104477A0) 里按「进图那一刻的节点数」分配一次，Scan() 和节点增减都不会重建。
+ * 所以运行期绝对不能：
+ *   1) 换掉 nodes 数组 / 增长 nodeCount —— 新 nodeIndex 超出 pathNodes 长度，
+ *      寻路线程 PointNode.Open → GetPathNode(idx) 抛 IndexOutOfRangeException，
+ *      A* 打 "Unhandled exception during pathfinding. Terminating." 后寻路线程永久
+ *      停摆；之后 Seeker.StartPath 永不返回，Bot.OnPathComplete 不再触发，
+ *      Bot.Update 第一行 Move() 只能沿旧方向走 —— 就是「复活后只会直直走」。
+ *   2) 给被删的点写 nodeIndex = -1 —— Bot.gNode_Nearset(+0x88) / Bot.path(+0x80)
+ *      等还指着它的引用一旦被 Open，GetPathNode(-1 → 0xFFFFFFFF) 同样越界炸线程。
+ * 现在的做法（A* 自己的软删除语义，nodes 数组和 nodeIndex 全程不动）：
+ *   删点 = 标不可走（GetNearest 用 NNConstraint.Default，constrainWalkability=1，
+ *          会跳过不可走点）+ 摘掉活点里指向它的边；
+ *   加点 = 复用被删掉的槽位（nodeIndex 保持原值）。
+ */
+#define NAV_MAXN 20000
+static unsigned char g_navDead[NAV_MAXN];   /* 本次套用里被标死的槽位 */
+static int g_navDeadN;
+
+static int nav_is_dead(P nd) {
+  int idx;
+  if (!nd) return 0;
+  idx = *(int*)((char*)nd + 0x08);
+  if (idx < 0 || idx >= g_navDeadN) return 0;   /* 不认识的槽位：当作活的 */
+  return g_navDead[idx];
+}
+/* 只保留「目标点在本次套用后仍然可走」的连接（不动 nodeIndex、不动 nodes 数组） */
+static int nav_conn_filter_dead(P nd) {
+  P c = 0;
+  int n, i, cnt = 0, h = 0;
+  P nc;
+  if (!g_connCls || !x_array_new) return 0;
+  n = nav_conn_get(nd, &c);
+  if (n < 0) { nav_conn_clear(nd); return 1; }      /* 坏表：清空，别再往下用 */
+  if (n == 0) return 0;
+  for (i = 0; i < n; i++) {
+    P o = *(P*)((char*)c + 0x10 + i * 12);
+    if (o && mem_ok(o, 0x28) && !nav_is_dead(o)) cnt++;
+  }
+  if (cnt == n) return 0;                           /* 没有死边：不重新分配 */
+  nc = x_array_new(g_connCls, (unsigned)cnt);
+  if (!nc) return 0;
+  if (x_gchandle_new) h = (int)x_gchandle_new(nc, 0);
+  cnt = 0;
+  for (i = 0; i < n; i++) {
+    P o = *(P*)((char*)c + 0x10 + i * 12);
+    if (!o || !mem_ok(o, 0x28) || nav_is_dead(o)) continue;
+    *(P*)((char*)nc + 0x10 + cnt * 12) = o;
+    *(unsigned*)((char*)nc + 0x14 + cnt * 12) = *(unsigned*)((char*)c + 0x14 + i * 12);
+    *(unsigned char*)((char*)nc + 0x18 + cnt * 12) = *(unsigned char*)((char*)c + 0x18 + i * 12);
+    cnt++;
+  }
+  *(P*)((char*)nd + 0x20) = nc;
+  if (h && x_gchandle_free) x_gchandle_free((P)h);
+  return 1;
+}
+/* 把一个被删掉的槽位借出来当新点用（nodeIndex 保持原值，nodes 数组不动） */
+static int nav_revive_slot(P g, const V3* p) {
+  int i, n = g_navDeadN;
+  for (i = 0; i < n; i++) {
+    P nd;
+    if (!g_navDead[i]) continue;
+    g_navDead[i] = 0;
+    nd = nav_node(g, i);
+    if (!nd) continue;
+    nav_set_walk(nd, 1);
+    nav_put_pos(nd, p);
+    nav_conn_clear(nd);
+    return i;
+  }
+  return -1;
+}
+static int nav_apply_core(P g) {
+  int i, n, kill = 0, revived = 0, skipped = 0, ok = 0;
+  if (!g) return 0;
+  n = nav_count(g);
+  if (n <= 0) { elog("naved: graph is empty (0 nodes), nothing to edit"); return 0; }
+  if (n > NAV_MAXN) { elog("naved: graph too big (%d > %d), skipped", n, NAV_MAXN); return 0; }
+  memset(g_navDead, 0, (size_t)n);
+  g_navDeadN = n;
+  /* 1) 删点：只标不可走 */
+  for (i = 0; i < g_nedN; i++) {
+    NAVED* e = &g_ned[i];
+    int k;
+    if (e->kind != NDEL) continue;
+    k = nav_find_any(g, &e->a, 0.35f);
+    if (k >= 0 && k < n && !g_navDead[k]) { g_navDead[k] = 1; kill++; ok++; }
+  }
+  if (kill) {
+    /* 2) 活点：摘掉指向死点的边（每点最多重分配一次连接表） */
+    for (i = 0; i < n; i++) {
+      P nd;
+      if (g_navDead[i]) continue;
+      nd = nav_node(g, i);
+      if (nd) nav_conn_filter_dead(nd);
+    }
+    /* 3) 死点置不可走。连接表保留：万一带野指针的 bot 指过来，nodeIndex 仍在图内，
+     *    最多走到死点为止，不会越界把寻路线程炸掉。 */
+    for (i = 0; i < n; i++) {
+      P nd;
+      if (!g_navDead[i]) continue;
+      nd = nav_node(g, i);
+      if (nd) nav_set_walk(nd, 0);
+    }
+  }
+  /* 4) 加点：只借被删掉的槽位，绝不 append（append 出来的 nodeIndex 会越界） */
+  for (i = 0; i < g_nedN; i++) {
+    NAVED* e = &g_ned[i];
+    if (e->kind != NADD) continue;
+    if (nav_find(g, &e->a, 0.35f) >= 0) continue;        /* 这里已经有可走的点 */
+    if (nav_revive_slot(g, &e->a) < 0) { skipped++; continue; }
+    revived++; ok++;
+  }
+  if (!kill && !revived) return nav_apply_edges(g);       /* 只是连边/断边 */
+  nav_refresh(g);
+  ok += nav_apply_edges(g);
+  elog("naved: applied in place: %d disabled, %d revived, %d adds skipped (graph stays %d nodes)",
+       kill, revived, skipped, n);
+  return ok;
+}
+/* 把清单套到活图上；返回实际生效条数 */
+static int nav_apply_all(P g) {
+  int ok = nav_apply_core(g);
+  g_nedExpect = nav_count(g);
+  return ok;
+}
+/* 撤销一条：反向操作 + 出栈 */
+static void nav_undo(void) {
+  P g = navfix_point_graph();
+  NAVED* e;
+  int ia, ib;
+  if (!g || !g_nedN) { elog("naved: nothing to undo"); return; }
+  e = &g_ned[g_nedN - 1];
+  if (e->kind == NADD) {
+    ia = nav_find(g, &e->a, 0.35f);
+    if (ia >= 0) nav_kill_node(g, nav_node(g, ia));
+  } else if (e->kind == NDEL) {
+    ia = nav_find_any(g, &e->a, 0.35f);   /* 被删的点已不可走，用“任意节点”找回来 */
+    if (ia >= 0) nav_set_walk(nav_node(g, ia), 1);
+    else if (nav_add_node(g, &e->a) < 0) elog("naved: undo: re-add failed");
+    /* 重建图时被删的点是从数组里摘掉的，撤销只能按坐标补一个空点回来，
+     * 原来的连边要重新连（Ctrl+Shift+J）。 */
+  } else {
+    ia = nav_find(g, &e->a, 0.35f);
+    ib = nav_find(g, &e->b, 0.35f);
+    if (ia >= 0 && ib >= 0) {
+      nav_conn_set(nav_node(g, ia), nav_node(g, ib), e->kind == EDEL);
+      nav_conn_set(nav_node(g, ib), nav_node(g, ia), e->kind == EDEL);
+    }
+  }
+  g_nedN--;
+  nav_refresh(g);
+  nav_save();
+  elog("naved: undo -> %d edits left", g_nedN);
+}
+/* 记录一条编辑 + 自动保存 */
+static void nav_push(int kind, const V3* a, const V3* b) {
+  NAVED* e;
+  if (g_nedN >= NAV_ED_MAX) { elog("naved: edit list full"); return; }
+  e = &g_ned[g_nedN++];
+  e->kind = kind;
+  e->a = *a;
+  if (b) e->b = *b; else memset(&e->b, 0, sizeof(e->b));
+  nav_save();
+}
+/* ---- 交互：加点 / 删点 / 连断边 / 选 A ---- */
+static int nav_pick(const V3* hint, float maxd) {
+  P g = navfix_point_graph();
+  return g ? nav_find(g, hint, maxd) : -1;
+}
+static void nav_sel_a(void) {
+  P g = navfix_point_graph();
+  V3 p;
+  int i;
+  if (!g) { elog("naved: no point graph"); return; }
+  if (!cam_point(&p)) { elog("naved: no ground under crosshair"); return; }
+  i = nav_pick(&p, 3.0f);
+  if (i < 0) { elog("naved: no node near crosshair (%.2f %.2f %.2f)", p.x, p.y, p.z); return; }
+  nav_pos(nav_node(g, i), &g_nedA);
+  g_nedHasA = 1;
+  elog("naved: A selected idx=%d at %.2f %.2f %.2f", i, g_nedA.x, g_nedA.y, g_nedA.z);
+}
+static void nav_add_here(void) {
+  P g = navfix_point_graph();
+  V3 p;
+  int idx, ia;
+  if (!g) return;
+  if (!cam_point(&p)) { elog("naved: no ground under crosshair"); return; }
+  p.y += 0.05f;
+  if (nav_find(g, &p, 0.4f) >= 0) { elog("naved: node already exists here"); return; }
+  idx = nav_add_node(g, &p);
+  if (idx < 0) { elog("naved: add node failed"); return; }
+  nav_push(NADD, &p, 0);
+  if (g_nedHasA) {
+    ia = nav_find(g, &g_nedA, 1.5f);
+    if (ia >= 0) {
+      nav_edge(g, nav_node(g, ia), nav_node(g, idx), 1);
+      nav_push(EADD, &g_nedA, &p);
+      elog("naved: also linked A -> new node");
+    }
+  }
+  nav_refresh(g);
+  elog("naved: node added idx=%d at %.2f %.2f %.2f", idx, p.x, p.y, p.z);
+}
+static void nav_del_here(void) {
+  P g = navfix_point_graph();
+  V3 p, q;
+  int i;
+  if (!g) return;
+  if (!cam_point(&p)) { elog("naved: no ground under crosshair"); return; }
+  i = nav_pick(&p, 3.0f);
+  if (i < 0) { elog("naved: no node near crosshair"); return; }
+  nav_pos(nav_node(g, i), &q);
+  nav_kill_node(g, nav_node(g, i));
+  nav_push(NDEL, &q, 0);
+  nav_refresh(g);
+  elog("naved: node disabled idx=%d at %.2f %.2f %.2f", i, q.x, q.y, q.z);
+}
+static void nav_toggle_edge(void) {
+  P g = navfix_point_graph();
+  V3 p, q;
+  int i, ia;
+  if (!g) return;
+  if (!g_nedHasA) { elog("naved: select A first (Ctrl+Shift+A)"); return; }
+  if (!cam_point(&p)) { elog("naved: no ground under crosshair"); return; }
+  i = nav_pick(&p, 3.0f);
+  if (i < 0) { elog("naved: no node near crosshair"); return; }
+  ia = nav_find(g, &g_nedA, 1.5f);
+  if (ia < 0) { elog("naved: A node disappeared, re-select it"); g_nedHasA = 0; return; }
+  nav_pos(nav_node(g, i), &q);
+  if (nav_conn_has(nav_node(g, ia), nav_node(g, i))) {
+    nav_conn_set(nav_node(g, ia), nav_node(g, i), 0);
+    nav_conn_set(nav_node(g, i), nav_node(g, ia), 0);
+    nav_push(EDEL, &g_nedA, &q);
+    elog("naved: edge A<->node removed");
+  } else {
+    nav_edge(g, nav_node(g, ia), nav_node(g, i), 1);
+    nav_push(EADD, &g_nedA, &q);
+    elog("naved: edge A<->node added");
+  }
+  nav_refresh(g);
+}
+static void nav_reapply(void) {
+  P g = navfix_point_graph();
+  int ops;
+  if (!g) { elog("naved: no point graph"); return; }
+  if (!g_nedN) { elog("naved: no edits for this map"); return; }
+  ops = nav_apply_all(g);           /* 内部已按需 refresh */
+  elog("naved: re-applied %d/%d edits", ops, g_nedN);
+}
+/* 主线程 tick：等图稳定 -> 读本图的编辑文件 -> 套用 */
+static void nav_edit_tick(void) {
+  P g;
+  int n, ops;
+  if (g_collectOnly || !ed_init()) return;
+  g = navfix_point_graph();
+  if (!g) { g_nedGraph = 0; g_nedApplied = 0; g_nedWaitN = -1; return; }
+  if (g != g_nedGraph) {
+    g_nedGraph = g;
+    g_nedApplied = 0;
+    g_nedWaitN = -1;
+    g_nedHasA = 0;
+    g_nedN = 0;
+    g_nedPath[0] = 0;
+  }
+  n = nav_count(g);
+  if (!g_nedApplied) {
+    if (n <= 0) return;
+    if (n != g_nedWaitN) { g_nedWaitN = n; return; }       /* 等两跳稳定 */
+    nav_fp(g_nedFp, sizeof(g_nedFp));
+    CreateDirectoryA(g_dir, 0);
+    {
+      char nd[MAX_PATH];
+      sprintf(nd, "%s\\nav", g_dir);
+      CreateDirectoryA(nd, 0);
+    }
+    sprintf(g_nedPath, "%s\\nav\\%s.txt", g_dir, g_nedFp);
+    nav_edit_load(g_nedPath);
+    g_nedBaseN = n;
+    ops = nav_apply_all(g);
+    g_nedApplied = 1;
+    if (ops) elog("naved: applied %d/%d edits on %s (nodes %d -> %d)",
+                  ops, g_nedN, g_nedFp, g_nedBaseN, nav_count(g));
+    else elog("naved: no edit file for %s", g_nedFp);
+    return;
+  }
+  /* 图被游戏重扫/重建过 -> 改动没了，重新套用（每 ~1 s 检查一次） */
+  if (g_nedN) {
+    static int probe;
+    if ((++probe % 16) == 0 && nav_needs_apply(g)) {
+      ops = nav_apply_all(g);
+      if (ops) {
+        elog("naved: graph rebuilt, re-applied %d edits", ops);
+        nav_refresh(g);
+      }
+    }
+  }
+}
+
 /* main-thread tick: keeps the labels glued to their world positions */
 void editor_tick(void) {
   static int ticks;
   if (!g_inited) return;
   if (g_autoExport) auto_export_tick();
+  nm_auto_tick();
   if (g_collectOnly) {
     if ((++ticks % 20) == 0) {   /* 每 5 s 一行心跳，崩溃时日志能指到具体地图 */
       char mn[80];
@@ -2190,6 +3077,7 @@ void editor_tick(void) {
     }
     return;
   }
+  nav_edit_tick();            /* 等图稳定后自动套用本图的编辑（不看 vis 开关） */
   if (!g_visOn) return;
   if (g_visDirty) {
     g_visDirty = 0;
@@ -2197,6 +3085,19 @@ void editor_tick(void) {
   }
   vis_label_tick();
   if ((++ticks % 8) == 0) hud_refresh();   /* keep counters live at ~2 s */
+}
+
+/* 练习场开关：<插件目录>\nav\nogen.txt 存在时，插件不再自己铺路点。
+ * 用来把暴风这种本来没有路点的图变成「真正的空场」，方便新手从 0 开始画。 */
+int editor_nogen(void) {
+  char p[MAX_PATH + 40];
+  FILE* f;
+  if (!g_dir[0]) return 0;
+  sprintf(p, "%s\\nav\\nogen.txt", g_dir);
+  f = fopen(p, "r");
+  if (!f) return 0;
+  fclose(f);
+  return 1;
 }
 
 /* warm up the il2cpp lookups on a quiet main-thread tick, not during a scene load */
@@ -2214,8 +3115,9 @@ void editor_on_key_mod(unsigned vk, int shift) {
   /* ---- visualizer hotkeys (work with or without edit mode) ---- */
   if (vk == 'V') { vis_toggle(); return; }
   if (shift && vk == 'X') { set_collect_only(!g_collectOnly); return; }
-  if (vk == 'E') { vis_export(); return; }
+  if (vk == 'E') { g_exportForce = 1; vis_export(); g_exportForce = 0; return; }
   if (vk == 'H') { g_helpOn = !g_helpOn; hud_refresh(); return; }
+  if (vk == 'M') { g_logOn = !g_logOn; hud_refresh(); return; }
   if (shift && vk == 'L') {
     g_lblMode = (g_lblMode + 1) % 3;
     elog("vis labels -> %d (0=off 1=near 2=all)", g_lblMode);
@@ -2226,10 +3128,15 @@ void editor_on_key_mod(unsigned vk, int shift) {
     vis_toggle_layer(1 << (vk - '1'));
     return;
   }
-  if (shift && vk >= '6' && vk <= '9') {
-    vis_toggle_csub(1 << (vk - '6'));
-    return;
-  }
+
+  /* ---- 路点编辑（Ctrl+Shift+字母） ---- */
+  if (shift && vk == 'A') { nav_sel_a(); return; }        /* 选 A 点 */
+  if (shift && vk == 'N') { nav_add_here(); return; }     /* 准星处加点 */
+  if (shift && vk == 'J') { nav_toggle_edge(); return; }  /* A <-> 准星节点 连/断 */
+  if (shift && vk == 'D') { nav_del_here(); return; }     /* 禁用准星节点 */
+  if (shift && vk == 'Z') { nav_undo(); return; }         /* 撤销上一条 */
+  if (shift && vk == 'S') { nav_save(); return; }         /* 手动再存一次 */
+  if (shift && vk == 'R') { nav_reapply(); return; }      /* 强制重新套用 */
 
   if (vk == '1') {
     g_on = !g_on;

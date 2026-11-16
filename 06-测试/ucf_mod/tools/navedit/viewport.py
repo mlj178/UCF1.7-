@@ -22,11 +22,13 @@ uniform vec3 cam;
 out vec3 v_nrm;
 out vec2 v_uv;
 out vec3 v_col;
+out vec3 v_wpos;
 out float v_dist;
 void main() {
     v_nrm = in_nrm;
     v_uv = in_uv;
     v_col = in_col;
+    v_wpos = in_pos;
     v_dist = length(in_pos - cam);
     gl_Position = mvp * vec4(in_pos, 1.0);
 }
@@ -37,17 +39,34 @@ MESH_FS = """
 in vec3 v_nrm;
 in vec2 v_uv;
 in vec3 v_col;
+in vec3 v_wpos;
 in float v_dist;
 uniform sampler2D albedo;
 uniform bool use_tex;
 uniform vec3 tint;
 uniform float alpha;
 uniform float alpha_cut;
-uniform vec3 light;
 uniform vec3 bg;
 uniform float fog_start;
 uniform float fog_end;
+uniform float unlit;
+// 游戏里真实的光照：Unity RenderSettings 的三色环境光 + 场景里的灯
+uniform vec3 amb_sky;
+uniform vec3 amb_equator;
+uniform vec3 amb_ground;
+uniform vec3 sun_dir;
+uniform vec3 sun_color;
+uniform int n_points;
+uniform vec4 point_pos[8];
+uniform vec3 point_color[8];
 out vec4 f_col;
+
+vec3 ambient_trilight(vec3 n) {
+    float up = n.y * 0.5 + 0.5;
+    vec3 c = mix(amb_ground, amb_equator, clamp(up * 2.0, 0.0, 1.0));
+    return mix(c, amb_sky, clamp(up * 2.0 - 1.0, 0.0, 1.0));
+}
+
 void main() {
     vec4 src = vec4(1.0);
     vec3 base = v_col;
@@ -58,14 +77,26 @@ void main() {
         a = alpha * src.a;
         if (alpha_cut > 0.001 && src.a < alpha_cut) discard;
     }
+    if (unlit > 0.5) {
+        f_col = vec4(base, a);
+        return;
+    }
     vec3 n = normalize(v_nrm);
-    float diff = max(dot(n, -light), 0.0);
-    float fill = max(dot(n, light), 0.0) * 0.22;
-    float sky = clamp(n.y * 0.5 + 0.5, 0.0, 1.0) * 0.13;
-    vec3 c = base * (0.44 + 0.56 * diff + fill) + sky;
+    vec3 lit = ambient_trilight(n);
+    lit += sun_color * max(dot(n, -sun_dir), 0.0);
+    for (int i = 0; i < 8; i++) {
+        if (i >= n_points) break;
+        float r = point_pos[i].w;
+        vec3 dv = point_pos[i].xyz - v_wpos;
+        float dist = length(dv);
+        if (dist < r) {
+            float att = 1.0 - dist / r;
+            lit += point_color[i] * att * att * max(dot(n, normalize(dv)), 0.0);
+        }
+    }
+    vec3 c = base * lit;
     float fog = clamp((v_dist - fog_start) / max(fog_end - fog_start, 1.0), 0.0, 1.0);
-    c = pow(max(c, vec3(0.0)), vec3(0.92));
-    f_col = vec4(mix(c, bg, fog * 0.70), a);
+    f_col = vec4(mix(c, bg, fog), a);
 }
 """
 
@@ -175,18 +206,24 @@ class Viewport(QtWidgets.QWidget):
         self.setMouseTracking(True)
         self.camera = Camera()
         self.geo = None
+        self.env = {}
         self.nav = None
         self.keys = set()
         self.grab_look = False
         self.pan_drag = False
         self.last_mouse = None
         self.press_pos = None
-        self.bg = (0.07, 0.08, 0.10)
+        self.bg = (0.24, 0.34, 0.46)
+        self.bg_dark = (0.07, 0.08, 0.10)
+        self.sky = True
         self.fog_start = 130.0
         self.fog_end = 620.0
         self.show_mesh = True
         self.show_tex = True
         self.show_shadow = False
+        self.show_cull = True
+        self.show_cards = False
+        self.unlit = False
         self.show_nodes = True
         self.show_edges = True
         self.show_features = True
@@ -219,7 +256,10 @@ class Viewport(QtWidgets.QWidget):
             self.mesh_prog = self.ctx.program(vertex_shader=MESH_VS, fragment_shader=MESH_FS)
             self.flat_prog = self.ctx.program(vertex_shader=FLAT_VS, fragment_shader=FLAT_FS)
             self.ctx.enable(moderngl.DEPTH_TEST)
-            self.ctx.disable(moderngl.CULL_FACE)
+            # Unity 的正面是顺时针；经过我们的坐标变换后，在 GL 里表现为逆时针，
+            # 所以默认的 CCW 正面刚好对得上，直接开背面剔除。
+            self.ctx.enable(moderngl.CULL_FACE)
+            self.ctx.front_face = "ccw"
             self.gl_info = self.ctx.info.get("GL_RENDERER", "?")
             self.ready = True
         except Exception as exc:
@@ -298,6 +338,10 @@ class Viewport(QtWidgets.QWidget):
         h = max(1, int(round(self.height() * dpr)))
         self._ensure_fbo(w, h)
         self._fbo.use()
+        if self.show_cull:
+            self.ctx.enable(moderngl.CULL_FACE)
+        else:
+            self.ctx.disable(moderngl.CULL_FACE)
         self.ctx.viewport = (0, 0, w, h)
         self.ctx.clear(*self.bg, 1.0)
         aspect = w / float(h)
@@ -307,10 +351,10 @@ class Viewport(QtWidgets.QWidget):
             p = self.mesh_prog
             p["mvp"].write(mvp)
             p["cam"].value = tuple(float(v) for v in self.camera.pos)
-            p["light"].value = (-0.36, -0.86, -0.30)
             p["bg"].value = self.bg
             p["fog_start"].value = self.fog_start
             p["fog_end"].value = self.fog_end
+            p["unlit"].value = 1.0 if self.unlit else 0.0
             p["albedo"].value = 0
             chunks = self.geo.chunks if self.geo is not None else []
             if self.show_tex and chunks:
@@ -372,6 +416,8 @@ class Viewport(QtWidgets.QWidget):
             if self.isolate_chunk >= 0 and i != self.isolate_chunk:
                 continue
             if (c.get("shadow") or c.get("blocker")) and not self.show_shadow:
+                continue
+            if c.get("card") and not self.show_cards:
                 continue
             if bool(c.get("transparent")) != transparent_pass:
                 continue
@@ -463,8 +509,57 @@ class Viewport(QtWidgets.QWidget):
         self.update()
 
     # ---- 数据 -------------------------------------------------------
+    def set_env(self, env):
+        """把场景里读到的真实光照参数灌进 shader。"""
+        self.env = env or {}
+        if not self.ready:
+            return
+        p = self.mesh_prog
+
+        def srgb(c):
+            return tuple(min(1.0, max(0.0, float(x)) ** (1.0 / 2.2)) for x in c)
+
+        amb = self.env.get("ambient") or {}
+        for key, name, dflt in (("sky", "amb_sky", (0.5, 0.5, 0.5)),
+                                ("equator", "amb_equator", (0.3, 0.3, 0.3)),
+                                ("ground", "amb_ground", (0.15, 0.15, 0.15))):
+            try:
+                p[name].value = srgb(amb.get(key) or dflt)
+            except Exception:
+                pass
+        sun = self.env.get("sun") or {}
+        try:
+            p["sun_dir"].value = tuple(sun.get("dir") or (0.3, -0.9, 0.2))
+        except Exception:
+            pass
+        try:
+            p["sun_color"].value = srgb(sun.get("color") or (1.0, 1.0, 1.0))
+        except Exception:
+            pass
+        pts = (self.env.get("points") or [])[:8]
+        arr = np.zeros((8, 4), dtype="f4")
+        cols = np.zeros((8, 3), dtype="f4")
+        for i, pt in enumerate(pts):
+            arr[i, :3] = pt.get("pos", (0.0, 0.0, 0.0))
+            arr[i, 3] = float(pt.get("range", 10.0))
+            cols[i] = srgb(pt.get("color", (1.0, 1.0, 1.0)))
+        try:
+            p["point_pos"].write(arr.tobytes())
+            p["point_color"].write(cols.tobytes())
+            p["n_points"].value = int(len(pts))
+        except Exception:
+            pass
+        fog = self.env.get("fog") or {}
+        if fog.get("on"):
+            self.fog_start = max(0.0, float(fog.get("start") or 0.0))
+            self.fog_end = max(self.fog_start + 1.0, float(fog.get("end") or 300.0))
+        if self.sky:
+            sky = srgb(amb.get("sky") or (0.24, 0.34, 0.46))
+            self.bg = tuple(min(1.0, float(c) * 0.82) for c in sky)
+
     def set_geometry(self, geo):
         self.geo = geo
+        self.set_env(getattr(geo, "env", None) if geo is not None else None)
         self._drop_textures()
         self.selected_chunk = -1
         self.isolate_chunk = -1
