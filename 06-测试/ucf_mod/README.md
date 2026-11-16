@@ -25,12 +25,13 @@ UnityCrossFire 1.7.1（Unity + IL2CPP）的文件化插件。
 ucf_mod/
 ├── README.md            本文件（入口）
 ├── STATUS.md            ★ 当前生效状态（唯一权威，先看这个）
-├── src/                 C 源码：plugin.c(加载/配置) navfix.c(A*导航) editor.c(编辑器/可视化/离线编辑)
+├── src/                 C 源码：cfg.c(配置) plugin.c(加载/注入) navfix.c(A*导航) editor.c(编辑器/可视化)
 ├── tools/
 │   ├── ucf_paths.py     工程端/部署端路径解析（唯一真相）
 │   ├── navserver.py     网页导航编辑器后端
 │   ├── navview.html     网页导航编辑器前端（俯视 + 3D）
 │   ├── geo2web.py       geo/*.npz → geo/web/*.bin（3D 地形）
+│   ├── 控制台.pyw        开关面板（CustomTkinter，双击 启动控制台.bat）
 │   ├── extract_geo.py   从游戏资源抽几何 → geo/*.npz
 │   ├── organize_maps.py vis/ 导出 → maps/ 归档
 │   ├── make_practice.py 生成空白练习图

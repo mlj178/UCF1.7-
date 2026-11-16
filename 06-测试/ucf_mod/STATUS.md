@@ -1,76 +1,102 @@
 # STATUS · 当前生效状态
 
 > **唯一权威**的"现在是什么"。每次构建 / 部署 / 改运行时数据后更新本文件。
-> 最后更新：2026-11-16 17:30
+> 最后更新：2026-11-16 18:36
 
 ## 1. 跑的是哪个 DLL
 
 | 项 | 值 |
 | --- | --- |
 | 部署位置 | 游戏目录 `ucf_mod\ucf_mod.dll` |
-| 大小 | **240,960 B** |
-| SHA256 | `BB2E91026AA3466B…` |
-| 构建时间 | 2026-11-16 16:53:15 |
-| 源码 | `src/plugin.c` + `navfix.c` + `editor.c`（editor.c 16:52）|
-| 源码↔产物一致性 | ✅ 已验证：用当前源码重建得到 240,960 B，字节数一致 |
-| 构建方式 | `tools\build.ps1` → `build/ucf_mod-<日期>-<git短哈希>.dll` + `build/build.json`（含各源文件时间戳）|
-| 回滚点 | 历史 DLL 已于 2026-11-16 清理 —— 回滚方式改为「用对应版本源码重建」（git 有源码历史）|
+| 大小 | **246163 B**（上一版 240,960 B）|
+| SHA256 | `77AF522114E465EF…` |
+| 部署时间 | 2026-11-16 18:35:02 |
+| 源码 | `src/cfg.c`（新）+ `plugin.c` + `navfix.c` + `editor.c` |
+| 回滚点 | `ucf_mod\ucf_mod.dll.deployed_20261116_183359`（旧版 240,960 B，18:33 部署前的）|
+| 构建方式 | `tools\build.ps1 -Deploy` → `build/build.json` 记录来源 |
 
-## 2. 开关
+> **可复现性说明**：同一份源码连续编译，字节数恒定（246,163 B）但 SHA256 每次不同。
+> gcc 会往产物里写非确定性内容，所以**核对用字节数 + build.json，不要用哈希比对**。
+
+## 2. 配置：ucf_mod.json（2026-11-16 起真的会被读）
+
+> ⚠️ 2026-11-16 之前，`plugin.c` 里的 `read_config()` **从未被调用**，
+> 整个 `ucf_mod.json` 是死的：`enabled` / `scene` / `game_mode` 全都没生效，
+> 实际一直用硬编码默认值（`Nano30_Storm` / `game_mode=6`）。
+> 现在由 `src/cfg.c` 统一读取，并且**启动时把每一项打进日志**（`[cfg]` 前缀）。
+
+| 开关 | 默认 | 关掉之后 |
+| --- | --- | --- |
+| `enabled` | 开 | **总开关**：插件加载后完全不动作 |
+| `hidden_map` | 开 | 房间地图列表里没有「暴风」 |
+| `auto_waypoints` | 开 | 没路点的图不铺路点（人机会原地不动） |
+| `auto_crouch` | 开 | 不自动补蹲守点 |
+| `ghost_areas` | 开 | 不造幽灵守卫区 |
+| `auto_export` | 开 | 不自动导出 `vis\*.json`（Ctrl+E 仍可） |
+| `hud` | 开 | 进图不显示状态面板（Ctrl+H 可叫出） |
+| `visualizer` | **关** | 进图画不出导航网格（Ctrl+V 可开） |
+| `editor` | 开 | 关掉后 Ctrl+1 无法进编辑模式 |
+| `collect_only` | 关 | —— 见下 |
+
+界面：`tools\启动控制台.bat`（CustomTkinter 窗口，勾选即写盘）。
+
+## 3. 三个"建图动作"已经拆开
+
+2026-11-16 之前 `build_waypoints()` 把「铺路点 / 补蹲守点 / 造守卫区」写在一个函数体里，
+第一个不跑后两个永远不会执行 —— 三个开关是假的。现在拆成：
+
+```
+survey()          只做射线采样，填 g_all[]，不创建任何对象
+act_waypoints()   建 UCF_WayPoints + Scan + ConnectNodes
+act_crouch()      补 Bot_CrouchPos（图里已有则跳过）
+act_guard()       造 Bot_NanoGuardArea（图里已有则跳过）
+run_setup()       按开关各跑各的，日志里各打一行
+```
+
+## 4. 其它运行时开关（文件形式，仍然有效）
 
 | 开关 | 文件 | 当前 |
 | --- | --- | --- |
-| 隐藏地图注入 | `ucf_mod.json`（`scene=Nano30_Storm`, `enabled=true`）| **开** |
-| 只读采集模式 | `collect.flag` | 关（文件不存在）|
-| 禁止自动铺路点 | `nav\nogen.txt` | 关（文件不存在）|
+| 只读采集 | `collect.flag` | 关（不存在）；等价于 `features.collect_only` |
+| 禁止自动铺路点 | `nav\nogen.txt` | 关（不存在） |
 
-## 3. 运行时数据（部署端）
+## 5. 运行时数据（部署端）
 
 | 文件 | 作用 | 状态 |
 | --- | --- | --- |
-| `markers\markers.txt` | 11 个蹲守点（crouch=11）| **生效** |
+| `markers\markers.txt` | 11 个蹲守点 | **生效** |
 | `nav\n0-0000000000000000.txt` | 练习场编辑清单 | **生效** |
-| `nav\n786-57a46e3465c847cb.txt.disabled_20261116_1655` | 运输船编辑（786→27 点）| **已停用**（会炸 A* 寻路线程；新版 DLL 下可改回原名重试）|
+| `nav\n786-57a46e3465c847cb.txt.disabled_20261116_1655` | 运输船编辑草稿 | **已停用** |
 | `nav\names.json` | 地图中文名注册表 | 生效 |
-| `maps\*.json` + `_index.json` | 11 张图原始导航数据 | 参考数据（游戏不读）|
-| `vis\*.json` / `navmesh_*.bin` | 采集导出 | 输出产物 |
+| `maps\*.json` | 11 张图原始导航数据 | 参考数据（游戏不读）|
+| `vis\*.json` | 自动导出产物 | 输出 |
 
-## 4. 功能状态
+## 6. 功能状态
 
-| 功能 | 状态 | 证据 / 备注 |
+| 功能 | 状态 | 证据 |
 | --- | --- | --- |
-| 隐藏地图注入（Nano30_Storm）| ✅ 可用 | 房间下拉可选 |
-| 自动补 A* 导航点（0 点图）| ✅ 可用 | 网格射线采样 → Scan → ConnectNodes |
-| 人机标记编辑器（Ctrl+1..9,0）| ✅ 可用 | 日志 `loaded 11 markers` |
-| 自动补蹲守点 Bot_CrouchPos | ✅ 可用 | 仅在该图无蹲守点时触发 |
-| 幽灵守卫区 Bot_NanoGuardArea | ⚠️ 可用有残留 | 11-15 造 42 区；仍有 bot 卡在出生洞穴 |
-| 导航可视化（Ctrl+V，分层/标签）| ✅ 可用 | 日志 `vis ON layers=0x1F` |
-| 进图自动导出路点（JSON）| ✅ 可用 | 17:05 导出 132 KB |
-| 离线编辑 → 游戏内套用（`nav/*.txt`）| ⚠️ 修完待验 | 运输船草稿已停用；新版走 A* 软删除 |
-| 「复活后只会直走」bug | ✅ 已修 / **复验待做** | 根因：重建点图 + nodeIndex=-1 炸寻路线程 |
-| Bot_JumpLink 跳台 | ❌ 未做 | 需绑定 A* 图节点对 |
-| 补给箱点 SP_RedBox/SP_BlueBox | ❌ 未做 | 隐藏图缺 SupplyBox → 偶发 NRE |
-| 网页导航编辑器（navview + navserver）| ✅ 可用 | 俯视 + 3D，保存写 `nav/<fp>.txt` |
-| 桌面版 3D 编辑器（navedit）| 🗑 已弃用 | 2026-11-16 被网页版取代；抽取器保留为 `tools/extract_geo.py` |
-| 体探针 / botwalk（probe_cmd.ini）| 🗑 已废弃 | 源码零引用，文件已清理 |
+| 隐藏地图注入（Nano30_Storm）| ✅ | 房间下拉可选；日志 `injected into MapAsset` |
+| 自动铺 A* 路点 + 连线 | ✅ | 0 点图 → 786 点 / 1391 边 |
+| 自动补蹲守点 | ✅ | 图内蹲守点为 0 时触发 |
+| 幽灵守卫区 | ⚠️ 可造但有残留 | 仍有 bot 卡在出生洞穴 |
+| 导航可视化（Ctrl+V）| ✅ | 分层 + 标签 |
+| 游戏内标记编辑 | ✅ | `loaded 11 markers` |
+| 自动导出路点 JSON | ✅ | 17:05 导出 132 KB |
+| 网页导航编辑器 | ✅ | 俯视 + 3D，保存写 `nav/<fp>.txt` |
+| 控制台开关面板 | 🆕 待验证 | `tools\启动控制台.bat` |
+| Bot_JumpLink 跳台 | ❌ 未做 | |
+| SP_RedBox / SP_BlueBox | ❌ 未做 | HUD 里 `缺:` 那行就是它 |
 
-## 5. 已知未解决
+## 7. 已知未解决
 
-1. 部分 bot 仍卡在出生洞穴（11-15 记录 7/29）。
+1. 部分 bot 卡在出生洞穴。
 2. `Bot_JumpLink`、补给箱/出生点全量注册未实现。
 3. 隐藏图缺 `MapManager.pointDic` 的 SupplyBox → 偶发空引用（不影响游玩）。
 4. 日志中文偶发乱码（GBK/UTF-8 混写）。
 
-## 6. 目录布局
+## 8. 下一步
 
-| 端 | 位置 | 进 git | 内容 |
-| --- | --- | --- | --- |
-| 工程端 | `06-测试\ucf_mod` | ✅ | `src/` `tools/` `docs/` `geo/*.npz` 及根目录 4 个文档 |
-| 部署端 | 游戏目录 `ucf_mod\` | ❌ | 40 个文件：dll/config/log + `nav/` `markers/` `maps/` `vis/` `backup/` |
-
-数据（`nav/` `markers/` `maps/` `vis/`）**只在部署端**，工具通过 `tools/ucf_paths.py` 直接读写那边，工程端不留副本。
-
-## 7. 下一步
-
-- [ ] 复验 16:53 的「只走直线」修复：进运输船，`Player.log` 不应再出现 `Unhandled exception during pathfinding`。
-- [ ] 复验通过后，把运输船编辑草稿改回 `n786-57a46e3465c847cb.txt` 重新套用。
+- [ ] **验证本次改动**：进一次图，确认 `ucf_mod.log` 开头出现 `[cfg] ======== ucf_mod.json loaded` 与 10 行开关。
+- [ ] 逐个关开关试：关 `auto_crouch` 后日志应出现 `[cfg] auto_crouch = off, skip crouch points`。
+- [ ] 复验「复活后只会直走」修复。
+- [ ] 复验通过后，把 `n786-…disabled_20261116_1655` 改回原名重新套用。

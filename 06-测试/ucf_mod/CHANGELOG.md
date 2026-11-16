@@ -7,6 +7,27 @@
 
 ## 2026-11-16
 
+### 18:35 · 功能开关化（cfg.c + 控制台 + 拆分建图动作）
+- **发现**：`plugin.c` 的 `read_config()` 从未被调用 —— 整个 `ucf_mod.json` 是死的，
+  `enabled` / `scene` / `game_mode` 一直用硬编码默认值（`Nano30_Storm` / 6）。
+  日志里从来没有 `config:` 那一行就是证据。
+- **新增 `src/cfg.c` / `cfg.h`**：唯一配置读取器。不引 JSON 库，线性扫 `"key"\s*:\s*true|false`。
+  `cfg_dump()` 启动时把 10 个开关全打进日志（`[cfg]` 前缀），关掉哪个都看得见。
+- **拆分 `build_waypoints()`**：原来「铺路点 / 补蹲守点 / 造守卫区」在同一函数体里，
+  第一个不跑后两个永远不执行 —— 三个开关是假的。现拆为
+  `survey()`（纯采样）+ `act_waypoints()` / `act_crouch()` / `act_guard()`，
+  各自读自己的开关，互不为前提。
+- **`editor.c`**：HUD / 可视化 / 自动导出 / 编辑模式全部受开关控制；
+  可视化关着时 HUD 仍然每 2 s 刷新（原来 `if (!g_visOn) return` 会连 HUD 一起冻住）。
+- **新增 `tools/控制台.pyw` + `启动控制台.bat`**：CustomTkinter 窗口，三组开关 + 日志尾巴 + 开始游戏。
+- **`tools/build.ps1` 两个 bug**：① 加源文件后丢失 UTF-8 BOM，PowerShell 5.1 解析中文报错；
+  ② 局部变量 `$deploy` 与参数 `[switch]$Deploy` 同名（PowerShell 大小写不敏感）→ 赋值失败。
+- 产物：`ucf_mod.dll` **246,163 B**。旧版备份 `ucf_mod.dll.deployed_20261116_183359`。
+- 复现性：同源码连续编译字节数恒定，SHA256 每次不同（gcc 写入非确定性内容）——
+  **核对用字节数，不要用哈希**。
+- 验证：`cfg.c` 单独编译零警告；用样例 json 跑 `cfg_dump()`，10 个开关的值与文件一致；
+  `控制台.pyw` 通过无头冒烟测试（建窗 + 读配置 + 读日志 + 销毁）。
+
 ### 17:30 · 工程化重构（工程/部署分离 + 清创）
 - 工程端（`src/` `tools/` `docs/` `geo/` 文档）从游戏目录搬到 `06-测试\ucf_mod`，
   游戏目录只留运行时文件。工具改用 `tools/ucf_paths.py` 解析两端路径。
