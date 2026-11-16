@@ -3,6 +3,9 @@
 UnityCrossFire 1.7.1（Unity + IL2CPP）的文件化插件。
 形态：游戏目录的 `winhttp.dll` 代理加载器 → 加载 `ucf_mod\ucf_mod.dll`（原生 C，mingw 编译，运行时挂 il2cpp）。
 
+> **只想玩游戏 / 只想改路点？** 不用看本文件，看游戏目录里的 `ucf_mod\README.txt`（三句话讲完）。
+> 本文件是开发说明，给改代码的人看。
+
 ## 两个目录，别搞混
 
 | | 位置 | 内容 | 版本控制 |
