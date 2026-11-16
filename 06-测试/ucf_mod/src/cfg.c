@@ -26,6 +26,7 @@ static const CFG_DEF g_defs[] = {
   { "auto_export",    1, "进图稳定后自动导出路点 JSON" },
   { "hud",            1, "进图显示状态面板" },
   { "visualizer",     0, "进图就画导航网格" },
+  { "navmesh_show",   1, "画 A* 可走面（NavMeshGraph 三角网线框）" },
   { "editor",         1, "允许游戏内编辑（Ctrl+1）" },
   { "collect_only",   0, "只读采集：只导出，不改游戏" },
   { 0, 0, 0 }

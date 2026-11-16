@@ -7,6 +7,98 @@
 
 ## 2026-11-16
 
+### 23:12 · 「A* 可走面」可视化：网页编辑器 + 游戏内 HUD（独立开关）
+
+- 背景：22:20 的结论是「人机真正跑在 NavMeshGraph 上」。但那张面只在后台导出成
+  `vis/navmesh_*.bin`，看不见；这轮把它画出来，并给一个能随时开关的入口。
+- 网页（`tools/navview.html` + `tools/navserver.py`）：
+  - 「显示」组新增 **可走面（A* NavMesh）** 勾选，右边直接显示 `1139 三角 / 840 顶点`；
+  - 2D 俯视和 3D 都画三角网线框（绿色），没数据的图显示「无数据」；
+  - 服务端新增 `/api/navmesh?level=levelN`（`?info=1` 只回 JSON）。
+    解析顺序：`maps/*.json` 里记的原导出名 → 按原生顶点数对号
+    `vis/navmesh_nm<顶点数>-*.bin` → 404（运输船/生化酒店/暴风本来就没有）。
+  - 深链接：`?open=maps/02_小型工厂.json&notour=1&navm=0` 直接打开某张图并指定可走面开关。
+- 游戏内（`src/editor.c` + `src/cfg.c`）：
+  - 新开关 `navmesh_show`（控制台「查看」组，默认开），**独立于 Ctrl+V 的五层**：
+    Ctrl+V 关着也能只显示可走面；
+  - `Ctrl+Shift+6` 随时开关，立即重建；换图后自动重建；
+  - HUD 多一行：`可走面 开  1139 三角 / 840 顶点  (A* NavMeshGraph，Ctrl+Shift+6 开关)`，
+    没有 NavMeshGraph 的图写「无（这张图没有 NavMeshGraph）」；
+  - 数据直接读运行时 `NavmeshBase.tiles → NavmeshTile{tris,verts}`（和 nm_dump 同一份），
+    不新增采集、不碰资产；线框抬高 5 cm，避免和地形打架。
+- 格式坑（已写进代码注释）：`UCFNM3` 头里第二个 int 是**索引个数**（3417 = 1139×3），
+  不是三角形个数；magic 是 7 字节（含结尾 0），顶点表从偏移 99 开始。
+- 截图：`screenshots/web_navmesh_l2.png`（开）、`web_navmesh_l2_off.png`（关）、
+  `console_navmesh_switch.png`（控制台开关）。
+- 产物：`ucf_mod.dll` **252,458 B**，部署 **23:01:21**，
+  回滚点 `ucf_mod.dll.deployed_20261116_230121`（249,587 B）。
+- 待验证：进图看 HUD 那行与线框。本轮自动化**点不进**房间的「开始游戏」（见 STATUS §6.7）。
+
+### 22:20 · 11 张图的「原生可通行空间」清点（PointGraph / NavMeshGraph）
+- 问题：小型工厂只有 12 个 A* 点，怀疑漏采；"点这么少人机怎么还会走"也没有定论。
+- 结论：12 是游戏自己报的完整节点数（不是抽样）；这 12 个点是 6 个 `WayLink`（NodeLink）的端点，
+  不是路点网。小型工厂的路面是 `Factory_NavMesh`（网格 843 顶点 → A* 去重后 840；3417 索引 / 1139 三角形）。
+  人机在 navmesh 上寻路，所以照常走动、寻敌。
+- 方法：直接读游戏场景 `levelN` 里 AstarData 的 base64→zip→`graphN.json`（A* 4.2.17）；
+  路点数按场景里 tag 20022（WayPoint）的激活物体数；网格顶点/三角形从 `resources.assets` 的 `*_NavMesh` 读。
+  新增 `tools/scan_native_nav.py`，一条命令复现整张表。
+- 结果表 + 证据：`docs/地图对照表.md` §「原生可通行空间（A* 图）」。
+- 顺带纠正：胜利广场、死亡擂台场景里没有 PointGraph（只有 NavMeshGraph），`待采集` 对它们是错的；
+  暴风配了 PointGraph 但场景里 0 个 WayPoint、也没有 navmesh，原生可走面为 0（现在那 694 点是插件铺的）。
+- 原生合计：路点 4056 个（786+2+17+8+3063+180）；navmesh 8 个网格 / 7496 个三角形。
+
+### 21:26 · 进图卡死修复：survey 的 maxZ 初值 + 五十亿次循环
+- 现象：控制台启动、进「暴风」图后游戏卡死/闪退；21:13:38 WER 记录 `AppHangB1`。
+- 证据：日志最后一行 `survey: coarse hits=35 bounds x[-50.0,30.0] z[-130.0,1000000000.0]`，
+  之后没有 `survey: spots`；主线程卡在细扫循环。
+- 根因（`src/navfix.c`）：`survey()` 的 `maxZ` 初值写成 +1e9（应为 -1e9），粗扫更新不了它；
+  细扫 `fz += 4` 到 1e9 → 约 55 亿次循环，游戏无响应。日志里的 z 上限 1e9 是初值，不是命中点。
+- 改法：`maxZ` 初值 -1e9；`hit_sane()` 校验命中点（有限 / 与起点同竖线 ±0.75 m / y ±500）；
+  粗扫包络限 1–700 m；细扫列数上限 50000；坏点计数与首条坐标写日志。
+- 验证：21:20 运输船（786 点）与 21:23 小型工厂（12 点）均能进图，未触发 survey；
+  暴风图属于 `GameMode 6 = Nano4_Terminator`，房间要先选「终结者模式」才出现在地图下拉，
+  下一轮复验。
+- 顺带完成 20:28 的 HUD 进图复验：运输船日志 `hud: cjk font … (probe U+4E2D)` /
+  `hud: ready … (game/CJK)`，左上角中文状态面板正常，截图 `screenshots/inmap_cjk_hud.png`。
+- 产物：`ucf_mod.dll` **249,587 B**，SHA256 `E24D18A3…`，部署 21:32:01；
+  备份 `ucf_mod.dll.deployed_20261116_213201`（21:26 首次防卡死版）。
+
+### 20:28 · HUD 只进图显示 + 真中文字体
+- 现象：大厅/房间左上角出现 `00000000`，下面一条黄色 `|++|...`。
+  两者都是 UCF HUD（`g_hud` 状态行 + `g_keys` 快捷键行）：`editor_tick` 在大厅也跑，
+  HUD 被提前建出来；借到的字体没有中文字形，中文标签全被吞掉，只剩数字/标点。
+- 改法（`src/editor.c`）：
+  1) `hud_refresh()` 开头检查 `navfix_point_graph()`，大厅直接 return，不建 HUD。
+  2) 换图后旧 Canvas 可能已销毁但指针还在 → `uobj_live()` 验活，失效则 `hud_reset()`。
+  3) 新增 `find_cjk_font()`：遍历场景 UGUI Text 的字体，用
+     `Font.HasCharacter('中'/'国'/'的'/'房'/'间')` 选真正带中文字形的字体；
+     找到后用 gchandle 根住，找不到才退回 Arial + 英文 fallback。
+  4) `g_cjk` 只在字体真含中文时为 1；`g_keys` / `g_cat` 补英文 fallback，不再出现乱码。
+- 验证：
+  - 20:29 启动游戏，大厅日志只到 `waiting for PointGraph`，**没有** `hud: ready`
+    （19:53 旧版同一位置会建 HUD）。
+  - 房间截图：左上角 `00000000` 和黄色 `|++|` 条都消失
+    （`screenshots/final_lobby_crop.png`）。
+  - 进图中文字体本轮未复验：自动化点「开始游戏」没触发场景切换，下一轮进图确认
+    `hud: cjk font ...` 与中文状态面板。
+- 产物：`ucf_mod.dll` **248,005 B**，部署 20:28:47，SHA256 `261FC846…`。
+  旧版备份 `ucf_mod.dll.deployed_20261116_202847`（248,005 B，20:25 版）；更早的 `…202537`（247,973 B，20:17 首版）。
+
+### 19:46 · 控制台：「加载暴风地图」单独成组
+- 需求：控制台继续拆分功能，把加载暴风地图独立出来。
+- 改动：`tools/控制台.pyw` 的 `GROUPS` 顶部新增「地图」组，只放 `hidden_map`；
+  标题「加载暴风地图」，说明「把隐藏图 Nano30_Storm 插进房间下拉框；关掉后选不到暴风」。
+  原有「建图 / 查看 / 手动」三组不动。C 侧 `hidden_map` 本来就是独立开关
+  （`plugin.c` 的 `g_hiddenMap`），这次只是补上界面入口，不重新编译 DLL。
+- 防回归：新增 `tools/test_console_switches.py` —— 解析 `src/cfg.c` 的 `g_defs[]` 与面板
+  `GROUPS`，断言 feature 开关一一对应、默认值一致、`hidden_map` 独占一组。
+  （「C 里有开关、面板里没入口」正是它要拦的情况。）
+- 验证：`python tools\test_console_switches.py` → `OK: 9 feature switches in 4 groups;
+  hidden_map separate`；`控制台.pyw` 无头冒烟通过 —— 建窗、读配置、切
+  `hidden_map` 写盘（false → true）、销毁；已有 `features` 键保持原值（缺的键按默认值补上，
+  这是 `persist()` 的既有行为）。
+- 截图：`screenshots/console_map_group.png`（本机，未入库）。
+
 ### 19:00 · 启动通行证：直接双击 exe = 原版
 - 需求：`UnityCrossFire.exe` 直接启动应是原版；从控制台启动才加载 mod。
 - **为什么不改加载器**：游戏根的 `winhttp.dll` 是 51 KB 预编译代理，用 pefile 查过 ——

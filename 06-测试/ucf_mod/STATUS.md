@@ -1,22 +1,22 @@
 # STATUS · 当前生效状态
 
 > **唯一权威**的"现在是什么"。每次构建 / 部署 / 改运行时数据后更新本文件。
-> 最后更新：2026-11-16 19:00
+> 最后更新：2026-11-16 23:12
 
 ## 1. 跑的是哪个 DLL
 
 | 项 | 值 |
 | --- | --- |
 | 部署位置 | 游戏目录 `ucf_mod\ucf_mod.dll` |
-| 大小 | **246163 B**（上一版 240,960 B）|
-| SHA256 | `5A4BB25D074F2CEE…` |
-| 部署时间 | 2026-11-16 18:56:46 |
-| 源码 | `src/cfg.c`（新）+ `plugin.c` + `navfix.c` + `editor.c` |
-| 回滚点 | `ucf_mod\ucf_mod.dll.deployed_20261116_183359`（**改动前**的 240,960 B 版本）|
+| 大小 | **252,458 B**（23:01 可走面版；249,587 B 是 21:32 防卡死版）|
+| SHA256 | `2598518F7FA784D3…` |
+| 部署时间 | 2026-11-16 23:01:21 |
+| 源码 | `src/cfg.c` + `plugin.c` + `navfix.c` + `editor.c`（+ 可走面线框 `navmesh_show` / Ctrl+Shift+6）|
+| 回滚点 | `ucf_mod\ucf_mod.dll.deployed_20261116_230121`（249,587 B 防卡死版，回到它可去掉可走面）|
 | 中间版本 | `…184234` / `…184255` / `…185646`（同一天几次构建，可忽略）|
 | 构建方式 | `tools\build.ps1 -Deploy` → `build/build.json` 记录来源 |
 
-> **可复现性说明**：同一份源码连续编译，字节数恒定（246,163 B）但 SHA256 每次不同。
+> **可复现性说明**：同一份源码连续编译，字节数恒定（当前 249,587 B）但 SHA256 每次不同。
 > gcc 会往产物里写非确定性内容，所以**核对用字节数 + build.json，不要用哈希比对**。
 
 ## 2. 配置：ucf_mod.json（2026-11-16 起真的会被读）
@@ -36,10 +36,13 @@
 | `auto_export` | 开 | 不自动导出 `vis\*.json`（Ctrl+E 仍可） |
 | `hud` | 开 | 进图不显示状态面板（Ctrl+H 可叫出） |
 | `visualizer` | **关** | 进图画不出导航网格（Ctrl+V 可开） |
+| `navmesh_show` | **开** | 不画 A* 可走面（NavMeshGraph 三角网）；Ctrl+Shift+6 可随时开关，与 Ctrl+V 互不影响 |
 | `editor` | 开 | 关掉后 Ctrl+1 无法进编辑模式 |
 | `collect_only` | 关 | —— 见下 |
 
-界面：`tools\启动控制台.bat`（CustomTkinter 窗口，勾选即写盘）。
+界面：`tools\启动控制台.bat`（CustomTkinter 窗口，勾选即写盘）。面板分
+**地图 / 建图 / 查看 / 手动** 四组；「加载暴风地图」（`hidden_map`）从 2026-11-16 19:46
+起单独占「地图」组（此前面板里没有它的入口，只能手改 json）。
 
 ## 2.5 启动通行证（2026-11-16 19:00 起）
 
@@ -107,12 +110,115 @@ run_setup()       按开关各跑各的，日志里各打一行
 | 自动补蹲守点 | ✅ | 图内蹲守点为 0 时触发 |
 | 幽灵守卫区 | ⚠️ 可造但有残留 | 仍有 bot 卡在出生洞穴 |
 | 导航可视化（Ctrl+V）| ✅ | 分层 + 标签 |
+| 可走面可视化（网页）| ✅ 已实测 | 小型工厂 1139 三角 / 840 顶点；2D 俯视 + 3D 都是绿色三角网；开关对比截图 `screenshots/web_navmesh_l2.png` / `..._off.png` |
+| 可走面可视化（游戏内）| ⏳ 已实现待进图复验 | 独立开关 `navmesh_show` + Ctrl+Shift+6 + HUD 一行计数；进图日志应出现 `vis: navmesh wire tris=...`（见 §6.7）|
 | 游戏内标记编辑 | ✅ | `loaded 11 markers` |
 | 自动导出路点 JSON | ✅ | 17:05 导出 132 KB |
 | 网页导航编辑器 | ✅ | 俯视 + 3D，保存写 `nav/<fp>.txt` |
 | 控制台开关面板 | 🆕 待验证 | `tools\启动控制台.bat` |
+| HUD 只进图 + 中文字体 | ✅ 已验证 | 20:29 大厅无 HUD；21:20 运输船进图 `hud: cjk font … (probe U+4E2D)`、`hud: ready … (game/CJK)`，截图 `screenshots/inmap_cjk_hud.png` |
+| 进图采样不卡死 | ✅ 已修 / ⏳ 暴风待复验 | `survey` 的 `maxZ` 初值修正 + 命中点/包络/列数三重保险；21:13 AppHang 的根因见 §6.6 |
 | Bot_JumpLink 跳台 | ❌ 未做 | |
 | SP_RedBox / SP_BlueBox | ❌ 未做 | HUD 里 `缺:` 那行就是它 |
+
+## 6.5 HUD 修复：只进图显示 + 真中文字体（20:28）
+
+**现象**：大厅/房间左上角有 `00000000`，下面一条黄色 `|++|...`。
+两者都是 UCF HUD：`g_hud` 的状态行（8 个计数）和 `g_keys` 的快捷键行；
+HUD 在大厅就被 `editor_tick` 建出来，而且借到的字体没有中文字形，
+中文标签全被吞掉，只剩数字/标点。
+
+**改法**（`src/editor.c`）：
+
+1. `hud_refresh()` 开头先查 `navfix_point_graph()`：大厅没有 PointGraph 直接 return，
+   不建 HUD、不刷文字。
+2. 换图后旧 Canvas 可能已被场景销毁但 `g_hud` 指针还在 → 先用 `uobj_live()` 验活，
+   失效则 `hud_reset()` 重建，避免对已销毁 UGUI Text 调 SetText 崩溃。
+3. 新增 `find_cjk_font()`：遍历场景所有 UGUI Text 的字体，用
+   `Font.HasCharacter('中'/'国'/'的'/'房'/'间')` 选真正带中文字形的字体；
+   找到后用 gchandle 根住。找不到才退回 Arial，并自动改用英文 fallback。
+4. `g_cjk` 现在只在字体真的含中文时为 1；`g_keys` / `g_cat` 都补了英文 fallback。
+
+**验证**：
+
+- 20:29 启动游戏（`UCF_MOD=1`），大厅日志只到 `waiting for PointGraph`，
+  **没有** `hud: ready`（旧版 19:53 同一位置会建 HUD）。
+- 房间截图：左上角 `00000000` 和黄色 `|++|` 条都消失（`screenshots/final_lobby_crop.png`）。
+- 21:20 进「运输船」复验通过：日志出现 `hud: cjk font 23d82138 from Text #0 (probe U+4E2D)`
+  与 `hud: ready font=23d82138 (game/CJK)`；游戏内左上角是中文状态面板（`screenshots/inmap_cjk_hud.png`）。
+
+## 6.6 进图卡死修复：survey 的 maxZ 初值（21:26）
+
+**现象**：从控制台启动、进「暴风」图后游戏卡死/闪退。Windows 事件日志
+21:13:38 记录 `AppHangB1`（进程 UnityCrossFire.exe）。
+
+**证据**：`ucf_mod.log` 最后一行停在
+
+```
+21:13:15 [nav] survey: coarse hits=35 bounds x[-50.0,30.0] z[-130.0,1000000000.0]
+```
+
+之后再也没有 `survey: spots=...`，主线程停住。
+
+**根因**（`src/navfix.c`）：
+
+1. `survey()` 里 `float minX = 1e9f, maxX = -1e9f, minZ = 1e9f, maxZ = 1e9f;`
+   —— `maxZ` 的初值写成了 **+1e9**，应为 `-1e9`。粗扫更新 `maxZ` 的条件是
+   `hit.z > maxZ`，正常地图永远不成立，所以 `maxZ` 一直是 1e9。
+2. 细扫 `for (fz = minZ-4; fz <= maxZ+4; fz += 4)` 于是从 -134 跑到 +1e9，
+   约 `(1e9/4) × 列数 ≈ 五十多亿次`，主线程永远出不来。
+   日志里的 z 上限 1000000000 就是初值，不是命中点。
+
+**改法**：
+
+1. `maxZ` 初值改为 `-1e9f`（真正的修复）。
+2. 新增 `hit_sane()`：命中点必须有限、与射线起点同竖线（±0.75 m）、y 在 ±500 内；
+   坏点直接丢弃。
+3. 粗扫后校验包络：宽/高必须 ≥1 m 且 ≤700 m，否则本次采样放弃（下个 tick 重试）。
+4. 细扫加列数上限 50000，超限直接放弃；日志新增 `survey: dropped N bogus hits`
+   与第一条坏点的坐标。
+
+**验证**：
+
+- 21:20「运输船」、21:23「小型工厂」均能进图，HUD/自动导出正常；中文字体已确认（见 §6.5）。
+  这两张图的路点图本来就有节点（786 / 12），`run_setup` 不会触发，所以没走到 survey。
+- 暴风图本轮未复验：自动化房间里 `比赛类型` 是「团队模式」，地图下拉只有
+  运输船/小型工厂/椰岛之巅。暴风属于 `GameMode 6 = Nano4_Terminator`（终结者模式），
+  要在「比赛类型」里选终结者模式，mode 6 的 MapAsset（已注入 2 条）才会成为当前地图列表。
+- 复验时日志应出现 `survey: coarse hits=...` 且 z 范围正常（不会再出现 1000000000），
+  随后 `survey: spots=...`；若命中点异常会出现 `survey: dropped N bogus hits`。
+
+**产物**：`ucf_mod.dll` **249,587 B**，SHA256 `E24D18A3…`，部署 21:32:01；
+回滚点 `ucf_mod.dll.deployed_20261116_213201`（21:26 首次防卡死版）。
+
+## 6.7 可走面可视化 + 进图自动化受限（23:12）
+
+**做了什么**：把 A* NavMeshGraph 的三角形**画出来**，并且开关可见、可复盘。
+
+- 游戏内（`src/editor.c`）：`nm_walk()` 直接读运行时 `NavmeshBase.tiles`（和导出同一个结构），
+  按三角形边生成线框网格（`flush_mesh_to` 单独一批对象，不占 Ctrl+V 五层的 80 个名额）；
+  独立开关 `navmesh_show`（cfg.c + 控制台「查看」组，默认开），`Ctrl+Shift+6` 随时开关并立即重建；
+  换图后 `vis_scene_reset` 把对象链表清空、下一帧重建。HUD 多一行计数：
+  `可走面 开  1139 三角 / 840 顶点  (A* NavMeshGraph，Ctrl+Shift+6 开关)`。
+- 网页（`tools/navview.html` + `navserver.py`）：「显示」组新增勾选 + 计数，
+  2D/3D 都画绿色三角网；`/api/navmesh?level=` 按「maps 里记的原文件名 → 原生顶点数对号」解析。
+
+**格式坑**：`UCFNM3` 头 = 7 字节 magic（含结尾 0）+ nv + **索引数** + ntile + flags +
+矩阵 + 平移；第二个 int 是索引数（3417 = 1139×3），不是三角形数。顶点表从 99 开始。
+
+**验证**：
+- 网页：小型工厂开/关两张截图，计数 1139/840 与 22:20 的原生清点一致；
+  `/api/navmesh?level=level2|level3|level5` 都能取到，`level1`（运输船，无 NavMeshGraph）返回 404。
+- 游戏内：**未完成**。本轮自动化点不进房间的「开始游戏」（见下），所以 HUD/线框还没有进图截图。
+
+**进图自动化受限**（记下来免得下次再撞）：
+- 现象：`SetCursorPos` + `mouse_event`/`SendInput` 对 UnityCrossFire 窗口无效
+  （连标题栏双击都不放大），同一套注入对资源管理器/浏览器有效；`SendKeys` 键盘也无效。
+  窗口前台切换成功（`GetForegroundWindow` 已是游戏），但游戏不响应合成输入。
+- 判断：本轮 agent 的进程与游戏窗口不在同一个可交互输入桌面/窗口站，注入的事件到不了 Unity 的消息队列。
+- 影响：进图复验需要**人手点一次「开始游戏」**（游戏现存于房间界面，选好 运输船/团队模式）。
+- 复验时看三处：HUD 第四行「可走面 …」；地图上的绿色三角网；日志 `vis: navmesh wire tris=… verts=… meshes=N`。
+  按 `Ctrl+Shift+6` 应看到线框立即消失/出现，日志出现 `navmesh OFF/ON`。
 
 ## 7. 死代码清理 + 编译闸门（18:42）
 
@@ -150,3 +256,6 @@ cfg.c:126:12: error: 'ucf_dead_probe' defined but not used [-Werror=unused-funct
 - [ ] 逐个关开关试：关 `auto_crouch` 后日志应出现 `[cfg] auto_crouch = off, skip crouch points`。
 - [ ] 复验「复活后只会直走」修复。
 - [ ] 复验通过后，把 `n786-…disabled_20261116_1655` 改回原名重新套用。
+- [x] 进图复验 HUD：21:20 运输船通过（中文面板 + `hud: cjk font`）。
+- [ ] 进暴风图复验 survey：比赛类型选「终结者模式」→ 地图选「隐藏地图 暴风」→ 开始；
+      确认不再卡死，日志出现正常的 `survey: coarse ...` / `survey: spots=...`。

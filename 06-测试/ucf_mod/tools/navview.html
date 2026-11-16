@@ -256,6 +256,7 @@ code.k{background:#0c1117; border:1px solid #1e2733; border-radius:4px; padding:
         <div class="h">显示</div>
         <div class="card">
           <label class="chk"><input type="checkbox" id="c-geo" checked><span class="dot" style="background:#6b7f96"></span>地形（灰模，无贴图）</label>
+          <label class="chk"><input type="checkbox" id="c-navmesh" checked><span class="dot" style="background:#26e08e"></span>可走面（A* NavMesh）<b id="navm-cnt" style="margin-left:6px;font-weight:400;color:var(--tx3)">-</b></label>
           <label class="chk"><input type="checkbox" id="c-edges" checked><span class="dot" style="background:var(--edge)"></span>连接边</label>
           <label class="chk"><input type="checkbox" id="c-blocked" checked><span class="dot" style="background:var(--blocked)"></span>不可走路点</label>
           <label class="chk"><input type="checkbox" id="c-tagged" checked><span class="dot" style="background:var(--tagged)"></span>带 tag 路点</label>
@@ -431,6 +432,7 @@ const S = {
   keys: new Set(), over3: false,
   /* 地形 */
   geo: null, geoLevel: "", geoBusy: false,
+  navm: null, navmLevel: "", navmBusy: false, showNavm: true,
   band: { on: false, lo: -50, hi: 50 },
   plan: null, planKey: "",
   showGeo: true, showEdges: true, showBlocked: true, showTagged: true,
@@ -891,6 +893,7 @@ function afterLoad(file) {
   $("mapname").value = S.label || "";
   if (S.level) { renderLevelSelect(); $("lvsel").value = S.level; }
   loadGeo(S.level);
+  loadNavm(S.level);
   /* 3D 默认按路点高度带剖切：船这类封闭场景不切就只看见外壳 */
   if (S.geo !== null || S.level) { S.cut3 = true; if ($("c3-cut")) $("c3-cut").checked = true; }
   fit2();
@@ -946,6 +949,78 @@ function parseGeo(buf, level) {
   off += (4 - (off % 4)) % 4;
   const idx = new Uint32Array(buf, off, t * 3);
   return { hdr: hdr, level: level, pos: pos, nrm: nrm, tris: idx, nv: n, nt: t };
+}
+
+/* ---- 可走面（A* NavMeshGraph）：插件导出的 UCFNM3 ----------------------
+ * 格式见 src/editor.c nm_dump()：
+ *   "UCFNM3\0" | int32 nv | int32 nt | int32 ntile | uint8 flag[4]
+ *   | float matrix[16] | float translation[3]
+ *   | int32 verts[nv*3] | int32 gverts[nv*3] | int32 tris[nt*3]
+ * 顶点 1/1000 m，已经是世界坐标（A* 运行时做过 GraphTransform），可以直接画。
+ * 索引是绝对下标（插件写文件时已经加过 tile 的顶点偏移）。 */
+async function loadNavm(level) {
+  if (!S.canServer || !level) { S.navm = null; S.navmLevel = ""; setNavmCount(); schedule(); return; }
+  if (S.navmLevel === level && S.navm) { setNavmCount(); return; }
+  if (S.navmBusy) return;
+  S.navmBusy = true;
+  try {
+    const r = await fetch("/api/navmesh?level=" + encodeURIComponent(level), { cache: "no-store" });
+    if (!r.ok) {
+      const j = await r.json().catch(function () { return {}; });
+      throw new Error(j.error || ("HTTP " + r.status));
+    }
+    const buf = await r.arrayBuffer();
+    S.navm = parseNavm(buf);
+    S.navmLevel = level;
+    setMsg("可走面已载入：" + level + " · " + S.navm.tri + " 三角 / " + S.navm.nv + " 顶点（A* 烘焙）", "ok");
+  } catch (e) {
+    S.navm = null; S.navmLevel = "";
+    setMsg("这张图没有可走面数据：" + e.message, "warn");
+  } finally {
+    S.navmBusy = false;
+    setNavmCount();
+    if (gl3.ready) uploadNavm();
+    schedule();
+  }
+}
+
+function parseNavm(buf) {
+  const dv = new DataView(buf);
+  const magic = String.fromCharCode(dv.getUint8(0), dv.getUint8(1), dv.getUint8(2),
+                                     dv.getUint8(3), dv.getUint8(4), dv.getUint8(5));
+  if (magic !== "UCFNM3") throw new Error("文件头不是 UCFNM3");
+  /* 注意：头里的第二个 int 是「索引个数」，不是三角形个数（3417 = 1139*3）。
+   * 插件 HUD 里的 tris= 也是索引数，两边一致。 */
+  /* 布局（和 src/editor.c nm_dump 一一对应）：
+   * 0..6  "UCFNM3\0"（7 字节，含结尾 0）
+   * 7     int32 nv        11  int32 索引数      15  int32 ntile
+   * 19    uint8 flags[4]  23  float matrix[16]  87  float translation[3]
+   * 99    int32 verts[nv*3] | gverts | tris */
+  const nv = dv.getInt32(7, true), nti = dv.getInt32(11, true), ntile = dv.getInt32(15, true);
+  if (nv <= 0 || nti <= 0 || nv > 3000000 || nti > 9000000) throw new Error("顶点/索引数不合理");
+  const nt = Math.floor(nti / 3);
+  let off = 99;                             /* 7 + 12 + 4 + 64 + 12 */
+  const verts = new Float32Array(nv * 3);
+  let mn = [1e9, 1e9, 1e9], mx = [-1e9, -1e9, -1e9];
+  for (let i = 0; i < nv * 3; i += 3) {
+    const x = dv.getInt32(off + i * 4, true) / 1000;
+    const y = dv.getInt32(off + (i + 1) * 4, true) / 1000;
+    const z = dv.getInt32(off + (i + 2) * 4, true) / 1000;
+    verts[i] = x; verts[i + 1] = y; verts[i + 2] = z;
+    if (x < mn[0]) mn[0] = x; if (x > mx[0]) mx[0] = x;
+    if (y < mn[1]) mn[1] = y; if (y > mx[1]) mx[1] = y;
+    if (z < mn[2]) mn[2] = z; if (z > mx[2]) mx[2] = z;
+  }
+  off += nv * 12 * 2;                       /* 跳过 gverts */
+  const idx = new Uint32Array(nt * 3);
+  for (let i = 0; i < nt * 3; i++) idx[i] = dv.getUint32(off + i * 4, true);
+  return { nv: nv, tri: nt, nti: nti, ntile: ntile, verts: verts, idx: idx, min: mn, max: mx };
+}
+
+function setNavmCount() {
+  const el = $("navm-cnt");
+  if (!el) return;
+  el.textContent = S.navm ? (S.navm.tri + " 三角 / " + S.navm.nv + " 顶点") : "无数据";
 }
 
 function updateBandFromNodes() {
@@ -1332,6 +1407,23 @@ function render2() {
   const bandOn = S.band.on;
   function inBand(n) { return !bandOn || (n.p[1] >= S.band.lo && n.p[1] <= S.band.hi); }
 
+  /* 可走面（俯视图）：三角网的边 */
+  if (S.showNavm && S.navm && s > 0.8) {
+    const N = S.navm, V = N.verts, Ix = N.idx;
+    c.strokeStyle = "rgba(38,224,142,.34)";
+    c.lineWidth = 1;
+    c.beginPath();
+    for (let t = 0; t < N.tri; t++) {
+      const a = Ix[t * 3], b = Ix[t * 3 + 1], d = Ix[t * 3 + 2];
+      if (a >= N.nv || b >= N.nv || d >= N.nv) continue;
+      c.moveTo(sx(V[a * 3]), sy(V[a * 3 + 2]));
+      c.lineTo(sx(V[b * 3]), sy(V[b * 3 + 2]));
+      c.lineTo(sx(V[d * 3]), sy(V[d * 3 + 2]));
+      c.closePath();
+    }
+    c.stroke();
+  }
+
   /* 连线 */
   if (S.showEdges && s > 0.35) {
     c.lineWidth = s > 5 ? 1.2 : 1;
@@ -1652,6 +1744,35 @@ function uploadGeo() {
   gl3.geoN = G.nt;
 }
 
+function uploadNavm() {
+  const gl = gl3.gl;
+  if (!gl3.ready) return;
+  const N = S.navm;
+  if (!N) { gl3.nmCount = 0; return; }
+  const n = N.tri * 6;                     /* 每个三角形 3 条边 -> 6 个顶点 */
+  const pos = new Float32Array(n * 3), col = new Float32Array(n * 3);
+  const V = N.verts, Ix = N.idx;
+  let w = 0;
+  const CR = 0.16, CG = 0.88, CB = 0.52;
+  for (let t = 0; t < N.tri; t++) {
+    const a = Ix[t * 3], b = Ix[t * 3 + 1], c = Ix[t * 3 + 2];
+    if (a >= N.nv || b >= N.nv || c >= N.nv) continue;
+    const ia = a * 3, ib = b * 3, ic = c * 3;
+    const pairs = [ia, ib, ib, ic, ic, ia];
+    for (let k = 0; k < 6; k++, w++) {
+      const o = pairs[k];
+      pos[w * 3] = V[o]; pos[w * 3 + 1] = V[o + 1] + 0.03; pos[w * 3 + 2] = V[o + 2];
+      col[w * 3] = CR; col[w * 3 + 1] = CG; col[w * 3 + 2] = CB;
+    }
+  }
+  if (!gl3.nmPos) { gl3.nmPos = gl.createBuffer(); gl3.nmCol = gl.createBuffer(); }
+  gl.bindBuffer(gl.ARRAY_BUFFER, gl3.nmPos);
+  gl.bufferData(gl.ARRAY_BUFFER, pos.subarray(0, w * 3), gl.STATIC_DRAW);
+  gl.bindBuffer(gl.ARRAY_BUFFER, gl3.nmCol);
+  gl.bufferData(gl.ARRAY_BUFFER, col.subarray(0, w * 3), gl.STATIC_DRAW);
+  gl3.nmCount = w;
+}
+
 function navBuffers() {
   const gl = gl3.gl;
   if (!gl3.ready) return;
@@ -1738,6 +1859,19 @@ function render3() {
 
   if (gl3.navDirty) navBuffers();
 
+  /* 可走面（A* NavMeshGraph 三角网线框）：人机真正在上面跑的面 */
+  if (S.showNavm && gl3.nmCount) {
+    const pn = gl3.progDraw;
+    gl.useProgram(pn);
+    gl.uniformMatrix4fv(gl.getUniformLocation(pn, "uVP"), false, CAM.VP);
+    const nPos = gl.getAttribLocation(pn, "aPos"), nCol = gl.getAttribLocation(pn, "aCol");
+    gl.bindBuffer(gl.ARRAY_BUFFER, gl3.nmPos);
+    gl.enableVertexAttribArray(nPos); gl.vertexAttribPointer(nPos, 3, gl.FLOAT, false, 0, 0);
+    gl.bindBuffer(gl.ARRAY_BUFFER, gl3.nmCol);
+    gl.enableVertexAttribArray(nCol); gl.vertexAttribPointer(nCol, 3, gl.FLOAT, false, 0, 0);
+    gl.drawArrays(gl.LINES, 0, gl3.nmCount);
+  }
+
   /* 连线 */
   if (S.showEdges && gl3.lineCount) {
     const p = gl3.progDraw;
@@ -1757,10 +1891,11 @@ function render3() {
     if (S.xray3) drawPoints(0.42, false);
   }
 
+  const ninfo = S.navm ? (" · 可走面 <b>" + S.navm.tri + "</b> 三角") : "";
   const tinfo = S.geo ? (S.geo.nt + " 三角形") : "无地形";
   $("hud3").innerHTML = "距离 <b>" + S.v3.dist.toFixed(0) + "</b> m · 偏航 <b>" +
     (S.v3.yaw * 180 / Math.PI).toFixed(0) + "°</b> · 俯仰 <b>" + (S.v3.pitch * 180 / Math.PI).toFixed(0) +
-    "°</b> · " + tinfo + (S.cut3 ? " · 切层" : "") +
+    "°</b> · " + tinfo + ninfo + (S.cut3 ? " · 切层" : "") +
     ((S.v3.fly || S.keys.size) ? " · 飞行 " + Math.round(S.flySpd || 0) + " m/s" : "");
 }
 
@@ -2545,7 +2680,7 @@ function showHelp() {
     "（游戏自己扫的，不含我们的编辑），只读参考——从这里打开再保存，只会写 <code class='k'>nav/</code>。" +
     "只读还原点在 <code class='k'>ucf_mod/backup/maps_original_*</code>（带 sha256 清单）。" +
     "缺的图采集完跑一次 <code class='k'>python tools/organize_maps.py --archive</code> 就会自动补进来。" +
-    "序号/关卡/中文名的**权威表**在 <code class='k'>ucf_mod/地图对照表.md</code>（手写、持久，改完刷新页面就生效）。</p>" +
+    "序号/关卡/中文名的**权威表**在 <code class='k'>ucf_mod/docs/地图对照表.md</code>（手写、持久，改完刷新页面就生效）。</p>" +
     "<p><b>3D 里的地形是从哪来的</b>：<code class='k'>tools/geo2web.py</code> 把 navedit 提取的 " +
     "<code class='k'>geo/*.npz</code> 转成 <code class='k'>geo/web/&lt;关卡&gt;.bin</code>（灰模，不带贴图 —— " +
     "贴图那套是乱的，这里不用它）。关卡选错 3D 就对不上路点，右上角下拉可以手动改。</p>";
@@ -2571,10 +2706,11 @@ function bindTopbar() {
   $("lvsel").addEventListener("change", function () {
     S.level = this.value;
     S.geo = null; S.geoLevel = ""; S.plan = null; S.planKey = "";
+    S.navm = null; S.navmLevel = ""; gl3.nmCount = 0; setNavmCount();
     gl3.geoBuf = null; gl3.geoChunks = []; S.triIndex = null;
     S.bandTouched = false;
     updateBandFromNodes();
-    if (S.level) loadGeo(S.level);
+    if (S.level) { loadGeo(S.level); loadNavm(S.level); }
     doNameSave();
     schedule();
   });
@@ -2632,6 +2768,11 @@ function bindSide() {
     if (miss) msg += "；" + miss + " 个落不了（附近也没路点）";
     setMsg(msg, (miss || ref) ? "warn" : "ok");
   };
+  $("c-navmesh").addEventListener("change", function () {
+    S.showNavm = this.checked;
+    if (S.showNavm && !S.navm && S.level) loadNavm(S.level);
+    schedule();
+  });
   ["c-geo", "c-edges", "c-blocked", "c-tagged", "c-feats", "c-iso"].forEach(function (id) {
     $(id).addEventListener("change", function () {
       S.showGeo = $("c-geo").checked;
@@ -3110,6 +3251,12 @@ async function autoOpen() {
 }
 
 async function boot() {
+  /* 深链接：?navm=0 打开时就关掉可走面（截图/对比用），默认开 */
+  if (/[?&]navm=0/.test(location.search)) {
+    S.showNavm = false;
+    const cb = $("c-navmesh");
+    if (cb) cb.checked = false;
+  }
   syncSizes();
   applyLayout();
   initGL();
@@ -3299,7 +3446,10 @@ boot();</script>
   }
   var saved = null;
   try { saved = JSON.parse(localStorage.getItem(KEY) || "null"); } catch (e) { saved = null; }
-  if (saved && typeof saved.step === "number") { i = Math.max(0, Math.min(STEPS.length - 1, saved.step)); show(true); }
+  /* ?notour=1：给自动化/截图用，别让引导面板挡住 3D 视图（顶栏的「新手引导」按钮照样能打开） */
+  var notour = /[?&]notour=1/.test(location.search);
+  if (notour) { /* 不开 */ }
+  else if (saved && typeof saved.step === "number") { i = Math.max(0, Math.min(STEPS.length - 1, saved.step)); show(true); }
   else {
     setTimeout(function () { show(true); }, 1200);   /* 第一次打开自动弹出来 */
   }
