@@ -27,3 +27,11 @@ vis/
 markers/
 backup/
 screenshots/
+
+# 数据三版：原生备份进库（冻结、只读），开发版是派生的，不进库
+navdata/dev/
+navdata/*.tmp/
+navdata/_before_cleanup_*.zip
+navdata/native/**/*.tmp
+tools/_*
+navdata/_logs/

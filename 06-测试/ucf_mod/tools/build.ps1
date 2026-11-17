@@ -16,7 +16,7 @@ $tools = $PSScriptRoot
 $root  = Split-Path -Parent $tools
 $src   = Join-Path $root 'src'
 $build = Join-Path $root 'build'
-$sources = @('cfg.c', 'plugin.c', 'navfix.c', 'editor.c')
+$sources = @('cfg.c', 'plugin.c', 'navfix.c', 'editor.c', 'autotest.c')
 
 # ---- gcc ----
 if (-not (Test-Path -LiteralPath $Gcc)) {
@@ -40,7 +40,9 @@ try {
     # -Werror=unused-function / unused-variable：定义了没人用的函数或变量直接编译失败。
     # 2026-11-16 的教训：plugin.c 里有个 read_config() 从没被调用，导致
     # ucf_mod.json 整个文件是死的却没人发现。用它防复发。
-    & $Gcc -O2 -shared -o $out @sources -Werror=unused-function -Werror=unused-variable -luser32 -lgdi32 -static-libgcc
+    # -fno-omit-frame-pointer：崩溃栈里要能看到我们自己的帧。2026-11-17 那三次闪退
+    # 的日志里一个 ucf_mod 帧都没有，就是因为 -O2 把 EBP 优化掉了，人工绕了一大圈。
+    & $Gcc -O2 -fno-omit-frame-pointer -shared -o $out @sources -Werror=unused-function -Werror=unused-variable -luser32 -lgdi32 -static-libgcc
     if ($LASTEXITCODE -ne 0) { throw "gcc 失败（exit $LASTEXITCODE）" }
 } finally { Pop-Location }
 
