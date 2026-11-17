@@ -1,0 +1,111 @@
+{
+ "kind": "ucf-navdata-native",
+ "frozen_at": "2026-11-17 12:13:28",
+ "source": "D:\\BaiduNetdiskDownload\\UnityCrossFire1.7.1\\UnityCrossFire1.7.1\\ucf_mod",
+ "rule": "只收 map.source == game 的导出；我们造的（ours/practice）一律不收，只在空档文件里记录原因",
+ "maps": [
+  {
+   "file": "01_运输船.json",
+   "level": "level1",
+   "cn": "运输船",
+   "scene": "TransportShip",
+   "nodes": 786,
+   "edges": 1391,
+   "fp": "n786-57a46e3465c847cb",
+   "source": "game"
+  },
+  {
+   "file": "02_小型工厂.json",
+   "level": "level2",
+   "cn": "小型工厂",
+   "scene": "Factory",
+   "nodes": 12,
+   "edges": 6,
+   "fp": "n12-0e2829fa03c469e3",
+   "source": "game"
+  },
+  {
+   "file": "03_椰岛之巅.json",
+   "level": "level3",
+   "cn": "椰岛之巅",
+   "scene": "Cebu_City",
+   "nodes": 2,
+   "edges": 0,
+   "fp": "n2-24a647eff15d6ca4",
+   "source": "game"
+  },
+  {
+   "file": "05_竞技场.json",
+   "level": "level5",
+   "cn": "竞技场",
+   "scene": "Arena",
+   "nodes": 17,
+   "edges": 24,
+   "fp": "n17-f352f68820fae99c",
+   "source": "game"
+  },
+  {
+   "file": "06_刀锋寨.json",
+   "level": "level6",
+   "cn": "刀锋寨",
+   "scene": "GrimReaperKM",
+   "nodes": 18,
+   "edges": 9,
+   "fp": "n18-1976c65d7f7ef2db",
+   "source": "game"
+  },
+  {
+   "file": "08_沙漠要塞.json",
+   "level": "level7",
+   "cn": "沙漠要塞",
+   "scene": "DesertFort",
+   "nodes": 12,
+   "edges": 7,
+   "fp": "n12-17a93cfb246913e1",
+   "source": "game"
+  },
+  {
+   "file": "09_生化酒店.json",
+   "level": "level8",
+   "cn": "生化酒店",
+   "scene": "NanoResort",
+   "nodes": 3063,
+   "edges": 5584,
+   "fp": "n3063-b04b59b2593bfae4",
+   "source": "game"
+  },
+  {
+   "file": "10_暴风.json",
+   "level": "level9",
+   "cn": "暴风",
+   "scene": "Nano30_Storm",
+   "nodes": 0,
+   "edges": 0,
+   "fp": "",
+   "source": "native-empty"
+  },
+  {
+   "file": "11_新寂静村.json",
+   "level": "level10",
+   "cn": "新寂静村",
+   "scene": "Nano_DawnVillage",
+   "nodes": 180,
+   "edges": 98,
+   "fp": "n180-03b43b7ee737fcdc",
+   "source": "game"
+  }
+ ],
+ "navmesh_bins": [
+  "navmesh_nm532-e33d6b4d26b6983e.bin",
+  "navmesh_nm559-c8d6b4433ee4e22c.bin",
+  "navmesh_nm60-41b97d9f6a766e59.bin",
+  "navmesh_nm683-5a28f3e9cb95f718.bin",
+  "navmesh_nm716-497a1a862c4146d9.bin",
+  "navmesh_nm840-40749e0342e84cbd.bin",
+  "navmesh_nm919-1d6104d863c754be.bin",
+  "navmesh_nm944-a99b40ea454de4a0.bin"
+ ],
+ "skipped": [],
+ "edits_dropped": [],
+ "manifest_sha256": "be7ef5e263714d4e92fe783c1105a470a869e00ad678f63549c5236d189d5088"
+}

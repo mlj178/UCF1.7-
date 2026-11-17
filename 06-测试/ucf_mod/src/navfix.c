@@ -375,10 +375,21 @@ static void purge_guard_areas(void) {
     int cap = *(int*)((char*)items + 0xC);   /* array length, not list size */
     if (cap <= 0 || n > cap) { nlog("guard areas: bad list size %d/%d, skip purge", n, cap); return; }
   }
+  /* 2026-11-17 13:03 实测：就是这段把数组写花的。
+   * 原写法把「读槽位、判活、写回同一下标」压在一行里（*(P*)(items+..+w++) = o），
+   * -O2 内联后写回的地址/宽度不可靠：purge-before 三个槽位全是合法对象，
+   * purge-after 就变成 0x5050f0d8 / 0x02790279 这种半截数据（16 位错位）。
+   * 现在改成：显式 4 字节读 → 只在 w != i 时才 4 字节搬，绝不原地写。 */
   for (i = 0; i < n; i++) {
-    P o = *(P*)((char*)items + 0x10 + i*4);
-    if (n_live(o)) *(P*)((char*)items + 0x10 + w++) = o;
-    else dead++;
+    unsigned tmp = 0;
+    P o;
+    memcpy(&tmp, (char*)items + 0x10 + i*4, 4);
+    o = (P)tmp;
+    if (!o) continue;
+    if (n_live(o)) {
+      if (w != i) memcpy((char*)items + 0x10 + w*4, &tmp, 4);
+      w++;
+    } else dead++;
   }
   if (w != n) {
     *(int*)((char*)list + 0xC) = w;
@@ -765,6 +776,7 @@ static void nav_tick(void) {
     nlog("scene astar=%p (purge start)", a);
     if (!g_collectOnly) purge_guard_areas();
     nlog("scene astar=%p (purge done, notify editor)", a);
+    { void editor_gc_probe(void); editor_gc_probe(); }   /* gc_probe 调试开关 */
     { void editor_on_scene(void*); editor_on_scene((void*)a); }
     navfix_diag_graphs();
     nlog("scene astar=%p (editor notified)", a);
@@ -834,6 +846,7 @@ static LRESULT CALLBACK NavProc(HWND h, UINT msg, WPARAM w, LPARAM l) {
     static int warmed;
     if (!warmed) { void editor_ensure_init(void); editor_ensure_init(); warmed = 1; }
     nav_tick();
+    { void autotest_tick(void); autotest_tick(); }   /* 只在 UCF_AUTOTEST 设了时动作 */
     return 0;
   }
   if (msg == WM_UCF_INJECT) {

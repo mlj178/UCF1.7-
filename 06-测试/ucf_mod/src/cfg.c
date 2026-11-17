@@ -25,8 +25,18 @@ static const CFG_DEF g_defs[] = {
   { "ghost_areas",    1, "凭空造幽灵守卫区" },
   { "auto_export",    1, "进图稳定后自动导出路点 JSON" },
   { "hud",            1, "进图显示状态面板" },
+  { "hud_states",     0, "HUD 第一行：可视化/五层/标签的开关状态（默认不显示）" },
+  { "hud_keys",       0, "HUD 快捷键帮助块（默认不显示；Ctrl+H 可临时叫出）" },
+  { "hud_log",        1, "HUD 显示导出结果与最近 3 行日志（Ctrl+M）" },
   { "visualizer",     0, "进图就画导航网格" },
+  { "vis_layer_a",    1, "可视化 A 层：路点/连线（Ctrl+Shift+1）" },
+  { "vis_layer_b",    1, "可视化 B 层：人类蹲守（Ctrl+Shift+2）" },
+  { "vis_layer_c",    1, "可视化 C 层：幽灵守区（Ctrl+Shift+3）" },
+  { "vis_layer_d",    1, "可视化 D 层：出生点/补给箱（Ctrl+Shift+4）" },
+  { "vis_layer_e",    1, "可视化 E 层：模式（Ctrl+Shift+5）" },
+  { "vis_labels",     0, "可视化文字标签：0 关 / 1 近距 35m / 2 全部（Ctrl+Shift+L）" },
   { "navmesh_show",   1, "画 A* 可走面（NavMeshGraph 三角网线框）" },
+  { "vis_lists",      1, "读游戏自己的组件表（守区/蹲守/出生点）：崩溃时可关" },
   { "editor",         1, "允许游戏内编辑（Ctrl+1）" },
   { "collect_only",   0, "只读采集：只导出，不改游戏" },
   { 0, 0, 0 }
@@ -117,7 +127,13 @@ void cfg_dump(void) {
   cflog("======== ucf_mod.json %s ========", g_ok ? "loaded" : "MISSING (defaults)");
   for (i = 0; g_defs[i].key; i++) {
     const char* v = find_value(g_defs[i].key);
-    int on = cfg_bool(g_defs[i].key, g_defs[i].def);
+    int on;
+    if (!strcmp(g_defs[i].key, "vis_labels")) {   /* 三态：0/1/2，别按 bool 打印 */
+      cflog("  %-14s = %d%s", g_defs[i].key, cfg_int(g_defs[i].key, g_defs[i].def),
+            v ? "" : "  (default)");
+      continue;
+    }
+    on = cfg_bool(g_defs[i].key, g_defs[i].def);
     cflog("  %-14s = %-5s%s", g_defs[i].key, on ? "ON" : "off",
           v ? "" : (on == g_defs[i].def ? "  (default)" : ""));
   }

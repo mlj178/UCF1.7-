@@ -104,6 +104,15 @@ static int inject_one(P ma) {
     return 0;
   }
   if (p_gchandle_new) hna = (P)p_gchandle_new(na, 0);
+  /* 新数组必须真有 n+1 个 MapAsset.Map（每个 0x1C）槽位，否则下面的 memcpy
+   * 会写出界，把托管堆写花。 */
+  if (*(int*)((char*)na + 0xC) != n + 1) {
+    logf_("!!! inject: array len mismatch %d != %d - skipped", *(int*)((char*)na + 0xC), n + 1);
+    if (hna && p_gchandle_free) p_gchandle_free(hna);
+    if (hl && p_gchandle_free) p_gchandle_free(hl);
+    if (hs && p_gchandle_free) p_gchandle_free(hs);
+    return 0;
+  }
 
   memcpy((char*)na + 0x10, data, n*0x1C);
   memcpy((char*)na + 0x10 + n*0x1C, data, 0x1C);

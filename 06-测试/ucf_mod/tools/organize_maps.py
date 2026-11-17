@@ -720,6 +720,9 @@ def main():
                 # 只处理「对照表里的关卡但这次没收」的旧文件；practice 这类自定义关卡原样保留
                 if lv not in LEVEL_ORDER or lv in rows:
                     continue
+                # 「原生为空」的空档说明文件（暴风）不是数据，别当可疑文件搬走
+                if str((info.get("doc", {}).get("map") or {}).get("origin") or "") == "native-empty":
+                    continue
                 os.makedirs(SUSPECT_DIR, exist_ok=True)
                 try:
                     shutil.move(p, os.path.join(SUSPECT_DIR, fn))

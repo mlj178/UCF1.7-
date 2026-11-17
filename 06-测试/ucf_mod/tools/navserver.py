@@ -16,6 +16,7 @@
 import json
 import os
 import re
+import shutil
 import socket
 import struct
 import subprocess
@@ -29,10 +30,12 @@ from urllib.parse import urlparse, parse_qs, unquote
 ROOT = os.path.dirname(os.path.abspath(__file__))   # 工程端 tools/
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
-from ucf_paths import DEPLOY as UCF, GEO, VIS, NAV, MAPS, doc  # noqa: E402
+from ucf_paths import (DEPLOY as UCF, GEO, VIS, NAV, MAPS, NATIVE, DEV, DATAVIS,  # noqa: E402
+                       PROFILE, READONLY, doc, profile_info)
 
 GEOWEB = os.path.join(GEO, "web")
 NAMES_FILE = os.path.join(NAV, "names.json")
+PACKS_DIR = os.path.join(UCF, "packs")   # ④ 测试包：只对某一张图生效的路线改动
 
 # ---------------------------------------------------------------- 可走面（NavMeshGraph）
 # 原生 A* 顶点数（网格顶点去重后），逐张图实测，见 docs/地图对照表.md
@@ -68,7 +71,9 @@ def navmesh_for(level):
             fn = (d.get("navmesh") or {}).get("file")
             if not fn:
                 continue
-            for base in (VIS, os.path.join(UCF, "backup"), GEOWEB):
+            for base in (DATAVIS, VIS, os.path.join(NATIVE, "vis"),
+                         os.path.join(DEV, "vis"),
+                         os.path.join(UCF, "backup"), GEOWEB):
                 p = os.path.join(base, os.path.basename(fn))
                 if os.path.isfile(p):
                     return p
@@ -79,9 +84,12 @@ def navmesh_for(level):
     if v:
         try:
             prefix = "navmesh_nm%d-" % v
-            for name in sorted(os.listdir(VIS)):
-                if name.startswith(prefix) and name.endswith(".bin"):
-                    return os.path.join(VIS, name)
+            for base in (DATAVIS, VIS, os.path.join(NATIVE, "vis"), os.path.join(DEV, "vis")):
+                if not os.path.isdir(base):
+                    continue
+                for name in sorted(os.listdir(base)):
+                    if name.startswith(prefix) and name.endswith(".bin"):
+                        return os.path.join(base, name)
         except OSError:
             pass
     return None
@@ -239,6 +247,52 @@ def default_names():
 
 TOKEN_RE = re.compile(r"^[A-Za-z0-9._-]{1,80}$")
 FP_RE = re.compile(r"^n\d+-[0-9a-fA-F]{16}$")
+PACK_NAME_RE = re.compile(r"^[A-Za-z0-9_-]{1,48}$")   # 测试包名：插件是 C，只认 ASCII
+
+
+def make_pack(fp, name, level="", label=""):
+    r"""把开发版这张图的改动清单复制成一份「测试包」（只对该图生效，正式版不动）。
+
+    测试包 = <游戏目录>\packs\<包名>\<指纹>.txt；游戏里靠 UCF_PACK + UCF_FP 读它。
+    """
+    if not FP_RE.match(fp or ""):
+        return {"ok": False, "error": "指纹格式不对：%r（应形如 n786-57a46e3465c847cb）" % fp}
+    if not PACK_NAME_RE.match(name or ""):
+        return {"ok": False, "error": "包名只能用 ASCII 字母/数字/下划线/减号，1~48 字符"}
+    src = os.path.join(NAV, fp + ".txt")
+    if not os.path.isfile(src):
+        return {"ok": False, "error": "这张图还没有改动清单（%s.txt）：先在编辑器里保存一次（Ctrl+S）" % fp}
+    pdir = os.path.join(UCF, "packs", name)
+    try:
+        os.makedirs(pdir, exist_ok=True)
+        shutil.copyfile(src, os.path.join(pdir, fp + ".txt"))
+    except OSError as exc:
+        return {"ok": False, "error": "写不进 %s：%s" % (pdir, exc)}
+    nd = ed = 0
+    with open(src, "r", encoding="utf-8", errors="replace") as f:
+        for line in f:
+            s = line.strip()
+            if s.startswith("node "):
+                nd += 1
+            elif s.startswith("edge "):
+                ed += 1
+    man = {
+        "name": name, "fp": fp, "level": level, "label": label,
+        "created": time.strftime("%Y-%m-%d %H:%M:%S"), "source": "editor",
+        "note": "测试包：只对这张图生效（编辑器另存为），插件用 UCF_PACK + UCF_FP 读",
+    }
+    try:
+        with open(os.path.join(pdir, "manifest.json"), "w", encoding="utf-8", newline="\n") as f:
+            json.dump(man, f, ensure_ascii=False, indent=2)
+            f.write("\n")
+    except OSError:
+        pass
+    return {
+        "ok": True, "dir": pdir, "fp": fp, "node": nd, "edge": ed, "pack": name,
+        "out": "已建测试包：%s\n  包名 %s   指纹 %s\n  改动 node %d / edge %d\n"
+               "下一步：打开 UCF 控制台 → 测试数据 → 测试包选 %s → 地图选这张图 → 开始游戏"
+               % (pdir, name, fp, nd, ed, name),
+    }
 EDIT_FILE_RE = re.compile(r"^n\d+-[0-9a-fA-F]{16}\.txt$")
 NODE_RE = re.compile(r"^node\s+(add|del)\s+-?\d+(?:\.\d+)?\s+-?\d+(?:\.\d+)?\s+-?\d+(?:\.\d+)?$")
 NUM = r"-?\d+(?:\.\d+)?"
@@ -395,6 +449,10 @@ def list_snapshots():
                 label = default_names().get(level, "") or default_names().get(info.get("mapName") or "", "")
             entry["label"] = label
             out.append(entry)
+    # vis/ 里的原始导出如果已经归档进 maps/（同一指纹），列表里就别重复出现
+    have_fp = set(x.get("fp") for x in out if x.get("dir") == "maps" and x.get("fp"))
+    out = [x for x in out if not (x.get("dir") == "vis" and x.get("fp") in have_fp)]
+
     def _sort_key(e):
         # maps/ 按文件名里的序号排（01_ 02_ …），其余按中文名排
         if e.get("dir") == "maps":
@@ -420,6 +478,8 @@ def read_txt_head(path):
                     m = re.search(r"fp=(\S+)", s)
                     if m:
                         fp = m.group(1)
+                    continue
+                if s == "blank":
                     continue
                 if NODE_RE.match(s) or EDGE_RE.match(s):
                     ops += 1
@@ -486,8 +546,27 @@ def list_geo():
                     bbox = hdr.get("bbox")
         except Exception:
             bbox = None
-        out.append({"level": fn[:-4], "bytes": os.path.getsize(p), "bbox": bbox,
+        out.append({"level": fn[:-4], "name": default_names().get(fn[:-4], ""),
+                    "bytes": os.path.getsize(p), "bbox": bbox,
                     "mtime": time.strftime("%Y-%m-%d %H:%M", time.localtime(os.path.getmtime(p)))})
+    # 同一张图有多份地形（level9 与 nano30_storm 都是暴风）：只留 levelN 那份，别在下拉里出现两次
+    best = {}
+    for e in out:
+        nm = e.get("name") or ""
+        if not nm:
+            continue
+        cur = best.get(nm)
+        e_is_lv = bool(re.match(r"^level\d+$", e["level"]))
+        c_is_lv = bool(re.match(r"^level\d+$", (cur or {}).get("level") or "x"))
+        if cur is None or (e_is_lv and not c_is_lv):
+            best[nm] = e
+    out = [e for e in out if not e.get("name") or best.get(e["name"]) is e]
+
+    def _geo_key(e):
+        m = re.match(r"^level(\d+)$", e["level"])
+        return (0, int(m.group(1)), "") if m else (1, 0, e["level"])
+
+    out.sort(key=_geo_key)
     return out
 
 
@@ -511,9 +590,13 @@ def list_backups(fp):
 
 
 def validate_txt(text):
-    """返回 (ok, 有效行数, 错误信息)。游戏端只会跳过不认的行，这里宁可报错。"""
+    r"""返回 (ok, 有效行数, 错误信息, blank)。
+
+    blank 是测试包专用指令：进图先把原生点全禁用，再套文件里的 node/edge。
+    正式版 nav\ 不接受 blank（见 post_save），避免误把正式地图清空。"""
     ops = 0
     fp = ""
+    blank = False
     for i, line in enumerate(text.splitlines(), 1):
         s = line.strip()
         if not s:
@@ -523,11 +606,14 @@ def validate_txt(text):
             if m:
                 fp = m.group(1)
             continue
+        if s == "blank":
+            blank = True
+            continue
         if NODE_RE.match(s) or EDGE_RE.match(s):
             ops += 1
             continue
-        return False, ops, "第 %d 行不是合法的编辑指令：%s" % (i, s[:60])
-    return True, ops, ""
+        return False, ops, "第 %d 行不是合法的编辑指令：%s" % (i, s[:60]), blank
+    return True, ops, "", blank
 
 
 # ---------------------------------------------------------------- HTTP
@@ -599,6 +685,7 @@ class Handler(SimpleHTTPRequestHandler):
                     "snapshots": list_snapshots(),
                     "edits": list_edits(),
                     "geo": list_geo(),
+                    "profile": profile_info(),
                 })
             if path == "/api/log":
                 n = 120
@@ -638,6 +725,18 @@ class Handler(SimpleHTTPRequestHandler):
                     return self.send_json({"ok": True, "fp": fp, "text": "", "exists": False})
                 with open(p, "r", encoding="utf-8", errors="replace") as f:
                     return self.send_json({"ok": True, "fp": fp, "text": f.read(), "exists": True})
+            if path == "/api/pack-txt":
+                name = safe_token((q.get("name") or [""])[0])
+                fp = safe_token((q.get("fp") or [""])[0])
+                if not PACK_NAME_RE.match(name or "") or not FP_RE.match(fp or ""):
+                    return self.send_json({"ok": False, "error": "包名或指纹格式不对"}, 400)
+                p = os.path.join(PACKS_DIR, name, fp + ".txt")
+                if not os.path.isfile(p):
+                    return self.send_json({"ok": True, "name": name, "fp": fp,
+                                           "text": "", "exists": False})
+                with open(p, "r", encoding="utf-8", errors="replace") as f:
+                    return self.send_json({"ok": True, "name": name, "fp": fp,
+                                           "text": f.read(), "exists": True})
             if path == "/api/backups":
                 return self.send_json({"ok": True, "items": list_backups(safe_token((q.get("fp") or [""])[0]))})
             if path == "/api/geo":
@@ -709,6 +808,21 @@ class Handler(SimpleHTTPRequestHandler):
         if body is None:
             return self.send_json({"ok": False, "error": "请求体为空或不是 JSON"}, 400)
         try:
+            if u.path == "/api/pack-new":
+                return self.send_json(make_pack(
+                    str(body.get("fp") or ""), str(body.get("name") or ""),
+                    str(body.get("level") or ""), str(body.get("label") or "")))
+            if u.path == "/api/pack-save":
+                return self.post_pack_save(body)
+            if u.path == "/api/publish":
+                return self.post_script("publish")
+            if u.path == "/api/restore-native":
+                return self.post_script("restore")
+            if READONLY and u.path in ("/api/name", "/api/save", "/api/restore"):
+                return self.send_json({
+                    "ok": False,
+                    "error": "现在是备份版（README：只读，永不编辑）。用 dev 版启动编辑器再改：启动导航编辑器.bat",
+                }, 403)
             if u.path == "/api/name":
                 return self.post_name(body)
             if u.path == "/api/save":
@@ -718,6 +832,20 @@ class Handler(SimpleHTTPRequestHandler):
         except Exception as exc:
             return self.send_json({"ok": False, "error": "%s: %s" % (type(exc).__name__, exc)}, 500)
         return self.send_json({"ok": False, "error": "未知接口 " + u.path}, 404)
+
+    def post_script(self, cmd):
+        """跑 tools/navdata.py 的某个子命令（publish / restore），把输出原样回给页面。"""
+        script = os.path.join(ROOT, "navdata.py")
+        try:
+            r = subprocess.run([sys.executable, script, cmd], cwd=ROOT,
+                               capture_output=True, timeout=900)
+        except Exception as exc:
+            return self.send_json({"ok": False, "error": "%s: %s" % (type(exc).__name__, exc)}, 500)
+        out = (r.stdout or b"").decode("utf-8", "replace")
+        err = (r.stderr or b"").decode("utf-8", "replace")
+        return self.send_json({"ok": r.returncode == 0, "cmd": cmd, "code": r.returncode,
+                               "out": out, "err": err,
+                               "error": "" if r.returncode == 0 else (err.strip() or out.strip())})
 
     def post_name(self, body):
         key = safe_token(body.get("key") or body.get("fp") or body.get("level"))
@@ -734,6 +862,70 @@ class Handler(SimpleHTTPRequestHandler):
         save_names(names)
         return self.send_json({"ok": True, "names": names})
 
+    def post_pack_save(self, body):
+        r"""网页编辑器把「空白底图 + 自己画的路线」写回 packs\<包名>\<指纹>.txt。
+
+        只动测试包，正式版 nav\ 一个字节不碰；blank 行由 validate_txt 识别，
+        同步维护 manifest.json（控制台靠它显示包信息）和 nogen.txt（关自动铺点）。
+        """
+        name = safe_token(body.get("name"))
+        fp = safe_token(body.get("fp"))
+        edit_text = body.get("editText") or ""
+        if not PACK_NAME_RE.match(name or ""):
+            return self.send_json({"ok": False, "error": "包名只能用 ASCII 字母/数字/_/-，1~48 字符"}, 400)
+        if not FP_RE.match(fp or ""):
+            return self.send_json({"ok": False, "error": "指纹格式不对：%r" % fp}, 400)
+        ok, ops, err, blank = validate_txt(edit_text)
+        if not ok:
+            return self.send_json({"ok": False, "error": err}, 400)
+        pdir = os.path.join(PACKS_DIR, name)
+        path = os.path.join(pdir, fp + ".txt")
+        try:
+            os.makedirs(pdir, exist_ok=True)
+            backups = []
+            if os.path.isfile(path):
+                bak = path + ".bak_" + time.strftime("%Y%m%d_%H%M%S")
+                shutil.copyfile(path, bak)
+                backups.append(os.path.basename(bak))
+            tmp = path + ".tmp"
+            with open(tmp, "w", encoding="utf-8", newline="\n") as f:
+                f.write(edit_text)
+            os.replace(tmp, path)
+            if blank:
+                nogen = os.path.join(pdir, "nogen.txt")
+                if not os.path.isfile(nogen):
+                    with open(nogen, "w", encoding="utf-8") as f:
+                        f.write("")
+            man_path = os.path.join(pdir, "manifest.json")
+            man = {}
+            if os.path.isfile(man_path):
+                try:
+                    with open(man_path, "r", encoding="utf-8") as f:
+                        man = json.load(f) or {}
+                except (OSError, ValueError):
+                    man = {}
+            man.update({
+                "name": name,
+                "fp": fp,
+                "level": str(body.get("level") or man.get("level") or ""),
+                "label": str(body.get("label") or man.get("label") or ""),
+                "blank": bool(blank),
+                "source": "editor-blank" if blank else (man.get("source") or "editor"),
+                "note": "空白底图测试包：原生点全禁用 + nogen.txt 关自动铺点；路线在网页编辑器里画",
+            })
+            man.setdefault("created", time.strftime("%Y-%m-%d %H:%M:%S"))
+            with open(man_path, "w", encoding="utf-8", newline="\n") as f:
+                json.dump(man, f, ensure_ascii=False, indent=2)
+                f.write("\n")
+        except OSError as exc:
+            return self.send_json({"ok": False, "error": "写不进 %s：%s" % (pdir, exc)}, 500)
+        return self.send_json({
+            "ok": True, "pack": name, "fp": fp, "ops": ops, "blank": blank,
+            "txtPath": path, "backups": backups,
+            "note": ("已保存到测试包 %s（%d 条，%s）" %
+                     (name, ops, "空白底图" if blank else "正式底图增量")),
+        })
+
     def post_save(self, body):
         ensure_dirs()
         fp = safe_token(body.get("fp"))
@@ -748,9 +940,14 @@ class Handler(SimpleHTTPRequestHandler):
             doc = json.loads(json_text)
         except Exception as exc:
             return self.send_json({"ok": False, "error": "JSON 非法：%s" % exc}, 400)
-        ok, ops, err = validate_txt(edit_text)
+        ok, ops, err, blank = validate_txt(edit_text)
         if not ok:
             return self.send_json({"ok": False, "error": err}, 400)
+        if blank:
+            return self.send_json({
+                "ok": False,
+                "error": "blank 只能写进测试包（测试数据 → 新建空白包），不能写进正式版 nav\\",
+            }, 400)
 
         json_path = os.path.join(NAV, json_name + ".json")
         txt_path = os.path.join(NAV, fp + ".txt")
@@ -841,16 +1038,24 @@ def main():
     srv = ThreadingHTTPServer(("127.0.0.1", port), Handler)
     srv.daemon_threads = True
     print("UCF 导航编辑器 · 本地服务")
-    print("  插件目录 : %s" % UCF)
+    print("  版本     : %s（UCF_PROFILE=%s）%s" % (
+        profile_info()["cn"], PROFILE, "  [只读]" if READONLY else ""))
+    print("  数据目录 : %s" % NAV)
+    print("  原生备份 : %s" % NATIVE)
+    print("  游戏目录 : %s" % UCF)
     print("  打开地址 : %s" % url)
-    print("  （关掉这个窗口就停止服务；编辑结果会写进 %s）" % NAV)
+    print("  （关掉这个窗口就停止服务；编辑结果写进 %s，点『部署到游戏』才推给游戏）" % NAV)
     for name in ("snapshots", "edits", "geo"):
         print("  %-10s %d" % (name, len({"snapshots": list_snapshots, "edits": list_edits, "geo": list_geo}[name]())))
     if not list_geo():
         print("  !! geo/web 是空的：3D 视图只能画路点。跑一次 tools/geo2web.py 生成网格。")
     if "--no-browser" not in sys.argv:
         threading.Thread(target=lambda: (time.sleep(0.4), webbrowser.open(url)), daemon=True).start()
-    threading.Thread(target=auto_organize_loop, daemon=True).start()   # 新导出自动归档
+    # 自动归档默认关闭（2026-11-17）：它会在后台跑 organize_maps，把 maps/ 里的文件
+    # 当「可疑/太小」搬去 _suspect/，和我们「原生备份只读」的约定打架。
+    # 需要时手动跑：python tools/organize_maps.py --archive
+    if "--auto-organize" in sys.argv:
+        threading.Thread(target=auto_organize_loop, daemon=True).start()
     try:
         srv.serve_forever()
     except KeyboardInterrupt:

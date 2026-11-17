@@ -74,6 +74,38 @@ static HMODULE g_ga;
 static char g_log[MAX_PATH];
 static char g_dir[MAX_PATH];
 static char g_file[MAX_PATH];
+
+/* ---- 测试包（UCF_PACK / UCF_FP）-------------------------------------------
+ * 「UCF 控制台」启动游戏时递进来的环境变量，决定这次读哪套路线数据：
+ *   UCF_PACK=chain_a   读 <插件目录>\packs\chain_a\<指纹>.txt
+ *                      （不设 = 读 <插件目录>\nav\<指纹>.txt，即一直以来的正式版）
+ *   UCF_FP=n0-...      只有当前场景指纹等于它才套用；别的图整包跳过，不动一个字节
+ *   UCF_FPLABEL=...    只用于 HUD/日志显示（图的中文名）
+ * 包目录固定放在插件目录内：vis / markers / 日志也都挂在 g_dir 下，把 nav 单独指到
+ * 工程端会让两套数据混用（导出、读数全乱），所以这里只换最后一级目录。 */
+static char g_navDir[MAX_PATH];   /* 路线数据目录：<dir>\nav 或 <dir>\packs\<包名> */
+static char g_packName[64];       /* 空 = 正式版 */
+static char g_packFp[48];         /* 空 = 不限图 */
+static char g_packFpLabel[64];    /* 只用于显示 */
+static int  g_packSkip;           /* 1 = 当前图不在本次测试清单里 */
+static char g_packStat[224] = "数据 正式版（nav）";   /* HUD 第 5 行 */
+
+/* ---- 控制台命令通道（游戏运行中切包 / 重读 / 保存）----------------------
+ * 控制台写 <插件目录>\ucf_navcmd.txt，插件每 ~0.5 s 查一次 seq；seq 变了才执行。
+ * 启动时先读一遍 seq 但不执行，上一次进程留下的旧命令不会被新进程重放。
+ *   seq=...  cmd=apply|reload|save|off  pack=<名>  fp=<指纹>
+ * apply/reload 会先把图还原成原生底图，再重新读文件套用（见 nav_base_restore）。 */
+static unsigned long long g_navCmdSeq;   /* 控制台写毫秒时间戳，32/64 位都收 */
+static char g_navCmdPath[MAX_PATH];
+
+/* 原生底图快照：切包 / 回正式版时把 PointGraph 还原成进图时的样子。
+ * 连接按 nodeIndex 存（不存 PointNode 指针），场景重建后也不会指到旧对象。 */
+typedef struct { unsigned char walk; V3 pos; int cn; unsigned char* conn; } NAVBASENODE;
+static NAVBASENODE* g_navBase;
+static int  g_navBaseN;
+static P    g_navBaseG;
+static char g_navBaseFp[48];
+
 static int  g_inited, g_initFail;
 static int  g_on, g_team, g_vis = 1;
 static int  g_n, g_areaCount, g_curArea = -1;
@@ -92,6 +124,10 @@ static P (*x_class_get_field_from_name)(P, const char*);
 static void (*x_field_static_get_value)(P, void*);
 static P (*x_array_new)(P, unsigned int);
 static P (*x_class_get_parent)(P);
+static P (*x_class_from_il2cpp_type)(P);
+static int (*x_class_instance_size)(P);
+static char* (*x_type_get_name)(P);
+static void (*x_free)(void*);
 static P (*x_domain_assembly_open)(P, const char*);
 static unsigned (*x_gchandle_new)(P, unsigned char);
 static void (*x_gchandle_free)(P);
@@ -115,6 +151,7 @@ typedef struct { int kind; V3 a, b; } NAVED;
 #define NAV_ED_MAX 4096
 static NAVED g_ned[NAV_ED_MAX];
 static int g_nedN;
+static int g_nedBlank;      /* 1 = 测试包 blank：先把原生点全禁掉，再套清单里的点/边 */
 static char g_nedPath[MAX_PATH];
 static char g_nedFp[48];
 static int g_nedBaseN;
@@ -278,7 +315,7 @@ static const COL COL_GRAY   = { 0.70f, 0.70f, 0.70f, 1.0f };
 static const COL COL_NAVM   = { 0.15f, 1.00f, 0.55f, 1.0f };  /* A* 可走面（NavMeshGraph 三角网） */
 
 /* --- 最近日志环形缓冲：游戏里 HUD 直接能看到，不用去翻 ucf_mod.log ------ */
-#define LOG_RING 8
+#define LOG_RING 24
 static char g_ring[LOG_RING][128];
 static int  g_ringN = 0;
 static int  g_logOn = 1;          /* Ctrl+M 开关 */
@@ -308,6 +345,298 @@ static void elog(const char* fmt, ...) {
     }
   }
   log_ring_push(buf);
+}
+
+/* ---------------- 崩溃现场记录（VEH）---------------------------------------
+ * 2026-11-17 10:22/10:23 两次闪退都落在 GameAssembly.dll+0x1290b1/c1，
+ * 崩溃线程栈上一个 ucf_mod 帧都没有 —— 说明崩的是游戏代码，但很可能是我们之
+ * 前放进去的对象/数据触发的。这里挂一个向量异常处理：崩的瞬间把「异常地址、
+ * 读取/写入哪个地址、栈上所有落在模块里的返回地址、以及最近 24 条日志」写进
+ * ucf_mod.log，下次再崩就能直接看到是谁调用的。只记录，不改变异常走向。
+ * ---------------------------------------------------------------------- */
+static unsigned mod_off(const void* a, const char** nmOut, int needCode) {
+  static const char* names[] = { "GameAssembly.dll", "UnityPlayer.dll", "ucf_mod.dll" };
+  int i;
+  for (i = 0; i < 3; i++) {
+    HMODULE h = GetModuleHandleA(names[i]);
+    const unsigned char* base;
+    const IMAGE_DOS_HEADER* dos;
+    const IMAGE_NT_HEADERS* nt;
+    unsigned size, off;
+    if (!h) continue;
+    base = (const unsigned char*)h;
+    dos = (const IMAGE_DOS_HEADER*)base;
+    if (dos->e_magic != IMAGE_DOS_SIGNATURE) continue;
+    nt = (const IMAGE_NT_HEADERS*)(base + dos->e_lfanew);
+    if (nt->Signature != IMAGE_NT_SIGNATURE) continue;
+    size = nt->OptionalHeader.SizeOfImage;
+    if ((const unsigned char*)a < base || (const unsigned char*)a >= base + size) continue;
+    off = (unsigned)((const unsigned char*)a - base);
+    if (needCode) {
+      /* 只认可执行节里的地址。不检查的话 .rdata 里的常数也会被当成返回地址，
+       * 10:35 那次的日志里整串 UnityPlayer+0x1478f74 就是这种假帧，把真栈淹了。 */
+      const IMAGE_SECTION_HEADER* s = IMAGE_FIRST_SECTION(nt);
+      int k, ok = 0;
+      for (k = 0; k < nt->FileHeader.NumberOfSections; k++, s++) {
+        unsigned va = s->VirtualAddress;
+        unsigned vs = s->Misc.VirtualSize ? s->Misc.VirtualSize : s->SizeOfRawData;
+        if (off < va || off >= va + vs) continue;
+        if (s->Characteristics & IMAGE_SCN_MEM_EXECUTE) ok = 1;
+        break;
+      }
+      if (!ok) continue;
+    }
+    *nmOut = names[i];
+    return off;
+  }
+  *nmOut = 0;
+  return 0;
+}
+
+/* 只读「已提交且可读」的内存：VEH 里绝不能因为自己再崩一次而递归 */
+static int safe_rd(const void* p, void* out, unsigned n) {
+  MEMORY_BASIC_INFORMATION mbi;
+  if (!p) return 0;
+  if (VirtualQuery(p, &mbi, sizeof mbi) != sizeof mbi) return 0;
+  if (mbi.State != MEM_COMMIT) return 0;
+  if (mbi.Protect & (PAGE_NOACCESS | PAGE_GUARD)) return 0;
+  if ((const unsigned char*)p + n > (const unsigned char*)mbi.BaseAddress + mbi.RegionSize) return 0;
+  memcpy(out, p, n);
+  return 1;
+}
+
+/* ---- 崩溃现场：把「正在被走查的那个对象/数组」也打出来 --------------------
+ * 2026-11-17 的五次闪退（10:22 / 10:23 / 10:35 / 11:32 / 11:33）全部停在
+ * GameAssembly+0x1290b1 / 0x1290c1，调用链固定为
+ *   il2cpp_unity_liveness_calculation_from_statics/root -> 0x144217 -> 0x14458a
+ *   -> 0x1441dc -> 0x1290a0
+ * 这不是 GC 写屏障（真正的写屏障在 GameAssembly+0x14cd80），而是 Unity 在
+ * Resources.UnloadUnusedAssets() 里做的「托管对象存活判定」：它把对象/数组
+ * 里的每个槽位当引用逐层走查，走查前先读 obj->klass（+0x1290b1 就是那条
+ * mov (%ebx),%eax）。所以 ebx 是「被当成对象」的那个值，edi-0x10 是它所在的
+ * 数组/容器。把数组的类名、长度、前 8 个槽位和槽位的类名写进日志，就能直接
+ * 看出是谁往引用数组里写了非对象数据。
+ * ---------------------------------------------------------------------- */
+/* Il2CppClass{image@0, gc_desc@4, name@8, namespaze@0xc, ...} -> 取类名 */
+/* il2cpp 的 Il2CppClass 是**运行时分配**的（不在 GameAssembly.dll 里），
+ * 所以不能用「指针落在模块内」来判断。改成看结构：
+ *   +0x08 name(可读的 ASCII 串)  +0x16 byval_arg.type(1..0x1e)
+ * 这两条同时成立才当成类对象。 */
+static int looks_like_class(P k) {
+  P nm = 0;
+  unsigned char ty = 0;
+  char c = 0;
+  int i, ok = 0;
+  if (!k) return 0;
+  if (!safe_rd((const void*)((char*)k + 8), &nm, 4) || !nm) return 0;
+  if (!safe_rd((const void*)((char*)k + 0x16), &ty, 1)) return 0;
+  if (ty < 1 || ty > 0x1E) return 0;
+  for (i = 0; i < 32; i++) {
+    if (!safe_rd((const char*)nm + i, &c, 1)) return 0;
+    if (!c) { ok = (i > 0); break; }
+    if ((unsigned char)c < 0x20 || (unsigned char)c > 0x7e) return 0;
+  }
+  return ok;
+}
+
+static int safe_name(P k, char* out, int cap) {
+  char* s = 0;
+  int i;
+  out[0] = 0;
+  if (!looks_like_class(k)) return 0;
+  if (!safe_rd((const void*)((char*)k + 8), &s, 4) || !s) return 0;
+  /* 逐字节读：字符串正好压在页尾时，一次性读满 cap 会失败 */
+  for (i = 0; i < cap - 1; i++) {
+    char ch;
+    if (!safe_rd((const char*)s + i, &ch, 1)) break;
+    if (!ch) break;
+    if ((unsigned char)ch < 0x20 || (unsigned char)ch > 0x7e) { out[0] = 0; return 0; }
+    out[i] = ch;
+  }
+  out[i] = 0;
+  return out[0] != 0;
+}
+
+static void probe_obj(const char* tag, P p) {
+  P k = 0;
+  char nm[64];
+  if (!p) { elog("!!! %s %08x", tag, (unsigned)p); return; }
+  if (!safe_rd((const void*)p, &k, 4)) { elog("!!! %s %08x (unmapped)", tag, (unsigned)p); return; }
+  if (safe_name(k, nm, sizeof nm)) elog("!!! %s %08x klass=%08x '%s'", tag, (unsigned)p, (unsigned)k, nm);
+  else elog("!!! %s %08x klass=%08x (?)", tag, (unsigned)p, (unsigned)k);
+}
+
+static void probe_arr(const char* tag, P arr) {
+  P k = 0, ek = 0;
+  char nm[80], en[80];
+  int n = 0, i;
+  unsigned raw[16];
+  if (!arr) return;
+  if (!safe_rd(arr, &k, 4)) { elog("!!! %s %08x (unmapped)", tag, (unsigned)arr); return; }
+  safe_rd((char*)arr + 0xC, &n, 4);
+  if (!safe_name(k, nm, sizeof nm)) strcpy(nm, "?");
+  en[0] = 0;
+  if (k && safe_rd((char*)k + 0x20, &ek, 4) && safe_name(ek, en, sizeof en))
+    elog("!!! %s %08x len=%d klass=%08x '%s' elem='%s'", tag, (unsigned)arr, n, (unsigned)k, nm, en);
+  else
+    elog("!!! %s %08x len=%d klass=%08x '%s'", tag, (unsigned)arr, n, (unsigned)k, nm);
+  if (safe_rd((char*)arr + 0x10, raw, sizeof raw)) {
+    elog("!!!   raw %08x %08x %08x %08x %08x %08x %08x %08x",
+         raw[0], raw[1], raw[2], raw[3], raw[4], raw[5], raw[6], raw[7]);
+  }
+  for (i = 0; i < 8 && i < n; i++) {
+    P v = 0;
+    P ek = 0;
+    char en[64];
+    if (!safe_rd((char*)arr + 0x10 + i * 4, &v, 4)) { elog("!!!   [%d] unmapped", i); break; }
+    if (!v) { elog("!!!   [%d] null", i); continue; }
+    if (safe_rd((const void*)v, &ek, 4) && safe_name(ek, en, sizeof en))
+      elog("!!!   [%d] %08x klass=%08x '%s'", i, (unsigned)v, (unsigned)ek, en);
+    else
+      elog("!!!   [%d] %08x (not an object)", i, (unsigned)v);
+  }
+}
+
+static LONG CALLBACK ed_veh(EXCEPTION_POINTERS* ep) {
+  CONTEXT* c = ep->ContextRecord;
+  const void* ex = (const void*)ep->ExceptionRecord->ExceptionAddress;
+  const char* nm = "?";
+  unsigned off;
+  unsigned code = (unsigned)ep->ExceptionRecord->ExceptionCode;
+  int i;
+
+  /* 这些不是崩溃，是正常控制流：
+   *   0x406D1388 RaiseException+SetThreadName（il2cpp/Unity 起线程时必发），
+   *   0xE06D7363 C++ throw，0x40080201 WinRT originate。
+   * 上一版把它们全当崩溃记，一次进图刷了 120 行，把真正那条埋了。 */
+  if (code == 0x406D1388 || code == 0xE06D7363 || code == 0x40080201) return EXCEPTION_CONTINUE_SEARCH;
+
+  off = mod_off(ex, &nm, 0);
+  elog("!!! crash code=0x%08x at %p (%s+0x%x)", code, ex, nm ? nm : "?", off);
+  if (code == EXCEPTION_ACCESS_VIOLATION && ep->ExceptionRecord->NumberParameters >= 2) {
+    elog("!!! access %s at 0x%08x",
+         ep->ExceptionRecord->ExceptionInformation[0] ? "write" : "read",
+         (unsigned)ep->ExceptionRecord->ExceptionInformation[1]);
+  }
+  if (c) {
+    unsigned sp = (unsigned)c->Esp, bp = (unsigned)c->Ebp;
+    unsigned char buf[8];
+    /* 寄存器：崩溃时那个坏指针通常还躺在 esi/edi/ebx 里，这是最值钱的一行 */
+    elog("!!! reg eax=%08x ebx=%08x ecx=%08x edx=%08x esi=%08x edi=%08x ebp=%08x esp=%08x",
+         (unsigned)c->Eax, (unsigned)c->Ebx, (unsigned)c->Ecx, (unsigned)c->Edx,
+         (unsigned)c->Esi, (unsigned)c->Edi, bp, sp);
+    /* 存活判定走查（0x1290a0）：ebx = 被当成对象解引用的值，edi-0x10 = 它所在的数组/容器。
+     * 这是判断「谁往引用数组里写了非对象数据」最直接的证据。 */
+    if (code == EXCEPTION_ACCESS_VIOLATION && nm && !strcmp(nm, "GameAssembly.dll") &&
+        off >= 0x129090 && off <= 0x1290d0) {
+      probe_obj("walk-obj(ebx)", (P)c->Ebx);
+      probe_arr("walk-array(edi-0x10)", (P)((char*)c->Edi - 0x10));
+      if (bp) {
+        unsigned owner = 0;
+        if (safe_rd((const void*)(bp + 0xc), &owner, 4)) probe_obj("walk-owner(ebp+0xc)", (P)owner);
+      }
+    }
+    /* 栈扫描从 128 格放宽到 512 格（2 KB）：我们的帧是 -O2 不带 EBP 的，
+     * 只靠 EBP 链根本看不到；上次日志只扫到 +0x1ec 就断了。 */
+    for (i = 0; i < 512 && sp; i++) {
+      unsigned v;
+      if (!safe_rd((const void*)(sp + i * 4), &v, 4)) break;
+      {
+        const char* mn;
+        unsigned mo = mod_off((void*)v, &mn, 1);
+        if (mn) elog("!!! stack+0x%03x %08x %s+0x%x", i * 4, v, mn, mo);
+      }
+    }
+    if (bp) {
+      for (i = 0; i < 24; i++) {
+        unsigned prev, ret;
+        if (!safe_rd((const void*)bp, buf, 8)) break;
+        memcpy(&prev, buf, 4);
+        memcpy(&ret, buf + 4, 4);
+        if (!ret) break;
+        {
+          const char* mn;
+          unsigned mo = mod_off((void*)ret, &mn, 1);
+          if (mn) elog("!!! ebp+%02d %08x %s+0x%x", i, ret, mn, mo);
+          /* 走查的这几帧里 [ebp+8..+0x10] 是对象/类型/状态指针，直接点一下 */
+          if (mn && !strcmp(mn, "GameAssembly.dll") && i < 6) {
+            unsigned a0 = 0, a1 = 0, a2 = 0;
+            safe_rd((const void*)(bp + 8), &a0, 4);
+            safe_rd((const void*)(bp + 0xc), &a1, 4);
+            safe_rd((const void*)(bp + 0x10), &a2, 4);
+            if (a0) probe_obj("  arg0", (P)a0);
+            if (a1) probe_obj("  arg1", (P)a1);
+            if (a2 > 0x10000) probe_obj("  arg2", (P)a2);
+          }
+        }
+        if (prev <= bp) break;
+        bp = prev;
+      }
+    }
+  }
+  for (i = 1; i <= 16 && i <= g_ringN; i++) {
+    int k = (g_ringN - i) % LOG_RING;
+    elog("!!! ring[-%d] %s", i, g_ring[k < 0 ? k + LOG_RING : k]);
+  }
+  return EXCEPTION_CONTINUE_SEARCH;
+}
+
+static int g_vehOn;
+static void veh_install(void) {
+  if (g_vehOn) return;
+  if (AddVectoredExceptionHandler(1, ed_veh)) {
+    g_vehOn = 1;
+    elog("veh: crash logger installed");
+  }
+}
+
+
+/* ---------------- GC 根：把我们长期保存的托管对象钉住 --------------------
+ * 2026-11-17 10:22 / 10:23 / 10:35 三次闪退都落在 GameAssembly.dll+0x1290b1/e1
+ * （il2cpp 运行时读 obj->klass，然后 klass 是 0 —— Boehm 回收后的内存是清零的）。
+ * 也就是说：有代码在用**已经被 GC 收掉的托管对象**。Boehm 只扫托管堆和线程栈，
+ * 不扫 DLL 的 .data，所以 g_matSlot / g_hud / g_keys / g_cat / g_lblComp /
+ * g_visObj / g_nmObj 这些 C 静态指针必须自己做成 GC 根。
+ *
+ * 第一版（10:33）用的是「object[2048] + 一个 gchandle」，但 System.Object 找不到
+ * （mscorlib 在程序集数组的未初始化尾巴后面，find_cls 的循环 break 掉了），
+ * 日志里刷了十几行 "roots: no System.Object class" —— **等于一个都没钉住**，
+ * 10:35 照样崩。现在改成每个对象一个 il2cpp_gchandle_new：一个句柄就是一个根，
+ * 不依赖任何类的查找。
+ * ---------------------------------------------------------------------- */
+#define ROOTS_MAX 512
+static P g_rootObj[ROOTS_MAX];
+static P g_rootH[ROOTS_MAX];
+static int g_rootsN, g_rootsFull;
+static P find_cls(const char* ns, const char* name);   /* 定义在后面 */
+static void list_layout_probe(void);                  /* 定义在后面 */
+
+/* 换场景时调用：上一张图的对象已经被 Unity 销毁了，句柄要还回去，
+ * 否则句柄表会一直涨，旧对象也永远回收不掉。 */
+static void roots_clear(void) {
+  int i;
+  if (!g_rootsN) return;
+  for (i = 0; i < g_rootsN; i++) {
+    if (g_rootH[i] && x_gchandle_free) x_gchandle_free(g_rootH[i]);
+    g_rootH[i] = 0;
+    g_rootObj[i] = 0;
+  }
+  elog("roots: cleared %d handle(s)", g_rootsN);
+  g_rootsN = 0;
+}
+
+static void root_put(P o) {
+  int i;
+  if (!o || !x_gchandle_new) return;
+  for (i = 0; i < g_rootsN; i++) if (g_rootObj[i] == o) return;   /* 同一个对象只钉一次 */
+  if (g_rootsN >= ROOTS_MAX) {
+    if (!g_rootsFull) { g_rootsFull = 1; elog("roots: full (%d) - new objects are NOT pinned", ROOTS_MAX); }
+    return;
+  }
+  g_rootH[g_rootsN] = (P)x_gchandle_new(o, 0);
+  g_rootObj[g_rootsN] = o;
+  g_rootsN++;
+  if (g_rootsN == 1) elog("roots: first handle ok (%p)", g_rootH[0]);
 }
 
 static int g_clsProbe;
@@ -357,6 +686,10 @@ static int ed_init(void) {
   RESOLVE(field_static_get_value);
   RESOLVE(array_new);
   RESOLVE(class_get_parent);
+  RESOLVE(class_from_il2cpp_type);
+  RESOLVE(class_instance_size);
+  RESOLVE(type_get_name);
+  RESOLVE(free);
   RESOLVE(domain_assembly_open);
   RESOLVE(gchandle_new);
   RESOLVE(gchandle_free);
@@ -433,6 +766,7 @@ static int ed_init(void) {
   if (g_gareaCls) g_gareaType = x_type_get_object(x_class_get_type(g_gareaCls));
 
   g_inited = 1;
+  list_layout_probe();     /* 核对我们猜的 List<T> 字段偏移 */
   elog("init: GameObject=%p Camera=%p Collider=%p Box=%p crouch=%p area=%p pos=%p renderer=%p text=%p canvas=%p font=%p",
        g_goCls, g_camCls, g_colCls, g_boxCls, g_crouchCls, g_areaCls, g_posCls, g_rendCls, g_textCls, g_canvasCls, g_fontCls);
   if (!g_goCls || !g_camCls || !g_crouchType || !g_areaType || !g_posType) {
@@ -551,6 +885,7 @@ static int mat_setup(void) {
     ((ctor_sh_t)RVA(R_MAT_CTOR_SH))(m, sh, 0);
     if (mat_usable(m)) {
       g_matProto = m;
+    root_put(m);
       g_matReady = 1;
       strncpy(g_shaderName, cand[i], sizeof(g_shaderName) - 1);
       if (x_gchandle_new) x_gchandle_new(m, 1);
@@ -567,6 +902,7 @@ static int mat_setup(void) {
         char nm[96];
         ((ctor_mat_t)RVA(R_MAT_CTOR_MT))(m, src, 0);
         g_matProto = m;
+    root_put(m);
         g_matReady = 1;
         str_ascii(((get_name_t)RVA(R_OBJ_NAME))(src, 0), nm, sizeof(nm));
         elog("mat: cloned scene material '%s'", nm);
@@ -675,6 +1011,10 @@ P navfix_add_guard_area(float x, float y, float z);
 #define VIS_NBMAX   2048
 #define MB_MAXV     20000
 #define MB_MAXI     70000
+/* 进图后等多少帧再读游戏自己的组件表（SpareAreaList / SpareList_BL/GR …）。
+ * 2026-11-17：沙漠要塞一进图就闪退（crash dump 显示停在 comp_pos -> UnityPlayer
+ * 0x755e86）。这些静态表在换图瞬间还指着上一张图正在销毁的组件，读位置就是野指针。 */
+#define VIS_SCENE_WAIT 90
 
 #define LAY_A 0x01
 #define LAY_B 0x02
@@ -731,15 +1071,22 @@ static int g_collectOnly;         /* 只读采集：不建图/不建蹲点/不�
 static int g_exportForce;         /* Ctrl+E 手动导出时绕过“已采过/太小”的过滤 */
 static int g_nmVert, g_nmTri;     /* 本次导出的 NavMeshGraph 顶点/三角形数 */
 static int g_nmShow = 1;          /* cfg: navmesh_show —— 画不画 A* 可走面线框 */
+static int g_visLists = 1;        /* cfg: vis_lists —— 读不读游戏静态组件表（崩溃兜底开关） */
 static int g_nmWireTri, g_nmWireVert;  /* 可走面当前三角形/顶点数（HUD 显示） */
 static P   g_nmObj[16];           /* 可走面自己的网格对象（和可视化的 5 层分开） */
 static int g_nmObjN;
 static int g_nmDirty = 1;         /* 换图/开关变化后要重建 */
+static int g_sceneAge;            /* 进图后过了多少帧（VIS_SCENE_WAIT 之前不碰游戏组件表） */
+static int g_sceneReadyOnce;      /* 本张图已经稳定过一次 */
+
+static P   g_trKlass;             /* Transform 的 il2cpp 类：comp_pos 用它挡掉「不是 Transform」的指针 */
+static int g_badTr;               /* comp_pos 拦下的坏指针个数（日志/HUD 可看） */
 static char g_nmFile[128];        /* 导航网格二进制文件名 */
 static unsigned long long nm_seenFp;  /* 已落盘的导航网格指纹 */
 static int nm_seen;
 static int g_cArea, g_cPos, g_cCrouch, g_cSpawn, g_cJump, g_cTag, g_cGuard;
-static int g_helpOn = 1;
+static int g_helpOn;              /* cfg: hud_keys —— 快捷键块默认不显示（Ctrl+H 临时开/关） */
+static int g_hudStates;           /* cfg: hud_states —— HUD 第一行（各开关状态）默认不显示 */
 
 static void hud_refresh(void);
 static void hud_reset(void);
@@ -876,6 +1223,19 @@ static int flush_mesh_to(const char* name, int slot, int items, P* list, int* co
   av = x_array_new(g_vec3Cls, (unsigned)g_bNV);
   ai = x_array_new(g_i32Cls, (unsigned)g_bNI);
   if (!av || !ai) { elog("vis: array alloc failed"); return 0; }
+  {
+    /* 这两条 memset 是往托管堆里写，长度必须和请求的完全一致。
+     * 万一 il2cpp 给的数组比要的小（元素类型不对），memcpy 就会越界，
+     * 把隔壁的托管对象写花 —— 后面任何一次 GC / 列表遍历都会崩。
+     * 12:39 那次 SpareAreaList 里出现野值（0xacf898f8）就是这个味道。 */
+    int vlen = *(int*)((char*)av + 0xC);
+    int ilen = *(int*)((char*)ai + 0xC);
+    if (vlen != g_bNV || ilen != g_bNI) {
+      elog("!!! vis: ARRAY LEN MISMATCH vec3 %d/%d i32 %d/%d - skip (would overflow)",
+           vlen, g_bNV, ilen, g_bNI);
+      return 0;
+    }
+  }
   memcpy((char*)av + 0x10, g_bV, (size_t)g_bNV * 12);
   memcpy((char*)ai + 0x10, g_bI, (size_t)g_bNI * 4);
   ((mesh_arr_t)RVA(R_MESH_VERTS))(mesh, av, 0);
@@ -885,7 +1245,7 @@ static int flush_mesh_to(const char* name, int slot, int items, P* list, int* co
   mat = mat_for(slot);
   if (mat) ((set_shmat_t)RVA(R_REND_SETSM))(mr, mat, 0);
   ((set_int1_t)RVA(R_REND_SHADOW))(mr, 0, 0);
-  if (*count < cap) list[(*count)++] = go;
+  if (*count < cap) { list[(*count)++] = go; root_put(go); }
   elog("vis: mesh '%s' slot=%d items=%d verts=%d tris=%d", name, slot, items, g_bNV, g_bNI / 3);
   return 1;
 }
@@ -921,6 +1281,7 @@ static int vis_canvas_init(void) {
   ((set_int1_t)RVA(R_CANVAS_MODE))(comp, 0, 0);          /* ScreenSpaceOverlay */
   ((set_int1_t)RVA(R_CANVAS_SORT))(comp, 31000, 0);
   g_lblCanvas = go;
+  root_put(go);
   g_lblTr = get_tr(go);
   return 1;
 }
@@ -986,6 +1347,7 @@ static void vis_label_build(int i) {
   if (!comp) return;
   ((set_txt_t)RVA(R_TEXT_SETTEXT))(comp, x_string_new(buf), 0);
   g_lblComp[i] = comp;
+  root_put(comp);
   g_lblHidden[i] = 1;
 }
 
@@ -1050,6 +1412,181 @@ static P static_obj(P cls, const char* field) {
 }
 static int list_n(P l) { return l ? *(int*)((char*)l + 0x0C) : 0; }
 static P list_items(P l) { return l ? *(P*)((char*)l + 0x08) : 0; }
+
+/* ---- 守卫区列表看门狗 -------------------------------------------------
+ * 2026-11-17 12:39 的闪退（沙漠要塞、进图 13 s、有人机）：
+ *   Bot.Update -> BotAction.NanoGuard.Update -> Bot_NanoGuardArea.GetPos
+ *     -> SpareAreaList.Remove(this) -> List.IndexOf
+ *     -> ObjectEqualityComparer.IndexOf -> 对 0xacf898f8（没映射）做虚调用 → 崩
+ * 即 SpareAreaList 的 _items 里混进了一个不是对象的野值。这局里只有游戏自己
+ * Add/Remove 这个列表；我们唯一会写它的地方是 purge_guard_areas()（这局没触发）。
+ * 所以每 2 tick 抄一遍槽位指纹：一变就记一行，出现野值立刻打 !!! + 最近日志，
+ * 用来定位「什么时候、在哪一步被写坏的」。
+ * ---------------------------------------------------------------------- */
+/* 类指针速查表。为什么需要：每校验一个槽位都要看它的类对象，而
+ * looks_like_class() 要**逐字节**读类名（Bot_NanoGuardArea 17 字节），每读一个字节
+ * 都走一遍 VirtualQuery —— 本机实测 391 ns/次，即一个槽位约 13 us。新寂静村 10 个
+ * 守区 x 各自 posList，一秒 4 遍就是几十万次 VirtualQuery。同一个列表里的槽位几乎
+ * 总是同一个类，所以把「已验证通过的类指针」记住，只在第一次遇到新类时扫名字。
+ * il2cpp 的 Il2CppClass 生命周期等于进程，记住不会失效。 */
+static P g_clsMemo[8];
+static void cls_memo_put(P k) {
+  static int rot;
+  g_clsMemo[rot++ & 7] = k;
+}
+static int obj_klass_ok(P o) {
+  P k = 0;
+  int i;
+  if (!o) return 1;                        /* null 合法 */
+  if (!safe_rd((const void*)o, &k, 4)) return 0;
+  for (i = 0; i < 8; i++) if (g_clsMemo[i] == k) return 1;
+  if (!looks_like_class(k)) return 0;
+  cls_memo_put(k);
+  return 1;
+}
+
+static unsigned g_areaSig;
+static int g_areaWatchN = -2;
+static int g_areaTicks;
+static int g_areaBad;          /* 已经报过同一种坏状态，别刷屏 */
+
+/* 用 il2cpp 自己的元数据核对 List<T> 的字段偏移，别靠猜。
+ * FieldInfo{name@0, type@4, parent@8, offset@0xc, token@0x10} */
+static int field_off(P cls, const char* name) {
+  P f;
+  if (!cls || !x_class_get_field_from_name) return -1;
+  f = x_class_get_field_from_name(cls, name);
+  if (!f) return -1;
+  return *(int*)((char*)f + 0xC);
+}
+
+static P field_type_class(P cls, const char* name) {
+  P f, ty;
+  if (!cls || !x_class_get_field_from_name || !x_class_from_il2cpp_type) return 0;
+  f = x_class_get_field_from_name(cls, name);
+  if (!f) return 0;
+  ty = *(P*)((char*)f + 4);              /* FieldInfo.type */
+  return ty ? x_class_from_il2cpp_type(ty) : 0;
+}
+
+/* 类名：走 il2cpp 自己的 type_get_name，不猜字段偏移 */
+static const char* type_name(P klass) {
+  static char buf[160];
+  char* s;
+  if (!klass || !x_class_get_type || !x_type_get_name) return "?";
+  s = x_type_get_name(x_class_get_type(klass));
+  if (!s) return "?";
+  strncpy(buf, s, sizeof buf - 1);
+  buf[sizeof buf - 1] = 0;
+  if (x_free) x_free(s);
+  return buf;
+}
+
+/* UCF 调试用：ucf_mod.json 里 "gc_probe": true → 每张图进图时强制一次 GC。
+ * 用来区分「我们的写操作写坏了列表」和「一次 GC 就把游戏自己的对象收走了」。 */
+static int g_gcProbe = -1;
+static void (*x_gc_collect)(void);
+
+void editor_gc_probe(void) {
+  if (g_gcProbe < 0) g_gcProbe = cfg_bool("gc_probe", 0) ? 1 : 0;
+  if (!g_gcProbe) return;
+  if (!x_gc_collect && g_ga) *(void**)&x_gc_collect = GetProcAddress(g_ga, "il2cpp_gc_collect");
+  if (x_gc_collect) { x_gc_collect(); elog("gc: forced collect (probe)"); }
+}
+
+static void list_layout_probe(void) {
+  P lc = field_type_class(g_areaCls, "SpareAreaList");
+  if (!lc) { elog("list layout: cannot resolve List<Bot_NanoGuardArea>"); return; }
+  elog("list layout: _items=+0x%x _size=+0x%x _version=+0x%x inst=%d",
+       field_off(lc, "_items"), field_off(lc, "_size"), field_off(lc, "_version"),
+       x_class_instance_size ? x_class_instance_size(lc) : -1);
+}
+
+/* "perf": true 时把一次体检的耗时累加，每 60 s 打一行 —— 回答「这东西吃不吃性能」，
+ * 不用猜。默认关，关着时只有 2 次 QueryPerformanceCounter 之外没有额外开销。 */
+static double g_pfSum, g_pfMax;
+static int g_pfCnt;
+
+static void area_watch(void) {
+  P l, items;
+  int n, cap, i, bad = -1;
+  unsigned sig = 2166136261u;
+  P badv = 0;
+  static int on = -1;
+  if (on < 0) on = cfg_bool("area_watch", 1) ? 1 : 0;
+  if (!on) return;                         /* 不想让插件碰这张表就设 area_watch:false */
+  if (!g_areaCls || !g_inited) return;
+  g_areaTicks++;
+  l = static_obj(g_areaCls, "SpareAreaList");
+  if (!l) {
+    if (g_areaWatchN != -1) { g_areaWatchN = -1; elog("areas: list=null"); }
+    return;
+  }
+  items = list_items(l);
+  n = list_n(l);
+  cap = items ? *(int*)((char*)items + 0xC) : -1;
+  if (!items || n < 0 || cap < 0 || n > cap) {
+    elog("!!! areas: BAD SIZE n=%d cap=%d list=%p items=%p", n, cap, l, items);
+    return;
+  }
+  for (i = 0; i < cap && i < 512; i++) {
+    P o = *(P*)((char*)items + 0x10 + i * 4);
+    sig = (sig ^ (unsigned)o) * 16777619u;
+    if (bad < 0 && !obj_klass_ok(o)) { bad = i; badv = o; }
+  }
+  if (bad >= 0) {
+    int k;
+    P kk = 0;
+    if (g_areaBad == 0) g_areaBad = 1; else return;
+    safe_rd((const void*)items, &kk, 4);
+    elog("!!! areas CORRUPT idx=%d val=%08x n=%d cap=%d list=%p items=%p age=%d",
+         bad, (unsigned)badv, n, cap, l, items, g_sceneAge);
+    elog("!!! array type = '%s' (klass=%p cls=%d)", type_name(kk), (void*)kk, looks_like_class(kk));
+    for (k = 0; k < n && k < 8; k++) {
+      P v = *(P*)((char*)items + 0x10 + k * 4);
+      P kv = 0;
+      int rd = safe_rd((const void*)v, &kv, 4);
+      elog("!!!   slot[%d] val=%08x klass=%08x readable=%d cls=%d type='%s'",
+           k, (unsigned)v, (unsigned)kv, rd, looks_like_class(kv),
+           looks_like_class(kv) ? type_name(kv) : "?");
+    }
+    for (k = 1; k <= 12 && k <= g_ringN; k++) {
+      int r = (g_ringN - k) % LOG_RING;
+      elog("!!! areas ring[-%d] %s", k, g_ring[r < 0 ? r + LOG_RING : r]);
+    }
+    return;
+  }
+  /* 每个守区自己的 posList（List<Bot_NanoGuardPos>）也一起体检：
+   * GetPos 就是先从 posList 取点、空了再从 SpareAreaList 摘自己。 */
+  for (i = 0; i < n && i < 64; i++) {
+    P a = *(P*)((char*)items + 0x10 + i * 4);
+    P pl, pit;
+    int pn, pcap, j;
+    if (!a) continue;
+    pl = *(P*)((char*)a + 0x10);          /* Bot_NanoGuardArea.posList */
+    if (!pl) continue;
+    pit = list_items(pl);
+    pn = list_n(pl);
+    pcap = pit ? *(int*)((char*)pit + 0xC) : -1;
+    if (!pit || pn < 0 || pcap < 0 || pn > pcap) {
+      elog("!!! posList BAD area[%d]=%p pl=%p n=%d cap=%d age=%d", i, a, pl, pn, pcap, g_sceneAge);
+      continue;
+    }
+    for (j = 0; j < pcap && j < 32; j++) {
+      P o = *(P*)((char*)pit + 0x10 + j * 4);
+      if (!obj_klass_ok(o)) {
+        elog("!!! posList CORRUPT area[%d]=%p idx=%d val=%08x n=%d cap=%d age=%d",
+             i, a, j, (unsigned)o, pn, pcap, g_sceneAge);
+        probe_arr("poslist-array", pit);
+        break;
+      }
+    }
+  }
+  if (n != g_areaWatchN || sig != g_areaSig) {
+    g_areaWatchN = n; g_areaSig = sig;
+    elog("areas: n=%d cap=%d sig=%08x age=%d", n, cap, sig, g_sceneAge);
+  }
+}
 /* A destroyed UnityEngine.Object keeps its managed wrapper but clears
  * m_CachedPtr (+0x8).  Calling GetComponent/GetPosition on it raises a
  * managed MissingReferenceException.  There is no managed catch here, so
@@ -1061,10 +1598,26 @@ static P comp_tr(P comp) {
   return ((get_tr_t)RVA(R_COMP_TR))(comp, 0);
 }
 static int comp_pos(P comp, V3* out) {
-  P tr = comp_tr(comp);
-  if (!tr) return 0;
+  P tr;
+  if (!comp || !mem_ok(comp, 0x10)) return 0;
+  tr = comp_tr(comp);
+  if (!tr || !mem_ok(tr, 0x10) || !uobj_live(tr)) return 0;
+  /* 组件表里可能混进「根本不是 Component」的指针：拿到的 tr 不是 Transform 类，
+   * 再调 GetPosition 就崩在 UnityPlayer 里（沙漠要塞那次）。这里直接拦掉。 */
+  if (g_trKlass && *(P*)tr != g_trKlass) { g_badTr++; return 0; }
   ((get_pos_t)RVA(R_GET_POS_INJ))(tr, out, 0);
   return 1;
+}
+
+/* 场景切换时游戏自己的静态组件表（SpareAreaList / SpareList_BL/GR / MapManager）
+ * 里还挂着上一张图的组件；元素被销毁甚至被别的分配覆盖后，读出来的根本不是对象。
+ * 2026-11-17 10:58 那次就是这么崩的：SpareAreaList[0] 读出来是 0x43ef6323
+ * （一个 float 478.77），当成 Component 传给 Component.get_transform，
+ * 崩在 UnityPlayer.dll+0x755e86。所以列表里的元素逐个校验 klass。 */
+static int obj_is(P o, P cls) {
+  if (!o || !cls) return 0;
+  if (!mem_ok(o, 0x10)) return 0;
+  return *(P*)o == cls;
 }
 
 static int vf_add(V3 p, int kind, int aux, const char* name) {
@@ -1163,11 +1716,13 @@ static void read_nano(void) {
   if (!l) { miss("SpareAreaList"); return; }
   n = list_n(l);
   items = list_items(l);
+  if (!items) { miss("SpareAreaList.items"); return; }
   if (n > 400) n = 400;
+  if (n > 0 && !mem_ok((char*)items + 0x10, (size_t)n * 4)) { miss("SpareAreaList.bad"); return; }
   for (i = 0; i < n; i++) {
     P a = *(P*)((char*)items + 0x10 + i * 4);
     V3 p;
-    if (!a) continue;
+    if (!obj_is(a, g_areaCls)) continue;
     if (!comp_pos(a, &p)) continue;
     apos[an] = p;
     aptr[an] = a;
@@ -1181,13 +1736,15 @@ static void read_nano(void) {
     g_cArea++;
     {
       P pl = *(P*)((char*)a + 0x10);
-      int pn = pl ? list_n(pl) : 0;
-      P pit = pl ? list_items(pl) : 0;
+      int pn = (pl && mem_ok(pl, 0x10)) ? list_n(pl) : 0;
+      P pit = (pl && mem_ok(pl, 0x10)) ? list_items(pl) : 0;
       if (!pit) pn = 0;
+      if (pn > 20) pn = 20;
+      if (pn > 0 && !mem_ok((char*)pit + 0x10, (size_t)pn * 4)) { pn = 0; }
       for (j = 0; j < pn && j < 20; j++) {
         P gp = *(P*)((char*)pit + 0x10 + j * 4);
         V3 q;
-        if (!gp) continue;
+        if (!obj_is(gp, g_posCls)) continue;
         if (!comp_pos(gp, &q)) continue;
         vf_add(q, K_NPOS, *(int*)((char*)gp + 0x1C), "幽灵守点");
         g_cPos++;
@@ -1254,10 +1811,11 @@ static void read_crouch(void) {
     if (!l) { miss(k ? "SpareList_GR" : "SpareList_BL"); continue; }
     if (!items) continue;
     if (n > 600) n = 600;
+    if (n > 0 && !mem_ok((char*)items + 0x10, (size_t)n * 4)) continue;
     for (i = 0; i < n; i++) {
       P c = *(P*)((char*)items + 0x10 + i * 4);
       V3 p;
-      if (!c) continue;
+      if (!obj_is(c, g_crouchCls)) continue;
       if (!comp_pos(c, &p)) continue;
       vf_add(p, K_CROUCH, k, nm[k]);
       g_cCrouch++;
@@ -1301,9 +1859,11 @@ static void read_spawns(void) {
   for (k = 0; k < 6; k++) {
     P arr = *(P*)((char*)mm + off[k]);
     int n, i;
-    if (!arr) { miss(nm[k]); continue; }
+    if (!arr || !mem_ok(arr, 0x10)) { miss(nm[k]); continue; }
     n = *(int*)((char*)arr + 0x0C);
+    if (n < 0) n = 0;
     if (n > 200) n = 200;
+    if (n > 0 && !mem_ok((char*)arr + 0x10, (size_t)n * 16)) { miss(nm[k]); continue; }
     for (i = 0; i < n; i++) {
       V3 p = *(V3*)((char*)arr + 0x10 + i * 16);
       vf_add(p, K_SPAWN, k, nm[k]);
@@ -1382,6 +1942,7 @@ static void vis_draw(void) {
       for (i = 0; i < g_vnN; i++) {
         V3 h;
         int grp = !g_vn[i].walk ? 2 : (g_vn[i].tag ? 1 : 0);
+        if (!g_vn[i].walk && g_nedBlank && g_packName[0]) continue;  /* 空白底图：原生点不画，屏幕才是真空白 */
         if (grp != g) continue;
         h.x = 0.14f; h.y = 0.14f; h.z = 0.14f;
         bs_solid(g_vn[i].p, h);
@@ -1480,18 +2041,22 @@ static void vis_rebuild(void) {
   g_cArea = g_cPos = g_cCrouch = g_cSpawn = g_cJump = g_cTag = g_cGuard = 0;
   g_miss[0] = 0;
   read_nav();
-  read_nano();
-  read_crouch();
-  read_guardareas();
-  read_typed(g_guardType, g_guardCls, K_GUARD, "守卫点", 1);
-  read_spawns();
+  if (g_visLists) {          /* 关掉它 = 完全不碰游戏自己的组件表（崩溃兜底） */
+    read_nano();
+    read_crouch();
+    read_guardareas();
+    read_typed(g_guardType, g_guardCls, K_GUARD, "守卫点", 1);
+    read_spawns();
+  } else {
+    miss("vis_lists=off");
+  }
   read_jump();
   read_tags();
   vis_draw();
   vis_show(1);
-  elog("vis: nodes=%d edges=%d labels=%d (area=%d pos=%d crouch=%d guard=%d spawn=%d jump=%d tag=%d) badnode=%d badconn=%d missing=[%s]",
+  elog("vis: nodes=%d edges=%d labels=%d (area=%d pos=%d crouch=%d guard=%d spawn=%d jump=%d tag=%d) badnode=%d badconn=%d badtr=%d missing=[%s]",
        g_vnN, g_veN, g_vfN, g_cArea, g_cPos, g_cCrouch, g_cGuard, g_cSpawn, g_cJump, g_cTag,
-       g_navBadNode, g_navBadConn, g_miss);
+       g_navBadNode, g_navBadConn, g_badTr, g_miss);
   {
     int i, s0 = 0, s1 = 0, s2 = 0;
     for (i = 0; i < g_vfN; i++) {
@@ -1514,6 +2079,8 @@ static void vis_scene_reset(void) {
   g_vnN = g_veN = g_vfN = 0;
   g_nN = g_eN = g_jN = g_tpN = 0;
   g_miss[0] = 0;
+  g_sceneAge = 0;          /* 新图：组件表要等稳定才读 */
+  g_badTr = 0;
   g_visDirty = g_visOn;
   /* 可走面的 Mesh 对象随旧场景一起被销毁：指针作废，下一帧重建 */
   g_nmObjN = 0;
@@ -1619,6 +2186,13 @@ static void collect_read(void) {
   g_vnN = g_veN = g_vfN = 0;
   g_nN = g_eN = g_jN = 0;
   read_nav();
+  /* 刚切图的 VIS_SCENE_WAIT 帧内：路点(来自 A* 图)和可走面可信，游戏自己的组件表
+   * 还挂着上一张图的东西，整段跳过。这一步是 10:58 那次闪退的正面补丁 ——
+   * 进图后 auto_export 两秒就触发，正好撞在没稳定的时候。 */
+  if (g_sceneAge < VIS_SCENE_WAIT) {
+    miss("scene-not-ready");
+    return;
+  }
   read_nano();
   read_crouch();
   read_guardareas();
@@ -1861,6 +2435,12 @@ static void vis_export(void) {
    *  - 以前这里看 g_visOn：开着可视化时整段跳过，导出的就是上一个场景的残留（实测写成 0 点的 n0 假文件，
    *    还顺手写了个 _seen_n0 标记，把后面真正有 3063 个点的那张图当成"重复"跳过了 —— 数据就是这么丢的）。
    *  - 也不再用 vis_rebuild()：它会建 Mesh + UGUI 文本，进图自动导出时正好赶上场景加载，是崩溃高发点。 */
+  if (g_sceneAge < VIS_SCENE_WAIT && !g_sceneReadyOnce) {
+    elog("vis: export deferred (scene age %d/%d) - component tables are still the old level's",
+         g_sceneAge, VIS_SCENE_WAIT);
+    sprintf(g_expStat, "场景还没稳定，稍后再导（%d/%d）", g_sceneAge, VIS_SCENE_WAIT);
+    return;
+  }
   g_exporting = 1;
   collect_read();
   g_exporting = 0;
@@ -2113,15 +2693,26 @@ static int hud_init(void) {
   ((set_col_t)RVA(R_GRAPHIC_COL))(comp, COL_WHITE, 0);
 
   g_hud = comp;
+  root_put(comp);
   g_hudGo = txtGo;
   g_keys = mk_text_ui(canvasTr, "UCF_HUD_Keys", 0.0f, 1.0f, 0.0f, 1.0f, 14.0f, -130.0f, 1180.0f, 96.0f, 14);
+  root_put(g_keys);
   if (g_keys) elog("hud: keys go=%p font=%p", g_keysGo, ((get_font_t)RVA(R_TEXT_GETFONT))(g_keys, 0));
   g_keysGo = g_keys ? ((get_go_t)RVA(R_GETGO))(g_keys, 0) : 0;
   /* left-edge legend: three horizontal rows, stacked vertically */
   g_cat = mk_text_ui(canvasTr, "UCF_HUD_Cats", 0.0f, 0.5f, 0.0f, 0.5f, 14.0f, -140.0f, 520.0f, 132.0f, 26);
+  root_put(g_cat);
   if (g_cat) {
     ((set_int1_t)RVA(R_TEXT_ALIGN))(g_cat, 3, 0);   /* MiddleLeft */
     g_catGo = ((get_go_t)RVA(R_GETGO))(g_cat, 0);
+  }
+  /* 记下 Transform 的类对象：comp_pos 用它区分「真 Transform」和野指针 */
+  if (!g_trKlass && g_hud) {
+    P t = comp_tr(g_hud);
+    if (t && mem_ok(t, 0x10) && uobj_live(t)) {
+      g_trKlass = *(P*)t;
+      elog("hud: transform klass=%p", g_trKlass);
+    }
   }
   elog("hud: ready font=%p (%s) keys=%p cats=%p", g_guiFont, g_cjk ? "game/CJK" : "builtin/ASCII", g_keys, g_cat);
   return 1;
@@ -2159,7 +2750,7 @@ static void cat_refresh(void) {
 
 static void hud_refresh(void) {
   char s[2400];
-  char miss[200];
+  char miss[320];   /* g_miss 最多 255 字节（UTF-8 中文 3 字节/字），2400 缓冲区也别写爆 */
   int c1 = 0, c2 = 0, c3 = 0, i;
   /* 大厅/房间没有 PointGraph：绝不在这里建 HUD。
    * 2026-11-16 之前 editor_tick 不分场景，HUD 在大厅就建出来了；中文又缺字形，
@@ -2171,10 +2762,10 @@ static void hud_refresh(void) {
     elog("hud: stale objects after scene change, rebuilding");
     hud_reset();
   }
-  /* cfg: hud = off —— 不建对象、不定时刷新，只在屏幕上留一句怎么叫回来 */
+  /* cfg: hud = off —— 不建对象、不定时刷新；控制台「状态面板」页是入口，屏上不留提示 */
   if (!g_hudOn) {
     if (g_hud)  ((set_txt_t)RVA(R_TEXT_SETTEXT))(g_hud, x_string_new(""), 0);
-    if (g_keys) ((set_txt_t)RVA(R_TEXT_SETTEXT))(g_keys, x_string_new(g_cjk ? "Ctrl+H 显示状态面板" : "Ctrl+H show panel"), 0);
+    if (g_keys) ((set_txt_t)RVA(R_TEXT_SETTEXT))(g_keys, x_string_new(""), 0);
     if (g_cat)  ((set_txt_t)RVA(R_TEXT_SETTEXT))(g_cat, x_string_new(""), 0);
     return;
   }
@@ -2184,38 +2775,55 @@ static void hud_refresh(void) {
     else if (g_mk[i].type == 2) c2++;
     else if (g_mk[i].type == 3) c3++;
   }
-  if (g_miss[0]) sprintf(miss, "   缺:%s", g_miss);
+  if (g_miss[0]) snprintf(miss, sizeof miss, "   缺:%s", g_miss);
   else miss[0] = 0;
   nm_walk(0);   /* 只统计：可视化关着，HUD 也能报可走面有多少 */
   if (g_cjk) {
-    sprintf(s,
-      "可视化 %s   A路点:%s B人类:%s C幽灵:%s D出生/箱:%s E模式:%s   可走面:%s   标签:%s\n"
+    int len = 0;
+    /* 第一行（各开关状态）默认不显示：开关已经搬到控制台「状态面板」页，
+     * 游戏里不再展示；只有 cfg: hud_states 打开时才画。 */
+    if (g_hudStates) {
+      len = sprintf(s,
+        "可视化 %s   A路点:%s B人类:%s C幽灵:%s D出生/箱:%s E模式:%s   可走面:%s   标签:%s\n",
+        g_visOn ? "开" : "关",
+        (g_lay & LAY_A) ? "开" : "关", (g_lay & LAY_B) ? "开" : "关",
+        (g_lay & LAY_C) ? "开" : "关", (g_lay & LAY_D) ? "开" : "关",
+        (g_lay & LAY_E) ? "开" : "关", g_nmShow ? "开" : "关",
+        g_lblMode == 0 ? "关" : (g_lblMode == 1 ? "近距" : "全部"));
+    }
+    sprintf(s + len,
       "节点 %d  连接 %d  守区 %d  守点 %d  蹲守 %d  守卫 %d  跳链 %d  标签区 %d%s\n"
       "可走面 %s  %d 三角 / %d 顶点  (A* NavMeshGraph，Ctrl+Shift+6 开关)\n"
       "编辑 %s   已放标记 %d (蹲%d/守%d/区%d)   屏上标签 %d/%d%s",
-      g_visOn ? "开" : "关",
-      (g_lay & LAY_A) ? "开" : "关", (g_lay & LAY_B) ? "开" : "关",
-      (g_lay & LAY_C) ? "开" : "关", (g_lay & LAY_D) ? "开" : "关",
-      (g_lay & LAY_E) ? "开" : "关", g_nmShow ? "开" : "关",
-      g_lblMode == 0 ? "关" : (g_lblMode == 1 ? "近距" : "全部"),
       g_vnN, g_veN, g_cArea, g_cPos, g_cCrouch, g_cGuard, g_cJump, g_cTag, miss,
       g_nmWireTri ? "已载入" : "无（这张图没有 NavMeshGraph）", g_nmWireTri, g_nmWireVert,
       g_on ? "开" : "关", g_n, c1, c2, c3, g_lblShown, g_vfN,
       g_visOn && g_visDirty ? "  [待重建]" : "");
   } else {
-    sprintf(s,
-      "VIS %s | A %s B %s C %s D %s E %s | walk-srf %s | labels %s\n"
+    int len = 0;
+    if (g_hudStates) {
+      len = sprintf(s,
+        "VIS %s | A %s B %s C %s D %s E %s | walk-srf %s | labels %s\n",
+        g_visOn ? "ON" : "OFF",
+        (g_lay & LAY_A) ? "on" : "off", (g_lay & LAY_B) ? "on" : "off",
+        (g_lay & LAY_C) ? "on" : "off", (g_lay & LAY_D) ? "on" : "off",
+        (g_lay & LAY_E) ? "on" : "off", g_nmShow ? "on" : "off",
+        g_lblMode == 0 ? "off" : (g_lblMode == 1 ? "near" : "all"));
+    }
+    sprintf(s + len,
       "nodes %d edges %d nano %d/%d crouch %d guard %d jump %d tag %d%s\n"
       "walkable %s %d tris / %d verts (NavMeshGraph, Ctrl+Shift+6)\n"
       "edit %s markers %d (c %d/p %d/a %d) on-screen labels %d/%d",
-      g_visOn ? "ON" : "OFF",
-      (g_lay & LAY_A) ? "on" : "off", (g_lay & LAY_B) ? "on" : "off",
-      (g_lay & LAY_C) ? "on" : "off", (g_lay & LAY_D) ? "on" : "off",
-      (g_lay & LAY_E) ? "on" : "off", g_nmShow ? "on" : "off",
-      g_lblMode == 0 ? "off" : (g_lblMode == 1 ? "near" : "all"),
       g_vnN, g_veN, g_cArea, g_cPos, g_cCrouch, g_cGuard, g_cJump, g_cTag, miss,
       g_nmWireTri ? "yes" : "none", g_nmWireTri, g_nmWireVert,
       g_on ? "ON" : "OFF", g_n, c1, c2, c3, g_lblShown, g_vfN);
+  }
+  /* 数据来源（正式版 / 测试包 + 本次只对哪张图生效）：出问题先看这一行 */
+  {
+    int len = (int)strlen(s);
+    if (len < (int)sizeof(s) - 260) {
+      len += snprintf(s + len, sizeof(s) - len, "\n%s", g_packStat);
+    }
   }
   /* 最近日志 + 导出结果：进了图抬头就能看见，不用开文件、不用看控制台 */
   if (g_logOn) {
@@ -2245,7 +2853,7 @@ static void hud_refresh(void) {
             "Waypoints: Ctrl+Shift+A select A   Ctrl+Shift+N add   Ctrl+Shift+J link/unlink   Ctrl+Shift+D disable   Ctrl+Shift+Z undo   Ctrl+Shift+R reapply";
       }
     } else {
-      k = g_cjk ? "Ctrl+H 显示快捷键" : "Ctrl+H show help";
+      k = "";   /* 默认不显示快捷键块：按 Ctrl+H 才叫出来 */
     }
     ((set_txt_t)RVA(R_TEXT_SETTEXT))(g_keys, x_string_new(k), 0);
   }
@@ -2276,7 +2884,8 @@ static int make_crouch(V3 p) {
   ((set_pos_t)RVA(R_SET_POS))(get_tr(go), p, 0);
   ((set_active_t)RVA(R_SETACTIVE))(go, 1, 0);
   if (!add_mk(1, p, -1, -1, g_team, go, comp, spawn_vis(p, 0.24f, 1))) return 0;
-  elog("crouch #%d at %.2f %.2f %.2f team=%d", g_n, p.x, p.y, p.z, g_team);
+  elog("crouch #%d at %.2f %.2f %.2f team=%d type=%s", g_n, p.x, p.y, p.z, g_team,
+       comp ? type_name(*(P*)comp) : "?");
   hud_refresh();
   return 1;
 }
@@ -2558,12 +3167,17 @@ void editor_on_scene(void* astar) {
   elog("scene: hud reset");
   vis_scene_reset();
   elog("scene: vis reset");
+  roots_clear();          /* 上一张图的对象已经销毁，句柄还回去 */
+  g_rootsFull = 0;
+  g_sceneAge = 0;
+  g_sceneReadyOnce = 0;
   g_aeNodes = -1;
   g_nedGraph = 0;
   g_nedApplied = 0;
   g_nedWaitN = -1;
   g_nedHasA = 0;
   g_nedN = 0;
+  g_nedBlank = 0;
   g_nedPath[0] = 0;
   nm_seen = 0;
   g_aeHold = 8;
@@ -2589,6 +3203,8 @@ void editor_set_auto_export(int on) { g_autoExport = on ? 1 : 0; }
 static void auto_export_tick(void) {
   P pg = navfix_point_graph();
   int n = pg ? *(int*)((char*)pg + 0xEC) : -1;
+  /* 场景没稳定就导出 = 用上一张图残留的组件表，会崩（见 collect_read 注释） */
+  if (g_sceneAge < VIS_SCENE_WAIT) { g_aeNodes = -1; g_aeHold = 8; return; }
   if (n > 0 && n == g_aeNodes) {
     if (g_aeHold > 0 && --g_aeHold == 0) {
       elog("auto-export: graph stable at %d nodes, writing JSON", n);
@@ -2741,9 +3357,40 @@ static int nav_find_any(P g, const V3* p, float maxd) {
 /* 清单里的改动是否还在图上（用来判断图是不是被游戏重扫掉了） */
 static int nav_needs_apply(P g) {
   int i, ia, ib, n;
-  if (!g || !g_nedN) return 0;
+  if (!g) return 0;
   n = nav_count(g);
   if (n != g_nedExpect) return 1;   /* 图被重扫/重建过：节点数不再是我们套完的样子 */
+  if (g_nedBlank && g_packName[0]) {
+    /* 空白底图：可走的点必须全是清单里的 node add；原生点只要有一个又活了就重套。 */
+    int j;
+    for (i = 0; i < n; i++) {
+      P nd = nav_node(g, i);
+      V3 p;
+      int hitAdd = 0;
+      if (!nd || !nav_walk(nd)) continue;
+      nav_pos(nd, &p);
+      for (j = 0; j < g_nedN; j++) {
+        if (g_ned[j].kind != NADD) continue;
+        if (nav_d2(&g_ned[j].a, &p) <= 0.1225f) { hitAdd = 1; break; }
+      }
+      if (!hitAdd) return 1;
+    }
+    for (j = 0; j < g_nedN; j++) {
+      NAVED* e = &g_ned[j];
+      if (e->kind == NADD && nav_find(g, &e->a, 0.35f) < 0) return 1;
+      if (e->kind != EADD && e->kind != EDEL) continue;
+      ia = nav_find(g, &e->a, 0.35f);
+      ib = nav_find(g, &e->b, 0.35f);
+      if (ia < 0 || ib < 0) return 1;
+      {
+        int has = nav_conn_has(nav_node(g, ia), nav_node(g, ib));
+        if (e->kind == EADD && !has) return 1;
+        if (e->kind == EDEL && has) return 1;
+      }
+    }
+    return 0;
+  }
+  if (!g_nedN) return 0;
   for (i = 0; i < g_nedN; i++) {
     NAVED* e = &g_ned[i];
     if (e->kind == NADD) {
@@ -2899,11 +3546,13 @@ static void nav_fp(char* out, int cap) {
 static void nav_save(void) {
   FILE* f;
   int i;
+  int blank = g_nedBlank && g_packName[0];
   if (!g_nedPath[0]) return;
-  if (!g_nedN) { DeleteFileA(g_nedPath); return; }
+  if (!g_nedN && !blank) { DeleteFileA(g_nedPath); return; }
   f = fopen(g_nedPath, "w");
   if (!f) { elog("naved: save failed %s", g_nedPath); return; }
   fprintf(f, "# ucf-navedit v1 fp=%s\n", g_nedFp);
+  if (blank) fprintf(f, "blank\n");
   for (i = 0; i < g_nedN; i++) {
     NAVED* e = &g_ned[i];
     if (e->kind == NADD)
@@ -2916,12 +3565,13 @@ static void nav_save(void) {
               e->a.x, e->a.y, e->a.z, e->b.x, e->b.y, e->b.z);
   }
   fclose(f);
-  elog("naved: saved %d edits -> %s", g_nedN, g_nedPath);
+  elog("naved: saved %d edits -> %s%s", g_nedN, g_nedPath, blank ? " (blank base)" : "");
 }
 static void nav_edit_load(const char* path) {
   FILE* f = fopen(path, "r");
   char line[256];
   g_nedN = 0;
+  g_nedBlank = 0;
   if (!f) return;
   while (fgets(line, sizeof(line), f)) {
     NAVED e;
@@ -2929,6 +3579,12 @@ static void nav_edit_load(const char* path) {
     float x, y, z, x2, y2, z2;
     char k1[16];
     if (line[0] == '#' || line[0] == '\n') continue;
+    /* blank：测试包专用。先把原生图整张禁掉，文件里的 node add / edge add 才是唯一路线。 */
+    if (!strncmp(line, "blank", 5) &&
+        (line[5] == 0 || line[5] == '\r' || line[5] == '\n' || line[5] == ' ')) {
+      g_nedBlank = 1;
+      continue;
+    }
     memset(&e, 0, sizeof(e));
     if (sscanf(line, "node %15s %f %f %f", k1, &x, &y, &z) == 4) {
       e.kind = (k1[0] == 'a') ? NADD : NDEL;
@@ -2943,7 +3599,7 @@ static void nav_edit_load(const char* path) {
     if (g_nedN < NAV_ED_MAX) g_ned[g_nedN++] = e;
   }
   fclose(f);
-  elog("naved: loaded %d edits from %s", g_nedN, path);
+  elog("naved: loaded %d edits from %s%s", g_nedN, path, g_nedBlank ? " (blank base)" : "");
 }
 /* 只处理 edge 条目；返回真正改变的条数 */
 static int nav_apply_edges(P g) {
@@ -2982,6 +3638,119 @@ static int nav_apply_edges(P g) {
 #define NAV_MAXN 20000
 static unsigned char g_navDead[NAV_MAXN];   /* 本次套用里被标死的槽位 */
 static int g_navDeadN;
+
+/* ---- 原生底图快照 / 还原 ------------------------------------------------
+ * 控制台在游戏运行中切包时，先把图还原成进图时的样子，再套新包。
+ * 连接只记 (nodeIndex,cost,shape)，不记 PointNode 指针：场景重建后点对象会换新，
+ * 按 index 还原才不会把旧内存写进新图。 */
+static void nav_base_free(void) {
+  int i;
+  if (g_navBase) {
+    for (i = 0; i < g_navBaseN; i++) free(g_navBase[i].conn);
+    free(g_navBase);
+  }
+  g_navBase = 0;
+  g_navBaseN = 0;
+  g_navBaseG = 0;
+  g_navBaseFp[0] = 0;
+}
+
+/* 第一次改动之前调用；同一张图只拍一次。 */
+static void nav_base_take(P g) {
+  char fp[48];
+  int i, n;
+  if (!g) return;
+  n = nav_count(g);
+  if (n <= 0 || n > NAV_MAXN) return;
+  nav_fp(fp, sizeof fp);
+  if (g_navBase && g_navBaseG == g && g_navBaseN == n && !strcmp(g_navBaseFp, fp)) return;
+  nav_base_free();
+  g_navBase = (NAVBASENODE*)calloc((size_t)n, sizeof(NAVBASENODE));
+  if (!g_navBase) { elog("naved: base snapshot alloc failed (%d nodes)", n); return; }
+  for (i = 0; i < n; i++) {
+    P nd = nav_node(g, i), c = 0;
+    NAVBASENODE* s = &g_navBase[i];
+    int cn, j;
+    if (!nd) { s->cn = -1; continue; }
+    s->walk = (unsigned char)(nav_walk(nd) ? 1 : 0);
+    nav_pos(nd, &s->pos);
+    cn = nav_conn_get(nd, &c);
+    if (cn < 0) { s->cn = -1; continue; }
+    s->cn = cn;
+    if (!cn) continue;
+    s->conn = (unsigned char*)malloc((size_t)cn * 12);
+    if (!s->conn) { s->cn = 0; continue; }   /* 没内存就按空连接还原，宁可少边不越界 */
+    for (j = 0; j < cn; j++) {
+      P o = *(P*)((char*)c + 0x10 + j * 12);
+      int idx = -1;
+      unsigned cost = *(unsigned*)((char*)c + 0x14 + j * 12);
+      unsigned char shape = *(unsigned char*)((char*)c + 0x18 + j * 12);
+      if (o && mem_ok(o, 0x28)) idx = *(int*)((char*)o + 0x08);
+      memcpy(s->conn + j * 12, &idx, 4);
+      memcpy(s->conn + j * 12 + 4, &cost, 4);
+      s->conn[j * 12 + 8] = shape;
+    }
+  }
+  g_navBaseN = n;
+  g_navBaseG = g;
+  strcpy(g_navBaseFp, fp);
+  elog("naved: base snapshot taken (%d nodes)", n);
+}
+
+/* 还原成快照（原生底图）。返回 1 = 已还原。 */
+static int nav_base_restore(P g) {
+  int i, n;
+  if (!g) return 0;
+  n = nav_count(g);
+  if (!g_navBase || g_navBaseG != g || g_navBaseN != n) return 0;
+  if (!g_connCls || !x_array_new) {
+    elog("naved: restore skipped (connection class unavailable)");
+    return 0;
+  }
+  for (i = 0; i < n; i++) {
+    P nd = nav_node(g, i);
+    NAVBASENODE* s = &g_navBase[i];
+    if (!nd) continue;
+    nav_set_walk(nd, s->walk ? 1 : 0);
+    nav_put_pos(nd, &s->pos);
+    if (s->cn < 0) { *(P*)((char*)nd + 0x20) = 0; continue; }
+    if (s->cn == 0) {
+      P nc0 = x_array_new(g_connCls, 0);
+      if (nc0) *(P*)((char*)nd + 0x20) = nc0;
+      continue;
+    }
+    {
+      int j, v = 0, h = 0;
+      P nc;
+      for (j = 0; j < s->cn; j++) {
+        int idx;
+        memcpy(&idx, s->conn + j * 12, 4);
+        if (idx >= 0 && idx < n && nav_node(g, idx)) v++;
+      }
+      nc = x_array_new(g_connCls, (unsigned)v);
+      if (!nc) continue;
+      if (x_gchandle_new) h = (int)x_gchandle_new(nc, 0);
+      v = 0;
+      for (j = 0; j < s->cn; j++) {
+        int idx;
+        P o;
+        memcpy(&idx, s->conn + j * 12, 4);
+        o = (idx >= 0 && idx < n) ? nav_node(g, idx) : 0;
+        if (!o) continue;
+        *(P*)((char*)nc + 0x10 + v * 12) = o;
+        memcpy((char*)nc + 0x14 + v * 12, s->conn + j * 12 + 4, 4);
+        *(unsigned char*)((char*)nc + 0x18 + v * 12) = s->conn[j * 12 + 8];
+        v++;
+      }
+      *(P*)((char*)nd + 0x20) = nc;
+      if (h && x_gchandle_free) x_gchandle_free((P)h);
+    }
+  }
+  g_navDeadN = 0;
+  nav_refresh(g);
+  elog("naved: base restored (%d nodes)", n);
+  return 1;
+}
 
 static int nav_is_dead(P nd) {
   int idx;
@@ -3038,12 +3807,20 @@ static int nav_revive_slot(P g, const V3* p) {
 }
 static int nav_apply_core(P g) {
   int i, n, kill = 0, revived = 0, skipped = 0, ok = 0;
+  int blank = g_nedBlank && g_packName[0];
   if (!g) return 0;
   n = nav_count(g);
   if (n <= 0) { elog("naved: graph is empty (0 nodes), nothing to edit"); return 0; }
   if (n > NAV_MAXN) { elog("naved: graph too big (%d > %d), skipped", n, NAV_MAXN); return 0; }
   memset(g_navDead, 0, (size_t)n);
   g_navDeadN = n;
+  if (blank) {
+    /* 空白底图：原生点全部当作已删，下一步的 node add 再从这些槽位里借点。 */
+    for (i = 0; i < n; i++) g_navDead[i] = 1;
+    kill = n;
+    ok = n;
+    elog("naved: blank base: disabled %d native nodes", n);
+  }
   /* 1) 删点：只标不可走 */
   for (i = 0; i < g_nedN; i++) {
     NAVED* e = &g_ned[i];
@@ -3053,10 +3830,11 @@ static int nav_apply_core(P g) {
     if (k >= 0 && k < n && !g_navDead[k]) { g_navDead[k] = 1; kill++; ok++; }
   }
   if (kill) {
-    /* 2) 活点：摘掉指向死点的边（每点最多重分配一次连接表） */
+    /* 2) 活点：摘掉指向死点的边（每点最多重分配一次连接表）。
+     *    blank 底图连死点自己的边也摘掉，确保没有一条原生路线可走。 */
     for (i = 0; i < n; i++) {
       P nd;
-      if (g_navDead[i]) continue;
+      if (!blank && g_navDead[i]) continue;
       nd = nav_node(g, i);
       if (nd) nav_conn_filter_dead(nd);
     }
@@ -3080,8 +3858,8 @@ static int nav_apply_core(P g) {
   if (!kill && !revived) return nav_apply_edges(g);       /* 只是连边/断边 */
   nav_refresh(g);
   ok += nav_apply_edges(g);
-  elog("naved: applied in place: %d disabled, %d revived, %d adds skipped (graph stays %d nodes)",
-       kill, revived, skipped, n);
+  elog("naved: applied in place: %d disabled, %d revived, %d adds skipped (graph stays %d nodes)%s",
+       kill, revived, skipped, n, blank ? " [blank base]" : "");
   return ok;
 }
 /* 把清单套到活图上；返回实际生效条数 */
@@ -3118,6 +3896,22 @@ static void nav_undo(void) {
   nav_refresh(g);
   nav_save();
   elog("naved: undo -> %d edits left", g_nedN);
+}
+/* 删掉自己加的点时，把清单里对应的 node add / 相关边一起摘掉。
+ * 否则重进图会先 node del 再 node add，点又活过来（空白底图尤其明显）。 */
+static int nav_drop_add(const V3* p) {
+  int i, j = 0, hit = 0;
+  for (i = 0; i < g_nedN; i++) {
+    NAVED* e = &g_ned[i];
+    int isAdd = (e->kind == NADD && nav_d2(&e->a, p) <= 0.0025f);
+    int isEdge = (e->kind == EADD || e->kind == EDEL) &&
+                 (nav_d2(&e->a, p) <= 0.0025f || nav_d2(&e->b, p) <= 0.0025f);
+    if (isAdd) { hit = 1; continue; }
+    if (isEdge) continue;
+    g_ned[j++] = *e;
+  }
+  g_nedN = j;
+  return hit;
 }
 /* 记录一条编辑 + 自动保存 */
 static void nav_push(int kind, const V3* a, const V3* b) {
@@ -3178,7 +3972,8 @@ static void nav_del_here(void) {
   if (i < 0) { elog("naved: no node near crosshair"); return; }
   nav_pos(nav_node(g, i), &q);
   nav_kill_node(g, nav_node(g, i));
-  nav_push(NDEL, &q, 0);
+  if (!nav_drop_add(&q)) nav_push(NDEL, &q, 0);
+  else nav_save();
   nav_refresh(g);
   elog("naved: node disabled idx=%d at %.2f %.2f %.2f", i, q.x, q.y, q.z);
 }
@@ -3210,16 +4005,182 @@ static void nav_reapply(void) {
   P g = navfix_point_graph();
   int ops;
   if (!g) { elog("naved: no point graph"); return; }
-  if (!g_nedN) { elog("naved: no edits for this map"); return; }
+  if (!g_nedPath[0] && !g_nedN && !(g_nedBlank && g_packName[0])) {
+    elog("naved: no edits for this map");
+    return;
+  }
+  /* 从原生底图重来，再读盘：否则已经套过的 node add 会被当成“已存在”跳过，
+   * 文件里删掉的点也还留在图里（控制台「重新应用」和 Ctrl+Shift+R 都走这里）。 */
+  if (!nav_base_restore(g)) { elog("naved: reload aborted (no base snapshot)"); return; }
+  if (g_nedPath[0]) nav_edit_load(g_nedPath);
+  if (g_nedBlank && !g_packName[0]) g_nedBlank = 0;
   ops = nav_apply_all(g);           /* 内部已按需 refresh */
-  elog("naved: re-applied %d/%d edits", ops, g_nedN);
+  elog("naved: re-applied %d/%d edits (reloaded from disk)", ops, g_nedN);
 }
+/* ---- 测试包：把环境变量翻译成「读哪个目录」+ HUD 一行状态 -------------- */
+static void pack_stat(void) {
+  const char* want = g_packFpLabel[0] ? g_packFpLabel : g_packFp;
+  if (!g_packName[0]) {
+    snprintf(g_packStat, sizeof g_packStat, "数据 正式版（nav）");
+  } else if (!g_packFp[0]) {
+    snprintf(g_packStat, sizeof g_packStat, "数据 测试包 %s · 不限图%s",
+             g_packName, g_nedBlank ? " · 空白底图" : "");
+  } else if (g_packSkip) {
+    snprintf(g_packStat, sizeof g_packStat,
+             "数据 测试包 %s · 只对 %s 生效 · 当前图已跳过", g_packName, want);
+  } else {
+    snprintf(g_packStat, sizeof g_packStat,
+             "数据 测试包 %s · 只对 %s 生效 · 包内 %d 项改动%s",
+             g_packName, want, g_nedN, g_nedBlank ? " · 空白底图" : "");
+  }
+}
+
+/* 包名/指纹只允许 ASCII 字母数字 _ -：插件用 ANSI 的 CreateDirectoryA/fopen，
+ * 中文路径没验证过，先在入口挡掉，别等运行期才发现打不开。 */
+static int pack_ok_name(const char* s) {
+  int i;
+  if (!s || !s[0] || strlen(s) > 48) return 0;
+  for (i = 0; s[i]; i++) {
+    char c = s[i];
+    if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+          (c >= '0' && c <= '9') || c == '_' || c == '-')) return 0;
+  }
+  return 1;
+}
+
+static void pack_init(void) {
+  char buf[160];
+  g_packName[0] = g_packFp[0] = g_packFpLabel[0] = 0;
+  g_packSkip = 0;
+  sprintf(g_navDir, "%s\\nav", g_dir);
+  if (GetEnvironmentVariableA("UCF_PACK", buf, sizeof buf) > 0 && buf[0]) {
+    if (!pack_ok_name(buf)) {
+      elog("pack: ignore UCF_PACK=%s (only [A-Za-z0-9_-], <=48 chars)", buf);
+    } else {
+      char pk[MAX_PATH];
+      strcpy(g_packName, buf);
+      sprintf(pk, "%s\\packs", g_dir);
+      CreateDirectoryA(pk, 0);
+      sprintf(g_navDir, "%s\\packs\\%s", g_dir, g_packName);
+      CreateDirectoryA(g_navDir, 0);
+    }
+  }
+  if (GetEnvironmentVariableA("UCF_FP", buf, sizeof buf) > 0 && buf[0]) {
+    if (pack_ok_name(buf)) strcpy(g_packFp, buf);
+    else elog("pack: ignore bad UCF_FP=%s", buf);
+  }
+  if (GetEnvironmentVariableA("UCF_FPLABEL", buf, sizeof buf) > 0 && buf[0]) {
+    strncpy(g_packFpLabel, buf, sizeof(g_packFpLabel) - 1);   /* 图名，允许中文 */
+    g_packFpLabel[sizeof(g_packFpLabel) - 1] = 0;
+  }
+  /* 控制台命令文件：只记下当前 seq，旧命令不在新进程里重放。 */
+  sprintf(g_navCmdPath, "%s\\ucf_navcmd.txt", g_dir);
+  {
+    FILE* f = fopen(g_navCmdPath, "r");
+    if (f) {
+      char line[256];
+      unsigned long long s;
+      while (fgets(line, sizeof line, f)) {
+        if (sscanf(line, "seq=%llu", &s) == 1) g_navCmdSeq = s;
+      }
+      fclose(f);
+    }
+  }
+  pack_stat();
+  elog("pack: %s  dir=%s  target=%s", g_packName[0] ? g_packName : "(none / official nav)",
+       g_navDir, g_packFp[0] ? g_packFp : "(any map)");
+}
+
+/* ---- 控制台命令：游戏运行中切包 / 重读 / 保存 --------------------------
+ * 控制台点「载入到游戏」「重新应用」「保存路线」「回正式版」时写 ucf_navcmd.txt。
+ * 这里在主线程 tick 里轮询，不在别的线程碰 Unity 对象。 */
+static int nav_cmd_set_pack(P g, const char* pack, const char* fp) {
+  int dirty, mapChanged;
+  if (pack && pack[0] && !pack_ok_name(pack)) {
+    elog("navcmd: bad pack name '%s'", pack);
+    return 0;
+  }
+  if (fp && fp[0] && !pack_ok_name(fp)) {
+    elog("navcmd: bad fp '%s'", fp);
+    return 0;
+  }
+  dirty = g_nedApplied && (g_nedN || (g_nedBlank && g_packName[0]));
+  if (g && dirty && !nav_base_restore(g)) {
+    elog("navcmd: refuse switch: base snapshot unavailable (re-enter the map)");
+    return 0;
+  }
+  mapChanged = !fp || !fp[0] || strcmp(fp, g_packFp) != 0;
+  if (pack && pack[0]) {
+    char pk[MAX_PATH];
+    strcpy(g_packName, pack);
+    sprintf(pk, "%s\\packs", g_dir);
+    CreateDirectoryA(pk, 0);
+    sprintf(g_navDir, "%s\\packs\\%s", g_dir, g_packName);
+    CreateDirectoryA(g_navDir, 0);
+    if (fp && fp[0]) strcpy(g_packFp, fp);
+    else g_packFp[0] = 0;
+  } else {
+    g_packName[0] = 0;
+    g_packFp[0] = 0;
+    sprintf(g_navDir, "%s\\nav", g_dir);
+  }
+  if (mapChanged) g_packFpLabel[0] = 0;   /* 换图后旧图名不再适用，宁可显示指纹 */
+  g_packSkip = 0;
+  g_nedApplied = 0;
+  g_nedWaitN = -1;
+  g_nedN = 0;
+  g_nedBlank = 0;
+  g_nedPath[0] = 0;
+  g_nedExpect = 0;
+  g_nedGraph = g;
+  pack_stat();
+  elog("navcmd: pack -> %s (fp %s)", g_packName[0] ? g_packName : "(official nav)",
+       g_packFp[0] ? g_packFp : "(any map)");
+  return 1;
+}
+
+static void nav_cmd_tick(P g) {
+  FILE* f;
+  char line[256];
+  char cmd[24] = "";
+  char pack[64] = "";
+  char fp[48] = "";
+  unsigned long long seq = 0;
+  int have = 0;
+  if (!g_navCmdPath[0]) return;
+  f = fopen(g_navCmdPath, "r");
+  if (!f) return;
+  while (fgets(line, sizeof line, f)) {
+    if (sscanf(line, "seq=%llu", &seq) == 1) { have = 1; continue; }
+    if (sscanf(line, "cmd=%23s", cmd) == 1) continue;
+    if (sscanf(line, "pack=%63s", pack) == 1) continue;
+    if (sscanf(line, "fp=%47s", fp) == 1) continue;
+  }
+  fclose(f);
+  if (!have || seq == g_navCmdSeq) return;
+  g_navCmdSeq = seq;
+  elog("navcmd: seq=%llu cmd=%s pack=%s fp=%s", seq,
+       cmd[0] ? cmd : "(none)", pack[0] ? pack : "(none)", fp[0] ? fp : "(any)");
+  if (!strcmp(cmd, "save")) {
+    if (g_nedPath[0]) nav_save();
+    else elog("navcmd: save skipped (no edit file for this map)");
+    return;
+  }
+  if (!strcmp(cmd, "off")) { nav_cmd_set_pack(g, "", ""); return; }
+  if (!strcmp(cmd, "apply") || !strcmp(cmd, "reload")) {
+    nav_cmd_set_pack(g, pack, fp);
+    return;
+  }
+  elog("navcmd: unknown cmd '%s'", cmd);
+}
+
 /* 主线程 tick：等图稳定 -> 读本图的编辑文件 -> 套用 */
 static void nav_edit_tick(void) {
   P g;
   int n, ops;
   if (g_collectOnly || !ed_init()) return;
   g = navfix_point_graph();
+  nav_cmd_tick(g);            /* 控制台命令：运行中切包 / 重读 / 保存 */
   if (!g) { g_nedGraph = 0; g_nedApplied = 0; g_nedWaitN = -1; return; }
   if (g != g_nedGraph) {
     g_nedGraph = g;
@@ -3227,31 +4188,51 @@ static void nav_edit_tick(void) {
     g_nedWaitN = -1;
     g_nedHasA = 0;
     g_nedN = 0;
+    g_nedBlank = 0;
     g_nedPath[0] = 0;
+    g_packSkip = 0;      /* 换图：让下一张图重新判断一次，并在日志里各记一行 */
+    nav_base_free();     /* 旧图的快照只对旧图有效 */
   }
   n = nav_count(g);
   if (!g_nedApplied) {
     if (n <= 0) return;
     if (n != g_nedWaitN) { g_nedWaitN = n; return; }       /* 等两跳稳定 */
     nav_fp(g_nedFp, sizeof(g_nedFp));
-    CreateDirectoryA(g_dir, 0);
-    {
-      char nd[MAX_PATH];
-      sprintf(nd, "%s\\nav", g_dir);
-      CreateDirectoryA(nd, 0);
+    /* 测试包只对一张图生效：指纹不符就整包跳过（宁可不动，也别改错图） */
+    if (g_packFp[0] && strcmp(g_packFp, g_nedFp) != 0) {
+      if (!g_packSkip) {
+        g_packSkip = 1;
+        elog("pack: skip %s (want fp %s, current %s)", g_packName, g_packFp, g_nedFp);
+        pack_stat();
+      }
+      g_nedPath[0] = 0;
+      g_nedBlank = 0;
+      nav_base_take(g);      /* 跳过也拍一张：之后运行中切到匹配的包还能还原 */
+      g_nedApplied = 1;      /* 本次进图不再重试；换图时 g_nedGraph 变了会重来 */
+      return;
     }
-    sprintf(g_nedPath, "%s\\nav\\%s.txt", g_dir, g_nedFp);
+    if (g_packSkip) { g_packSkip = 0; pack_stat(); }
+    CreateDirectoryA(g_dir, 0);
+    CreateDirectoryA(g_navDir, 0);
+    sprintf(g_nedPath, "%s\\%s.txt", g_navDir, g_nedFp);
+    nav_base_take(g);     /* 先拍原生底图，再套文件；切包时才能还原 */
     nav_edit_load(g_nedPath);
+    if (g_nedBlank && !g_packName[0]) {
+      g_nedBlank = 0;
+      elog("naved: ignore blank (only a test pack may blank the base)");
+    }
     g_nedBaseN = n;
     ops = nav_apply_all(g);
     g_nedApplied = 1;
-    if (ops) elog("naved: applied %d/%d edits on %s (nodes %d -> %d)",
-                  ops, g_nedN, g_nedFp, g_nedBaseN, nav_count(g));
-    else elog("naved: no edit file for %s", g_nedFp);
+    pack_stat();
+    if (ops) elog("naved: applied %d/%d edits on %s (nodes %d -> %d)%s",
+                  ops, g_nedN, g_nedFp, g_nedBaseN, nav_count(g),
+                  g_nedBlank ? " [blank base]" : "");
+    else elog("naved: no edit file for %s (dir %s)", g_nedFp, g_navDir);
     return;
   }
   /* 图被游戏重扫/重建过 -> 改动没了，重新套用（每 ~1 s 检查一次） */
-  if (g_nedN) {
+  if (g_nedN || (g_nedBlank && g_packName[0])) {
     static int probe;
     if ((++probe % 16) == 0 && nav_needs_apply(g)) {
       ops = nav_apply_all(g);
@@ -3263,10 +4244,41 @@ static void nav_edit_tick(void) {
   }
 }
 
+/* autotest.c 用：把当前地图的中文名读出来（读不到就留空） */
+void editor_map_name(char* out, int cap) {
+  if (!out || cap <= 0) return;
+  out[0] = 0;
+  if (!g_inited) return;
+  map_name_from_minimap(out, cap);
+}
+
 /* main-thread tick: keeps the labels glued to their world positions */
 void editor_tick(void) {
   static int ticks;
   if (!g_inited) return;
+  {                           /* 守卫区静态列表体检：2 tick 一次 = 0.5 s 一次 */
+    static int w, pf = -1;
+    if (pf < 0) pf = cfg_bool("perf", 0) ? 1 : 0;
+    if ((++w & 1) == 0) {
+      if (pf) {
+        LARGE_INTEGER a, b, fr;
+        double us;
+        QueryPerformanceCounter(&a);
+        area_watch();
+        QueryPerformanceCounter(&b);
+        QueryPerformanceFrequency(&fr);
+        us = (double)(b.QuadPart - a.QuadPart) * 1e6 / (double)fr.QuadPart;
+        g_pfSum += us; g_pfCnt++; if (us > g_pfMax) g_pfMax = us;
+        if (g_pfCnt >= 120) {              /* 120 次 x 0.5 s = 60 s */
+          elog("perf: area_watch avg=%.1fus max=%.1fus n=%d (~%.3f%% of one core)",
+               g_pfSum / g_pfCnt, g_pfMax, g_pfCnt, (g_pfSum / g_pfCnt) * 2.0 / 10000.0);
+          g_pfSum = g_pfMax = 0; g_pfCnt = 0;
+        }
+      } else area_watch();
+    }
+  }
+  if (g_sceneAge < 1000000) g_sceneAge++;
+  if (g_sceneAge >= VIS_SCENE_WAIT) g_sceneReadyOnce = 1;
   if (g_autoExport) auto_export_tick();
   nm_auto_tick();
   if (g_collectOnly) {
@@ -3284,9 +4296,21 @@ void editor_tick(void) {
     if ((++ticks % 8) == 0) hud_refresh();   /* 可视化关着也保持面板数字是活的 */
     return;
   }
+  if ((ticks % 60) == 0) {
+    P pg = navfix_point_graph();
+    elog("hb: interactive tick=%d age=%d nodes=%d vis=%d dirty=%d badtr=%d",
+         ticks, g_sceneAge, pg ? *(int*)((char*)pg + 0xEC) : -1, g_visOn, g_visDirty, g_badTr);
+  }
   if (g_visDirty) {
-    g_visDirty = 0;
-    vis_rebuild();
+    /* 刚进图时游戏自己的组件表还挂着上一张图的组件（见 VIS_SCENE_WAIT 注释）。
+     * 等场景稳定再读；可走面和水走面线框已经在 nm_tick 里画好了，不受影响。 */
+    if (g_sceneAge < VIS_SCENE_WAIT) {
+      if ((ticks % 20) == 0)
+        elog("vis: defer rebuild (scene age %d/%d)", g_sceneAge, VIS_SCENE_WAIT);
+    } else {
+      g_visDirty = 0;
+      vis_rebuild();
+    }
   }
   vis_label_tick();
   if ((++ticks % 8) == 0) hud_refresh();   /* keep counters live at ~2 s */
@@ -3298,6 +4322,12 @@ int editor_nogen(void) {
   char p[MAX_PATH + 40];
   FILE* f;
   if (!g_dir[0]) return 0;
+  /* 测试包里也可以放一份 nogen.txt：测「空场从 0 画点」时不必动正式版的开关 */
+  if (g_navDir[0]) {
+    sprintf(p, "%s\\nogen.txt", g_navDir);
+    f = fopen(p, "r");
+    if (f) { fclose(f); return 1; }
+  }
   sprintf(p, "%s\\nav\\nogen.txt", g_dir);
   f = fopen(p, "r");
   if (!f) return 0;
@@ -3420,16 +4450,31 @@ void editor_start(const char* modDir) {
   strncpy(g_dir, modDir, sizeof(g_dir) - 1);
   sprintf(g_log, "%s\\ucf_mod.log", g_dir);
   sprintf(g_file, "%s\\markers\\markers.txt", g_dir);
+  pack_init();   /* UCF_PACK / UCF_FP：这次读哪个目录、只对哪张图生效 */
   /* 开关全部来自 ucf_mod.json（cfg.c）：这里各取一次，日志里写清楚，
    * 关掉哪个在日志里都看得见，不用猜。 */
   g_hudOn      = cfg_bool("hud", 1);
-  g_helpOn     = g_hudOn;
+  g_hudStates  = cfg_bool("hud_states", 0);
+  g_helpOn     = cfg_bool("hud_keys", 0);
+  g_logOn      = cfg_bool("hud_log", 1);
   g_visOn      = cfg_bool("visualizer", 0);
+  g_lay        = (cfg_bool("vis_layer_a", 1) ? LAY_A : 0)
+               | (cfg_bool("vis_layer_b", 1) ? LAY_B : 0)
+               | (cfg_bool("vis_layer_c", 1) ? LAY_C : 0)
+               | (cfg_bool("vis_layer_d", 1) ? LAY_D : 0)
+               | (cfg_bool("vis_layer_e", 1) ? LAY_E : 0);
+  g_lblMode    = cfg_int("vis_labels", 0);
+  if (g_lblMode < 0 || g_lblMode > 2) g_lblMode = 0;
   g_nmShow     = cfg_bool("navmesh_show", 1);
+  g_visLists   = cfg_bool("vis_lists", 1);
   g_autoExport = cfg_bool("auto_export", 1);
   g_editAllow  = cfg_bool("editor", 1);
-  elog("editor ready: hud=%d visualizer=%d navmesh=%d auto_export=%d editor=%d file=%s",
-       g_hudOn, g_visOn, g_nmShow, g_autoExport, g_editAllow, g_file);
+  elog("editor ready: hud=%d states=%d keys=%d log=%d visualizer=%d layers=0x%X labels=%d "
+       "navmesh=%d auto_export=%d editor=%d file=%s",
+       g_hudOn, g_hudStates, g_helpOn, g_logOn, g_visOn, g_lay, g_lblMode,
+       g_nmShow, g_autoExport, g_editAllow, g_file);
+  veh_install();   /* 挂了 VEH：任何崩溃都会把调用链写进 ucf_mod.log */
+  { void autotest_start(const char*); autotest_start(g_dir); }   /* UCF_AUTOTEST=7,10 才动作 */
   {
     char p[MAX_PATH];
     FILE* fh;

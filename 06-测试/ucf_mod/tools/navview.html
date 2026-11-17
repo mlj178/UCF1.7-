@@ -189,7 +189,10 @@ code.k{background:#0c1117; border:1px solid #1e2733; border-radius:4px; padding:
   <select id="lvsel" class="sel" title="关卡（决定 3D 用哪一份地形网格）"></select>
   <button class="btn mini" id="b-namesave" title="把中文名/关卡写进 nav/names.json">存名</button>
   <span class="sep"></span>
-  <button class="btn primary" id="b-save" disabled title="Ctrl+S：写 nav/&lt;地图&gt;.json + nav/&lt;指纹&gt;.txt，游戏里自动套用">保存并应用</button>
+  <button class="btn primary" id="b-save" disabled title="Ctrl+S：写 nav/&lt;地图&gt;.json + nav/&lt;指纹&gt;.txt（写进开发版）">保存并应用</button>
+  <button class="btn" id="b-publish" disabled title="把开发版的 maps/ nav/ 推到游戏目录（③ 部署版），游戏下次进图生效">部署到游戏</button>
+  <button class="btn" id="b-pack" disabled title="把当前这张图的改动另存为「测试包」：只对这张图生效，不动正式版 nav/。控制台里选它再进游戏">存为测试包</button>
+  <button class="btn mini" id="b-restore" disabled title="用 ① 原生备份覆盖 ② 开发版（丢掉开发版的改动）">还原原生</button>
   <button class="btn" id="b-undo" disabled title="Ctrl+Z">撤销</button>
   <button class="btn" id="b-redo" disabled title="Ctrl+Y">重做</button>
   <button class="btn" id="b-reload" disabled title="Ctrl+R：丢掉未保存改动，重新读文件">重载</button>
@@ -198,6 +201,7 @@ code.k{background:#0c1117; border:1px solid #1e2733; border-radius:4px; padding:
   <span class="chip" id="c-nodes">节点 <b>0</b></span>
   <span class="chip" id="c-edges">边 <b>0</b></span>
   <span class="chip" id="c-dirty">未改动</span>
+  <span class="chip" id="c-ver" title="现在编辑的是哪一版：开发版 / 部署版 / 备份版（只读）">版本 ?</span>
   <span class="chip" id="c-srv">离线</span>
 </div>
 
@@ -288,6 +292,15 @@ code.k{background:#0c1117; border:1px solid #1e2733; border-radius:4px; padding:
             <label>JSON 名</label>
             <input type="text" id="s-jsonname" class="txt">
           </div>
+          <div class="field">
+            <label>测试包</label>
+            <input type="text" id="s-pack" class="txt" placeholder="包名（空=正式版）">
+          </div>
+          <div class="btn-row" style="margin-top:4px">
+            <button class="btn mini" id="b-pack-load" title="读取 packs\&lt;包名&gt;\&lt;指纹&gt;.txt 继续编辑">载入包</button>
+            <button class="btn mini" id="b-pack-new" title="给当前地图新建一份空白底图测试包">新建空白包</button>
+          </div>
+          <div class="kv" style="margin-top:4px"><span>模式</span><b id="s-packmode">正式版</b></div>
           <div class="btn-row" style="margin-top:6px">
             <button class="btn" id="b-export" title="不走服务：把 json/txt 下载到本地">导出文件</button>
             <button class="btn" id="b-bak" title="查看/还原历史备份">备份</button>
@@ -421,6 +434,7 @@ const S = {
   nodes: [], byUid: new Map(), edges: new Set(), feats: [], lines: {},
   origNodes: new Map(), origEdges: new Set(),
   txtText: "", txtOps: 0, txtLoaded: false,
+  editPack: "", packText: "", blankBase: false,   /* 测试包模式：blankBase=空白底图 */
   targetFp: "",
   /* 交互 */
   mode: "select", sel: new Set(), hover: -1, dirty: false,
@@ -470,6 +484,8 @@ async function refreshLists() {
     S.names = j.names || {};
     S.mapIndex = j.mapIndex || {};
     S.defaults = j.defaults || {};
+    S.profile = j.profile || {};
+    setProfileUI();
     $("sec-files").style.display = "block";
     renderFileList();
     renderLevelSelect();
@@ -610,6 +626,11 @@ function parseOps(text) {
   return out;
 }
 
+/* 测试包空白底图：文件里有单独一行 blank */
+function hasBlank(text) {
+  return String(text || "").split(/\r?\n/).some(function (s) { return s.trim() === "blank"; });
+}
+
 /* 套用清单，同时把“这次真的改了什么”记下来（之后据此反推基础图） */
 function applyTxtEx(text) {
   const recs = [];
@@ -720,6 +741,8 @@ async function loadSnapshot(dir, file) {
     const j = await apiGet("/api/raw?dir=" + encodeURIComponent(dir) + "&file=" + encodeURIComponent(file));
     const doc = normDoc(j);
     S.srcDir = dir; S.srcFile = file;
+    S.editPack = ""; S.packText = ""; S.blankBase = false;
+    if ($("s-pack")) $("s-pack").value = "";
     buildModel(doc);
     S.key = S.mapName || S.fp || file;
     /* 中文名 / 关卡：这条快照在服务端算好的结果最准（它已经按 指纹>地图名>关卡 查过） */
@@ -733,6 +756,44 @@ async function loadSnapshot(dir, file) {
   } catch (e) {
     setMsg("载入失败：" + e.message, "bad");
   }
+}
+
+/* 测试包模式：读 packs\<包名>\<指纹>.txt。forceBlank=true 时新建/覆盖成空白底图，
+ * 之后编辑器里的点/边全部写回这个包，正式版 nav\ 一个字节不碰。 */
+async function loadPack(name, forceBlank) {
+  if (!S.doc) { setMsg("先打开一张地图文件", "bad"); return; }
+  if (!S.targetFp) { setMsg("没有目标指纹：先选一张有路点图的地图", "bad"); return; }
+  name = String(name || "").trim();
+  if (!/^[A-Za-z0-9_-]{1,48}$/.test(name)) {
+    setMsg("包名只能用 ASCII 字母/数字/_/-，1~48 字符", "bad");
+    return;
+  }
+  if (S.dirty && !confirm("当前有未保存改动，仍切换测试包？")) return;
+  let exists = false, text = "";
+  try {
+    const r = await apiGet("/api/pack-txt?name=" + encodeURIComponent(name) +
+                           "&fp=" + encodeURIComponent(S.targetFp));
+    exists = !!r.exists; text = r.text || "";
+  } catch (e) { setMsg("读测试包失败：" + e.message, "bad"); return; }
+  if (forceBlank) {
+    if (exists && !confirm("测试包 " + name + " 已有这张图的清单，用空白底图覆盖？")) return;
+    text = "# ucf-navedit v1 fp=" + S.targetFp + "\nblank\n";
+  } else if (!exists) {
+    setMsg("测试包 " + name + " 里没有这张图（" + S.targetFp + "）的清单", "bad");
+    return;
+  }
+  if ((forceBlank || hasBlank(text)) && (!S.doc || !S.doc.nodes || S.doc.nodes.length === 0)) {
+    setMsg("这张图原生 0 个点，空白包没有可复用的节点槽位；请换一张有原生路点的图（如运输船）", "bad");
+    return;
+  }
+  S.editPack = name;
+  S.packText = text;
+  S.blankBase = hasBlank(text);
+  if ($("s-pack")) $("s-pack").value = name;
+  await applyCurrentTarget();
+  refreshAll();
+  setMsg("已进入测试包 " + name + " · " + (S.blankBase ? "空白底图" : "正式底图增量") +
+         " · " + S.txtOps + " 条" + (S.blankBase ? "（自己画点/边）" : ""), "ok");
 }
 
 function labelFromEntry(fp, mapName, file) {
@@ -851,13 +912,38 @@ async function applyCurrentTarget() {
   const doc = S.doc;
   S.txtText = ""; S.txtOps = 0; S.txtLoaded = false;
   let txt = "";
-  if (S.targetFp) {
+  if (S.editPack) {
+    /* 测试包：读 packs\<包名>\<指纹>.txt，不是正式版 nav */
+    txt = S.packText || "";
+    if (!txt && S.targetFp) {
+      try {
+        const r = await apiGet("/api/pack-txt?name=" + encodeURIComponent(S.editPack) +
+                               "&fp=" + encodeURIComponent(S.targetFp));
+        txt = r.text || "";
+      } catch (e) { txt = ""; }
+    }
+    S.packText = txt;
+    S.blankBase = hasBlank(txt);
+  } else if (S.targetFp) {
     try {
       const r = await apiGet("/api/txt?fp=" + encodeURIComponent(S.targetFp));
       txt = r.text || "";
     } catch (e) { txt = ""; }
   }
   modelFromDoc(doc);
+  if (S.blankBase) {
+    /* 空白底图 = 0 点 0 边起步；文件里的 node add / edge add 就是全部路线。
+       不反推原生图，也不产生 node del —— A* 那边由插件的 blank 先全禁掉。 */
+    S.nodes = []; S.byUid = new Map(); S.edges = new Set(); S.sel.clear();
+    const recs0 = txt.trim() ? applyTxtEx(txt) : [];
+    S.origNodes = new Map(); S.origEdges = new Set();
+    S.txtText = txt; S.txtOps = parseOps(txt).length; S.txtLoaded = true;
+    S.floorOff = null; S.undo = []; S.redo = []; S.dirty = false;
+    updateBandFromNodes();
+    refreshAll();
+    schedule();
+    return;
+  }
   const wantN = S.nodes.length, wantE = S.edges.size;
   let unapplied = false;
   if (txt.trim() && doc.map && doc.map.editsApplied) {
@@ -1069,7 +1155,10 @@ function buildEdits() {
     }
   });
   S.nodes.forEach(function (n) {
-    if (!S.origNodes.has(n.uid)) { pushAdd(n.p); movedUid.add(n.uid); }
+    if (!S.origNodes.has(n.uid)) {
+      if (S.blankBase && !n.walk) return;   /* 空白底图：红点=不放进清单 */
+      pushAdd(n.p); movedUid.add(n.uid);
+    }
   });
 
   const eAdd = [], eDel = [];
@@ -1077,7 +1166,7 @@ function buildEdits() {
   S.edges.forEach(function (k) {
     if (S.origEdges.has(k)) return;
     const ab = k.split("|"), a = S.byUid.get(+ab[0]), b = S.byUid.get(+ab[1]);
-    if (a && b) eAdd.push([a.p, b.p]);
+    if (a && b && (!S.blankBase || (a.walk && b.walk))) eAdd.push([a.p, b.p]);
   });
   S.origEdges.forEach(function (k) {
     if (S.edges.has(k)) return;
@@ -1092,6 +1181,7 @@ function buildEdits() {
 
 function buildTxt(ed) {
   const out = ["# ucf-navedit v1 fp=" + (S.targetFp || S.fp)];
+  if (S.blankBase) out.push("blank");      /* 测试包：原生点先全禁掉，下面的 add 才是全部路线 */
   ed.delPos.forEach(function (p) { out.push("node del " + pos3(p)); });
   ed.addPos.forEach(function (p) { out.push("node add " + pos3(p)); });
   ed.eAdd.forEach(function (e) { out.push("edge add " + pos3(e[0]) + " " + pos3(e[1])); });
@@ -1177,13 +1267,18 @@ async function doSave() {
   if (!S.doc) return;
   const ed = buildEdits();
   const txt = buildTxt(ed);
-  const doc = buildJSON(ed);
-  const jt = JSON.stringify(doc, null, 1);
   S.label = ($("mapname").value || "").trim();
   S.level = $("lvsel").value || S.level;
-  doc.map.label = S.label; doc.map.level = S.level;
 
   if (!S.canServer) {
+    if (S.editPack) {
+      download("packs_" + S.editPack + "_" + (S.targetFp || "fp") + ".txt", txt, "text/plain");
+      setMsg("离线模式：已导出测试包清单；放进 ucf_mod/packs/" + S.editPack + "/ 即生效", "warn");
+      return;
+    }
+    const doc = buildJSON(ed);
+    const jt = JSON.stringify(doc, null, 1);
+    doc.map.label = S.label; doc.map.level = S.level;
     download("nav_" + (S.label || S.targetFp) + ".json", jt, "application/json");
     setTimeout(function () { download(S.targetFp + ".txt", txt, "text/plain"); }, 200);
     setMsg("离线模式：已导出两个文件，放进 ucf_mod/nav/ 即生效", "warn");
@@ -1195,6 +1290,21 @@ async function doSave() {
   }
   $("b-save").disabled = true;
   try {
+    if (S.editPack) {
+      /* 测试包模式：只写 packs\<包名>\<指纹>.txt（正式版 nav 一个字节不碰） */
+      const j = await apiPost("/api/pack-save", {
+        name: S.editPack, fp: S.targetFp, editText: txt,
+        label: S.label, level: S.level, blank: S.blankBase
+      });
+      S.packText = txt; S.txtText = txt; S.txtOps = j.ops; S.txtLoaded = true;
+      S.dirty = false;
+      refreshAll();
+      setMsg((j.note || "已保存测试包") + "  ·  备份 " + (j.backups || []).length + " 个", "ok");
+      return;
+    }
+    const doc = buildJSON(ed);
+    const jt = JSON.stringify(doc, null, 1);
+    doc.map.label = S.label; doc.map.level = S.level;
     const j = await apiPost("/api/save", {
       fp: S.targetFp, jsonName: jsonNameFor(), jsonText: jt, editText: txt,
       label: S.label, level: S.level, key: S.mapName || S.fp
@@ -2149,7 +2259,8 @@ function buildTriIndex() {
 function floorOffFor() {
   if (S.floorOff != null) return S.floorOff;
   let off = 0.03;
-  const base = S.origNodes ? Array.from(S.origNodes.values()) : [];
+  const base = (S.origNodes && S.origNodes.size) ? Array.from(S.origNodes.values())
+             : ((S.doc && S.doc.nodes) ? S.doc.nodes : []);
   if (S.geo && base.length >= 8) {
     const vals = [];
     for (let i = 0; i < base.length && i < 400; i++) {
@@ -2369,7 +2480,9 @@ function refreshIssues() {
   }
   items.push({ cls: "info", t: "i", d: "连通块 " + comp.length + " · 最长边 " + maxEdge.toFixed(1) +
     " m · 不可走 " + (S.nodes.length - S.nodes.filter(function (n) { return n.walk; }).length) + " 点" });
-  if (S.txtLoaded) items.push({ cls: "info", t: "清单", d: "已套用 nav/" + S.targetFp + ".txt（" + S.txtOps + " 条）" });
+  if (S.txtLoaded) items.push({ cls: "info", t: "清单",
+    d: "已套用 " + (S.editPack ? ("packs/" + S.editPack + "/" + S.targetFp) : ("nav/" + S.targetFp)) +
+       ".txt（" + S.txtOps + " 条）" + (S.blankBase ? " · 空白底图" : "") });
   box.innerHTML = items.map(function (it) {
     return "<div class='issue " + it.cls + "'" + (it.act ? " data-act='" + it.act + "'" : "") +
       "><span class='t'>" + it.t + "</span><span class='d'>" + esc(it.d) + "</span></div>";
@@ -2393,8 +2506,22 @@ function refreshPanels() {
 
 function renderSavePanel() {
   if (!S.doc) return;
-  $("s-txt").textContent = S.targetFp ? ("nav/" + S.targetFp + ".txt") : "-";
+  $("s-txt").textContent = S.editPack
+    ? ("packs/" + S.editPack + "/" + (S.targetFp || "?") + ".txt" + (S.blankBase ? "（空白底图）" : ""))
+    : (S.targetFp ? ("nav/" + S.targetFp + ".txt") : "-");
+  if ($("s-packmode")) {
+    $("s-packmode").textContent = S.editPack
+      ? ("测试包 " + S.editPack + (S.blankBase ? " · 空白底图" : " · 正式底图增量"))
+      : "正式版（nav）";
+  }
   const sel = $("s-target");
+  if (sel) sel.disabled = !!S.editPack;
+  if ($("b-pack")) $("b-pack").disabled = !!S.editPack;   /* 包模式下别把开发版改动另存成另一个包 */
+  if ($("b-save")) {
+    $("b-save").title = S.editPack
+      ? "Ctrl+S：写 packs\\<包名>\\<指纹>.txt（测试包，不动正式版）"
+      : "Ctrl+S：写 nav/<地图>.json + nav/<指纹>.txt（写进开发版）";
+  }
   if (S.targets && S.targets.length) {
     const cur = S.targetFp;
     sel.innerHTML = S.targets.map(function (t) {
@@ -2414,7 +2541,7 @@ function renderLevelSelect() {
   let html = "<option value=''>（不载入地形）</option>";
   (S.geoLevels || []).forEach(function (g) {
     html += "<option value='" + esc(g.level) + "'" + (g.level === cur ? " selected" : "") + ">" +
-            esc(g.level) + "  " + fmtMs(g.bytes) + "</option>";
+            esc(g.level) + (g.name ? " · " + esc(g.name) : "") + "  " + fmtMs(g.bytes) + "</option>";
   });
   sel.innerHTML = html;
   sel.value = cur;
@@ -2631,12 +2758,13 @@ async function showBackups() {
 
 function showHelp() {
   const html =
-    "<p><b>这是什么</b>：把游戏里 <code class='k'>Ctrl+E</code> 导出的导航数据（<code class='k'>ucf_mod/vis/*.json</code>）" +
-    "在浏览器里编辑；保存时同时写两份文件，其中 <code class='k'>nav/&lt;指纹&gt;.txt</code> 是游戏内插件" +
-    "（<code class='k'>ucf_mod.dll</code>）进图后自动读取并套用的清单。</p>" +
-    "<p><b>保存 → 生效</b>：保存后回到游戏，进这张图（或按 <code class='k'>Ctrl+Shift+R</code> 强制重套用），" +
-    "插件会在节点数稳定后读 <code class='k'>nav/&lt;指纹&gt;.txt</code>。指纹 = <code class='k'>n节点数-位置异或哈希</code>，" +
-    "所以只有同一张图、同一份扫描才会对上。</p>" +
+    "<p><b>这是什么</b>：把游戏里 <code class='k'>Ctrl+E</code> 导出的<b>原生</b>导航数据" +
+    "（<code class='k'>ucf_mod/vis/*.json</code>）在浏览器里编辑；保存写两份到 <b>② 开发版</b>：" +
+    "<code class='k'>nav/&lt;指纹&gt;.txt</code>（游戏插件读的清单）和 <code class='k'>nav/&lt;地图名&gt;.json</code>（给人看的数据）。</p>" +
+    "<p><b>保存 → 生效</b>：保存只进开发版；点顶栏 <b>部署到游戏</b> 之后，游戏里的插件下次进图" +
+    "（或按 <code class='k'>Ctrl+Shift+R</code> 强制重套用）才会读 <code class='k'>nav/&lt;指纹&gt;.txt</code>。" +
+    "指纹 = <code class='k'>n节点数-位置异或哈希</code>，所以只有同一张图、同一份扫描才会对上。" +
+    "改坏了点 <b>还原原生</b> 就回到 ① 备份版。</p>" +
     "<p><b>能改的和不能改的</b>：插件只认四种指令 —— <code class='k'>node add/del</code>（加点 / 删点）、" +
     "<code class='k'>edge add/del</code>（连边 / 断边）。所以这里能做的编辑就是：加点、删点、移动点（=删旧+加新）、" +
     "可走/不可走、连边、断边。特征点（出生点、蹲守点、守区）只显示不可改 —— 插件没有对应指令。</p>" +
@@ -2676,11 +2804,19 @@ function showHelp() {
     "<tr><td>Ctrl+S</td><td>保存并应用</td></tr>" +
     "<tr><td>Ctrl+R</td><td>丢掉未保存改动，重新读文件</td></tr>" +
     "</table>" +
-    "<p><b>原始地图数据集</b>：<code class='k'>ucf_mod/maps/</code> 里是 11 张图按 01~11 编号的**原始**导航数据" +
-    "（游戏自己扫的，不含我们的编辑），只读参考——从这里打开再保存，只会写 <code class='k'>nav/</code>。" +
-    "只读还原点在 <code class='k'>ucf_mod/backup/maps_original_*</code>（带 sha256 清单）。" +
-    "缺的图采集完跑一次 <code class='k'>python tools/organize_maps.py --archive</code> 就会自动补进来。" +
-    "序号/关卡/中文名的**权威表**在 <code class='k'>ucf_mod/docs/地图对照表.md</code>（手写、持久，改完刷新页面就生效）。</p>" +
+    "<p><b>数据三版</b>（顶栏右上角的徽标显示你现在编辑的是哪一版）：</p><table class='tbl'>" +
+    "<tr><th>版本</th><th>位置</th><th>作用</th></tr>" +
+    "<tr><td>① 备份版（只读）</td><td><code class='k'>navdata\\native\\</code></td>" +
+    "<td>UCF 原版数据，冻结于此、永不编辑；<code class='k'>python tools/navdata.py verify</code> 可校验</td></tr>" +
+    "<tr><td>② 开发版</td><td><code class='k'>navdata\\dev\\</code></td>" +
+    "<td>日常在这里编辑（编辑器默认打开这一版）</td></tr>" +
+    "<tr><td>③ 部署版</td><td><code class='k'>游戏目录\\ucf_mod\\</code></td>" +
+    "<td>游戏里的插件读这一版；点「部署到游戏」从开发版推过去</td></tr>" +
+    "</table>" +
+    "<p><b>只保留原生</b>：列表里的图都是游戏原版给的（插件进图 <code class='k'>Ctrl+E</code> 扫出来的）；" +
+    "我们手工铺的点、练习沙盒、编辑清单都不在这一版里。" +
+    "想看图里到底有没有、多少点：<code class='k'>docs/地图对照表.md</code> 的「原生可通行空间」表。" +
+    "序号/关卡/中文名的**权威表**也在那份 md（手写、持久，改完刷新页面就生效）。</p>" +
     "<p><b>3D 里的地形是从哪来的</b>：<code class='k'>tools/geo2web.py</code> 把 navedit 提取的 " +
     "<code class='k'>geo/*.npz</code> 转成 <code class='k'>geo/web/&lt;关卡&gt;.bin</code>（灰模，不带贴图 —— " +
     "贴图那套是乱的，这里不用它）。关卡选错 3D 就对不上路点，右上角下拉可以手动改。</p>";
@@ -2690,15 +2826,84 @@ function showHelp() {
 /* =====================================================================
  * 15. 事件绑定
  * ===================================================================*/
+function setProfileUI() {
+  const pr = S.profile || {};
+  const ver = $("c-ver");
+  if (ver) {
+    ver.textContent = pr.cn || "版本 ?";
+    ver.style.color = pr.readonly ? "#ffb3b3" : "#9ed0ff";
+    ver.title = "数据目录：" + (pr.data || "?") + (pr.readonly ? "（只读，永不编辑）" : "（可编辑）");
+  }
+  const ro = !!pr.readonly;
+  const pub = $("b-publish"), res = $("b-restore");
+  if (pub) { pub.disabled = ro || !S.canServer; pub.title = "把开发版的 maps/ nav/ 推到游戏目录（③ 部署版），游戏下次进图生效"; }
+  if (res) { res.disabled = ro || !S.canServer; res.title = "用 ① 原生备份覆盖 ② 开发版（丢掉开发版的改动）"; }
+  const bp = $("b-pack");
+  if (bp) { bp.disabled = ro || !S.canServer; }
+  if (ro) { $("b-save").disabled = true; }
+}
+
+async function runDataAction(path, label, ask) {
+  if (ask && !confirm(ask)) return;
+  setMsg(label + " 中…", "warn");
+  try {
+    const j = await apiPost(path, {});
+    const out = (j.out || "").trim();
+    showBanner("<b>" + esc(label) + " 完成</b><pre style='margin:6px 0 0;white-space:pre-wrap;font-family:Consolas,monospace;font-size:11.5px'>" +
+               esc(out) + "</pre>");
+    setMsg(label + " 完成", "ok");
+    await refreshLists();
+    if (path === "/api/restore-native" && S.srcFile) loadSnapshot(S.srcDir, S.srcFile);
+  } catch (e) {
+    setMsg(label + " 失败：" + e.message, "bad");
+  }
+}
+
 function bindTopbar() {
   $("b-save").onclick = doSave;
+  $("b-publish").onclick = function () {
+    runDataAction("/api/publish", "部署到游戏",
+      "把开发版（navdata\\dev）的 maps/ nav/ 覆盖到游戏目录？\n游戏里的插件下次进图就按这一版走。");
+  };
+  $("b-pack").onclick = async function () {
+    const fp = S.targetFp || S.fp;
+    if (!fp) { setMsg("没有指纹：先打开一张有路点图的地图文件", "bad"); return; }
+    const name = (prompt("测试包名（ASCII 字母/数字/_/-，例：chain_a）", "chain_a") || "").trim();
+    if (!name) return;
+    setMsg("存为测试包 中…", "warn");
+    try {
+      const j = await apiPost("/api/pack-new", { fp: fp, name: name, level: S.level, label: S.label });
+      if (!j.ok) { setMsg("存为测试包 失败：" + (j.error || "?"), "bad"); return; }
+      showBanner("<b>已建测试包 " + esc(j.pack) + "</b><pre style='margin:6px 0 0;white-space:pre-wrap;font-family:Consolas,monospace;font-size:11.5px'>" +
+                 esc(j.out || "") + "</pre>");
+      setMsg("已建测试包 " + j.pack, "ok");
+    } catch (e) {
+      setMsg("存为测试包 失败：" + e.message, "bad");
+    }
+  };
+  $("b-restore").onclick = function () {
+    runDataAction("/api/restore-native", "还原原生",
+      "用原生备份（navdata\\native）覆盖开发版？\n开发版里自己加的点、边、编辑清单都会被丢掉。");
+  };
   $("b-undo").onclick = undo;
   $("b-redo").onclick = redo;
   $("b-help").onclick = showHelp;
   $("b-reload").onclick = function () {
     if (!S.srcFile) return;
+    if (S.editPack) { loadPack(S.editPack, false); return; }
     if (S.dirty && !confirm("丢掉未保存的改动，重新读文件？")) return;
     loadSnapshot(S.srcDir, S.srcFile);
+  };
+  $("b-pack-load").onclick = function () {
+    const name = ($("s-pack").value || "").trim();
+    if (!name) { setMsg("先在「测试包」里填包名", "bad"); return; }
+    loadPack(name, false);
+  };
+  $("b-pack-new").onclick = function () {
+    const def = ($("s-pack").value || "").trim() || "blank_a";
+    const name = (prompt("空白测试包名（ASCII 字母/数字/_/-）", def) || "").trim();
+    if (!name) return;
+    loadPack(name, true);
   };
   $("b-namesave").onclick = doNameSave;
   $("mapname").addEventListener("keydown", function (e) { if (e.key === "Enter") this.blur(); });
@@ -3360,10 +3565,12 @@ boot();</script>
     { t: "欢迎：90 分钟学会改路点", hl: [],
       b: "<p>这不是说明书，是<strong>跟着做</strong>的练习。你只要照着点，每步都告诉你：<em>做什么 → 会看到什么 → 为什么</em>。</p>" +
          "<p>三件事：① 路点是什么 ② 编辑器怎么用 ③ 改完怎么进游戏。</p>" +
-         "<p>练习场是<strong>空的</strong>，画坏了也不影响任何真地图。</p>" },
-    { t: "第 1 步：打开练习场", hl: ["#sec-files", "#filelist"],
-      b: "<p>看左边「打开」里，点 <span class='k'>练习场（空白）</span>。</p>" +
-         "<p>打开后中间会出现一块空地，右边出现 3D 场景 —— 这就是你的沙盒。</p>" +
+         "<p>这里能放心乱来：改动只写 <strong>② 开发版</strong>，游戏里那份（③ 部署版）不会动；" +
+         "点「部署到游戏」才推过去，点「还原原生」就回到 ① 备份版。</p>" },
+    { t: "第 1 步：打开运输船", hl: ["#sec-files", "#filelist"],
+      b: "<p>看左边「打开」里，点最上面那条 <span class='k'>运输船 level1</span>（786 点 / 1391 边，游戏原版数据）。</p>" +
+         "<p>打开后中间会出现整张图的俯视图，右边出现 3D 场景。" +
+         "列表里只剩 <strong>UCF 原生</strong>的图，我们手工铺的都不在里面了。</p>" +
          "<p class='warn'>如果没有「打开」这一块，先刷新一下页面。</p>" },
     { t: "界面地图：三个区域", hl: ["#side", "#pane2", "#pane3"],
       b: "<p><strong>左栏</strong>= 设置和工具；<strong>中间</strong>= 2D 俯视图；<strong>右边</strong>= 3D 场景。</p>" +
@@ -3372,7 +3579,7 @@ boot();</script>
       b: "<p>滚轮缩放；按住左键拖是平移；单击一个点会选中它（侧栏『点信息』显示坐标）。</p>" +
          "<p>你在这里看到的是<strong>地面平面图</strong>，箱子、台阶在这里只是一个点顶上的坐标。</p>" },
     { t: "3D 视图怎么动", hl: ["#pane3"],
-      b: "<p>右键拖动转视角，滚轮拉近拉远。你应该能看到一块 40×40 的空地、3 个箱子、5 级台阶和一根柱子。</p>" +
+      b: "<p>右键拖动转视角，滚轮拉近拉远，W/A/S/D 能飞 —— 你现在看到的是运输船的灰模地形。</p>" +
          "<p>以后加点的时候，2D 里放位置、3D 里看它到底有没有悬空或者贴错面。</p>" },
     { t: "第 2 步：切到『加点』", hl: ["#b-mode-add"],
       b: "<p>左栏「编辑」里点 <span class='k'>加点</span>（快捷键 <span class='k'>A</span>）。</p>" +
@@ -3394,11 +3601,12 @@ boot();</script>
       b: "<p>选中一个点 → 点 <span class='k'>删点</span>（<span class='k'>Delete</span>）：点没了，连在它身上的边一起断。</p>" +
          "<p>再点 <span class='k'>撤销</span>（<span class='k'>Ctrl+Z</span>）就回来；<span class='k'>重做</span>是 <span class='k'>Ctrl+Y</span>。</p>" +
          "<p><span class='k'>可走</span>（<span class='k'>W</span>）<strong>不是删除</strong>：它把点标成红色 = 不可走，点和边都还在，只是机器人不把它当落脚点。</p>" +
-         "<p>放心乱来：练习场没有真数据。</p>" },
+         "<p>放心乱来：这是开发版，游戏里那份没动；点「还原原生」就全回去。</p>" },
     { t: "第 8 步：保存，看它写了什么", hl: ["#b-save", "#s-txt", "#s-target"],
       b: "<p>点 <span class='k'>保存并应用</span>（<span class='k'>Ctrl+S</span>）。它写的是<strong>改动清单</strong>，不是整张图：几行 <span class='k'>node add</span> / <span class='k'>edge add</span>。</p>" +
          "<p>清单文件按<strong>指纹</strong>命名：指纹 = 这张图所有点坐标的校验和，用来保证『编辑套到了对的那张图』。</p>" +
-         "<p>练习场指纹是 <span class='k'>n0-0000000000000000</span>，所以写出来的文件在游戏里只会落到『本来就 0 个点』的图上。</p>" +
+         "<p>运输船的指纹是 <span class='k'>n786-57a46e3465c847cb</span>，所以只有『786 个点』那张图能对上这份清单。</p>" +
+         "<p>保存只写开发版；要让游戏真的按它跑，再点顶栏的 <span class='k'>部署到游戏</span>。</p>" +
          "<p class='warn'>第 6 课会进游戏验证：看《学习_路点入门.md》第 6 节。</p>" }
   ];
   var i = 0, open = false, lastHl = [];
@@ -3440,7 +3648,7 @@ boot();</script>
   if (tb && grow) {
     var btn = document.createElement("button");
     btn.className = "btn mini"; btn.id = "b-tutor"; btn.textContent = "新手引导";
-    btn.title = "打开 / 继续新手引导（练习场）";
+    btn.title = "打开 / 继续新手引导（用运输船练手）";
     btn.onclick = function () { show(!open); };
     tb.insertBefore(btn, grow);
   }
