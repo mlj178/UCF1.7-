@@ -872,14 +872,46 @@ static LRESULT CALLBACK NavProc(HWND h, UINT msg, WPARAM w, LPARAM l) {
     editor_on_key_any((unsigned)w, (int)l);
     return 0;
   }
+  if (msg == WM_TIMER && w == 0xF3C1) {
+    void editor_freecam_tick(void);
+    editor_freecam_tick();
+    return 0;
+  }
+  if (msg == WM_CHAR || msg == WM_SYSCHAR) {
+    int editor_menu_is_open(void);
+    if (editor_menu_is_open()) return 0;   /* 菜单模态：不再把字符送进游戏聊天框 */
+  }
   if (msg == WM_KEYDOWN) {
+    int ext = (l & 0x1000000) ? 1 : 0;
+    int editor_menu_key(unsigned, int);
+    /* 菜单键 / F2 / 长按 E 先在插件里处理；返回 1 表示已消费，不再传游戏。 */
+    if (editor_menu_key((unsigned)w, ext)) return 0;
     if (w == VK_DELETE) {
       void editor_delete_nearest(void);
       editor_delete_nearest();
+    } else if (w == VK_F7) {
+      void editor_freecam_toggle(void);
+      editor_freecam_toggle();
     } else if (GetAsyncKeyState(VK_CONTROL) & 0x8000) {
       int shift = (GetAsyncKeyState(VK_SHIFT) & 0x8000) ? 1 : 0;
       void editor_on_key_mod(unsigned, int);
       editor_on_key_mod((unsigned)w, shift);
+    }
+  }
+  if (msg == WM_LBUTTONDOWN || msg == WM_RBUTTONDOWN) {
+    int editor_menu_is_open(void);
+    void editor_on_mouse(int);
+    int open = editor_menu_is_open();
+    editor_on_mouse(msg == WM_LBUTTONDOWN ? 1 : 2);
+    /* 菜单开着时连右键也吞掉，避免右键瞄准/退出菜单被游戏接走 */
+    if (open) return 0;
+  }
+  if (msg == WM_MOUSEWHEEL) {
+    int editor_menu_is_open(void);
+    if (editor_menu_is_open()) {
+      void editor_menu_wheel(int);
+      editor_menu_wheel((int)GET_WHEEL_DELTA_WPARAM(w));
+      return 0;   /* 避免菜单开着时滚轮切枪 */
     }
   }
   if (!g_oldProc) return DefWindowProcA(h, msg, w, l);
@@ -970,6 +1002,13 @@ static DWORD WINAPI nav_worker(LPVOID x) {
   if (!g_hwnd) { nlog("game window not found"); return 0; }
   g_oldProc = (WNDPROC)SetWindowLongPtrA(g_hwnd, GWLP_WNDPROC, (LONG_PTR)NavProc);
   nlog("window hooked %p old=%p", g_hwnd, g_oldProc);
+  {  /* 车测自由视角：只有 UCF_FREECAM=1 才起 16 ms 定时器，正常游戏没有这条消息 */
+    char v[8];
+    if (GetEnvironmentVariableA("UCF_FREECAM", v, sizeof v) > 0 && v[0] == '1') {
+      SetTimer(g_hwnd, 0xF3C1, 16, 0);
+      nlog("freecam: 16 ms timer started");
+    }
+  }
   g_ready = 1;
 
   for (;;) {

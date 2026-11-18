@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""把 vis/ 里一堆历史扫描整理成「原始地图数据集」+ 只读还原点。
+"""把 ④ 测试版里的历史扫描整理成「原始地图数据集」+ 只读还原点。
 
 一句话：一张图只留一份、去掉我们自己的编辑、编号+中文名、再存一份永不改动的备份。
 
     python organize_maps.py                # 整理（不删任何东西）
-    python organize_maps.py --archive      # 顺带把 vis/ 里处理过的历史 JSON 归档到 backup/
+    python organize_maps.py --archive      # 顺带把处理过的历史 JSON 归档到 ④ navdata\\test\\archive\\
     python organize_maps.py --dry          # 只看会做什么
 
 产出：
     ucf_mod/maps/NN_<中文名>.json         原始数据（游戏自己扫的，不含我们的编辑）
     ucf_mod/maps/_index.json / INDEX.md   11 张图的编号、中文名、是否已有数据
-    ucf_mod/backup/maps_original_<日期>/  只读还原点（raw 原始导出 + canonical + MANIFEST）
+    navdata\\test\\archive\\maps_original_<日期>/  只读还原点（raw 原始导出 + canonical + MANIFEST）
 
 为什么「原始」要挑节点最少的那份：
   游戏的 A* 点图是进图时现扫的，我们插件的编辑（nav/<指纹>.txt）是在扫描结果之上另加的。
@@ -21,7 +21,7 @@
 中文名不是猜的：游戏 sharedassets0.assets 里的选图表是「模式名 / 场景名 / 中文名」三元组，
 每个 levelN 场景文件里又能找到自己的场景名（TransportShip、Factory、Cebu_City、NY_TM、
 Arena、GrimReaperKM、DesertFort、NanoResort、Nano_DawnVillage、DeathRing），两边一对即得。
-level9 = Nano30_Storm（插件注入的隐藏图，游戏里显示「隐藏地图 暴风」）。
+level9 = Nano30_Storm（插件注入的隐藏图「飓风危城」，多人生化模式）。
 """
 from __future__ import annotations
 
@@ -39,7 +39,23 @@ import time
 TOOLS = os.path.dirname(os.path.abspath(__file__))
 if TOOLS not in sys.path:
     sys.path.insert(0, TOOLS)
-from ucf_paths import DEPLOY as UCF, GEO, VIS, NAV, MAPS, BACKUP, NAMES_FILE, doc  # noqa: E402
+from ucf_paths import (DEPLOY as UCF, GEO, EXPORT as VIS, NAV, MAPS, BACKUP,  # noqa: E402
+                       ARCHIVE, NAMES_FILE, doc)
+
+# 历史归档：2026-11-18 起新快照写 ④ 测试版 archive\；旧快照仍在 ③\backup（只读兼容）。
+HISTORY_ROOTS = [ARCHIVE, BACKUP]
+
+
+def _find_in_history(glob_pat, name):
+    """在 ④ archive / ③ backup 的历史快照里找 raw/<name>（新快照优先）。"""
+    if not name:
+        return ""
+    for root in HISTORY_ROOTS:
+        for prev in sorted(glob.glob(os.path.join(root, glob_pat)), reverse=True):
+            cand = os.path.join(prev, "raw", name)
+            if os.path.isfile(cand):
+                return cand
+    return ""
 
 TABLE_FILE = doc("地图对照表.md")
 ROW_RE = re.compile(r"^\|\s*(\d{1,3})\s*\|\s*(level\d+)\s*\|\s*([^|]+?)\s*\|\s*([^|]*?)\s*\|\s*([^|]*?)\s*\|")
@@ -89,7 +105,7 @@ _BUILTIN_LEVELS = [
     ("level11", "死亡擂台", "DeathRing", ""),
     ("level7", "沙漠要塞", "DesertFort", ""),
     ("level8", "生化酒店", "NanoResort", ""),
-    ("level9", "暴风", "Nano30_Storm", "隐藏地图（插件注入）"),
+    ("level9", "飓风危城", "Nano30_Storm", "隐藏地图（插件注入·多人生化模式）"),
     ("level10", "新寂静村", "Nano_DawnVillage", ""),
 ]
 
@@ -140,7 +156,7 @@ def log(*a):
 
 
 def ensure_dirs():
-    for d in (MAPS, BACKUP):
+    for d in (MAPS, ARCHIVE, VIS):
         os.makedirs(d, exist_ok=True)
 
 
@@ -385,7 +401,7 @@ def build_index(rows, suspect=None, extras=None):
            "- 文件里的 map.fingerprint 就是游戏套编辑之前算的指纹，也是 nav/<指纹>.txt 用的那个。",
            "- edits_on_top：这份原图之上，游戏现在还套着几条编辑。",
            "- 想让游戏回到原图：删掉 ucf_mod/nav/<指纹>.txt，下次进图就是干净的原始点图。",
-           "- 只读还原点：ucf_mod/backup/maps_original_<日期>/（含 sha256 清单）。",
+           "- 只读还原点：navdata\\test\\archive\\maps_original_<日期>/（含 sha256 清单）。",
            "- 早先标成「疑似大厅数据」、还没进数据集的导出在 ucf_mod/backup/review_20261116/；",
            "  其中小型工厂那 12 点已证实是 node link 端点（真数据），已经收进数据集。",
            "- 序号/关卡/中文名/场景名以 ucf_mod/docs/地图对照表.md 为准，本文件不定义名字。"]
@@ -403,42 +419,44 @@ def _find_raw_in_history(fp):
     """在 backup/vis_history_* 里按指纹找回最初的导出文件。"""
     if not fp:
         return ""
-    for d in sorted(glob.glob(os.path.join(BACKUP, "vis_history_*")), reverse=True):
-        try:
-            names = sorted(os.listdir(d))
-        except OSError:
-            continue
-        for fn in names:
-            if not fn.lower().endswith(".json"):
-                continue
+    for root in HISTORY_ROOTS:
+        for d in sorted(glob.glob(os.path.join(root, "vis_history_*")), reverse=True):
             try:
-                doc = load_json(os.path.join(d, fn))
-            except Exception:
+                names = sorted(os.listdir(d))
+            except OSError:
                 continue
-            if str((doc.get("map") or {}).get("fingerprint") or "") == fp:
-                return os.path.join(d, fn)
+            for fn in names:
+                if not fn.lower().endswith(".json"):
+                    continue
+                try:
+                    doc = load_json(os.path.join(d, fn))
+                except Exception:
+                    continue
+                if str((doc.get("map") or {}).get("fingerprint") or "") == fp:
+                    return os.path.join(d, fn)
     return ""
 
 
 def _prev_raw_name(level):
     """从已有还原点的 MANIFEST 里查这张图原来导出的文件名。"""
-    for prev in sorted(glob.glob(os.path.join(BACKUP, "maps_original_*")), reverse=True):
-        man = os.path.join(prev, "MANIFEST.json")
-        if not os.path.isfile(man):
-            continue
-        try:
-            data = load_json(man)
-        except Exception:
-            continue
-        for e in (data.get("maps") or []):
-            if e.get("level") == level and (e.get("raw") or {}).get("file"):
-                return e["raw"]["file"]
+    for root in HISTORY_ROOTS:
+        for prev in sorted(glob.glob(os.path.join(root, "maps_original_*")), reverse=True):
+            man = os.path.join(prev, "MANIFEST.json")
+            if not os.path.isfile(man):
+                continue
+            try:
+                data = load_json(man)
+            except Exception:
+                continue
+            for e in (data.get("maps") or []):
+                if e.get("level") == level and (e.get("raw") or {}).get("file"):
+                    return e["raw"]["file"]
     return ""
 
 
 def rebuild_backup(rows, dry=False):
     stamp = time.strftime("%Y%m%d")
-    root = os.path.join(BACKUP, "maps_original_" + stamp)
+    root = os.path.join(ARCHIVE, "maps_original_" + stamp)
     if os.path.isdir(root) and not dry:
         prev = 0
         try:
@@ -448,9 +466,9 @@ def rebuild_backup(rows, dry=False):
             prev = 0
         if prev > len(rows):
             n = 2
-            while os.path.isdir(os.path.join(BACKUP, "maps_original_%s_r%d" % (stamp, n))):
+            while os.path.isdir(os.path.join(ARCHIVE, "maps_original_%s_r%d" % (stamp, n))):
                 n += 1
-            root = os.path.join(BACKUP, "maps_original_%s_r%d" % (stamp, n))
+            root = os.path.join(ARCHIVE, "maps_original_%s_r%d" % (stamp, n))
             log("  同日旧备份有 %d 张图、这次只有 %d 张：写新目录 %s，旧的不动" % (prev, len(rows), root))
     if dry:
         log("[dry] 会重建备份目录 %s" % root)
@@ -473,11 +491,9 @@ def rebuild_backup(rows, dry=False):
             # 再按指纹去历史归档里翻，最后才退回 maps/ 这份（保证还原点里的 raw 永远是"游戏导出的原件"）
             old_raw = _prev_raw_name(lv)
             if old_raw:
-                for prev in sorted(glob.glob(os.path.join(BACKUP, "maps_original_*")), reverse=True):
-                    cand = os.path.join(prev, "raw", old_raw)
-                    if os.path.isfile(cand):
-                        src = cand
-                        break
+                cand = _find_in_history("maps_original_*", old_raw)
+                if cand:
+                    src = cand
             if r.get("fp"):
                 found = _find_raw_in_history(r.get("fp"))
                 if found:
@@ -489,11 +505,9 @@ def rebuild_backup(rows, dry=False):
         if not src or not os.path.isfile(src):
             # 原始导出已经被归档（不在 vis/ 了）：优先复用已有还原点里的 raw/，保证还原点不会越跑越少
             base_name = os.path.basename(r.get("src") or "")
-            for prev in sorted(glob.glob(os.path.join(BACKUP, "maps_original_*")), reverse=True):
-                cand = os.path.join(prev, "raw", base_name)
-                if base_name and os.path.isfile(cand):
-                    src = cand
-                    break
+            cand = _find_in_history("maps_original_*", base_name)
+            if cand:
+                src = cand
         if not src or not os.path.isfile(src):
             log("  !! 备份跳过 %s（找不到原始导出）" % r.get("fname"))
             continue
@@ -547,50 +561,65 @@ def rebuild_backup(rows, dry=False):
 
 
 def archive_vis(files, dry=False):
-    """把 vis/ 清空：传入的 JSON + 插件的 _seen_* 标记 + *.navmesh.bin + _noise 目录。"""
+    """把处理过的 vis 导出归档：JSON + 伴随的 *.navmesh.bin + _state/_seen_* + _noise。
+    新结构（raw/地图/文件）会保留相对路径一起搬走。"""
     stamp = time.strftime("%Y%m%d_%H%M%S")
-    root = os.path.join(BACKUP, "vis_history_" + stamp)
+    root = os.path.join(ARCHIVE, "vis_history_" + stamp)
     if dry:
         log("[dry] 会把这些文件归档到 %s" % root)
         for p in files:
-            log("      ", os.path.basename(p))
+            log("      ", os.path.relpath(p, VIS))
         return root
     os.makedirs(root, exist_ok=True)
     extra = []
-    if os.path.isdir(VIS):
-        for fn in sorted(os.listdir(VIS)):
-            p = os.path.join(VIS, fn)
-            if os.path.isfile(p) and (fn.startswith("_seen_") or fn.endswith(".navmesh.bin")):
-                extra.append(p)
     noise = os.path.join(VIS, "_noise")
+    if os.path.isdir(VIS):
+        for base, dirs, fns in os.walk(VIS):
+            dirs[:] = [d for d in dirs if d != "_noise"]
+            for fn in sorted(fns):
+                p = os.path.join(base, fn)
+                if fn.startswith("_seen_") or fn.endswith(".navmesh.bin"):
+                    extra.append(p)
     moved = 0
-    only_vis = [p for p in (files + extra) if os.path.abspath(os.path.dirname(p)) == os.path.abspath(VIS)]
+    vis_root = os.path.abspath(VIS) + os.sep
+    only_vis = [p for p in (files + extra) if os.path.abspath(p).startswith(vis_root)]
     for p in only_vis:
-        dst = os.path.join(root, os.path.basename(p))
+        dst = os.path.join(root, os.path.relpath(p, VIS))
         try:
+            os.makedirs(os.path.dirname(dst), exist_ok=True)
             os.replace(p, dst)
             moved += 1
         except OSError as exc:
-            log("  !! 归档失败 %s: %s" % (os.path.basename(p), exc))
+            log("  !! 归档失败 %s: %s" % (os.path.relpath(p, VIS), exc))
     if os.path.isdir(noise):
         try:
             shutil.move(noise, os.path.join(root, "_noise"))
         except OSError:
             pass
+    # 清掉搬空的 raw/<地图>/ 目录（不碰 navmesh/ 与 _state/）
+    raw = os.path.join(VIS, "raw")
+    if os.path.isdir(raw):
+        for base, dirs, fns in os.walk(raw, topdown=False):
+            if not os.listdir(base):
+                try:
+                    os.rmdir(base)
+                except OSError:
+                    pass
     with io.open(os.path.join(root, "README.txt"), "w", encoding="utf-8", newline="") as f:
         f.write("vis/ 历史导出归档（%s）\r\n\r\n" % time.strftime("%Y-%m-%d %H:%M:%S"))
-        f.write("这里存的是 vis/ 里原来的全部东西（逐字节复制/移动），共 %d 个文件：\r\n" % moved)
-        f.write("  *.json          历次 Ctrl+E 导出的扫描结果\r\n")
-        f.write("  *.navmesh.bin   A* NavMeshGraph 导出（真正的人机可走面）\r\n")
-        f.write("  _seen_<指纹>    插件「同一指纹只导一次」的标记\r\n")
-        f.write("  _noise/         扫描时被判定为噪声的点\r\n\r\n")
-        f.write("整理后的原始数据集在 ucf_mod/maps/；只读还原点在 ucf_mod/backup/maps_original_*/。\r\n")
+        f.write("这里存的是 vis/ 里被本次整理的原始导出，共 %d 个文件，目录结构与 vis/ 一致：\r\n" % moved)
+        f.write("  raw/<级别_中文名>/<时间>_<指纹>.json   历次 Ctrl+E 的扫描结果\r\n")
+        f.write("  *.navmesh.bin                       与某份导出同名的可走面副本\r\n")
+        f.write("  _state/_seen_<指纹>                  插件「同一指纹只导一次」的标记\r\n")
+        f.write("  _noise/                              扫描时被判定为噪声的点\r\n\r\n")
+        f.write("去重后的可走面在 ucf_mod/vis/navmesh/；整理后的原始数据集在 ucf_mod/maps/。\r\n")
     return root
 
 
 def main():
     ap = argparse.ArgumentParser(description="整理原始地图数据集 + 只读备份")
-    ap.add_argument("--archive", action="store_true", help="把 vis/ 里的历史导出搬进 backup/（默认不动）")
+    ap.add_argument("--archive", action="store_true",
+                    help="把 ④ 里处理过的历史导出搬进 ④ archive/（默认不动）")
     ap.add_argument("--dry", action="store_true", help="只显示会做什么")
     ap.add_argument("--no-backup", action="store_true", help="不重建备份")
     ap.add_argument("--no-geo", action="store_true", help="不按地形判关卡")
@@ -608,12 +637,17 @@ def main():
     names = load_names()
 
     files = []
-    for folder in (VIS, MAPS):
-        if not os.path.isdir(folder):
-            continue
-        for fn in sorted(os.listdir(folder)):
+    # vis/ 新结构：raw/<级别_中文名>/*.json；也兼容旧的平铺文件
+    if os.path.isdir(VIS):
+        for base, dirs, fns in os.walk(VIS):
+            dirs[:] = [d for d in dirs if d not in ("_state", "_noise", "navmesh")]
+            for fn in sorted(fns):
+                if fn.lower().endswith(".json") and fn not in ("names.json", "_index.json"):
+                    files.append(os.path.join(base, fn))
+    if os.path.isdir(MAPS):
+        for fn in sorted(os.listdir(MAPS)):
             if fn.lower().endswith(".json") and fn not in ("names.json", "_index.json"):
-                files.append(os.path.join(folder, fn))
+                files.append(os.path.join(MAPS, fn))
     if not files:
         log("vis/ 里没有 JSON。先在游戏里 Ctrl+E 导出（或开 Ctrl+Shift+X 采集模式，进每张图自动导出）。")
         return 0
@@ -624,7 +658,7 @@ def main():
         if not info:
             log("跳过（不是 ucf-navgraph / 老格式）：%s" % os.path.basename(p))
             continue
-        info["from_maps"] = (os.path.dirname(p) == MAPS)
+        info["from_maps"] = (os.path.abspath(os.path.dirname(p)) == os.path.abspath(MAPS))
         snaps.append(info)
     n_fresh = sum(1 for s in snaps if not s["from_maps"])
     log("可用导出：%d 份（vis/ 新导出 %d + maps/ 已有 %d）" % (len(snaps), n_fresh, len(snaps) - n_fresh))
@@ -733,7 +767,7 @@ def main():
             log("  移到 maps/_suspect/（低于可信线或不再采用，没删）：%s" % ", ".join(moved))
 
         # 同一张图只留一个编号文件名。改序号/改名字之后，旧文件名和重复副本搬进 backup/stale_*，不删。
-        stale_dir = os.path.join(BACKUP, "stale_" + time.strftime("%Y%m%d_%H%M%S"))
+        stale_dir = os.path.join(ARCHIVE, "stale_" + time.strftime("%Y%m%d_%H%M%S"))
         stale = []
         if os.path.isdir(MAPS):
             for fn in sorted(os.listdir(MAPS)):
@@ -797,7 +831,8 @@ def main():
             log("  nav/names.json 已更新（%d 条）" % len(names))
 
     if args.archive:
-        vis_only = [p for p in files if os.path.dirname(p) == VIS]
+        vis_root = os.path.abspath(VIS) + os.sep
+        vis_only = [p for p in files if os.path.abspath(p).startswith(vis_root)]
         root = archive_vis(vis_only, args.dry)
         log("  历史导出归档：%s（%d 个文件）" % (root, len(vis_only)))
 
@@ -805,10 +840,10 @@ def main():
     if missing:
         log("")
         log("还没有原始数据的关卡：" + "、".join("%s %s" % (lv, NAME_OF.get(lv, "")) for lv in missing))
-        log("  采集办法：游戏里按 Ctrl+Shift+X 开采集模式（进图自动导出、不改任何东西），")
+        log("  采集办法：游戏里按 Ctrl+Shift+X 开采集模式（只读、不改任何东西），进图稳定后按 Ctrl+E 导出，")
         log("  把缺的图各进一次，回来再跑一遍本脚本。")
     log("")
-    log("完成。原始数据集：ucf_mod/maps/    还原点：ucf_mod/backup/maps_original_*/")
+    log("完成。原始数据集：② navdata\\dev\\maps\\    还原点：④ navdata\\test\\archive\\maps_original_*/")
     return 0
 
 

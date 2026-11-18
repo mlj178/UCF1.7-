@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>UCF 导航编辑器 · 俯视 + 3D</title>
+<title>UCF 导航查看（只读）· 俯视 + 3D</title>
 <style>
 :root{
   --bg:#0d1117; --bg2:#11161e; --panel:#151b24; --panel2:#1b232e; --line:#242e3b;
@@ -180,12 +180,40 @@ body.vsplit #pane2{flex-basis:50%}
 .tbl th,.tbl td{text-align:left; padding:3px 6px; border-bottom:1px solid #1d2531}
 .tbl th{color:var(--tx3); font-weight:600}
 code.k{background:#0c1117; border:1px solid #1e2733; border-radius:4px; padding:0 4px; font-family:Consolas,monospace; font-size:11px; color:#9ed0ff}
+/* ---------- 只读查看（工作台固定进入此模式） ---------- */
+body.viewonly #sec-tools, body.viewonly #sec-save,
+body.viewonly #b-save, body.viewonly #b-publish, body.viewonly #b-pack,
+body.viewonly #b-restore, body.viewonly #b-undo, body.viewonly #b-redo,
+body.viewonly #b-reload, body.viewonly #b-namesave,
+body.viewonly #b2-add, body.viewonly #b2-link, body.viewonly #b2-del,
+body.viewonly #b2-plan{display:none!important}
+body.viewonly #mapname{cursor:default;opacity:.85}
+body.viewonly #c-dirty, body.viewonly #b-tutor{display:none!important}
+#viewbar{display:none;align-items:center;gap:8px;padding:6px 12px;border-bottom:1px solid #2a3a4d;
+  background:linear-gradient(90deg,#152232,#101923);font-size:11.5px;color:#9fb4ca}
+#viewbar b{color:#cfe4ff;font-weight:600}
+#viewbar .tag{color:#ffd08a;border:1px solid #5a4520;background:#241c0c;border-radius:3px;padding:2px 6px;font-size:9px}
+#viewbar .grow{flex:1}
+#viewbar code{font-family:Consolas,monospace;color:#bfe0ff;background:#0b1219;padding:1px 5px;border-radius:3px;font-size:10.5px}
+body.viewonly #viewbar{display:flex}
+
+/* ---------- 内嵌模式（路点工作台右侧 3D 侧栏）：只留 3D ---------- */
+body.embed #topbar, body.embed #viewbar, body.embed #banner,
+body.embed #side, body.embed #splitter, body.embed #statusbar,
+body.embed #pane2, body.embed #tutor, body.embed .hint {display:none !important}
+body.embed #work{background:#080b0f}
+body.embed #panes{min-width:0}
+body.embed #pane3{flex:1 1 auto}
+body.embed .panebar{left:6px;top:6px;padding:3px 5px;gap:4px}
+body.embed .panebar .btn{padding:2px 6px;font-size:10.5px}
+body.embed .panebar .tag{font-size:10px}
+body.embed .hud{font-size:10px;padding:3px 6px;max-width:calc(100% - 12px)}
 </style>
 </head>
 <body>
 <div id="topbar">
-  <div class="brand">UCF <b>导航编辑器</b></div>
-  <input id="mapname" placeholder="地图中文名（可直接改）" title="这张图的中文名，会存进 nav/names.json">
+  <div class="brand">UCF <b>路点工作台</b><span style="font-size:10px;color:#7f8fa3;margin-left:6px">只读查看</span></div>
+  <input id="mapname" placeholder="地图中文名（只读）" title="只读查看：不提供改名">
   <select id="lvsel" class="sel" title="关卡（决定 3D 用哪一份地形网格）"></select>
   <button class="btn mini" id="b-namesave" title="把中文名/关卡写进 nav/names.json">存名</button>
   <span class="sep"></span>
@@ -201,10 +229,11 @@ code.k{background:#0c1117; border:1px solid #1e2733; border-radius:4px; padding:
   <span class="chip" id="c-nodes">节点 <b>0</b></span>
   <span class="chip" id="c-edges">边 <b>0</b></span>
   <span class="chip" id="c-dirty">未改动</span>
-  <span class="chip" id="c-ver" title="现在编辑的是哪一版：开发版 / 部署版 / 备份版（只读）">版本 ?</span>
+  <select id="profsel" class="sel" title="切换查看的数据版本：①备份 / ②开发 / ③部署 / ④测试（只改查看，不写文件）"></select>
   <span class="chip" id="c-srv">离线</span>
 </div>
 
+<div id="viewbar"><span class="tag">只读</span><b>查看模式</b><span>这里只展示路点图 / 可走面 / 特征点 / 路线 / 区域，不会写入任何数据。</span><span class="grow"></span><span>不要编辑</span></div>
 <div id="banner"></div>
 
 <div id="main">
@@ -371,6 +400,10 @@ code.k{background:#0c1117; border:1px solid #1e2733; border-radius:4px; padding:
  * 0. 常量与工具
  * ===================================================================*/
 "use strict";
+/* 网页端永久只读（2026-11-18 融合进路点工作台，编辑能力已删除） */
+const VIEWONLY = true;
+/* ?embed=1：被路点工作台的 3D 侧栏内嵌时，只留 3D 画面（隐藏顶栏 / 侧栏 / 俯视分屏） */
+const EMBED = /[?&]embed=1(&|$)/.test(location.search);
 const $ = function (id) { return document.getElementById(id); };
 const KINDS = {
   nano_area:  { c: "#3ddc84", label: "幽灵守区", r: 2.4 },
@@ -411,6 +444,20 @@ function ekey(a, b) { return a < b ? a + "|" + b : b + "|" + a; }
 function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
   return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }
 function fmtMs(n) { return (n / 1048576).toFixed(2) + " MB"; }
+function rgbaHex(hex, a) {
+  var m = String(hex || "#888").replace("#", "");
+  if (m.length === 3) m = m[0] + m[0] + m[1] + m[1] + m[2] + m[2];
+  var n = parseInt(m, 16);
+  if (!isFinite(n)) n = 0x888888;
+  return "rgba(" + ((n >> 16) & 255) + "," + ((n >> 8) & 255) + "," + (n & 255) + "," + a + ")";
+}
+function rgbOf(hex) {
+  var m = String(hex || "#888").replace("#", "");
+  if (m.length === 3) m = m[0] + m[0] + m[1] + m[1] + m[2] + m[2];
+  var n = parseInt(m, 16);
+  if (!isFinite(n)) n = 0x888888;
+  return [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255];
+}
 function nowStr() {
   const d = new Date(), p = function (n) { return String(n).padStart(2, "0"); };
   return d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate()) + " " +
@@ -465,6 +512,7 @@ function apiGet(path) {
   });
 }
 function apiPost(path, obj) {
+  if (VIEWONLY) return Promise.reject(new Error("只读查看：不提供保存 / 部署 / 改名"));
   return fetch(path, { method: "POST", headers: { "Content-Type": "application/json" },
                        body: JSON.stringify(obj) }).then(function (r) {
     return r.json().then(function (j) {
@@ -535,6 +583,17 @@ function normDoc(j) {
     jump: L.jump || j.jump_lines || []
   };
   out.edges = j.edges || [];
+  out.routes = (j.routes || []).map(function (r, i) {
+    return { id: String(r.id || ("R" + (i + 1))), name: String(r.name || ""),
+             color: String(r.color || "#4f8cff"), team: String(r.team || ""),
+             closed: !!r.closed,
+             pts: (r.pts || []).map(function (q) { return [+q[0], +q[1], +q[2]]; }) };
+  });
+  out.zones = (j.zones || []).map(function (z, i) {
+    return { id: String(z.id || ("Z" + (i + 1))), name: String(z.name || ""),
+             color: String(z.color || "#a78bfa"), kind: String(z.kind || "area"),
+             pts: (z.pts || []).map(function (q) { return [+q[0], +q[1], +q[2]]; }) };
+  });
   return out;
 }
 
@@ -545,6 +604,9 @@ function buildModel(doc) {
   S.source = (doc.map && doc.map.source) || "";
   S.feats = doc.feats || [];
   S.lines = doc.lines || {};
+  S.routes = doc.routes || [];
+  S.zones = doc.zones || [];
+  gl3.rzDirty = true;
   S.nodes = []; S.byUid = new Map(); S.edges = new Set();
   uidNum.v = 0;
   const id2uid = new Map();
@@ -1551,6 +1613,60 @@ function render2() {
     c.stroke();
   }
 
+  /* 路线 / 区域：工作台保存的 routes[] / zones[]，查看器只读展示 */
+  if (S.zones && S.zones.length) {
+    S.zones.forEach(function (z) {
+      const pts = z.pts || [];
+      if (pts.length < 3) return;
+      const col = z.color || "#a78bfa";
+      c.beginPath();
+      for (let i = 0; i < pts.length; i++) {
+        const px = sx(pts[i][0]), py = sy(pts[i][2]);
+        if (i === 0) c.moveTo(px, py); else c.lineTo(px, py);
+      }
+      c.closePath();
+      c.fillStyle = rgbaHex(col, 0.10);
+      c.fill();
+      c.strokeStyle = rgbaHex(col, 0.8);
+      c.lineWidth = 1.3;
+      c.setLineDash([5, 3]);
+      c.stroke();
+      c.setLineDash([]);
+      if (s > 1.8) {
+        c.fillStyle = rgbaHex(col, 0.95);
+        c.font = "10px Consolas,monospace";
+        c.fillText((z.id || "Z") + " " + (z.name || ""), sx(pts[0][0]) + 6, sy(pts[0][2]) - 6);
+      }
+    });
+  }
+  if (S.routes && S.routes.length) {
+    S.routes.forEach(function (r) {
+      const pts = r.pts || [];
+      if (pts.length < 2) return;
+      const col = r.color || "#4f8cff";
+      c.beginPath();
+      for (let i = 0; i < pts.length; i++) {
+        const px = sx(pts[i][0]), py = sy(pts[i][2]);
+        if (i === 0) c.moveTo(px, py); else c.lineTo(px, py);
+      }
+      if (r.closed) c.closePath();
+      c.strokeStyle = rgbaHex(col, 0.95);
+      c.lineWidth = 1.8;
+      c.stroke();
+      for (let i = 0; i < pts.length; i++) {
+        c.beginPath();
+        c.arc(sx(pts[i][0]), sy(pts[i][2]), s > 3 ? 2.6 : 1.8, 0, 6.2832);
+        c.fillStyle = rgbaHex(col, 0.95);
+        c.fill();
+      }
+      if (s > 1.8) {
+        c.fillStyle = rgbaHex(col, 0.95);
+        c.font = "10px Consolas,monospace";
+        c.fillText((r.id || "R") + " " + (r.name || ""), sx(pts[0][0]) + 6, sy(pts[0][2]) - 8);
+      }
+    });
+  }
+
   /* 特征点连线（守区邻居 / 入口撤离 / 跳链） */
   if (S.showFeats && S.lines) {
     c.lineWidth = 1;
@@ -1653,6 +1769,9 @@ function render2() {
   $("hud2").innerHTML =
     "<b>" + (S.v2.s).toFixed(1) + "</b> px/m · 网格 " + step + "m · " + selInfo +
     (cp ? ("\nX <b>" + cp[0].toFixed(2) + "</b>  Z <b>" + cp[2].toFixed(2) + "</b>") : "") +
+    ((S.routes && S.routes.length) || (S.zones && S.zones.length)
+      ? ("\n路线 <b>" + ((S.routes || []).length) + "</b> · 区域 <b>" + ((S.zones || []).length) + "</b>")
+      : "") +
     (S.plan ? ("\n地形图 " + S.plan.pw + "×" + S.plan.ph + " px" + (S.planMs ? (" · " + S.planMs + " ms") : "")) : "");
 }
 /* =====================================================================
@@ -1664,7 +1783,8 @@ const gl3 = {
   ready: false, gl: null, lost: false,
   progMesh: null, progPoint: null, progDraw: null,
   geoBuf: null, geoIdxType: 0, geoN: 0, geoChunks: [],
-  navPos: null, navCol: null, navCount: 0, navDirty: true
+  navPos: null, navCol: null, navCount: 0, navDirty: true,
+  rzPos: null, rzCol: null, rzCount: 0, rzDirty: true
 };
 
 const VS_MESH = [
@@ -1822,6 +1942,7 @@ function initGL() {
   gl.clearColor(0.043, 0.055, 0.070, 1);
   gl3.ready = true;
   gl3.navDirty = true;
+  gl3.rzDirty = true;
   uploadGeo();
   schedule();
 }
@@ -1928,6 +2049,44 @@ function navBuffers() {
   gl3.navDirty = false;
 }
 
+/* 路线 / 区域（工作台写的 routes / zones）：3D 里画成贴地的线，路线略高一点 */
+function rzBuffers() {
+  const gl = gl3.gl;
+  if (!gl3.ready) return;
+  const seg = [];
+  (S.routes || []).forEach(function (r) {
+    const pts = r.pts || [];
+    if (pts.length < 2) return;
+    const c = rgbOf(r.color || "#4f8cff");
+    for (let i = 1; i < pts.length; i++) seg.push([pts[i - 1], pts[i], c, 0.08]);
+    if (r.closed && pts.length > 2) seg.push([pts[pts.length - 1], pts[0], c, 0.08]);
+  });
+  (S.zones || []).forEach(function (z) {
+    const pts = z.pts || [];
+    if (pts.length < 3) return;
+    const c = rgbOf(z.color || "#a78bfa");
+    for (let i = 0; i < pts.length; i++) seg.push([pts[i], pts[(i + 1) % pts.length], c, 0.05]);
+  });
+  const n = seg.length * 2;
+  const pos = new Float32Array(n * 3), col = new Float32Array(n * 3);
+  let w = 0;
+  seg.forEach(function (s) {
+    for (let k = 0; k < 2; k++) {
+      const q = s[k];
+      pos[w * 3] = q[0]; pos[w * 3 + 1] = q[1] + s[3]; pos[w * 3 + 2] = q[2];
+      col[w * 3] = s[2][0]; col[w * 3 + 1] = s[2][1]; col[w * 3 + 2] = s[2][2];
+      w++;
+    }
+  });
+  if (!gl3.rzPos) { gl3.rzPos = gl.createBuffer(); gl3.rzCol = gl.createBuffer(); }
+  gl.bindBuffer(gl.ARRAY_BUFFER, gl3.rzPos);
+  gl.bufferData(gl.ARRAY_BUFFER, pos, gl.DYNAMIC_DRAW);
+  gl.bindBuffer(gl.ARRAY_BUFFER, gl3.rzCol);
+  gl.bufferData(gl.ARRAY_BUFFER, col, gl.DYNAMIC_DRAW);
+  gl3.rzCount = w;
+  gl3.rzDirty = false;
+}
+
 function render3() {
   if (!gl3.ready || gl3.lost) return;
   const gl = gl3.gl;
@@ -1995,6 +2154,20 @@ function render3() {
     gl.drawArrays(gl.LINES, 0, gl3.lineCount);
   }
 
+  /* 路线 / 区域：贴地线（工作台里的 routes / zones） */
+  if (gl3.rzDirty) rzBuffers();
+  if (gl3.rzCount) {
+    const pz = gl3.progDraw;
+    gl.useProgram(pz);
+    gl.uniformMatrix4fv(gl.getUniformLocation(pz, "uVP"), false, CAM.VP);
+    const zPos = gl.getAttribLocation(pz, "aPos"), zCol = gl.getAttribLocation(pz, "aCol");
+    gl.bindBuffer(gl.ARRAY_BUFFER, gl3.rzPos);
+    gl.enableVertexAttribArray(zPos); gl.vertexAttribPointer(zPos, 3, gl.FLOAT, false, 0, 0);
+    gl.bindBuffer(gl.ARRAY_BUFFER, gl3.rzCol);
+    gl.enableVertexAttribArray(zCol); gl.vertexAttribPointer(zCol, 3, gl.FLOAT, false, 0, 0);
+    gl.drawArrays(gl.LINES, 0, gl3.rzCount);
+  }
+
   /* 路点：先正常画一遍；勾了“穿透”再叠一层不吃深度的半透明，墙后的点也能看见 */
   if (gl3.navCount) {
     drawPoints(1.0, true);
@@ -2005,7 +2178,11 @@ function render3() {
   const tinfo = S.geo ? (S.geo.nt + " 三角形") : "无地形";
   $("hud3").innerHTML = "距离 <b>" + S.v3.dist.toFixed(0) + "</b> m · 偏航 <b>" +
     (S.v3.yaw * 180 / Math.PI).toFixed(0) + "°</b> · 俯仰 <b>" + (S.v3.pitch * 180 / Math.PI).toFixed(0) +
-    "°</b> · " + tinfo + ninfo + (S.cut3 ? " · 切层" : "") +
+    "°</b> · " + tinfo + ninfo +
+    (((S.routes && S.routes.length) || (S.zones && S.zones.length))
+      ? (" · 路线 <b>" + ((S.routes || []).length) + "</b> / 区域 <b>" + ((S.zones || []).length) + "</b>")
+      : "") +
+    (S.cut3 ? " · 切层" : "") +
     ((S.v3.fly || S.keys.size) ? " · 飞行 " + Math.round(S.flySpd || 0) + " m/s" : "");
 }
 
@@ -2636,6 +2813,7 @@ function setBandFromSliders() {
  * 13. 模式 / 交互辅助
  * ===================================================================*/
 function setMode(m) {
+  if (VIEWONLY && m !== "select") m = "select";
   S.mode = m;
   S.linkFrom = null;
   ["b-mode-sel", "b-mode-add", "b-mode-link"].forEach(function (id) {
@@ -2812,7 +2990,11 @@ function showHelp() {
     "<td>日常在这里编辑（编辑器默认打开这一版）</td></tr>" +
     "<tr><td>③ 部署版</td><td><code class='k'>游戏目录\\ucf_mod\\</code></td>" +
     "<td>游戏里的插件读这一版；点「部署到游戏」从开发版推过去</td></tr>" +
+    "<tr><td>④ 测试版</td><td><code class='k'>navdata\\test\\</code></td>" +
+    "<td>插件 Ctrl+E 导出的原始文件、测试包、归档；不影响游戏</td></tr>" +
     "</table>" +
+    "<p><b>版本切换</b>：顶栏右侧的版本下拉可以在 ①备份 / ②开发 / ③部署 / ④测试 之间切；" +
+    "只改查看的数据源，不写文件。</p>" +
     "<p><b>只保留原生</b>：列表里的图都是游戏原版给的（插件进图 <code class='k'>Ctrl+E</code> 扫出来的）；" +
     "我们手工铺的点、练习沙盒、编辑清单都不在这一版里。" +
     "想看图里到底有没有、多少点：<code class='k'>docs/地图对照表.md</code> 的「原生可通行空间」表。" +
@@ -2828,11 +3010,16 @@ function showHelp() {
  * ===================================================================*/
 function setProfileUI() {
   const pr = S.profile || {};
-  const ver = $("c-ver");
-  if (ver) {
-    ver.textContent = pr.cn || "版本 ?";
-    ver.style.color = pr.readonly ? "#ffb3b3" : "#9ed0ff";
-    ver.title = "数据目录：" + (pr.data || "?") + (pr.readonly ? "（只读，永不编辑）" : "（可编辑）");
+  const sel = $("profsel");
+  if (sel) {
+    const order = ["native", "dev", "deploy", "test"];
+    const labels = { native: "① 备份版", dev: "② 开发版", deploy: "③ 部署版", test: "④ 测试版" };
+    if (!sel.options.length) {
+      sel.innerHTML = order.map(function (k) { return '<option value="' + k + '">' + labels[k] + '</option>'; }).join("");
+    }
+    sel.value = pr.profile || "dev";
+    sel.title = "当前查看：" + (pr.cn || "?") + " · " + (pr.data || "?") +
+      "（切换只改查看，不写文件）";
   }
   const ro = !!pr.readonly;
   const pub = $("b-publish"), res = $("b-restore");
@@ -2860,6 +3047,22 @@ async function runDataAction(path, label, ask) {
 }
 
 function bindTopbar() {
+  const ps = $("profsel");
+  if (ps) ps.onchange = async function () {
+    const p = this.value;
+    if (!p || p === ((S.profile || {}).profile || "")) return;
+    try {
+      await apiGet("/api/profile?set=" + encodeURIComponent(p));
+      try {
+        const u = new URL(location.href);
+        u.searchParams.set("profile", p);
+        history.replaceState(null, "", u);
+      } catch (x) {}
+      location.reload();
+    } catch (e) {
+      setMsg("切换版本失败：" + e.message, "bad");
+    }
+  };
   $("b-save").onclick = doSave;
   $("b-publish").onclick = function () {
     runDataAction("/api/publish", "部署到游戏",
@@ -2922,6 +3125,7 @@ function bindTopbar() {
 }
 
 async function doNameSave() {
+  if (VIEWONLY) return;
   S.label = ($("mapname").value || "").trim();
   S.level = $("lvsel").value || S.level;
   if (!S.canServer) { setMsg("中文名要本地服务才能存盘", "warn"); return; }
@@ -3093,6 +3297,17 @@ function bindCanvas2() {
   cv2.addEventListener("mousedown", function (e) {
     const p = P(e);
     S.mouse = p;
+    if (VIEWONLY) {
+      if (e.button === 1 || e.button === 2) {
+        drag = { mode: "pan", x: p[0], y: p[1], cx: S.v2.cx, cz: S.v2.cz };
+        e.preventDefault();
+        return;
+      }
+      const uid = hit2(p[0], p[1]);
+      if (uid >= 0) select(uid, e.shiftKey);
+      else select(null);
+      return;
+    }
     if (e.button === 1 || e.button === 2) {
       drag = { mode: "pan", x: p[0], y: p[1], cx: S.v2.cx, cz: S.v2.cz };
       e.preventDefault();
@@ -3377,6 +3592,7 @@ function bindKeys() {
     if (t === "INPUT" || t === "SELECT" || t === "TEXTAREA") return;
     const k = (e.key || "").toLowerCase();
     if (e.ctrlKey || e.metaKey) {
+      if (VIEWONLY) { e.preventDefault(); return; }
       if (k === "z") { e.preventDefault(); if (e.shiftKey) redo(); else undo(); return; }
       if (k === "y") { e.preventDefault(); redo(); return; }
       if (k === "s") { e.preventDefault(); doSave(); return; }
@@ -3392,6 +3608,18 @@ function bindKeys() {
       e.preventDefault();
       return;
     }
+    if (VIEWONLY) {
+      if (e.ctrlKey || e.metaKey) { e.preventDefault(); return; }
+      if (k === "delete" || k === "backspace" || k === "w" || k === "a" || k === "e") {
+        e.preventDefault(); return;
+      }
+      if (k === "f" || k === " " || k === "?" || k === "/" || k === "escape" ||
+          k === "arrowleft" || k === "arrowright" || k === "arrowup" || k === "arrowdown") {
+        /* 查看：全图 / 帮助 / 取消 / 平移，继续走原有分支 */
+      } else {
+        return;
+      }
+    }
     if (k === "delete" || k === "backspace") { e.preventDefault(); deleteSelected(); return; }
     if (k === "w") { toggleWalkSel(); return; }
     if (k === "a") { setMode(S.mode === "add" ? "select" : "add"); return; }
@@ -3402,7 +3630,10 @@ function bindKeys() {
     if (k === "?" || k === "/") { showHelp(); return; }
     if (k === "escape") {
       S.v3.fly = false; S.keys.clear();            /* Esc 顺手收掉飞行状态 */
-      setMode("select"); select(null); closeModal(); return;
+      setMode("select"); select(null); closeModal();
+      /* 内嵌在路点工作台的 3D 侧栏里时，Esc 同时把侧栏收起来（焦点在 iframe 里，父页收不到按键） */
+      if (EMBED && window.parent !== window) { try { window.parent.postMessage({ ucf: "dock-close" }, "*"); } catch (x) {} }
+      return;
     }
     if (e.key === "ArrowLeft") { S.v2.cx -= 20 / S.v2.s; schedule(); }
     if (e.key === "ArrowRight") { S.v2.cx += 20 / S.v2.s; schedule(); }
@@ -3441,8 +3672,9 @@ async function autoOpen() {
   const m = /[?&](?:open|file)=([^&]+)/.exec(location.search);
   if (m) {
     const u = decodeURIComponent(m[1]).replace(/\\/g, "/");
-    const parts = u.split("/");
-    const file = parts.pop(), dir = parts.pop() || "vis";
+    const parts = u.split("/").filter(Boolean);
+    let dir = "vis", file = parts[0] || "";
+    if (parts.length >= 2) { dir = parts.shift(); file = parts.join("/"); }
     await loadSnapshot(dir, file);
     return;
   }
@@ -3451,11 +3683,46 @@ async function autoOpen() {
                "它会出现 <b>ucf_mod/vis/</b> 里，然后按 F5 刷新这个页面。");
     return;
   }
-  const pick = S.snapshots.slice().sort(function (a, b) { return (b.mtimeTs || 0) - (a.mtimeTs || 0); })[0];
+  /* 只读查看优先打开 nav\ 里的正式路点图；raw\ 的未识别导出只作兜底 */
+  const pool = S.snapshots.filter(function (e) { return e.dir === "nav"; });
+  const pick = (pool.length ? pool : S.snapshots).slice()
+    .sort(function (a, b) {
+      function sc(e) {
+        return (e.level ? 1000 : 0) + ((e.edges || 0) > 0 ? 500 : 0) +
+               ((e.nodes || 0) > 100 ? 100 : 0) +
+               (((e.label || "").indexOf("未识别") < 0) ? 200 : 0) +
+               (((e.file || "").indexOf("未识别") < 0) ? 300 : 0);
+      }
+      return sc(b) - sc(a) || (b.mtimeTs || 0) - (a.mtimeTs || 0);
+    })[0];
   if (pick) await loadSnapshot(pick.dir, pick.file);
 }
 
+function applyViewOnly() {
+  document.body.classList.add("viewonly");
+  const mn = $("mapname");
+  if (mn) {
+    mn.readOnly = true;
+    mn.placeholder = "地图中文名（只读）";
+    mn.title = "只读查看：不提供改名";
+  }
+  const lv = $("lvsel");
+  if (lv) { lv.title = "只读查看：可以切换地形，不会写数据"; }
+  const cd = $("c-dirty");
+  if (cd) { cd.textContent = "只读查看"; cd.className = "chip warn"; }
+  setMode("select");
+  const h2 = document.querySelector("#pane2 .hint");
+  if (h2) h2.textContent = "滚轮缩放 · 右键/中键平移 · 左键选中（只读查看）";
+}
+
 async function boot() {
+  if (EMBED) { document.body.classList.add("embed"); S.vertical = false; }
+  if (VIEWONLY) applyViewOnly();
+  /* ?profile=native|dev|deploy|test：工作台/链接带过来的查看版本 */
+  const pm = /[?&]profile=([^&]+)/.exec(location.search);
+  if (pm) {
+    try { await apiGet("/api/profile?set=" + encodeURIComponent(decodeURIComponent(pm[1]))); } catch (e) {}
+  }
   /* 深链接：?navm=0 打开时就关掉可走面（截图/对比用），默认开 */
   if (/[?&]navm=0/.test(location.search)) {
     S.showNavm = false;
@@ -3470,9 +3737,9 @@ async function boot() {
   emptyState();
 
   if (location.protocol === "file:") {
-    showBanner("<b>现在是用 file:// 直接打开的，保存不了、也读不到文件列表。</b>" +
-               "请关掉这个标签页，双击 <b>ucf_mod\\tools\\启动导航编辑器.bat</b>——它会开一个本地服务" +
-               "（只监听 127.0.0.1）并自动打开编辑器；那时才能保存并直接应用到游戏。");
+    showBanner("<b>现在是用 file:// 直接打开的，读不到文件列表。</b>" +
+               "请关掉这个标签页，打开 <b>UCF 控制台</b>，点「路点工作台（查看）」——它会开一个本地只读服务" +
+               "（只监听 127.0.0.1）并自动打开工作台。");
     $("c-srv").textContent = "离线";
     $("c-srv").className = "chip bad";
     return;
@@ -3488,7 +3755,7 @@ async function boot() {
     S.canServer = false;
     $("c-srv").textContent = "服务不可用";
     $("c-srv").className = "chip bad";
-    showBanner("连不上本地服务：" + esc(e.message) + "。请用 <b>tools\\启动导航编辑器.bat</b> 打开。");
+    showBanner("连不上本地服务：" + esc(e.message) + "。请打开 UCF 控制台，点「路点工作台（查看）」。");
     return;
   }
   await autoOpen();

@@ -1,30 +1,36 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-r"""navdata.py —— 导航数据「三版」管理：① 原生备份  ② 开发  ③ 部署
+r"""navdata.py —— 导航数据「四版」管理：① 备份  ② 开发  ③ 部署  ④ 测试
 
   ---------------------------------------------------------------------------
   ① 备份版  navdata/native/      UCF 原版数据，只读、永不编辑（本脚本之外没人写它）
   ② 开发版  navdata/dev/         日常在这里编辑（编辑器默认打开这一版）
   ③ 部署版  游戏目录 ucf_mod/     游戏里的插件读这一版，由 publish 从开发版推过去
+  ④ 测试版  navdata/test/        插件导出 + 测试包 + 归档，脏了也不影响 ② ③
+                                   vis\      导出收件箱（Ctrl+E / navmesh 落这里）
+                                   packs\    测试包
+                                   archive\  处理过的导出 / 只读还原点
+  流水线：游戏导出 -> ④ ->（import）-> ② ->（publish）-> ③；① 随时 freeze
   ---------------------------------------------------------------------------
 
 常用命令（在 tools/ 下跑）：
 
-    python navdata.py status              # 三版各自在哪、各有几个文件、是否只读
+    python navdata.py status              # 四版各自在哪、各有几个文件、是否只读
     python navdata.py verify              # 校验备份版没被动过（SHA256 清单）
     python navdata.py restore             # 开发版 <- 备份版（丢掉开发版的改动）
+    python navdata.py import              # 测试版 -> 开发版（可走面 + 原始导出）
     python navdata.py publish             # 部署版 <- 开发版（推给游戏）
     python navdata.py diff                # 开发版 vs 备份版 / 开发版 vs 部署版 差在哪
     python navdata.py freeze --force      # 用当前数据重建「备份版」（只在确认要重新冻结时用）
 
-  测试包（④，不是"第四份全量数据"）：一份只对某一张图生效的路线改动，
-  放在游戏目录 packs\<包名>\<指纹>.txt；插件用 UCF_PACK / UCF_FP 读它，
+  测试包（④ 的一部分）：一份只对某一张图生效的路线改动，放在
+  navdata\test\packs\<包名>\<指纹>.txt；插件用 UCF_PACK / UCF_FP 读它，
   正式版 nav\ 一个字节都不动。控制台启动前可以选"正式版 / 测试包 + 只对哪张图生效"。
 
     python navdata.py pack list                     # 有哪些测试包
     python navdata.py pack new chain_a --level 11   # 从开发版复制 level11 的改动做包
     python navdata.py pack diff chain_a             # 包 vs 开发版 / 部署版
-    python navdata.py pack promote chain_a          # 包 -> 正式版 nav\（会先备份旧文件）
+    python navdata.py pack promote chain_a          # 包 -> 开发版（再手动「部署到游戏」）
 
 注意：freeze 只收【原生】内容 —— 判据是导出文件里 map.source
       （"game" 才算原生；"ours"/"practice" = 我们造的，一律不收），
@@ -37,6 +43,7 @@ import os
 import re
 import shutil
 import stat
+import subprocess
 import sys
 import time
 
@@ -194,6 +201,22 @@ def summary(root):
             "sub": sub}
 
 
+def _walk_count(root, pred=None):
+    """(文件数, 最近 mtime)；pred 只统计某类文件。"""
+    n, latest = 0, 0.0
+    if os.path.isdir(root):
+        for dp, _dirs, fns in os.walk(root):
+            for fn in fns:
+                if pred and not pred(fn):
+                    continue
+                n += 1
+                try:
+                    latest = max(latest, os.path.getmtime(os.path.join(dp, fn)))
+                except OSError:
+                    pass
+    return n, latest
+
+
 def human(n):
     for unit in ("B", "KB", "MB", "GB"):
         if n < 1024 or unit == "GB":
@@ -320,12 +343,26 @@ def cmd_freeze(args):
                 pass
             edits.append((fn, head))
 
+    # 可走面：③\vis（旧位置）、④\vis、当前版本自带的 vis 都收，同名只看第一份。
+    # 2026-11-18 起导出落在 ④，③\vis 只留迁移前的旧文件。
     bins = []
-    if os.path.isdir(svis):
-        for fn in sorted(os.listdir(svis)):
-            if fn.lower().endswith(".bin") and fn.startswith("navmesh"):
-                shutil.copy2(os.path.join(svis, fn), os.path.join(tmp, "vis", fn))
-                bins.append(fn)
+    vis_roots = [svis, P.VIS, P.DATAVIS]
+    seen_roots = []
+    for root in vis_roots:
+        if not os.path.isdir(root):
+            continue
+        key = os.path.abspath(root).lower()
+        if key in seen_roots:
+            continue
+        seen_roots.append(key)
+        for base, dirs, fns in os.walk(root):
+            dirs[:] = [d for d in dirs if d not in ("_state", "_noise")]
+            for fn in sorted(fns):
+                if fn.lower().endswith(".bin") and fn.startswith("navmesh"):
+                    if fn in bins:
+                        continue
+                    shutil.copy2(os.path.join(base, fn), os.path.join(tmp, "vis", fn))
+                    bins.append(fn)
 
     names = {}
     for r in load_table():
@@ -561,6 +598,60 @@ def cmd_restore(args):
     return 0
 
 
+def cmd_import(args):
+    """④ 测试版 -> ② 开发版：可走面拷进 dev/vis，原始导出交给 organize_maps 改写到 dev/maps。
+
+    这是四版里唯一「测试 -> 开发」的入口：插件只往 ④ 写，人决定哪些数据值得进 ②；
+    进 ② 之后仍然要手动「部署到游戏」才会到 ③。--dry 只看会做什么。
+    """
+    devvis = os.path.join(P.DEV, "vis")
+    roots = [P.VIS]
+    if args.legacy and os.path.abspath(P.LEGACY_VIS) not in [os.path.abspath(x) for x in roots]:
+        roots.append(P.LEGACY_VIS)
+    copied = same = 0
+    for root in roots:
+        if not os.path.isdir(root):
+            continue
+        for base_dir, dirs, fns in os.walk(root):
+            dirs[:] = [d for d in dirs if d not in ("_state", "_noise", "raw")]
+            for fn in sorted(fns):
+                if not (fn.startswith("navmesh") and fn.lower().endswith(".bin")):
+                    continue
+                src = os.path.join(base_dir, fn)
+                dst = os.path.join(devvis, fn)
+                if os.path.isfile(dst) and sha256(dst) == sha256(src):
+                    same += 1
+                    continue
+                if args.dry:
+                    print("  [dry] 会拷贝可走面 %s" % fn)
+                    continue
+                os.makedirs(devvis, exist_ok=True)
+                shutil.copy2(src, dst)
+                copied += 1
+    print("② 开发版可走面：%s %d 个 -> %s（已相同 %d 个）" % (
+        "会新增/更新" if args.dry else "新增/更新", copied, devvis, same))
+
+    script = os.path.join(HERE, "organize_maps.py")
+    if not os.path.isfile(script):
+        sys.exit("找不到 organize_maps.py：%s" % script)
+    cmd = [sys.executable, "-u", script, "--archive"] + (["--dry"] if args.dry else [])
+    print("")
+    print("> python tools/organize_maps.py --archive%s" % (" --dry" if args.dry else ""))
+    r = subprocess.run(cmd, cwd=HERE, capture_output=True)
+    out = (r.stdout or b"").decode("utf-8", "replace").rstrip()
+    err = (r.stderr or b"").decode("utf-8", "replace").rstrip()
+    if out:
+        print(out)
+    if err:
+        print(err)
+    if r.returncode != 0:
+        return r.returncode
+    print("")
+    print("④ 里处理过的原始导出归档到：%s" % P.ARCHIVE)
+    print("下一步：控制台「部署到游戏 ②→③」（或 python navdata.py publish）")
+    return 0
+
+
 def cmd_publish(args):
     s = summary(P.DEV)
     if not s["exists"] or s["files"] == 0:
@@ -612,7 +703,7 @@ def cmd_diff(args):
 
 
 def cmd_status(args):
-    print("UCF 导航数据 · 三版")
+    print("UCF 导航数据 · 四版")
     print("")
     infos = [
         ("① 备份版（原生·只读）", P.NATIVE, "只读，永不编辑"),
@@ -628,6 +719,22 @@ def cmd_status(args):
             human(s["bytes"]), s["mtime"]))
         print("    %s" % tip)
         print("")
+    n_files, t_last = _walk_count(P.VIS)
+    n_json = _walk_count(P.VIS, lambda f: f.lower().endswith(".json"))[0]
+    n_bin = _walk_count(P.VIS, lambda f: f.startswith("navmesh") and f.lower().endswith(".bin"))[0]
+    packs = []
+    if os.path.isdir(P.PACKS_DIR):
+        packs = sorted(d for d in os.listdir(P.PACKS_DIR)
+                       if os.path.isdir(os.path.join(P.PACKS_DIR, d)))
+    print("④ 测试版（导出 + 测试包）  %s" % P.TEST)
+    print("    %s  导出 %d 个文件（raw %d / 可走面 %d）  测试包 %d 个（%s）  最近改动 %s" % (
+        "存在" if os.path.isdir(P.TEST) else "不存在", n_files, n_json, n_bin,
+        len(packs), "、".join(packs) if packs else "无",
+        time.strftime("%Y-%m-%d %H:%M", time.localtime(t_last)) if t_last else "-"))
+    print("    导出根：%s" % P.VIS)
+    print("    测试包：%s" % P.PACKS_DIR)
+    print("    插件导出落在 ④；要进 ② 用「导入到开发版」，② 再由「部署到游戏」推 ③")
+    print("")
     print("当前生效（UCF_PROFILE=%s）：%s" % (P.PROFILE, P.DATA))
     fz = os.path.join(P.NATIVE, ".frozen.json")
     if os.path.isfile(fz):
@@ -649,7 +756,7 @@ PACK_NAME_RE = re.compile(r"^[A-Za-z0-9_-]{1,48}$")
 
 
 def packs_root():
-    return os.path.join(P.DEPLOY, "packs")
+    return P.PACKS_DIR
 
 
 def maps_index():
@@ -848,11 +955,12 @@ def cmd_pack_promote(args):
     if is_blank:
         sys.exit("这是空白底图测试包（blank），不能升到正式版 nav\\："
                  "正式版只做增量改动，没有清空底图机制。")
-    navdir = os.path.join(P.DEPLOY, "nav")
+    # 四版纪律：包只升到 ② 开发版，再由「部署到游戏」统一推 ③。
+    navdir = os.path.join(P.DEV, "nav")
     os.makedirs(navdir, exist_ok=True)
     dst = os.path.join(navdir, fp + ".txt")
     nd, ed = edit_counts(src)
-    print("包 %s -> 正式版：%s" % (args.name, dst))
+    print("包 %s -> ② 开发版：%s" % (args.name, dst))
     print("  改动 node %d / edge %d   地图 %s %s" % (nd, ed, man.get("level", "?"), man.get("label", "")))
     if os.path.isfile(dst):
         bak = dst + ".bak_" + time.strftime("%Y%m%d_%H%M%S")
@@ -867,7 +975,8 @@ def cmd_pack_promote(args):
         print("  [dry] 不写盘")
         return 0
     shutil.copyfile(src, dst)
-    print("  已写入。游戏里按 Ctrl+Shift+R 重新套用（或下次进图自动生效）")
+    print("  已写入 ② 开发版。要进游戏请在控制台点「部署到游戏 ②→③」"
+          "（或 python navdata.py publish）")
     return 0
 
 
@@ -876,7 +985,7 @@ def main():
     print("")
     print("=== %s  navdata.py %s  (UCF_PROFILE=%s) ===" % (
         time.strftime("%Y-%m-%d %H:%M:%S"), " ".join(sys.argv[1:]) or "status", P.PROFILE))
-    ap = argparse.ArgumentParser(description="导航数据三版管理（原生备份 / 开发 / 部署）")
+    ap = argparse.ArgumentParser(description="导航数据四版管理（备份 / 开发 / 部署 / 测试）")
     sub = ap.add_subparsers(dest="cmd")
 
     q = sub.add_parser("freeze", help="用当前数据重建「备份版」（只收原生）")
@@ -890,6 +999,11 @@ def main():
     q = sub.add_parser("restore", help="开发版 <- 备份版（丢掉开发版改动）")
     q.set_defaults(func=cmd_restore)
 
+    q = sub.add_parser("import", help="开发版 <- 测试版（可走面 + 原始导出）")
+    q.add_argument("--legacy", action="store_true", help="顺带扫旧位置 ③\\vis（迁移过渡）")
+    q.add_argument("--dry", action="store_true")
+    q.set_defaults(func=cmd_import)
+
     q = sub.add_parser("publish", help="部署版 <- 开发版（推给游戏）")
     q.add_argument("--dry", action="store_true")
     q.set_defaults(func=cmd_publish)
@@ -897,10 +1011,10 @@ def main():
     q = sub.add_parser("diff", help="开发版 vs 备份版 / 部署版")
     q.set_defaults(func=cmd_diff)
 
-    q = sub.add_parser("status", help="三版状态")
+    q = sub.add_parser("status", help="四版状态")
     q.set_defaults(func=cmd_status)
 
-    q = sub.add_parser("pack", help="测试包：只对一张图生效的路线数据（游戏目录 packs/）")
+    q = sub.add_parser("pack", help="测试包：只对一张图生效的路线数据（④ navdata\\test\\packs/）")
     q.set_defaults(func=cmd_pack_list)
     ps = q.add_subparsers(dest="pack_cmd")
     q2 = ps.add_parser("list", help="列出测试包")

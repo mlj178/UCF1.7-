@@ -6,6 +6,8 @@
 链路跨 5 个文件：src/editor.c / tools/navdata.py / tools/navserver.py /
 tools/navview.html / tools/控制台.pyw。本测试只读源码，不需要游戏、网络或窗口。
 
+2026-11-18 起网页端只读：测试包只由控制台 / navdata.py 创建，网页端只读查看包。
+
 跑法：python tools/test_blank_pack.py
 """
 import os
@@ -34,9 +36,8 @@ def main():
     assert "is_blank" in navdata, "navdata.py promote 不再拦空白包"
 
     server = read(os.path.join("tools", "navserver.py"))
-    assert "/api/pack-save" in server, "navserver.py 丢了 /api/pack-save"
-    assert "/api/pack-txt" in server, "navserver.py 丢了 /api/pack-txt"
-    assert 's == "blank"' in server, "navserver.py validate_txt 不再识别 blank"
+    assert "/api/pack-txt" in server, "navserver.py 丢了 /api/pack-txt（只读看包）"
+    assert "只读服务，不提供写入接口" in server, "navserver.py 不再拒绝网页写入"
 
     view = read(os.path.join("tools", "navview.html"))
     assert "function hasBlank" in view, "navview.html 丢了 hasBlank"

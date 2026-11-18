@@ -1,22 +1,22 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""UCF 导航编辑器 · 本地服务（只用标准库，双击 启动导航编辑器.bat 即可）
+"""UCF 路点工作台 · 本地只读服务（只用标准库，由控制台「路点工作台（查看）」启动）
 
-它做四件事：
+2026-11-18 起网页端永久只读，编辑能力已删除。它做三件事：
   1) 给 navview.html 列出 vis/、nav/ 里能打开的地图数据；
-  2) 保存编辑结果 —— 同时写两份：
-       nav/<地图名>.json   人看的权威数据（ucf-navgraph v1 + edits 段）
-       nav/<指纹>.txt      游戏内插件直接读的编辑清单（ucf-navedit v1）
-     保存前自动备份，可一键回滚；
-  3) 把 geo/web/<关卡>.bin（geo2web.py 生成的灰模网格）发给浏览器做 3D 视图；
-  4) 记住每张图的中文名（nav/names.json）。
+  2) 把 geo/web/<关卡>.bin（geo2web.py 生成的灰模网格）发给浏览器做 3D 视图；
+  3) 提供可走面、测试包文本、地图名等只读数据。
+
+所有 POST 写接口已移除，统一返回 405。部署 / 建测试包请用命令行：
+    python navdata.py publish
+    python navdata.py pack new <包名> --level <关卡>
 
 只监听 127.0.0.1，仅本机可访问。
 """
+import hashlib
 import json
 import os
 import re
-import shutil
 import socket
 import struct
 import subprocess
@@ -30,12 +30,74 @@ from urllib.parse import urlparse, parse_qs, unquote
 ROOT = os.path.dirname(os.path.abspath(__file__))   # 工程端 tools/
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
-from ucf_paths import (DEPLOY as UCF, GEO, VIS, NAV, MAPS, NATIVE, DEV, DATAVIS,  # noqa: E402
-                       PROFILE, READONLY, doc, profile_info)
+from ucf_paths import (DEPLOY, DEPLOY as UCF, GEO, VIS, NAV, MAPS, NATIVE, DEV, DATAVIS,  # noqa: E402
+                       TEST, PACKS_DIR, GAME_VIS, PROFILE, READONLY, doc,
+                       profile_info as _profile_info)
 
 GEOWEB = os.path.join(GEO, "web")
 NAMES_FILE = os.path.join(NAV, "names.json")
-PACKS_DIR = os.path.join(UCF, "packs")   # ④ 测试包：只对某一张图生效的路线改动
+
+# ---------------------------------------------------------------- 版本切换
+# 网页端只读，但可以在 ①备份 / ②开发 / ③部署 / ④测试 之间切换查看。
+# 切换只改本服务的内存状态（读哪套 maps/nav），不写任何文件。
+PROFILE_ORDER = ("native", "dev", "deploy", "test")
+PROFILE_LABEL = {"native": "① 备份版", "dev": "② 开发版",
+                 "deploy": "③ 部署版", "test": "④ 测试版"}
+PROFILE_CN_VIEW = {"native": "备份版（原生·只读）", "dev": "开发版",
+                   "deploy": "部署版", "test": "测试版"}
+PROFILE_ROOT = {"native": NATIVE, "dev": DEV, "deploy": DEPLOY, "test": TEST}
+PROFILE_ALIAS = {
+    "native": "native", "backup": "native", "frozen": "native", "原生": "native", "备份": "native",
+    "dev": "dev", "develop": "dev", "开发": "dev",
+    "deploy": "deploy", "game": "deploy", "部署": "deploy",
+    "test": "test", "export": "test", "测试": "test",
+}
+VIEW_LOCK = threading.RLock()
+
+
+def profile_info():
+    """当前查看版本 + 四版路径（供 /api/workbench、/api/maps、navview 顶栏）。"""
+    return {
+        "profile": PROFILE,
+        "cn": PROFILE_CN_VIEW.get(PROFILE, PROFILE),
+        "label": PROFILE_LABEL.get(PROFILE, PROFILE),
+        "readonly": READONLY,
+        "data": DATA,
+        "maps": MAPS,
+        "nav": NAV,
+        "native": NATIVE,
+        "dev": DEV,
+        "deploy": DEPLOY,
+        "test": TEST,
+        "export": VIS,
+        "packs": PACKS_DIR,
+        "gameVis": GAME_VIS,
+        "profiles": [{"id": k, "label": PROFILE_LABEL[k], "cn": PROFILE_CN_VIEW[k]}
+                     for k in PROFILE_ORDER],
+    }
+
+
+def set_profile(name):
+    """切换“当前查看哪一版”；只改内存里的根目录，不动文件。"""
+    global PROFILE, READONLY, DATA, MAPS, NAV, NAMES_FILE, DATAVIS
+    key = PROFILE_ALIAS.get(str(name or "").strip().lower(), "")
+    if key:
+        PROFILE = key
+        DATA = PROFILE_ROOT[key]
+        MAPS = os.path.join(DATA, "maps")
+        NAV = os.path.join(DATA, "nav")
+        NAMES_FILE = os.path.join(NAV, "names.json")
+        DATAVIS = os.path.join(DATA, "vis")
+        # ①/③/④ 是只读数据；②开发版在旧语义里可写（网页端仍然只读）
+        READONLY = key != "dev"
+    return profile_info()
+
+
+set_profile(PROFILE)
+
+# 工作台（设计版真应用）放在工程端 design/，由本服务托管给浏览器
+DESIGN = os.path.join(os.path.dirname(ROOT), "design")
+# ④ 测试包目录（ucf_paths.PACKS_DIR）：只对某一张图生效的路线改动
 
 # ---------------------------------------------------------------- 可走面（NavMeshGraph）
 # 原生 A* 顶点数（网格顶点去重后），逐张图实测，见 docs/地图对照表.md
@@ -71,7 +133,9 @@ def navmesh_for(level):
             fn = (d.get("navmesh") or {}).get("file")
             if not fn:
                 continue
-            for base in (DATAVIS, VIS, os.path.join(NATIVE, "vis"),
+            for base in (DATAVIS, VIS, os.path.join(VIS, "navmesh"),
+                         os.path.join(GAME_VIS, "navmesh"),   # 迁移前的旧位置
+                         os.path.join(NATIVE, "vis"),
                          os.path.join(DEV, "vis"),
                          os.path.join(UCF, "backup"), GEOWEB):
                 p = os.path.join(base, os.path.basename(fn))
@@ -84,7 +148,9 @@ def navmesh_for(level):
     if v:
         try:
             prefix = "navmesh_nm%d-" % v
-            for base in (DATAVIS, VIS, os.path.join(NATIVE, "vis"), os.path.join(DEV, "vis")):
+            for base in (DATAVIS, VIS, os.path.join(VIS, "navmesh"),
+                         os.path.join(GAME_VIS, "navmesh"),
+                         os.path.join(NATIVE, "vis"), os.path.join(DEV, "vis")):
                 if not os.path.isdir(base):
                     continue
                 for name in sorted(os.listdir(base)):
@@ -107,7 +173,12 @@ def tail_log(n=120):
             f.seek(0, os.SEEK_END)
             size = f.tell()
             f.seek(max(0, size - 262144))
-            data = f.read().decode("utf-8", "replace")
+            raw = f.read()
+            try:
+                data = raw.decode("utf-8")
+            except UnicodeDecodeError:
+                # 插件日志是 GBK（中文 Windows），UTF-8 读不出来就回退
+                data = raw.decode("gbk", "replace")
     except OSError:
         return []
     lines = [ln for ln in data.splitlines() if ln.strip()]
@@ -115,17 +186,18 @@ def tail_log(n=120):
 
 
 def vis_stamp():
-    """vis/ 下导出文件的 (文件名, mtime) 指纹：变了就说明插件刚写了新数据。"""
+    """vis/ 下导出文件的 (相对路径, mtime) 指纹：变了就说明插件刚写了新数据。"""
     out = []
-    try:
-        for name in os.listdir(VIS):
+    for base, dirs, files in os.walk(VIS):
+        dirs[:] = [d for d in dirs if d not in ("_state", "_noise")]
+        for name in files:
             if name.endswith(".json") or name.endswith(".bin"):
+                p = os.path.join(base, name)
                 try:
-                    out.append((name, int(os.path.getmtime(os.path.join(VIS, name)))))
+                    out.append((os.path.relpath(p, VIS).replace("\\", "/"),
+                                int(os.path.getmtime(p))))
                 except OSError:
                     pass
-    except OSError:
-        pass
     return tuple(sorted(out))
 
 
@@ -180,11 +252,25 @@ BUILTIN_DEFAULT_NAMES = {
     "level6": "刀锋寨", "GrimReaperKM": "刀锋寨",
     "level7": "沙漠要塞", "DesertFort": "沙漠要塞",
     "level8": "生化酒店", "NanoResort": "生化酒店",
-    "level9": "暴风", "Nano30_Storm": "暴风", "nano30_storm": "暴风",
+    "level9": "飓风危城", "Nano30_Storm": "飓风危城", "nano30_storm": "飓风危城",
     "level10": "新寂静村", "Nano_DawnVillage": "新寂静村",
     "level11": "死亡擂台", "DeathRing": "死亡擂台",
     "level0": "主菜单",
 }
+
+# 模式分组（GameMode 枚举见 dump.cs：Nano3=3 / Nano4=4 / Nano6=5 / Nano4_Terminator=6；
+# 地图归属按游戏选图表 + 实际玩法核对：沙漠要塞=生化剑客（官方页面），新寂静村=多人生化，
+# 隐藏图 Nano30_Storm「飓风危城」也归多人生化。同一张图只放进一个组，避免下拉里出现两次。）
+MODE_BY_LEVEL = {
+    "level1": ("团队模式", 0), "level2": ("团队模式", 0), "level3": ("团队模式", 0),
+    "level4": ("个人竞技", 1),
+    "level5": ("特殊战", 2), "level6": ("特殊战", 2), "level11": ("特殊战", 2),
+    "level8": ("生化模式", 3),
+    "level7": ("生化剑客模式", 4),
+    "level10": ("多人生化模式", 5), "level9": ("多人生化模式", 5),
+}
+# 原生场景里 0 个 WayPoint：只有可走面，永远采不到点图（见 docs/地图对照表.md §5）
+NO_POINT_LEVELS = ("level4", "level11")
 
 # 权威对照表（手写在工程端 docs/，持久保存；改了不用重启服务，下次请求就生效）
 TABLE_FILE = doc("地图对照表.md")
@@ -250,49 +336,6 @@ FP_RE = re.compile(r"^n\d+-[0-9a-fA-F]{16}$")
 PACK_NAME_RE = re.compile(r"^[A-Za-z0-9_-]{1,48}$")   # 测试包名：插件是 C，只认 ASCII
 
 
-def make_pack(fp, name, level="", label=""):
-    r"""把开发版这张图的改动清单复制成一份「测试包」（只对该图生效，正式版不动）。
-
-    测试包 = <游戏目录>\packs\<包名>\<指纹>.txt；游戏里靠 UCF_PACK + UCF_FP 读它。
-    """
-    if not FP_RE.match(fp or ""):
-        return {"ok": False, "error": "指纹格式不对：%r（应形如 n786-57a46e3465c847cb）" % fp}
-    if not PACK_NAME_RE.match(name or ""):
-        return {"ok": False, "error": "包名只能用 ASCII 字母/数字/下划线/减号，1~48 字符"}
-    src = os.path.join(NAV, fp + ".txt")
-    if not os.path.isfile(src):
-        return {"ok": False, "error": "这张图还没有改动清单（%s.txt）：先在编辑器里保存一次（Ctrl+S）" % fp}
-    pdir = os.path.join(UCF, "packs", name)
-    try:
-        os.makedirs(pdir, exist_ok=True)
-        shutil.copyfile(src, os.path.join(pdir, fp + ".txt"))
-    except OSError as exc:
-        return {"ok": False, "error": "写不进 %s：%s" % (pdir, exc)}
-    nd = ed = 0
-    with open(src, "r", encoding="utf-8", errors="replace") as f:
-        for line in f:
-            s = line.strip()
-            if s.startswith("node "):
-                nd += 1
-            elif s.startswith("edge "):
-                ed += 1
-    man = {
-        "name": name, "fp": fp, "level": level, "label": label,
-        "created": time.strftime("%Y-%m-%d %H:%M:%S"), "source": "editor",
-        "note": "测试包：只对这张图生效（编辑器另存为），插件用 UCF_PACK + UCF_FP 读",
-    }
-    try:
-        with open(os.path.join(pdir, "manifest.json"), "w", encoding="utf-8", newline="\n") as f:
-            json.dump(man, f, ensure_ascii=False, indent=2)
-            f.write("\n")
-    except OSError:
-        pass
-    return {
-        "ok": True, "dir": pdir, "fp": fp, "node": nd, "edge": ed, "pack": name,
-        "out": "已建测试包：%s\n  包名 %s   指纹 %s\n  改动 node %d / edge %d\n"
-               "下一步：打开 UCF 控制台 → 测试数据 → 测试包选 %s → 地图选这张图 → 开始游戏"
-               % (pdir, name, fp, nd, ed, name),
-    }
 EDIT_FILE_RE = re.compile(r"^n\d+-[0-9a-fA-F]{16}\.txt$")
 NODE_RE = re.compile(r"^node\s+(add|del)\s+-?\d+(?:\.\d+)?\s+-?\d+(?:\.\d+)?\s+-?\d+(?:\.\d+)?$")
 NUM = r"-?\d+(?:\.\d+)?"
@@ -338,17 +381,11 @@ def load_names():
     return data
 
 
-def save_names(data):
-    ensure_dirs()
-    tmp = NAMES_FILE + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2, sort_keys=True)
-    os.replace(tmp, NAMES_FILE)
-    try:
-        _names["mtime"] = os.path.getmtime(NAMES_FILE)
-    except OSError:
-        _names["mtime"] = -1.0
-    _names["data"] = data
+def safe_relpath(s, fallback=""):
+    r"""允许 vis/raw 下的相对路径（a/b.json），挡住 .. 和盘符。"""
+    s = str(s or "").strip().replace("\\", "/")
+    parts = [p for p in s.split("/") if p not in ("", ".", "..")]
+    return "/".join(parts)[:180] or fallback
 
 
 def safe_token(s, fallback=""):
@@ -365,7 +402,8 @@ def level_from_text(s):
     m = re.match(r"^(level\d+)\b", s, re.I)
     if m:
         return m.group(1).lower()
-    m = re.search(r"\b(level\d+)\b", s, re.I)
+    # 目录名常是 level1_运输船：下划线也是分隔符，\b 在这里不成立
+    m = re.search(r"(level\d+)(?=[_\-/\.]|$)", s, re.I)
     return m.group(1).lower() if m else ""
 
 
@@ -411,43 +449,67 @@ def summarize(path):
 def list_snapshots():
     out = []
     names = load_names()
-    for kind, folder in (("maps", MAPS), ("nav", NAV), ("vis", VIS)):
-        try:
-            files = sorted(os.listdir(folder))
-        except OSError:
-            continue
-        for fn in files:
-            if not fn.lower().endswith(".json") or fn in ("names.json", "_index.json"):
+    kinds = [("maps", MAPS), ("nav", NAV)]
+    # ④ 测试版的“地图”是 vis/raw 里的原始导出；①/②/③ 只看各自的 maps/nav
+    if PROFILE == "test":
+        kinds.append(("vis", VIS))
+    for kind, folder in kinds:
+        entries = []
+        if kind == "vis":
+            # 新结构：vis/raw/<级别_中文名>/<时间>_<指纹>.json；也兼容旧的平铺文件
+            for base, dirs, files in os.walk(folder):
+                dirs[:] = [d for d in dirs if d not in ("_state", "_noise", "navmesh")]
+                for fn in files:
+                    if not fn.lower().endswith(".json") or fn in ("names.json", "_index.json"):
+                        continue
+                    p = os.path.join(base, fn)
+                    if os.path.isfile(p):
+                        entries.append((os.path.relpath(p, folder).replace("\\", "/"), p))
+        else:
+            try:
+                files = sorted(os.listdir(folder))
+            except OSError:
                 continue
-            p = os.path.join(folder, fn)
-            if not os.path.isfile(p):
-                continue
+            for fn in files:
+                if not fn.lower().endswith(".json") or fn in ("names.json", "_index.json"):
+                    continue
+                p = os.path.join(folder, fn)
+                if os.path.isfile(p):
+                    entries.append((fn, p))
+        for fn, p in entries:
             info = summarize(p)
             if not info or info.get("error"):
                 continue
             fp = info.get("fp") or ""
-            key = info.get("mapName") or fp or os.path.splitext(fn)[0]
+            key = info.get("mapName") or fp or os.path.splitext(os.path.basename(fn))[0]
             entry = dict(info)
             entry.update({"dir": kind, "file": fn, "key": key})
             # 关卡：指纹 > 地图名 > 文件名；中文名：指纹 > 地图名 > 关卡 > 内置表
             level = str(info.get("mapLevel") or "")
             if not level:
-                for k in (fp, info.get("mapName"), os.path.splitext(fn)[0]):
+                for k in (fp, info.get("mapName"), os.path.splitext(os.path.basename(fn))[0]):
                     if k and k in names and names[k].get("level"):
                         level = names[k]["level"]
                         break
             if not level:
-                level = level_from_text(info.get("mapName") or fn) or ""
+                level = (level_from_text(info.get("mapName") or "")
+                         or level_from_text(fn) or "")
             entry["level"] = level
-            label = str(info.get("mapLabel") or "")
+            # 显示名以 docs/地图对照表.md 为准（maps 里的 label / names.json 是旧快照，
+            # 隐藏图改叫「飓风危城」不用回写四版数据）
+            label = default_names().get(level, "")
+            if not label:
+                label = str(info.get("mapLabel") or "")
             if not label:
                 for k in (fp, info.get("mapName"), level):
                     if k and k in names and names[k].get("name"):
                         label = names[k]["name"]
                         break
-            if not label:
-                label = default_names().get(level, "") or default_names().get(info.get("mapName") or "", "")
             entry["label"] = label
+            if kind == "vis" and "_未识别" in fn:
+                folder = os.path.basename(os.path.dirname(fn))
+                entry["label"] = folder.strip("_").replace("_", " ")
+                entry["suspect"] = True
             out.append(entry)
     # vis/ 里的原始导出如果已经归档进 maps/（同一指纹），列表里就别重复出现
     have_fp = set(x.get("fp") for x in out if x.get("dir") == "maps" and x.get("fp"))
@@ -589,31 +651,691 @@ def list_backups(fp):
     return out
 
 
-def validate_txt(text):
-    r"""返回 (ok, 有效行数, 错误信息, blank)。
+# ---------------------------------------------------------------- 工作台汇总
+# 2026-11-18：七页只读工作台的唯一数据入口。所有数字都从真实文件算：
+#   maps/*.json（②开发版）、①备份版、③部署端、④测试包、ucf_mod.json、ucf_mod.log。
+# 网页端只读；这里也只做 GET 汇总，不写任何文件。
+FEATURE_KINDS = ("nano_area", "nano_pos", "crouch", "guard",
+                 "guard_area", "spawn", "jump", "tag_region")
+SPAWN_AUX = {0: "gr", 1: "bl", 2: "neutral", 3: "supply", 4: "red", 5: "blue"}
 
-    blank 是测试包专用指令：进图先把原生点全禁用，再套文件里的 node/edge。
-    正式版 nav\ 不接受 blank（见 post_save），避免误把正式地图清空。"""
-    ops = 0
-    fp = ""
-    blank = False
-    for i, line in enumerate(text.splitlines(), 1):
-        s = line.strip()
-        if not s:
+_hash_cache = {}
+_info_cache = {}
+
+
+def sha256(path):
+    """文件 SHA256（按 mtime+size 缓存）；读不到返回空串。"""
+    try:
+        st = os.stat(path)
+    except OSError:
+        return ""
+    key = (path, st.st_mtime, st.st_size)
+    hit = _hash_cache.get(key)
+    if hit is not None:
+        return hit
+    h = hashlib.sha256()
+    try:
+        with open(path, "rb") as f:
+            for chunk in iter(lambda: f.read(65536), b""):
+                h.update(chunk)
+    except OSError:
+        return ""
+    val = h.hexdigest()
+    _hash_cache[key] = val
+    return val
+
+
+def find_navmesh(level, filename=""):
+    """这张图的可走面（NavMeshGraph）导出文件；找不到返回 ("", False)。
+    只找文件，不解析；运输船/生化酒店/暴风本来就没有 NavMeshGraph。"""
+    bases = (DATAVIS, VIS, os.path.join(VIS, "navmesh"),
+             os.path.join(GAME_VIS, "navmesh"), os.path.join(NATIVE, "vis"),
+             os.path.join(DEV, "vis"), os.path.join(UCF, "backup"), GEOWEB)
+    if filename:
+        base = os.path.basename(filename)
+        for d in bases:
+            p = os.path.join(d, base)
+            if os.path.isfile(p):
+                return base, True
+    v = NATIVE_VERTS.get(level)
+    if v:
+        prefix = "navmesh_nm%d-" % v
+        for d in bases:
+            if not os.path.isdir(d):
+                continue
+            try:
+                for name in sorted(os.listdir(d)):
+                    if name.startswith(prefix) and name.endswith(".bin"):
+                        return name, True
+            except OSError:
+                pass
+    return "", False
+
+
+def _map_info(path):
+    """读一张地图 JSON，算出工作台要用的全部统计（按 mtime+size 缓存）。"""
+    try:
+        st = os.stat(path)
+    except OSError:
+        return None
+    key = (st.st_mtime, st.st_size)
+    hit = _info_cache.get(path)
+    if hit and hit[0] == key:
+        return dict(hit[1])
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            doc = json.load(f)
+    except (OSError, ValueError) as exc:
+        info = {"error": str(exc)}
+        _info_cache[path] = (key, info)
+        return dict(info)
+
+    mp = doc.get("map") or {}
+    nodes = doc.get("nodes") or []
+    edges = doc.get("edges") or []
+    feats = doc.get("features") or []
+    lines = doc.get("lines") or {}
+    if not isinstance(lines, dict):
+        lines = {}
+
+    id2i = {}
+    for i, n in enumerate(nodes):
+        nid = n.get("id")
+        if nid is not None:
+            id2i.setdefault(str(nid), i)
+    adj = [[] for _ in nodes]
+    valid_edges = 0
+    for e in edges:
+        if not e or len(e) < 2:
             continue
-        if s.startswith("#"):
-            m = re.search(r"fp=(\S+)", s)
-            if m:
-                fp = m.group(1)
+        a = id2i.get(str(e[0]))
+        b = id2i.get(str(e[1]))
+        if a is None or b is None or a == b:
             continue
-        if s == "blank":
-            blank = True
+        adj[a].append(b)
+        adj[b].append(a)
+        valid_edges += 1
+
+    walk = 0
+    ys = []
+    xs = []
+    zs = []
+    for n in nodes:
+        if n.get("walk", 1):
+            walk += 1
+        p = n.get("p") or []
+        if len(p) >= 3:
+            try:
+                xs.append(float(p[0]))
+                ys.append(float(p[1]))
+                zs.append(float(p[2]))
+            except (TypeError, ValueError):
+                pass
+
+    deg = [len(a) for a in adj]
+    isolated = sum(1 for d in deg if d == 0)
+    degree_gt6 = sum(1 for d in deg if d > 6)
+    max_degree = max(deg) if deg else 0
+    comps = 0
+    seen = bytearray(len(nodes))
+    for i in range(len(nodes)):
+        if seen[i]:
             continue
-        if NODE_RE.match(s) or EDGE_RE.match(s):
-            ops += 1
+        comps += 1
+        seen[i] = 1
+        stack = [i]
+        while stack:
+            u = stack.pop()
+            for v in adj[u]:
+                if not seen[v]:
+                    seen[v] = 1
+                    stack.append(v)
+
+    kinds = {}
+    spawn_aux = {}
+    crouch_aux = {}
+    for f in feats:
+        k = str(f.get("kind") or "")
+        if not k:
             continue
-        return False, ops, "第 %d 行不是合法的编辑指令：%s" % (i, s[:60]), blank
-    return True, ops, "", blank
+        kinds[k] = kinds.get(k, 0) + 1
+        a = f.get("aux")
+        if k == "spawn":
+            spawn_aux[str(a)] = spawn_aux.get(str(a), 0) + 1
+        elif k == "crouch":
+            crouch_aux[str(a)] = crouch_aux.get(str(a), 0) + 1
+
+    bbox = mp.get("bbox")
+    if not bbox and xs:
+        bbox = [[min(xs), min(ys) if ys else 0.0, min(zs)],
+                [max(xs), max(ys) if ys else 0.0, max(zs)]]
+
+    level = str(mp.get("level") or "")
+    nm = mp.get("navmesh") or {}
+    nm_file, nm_ok = find_navmesh(level, str((nm or {}).get("file") or ""))
+
+    info = {
+        "fp": str(mp.get("fingerprint") or ""),
+        "name": str(mp.get("name") or ""),
+        "label": str(mp.get("label") or ""),
+        "level": level,
+        "scene": str(mp.get("scene") or ""),
+        "source": str(mp.get("source") or ""),
+        "generated": str(doc.get("generated") or ""),
+        "nodes": len(nodes),
+        "walkable": walk,
+        "edges": valid_edges,
+        "features": len(feats),
+        "kinds": kinds,
+        "spawnAux": spawn_aux,
+        "crouchAux": crouch_aux,
+        "jumpLinks": len(lines.get("jump") or []),
+        "nanoNeighbor": len(lines.get("nano_neighbor") or []),
+        "entranceEscape": len(lines.get("entrance_escape") or []),
+        "isolated": isolated,
+        "components": comps,
+        "degreeGt6": degree_gt6,
+        "maxDegree": max_degree,
+        "support": mp.get("support", (walk / len(nodes)) if nodes else 0),
+        "bbox": bbox,
+        "routes": len(doc.get("routes") or []),
+        "zones": len(doc.get("zones") or []),
+        "navmesh": nm_ok,
+        "navmeshFile": nm_file,
+        "mtime": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(st.st_mtime)),
+        "mtimeTs": st.st_mtime,
+        "size": st.st_size,
+    }
+    _info_cache[path] = (key, info)
+    return dict(info)
+
+
+def _edit_ops(root, fp):
+    """nav/<指纹>.txt 里插件真正会执行的 node/edge 指令数。"""
+    if not fp:
+        return 0
+    p = os.path.join(root, "nav", fp + ".txt")
+    if not os.path.isfile(p):
+        return 0
+    head = read_txt_head(p)
+    return int(head.get("ops") or 0) if head else 0
+
+
+def _file_time(path):
+    try:
+        m = os.stat(path).st_mtime
+    except OSError:
+        return "", 0
+    return time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(m)), m
+
+
+def _no_of(file_name, row):
+    no = str((row or {}).get("no") or "")
+    if no:
+        return no
+    m = re.match(r"^(\d{1,3})_", file_name or "")
+    return m.group(1) if m else ""
+
+
+def _map_entry(file_name, path, info, row):
+    """一条地图行：文件统计 + 索引行 + ③部署状态 + 自动铺设触发判断。"""
+    info = info or {}
+    row = row or {}
+    level = str(info.get("level") or row.get("level") or "")
+    # 显示名以 docs/地图对照表.md 为准（level9 隐藏图 = 飓风危城，文件仍叫 10_暴风.json）
+    label = (default_names().get(level, "") or str(info.get("label") or "")
+             or str(row.get("name") or ""))
+    fp = str(info.get("fp") or row.get("fingerprint") or "")
+    file_name = file_name or str(row.get("file") or "")
+    mode, mode_order = MODE_BY_LEVEL.get(level, ("其他", 99))
+    exists = bool(path and os.path.isfile(path))
+    nodes = int(info.get("nodes") or row.get("nodes") or 0)
+    edges = int(info.get("edges") or row.get("edges") or 0)
+    features = int(info.get("features") or row.get("features") or 0)
+    kinds = info.get("kinds") or {}
+    crouch_aux = info.get("crouchAux") or {}
+    status = "missing"
+    if exists:
+        status = "empty" if nodes == 0 else ("tiny" if nodes < 50 else "ok")
+
+    # 没有地图 JSON 的关卡（胜利广场 / 死亡擂台）也要能看出有没有可走面
+    nm_ok = bool(info.get("navmesh"))
+    nm_file = str(info.get("navmeshFile") or "")
+    if not nm_ok and level:
+        nm_file, nm_ok = find_navmesh(level)
+
+    dep_path = os.path.join(DEPLOY, "maps", file_name) if file_name else ""
+    dep_exists = bool(dep_path and os.path.isfile(dep_path))
+    dep = {"exists": dep_exists, "same": False, "mtime": "", "size": 0}
+    if dep_exists:
+        dep["same"] = bool(exists and sha256(dep_path) == sha256(path))
+        dep["mtime"] = _file_time(dep_path)[0]
+        try:
+            dep["size"] = os.path.getsize(dep_path)
+        except OSError:
+            pass
+
+    return {
+        "no": _no_of(file_name, row),
+        "level": level,
+        "label": label,
+        "mode": mode,
+        "modeOrder": mode_order,
+        "noPointGraph": level in NO_POINT_LEVELS,
+        "scene": str(info.get("scene") or row.get("scene") or ""),
+        "file": file_name,
+        "fp": fp,
+        "nodes": nodes,
+        "walkable": int(info.get("walkable") or 0),
+        "edges": edges,
+        "features": features,
+        "kinds": kinds,
+        "spawnAux": info.get("spawnAux") or {},
+        "crouchAux": crouch_aux,
+        "jumpLinks": int(info.get("jumpLinks") or 0),
+        "jumpEndpoints": int(kinds.get("jump") or 0),
+        "isolated": int(info.get("isolated") or 0),
+        "components": int(info.get("components") or 0),
+        "degreeGt6": int(info.get("degreeGt6") or 0),
+        "maxDegree": int(info.get("maxDegree") or 0),
+        "support": info.get("support") or 0,
+        "bbox": info.get("bbox"),
+        "routes": int(info.get("routes") or 0),
+        "zones": int(info.get("zones") or 0),
+        "navmesh": nm_ok,
+        "navmeshFile": nm_file,
+        "mtime": info.get("mtime") or "",
+        "mtimeTs": info.get("mtimeTs") or 0,
+        "size": int(info.get("size") or 0),
+        "status": status,
+        "editsDev": _edit_ops(DEV, fp),
+        "editsNative": _edit_ops(NATIVE, fp),
+        "editsDeploy": _edit_ops(DEPLOY, fp),
+        "deployed": dep,
+        "auto": {
+            "waypoints": nodes == 0,
+            "crouch": sum(crouch_aux.values()) == 0,
+            "guard": int(kinds.get("nano_area") or 0) == 0,
+        },
+    }
+
+
+def collect_test_maps():
+    """④ 测试版：vis/raw 里的每份导出算一条“地图”，按时间倒序。
+    测试版没有 maps/ 的固定图集，这样查看器也能打开同一批原始导出。"""
+    out = []
+    raw_root = os.path.join(VIS, "raw")
+    for base, dirs, files in os.walk(raw_root):
+        dirs[:] = [d for d in dirs if d not in ("_state", "_noise", "navmesh")]
+        for fn in files:
+            if not fn.lower().endswith(".json") or fn in ("names.json", "_index.json"):
+                continue
+            p = os.path.join(base, fn)
+            info = _map_info(p)
+            if not info or info.get("error"):
+                continue
+            rel = os.path.relpath(p, VIS).replace("\\", "/")
+            entry = _map_entry(rel, p, info, {})
+            entry["dir"] = "vis"
+            entry["file"] = rel
+            entry["no"] = ""
+            entry["deployed"] = {"exists": False, "same": False, "mtime": "", "size": 0}
+            entry["editsDev"] = 0
+            entry["editsDeploy"] = 0
+            folder = os.path.basename(base)
+            if not entry.get("level"):
+                mm = re.search(r"(level\d+)_", rel, re.I) or re.search(r"\b(level\d+)\b", rel, re.I)
+                if mm:
+                    entry["level"] = mm.group(1).lower()
+            if "_未识别" in rel:
+                entry["label"] = folder.strip("_").replace("_", " ")
+                entry["suspect"] = True
+            elif not entry.get("label"):
+                entry["label"] = default_names().get(entry.get("level") or "", "") or folder
+            elif entry.get("level"):
+                entry["label"] = default_names().get(entry.get("level"), entry.get("label"))
+            out.append(entry)
+    out.sort(key=lambda e: e.get("mtimeTs") or 0, reverse=True)
+    for i, e in enumerate(out):
+        e["no"] = str(i + 1).zfill(2)
+    return out
+
+
+def collect_maps():
+    """当前版本的图集：①/②/③ 读 maps/*.json；④ 读 vis/raw 的导出。"""
+    if PROFILE == "test":
+        return collect_test_maps()
+    try:
+        with open(os.path.join(MAPS, "_index.json"), "r", encoding="utf-8") as f:
+            index = json.load(f)
+    except (OSError, ValueError):
+        index = {}
+    idx_rows = {}
+    for row in (index.get("maps") or []):
+        if not isinstance(row, dict):
+            continue
+        fn = str(row.get("file") or "")
+        idx_rows[fn or ("#%s" % row.get("no"))] = row
+
+    out = []
+    seen = set()
+    seen_levels = set()
+    try:
+        files = sorted(os.listdir(MAPS))
+    except OSError:
+        files = []
+    for fn in files:
+        if not fn.lower().endswith(".json") or fn.startswith("_"):
+            continue
+        p = os.path.join(MAPS, fn)
+        if not os.path.isfile(p):
+            continue
+        info = _map_info(p)
+        if not info or info.get("error"):
+            continue
+        out.append(_map_entry(fn, p, info, idx_rows.get(fn)))
+        seen.add(fn)
+        if info.get("level"):
+            seen_levels.add(str(info["level"]))
+    for key, row in idx_rows.items():
+        fn = str(row.get("file") or "")
+        if fn and fn in seen:
+            continue
+        # 同一张图已经有文件了（索引里这条没写 file），别再加一行重复的
+        if not fn and str(row.get("level") or "") in seen_levels:
+            continue
+        p = os.path.join(MAPS, fn) if fn else ""
+        out.append(_map_entry(fn, p, _map_info(p) if p else None, row))
+
+    # 这一版没有 _index.json（① 备份版就是），按权威对照表补齐缺的图，
+    # 否则下拉里会跳过 04 胜利广场、07 死亡擂台这类原生没有点图、只有可走面的关卡。
+    have_levels = {str(e.get("level") or "") for e in out}
+    have_nos = {str(e.get("no") or "") for e in out}
+    for (t_no, t_lv, t_nm, t_sc, t_note) in load_map_table():
+        no = "%02d" % t_no
+        if t_lv in have_levels or no in have_nos:
+            continue
+        out.append(_map_entry("", "", None, {
+            "no": no, "level": t_lv, "name": t_nm, "scene": t_sc, "note": t_note,
+        }))
+
+    def _sort(e):
+        no = str(e.get("no") or "")
+        m = re.match(r"^(\d+)", no)
+        return (int(m.group(1)) if m else 999, e.get("level") or "")
+
+    out.sort(key=_sort)
+    return out
+
+
+def _scan_files(root, sub, exts):
+    """目录下（不递归）指定后缀的文件：数量、体积、最新时间。"""
+    d = os.path.join(root, sub) if sub else root
+    count = 0
+    total = 0
+    latest = 0
+    try:
+        names = os.listdir(d)
+    except OSError:
+        names = []
+    for name in names:
+        if exts and not name.lower().endswith(exts):
+            continue
+        p = os.path.join(d, name)
+        if not os.path.isfile(p):
+            continue
+        try:
+            st = os.stat(p)
+        except OSError:
+            continue
+        count += 1
+        total += st.st_size
+        latest = max(latest, st.st_mtime)
+    return count, total, latest
+
+
+def _dir_version(root):
+    """四版里的一版：地图数 / 编辑数 / 可走面数 / 体积 / 最近写入。"""
+    maps_n, maps_b, maps_t = _scan_files(root, "maps", (".json",))
+    # _index.json 不算地图
+    if os.path.isfile(os.path.join(root, "maps", "_index.json")):
+        maps_n = max(0, maps_n - 1)
+    nav_n, nav_b, nav_t = _scan_files(root, "nav", (".txt",))
+    nm1, nmb1, nmt1 = _scan_files(root, "vis", (".bin",))
+    nm2, nmb2, nmt2 = _scan_files(root, os.path.join("vis", "navmesh"), (".bin",))
+    latest = max(maps_t, nav_t, nmt1, nmt2)
+    out = {
+        "path": root,
+        "exists": os.path.isdir(root),
+        "maps": maps_n,
+        "nav": nav_n,
+        "navmesh": nm1 + nm2,
+        "bytes": maps_b + nav_b + nmb1 + nmb2,
+        "latest": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(latest)) if latest else "",
+        "latestTs": latest,
+    }
+    return out
+
+
+def _compare_group(a_root, b_root, sub, exts):
+    """两版同一目录下的文件对比：同名同 SHA 算一致，其余列出文件名。"""
+    def _list(root):
+        d = os.path.join(root, sub)
+        try:
+            names = os.listdir(d)
+        except OSError:
+            return {}
+        out = {}
+        for name in names:
+            if not name.lower().endswith(exts) or name.startswith("_"):
+                continue
+            p = os.path.join(d, name)
+            if os.path.isfile(p):
+                out[name] = p
+        return out
+
+    fa = _list(a_root)
+    fb = _list(b_root)
+    same = 0
+    diff = []
+    for name in sorted(set(fa) & set(fb)):
+        if sha256(fa[name]) == sha256(fb[name]):
+            same += 1
+        else:
+            diff.append(name)
+    return {
+        "same": same,
+        "diff": diff,
+        "onlyA": sorted(set(fa) - set(fb)),
+        "onlyB": sorted(set(fb) - set(fa)),
+    }
+
+
+def _consistency():
+    return {
+        "nativeDev": {
+            "maps": _compare_group(NATIVE, DEV, "maps", (".json",)),
+            "nav": _compare_group(NATIVE, DEV, "nav", (".txt",)),
+        },
+        "devDeploy": {
+            "maps": _compare_group(DEV, DEPLOY, "maps", (".json",)),
+            "nav": _compare_group(DEV, DEPLOY, "nav", (".txt",)),
+        },
+    }
+
+
+def collect_packs():
+    """④ 测试包：名字、图、指纹、指令数、nogen、创建时间。"""
+    out = []
+    try:
+        names = sorted(os.listdir(PACKS_DIR))
+    except OSError:
+        return out
+    for name in names:
+        d = os.path.join(PACKS_DIR, name)
+        if not os.path.isdir(d):
+            continue
+        manifest = {}
+        try:
+            with open(os.path.join(d, "manifest.json"), "r", encoding="utf-8") as f:
+                manifest = json.load(f) or {}
+        except (OSError, ValueError):
+            manifest = {}
+        ops = 0
+        files = 0
+        latest = 0
+        try:
+            for fn in os.listdir(d):
+                if not fn.lower().endswith(".txt"):
+                    continue
+                p = os.path.join(d, fn)
+                if not os.path.isfile(p):
+                    continue
+                head = read_txt_head(p)
+                if head:
+                    ops += int(head.get("ops") or 0)
+                    files += 1
+                latest = max(latest, _file_time(p)[1])
+        except OSError:
+            pass
+        nogen = os.path.isfile(os.path.join(d, "nogen.txt"))
+        out.append({
+            "name": name,
+            "label": str(manifest.get("label") or ""),
+            "level": str(manifest.get("level") or ""),
+            "fp": str(manifest.get("fp") or ""),
+            "blank": bool(manifest.get("blank")),
+            "note": str(manifest.get("note") or ""),
+            "created": str(manifest.get("created") or ""),
+            "files": files,
+            "ops": ops,
+            "nogen": nogen,
+            "mtime": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(latest)) if latest else "",
+        })
+    return out
+
+
+def collect_config():
+    """③ 部署端的 ucf_mod.json：自动铺设三个开关和当前测试包。"""
+    p = os.path.join(DEPLOY, "ucf_mod.json")
+    out = {"path": p, "exists": os.path.isfile(p), "enabled": None,
+           "scene": "", "label": "", "features": {}, "pack": {}}
+    if not out["exists"]:
+        return out
+    try:
+        with open(p, "r", encoding="utf-8-sig") as f:
+            cfg = json.load(f) or {}
+    except (OSError, ValueError):
+        return out
+    feats = cfg.get("features") or {}
+    out["enabled"] = bool(cfg.get("enabled", True))
+    out["scene"] = str(cfg.get("scene") or "")
+    out["label"] = str(cfg.get("label") or "")
+    out["features"] = {k: bool(feats.get(k)) for k in
+                       ("auto_waypoints", "auto_crouch", "ghost_areas",
+                        "collect_only", "editor")}
+    out["pack"] = cfg.get("pack") or {}
+    return out
+
+
+def collect_events(limit=24):
+    """最近文件事件：地图导出、编辑清单、测试包、部署。"""
+    events = []
+
+    def _add(kind, text, path):
+        t, ts = _file_time(path)
+        if ts:
+            events.append({"kind": kind, "text": text, "time": t, "ts": ts,
+                           "file": os.path.basename(path)})
+
+    roots = []
+    if PROFILE == "native":
+        roots = [("① 备份版", NATIVE)]
+    elif PROFILE == "deploy":
+        roots = [("③ 部署版", DEPLOY)]
+    elif PROFILE == "test":
+        roots = []
+    else:
+        roots = [("② 开发版", DEV), ("③ 部署版", DEPLOY)]
+    for label, root in roots:
+        try:
+            for fn in sorted(os.listdir(os.path.join(root, "maps"))):
+                if fn.endswith(".json") and not fn.startswith("_"):
+                    _add("地图", label + " · " + fn, os.path.join(root, "maps", fn))
+        except OSError:
+            pass
+        try:
+            for fn in sorted(os.listdir(os.path.join(root, "nav"))):
+                if fn.endswith(".txt"):
+                    p = os.path.join(root, "nav", fn)
+                    head = read_txt_head(p)
+                    ops = int(head.get("ops") or 0) if head else 0
+                    _add("编辑", label + " 编辑清单 · %s · %d 条" % (fn, ops), p)
+        except OSError:
+            pass
+    if PROFILE == "test":
+        raw_root = os.path.join(VIS, "raw")
+        for base, dirs, files in os.walk(raw_root):
+            dirs[:] = [d for d in dirs if d not in ("_state", "_noise", "navmesh")]
+            for fn in files:
+                if not fn.lower().endswith(".json"):
+                    continue
+                p = os.path.join(base, fn)
+                rel = os.path.relpath(p, VIS).replace("\\", "/")
+                _add("导出", "④ 测试版 · " + rel, p)
+    for pk in collect_packs():
+        d = os.path.join(PACKS_DIR, pk["name"])
+        _add("测试包", "④ %s · %s · %d 条指令" % (pk["name"], pk["label"] or pk["level"], pk["ops"]),
+             os.path.join(d, "manifest.json"))
+    events.sort(key=lambda e: e["ts"], reverse=True)
+    return events[:limit]
+
+
+def _raw_count():
+    """④ vis/raw 下的导出数量 + 最新时间（测试版当“图集”用）。"""
+    n = 0
+    latest = 0
+    root = os.path.join(VIS, "raw")
+    for base, dirs, files in os.walk(root):
+        dirs[:] = [d for d in dirs if d not in ("_state", "_noise", "navmesh")]
+        for fn in files:
+            if fn.lower().endswith(".json") and fn not in ("names.json", "_index.json"):
+                p = os.path.join(base, fn)
+                try:
+                    st = os.stat(p)
+                except OSError:
+                    continue
+                n += 1
+                latest = max(latest, st.st_mtime)
+    return n, latest
+
+
+def build_workbench():
+    test_ver = _dir_version(TEST)
+    raw_n, raw_t = _raw_count()
+    test_ver["raw"] = raw_n
+    test_ver["rawLatest"] = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(raw_t)) if raw_t else ""
+    return {
+        "ok": True,
+        "server": "ucf-navserver/2 %s" % time.strftime("%Y-%m-%d %H:%M:%S"),
+        "profile": profile_info(),
+        "profiles": profile_info()["profiles"],
+        "names": load_names(),
+        "defaults": default_names(),
+        "maps": collect_maps(),
+        "versions": {
+            "native": _dir_version(NATIVE),
+            "dev": _dir_version(DEV),
+            "deploy": _dir_version(DEPLOY),
+            "test": test_ver,
+        },
+        "packs": collect_packs(),
+        "consistency": _consistency(),
+        "config": collect_config(),
+        "events": collect_events(),
+        "log": tail_log(600),
+        "logFile": LOG_FILE,
+    }
 
 
 # ---------------------------------------------------------------- HTTP
@@ -645,27 +1367,62 @@ class Handler(SimpleHTTPRequestHandler):
         self.send_bytes(json.dumps(obj, ensure_ascii=False).encode("utf-8"),
                         "application/json; charset=utf-8", code)
 
-    def read_json_body(self, limit=96 * 1024 * 1024):
+    # ---- design/（工作台页面 + 静态资源） ----
+    MIME = {
+        ".html": "text/html; charset=utf-8",
+        ".css": "text/css; charset=utf-8",
+        ".js": "application/javascript; charset=utf-8",
+        ".json": "application/json; charset=utf-8",
+        ".svg": "image/svg+xml",
+        ".png": "image/png",
+        ".woff2": "font/woff2",
+        ".ico": "image/x-icon",
+    }
+
+    def redirect(self, where):
+        body = ("<!doctype html><meta charset=utf-8><a href=\"%s\">%s</a>" % (where, where)).encode("utf-8")
+        self.send_response(302)
+        self.send_header("Location", where)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
         try:
-            n = int(self.headers.get("Content-Length") or 0)
-        except ValueError:
-            return None
-        if n <= 0 or n > limit:
-            return None
-        raw = self.rfile.read(n)
-        try:
-            return json.loads(raw.decode("utf-8"))
-        except Exception:
-            return None
+            self.wfile.write(body)
+        except (BrokenPipeError, ConnectionResetError):
+            pass
+
+    def serve_design(self, rel):
+        """只允许 design/ 目录内的文件，挡住 .. 和绝对路径。"""
+        rel = unquote(rel or "").replace("\\", "/").lstrip("/")
+        full = os.path.abspath(os.path.join(DESIGN, *[x for x in rel.split("/") if x]))
+        if os.path.commonpath([os.path.abspath(DESIGN), full]) != os.path.abspath(DESIGN):
+            return self.send_json({"ok": False, "error": "路径越界: " + rel}, 400)
+        if not os.path.isfile(full):
+            return self.send_json({"ok": False, "error": "没有 " + rel}, 404)
+        ext = os.path.splitext(full)[1].lower()
+        with open(full, "rb") as f:
+            body = f.read()
+        return self.send_bytes(body, self.MIME.get(ext, "application/octet-stream"))
 
     # ---- GET ----
     def do_GET(self):
+        # 版本切换会改内存里的 MAPS/NAV；整请求加锁，避免半切换状态
+        with VIEW_LOCK:
+            return self._do_GET()
+
+    def _do_GET(self):
         u = urlparse(self.path)
         q = parse_qs(u.query)
         path = u.path
-        if path in ("/", "/index.html", "/navview.html"):
+        if path in ("/", "/index.html"):
+            return self.redirect("/design/nav-studio.html")
+        if path == "/navview.html":
             self.path = "/navview.html"
             return SimpleHTTPRequestHandler.do_GET(self)
+        if path in ("/studio", "/studio/", "/studio.html"):
+            return self.redirect("/design/nav-studio.html")
+        if path.startswith("/design/"):
+            return self.serve_design(path[len("/design/"):])
         try:
             if path == "/api/maps":
                 index = {}
@@ -686,6 +1443,38 @@ class Handler(SimpleHTTPRequestHandler):
                     "edits": list_edits(),
                     "geo": list_geo(),
                     "profile": profile_info(),
+                })
+            if path == "/api/profile":
+                # 只读查看的“版本切换”：只改内存里读哪套 maps/nav，不写文件
+                want = (q.get("set") or [""])[0]
+                if want:
+                    return self.send_json({"ok": True, "profile": set_profile(want)})
+                return self.send_json({"ok": True, "profile": profile_info()})
+            if path == "/api/workbench":
+                # 七页只读工作台：一次拿齐地图统计 / 四版 / 测试包 / 配置 / 事件 / 日志
+                return self.send_json(build_workbench())
+            if path == "/api/studio":
+                # 工作台启动时一次性拿齐：版本 / 图列表 / 编辑清单 / 地形 / 日志
+                index = {}
+                try:
+                    ip = os.path.join(MAPS, "_index.json")
+                    if os.path.isfile(ip):
+                        with open(ip, "r", encoding="utf-8") as f:
+                            index = json.load(f)
+                except Exception:
+                    index = {}
+                return self.send_json({
+                    "ok": True,
+                    "ucf": UCF,
+                    "profile": profile_info(),
+                    "names": load_names(),
+                    "defaults": default_names(),
+                    "mapIndex": index,
+                    "snapshots": list_snapshots(),
+                    "edits": list_edits(),
+                    "geo": list_geo(),
+                    "log": tail_log(120),
+                    "server": "ucf-navserver/2 %s" % time.strftime("%Y-%m-%d %H:%M:%S"),
                 })
             if path == "/api/log":
                 n = 120
@@ -711,9 +1500,11 @@ class Handler(SimpleHTTPRequestHandler):
                 return self.send_json({"ok": True, "names": load_names(), "defaults": default_names()})
             if path == "/api/raw":
                 kind = (q.get("dir") or ["vis"])[0]
-                fn = safe_token((q.get("file") or [""])[0])
+                fn = safe_relpath((q.get("file") or [""])[0])
                 base = MAPS if kind == "maps" else (NAV if kind == "nav" else VIS)
-                p = os.path.join(base, fn)
+                p = os.path.join(base, *[x for x in fn.split("/") if x])
+                if os.path.commonpath([os.path.abspath(base), os.path.abspath(p)]) != os.path.abspath(base):
+                    return self.send_json({"ok": False, "error": "路径越界: " + fn}, 400)
                 if not os.path.isfile(p):
                     return self.send_json({"ok": False, "error": "文件不存在: " + fn}, 404)
                 with open(p, "rb") as f:
@@ -803,219 +1594,8 @@ class Handler(SimpleHTTPRequestHandler):
 
     # ---- POST ----
     def do_POST(self):
-        u = urlparse(self.path)
-        body = self.read_json_body()
-        if body is None:
-            return self.send_json({"ok": False, "error": "请求体为空或不是 JSON"}, 400)
-        try:
-            if u.path == "/api/pack-new":
-                return self.send_json(make_pack(
-                    str(body.get("fp") or ""), str(body.get("name") or ""),
-                    str(body.get("level") or ""), str(body.get("label") or "")))
-            if u.path == "/api/pack-save":
-                return self.post_pack_save(body)
-            if u.path == "/api/publish":
-                return self.post_script("publish")
-            if u.path == "/api/restore-native":
-                return self.post_script("restore")
-            if READONLY and u.path in ("/api/name", "/api/save", "/api/restore"):
-                return self.send_json({
-                    "ok": False,
-                    "error": "现在是备份版（README：只读，永不编辑）。用 dev 版启动编辑器再改：启动导航编辑器.bat",
-                }, 403)
-            if u.path == "/api/name":
-                return self.post_name(body)
-            if u.path == "/api/save":
-                return self.post_save(body)
-            if u.path == "/api/restore":
-                return self.post_restore(body)
-        except Exception as exc:
-            return self.send_json({"ok": False, "error": "%s: %s" % (type(exc).__name__, exc)}, 500)
-        return self.send_json({"ok": False, "error": "未知接口 " + u.path}, 404)
-
-    def post_script(self, cmd):
-        """跑 tools/navdata.py 的某个子命令（publish / restore），把输出原样回给页面。"""
-        script = os.path.join(ROOT, "navdata.py")
-        try:
-            r = subprocess.run([sys.executable, script, cmd], cwd=ROOT,
-                               capture_output=True, timeout=900)
-        except Exception as exc:
-            return self.send_json({"ok": False, "error": "%s: %s" % (type(exc).__name__, exc)}, 500)
-        out = (r.stdout or b"").decode("utf-8", "replace")
-        err = (r.stderr or b"").decode("utf-8", "replace")
-        return self.send_json({"ok": r.returncode == 0, "cmd": cmd, "code": r.returncode,
-                               "out": out, "err": err,
-                               "error": "" if r.returncode == 0 else (err.strip() or out.strip())})
-
-    def post_name(self, body):
-        key = safe_token(body.get("key") or body.get("fp") or body.get("level"))
-        name = str(body.get("name") or "").strip()[:40]
-        level = str(body.get("level") or "").strip()
-        if not key:
-            return self.send_json({"ok": False, "error": "缺少 key"}, 400)
-        names = dict(load_names())
-        if not name and not level:
-            names.pop(key, None)
-        else:
-            cur = names.get(key) or {}
-            names[key] = {"name": name or cur.get("name", ""), "level": level or cur.get("level", "")}
-        save_names(names)
-        return self.send_json({"ok": True, "names": names})
-
-    def post_pack_save(self, body):
-        r"""网页编辑器把「空白底图 + 自己画的路线」写回 packs\<包名>\<指纹>.txt。
-
-        只动测试包，正式版 nav\ 一个字节不碰；blank 行由 validate_txt 识别，
-        同步维护 manifest.json（控制台靠它显示包信息）和 nogen.txt（关自动铺点）。
-        """
-        name = safe_token(body.get("name"))
-        fp = safe_token(body.get("fp"))
-        edit_text = body.get("editText") or ""
-        if not PACK_NAME_RE.match(name or ""):
-            return self.send_json({"ok": False, "error": "包名只能用 ASCII 字母/数字/_/-，1~48 字符"}, 400)
-        if not FP_RE.match(fp or ""):
-            return self.send_json({"ok": False, "error": "指纹格式不对：%r" % fp}, 400)
-        ok, ops, err, blank = validate_txt(edit_text)
-        if not ok:
-            return self.send_json({"ok": False, "error": err}, 400)
-        pdir = os.path.join(PACKS_DIR, name)
-        path = os.path.join(pdir, fp + ".txt")
-        try:
-            os.makedirs(pdir, exist_ok=True)
-            backups = []
-            if os.path.isfile(path):
-                bak = path + ".bak_" + time.strftime("%Y%m%d_%H%M%S")
-                shutil.copyfile(path, bak)
-                backups.append(os.path.basename(bak))
-            tmp = path + ".tmp"
-            with open(tmp, "w", encoding="utf-8", newline="\n") as f:
-                f.write(edit_text)
-            os.replace(tmp, path)
-            if blank:
-                nogen = os.path.join(pdir, "nogen.txt")
-                if not os.path.isfile(nogen):
-                    with open(nogen, "w", encoding="utf-8") as f:
-                        f.write("")
-            man_path = os.path.join(pdir, "manifest.json")
-            man = {}
-            if os.path.isfile(man_path):
-                try:
-                    with open(man_path, "r", encoding="utf-8") as f:
-                        man = json.load(f) or {}
-                except (OSError, ValueError):
-                    man = {}
-            man.update({
-                "name": name,
-                "fp": fp,
-                "level": str(body.get("level") or man.get("level") or ""),
-                "label": str(body.get("label") or man.get("label") or ""),
-                "blank": bool(blank),
-                "source": "editor-blank" if blank else (man.get("source") or "editor"),
-                "note": "空白底图测试包：原生点全禁用 + nogen.txt 关自动铺点；路线在网页编辑器里画",
-            })
-            man.setdefault("created", time.strftime("%Y-%m-%d %H:%M:%S"))
-            with open(man_path, "w", encoding="utf-8", newline="\n") as f:
-                json.dump(man, f, ensure_ascii=False, indent=2)
-                f.write("\n")
-        except OSError as exc:
-            return self.send_json({"ok": False, "error": "写不进 %s：%s" % (pdir, exc)}, 500)
-        return self.send_json({
-            "ok": True, "pack": name, "fp": fp, "ops": ops, "blank": blank,
-            "txtPath": path, "backups": backups,
-            "note": ("已保存到测试包 %s（%d 条，%s）" %
-                     (name, ops, "空白底图" if blank else "正式底图增量")),
-        })
-
-    def post_save(self, body):
-        ensure_dirs()
-        fp = safe_token(body.get("fp"))
-        if not FP_RE.match(fp or ""):
-            return self.send_json({"ok": False, "error": "指纹格式不对：%r（应形如 n786-57a46e3465c847cb）" % fp}, 400)
-        json_name = safe_token(body.get("jsonName")) or fp
-        json_text = body.get("jsonText") or ""
-        edit_text = body.get("editText") or ""
-        if not json_text.strip():
-            return self.send_json({"ok": False, "error": "jsonText 为空"}, 400)
-        try:
-            doc = json.loads(json_text)
-        except Exception as exc:
-            return self.send_json({"ok": False, "error": "JSON 非法：%s" % exc}, 400)
-        ok, ops, err, blank = validate_txt(edit_text)
-        if not ok:
-            return self.send_json({"ok": False, "error": err}, 400)
-        if blank:
-            return self.send_json({
-                "ok": False,
-                "error": "blank 只能写进测试包（测试数据 → 新建空白包），不能写进正式版 nav\\",
-            }, 400)
-
-        json_path = os.path.join(NAV, json_name + ".json")
-        txt_path = os.path.join(NAV, fp + ".txt")
-        stamp = time.strftime("%Y%m%d_%H%M%S")
-        backups = []
-        for p in (json_path, txt_path):
-            if not os.path.isfile(p):
-                continue
-            try:
-                with open(p, "rb") as f:
-                    old = f.read()
-                bak = p + ".bak_" + stamp
-                with open(bak, "wb") as f:
-                    f.write(old)
-                backups.append(os.path.basename(bak))
-            except OSError:
-                pass
-
-        tmp = json_path + ".tmp"
-        with open(tmp, "w", encoding="utf-8", newline="\n") as f:
-            f.write(json_text)
-        os.replace(tmp, json_path)
-
-        tmp = txt_path + ".tmp"
-        with open(tmp, "w", encoding="utf-8", newline="\n") as f:
-            f.write(edit_text)
-        os.replace(tmp, txt_path)
-
-        # 顺手记住这张图的中文名 / 关卡
-        label = str(body.get("label") or "").strip()[:40]
-        level = str(body.get("level") or "").strip()
-        if label or level:
-            names = dict(load_names())
-            for k in (fp, safe_token(body.get("key"))):
-                if k:
-                    names[k] = {"name": label or names.get(k, {}).get("name", ""),
-                                "level": level or names.get(k, {}).get("level", "")}
-            save_names(names)
-
-        _cache.pop(json_path, None)
-        if ops:
-            note = "已写入 %d 条编辑 → nav/%s.txt（进游戏这张图会自动套用）" % (ops, fp)
-        else:
-            note = "编辑清单为空 → 已删除 nav/%s.txt 的效果（游戏里恢复原图）" % fp
-        return self.send_json({
-            "ok": True,
-            "jsonPath": json_path,
-            "txtPath": txt_path,
-            "jsonName": json_name,
-            "ops": ops,
-            "nodes": len(doc.get("nodes") or []),
-            "backups": backups,
-            "note": note,
-        })
-
-    def post_restore(self, body):
-        fn = safe_token(body.get("file"))
-        if not fn or ".bak_" not in fn:
-            return self.send_json({"ok": False, "error": "只能还原 .bak_* 备份文件"}, 400)
-        src = os.path.join(NAV, fn)
-        if not os.path.isfile(src):
-            return self.send_json({"ok": False, "error": "备份不存在: " + fn}, 404)
-        dst = os.path.join(NAV, fn.split(".bak_")[0])
-        with open(src, "rb") as f:
-            data = f.read()
-        with open(dst, "wb") as f:
-            f.write(data)
-        return self.send_json({"ok": True, "restored": os.path.basename(dst), "bytes": len(data)})
+        # 2026-11-18 起网页端只读：所有写接口已移除，统一返回 405。
+        return self.send_json({"ok": False, "error": "只读服务，不提供写入接口"}, 405)
 
 
 def pick_port(preferred=8765, tries=40):
@@ -1034,17 +1614,21 @@ def pick_port(preferred=8765, tries=40):
 def main():
     ensure_dirs()
     port = pick_port()
-    url = "http://127.0.0.1:%d/navview.html" % port
+    # 2026-11-18 起只有一个只读入口；--studio 保留为无操作，防旧快捷方式报错。
+    url = "http://127.0.0.1:%d/design/nav-studio.html" % port
     srv = ThreadingHTTPServer(("127.0.0.1", port), Handler)
     srv.daemon_threads = True
-    print("UCF 导航编辑器 · 本地服务")
+    print("UCF 路点工作台 · 本地服务（只读查看）")
     print("  版本     : %s（UCF_PROFILE=%s）%s" % (
         profile_info()["cn"], PROFILE, "  [只读]" if READONLY else ""))
+    print("  版本切换 : /api/profile?set=native|dev|deploy|test（只读查看，不写文件）")
     print("  数据目录 : %s" % NAV)
     print("  原生备份 : %s" % NATIVE)
     print("  游戏目录 : %s" % UCF)
+    print("  导出目录 : %s（④ 测试版）" % VIS)
+    print("  测试包   : %s" % PACKS_DIR)
     print("  打开地址 : %s" % url)
-    print("  （关掉这个窗口就停止服务；编辑结果写进 %s，点『部署到游戏』才推给游戏）" % NAV)
+    print("  （关掉这个窗口就停止服务；本服务只读，不写任何路线数据）")
     for name in ("snapshots", "edits", "geo"):
         print("  %-10s %d" % (name, len({"snapshots": list_snapshots, "edits": list_edits, "geo": list_geo}[name]())))
     if not list_geo():

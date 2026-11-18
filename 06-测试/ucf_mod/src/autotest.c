@@ -410,6 +410,10 @@ void autotest_tick(void) {
   }
 }
 
+/* editor.c 的自由视角用：车测已经进图（phase 2 = 正在切图）才允许接管相机，
+ * 免得在大厅/热身阶段把相机摆到 0,0,0。 */
+int autotest_in_map(void) { return g_on && g_phase >= 2; }
+
 void autotest_start(const char* modDir) {
   char v[256];
   char* p;
