@@ -995,6 +995,51 @@ def collect_test_maps():
             elif entry.get("level"):
                 entry["label"] = default_names().get(entry.get("level"), entry.get("label"))
             out.append(entry)
+    # ④ 测试包也当一条“地图”：同一份导出 + packs/<包名>/<指纹>.txt
+    # （空白底图的 blank 行 + node/edge add 在查看端套用，只读）
+    by_fp = {}
+    for e in out:
+        fp0 = e.get("fp") or ""
+        if fp0 and fp0 not in by_fp:
+            by_fp[fp0] = e
+    for pk in collect_packs():
+        name = str(pk.get("name") or "")
+        fp0 = str(pk.get("fp") or "")
+        base = by_fp.get(fp0)
+        if not name or not base:
+            continue
+        txt_path = os.path.join(PACKS_DIR, name, fp0 + ".txt")
+        if not os.path.isfile(txt_path):
+            continue
+        entry = dict(base)
+        mt, mts = _file_time(txt_path)
+        entry["pack"] = name
+        entry["packBlank"] = bool(pk.get("blank"))
+        entry["packOps"] = int(pk.get("ops") or 0)
+        entry["packNogen"] = bool(pk.get("nogen"))
+        entry["label"] = ((base.get("label") or pk.get("label") or fp0) + " · " + name +
+                          ("（空白底图）" if pk.get("blank") else "（测试包）"))
+        entry["mtime"] = mt or entry.get("mtime") or ""
+        entry["mtimeTs"] = mts or entry.get("mtimeTs") or 0
+        entry["no"] = ""
+        if pk.get("blank"):
+            # 空白底图的结果点数 = 清单里的 node add / edge add（原生点全禁用）
+            n_add = e_add = 0
+            try:
+                with open(txt_path, "r", encoding="utf-8", errors="replace") as f:
+                    for ln in f:
+                        t = ln.strip().split()
+                        if len(t) >= 2 and t[0] == "node" and t[1] == "add":
+                            n_add += 1
+                        elif len(t) >= 2 and t[0] == "edge" and t[1] == "add":
+                            e_add += 1
+            except OSError:
+                pass
+            entry["nodes"] = n_add
+            entry["walkable"] = n_add
+            entry["edges"] = e_add
+            entry["status"] = "ok" if n_add else "empty"
+        out.append(entry)
     out.sort(key=lambda e: e.get("mtimeTs") or 0, reverse=True)
     for i, e in enumerate(out):
         e["no"] = str(i + 1).zfill(2)

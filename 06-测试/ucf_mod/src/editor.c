@@ -143,6 +143,7 @@ static void (*x_free)(void*);
 static P (*x_domain_assembly_open)(P, const char*);
 static unsigned (*x_gchandle_new)(P, unsigned char);
 static void (*x_gchandle_free)(P);
+static void (*x_gc_wbarrier_set_field)(P, P, P);
 static P (*x_class_get_method_from_name)(P, const char*, int);
 static P (*x_runtime_invoke)(P, void*, void**, void**);
 
@@ -163,6 +164,27 @@ static int g_matReady;
 /* 路点图编辑（定义在文件后半段，这里提前声明给 ed_init/editor_on_scene 用） */
 typedef struct { int kind; int dir; V3 a, b; } NAVED;   /* dir: 0 双向 / 1 A->B / 2 B->A */
 #define NAV_ED_MAX 4096
+#define NAV_MAXN 20000
+
+/* connections 数组的强根。
+ * 只写 connections 字段 + GC 写屏障，在 138 点/105 边这种大图上仍然会在旧图
+ * 销毁时崩在 PointNode.ClearConnections：屏障保证“字段→数组”，但数组里
+ * Connection.node 的引用和旧图生命周期在 Unity 卸载时很脆。
+ * 这里给每个 nodeIndex 的当前 connections 数组保留一个 gchandle，等下一次
+ * 同一槽位换数组时再释放；数组在旧图销毁期间绝不会被 GC 回收。
+ * 代价是每张图最多 786 个句柄；退出时统一释放，换图后同一槽位换数组时
+ * 会在 nav_conn_bind 里释放旧句柄。 */
+static unsigned g_connRoot[NAV_MAXN];
+static void nav_conn_roots_release(void) {
+  int i;
+  if (!x_gchandle_free) return;
+  for (i = 0; i < NAV_MAXN; i++) {
+    if (g_connRoot[i]) {
+      x_gchandle_free((P)g_connRoot[i]);
+      g_connRoot[i] = 0;
+    }
+  }
+}
 static NAVED g_ned[NAV_ED_MAX];
 static int g_nedN;
 static NAVED g_redo[NAV_ED_MAX];
@@ -734,6 +756,7 @@ static int ed_init(void) {
   RESOLVE(domain_assembly_open);
   RESOLVE(gchandle_new);
   RESOLVE(gchandle_free);
+  x_gc_wbarrier_set_field = (void (*)(P, P, P))GetProcAddress(g_ga, "il2cpp_gc_wbarrier_set_field");
   RESOLVE(class_get_method_from_name);
   RESOLVE(runtime_invoke);
   if (!x_domain_get || !x_object_new || !x_string_new || !x_class_from_name || !x_class_get_type) {
@@ -3194,7 +3217,11 @@ static int load_file(void) {
       if (make_nanopos(a, p, b)) made++;
     } else if (sscanf(line, "crouch %d %f %f %f", &a, &x, &y, &z) == 4) {
       V3 p; p.x = x; p.y = y; p.z = z;
+      /* 文件里的队伍列要生效：make_crouch 用的是 g_team，临时切过去再还原 */
+      int savedTeam = g_team;
+      g_team = a ? 1 : 0;
       if (make_crouch(p)) made++;
+      g_team = savedTeam;
     } else if (sscanf(line, "tag %d %f %f %f", &a, &x, &y, &z) == 4) {
       V3 p; p.x = x; p.y = y; p.z = z;
       make_tag(p, a, 3.0f);
@@ -3428,17 +3455,60 @@ static int nav_find_any(P g, const V3* p, float maxd) {
   }
   return best;
 }
-/* 清单里的改动是否还在图上（用来判断图是不是被游戏重扫掉了） */
-static int nav_edge_on(P a, P b, int dir) {
-  if (dir == 1) return nav_conn_has(a, b);
-  if (dir == 2) return nav_conn_has(b, a);
-  return nav_conn_has(a, b) && nav_conn_has(b, a);
+/* 清单里的改动是否还在图上（用来判断图是不是被游戏重扫掉了）。
+ *
+ * 关键：不能逐条独立判断。菜单切边会留下 “edge del A-B … edge add A-B”
+ * 这样的历史条目；如果只看第一条，运行图里明明有 A-B，EDEL 永远认为“没删掉”，
+ * 于是每 ~4 秒整图重套一次，人机刚拿到路径就被重置。
+ * 这里按顺序把所有 edge 条目折叠成“每个有向 pairs 的最终期望状态”，再和运行图比。
+ * 方向和先后都以文件里的最后一条为准。 */
+#define NAV_EXP_MAX (NAV_ED_MAX * 2)
+typedef struct { int a, b; unsigned char want; } NAVEXP;
+static NAVEXP g_navExp[NAV_EXP_MAX];
+
+static int nav_exp_add(int a, int b, int on) {
+  unsigned h, k;
+  int i;
+  if (a < 0 || b < 0 || a == b) return 0;
+  h = ((unsigned)a * 73856093u) ^ ((unsigned)b * 19349663u);
+  for (k = 0; k < NAV_EXP_MAX; k++) {
+    i = (int)((h + k) & (NAV_EXP_MAX - 1));
+    if (g_navExp[i].a < 0) {
+      g_navExp[i].a = a;
+      g_navExp[i].b = b;
+      g_navExp[i].want = (unsigned char)(on ? 1 : 0);
+      return 0;
+    }
+    if (g_navExp[i].a == a && g_navExp[i].b == b) {
+      g_navExp[i].want = (unsigned char)(on ? 1 : 0);
+      return 0;
+    }
+  }
+  return -1;
+}
+static int nav_exp_record(const NAVED* e, int ia, int ib, int on) {
+  if (ia < 0 || ib < 0 || ia == ib) return 0;
+  if (e->dir == 1) return nav_exp_add(ia, ib, on);
+  if (e->dir == 2) return nav_exp_add(ib, ia, on);
+  if (nav_exp_add(ia, ib, on) < 0) return -1;
+  return nav_exp_add(ib, ia, on);
+}
+static int nav_exp_check(P g) {
+  int i;
+  for (i = 0; i < NAV_EXP_MAX; i++) {
+    int has;
+    if (g_navExp[i].a < 0) continue;
+    has = nav_conn_has(nav_node(g, g_navExp[i].a), nav_node(g, g_navExp[i].b));
+    if (has != (int)g_navExp[i].want) return 1;
+  }
+  return 0;
 }
 static int nav_needs_apply(P g) {
   int i, ia, ib, n;
   if (!g) return 0;
   n = nav_count(g);
   if (n != g_nedExpect) return 1;   /* 图被重扫/重建过：节点数不再是我们套完的样子 */
+  for (i = 0; i < NAV_EXP_MAX; i++) g_navExp[i].a = -1;
   if (g_nedBlank && g_packName[0]) {
     /* 空白底图：可走的点必须全是清单里的 node add；原生点只要有一个又活了就重套。 */
     int j;
@@ -3461,13 +3531,9 @@ static int nav_needs_apply(P g) {
       ia = nav_find(g, &e->a, 0.35f);
       ib = nav_find(g, &e->b, 0.35f);
       if (ia < 0 || ib < 0) return 1;
-      {
-        int has = nav_edge_on(nav_node(g, ia), nav_node(g, ib), e->dir);
-        if (e->kind == EADD && !has) return 1;
-        if (e->kind == EDEL && has) return 1;
-      }
+      if (nav_exp_record(e, ia, ib, e->kind == EADD) < 0) return 1;
     }
-    return 0;
+    return nav_exp_check(g);
   }
   if (!g_nedN) return 0;
   for (i = 0; i < g_nedN; i++) {
@@ -3481,13 +3547,11 @@ static int nav_needs_apply(P g) {
       ia = nav_find_any(g, &e->a, 0.35f);
       ib = nav_find_any(g, &e->b, 0.35f);
       if (ia >= 0 && ib >= 0) {
-        int has = nav_edge_on(nav_node(g, ia), nav_node(g, ib), e->dir);
-        if (e->kind == EADD && !has) return 1;
-        if (e->kind == EDEL && has) return 1;
+        if (nav_exp_record(e, ia, ib, e->kind == EADD) < 0) return 1;
       }
     }
   }
-  return 0;
+  return nav_exp_check(g);
 }
 /* 一个节点的连接数上限：超过就是数据坏了（A* 里最多几十条）。
  * 返回 -1 = 指针/长度不可信，0 = 没有连接，>0 = 连接数（*out 给出数组指针）。 */
@@ -3515,14 +3579,35 @@ static int nav_conn_has(P nd, P other) {
     if (*(P*)((char*)c + 0x10 + i * 12) == other) return 1;
   return 0;
 }
+/* 把 nd.connections 换成 nc，并让 nc 一直有强根。
+ * 先写字段（写屏障），再释放该槽位的旧句柄；旧数组即使马上被 GC 看到也不会
+ * 在 ClearConnections 里变成悬空指针。nc=0 表示恢复成 null。 */
+static void nav_conn_bind(P nd, P nc) {
+  int idx;
+  unsigned old = 0, h = 0;
+  if (!nd) return;
+  idx = *(int*)((char*)nd + 0x08);
+  if (idx >= 0 && idx < NAV_MAXN) {
+    old = g_connRoot[idx];
+    if (nc && x_gchandle_new) h = x_gchandle_new(nc, 0);
+  }
+  if (x_gc_wbarrier_set_field) x_gc_wbarrier_set_field(nd, (char*)nd + 0x20, nc);
+  else *(P*)((char*)nd + 0x20) = nc;
+  if (idx >= 0 && idx < NAV_MAXN) {
+    g_connRoot[idx] = h;
+    if (old && old != h && x_gchandle_free) x_gchandle_free((P)old);
+  } else if (h && x_gchandle_free) {
+    x_gchandle_free((P)h);
+  }
+}
 /* add=1 连边 / add=0 断边；返回 1 表示有改动 */
 static int nav_conn_set(P nd, P other, int add) {
   P c = 0;
-  int n, i, cnt = 0, hnd = 0;
+  int n, i, cnt = 0;
   P nc;
   V3 pa, pb;
   unsigned cost;
-  if (!nd || !other || !g_connCls || !x_array_new) return 0;
+  if (!nd || !other || nd == other || !g_connCls || !x_array_new) return 0;
   n = nav_conn_get(nd, &c);
   if (n < 0) return 0;              /* 数据坏了：宁可不连，也不越界写 */
   if (add) {
@@ -3532,7 +3617,6 @@ static int nav_conn_set(P nd, P other, int add) {
     if (cost < 1u) cost = 1u;
     nc = x_array_new(g_connCls, (unsigned)(n + 1));
     if (!nc) return 0;
-    if (x_gchandle_new) hnd = (int)x_gchandle_new(nc, 0);
     if (n) memcpy((char*)nc + 0x10, (char*)c + 0x10, (size_t)n * 12);
     *(P*)((char*)nc + 0x10 + n * 12) = other;
     *(unsigned*)((char*)nc + 0x14 + n * 12) = cost;
@@ -3541,7 +3625,6 @@ static int nav_conn_set(P nd, P other, int add) {
     if (!nav_conn_has(nd, other)) return 0;
     nc = x_array_new(g_connCls, (unsigned)(n - 1));
     if (!nc) return 0;
-    if (x_gchandle_new) hnd = (int)x_gchandle_new(nc, 0);
     for (i = 0; i < n; i++) {
       P t = *(P*)((char*)c + 0x10 + i * 12);
       if (t == other) continue;
@@ -3551,8 +3634,7 @@ static int nav_conn_set(P nd, P other, int add) {
       cnt++;
     }
   }
-  *(P*)((char*)nd + 0x20) = nc;
-  if (hnd && x_gchandle_free) x_gchandle_free((P)hnd);
+  nav_conn_bind(nd, nc);
   return 1;
 }
 static int nav_conn_clear(P nd) {
@@ -3560,7 +3642,7 @@ static int nav_conn_clear(P nd) {
   if (!nd || !g_connCls || !x_array_new) return 0;
   nc = x_array_new(g_connCls, 0);
   if (!nc) return 0;
-  *(P*)((char*)nd + 0x20) = nc;
+  nav_conn_bind(nd, nc);
   return 1;
 }
 /* 新建一个点；返回槽位下标，失败 -1。
@@ -3743,7 +3825,6 @@ static int nav_apply_edges(P g) {
  *          会跳过不可走点）+ 摘掉活点里指向它的边；
  *   加点 = 复用被删掉的槽位（nodeIndex 保持原值）。
  */
-#define NAV_MAXN 20000
 static unsigned char g_navDead[NAV_MAXN];   /* 本次套用里被标死的槽位 */
 static int g_navDeadN;
 
@@ -3821,14 +3902,14 @@ static int nav_base_restore(P g) {
     if (!nd) continue;
     nav_set_walk(nd, s->walk ? 1 : 0);
     nav_put_pos(nd, &s->pos);
-    if (s->cn < 0) { *(P*)((char*)nd + 0x20) = 0; continue; }
+    if (s->cn < 0) { nav_conn_bind(nd, 0); continue; }
     if (s->cn == 0) {
       P nc0 = x_array_new(g_connCls, 0);
-      if (nc0) *(P*)((char*)nd + 0x20) = nc0;
+      if (nc0) nav_conn_bind(nd, nc0);
       continue;
     }
     {
-      int j, v = 0, h = 0;
+      int j, v = 0;
       P nc;
       for (j = 0; j < s->cn; j++) {
         int idx;
@@ -3837,7 +3918,6 @@ static int nav_base_restore(P g) {
       }
       nc = x_array_new(g_connCls, (unsigned)v);
       if (!nc) continue;
-      if (x_gchandle_new) h = (int)x_gchandle_new(nc, 0);
       v = 0;
       for (j = 0; j < s->cn; j++) {
         int idx;
@@ -3850,8 +3930,7 @@ static int nav_base_restore(P g) {
         *(unsigned char*)((char*)nc + 0x18 + v * 12) = s->conn[j * 12 + 8];
         v++;
       }
-      *(P*)((char*)nd + 0x20) = nc;
-      if (h && x_gchandle_free) x_gchandle_free((P)h);
+      nav_conn_bind(nd, nc);
     }
   }
   g_navDeadN = 0;
@@ -3870,7 +3949,7 @@ static int nav_is_dead(P nd) {
 /* 只保留「目标点在本次套用后仍然可走」的连接（不动 nodeIndex、不动 nodes 数组） */
 static int nav_conn_filter_dead(P nd) {
   P c = 0;
-  int n, i, cnt = 0, h = 0;
+  int n, i, cnt = 0;
   P nc;
   if (!g_connCls || !x_array_new) return 0;
   n = nav_conn_get(nd, &c);
@@ -3883,7 +3962,6 @@ static int nav_conn_filter_dead(P nd) {
   if (cnt == n) return 0;                           /* 没有死边：不重新分配 */
   nc = x_array_new(g_connCls, (unsigned)cnt);
   if (!nc) return 0;
-  if (x_gchandle_new) h = (int)x_gchandle_new(nc, 0);
   cnt = 0;
   for (i = 0; i < n; i++) {
     P o = *(P*)((char*)c + 0x10 + i * 12);
@@ -3893,8 +3971,7 @@ static int nav_conn_filter_dead(P nd) {
     *(unsigned char*)((char*)nc + 0x18 + cnt * 12) = *(unsigned char*)((char*)c + 0x18 + i * 12);
     cnt++;
   }
-  *(P*)((char*)nd + 0x20) = nc;
-  if (h && x_gchandle_free) x_gchandle_free((P)h);
+  nav_conn_bind(nd, nc);
   return 1;
 }
 /* 把一个被删掉的槽位借出来当新点用（nodeIndex 保持原值，nodes 数组不动） */
@@ -4121,6 +4198,7 @@ static void nav_toggle_edge(void) {
   if (i < 0) { elog("naved: no node near crosshair"); return; }
   ia = nav_find(g, &g_nedA, 1.5f);
   if (ia < 0) { elog("naved: A node disappeared, re-select it"); g_nedHasA = 0; return; }
+  if (ia == i) { elog("wpmenu: A and B are the same node; skip self-edge"); return; }
   nav_pos(nav_node(g, i), &q);
   if (nav_conn_has(nav_node(g, ia), nav_node(g, i))) {
     nav_conn_set(nav_node(g, ia), nav_node(g, i), 0);
@@ -4212,6 +4290,11 @@ static void nav_link_one(void) {
   if (i < 0) { elog("wpmenu: no node near crosshair"); return; }
   ia = nav_find(g, &g_nedA, 1.5f);
   if (ia < 0) { elog("wpmenu: A disappeared, select again"); g_nedHasA = 0; g_wpLinkStep = 1; return; }
+  if (ia == i) {
+    elog("wpmenu: A and B are the same node; skip self-edge");
+    g_wpLinkStep = 0;
+    return;
+  }
   nav_pos(nav_node(g, i), &q);
   if (g_wpPath == 1) {
     nav_conn_set(nav_node(g, ia), nav_node(g, i), 1);
@@ -5173,7 +5256,11 @@ void editor_on_key_any(unsigned vk, int shift) {
   if (!ed_init()) return;
   elog("test-key vk=0x%02X shift=%d menu=%d", vk & 0xFF, shift, g_wpMenuOpen);
   /* 菜单开着时，数字/Enter/W/S/Esc 必须先给菜单，不能被编辑器开关抢走 */
-  if (vk == VK_F2 || vk == 'E' || g_wpMenuOpen) {
+  if (g_wpMenuOpen) {
+    (void)editor_menu_key(vk, 0);
+    return;   /* 菜单开着只走菜单键，别让测试钩子顺带触发编辑器 Ctrl 热键 */
+  }
+  if (vk == VK_F2 || vk == 'E') {
     if (editor_menu_key(vk, 0)) return;
   }
   editor_on_key_mod(vk, shift);
@@ -5181,6 +5268,7 @@ void editor_on_key_any(unsigned vk, int shift) {
 
 void editor_on_quit(void) {
   elog("quit: editor stop (markers=%d vis nodes=%d labels=%d)", g_n, g_vnN, g_vfN);
+  nav_conn_roots_release();
 }
 
 /* ---- 车测自由视角（2026-11-18）----------------------------------------
