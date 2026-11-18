@@ -3676,6 +3676,11 @@ async function autoOpen() {
     let dir = "vis", file = parts[0] || "";
     if (parts.length >= 2) { dir = parts.shift(); file = parts.join("/"); }
     await loadSnapshot(dir, file);
+    /* ?pack=包名：工作台选的是④测试包条目，载入后套用包里的 blank / 编辑清单 */
+    const pk = /[?&]pack=([^&]+)/.exec(location.search);
+    if (pk) {
+      try { await loadPack(decodeURIComponent(pk[1]), false); } catch (e) {}
+    }
     return;
   }
   if (!S.snapshots.length) {

@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿/* UCF 路点工作台 · 七页只读版（2026-11-18）
+﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿/* UCF 路点工作台 · 七页只读版（2026-11-18）
  * 数据全部来自 tools/navserver.py 的 GET 接口：
  *   /api/workbench  地图统计 / 四版 / 测试包 / 配置 / 事件 / 日志
  *   /api/raw        地图 JSON（②开发版 maps/）
@@ -262,6 +262,15 @@ function buildModel(doc, txt) {
 }
 
 function applyTxt(text) {
+  var isBlank = false;
+  String(text).split('\n').forEach(function (line) {
+    if (line.trim() === 'blank') isBlank = true;
+  });
+  /* 空白底图：先把原生点全禁用、原生边全断，再按清单重新加点/连边 */
+  if (isBlank) {
+    ST.nodes.forEach(function (n) { n.alive = false; });
+    ST.edges = [];
+  }
   var byPos = new Map();
   ST.nodes.forEach(function (n) {
     if (n.alive) byPos.set(posKey([n.x, n.y, n.z]), n.uid);
@@ -1049,7 +1058,8 @@ function updateHeader() {
 
   var dir = (m && m.dir) || 'maps';
   ST.dockUrl = '/navview.html?view=1&embed=1&notour=1&profile=' + encodeURIComponent(ST.profile) +
-    (m && m.file ? '&open=' + encodeURIComponent(dir + '/' + m.file) : '');
+    (m && m.file ? '&open=' + encodeURIComponent(dir + '/' + m.file) : '') +
+    (m && m.pack ? '&pack=' + encodeURIComponent(m.pack) : '');
   var dm = $('dockMap');
   if (dm) dm.textContent = m && m.file ? ((m.label || m.level) + ' · ' + m.file) : '未载入地图';
 }
@@ -1216,11 +1226,15 @@ function selectedLayerDef() {
 
 function layerDetailHtml() {
   var d = selectedLayerDef(), it = d.item, s = ST.stats, m = ST.cur;
-  var share = it.key.indexOf('spawn') === 0 || it.key === 'supply' || it.key.indexOf('crouch') === 0
-    ? (s.features ? pct(it.count, s.features) + '% 的特征点' : '—')
-    : (s.nodes ? pct(it.count, s.nodes) + '% 的节点' : '—');
+  var share = '—';
+  if (s) {
+    share = it.key.indexOf('spawn') === 0 || it.key === 'supply' || it.key.indexOf('crouch') === 0
+      ? (s.features ? pct(it.count, s.features) + '% 的特征点' : '—')
+      : (s.nodes ? pct(it.count, s.nodes) + '% 的节点' : '—');
+  }
   var note = '';
-  if (it.key === 'node_walk') note = 'A* 真正能走的点。可走率 ' + pct(s.walkable, s.nodes) + '%，图里 support=' + (m && m.support ? m.support : '—') + '。';
+  if (!s) note = '还没有载入地图：数量 / 占比等选一张图后再算，字段说明和颜色不受影响。';
+  else if (it.key === 'node_walk') note = 'A* 真正能走的点。可走率 ' + pct(s.walkable, s.nodes) + '%，图里 support=' + (m && m.support ? m.support : '—') + '。';
   else if (it.key === 'node_block') note = 'GraphNode.flags bit0=0，寻路会绕开；一般是手动禁用的点。';
   else if (it.key === 'edge') note = 'PointGraph.Scan 按 maxDistance + 射线自动连的边，不是手画线。运输船 1391 条边就是它自己连的。';
   else if (it.key === 'jump') note = 'Bot_JumpLink 的端点 ' + ((s.kinds.jump) || 0) + ' 个；插件导出的成对链路 ' + s.jumpLinks + ' 条。人机路径经过时会插入跳跃段。';
@@ -1327,7 +1341,7 @@ function renderQuickLists() {
   }
   $('quickRoutes').innerHTML = html;
 
-  var k = ST.stats.kinds;
+  var k = (ST.stats && ST.stats.kinds) || {};
   var zs = [];
   if (k.nano_area) zs.push(['Z', '幽灵守区', k.nano_area, '#a78bfa']);
   if (k.guard_area) zs.push(['G', '旧守卫区', k.guard_area, '#7c6bd4']);
@@ -1782,8 +1796,8 @@ function renderMaps() {
     else if (m.status === 'empty') { status = '— 无点图'; cls = 'no'; }
     else if (m.status === 'missing') { status = m.navmesh ? '— 仅可走面' : '— 待采集'; cls = 'no'; }
     if (m.suspect) { status = '? 未识别'; cls = 'warn'; }
-    var on = ST.cur && (ST.cur.file ? (ST.cur.file === m.file) : (!m.file && ST.cur.level === m.level));
-    var key = m.file || ('level:' + (m.level || ''));
+    var on = ST.cur && (ST.cur.file ? (ST.cur.file === m.file && (ST.cur.pack || '') === (m.pack || '')) : (!m.file && ST.cur.level === m.level));
+    var key = m.pack ? ('pack:' + m.pack) : (m.file || ('level:' + (m.level || '')));
     var edits = ST.profile === 'native' ? (m.editsNative || 0)
       : ST.profile === 'deploy' ? (m.editsDeploy || 0)
       : ST.profile === 'test' ? 0 : (m.editsDev || 0);
@@ -1838,7 +1852,9 @@ function bindMapTable() {
     var tr = e.target.closest('[data-map]');
     if (!tr) return;
     var file = tr.dataset.map;
-    var m = ST.maps.filter(function (x) { return (x.file || ('level:' + (x.level || ''))) === file; })[0];
+    var m = ST.maps.filter(function (x) {
+      return (x.pack ? ('pack:' + x.pack) : (x.file || ('level:' + (x.level || '')))) === file;
+    })[0];
     if (!m) return;
     if (m.status === 'missing' && !m.navmesh) {
       toast('这张图还没有文件，先在游戏里 Ctrl+E 导出', 'err');
@@ -2021,7 +2037,15 @@ function loadMap(entry) {
   api(q).then(function (doc) {
     if (!doc || !doc.nodes) throw new Error((doc && doc.error) || '文件不是导航数据');
     var fp = (doc.map && doc.map.fingerprint) || entry.fp || '';
-    var txtP = (dir === 'maps' && fp) ? api('/api/txt?fp=' + encodeURIComponent(fp)) : Promise.resolve({ text: '', exists: false });
+    /* 测试包条目：清单从 packs/<包名>/<指纹>.txt 读（④ 测试版） */
+    var txtP;
+    if (entry.pack) {
+      txtP = api('/api/pack-txt?name=' + encodeURIComponent(entry.pack) + '&fp=' + encodeURIComponent(fp));
+    } else if (dir === 'maps' && fp) {
+      txtP = api('/api/txt?fp=' + encodeURIComponent(fp));
+    } else {
+      txtP = Promise.resolve({ text: '', exists: false });
+    }
     return txtP.then(function (txt) {
       buildModel(doc, txt);
       ST.cur = entry;
@@ -2189,6 +2213,7 @@ function switchProfile(p) {
   var oldFile = ST.cur && ST.cur.file;
   var oldLevel = ST.cur && ST.cur.level;
   var oldDir = (ST.cur && ST.cur.dir) || 'maps';
+  var oldPack = (ST.cur && ST.cur.pack) || '';
   api('/api/profile?set=' + encodeURIComponent(p)).then(function (j) {
     if (!j || !j.ok) throw new Error((j && j.error) || '切换版本失败');
     return api('/api/workbench');
@@ -2201,9 +2226,10 @@ function switchProfile(p) {
     setConn(true, '本地只读服务 · ' + (wb.profile ? wb.profile.cn : ''));
     var pick = null;
     if (oldFile) {
-      pick = ST.maps.filter(function (m) {
+      var cands = ST.maps.filter(function (m) {
         return m.file === oldFile && (m.dir || 'maps') === oldDir;
-      })[0];
+      });
+      pick = (oldPack ? cands.filter(function (m) { return m.pack === oldPack; })[0] : null) || cands[0];
     } else if (oldLevel) {
       pick = ST.maps.filter(function (m) { return !m.file && m.level === oldLevel; })[0];
     }
@@ -2212,12 +2238,10 @@ function switchProfile(p) {
       ST.cam.zoom = 1;
       loadMap(pick);
     } else {
-      ST.cur = null;
-      ST.doc = null;
-      ST.stats = null;
+      /* 新版本里没有当前这张图：整个模型清空，别让旧图的点留在画布上 */
+      showEmptyMap();
       renderAll();
       showPage(ST.page);
-      updateHeader();
       if (ST.dockOpen) openDock(true);   /* 没有对应地图也把 3D 换到新版本 */
     }
   }).catch(function (e) {
@@ -2267,11 +2291,13 @@ function buildMapPicker() {
   groups.sort(function (a, b) { return a.order - b.order; });
   list.innerHTML = groups.map(function (g) {
     var rows = g.rows.map(function (m) {
-      var on = ST.cur && (ST.cur.file ? (ST.cur.file === m.file) : (!m.file && ST.cur.level === m.level));
+      var on = ST.cur && (ST.cur.file ? (ST.cur.file === m.file && (ST.cur.pack || '') === (m.pack || '')) : (!m.file && ST.cur.level === m.level));
       var off = m.status === 'missing';
-      var mt = (m.dir === 'vis') ? (m.mtime || '').slice(5, 16) : (m.nodes + ' 点');
+      var mt = m.pack ? ((m.packBlank ? '空白底图' : '测试包') + ' · ' + m.nodes + ' 点')
+        : (m.dir === 'vis') ? (m.mtime || '').slice(5, 16) : (m.nodes + ' 点');
       if (off) mt = m.navmesh ? '仅可走面' : '待采集';
-      return '<div class="pickrow' + (on ? ' on' : '') + (off && !m.navmesh ? ' off' : '') + '" data-pick="' + esc(m.file) + '" data-level="' + esc(m.level || '') + '">' +
+      var pickKey = m.pack ? ('pack:' + m.pack) : (m.file || '');
+      return '<div class="pickrow' + (on ? ' on' : '') + (off && !m.navmesh ? ' off' : '') + '" data-pick="' + esc(pickKey) + '" data-level="' + esc(m.level || '') + '">' +
         '<span class="no">' + esc(m.no) + '</span><span class="nm">' + esc(m.label || m.level || '未命名') + '</span>' +
         '<span class="mt">' + esc(mt) + '</span></div>';
     }).join('');
@@ -2296,8 +2322,8 @@ function bindTop() {
     if (!row) return;
     var file = row.dataset.pick;
     var m = ST.maps.filter(function (x) {
-      if (file) return x.file === file;
-      return !x.file && (x.level || '') === row.dataset.level;
+      if (file) return x.pack ? ('pack:' + x.pack) === file : x.file === file;
+      return !x.file && !x.pack && (x.level || '') === row.dataset.level;
     })[0];
     if (!m) return;
     if (m.status === 'missing' && !m.navmesh) {

@@ -884,6 +884,7 @@ static LRESULT CALLBACK NavProc(HWND h, UINT msg, WPARAM w, LPARAM l) {
   if (msg == WM_KEYDOWN) {
     int ext = (l & 0x1000000) ? 1 : 0;
     int editor_menu_key(unsigned, int);
+    int editor_menu_is_open(void);
     /* 菜单键 / F2 / 长按 E 先在插件里处理；返回 1 表示已消费，不再传游戏。 */
     if (editor_menu_key((unsigned)w, ext)) return 0;
     if (w == VK_DELETE) {
@@ -892,7 +893,8 @@ static LRESULT CALLBACK NavProc(HWND h, UINT msg, WPARAM w, LPARAM l) {
     } else if (w == VK_F7) {
       void editor_freecam_toggle(void);
       editor_freecam_toggle();
-    } else if (GetAsyncKeyState(VK_CONTROL) & 0x8000) {
+    } else if (!editor_menu_is_open() && (GetAsyncKeyState(VK_CONTROL) & 0x8000)) {
+      /* 菜单开着时 W/A/S/D 要留给游戏走路，不能顺带触发 Ctrl+Shift+A/D/S 等编辑器热键 */
       int shift = (GetAsyncKeyState(VK_SHIFT) & 0x8000) ? 1 : 0;
       void editor_on_key_mod(unsigned, int);
       editor_on_key_mod((unsigned)w, shift);
