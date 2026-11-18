@@ -75,6 +75,16 @@ static char g_log[MAX_PATH];
 static char g_dir[MAX_PATH];
 static char g_file[MAX_PATH];
 
+/* ---- 四版路径（2026-11-18）------------------------------------------------
+ * ① 备份版 navdata\native / ② 开发版 navdata\dev / ③ 部署版 <游戏目录> /
+ * ④ 测试版 navdata\test（导出收件箱 + 测试包）。
+ * 插件只负责 ④ 的写入，③ 的 maps\ nav\ 由控制台「部署到游戏」从 ② 推过来。
+ * 导出/测试包目录解析顺序：环境变量（控制台启动游戏时注入）> ucf_mod.json > 插件目录。 */
+static char g_expDir[MAX_PATH];    /* 导出根：UCF_EXPORT_DIR > cfg export_dir > <dir>\vis */
+static char g_packRoot[MAX_PATH];  /* 测试包根：UCF_PACK_DIR > cfg pack_dir > <dir>\packs */
+static int  g_navReadOnly;         /* UCF_NAV_READONLY=1：正式版 nav\ 不允许游戏内落盘 */
+static int  g_saveWarned;
+
 /* ---- 测试包（UCF_PACK / UCF_FP）-------------------------------------------
  * 「UCF 控制台」启动游戏时递进来的环境变量，决定这次读哪套路线数据：
  *   UCF_PACK=chain_a   读 <插件目录>\packs\chain_a\<指纹>.txt
@@ -121,6 +131,8 @@ static P (*x_object_new)(P);
 static P (*x_string_new)(const char*);
 static P (*x_thread_attach)(P);
 static P (*x_class_get_field_from_name)(P, const char*);
+static P (*x_field_get_type)(P);
+static P (*x_class_get_element_class)(P);
 static void (*x_field_static_get_value)(P, void*);
 static P (*x_array_new)(P, unsigned int);
 static P (*x_class_get_parent)(P);
@@ -131,6 +143,8 @@ static void (*x_free)(void*);
 static P (*x_domain_assembly_open)(P, const char*);
 static unsigned (*x_gchandle_new)(P, unsigned char);
 static void (*x_gchandle_free)(P);
+static P (*x_class_get_method_from_name)(P, const char*, int);
+static P (*x_runtime_invoke)(P, void*, void**, void**);
 
 static P g_goCls, g_camCls, g_colCls, g_boxCls, g_crouchCls, g_areaCls, g_posCls;
 static P g_colType, g_boxType, g_crouchType, g_areaType, g_posType;
@@ -138,7 +152,7 @@ static P g_rendCls, g_rendType, g_textCls, g_textType, g_canvasCls, g_canvasType
 
 static P g_matCls;
 static P g_meshCls, g_mfCls, g_mrCls, g_vec3Cls, g_i32Cls;
-static P g_guardCls, g_jumpCls, g_tagCls, g_gareaCls;
+static P g_guardCls, g_jumpCls, g_tagCls, g_gareaCls, g_jumpLinkCls;
 static P g_mmCls, g_mmInstField;
 static P g_mfType, g_mrType, g_guardType, g_jumpType, g_tagType, g_gareaType;
 static P g_matProto;     /* working template material (game shader) */
@@ -147,10 +161,12 @@ static P g_matSlot[16];  /* cached material per marker type 1..15   */
 static int g_matReady;
 
 /* 路点图编辑（定义在文件后半段，这里提前声明给 ed_init/editor_on_scene 用） */
-typedef struct { int kind; V3 a, b; } NAVED;
+typedef struct { int kind; int dir; V3 a, b; } NAVED;   /* dir: 0 双向 / 1 A->B / 2 B->A */
 #define NAV_ED_MAX 4096
 static NAVED g_ned[NAV_ED_MAX];
 static int g_nedN;
+static NAVED g_redo[NAV_ED_MAX];
+static int g_redoN;
 static int g_nedBlank;      /* 1 = 测试包 blank：先把原生点全禁掉，再套清单里的点/边 */
 static char g_nedPath[MAX_PATH];
 static char g_nedFp[48];
@@ -158,6 +174,12 @@ static int g_nedBaseN;
 static int g_nedExpect;     /* 套用后应有的节点数：用来判断图是否被游戏重扫过 */
 static int g_nedApplied;
 static int g_nedWaitN;
+/* 车测自由视角（UCF_FREECAM=1 才启用；正常游戏完全不进这条路径） */
+static int g_freeEnv, g_freeOn, g_freeInited, g_freeVcamOff, g_freeWarned, g_freeEnvRead;
+static DWORD g_freeLastTick;
+static P g_freeCam, g_freeVcamGo, g_freeTrCls, g_freeBrain, g_freeBrainCls;
+static V3 g_freePos;
+static float g_freeYaw, g_freePitch;
 static P   g_nedGraph;
 static int g_nedHasA;
 static V3  g_nedA;
@@ -169,6 +191,21 @@ static P g_keys;         /* UGUI Text component: hotkey panel */
 static P g_keysGo;
 static P g_cat;          /* UGUI Text: D-layer category list (left edge) */
 static P g_catGo;
+static P g_menu;         /* UGUI Text: SyPB-style waypoint menu */
+static P g_menuGo;
+static int g_wpMenuOn = 1;      /* cfg: wp_menu */
+static int g_wpMenuOpen;
+static int g_wpMenuSel;
+static int g_wpMenuSub;         /* 0 main 1 types 2 paths 3 areas 4 edit 5 layers */
+static int g_wpMenuSubSel;
+static int g_wpBrush;           /* 0 normal 1 jump 2 crouch 3 guard 4 area 5 tag */
+static int g_wpPath;            /* 0 both 1 A->B 2 B->A */
+static int g_wpAutoGround = 1;  /* cfg: wp_autoground */
+static int g_wpArm;             /* next Enter/LMB places */
+static int g_wpLinkStep;        /* 1 need A, 2 need B */
+static DWORD g_wpEDownAt;
+static int g_wpEFired;
+static char g_wpBrushName[16] = "normal";
 static P g_guiFont;      /* font borrowed from the game UI (has CJK glyphs) */
 static unsigned g_fontHandle; /* gchandle: keep the chosen font alive */
 static P g_fontRooted;   /* which font g_fontHandle roots */
@@ -183,10 +220,12 @@ static int g_tintLogged; /* one-shot material/shader diagnostic */
 #define R_CTOR_STR    0x331EA0
 #define R_GET_TR      0x332010
 #define R_SETACTIVE   0x331CF0
+#define R_SET_ENABLED 0x3253E0   /* Behaviour.set_enabled(bool)            */
 #define R_SETLAYER    0x332040
 #define R_GETGO       0x32CEB0
 #define R_SET_POS     0x3F4840
 #define R_GET_POS_INJ 0x3F4280
+#define R_SET_EULER   0x3F44F0   /* Transform.set_eulerAngles(Vector3)     */
 #define R_TDIR_INJ    0x3F3B70
 #define R_SET_SCALE   0x3F4730
 #define R_SET_PARENT  0x3F3AB0
@@ -683,6 +722,8 @@ static int ed_init(void) {
   RESOLVE(string_new);
   RESOLVE(thread_attach);
   RESOLVE(class_get_field_from_name);
+  RESOLVE(field_get_type);
+  RESOLVE(class_get_element_class);
   RESOLVE(field_static_get_value);
   RESOLVE(array_new);
   RESOLVE(class_get_parent);
@@ -693,6 +734,8 @@ static int ed_init(void) {
   RESOLVE(domain_assembly_open);
   RESOLVE(gchandle_new);
   RESOLVE(gchandle_free);
+  RESOLVE(class_get_method_from_name);
+  RESOLVE(runtime_invoke);
   if (!x_domain_get || !x_object_new || !x_string_new || !x_class_from_name || !x_class_get_type) {
     g_initFail = 1;
     elog("il2cpp exports missing");
@@ -741,6 +784,15 @@ static int ed_init(void) {
   g_guardCls = find_cls("", "Bot_GuardPos");
   g_jumpCls = find_cls("", "Bot_JumpLink");
   g_tagCls = find_cls("", "PointNodeTagModifier");
+  /* Bot_JumpLink.Link 是嵌套结构；从 links 字段的类型里拿到 Link[] 再取元素类。 */
+  if (g_jumpCls && x_class_get_field_from_name && x_field_get_type &&
+      x_class_from_il2cpp_type && x_class_get_element_class) {
+    P f = x_class_get_field_from_name(g_jumpCls, "links");
+    P ft = f ? x_field_get_type(f) : 0;
+    P ac = ft ? x_class_from_il2cpp_type(ft) : 0;
+    g_jumpLinkCls = ac ? x_class_get_element_class(ac) : 0;
+  }
+  elog("init: jumpLinkCls=%p", g_jumpLinkCls);
   g_gareaCls = find_cls("", "Bot_GuardArea");
   elog("init: core classes ok");
   g_mmCls = find_cls("", "MapManager");
@@ -1062,13 +1114,18 @@ static int g_lblShown;
 static int g_exporting;            /* 正在导出：忽略图层开关，五层全读，绝不少导数据 */
 static int g_visOn, g_lay = LAY_A | LAY_B | LAY_C | LAY_D | LAY_E, g_lblMode = 0;  /* 0 = no world-space text: it clutters the view */
 static int g_visDirty, g_visNoMesh;
-static int g_autoExport = 1;      /* cfg: auto_export —— 图稳定后自动导出一份路点 JSON */
 static int g_hudOn = 1;           /* cfg: hud —— 状态面板总开关（Ctrl+H 可强行叫出） */
 static int g_editAllow = 1;       /* cfg: editor —— 是否允许进编辑模式 */
-static int g_aeNodes = -1;        /* 自动导出：上次看到的节点数 */
-static int g_aeHold;              /* 自动导出：稳定倒计时（tick 数） */
 static int g_collectOnly;         /* 只读采集：不建图/不建蹲点/不建守区/不建任何 UI 对象 */
 static int g_exportForce;         /* Ctrl+E 手动导出时绕过“已采过/太小”的过滤 */
+/* Ctrl+E 导出：总开关 + 六类内容（独立于可视化五层；关掉哪类，JSON 里就不读/不写哪类） */
+static int g_expEnabled = 1;      /* cfg: export_enabled —— 导出总开关 */
+static int g_expNodes = 1;        /* cfg: export_nodes —— 路点 / 连线 */
+static int g_expCrouch = 1;       /* cfg: export_crouch —— 人类蹲守点 */
+static int g_expArea = 1;         /* cfg: export_area —— 幽灵守区 / 幽灵守点 */
+static int g_expGuard = 1;        /* cfg: export_guard —— 守卫区 / 守卫点 */
+static int g_expSpawn = 1;        /* cfg: export_spawn —— 出生点 / 补给箱 */
+static int g_expTags = 1;         /* cfg: export_tags —— 跳点 / 标签区 */
 static int g_nmVert, g_nmTri;     /* 本次导出的 NavMeshGraph 顶点/三角形数 */
 static int g_nmShow = 1;          /* cfg: navmesh_show —— 画不画 A* 可走面线框 */
 static int g_visLists = 1;        /* cfg: vis_lists —— 读不读游戏静态组件表（崩溃兜底开关） */
@@ -1322,8 +1379,8 @@ static const COL* label_col(int kind, int aux) {
     case K_GAREA:  return &COL_PURPLE;
     case K_SPAWN:
       switch (aux) {
-        case 0:  return &COL_AREA;    /* 保卫者出生 */
-        case 1:  return &COL_CROUCH;  /* 幽灵出生   */
+        case 0:  return &COL_AREA;    /* 幽灵出生   */
+        case 1:  return &COL_CROUCH;  /* 保卫者出生 */
         case 2:  return &COL_GRAY;    /* 中立点     */
         case 3:  return &COL_GOLD;    /* 普通补给箱 */
         case 4:  return &COL_PINK;    /* 红色补给箱 */
@@ -1849,7 +1906,7 @@ static void read_guardareas(void) {
 }
 
 static void read_spawns(void) {
-  static const char* nm[6] = { "保卫者出生", "幽灵出生", "中立点", "补给箱", "红箱", "蓝箱" };
+  static const char* nm[6] = { "幽灵出生", "保卫者出生", "中立点", "补给箱", "红箱", "蓝箱" };
   static const int off[6] = { 0x10, 0x14, 0x18, 0x1C, 0x20, 0x24 };
   P mm = 0;
   int k;
@@ -2185,21 +2242,25 @@ static void collect_read(void) {
   g_miss[0] = 0;
   g_vnN = g_veN = g_vfN = 0;
   g_nN = g_eN = g_jN = 0;
-  read_nav();
+  if (g_expNodes) read_nav(); else miss("export_nodes=off");
   /* 刚切图的 VIS_SCENE_WAIT 帧内：路点(来自 A* 图)和可走面可信，游戏自己的组件表
    * 还挂着上一张图的东西，整段跳过。这一步是 10:58 那次闪退的正面补丁 ——
-   * 进图后 auto_export 两秒就触发，正好撞在没稳定的时候。 */
+   * 进图后导出（Ctrl+E）来得太早，正好撞在没稳定的时候。 */
   if (g_sceneAge < VIS_SCENE_WAIT) {
     miss("scene-not-ready");
     return;
   }
-  read_nano();
-  read_crouch();
-  read_guardareas();
-  read_typed(g_guardType, g_guardCls, K_GUARD, "守卫点", 1);
-  read_spawns();
-  read_jump();
-  read_tags();
+  if (g_expArea) read_nano();
+  if (g_expCrouch) read_crouch();
+  if (g_expGuard) {
+    read_guardareas();
+    read_typed(g_guardType, g_guardCls, K_GUARD, "守卫点", 1);
+  }
+  if (g_expSpawn) read_spawns();
+  if (g_expTags) {
+    read_jump();
+    read_tags();
+  }
 }
 
 /* ---- NavMeshGraph 导出（A* 烘焙出来的人机可走面）----------------------
@@ -2431,10 +2492,16 @@ static void vis_export(void) {
   int i, ok, src;
   extern int navfix_graph_ours(void);
 
+  if (!g_expEnabled) {
+    elog("vis: export disabled (export_enabled=false)");
+    sprintf(g_expStat, "导出总开关已关");
+    return;
+  }
+
   /* 导出必须**重新读一遍**数据，而且只走只读通道：
    *  - 以前这里看 g_visOn：开着可视化时整段跳过，导出的就是上一个场景的残留（实测写成 0 点的 n0 假文件，
    *    还顺手写了个 _seen_n0 标记，把后面真正有 3063 个点的那张图当成"重复"跳过了 —— 数据就是这么丢的）。
-   *  - 也不再用 vis_rebuild()：它会建 Mesh + UGUI 文本，进图自动导出时正好赶上场景加载，是崩溃高发点。 */
+   *  - 也不再用 vis_rebuild()：它会建 Mesh + UGUI 文本，导出时正好赶上场景加载，是崩溃高发点。 */
   if (g_sceneAge < VIS_SCENE_WAIT && !g_sceneReadyOnce) {
     elog("vis: export deferred (scene age %d/%d) - component tables are still the old level's",
          g_sceneAge, VIS_SCENE_WAIT);
@@ -2444,13 +2511,13 @@ static void vis_export(void) {
   g_exporting = 1;
   collect_read();
   g_exporting = 0;
-  if (g_vnN <= 0) {
-    elog("vis: export skipped: read 0 nodes (graph=%p) - no empty file, no _seen marker", navfix_point_graph());
-    sprintf(g_expStat, "读不到点，未导出（等图稳定再按 Ctrl+E）");
+  if (g_vnN <= 0 && g_vfN <= 0) {
+    elog("vis: export skipped: nothing selected (nodes=0 features=0) - no empty file");
+    sprintf(g_expStat, "导出内容全关，未导出");
     return;
   }
   GetLocalTime(&st);
-  sprintf(dir, "%s\\vis", g_dir);
+  strcpy(dir, g_expDir);          /* ④ 测试版导出收件箱（不再是 ③ 部署版） */
   CreateDirectoryA(dir, 0);
 
   map_name_from_minimap(mapname, sizeof(mapname));
@@ -2467,12 +2534,14 @@ static void vis_export(void) {
     if (p.z > hi.z) hi.z = p.z;
   }
   if (!g_vnN) { lo.x = lo.y = lo.z = hi.x = hi.y = hi.z = 0.0f; }
-  sprintf(fp, "n%d-%016llx", g_vnN, xr);
+  /* 路点关掉时没有节点指纹可用：用特征数当指纹，且不写 _seen 去重标记（见下） */
+  if (g_vnN > 0) sprintf(fp, "n%d-%016llx", g_vnN, xr);
+  else sprintf(fp, "f%d", g_vfN);
   src = navfix_graph_ours();
 
-  /* 同一张图只导一次：指纹相同说明节点位置完全一致 */
-  sprintf(mark, "%s\\vis\\_seen_%s", g_dir, fp);
-  if (!g_exportForce) {
+  /* 同一张图只导一次：指纹相同说明节点位置完全一致（只对含路点的导出生效） */
+  sprintf(mark, "%s\\_seen_%s", g_expDir, fp);
+  if (g_vnN > 0 && !g_exportForce) {
     FILE* mf = fopen(mark, "r");
     if (mf) {
       fclose(mf);
@@ -2706,6 +2775,13 @@ static int hud_init(void) {
     ((set_int1_t)RVA(R_TEXT_ALIGN))(g_cat, 3, 0);   /* MiddleLeft */
     g_catGo = ((get_go_t)RVA(R_GETGO))(g_cat, 0);
   }
+  /* 路点菜单：左中一列，默认空；F2 / 长按 E 才填内容 */
+  g_menu = mk_text_ui(canvasTr, "UCF_HUD_Menu", 0.0f, 0.5f, 0.0f, 0.5f, 14.0f, 30.0f, 560.0f, 400.0f, 16);
+  root_put(g_menu);
+  if (g_menu) {
+    ((set_int1_t)RVA(R_TEXT_ALIGN))(g_menu, 3, 0);   /* MiddleLeft */
+    g_menuGo = ((get_go_t)RVA(R_GETGO))(g_menu, 0);
+  }
   /* 记下 Transform 的类对象：comp_pos 用它区分「真 Transform」和野指针 */
   if (!g_trKlass && g_hud) {
     P t = comp_tr(g_hud);
@@ -2733,7 +2809,7 @@ static void cat_refresh(void) {
     ((set_txt_t)RVA(R_TEXT_SETTEXT))(g_cat, x_string_new(""), 0);
     return;
   }
-  spawn = cat_count(0, 2);   /* 保卫者出生 / 幽灵出生 / 中立点 */
+  spawn = cat_count(0, 2);   /* 幽灵出生 / 保卫者出生 / 中立点 */
   box   = cat_count(3, 3);   /* 普通补给箱 */
   color = cat_count(4, 5);   /* 红色 / 蓝色补给箱 */
   if (g_cjk) {
@@ -2767,6 +2843,8 @@ static void hud_refresh(void) {
     if (g_hud)  ((set_txt_t)RVA(R_TEXT_SETTEXT))(g_hud, x_string_new(""), 0);
     if (g_keys) ((set_txt_t)RVA(R_TEXT_SETTEXT))(g_keys, x_string_new(""), 0);
     if (g_cat)  ((set_txt_t)RVA(R_TEXT_SETTEXT))(g_cat, x_string_new(""), 0);
+    if (g_menu && !g_wpMenuOpen)
+      ((set_txt_t)RVA(R_TEXT_SETTEXT))(g_menu, x_string_new(""), 0);
     return;
   }
   if (!g_hud && !hud_init()) return;
@@ -2845,12 +2923,14 @@ static void hud_refresh(void) {
         k = "Ctrl+V 可视化总开关   Ctrl+Shift+1..6  A路点/B人类/C幽灵/D出生/箱/E模式/F可走面   Ctrl+Shift+L 文字标签 关/近距/全部\n"
             "Ctrl+E 手动导出   Ctrl+M 日志行开关   Ctrl+H 本面板开关   Delete 删除准星最近标记   Ctrl+0 显示/隐藏已放标记\n"
             "Ctrl+1 编辑模式  Ctrl+2 蹲守点  Ctrl+4 幽灵守区  Ctrl+5 撤销  Ctrl+6 保存  Ctrl+7 重载  Ctrl+8 阵营  Ctrl+9 状态\n"
-            "路点编辑: Ctrl+Shift+A 选A点  Ctrl+Shift+N 加点  Ctrl+Shift+J A↔点 连/断  Ctrl+Shift+D 禁用点  Ctrl+Shift+Z 撤销  Ctrl+Shift+R 重套用（改完自动存盘）";
+            "路点编辑: Ctrl+Shift+A 选A点  Ctrl+Shift+N 加点  Ctrl+Shift+J A↔点 连/断  Ctrl+Shift+D 禁用点  Ctrl+Shift+Z 撤销  Ctrl+Shift+R 重套用（改完自动存盘）\n"
+            "路点菜单: F2 开关 / 长按 E 备用   1-9 直选   小键盘 8/2 上下   5 确认   0 返回   左键确认 / 右键返回";
       } else {
         k = "Ctrl+V visualizer   Ctrl+Shift+1..6  A/B/C/D/E/F layers   Ctrl+Shift+L labels\n"
             "Ctrl+E export   Ctrl+M log lines   Ctrl+H this panel   Delete nearest marker   Ctrl+0 marker balls\n"
             "Ctrl+1 edit   Ctrl+2 crouch   Ctrl+4 guard area   Ctrl+5 undo   Ctrl+6 save   Ctrl+7 reload   Ctrl+8 team   Ctrl+9 status\n"
-            "Waypoints: Ctrl+Shift+A select A   Ctrl+Shift+N add   Ctrl+Shift+J link/unlink   Ctrl+Shift+D disable   Ctrl+Shift+Z undo   Ctrl+Shift+R reapply";
+            "Waypoints: Ctrl+Shift+A select A   Ctrl+Shift+N add   Ctrl+Shift+J link/unlink   Ctrl+Shift+D disable   Ctrl+Shift+Z undo   Ctrl+Shift+R reapply\n"
+            "Menu: F2 toggle / hold E  1-9 select  Numpad 8/2 move  5 ok  0 back  LMB ok / RMB back";
       }
     } else {
       k = "";   /* 默认不显示快捷键块：按 Ctrl+H 才叫出来 */
@@ -2860,7 +2940,7 @@ static void hud_refresh(void) {
   cat_refresh();
 }
 
-static void hud_reset(void) { g_hud = 0; g_hudGo = 0; g_keys = 0; g_keysGo = 0; g_cat = 0; g_catGo = 0; g_lblCanvas = 0; g_lblTr = 0; }
+static void hud_reset(void) { g_hud = 0; g_hudGo = 0; g_keys = 0; g_keysGo = 0; g_cat = 0; g_catGo = 0; g_menu = 0; g_menuGo = 0; g_lblCanvas = 0; g_lblTr = 0; }
 
 /* ---- marker store ------------------------------------------------------- */
 static int add_mk(int type, V3 p, int aid, int parent, int prm, P go, P comp, P vis) {
@@ -3049,9 +3129,11 @@ static void toggle_visuals(void) {
   hud_refresh();
 }
 
+static void make_tag(V3 p, int tag, float radius);
+
 static int save_file(void) {
   FILE* f;
-  int i, c1 = 0, c2 = 0, c3 = 0;
+  int i, c1 = 0, c2 = 0, c3 = 0, c5 = 0;
   if (!g_file[0]) return 0;
   CreateDirectoryA(g_dir, 0);
   {
@@ -3066,19 +3148,22 @@ static int save_file(void) {
     if (g_mk[i].type == 1) c1++;
     else if (g_mk[i].type == 2) c2++;
     else if (g_mk[i].type == 3) c3++;
+    else if (g_mk[i].type == 5) c5++;
   }
-  fprintf(f, "# ucf_mod markers v1  crouch=%d nanopos=%d area=%d\n", c1, c2, c3);
+  fprintf(f, "# ucf_mod markers v1  crouch=%d nanopos=%d area=%d tag=%d\n", c1, c2, c3, c5);
   fprintf(f, "# crouch <team> <x> <y> <z>\n");
   fprintf(f, "# area <scale*10> <x> <y> <z>\n");
   fprintf(f, "# nanopos <areaId> <x> <y> <z> <safety>\n");
+  fprintf(f, "# tag <tag> <x> <y> <z>\n");
   for (i = 0; i < g_n; i++) {
     MK* m = &g_mk[i];
     if (m->type == 1) fprintf(f, "crouch %d %.3f %.3f %.3f\n", m->prm, m->p.x, m->p.y, m->p.z);
     else if (m->type == 3) fprintf(f, "area %d %.3f %.3f %.3f\n", m->prm, m->p.x, m->p.y, m->p.z);
     else if (m->type == 2) fprintf(f, "nanopos %d %.3f %.3f %.3f %d\n", m->aid, m->p.x, m->p.y, m->p.z, m->prm);
+    else if (m->type == 5) fprintf(f, "tag %d %.3f %.3f %.3f\n", m->prm, m->p.x, m->p.y, m->p.z);
   }
   fclose(f);
-  elog("saved %d markers (crouch=%d nanopos=%d area=%d) -> %s", g_n, c1, c2, c3, g_file);
+  elog("saved %d markers (crouch=%d nanopos=%d area=%d tag=%d) -> %s", g_n, c1, c2, c3, c5, g_file);
   hud_refresh();
   return 1;
 }
@@ -3110,6 +3195,10 @@ static int load_file(void) {
     } else if (sscanf(line, "crouch %d %f %f %f", &a, &x, &y, &z) == 4) {
       V3 p; p.x = x; p.y = y; p.z = z;
       if (make_crouch(p)) made++;
+    } else if (sscanf(line, "tag %d %f %f %f", &a, &x, &y, &z) == 4) {
+      V3 p; p.x = x; p.y = y; p.z = z;
+      make_tag(p, a, 3.0f);
+      made++;
     }
   }
   fclose(f);
@@ -3119,14 +3208,15 @@ static int load_file(void) {
 }
 
 static void status(void) {
-  int c1 = 0, c2 = 0, c3 = 0, i;
+  int c1 = 0, c2 = 0, c3 = 0, c5 = 0, i;
   for (i = 0; i < g_n; i++) {
     if (g_mk[i].type == 1) c1++;
     else if (g_mk[i].type == 2) c2++;
     else if (g_mk[i].type == 3) c3++;
+    else if (g_mk[i].type == 5) c5++;
   }
-  elog("status: edit=%d vis=%d team=%d markers=%d (crouch=%d nanopos=%d area=%d) curAreaAid=%d hud=%d",
-       g_on, g_vis, g_team, g_n, c1, c2, c3,
+  elog("status: edit=%d vis=%d team=%d markers=%d (crouch=%d nanopos=%d area=%d tag=%d) curAreaAid=%d hud=%d",
+       g_on, g_vis, g_team, g_n, c1, c2, c3, c5,
        (g_curArea >= 0 && g_curArea < g_n) ? g_mk[g_curArea].aid : -1, g_hud ? 1 : 0);
   if (g_areaCls && x_class_get_field_from_name) {
     P f = x_class_get_field_from_name(g_areaCls, "SpareAreaList");
@@ -3171,19 +3261,24 @@ void editor_on_scene(void* astar) {
   g_rootsFull = 0;
   g_sceneAge = 0;
   g_sceneReadyOnce = 0;
-  g_aeNodes = -1;
   g_nedGraph = 0;
   g_nedApplied = 0;
   g_nedWaitN = -1;
   g_nedHasA = 0;
   g_nedN = 0;
+  /* 自由视角：上一张图的相机/虚拟相机指针已经销毁，下一帧重新找 */
+  g_freeCam = 0;
+  g_freeVcamGo = 0;
+  g_freeVcamOff = 0;
+  g_freeInited = 0;
+  g_freeWarned = 0;
+  g_freeBrain = 0;
   g_nedBlank = 0;
   g_nedPath[0] = 0;
   nm_seen = 0;
-  g_aeHold = 8;
   elog("scene changed (astar=%p) - loading markers", astar);
   if (g_collectOnly) {
-    elog("collect-only: graph will be exported automatically, nothing is modified");
+    elog("collect-only: press Ctrl+E to export, nothing is modified");
     return;
   }
   load_file();
@@ -3193,27 +3288,6 @@ void editor_on_scene(void* astar) {
 /* called by navfix after it rebuilds the point graph */
 void editor_mark_dirty(void) {
   g_visDirty = 1;
-}
-
-/* 关掉"进图自动导出"（目前没有热键，留给后续配置用） */
-void editor_set_auto_export(int on) { g_autoExport = on ? 1 : 0; }
-
-/* 自动导出：当前场景的路点图只要有节点、且节点数稳定 ~2 s，就落一份 JSON。
- * 旧实现只在“我们自己重建过图”之后才导出，游戏自己建好的图永远导不出来。 */
-static void auto_export_tick(void) {
-  P pg = navfix_point_graph();
-  int n = pg ? *(int*)((char*)pg + 0xEC) : -1;
-  /* 场景没稳定就导出 = 用上一张图残留的组件表，会崩（见 collect_read 注释） */
-  if (g_sceneAge < VIS_SCENE_WAIT) { g_aeNodes = -1; g_aeHold = 8; return; }
-  if (n > 0 && n == g_aeNodes) {
-    if (g_aeHold > 0 && --g_aeHold == 0) {
-      elog("auto-export: graph stable at %d nodes, writing JSON", n);
-      vis_export();
-    }
-  } else {
-    g_aeNodes = n;
-    g_aeHold = 8;
-  }
 }
 
 /* NavMeshGraph 自动落盘：和 PointGraph 无关。
@@ -3257,7 +3331,7 @@ static void nm_auto_tick(void) {
   nm_seenFp = h;
   nm_seen = 1;
   sprintf(fp, "nm%d-%016llx", nv, h);
-  sprintf(path, "%s\\vis\\navmesh_%s.bin", g_dir, fp);
+  sprintf(path, "%s\\navmesh_%s.bin", g_expDir, fp);
   if (nm_dump(path, &g_nmVert, &g_nmTri)) {
     elog("nm: verts=%d tris=%d tiles=%d -> %s", g_nmVert, g_nmTri, ntile, path);
     /* 这里不再 hud_refresh()：刚进图就 set UGUI 文本是历史崩溃点之一，HUD 下一次 tick 自己会刷 */
@@ -3355,6 +3429,11 @@ static int nav_find_any(P g, const V3* p, float maxd) {
   return best;
 }
 /* 清单里的改动是否还在图上（用来判断图是不是被游戏重扫掉了） */
+static int nav_edge_on(P a, P b, int dir) {
+  if (dir == 1) return nav_conn_has(a, b);
+  if (dir == 2) return nav_conn_has(b, a);
+  return nav_conn_has(a, b) && nav_conn_has(b, a);
+}
 static int nav_needs_apply(P g) {
   int i, ia, ib, n;
   if (!g) return 0;
@@ -3383,7 +3462,7 @@ static int nav_needs_apply(P g) {
       ib = nav_find(g, &e->b, 0.35f);
       if (ia < 0 || ib < 0) return 1;
       {
-        int has = nav_conn_has(nav_node(g, ia), nav_node(g, ib));
+        int has = nav_edge_on(nav_node(g, ia), nav_node(g, ib), e->dir);
         if (e->kind == EADD && !has) return 1;
         if (e->kind == EDEL && has) return 1;
       }
@@ -3402,7 +3481,7 @@ static int nav_needs_apply(P g) {
       ia = nav_find_any(g, &e->a, 0.35f);
       ib = nav_find_any(g, &e->b, 0.35f);
       if (ia >= 0 && ib >= 0) {
-        int has = nav_conn_has(nav_node(g, ia), nav_node(g, ib));
+        int has = nav_edge_on(nav_node(g, ia), nav_node(g, ib), e->dir);
         if (e->kind == EADD && !has) return 1;
         if (e->kind == EDEL && has) return 1;
       }
@@ -3548,6 +3627,16 @@ static void nav_save(void) {
   int i;
   int blank = g_nedBlank && g_packName[0];
   if (!g_nedPath[0]) return;
+  /* 四版纪律：正式版 nav\ 只允许控制台从 ② 开发版推过来，游戏内不许直接写 ③。
+   * 想边玩边改就先选一个测试包（④ packs），或去网页编辑器改 ②。 */
+  if (g_navReadOnly && !g_packName[0]) {
+    if (!g_saveWarned) {
+      g_saveWarned = 1;
+      elog("naved: save blocked - official nav\\ is read-only (UCF_NAV_READONLY); "
+           "use a test pack or the web editor (navdata\\dev)");
+    }
+    return;
+  }
   if (!g_nedN && !blank) { DeleteFileA(g_nedPath); return; }
   f = fopen(g_nedPath, "w");
   if (!f) { elog("naved: save failed %s", g_nedPath); return; }
@@ -3559,10 +3648,14 @@ static void nav_save(void) {
       fprintf(f, "node add %.3f %.3f %.3f\n", e->a.x, e->a.y, e->a.z);
     else if (e->kind == NDEL)
       fprintf(f, "node del %.3f %.3f %.3f\n", e->a.x, e->a.y, e->a.z);
-    else
+    else {
+      const char* verb = "add";
+      if (e->kind == EDEL) verb = e->dir == 1 ? "delout" : (e->dir == 2 ? "delin" : "del");
+      else if (e->dir == 1) verb = "out";
+      else if (e->dir == 2) verb = "in";
       fprintf(f, "edge %s %.3f %.3f %.3f %.3f %.3f %.3f\n",
-              e->kind == EADD ? "add" : "del",
-              e->a.x, e->a.y, e->a.z, e->b.x, e->b.y, e->b.z);
+              verb, e->a.x, e->a.y, e->a.z, e->b.x, e->b.y, e->b.z);
+    }
   }
   fclose(f);
   elog("naved: saved %d edits -> %s%s", g_nedN, g_nedPath, blank ? " (blank base)" : "");
@@ -3571,6 +3664,7 @@ static void nav_edit_load(const char* path) {
   FILE* f = fopen(path, "r");
   char line[256];
   g_nedN = 0;
+  g_redoN = 0;
   g_nedBlank = 0;
   if (!f) return;
   while (fgets(line, sizeof(line), f)) {
@@ -3590,7 +3684,9 @@ static void nav_edit_load(const char* path) {
       e.kind = (k1[0] == 'a') ? NADD : NDEL;
       e.a.x = x; e.a.y = y; e.a.z = z;
     } else if (sscanf(line, "edge %15s %f %f %f %f %f %f", k1, &x, &y, &z, &x2, &y2, &z2) == 7) {
-      e.kind = (k1[0] == 'a') ? EADD : EDEL;
+      e.kind = (k1[0] == 'a' || k1[0] == 'o' || k1[0] == 'i') ? EADD : EDEL;
+      e.dir = (k1[0] == 'o' || !strcmp(k1, "delout")) ? 1 :
+              ((k1[0] == 'i' || !strcmp(k1, "delin")) ? 2 : 0);
       e.a.x = x; e.a.y = y; e.a.z = z;
       e.b.x = x2; e.b.y = y2; e.b.z = z2;
     } else {
@@ -3601,19 +3697,31 @@ static void nav_edit_load(const char* path) {
   fclose(f);
   elog("naved: loaded %d edits from %s%s", g_nedN, path, g_nedBlank ? " (blank base)" : "");
 }
+/* 按 dir 只改一个方向（0 双向 / 1 A->B / 2 B->A）。
+ * 返回值：有没有真的改到连接。 */
+static int nav_conn_apply(P g, const NAVED* e, int on) {
+  int ia, ib, ch = 0;
+  if (!g || !e) return 0;
+  ia = nav_find(g, &e->a, 0.35f);
+  ib = nav_find(g, &e->b, 0.35f);
+  if (ia < 0 || ib < 0) return 0;
+  if (e->dir == 1) {
+    ch = nav_conn_set(nav_node(g, ia), nav_node(g, ib), on);
+  } else if (e->dir == 2) {
+    ch = nav_conn_set(nav_node(g, ib), nav_node(g, ia), on);
+  } else {
+    ch |= nav_conn_set(nav_node(g, ia), nav_node(g, ib), on);
+    ch |= nav_conn_set(nav_node(g, ib), nav_node(g, ia), on);
+  }
+  return ch;
+}
 /* 只处理 edge 条目；返回真正改变的条数 */
 static int nav_apply_edges(P g) {
-  int i, ia, ib, ok = 0;
+  int i, ok = 0;
   for (i = 0; i < g_nedN; i++) {
     NAVED* e = &g_ned[i];
-    int ch = 0;
     if (e->kind != EADD && e->kind != EDEL) continue;
-    ia = nav_find(g, &e->a, 0.35f);
-    ib = nav_find(g, &e->b, 0.35f);
-    if (ia < 0 || ib < 0) continue;
-    ch |= nav_conn_set(nav_node(g, ia), nav_node(g, ib), e->kind == EADD);
-    ch |= nav_conn_set(nav_node(g, ib), nav_node(g, ia), e->kind == EADD);
-    if (ch) ok++;
+    if (nav_conn_apply(g, e, e->kind == EADD)) ok++;
   }
   if (ok) nav_refresh(g);
   return ok;
@@ -3868,13 +3976,14 @@ static int nav_apply_all(P g) {
   g_nedExpect = nav_count(g);
   return ok;
 }
-/* 撤销一条：反向操作 + 出栈 */
+/* 撤销一条：反向操作 + 出栈；被撤销的条目进 redo 栈。 */
 static void nav_undo(void) {
   P g = navfix_point_graph();
   NAVED* e;
-  int ia, ib;
+  int ia;
   if (!g || !g_nedN) { elog("naved: nothing to undo"); return; }
   e = &g_ned[g_nedN - 1];
+  if (g_redoN < NAV_ED_MAX) g_redo[g_redoN++] = *e;
   if (e->kind == NADD) {
     ia = nav_find(g, &e->a, 0.35f);
     if (ia >= 0) nav_kill_node(g, nav_node(g, ia));
@@ -3885,17 +3994,34 @@ static void nav_undo(void) {
     /* 重建图时被删的点是从数组里摘掉的，撤销只能按坐标补一个空点回来，
      * 原来的连边要重新连（Ctrl+Shift+J）。 */
   } else {
-    ia = nav_find(g, &e->a, 0.35f);
-    ib = nav_find(g, &e->b, 0.35f);
-    if (ia >= 0 && ib >= 0) {
-      nav_conn_set(nav_node(g, ia), nav_node(g, ib), e->kind == EDEL);
-      nav_conn_set(nav_node(g, ib), nav_node(g, ia), e->kind == EDEL);
-    }
+    nav_conn_apply(g, e, e->kind == EDEL);
   }
   g_nedN--;
   nav_refresh(g);
   nav_save();
-  elog("naved: undo -> %d edits left", g_nedN);
+  elog("naved: undo -> %d edits left (redo=%d)", g_nedN, g_redoN);
+}
+
+static void nav_redo(void) {
+  P g = navfix_point_graph();
+  NAVED e;
+  int ia;
+  if (!g || !g_redoN) { elog("naved: nothing to redo"); return; }
+  e = g_redo[g_redoN - 1];
+  if (e.kind == NADD) {
+    ia = nav_add_node(g, &e.a);
+    if (ia < 0) { elog("naved: redo: add failed"); return; }
+  } else if (e.kind == NDEL) {
+    ia = nav_find_any(g, &e.a, 0.35f);
+    if (ia >= 0) nav_kill_node(g, nav_node(g, ia));
+  } else {
+    nav_conn_apply(g, &e, e.kind == EADD);
+  }
+  if (g_nedN < NAV_ED_MAX) g_ned[g_nedN++] = e;
+  g_redoN--;
+  nav_refresh(g);
+  nav_save();
+  elog("naved: redo -> %d edits left (redo=%d)", g_nedN, g_redoN);
 }
 /* 删掉自己加的点时，把清单里对应的 node add / 相关边一起摘掉。
  * 否则重进图会先 node del 再 node add，点又活过来（空白底图尤其明显）。 */
@@ -3919,8 +4045,15 @@ static void nav_push(int kind, const V3* a, const V3* b) {
   if (g_nedN >= NAV_ED_MAX) { elog("naved: edit list full"); return; }
   e = &g_ned[g_nedN++];
   e->kind = kind;
+  e->dir = 0;
   e->a = *a;
   if (b) e->b = *b; else memset(&e->b, 0, sizeof(e->b));
+  g_redoN = 0;
+  nav_save();
+}
+static void nav_push_dir(int kind, const V3* a, const V3* b, int dir) {
+  nav_push(kind, a, b);
+  if (g_nedN > 0) g_ned[g_nedN - 1].dir = dir;
   nav_save();
 }
 /* ---- 交互：加点 / 删点 / 连断边 / 选 A ---- */
@@ -4017,6 +4150,203 @@ static void nav_reapply(void) {
   ops = nav_apply_all(g);           /* 内部已按需 refresh */
   elog("naved: re-applied %d/%d edits (reloaded from disk)", ops, g_nedN);
 }
+/* ---- 菜单动作：断边 / 落地 / 单向连边 / 标签区 / 放置 ---- */
+static void menu_refresh(void);
+static void nav_unlink_here(void) {
+  P g = navfix_point_graph();
+  V3 p, nb[64];
+  int i, n, cnt = 0;
+  P c = 0;
+  if (!g) { elog("wpmenu: no point graph"); return; }
+  if (!cam_point(&p)) { elog("wpmenu: no ground under crosshair"); return; }
+  i = nav_pick(&p, 3.0f);
+  if (i < 0) { elog("wpmenu: no node near crosshair"); return; }
+  nav_pos(nav_node(g, i), &p);
+  n = nav_conn_get(nav_node(g, i), &c);
+  for (int j = 0; j < n && j < 64; j++) {
+    P o = *(P*)((char*)c + 0x10 + j * 12);
+    if (o) nav_pos(o, &nb[cnt++]);
+  }
+  for (int j = 0; j < cnt; j++) {
+    int k = nav_find(g, &nb[j], 0.35f);
+    if (k < 0) continue;
+    nav_conn_set(nav_node(g, i), nav_node(g, k), 0);
+    nav_conn_set(nav_node(g, k), nav_node(g, i), 0);
+    nav_push(EDEL, &p, &nb[j]);
+  }
+  nav_refresh(g);
+  elog("wpmenu: unlinked %d edges", cnt);
+}
+
+/* 只把点贴到地面（Y 对齐）；水平移动/写盘格式本轮不做。 */
+static void nav_ground_here(void) {
+  P g = navfix_point_graph();
+  V3 p, q;
+  int i;
+  if (!g) return;
+  if (!cam_point(&q)) { elog("wpmenu: no ground under crosshair"); return; }
+  i = nav_pick(&q, 3.0f);
+  if (i < 0) { elog("wpmenu: no node near crosshair"); return; }
+  nav_pos(nav_node(g, i), &p);
+  p.y = q.y + 0.05f;
+  nav_put_pos(nav_node(g, i), &p);
+  nav_refresh(g);
+  elog("wpmenu: node grounded to y=%.2f (session only; no move format yet)", p.y);
+}
+
+/* A 已选时，把 A 和准星点按 g_wpPath 连一条边。 */
+static void nav_link_one(void) {
+  P g = navfix_point_graph();
+  V3 p, q;
+  int i, ia;
+  if (!g) { elog("wpmenu: no point graph"); return; }
+  if (g_wpLinkStep == 1) {
+    nav_sel_a();
+    if (g_nedHasA) g_wpLinkStep = 2;
+    elog("wpmenu: link step=%d A=%d", g_wpLinkStep, g_nedHasA);
+    return;
+  }
+  if (!g_nedHasA) { elog("wpmenu: select A first"); g_wpLinkStep = 1; return; }
+  if (!cam_point(&p)) { elog("wpmenu: no ground under crosshair"); return; }
+  i = nav_pick(&p, 3.0f);
+  if (i < 0) { elog("wpmenu: no node near crosshair"); return; }
+  ia = nav_find(g, &g_nedA, 1.5f);
+  if (ia < 0) { elog("wpmenu: A disappeared, select again"); g_nedHasA = 0; g_wpLinkStep = 1; return; }
+  nav_pos(nav_node(g, i), &q);
+  if (g_wpPath == 1) {
+    nav_conn_set(nav_node(g, ia), nav_node(g, i), 1);
+    nav_conn_set(nav_node(g, i), nav_node(g, ia), 0);
+    nav_push_dir(EADD, &g_nedA, &q, 1);
+    elog("wpmenu: edge A->B");
+  } else if (g_wpPath == 2) {
+    nav_conn_set(nav_node(g, i), nav_node(g, ia), 1);
+    nav_conn_set(nav_node(g, ia), nav_node(g, i), 0);
+    nav_push_dir(EADD, &g_nedA, &q, 2);
+    elog("wpmenu: edge B->A");
+  } else {
+    nav_conn_set(nav_node(g, ia), nav_node(g, i), 1);
+    nav_conn_set(nav_node(g, i), nav_node(g, ia), 1);
+    nav_push(EADD, &g_nedA, &q);
+    elog("wpmenu: edge A<->B");
+  }
+  nav_refresh(g);
+  g_wpLinkStep = 0;
+}
+
+/* 手动给范围内的点打 tag（不改扫描，仅当前会话；markers 里存一条 tag 记录）。 */
+static void nav_set_tag(P nd, int tag) {
+  unsigned fl;
+  if (!nd) return;
+  fl = *(unsigned*)((char*)nd + 0x0C);
+  fl = (fl & ~0x1F00000u) | (((unsigned)tag & 0x1Fu) << 19);
+  *(unsigned*)((char*)nd + 0x0C) = fl;
+}
+static void make_tag(V3 p, int tag, float radius) {
+  P g = navfix_point_graph();
+  int i, n, hit = 0;
+  if (!g) return;
+  n = nav_count(g);
+  for (i = 0; i < n; i++) {
+    P nd = nav_node(g, i);
+    V3 q;
+    if (!nd) continue;
+    nav_pos(nd, &q);
+    if (nav_d2(&p, &q) <= radius * radius) { nav_set_tag(nd, tag); hit++; }
+  }
+  add_mk(5, p, -1, -1, tag, 0, 0, spawn_vis(p, 0.30f, 5));
+  elog("wpmenu: tag zone tag=%d radius=%.1f nodes=%d", tag, radius, hit);
+  g_visDirty = 1;
+}
+
+/* 跳跃链接：Bot_JumpLink.Link[] 只有一个元素，endTransform 指向终点。
+ * 这是本轮的唯一“新建组件”路径；session-only（pack 格式还没有 jump 行），
+ * 先用 markers 的可视化球提示，下一轮再补持久化。 */
+static int make_jump_link(V3 a, V3 b) {
+  P endGo, startGo, comp, links, endTr, startTr, method;
+  float dx = b.x - a.x, dy = b.y - a.y, dz = b.z - a.z;
+  float len = sqrtf(dx * dx + dy * dy + dz * dz);
+  int h = 0;
+  if (!g_jumpType || !g_jumpLinkCls || !x_array_new) {
+    elog("wpmenu: jump link class missing (type=%p link=%p)", g_jumpType, g_jumpLinkCls);
+    return 0;
+  }
+  if (len < 0.2f) { elog("wpmenu: jump end too close"); return 0; }
+  endGo = new_go("UCF_JumpEnd");
+  if (!endGo) return 0;
+  endTr = get_tr(endGo);
+  if (endTr) ((set_pos_t)RVA(R_SET_POS))(endTr, b, 0);
+  ((set_active_t)RVA(R_SETACTIVE))(endGo, 1, 0);
+
+  startGo = new_go("UCF_JumpLink");
+  if (!startGo) return 0;
+  startTr = get_tr(startGo);
+  if (startTr) ((set_pos_t)RVA(R_SET_POS))(startTr, a, 0);
+  comp = ((addcomp_t)RVA(R_ADDCOMP))(startGo, g_jumpType, 0);
+  if (!comp) { elog("wpmenu: Bot_JumpLink AddComponent failed"); return 0; }
+
+  links = x_array_new(g_jumpLinkCls, 1);
+  if (!links) { elog("wpmenu: Link[] alloc failed"); return 0; }
+  if (x_gchandle_new) h = (int)x_gchandle_new(links, 0);
+  *(P*)((char*)links + 0x10) = endTr;              /* endTransform */
+  *(P*)((char*)links + 0x14) = 0;                  /* endNode (OnLatePostScan 填) */
+  *(float*)((char*)links + 0x18) = 0.0f;           /* needSpeed */
+  *(float*)((char*)links + 0x1C) = 1.0f;           /* accuracy */
+  *(float*)((char*)links + 0x20) = dx / len;       /* direction */
+  *(float*)((char*)links + 0x24) = dy / len;
+  *(float*)((char*)links + 0x28) = dz / len;
+  *(P*)((char*)comp + 0x24) = links;               /* links */
+  ((set_active_t)RVA(R_SETACTIVE))(startGo, 1, 0);
+
+  method = x_class_get_method_from_name ? x_class_get_method_from_name(g_jumpCls, "OnLatePostScan", 0) : 0;
+  if (method && x_runtime_invoke) {
+    x_runtime_invoke(method, comp, 0, 0);
+    elog("wpmenu: jump link created start=(%.2f %.2f %.2f) end=(%.2f %.2f %.2f) method=%p",
+         a.x, a.y, a.z, b.x, b.y, b.z, method);
+  } else {
+    elog("wpmenu: jump component created but OnLatePostScan missing; link inactive");
+  }
+  if (h && x_gchandle_free) x_gchandle_free((P)h);
+  add_mk(4, a, -1, -1, 0, startGo, comp, spawn_vis(a, 0.28f, 4));
+  g_visDirty = 1;
+  return 1;
+}
+
+static void wp_place(void) {
+  V3 p;
+  if (!cam_point(&p)) { elog("wpmenu: no ground under crosshair"); return; }
+  p.y += 0.05f;
+  if (g_wpAutoGround) { /* cam_point already returns the ground point */ }
+  switch (g_wpBrush) {
+    case 0: nav_add_here(); break;
+    case 1:
+      if (g_nedHasA) {
+        if (make_jump_link(g_nedA, p)) elog("wpmenu: jump link A -> crosshair (session only)");
+      } else {
+        elog("wpmenu: jump link needs A start first (Ctrl+Shift+A or path step 1)");
+      }
+      break;
+    case 2: make_crouch(p); break;
+    case 3:
+      if (g_curArea >= 0 && g_curArea < g_n && g_mk[g_curArea].type == 3) {
+        make_nanopos(g_mk[g_curArea].aid, p, 3);
+        elog("wpmenu: guard pos added under current area aid=%d", g_mk[g_curArea].aid);
+      } else {
+        make_area(30, p);
+        if (g_curArea >= 0) make_nanopos(g_mk[g_curArea].aid, p, 3);
+        elog("wpmenu: no current area; created area + one guard pos");
+      }
+      break;
+    case 4:
+      make_area(30, p);
+      break;
+    case 5: make_tag(p, 7, 3.0f); break;
+    default: break;
+  }
+  if (g_wpBrush == 2 || g_wpBrush == 3 || g_wpBrush == 4 || g_wpBrush == 5) save_file();
+  hud_refresh();
+  menu_refresh();
+}
+
 /* ---- 测试包：把环境变量翻译成「读哪个目录」+ HUD 一行状态 -------------- */
 static void pack_stat(void) {
   const char* want = g_packFpLabel[0] ? g_packFpLabel : g_packFp;
@@ -4048,6 +4378,38 @@ static int pack_ok_name(const char* s) {
   return 1;
 }
 
+/* 逐级建目录：④ 可能在工程端，路径跨盘且多层目录不一定存在。 */
+static void mkdir_p(const char* path) {
+  char buf[MAX_PATH];
+  int i;
+  if (!path || !path[0]) return;
+  strncpy(buf, path, sizeof buf - 1);
+  buf[sizeof buf - 1] = 0;
+  for (i = 3; buf[i]; i++) {          /* 跳过 "D:\" */
+    if (buf[i] == '\\' || buf[i] == '/') {
+      char c = buf[i];
+      buf[i] = 0;
+      CreateDirectoryA(buf, 0);
+      buf[i] = c;
+    }
+  }
+  CreateDirectoryA(buf, 0);
+}
+
+/* 环境变量优先，其次 ucf_mod.json，最后退回插件目录（旧行为）。 */
+static void dir_choice(const char* envName, const char* cfgKey, const char* def,
+                       char* out, int cap) {
+  char buf[MAX_PATH];
+  out[0] = 0;
+  if (GetEnvironmentVariableA(envName, buf, sizeof buf) > 0 && buf[0]) {
+    strncpy(out, buf, cap - 1);
+  } else {
+    cfg_str(cfgKey, "", out, cap);
+    if (!out[0]) strncpy(out, def, cap - 1);
+  }
+  out[cap - 1] = 0;
+}
+
 static void pack_init(void) {
   char buf[160];
   g_packName[0] = g_packFp[0] = g_packFpLabel[0] = 0;
@@ -4057,11 +4419,9 @@ static void pack_init(void) {
     if (!pack_ok_name(buf)) {
       elog("pack: ignore UCF_PACK=%s (only [A-Za-z0-9_-], <=48 chars)", buf);
     } else {
-      char pk[MAX_PATH];
       strcpy(g_packName, buf);
-      sprintf(pk, "%s\\packs", g_dir);
-      CreateDirectoryA(pk, 0);
-      sprintf(g_navDir, "%s\\packs\\%s", g_dir, g_packName);
+      mkdir_p(g_packRoot);
+      sprintf(g_navDir, "%s\\%s", g_packRoot, g_packName);
       CreateDirectoryA(g_navDir, 0);
     }
   }
@@ -4111,11 +4471,9 @@ static int nav_cmd_set_pack(P g, const char* pack, const char* fp) {
   }
   mapChanged = !fp || !fp[0] || strcmp(fp, g_packFp) != 0;
   if (pack && pack[0]) {
-    char pk[MAX_PATH];
     strcpy(g_packName, pack);
-    sprintf(pk, "%s\\packs", g_dir);
-    CreateDirectoryA(pk, 0);
-    sprintf(g_navDir, "%s\\packs\\%s", g_dir, g_packName);
+    mkdir_p(g_packRoot);
+    sprintf(g_navDir, "%s\\%s", g_packRoot, g_packName);
     CreateDirectoryA(g_navDir, 0);
     if (fp && fp[0]) strcpy(g_packFp, fp);
     else g_packFp[0] = 0;
@@ -4139,12 +4497,19 @@ static int nav_cmd_set_pack(P g, const char* pack, const char* fp) {
   return 1;
 }
 
+static int brush_from_name(const char* name);
+static void set_brush(int b);
+static void menu_open(void);
+static void menu_close(void);
+
 static void nav_cmd_tick(P g) {
   FILE* f;
   char line[256];
   char cmd[24] = "";
   char pack[64] = "";
   char fp[48] = "";
+  char brush[24] = "";
+  char menu[8] = "";
   unsigned long long seq = 0;
   int have = 0;
   if (!g_navCmdPath[0]) return;
@@ -4155,6 +4520,8 @@ static void nav_cmd_tick(P g) {
     if (sscanf(line, "cmd=%23s", cmd) == 1) continue;
     if (sscanf(line, "pack=%63s", pack) == 1) continue;
     if (sscanf(line, "fp=%47s", fp) == 1) continue;
+    if (sscanf(line, "brush=%23s", brush) == 1) continue;
+    if (sscanf(line, "menu=%7s", menu) == 1) continue;
   }
   fclose(f);
   if (!have || seq == g_navCmdSeq) return;
@@ -4164,6 +4531,15 @@ static void nav_cmd_tick(P g) {
   if (!strcmp(cmd, "save")) {
     if (g_nedPath[0]) nav_save();
     else elog("navcmd: save skipped (no edit file for this map)");
+    save_file();
+    return;
+  }
+  if (!strcmp(cmd, "undo")) { nav_undo(); return; }
+  if (!strcmp(cmd, "redo")) { nav_redo(); return; }
+  if (!strcmp(cmd, "brush")) { set_brush(brush_from_name(brush)); return; }
+  if (!strcmp(cmd, "menu")) {
+    if (menu[0] == '0' || !strcmp(menu, "off")) menu_close();
+    else if (menu[0] == '1' || !strcmp(menu, "on")) menu_open();
     return;
   }
   if (!strcmp(cmd, "off")) { nav_cmd_set_pack(g, "", ""); return; }
@@ -4253,6 +4629,364 @@ void editor_map_name(char* out, int cap) {
 }
 
 /* main-thread tick: keeps the labels glued to their world positions */
+/* ======================= 路点菜单（SyPB 式） =======================
+ * F2 开关；长按 E 0.45 s 也可（UCF 没有 E 交互，先按用户确认）。
+ * 菜单只做「选操作 → 调已有的 naved / make_* 函数」，不改游戏行为层。
+ */
+static const char* WP_MENU[10] = {
+  "添加路点", "设置笔刷 / 标记", "建立路径", "删除路径", "删除路点",
+  "落地 / 贴地", "聚集区工具", "撤销 / 保存", "显示图层", "关闭菜单"
+};
+static const char* WP_TYPES[6] = {
+  "普通路点", "跳跃点", "蹲守点", "守点", "聚集区", "标签区"
+};
+static const char* WP_PATHS[3] = { "双向", "单向 A -> B", "单向 B -> A" };
+static const char* WP_AREAS[4] = {
+  "新建聚集区", "加守点", "加入口 entrancePos", "加逃跑点 escapePos"
+};
+static const char* WP_EDIT[4] = { "撤销一步", "重做一步", "保存到文件", "重读并套用" };
+static const char* WP_LAYERS[4] = { "边", "文字标签", "可走面", "路点总开关" };
+
+/* 小键盘键码：mingw 的 winuser.h 一般都有；老头文件缺失时兜底。 */
+#ifndef VK_NUMPAD0
+#define VK_NUMPAD0 0x60
+#define VK_NUMPAD1 0x61
+#define VK_NUMPAD2 0x62
+#define VK_NUMPAD3 0x63
+#define VK_NUMPAD4 0x64
+#define VK_NUMPAD5 0x65
+#define VK_NUMPAD6 0x66
+#define VK_NUMPAD7 0x67
+#define VK_NUMPAD8 0x68
+#define VK_NUMPAD9 0x69
+#endif
+
+static void wp_place(void);
+static void nav_unlink_here(void);
+static void nav_ground_here(void);
+static void nav_link_one(void);
+static void nav_redo(void);
+
+static void menu_sub_title(char* out, int cap) {
+  const char* s = "路点菜单";
+  if (g_wpMenuSub == 1) s = "添加路点：选类型";
+  else if (g_wpMenuSub == 2) s = "建立路径：选方向";
+  else if (g_wpMenuSub == 3) s = "聚集区工具";
+  else if (g_wpMenuSub == 4) s = "撤销 / 保存";
+  else if (g_wpMenuSub == 5) s = "显示图层";
+  snprintf(out, (size_t)cap, "%s", s);
+}
+
+static int menu_sub_count(void) {
+  if (g_wpMenuSub == 1) return 6;
+  if (g_wpMenuSub == 2) return 3;
+  if (g_wpMenuSub == 3) return 4;
+  if (g_wpMenuSub == 4) return 4;
+  if (g_wpMenuSub == 5) return 4;
+  return 10;
+}
+
+static const char* menu_sub_label(int i) {
+  if (g_wpMenuSub == 1) return (i >= 0 && i < 6) ? WP_TYPES[i] : "";
+  if (g_wpMenuSub == 2) return (i >= 0 && i < 3) ? WP_PATHS[i] : "";
+  if (g_wpMenuSub == 3) return (i >= 0 && i < 4) ? WP_AREAS[i] : "";
+  if (g_wpMenuSub == 4) return (i >= 0 && i < 4) ? WP_EDIT[i] : "";
+  if (g_wpMenuSub == 5) return (i >= 0 && i < 4) ? WP_LAYERS[i] : "";
+  return "";
+}
+
+static void menu_refresh(void) {
+  char s[2048];
+  char title[64];
+  int i, n, off = 0;
+  if (g_menu && !uobj_live(g_menu)) hud_reset();
+  if (!g_menu) return;
+  if (!g_wpMenuOn || !g_wpMenuOpen) {
+    ((set_txt_t)RVA(R_TEXT_SETTEXT))(g_menu, x_string_new(""), 0);
+    return;
+  }
+  menu_sub_title(title, sizeof title);
+  off += snprintf(s + off, sizeof s - (size_t)off, "%s   [F2 / 长按E 关闭]\n", title);
+  if (g_wpMenuSub == 0) {
+    for (i = 0; i < 10 && off < (int)sizeof s - 80; i++) {
+      off += snprintf(s + off, sizeof s - (size_t)off, "%s%d  %s\n",
+                      i == g_wpMenuSel ? "> " : "  ", (i + 1) % 10, WP_MENU[i]);
+    }
+  } else {
+    n = menu_sub_count();
+    for (i = 0; i < n && off < (int)sizeof s - 80; i++) {
+      off += snprintf(s + off, sizeof s - (size_t)off, "%s%d  %s\n",
+                      i == g_wpMenuSubSel ? "> " : "  ", i + 1, menu_sub_label(i));
+    }
+  }
+  if (g_wpArm) {
+    off += snprintf(s + off, sizeof s - (size_t)off, "\n[%s] 小键盘5 / 左键 放置\n", WP_TYPES[g_wpBrush]);
+  } else if (g_wpLinkStep == 1) {
+    off += snprintf(s + off, sizeof s - (size_t)off, "\n对准起点，小键盘5 选 A\n");
+  } else if (g_wpLinkStep == 2) {
+    off += snprintf(s + off, sizeof s - (size_t)off, "\nA 已选，对准终点，小键盘5 连边\n");
+  } else {
+    off += snprintf(s + off, sizeof s - (size_t)off, "\n当前笔刷: %s  A: %s\n",
+                    WP_TYPES[g_wpBrush], g_nedHasA ? "已选" : "未选");
+  }
+  if (off < (int)sizeof s - 80)
+    off += snprintf(s + off, sizeof s - (size_t)off, "小键盘 8/2 上下   5 确认   0 返回   1-9 直选\n");
+  ((set_txt_t)RVA(R_TEXT_SETTEXT))(g_menu, x_string_new(s), 0);
+}
+
+static void menu_open(void) {
+  if (!g_wpMenuOn) { elog("wpmenu: disabled by cfg wp_menu=0"); return; }
+  if (g_collectOnly) { elog("wpmenu: collect-only, menu disabled"); return; }
+  if (g_menu && !uobj_live(g_menu)) hud_reset();
+  if (!g_menu) hud_init();
+  g_wpMenuOpen = 1;
+  g_wpMenuSel = 0;
+  g_wpMenuSub = 0;
+  g_wpMenuSubSel = 0;
+  g_wpArm = 0;
+  g_wpLinkStep = 0;
+  elog("wpmenu: open");
+  menu_refresh();
+}
+
+static void menu_close(void) {
+  if (!g_wpMenuOpen) return;
+  g_wpMenuOpen = 0;
+  g_wpArm = 0;
+  g_wpLinkStep = 0;
+  g_wpMenuSub = 0;
+  elog("wpmenu: close");
+  menu_refresh();
+}
+
+static void menu_toggle(void) {
+  if (g_wpMenuOpen) menu_close(); else menu_open();
+}
+
+static void menu_back(void) {
+  if (g_wpArm || g_wpLinkStep) {
+    g_wpArm = 0;
+    g_wpLinkStep = 0;
+    g_nedHasA = 0;
+    elog("wpmenu: placement cancelled");
+    menu_refresh();
+    return;
+  }
+  if (g_wpMenuSub) { g_wpMenuSub = 0; g_wpMenuSubSel = 0; menu_refresh(); return; }
+  menu_close();
+}
+
+static void menu_move(int delta) {
+  int n = g_wpMenuSub ? menu_sub_count() : 10;
+  if (!n) return;
+  if (g_wpMenuSub) g_wpMenuSubSel = (g_wpMenuSubSel + delta + n) % n;
+  else g_wpMenuSel = (g_wpMenuSel + delta + n) % n;
+  elog("wpmenu: %s=%d", g_wpMenuSub ? "subsel" : "sel",
+       g_wpMenuSub ? g_wpMenuSubSel : g_wpMenuSel);
+  menu_refresh();
+}
+
+static int brush_from_name(const char* name) {
+  if (!name) return 0;
+  if (!strcmp(name, "jump")) return 1;
+  if (!strcmp(name, "crouch")) return 2;
+  if (!strcmp(name, "guard")) return 3;
+  if (!strcmp(name, "area")) return 4;
+  if (!strcmp(name, "tag")) return 5;
+  return 0;
+}
+
+static const char* brush_name(int b) {
+  static const char* n[6] = { "normal", "jump", "crouch", "guard", "area", "tag" };
+  return (b >= 0 && b < 6) ? n[b] : "normal";
+}
+
+static void set_brush(int b) {
+  if (b < 0 || b > 5) b = 0;
+  g_wpBrush = b;
+  strncpy(g_wpBrushName, brush_name(b), sizeof g_wpBrushName - 1);
+  g_wpBrushName[sizeof g_wpBrushName - 1] = 0;
+  elog("wpmenu: brush=%s", g_wpBrushName);
+  menu_refresh();
+}
+
+/* 菜单确认：主菜单进子菜单 / 子菜单执行；不关菜单，便于连续操作。 */
+static void menu_activate(void) {
+  int i;
+  if (g_wpMenuSub == 0) {
+    if (g_wpArm || g_wpLinkStep) {
+      g_wpArm = 0;
+      g_wpLinkStep = 0;
+      g_nedHasA = 0;
+      elog("wpmenu: placement cancelled by menu");
+    }
+    i = g_wpMenuSel;
+    if (i == 0) { g_wpMenuSub = 1; g_wpMenuSubSel = g_wpBrush; menu_refresh(); return; }
+    if (i == 1) { g_wpMenuSub = 1; g_wpMenuSubSel = g_wpBrush; menu_refresh(); return; }
+    if (i == 2) { g_wpMenuSub = 2; g_wpMenuSubSel = g_wpPath; menu_refresh(); return; }
+    if (i == 3) { nav_unlink_here(); menu_refresh(); return; }
+    if (i == 4) { nav_del_here(); menu_refresh(); return; }
+    if (i == 5) { nav_ground_here(); menu_refresh(); return; }
+    if (i == 6) { g_wpMenuSub = 3; g_wpMenuSubSel = 0; menu_refresh(); return; }
+    if (i == 7) { g_wpMenuSub = 4; g_wpMenuSubSel = 0; menu_refresh(); return; }
+    if (i == 8) { g_wpMenuSub = 5; g_wpMenuSubSel = 0; menu_refresh(); return; }
+    if (i == 9) { menu_close(); return; }
+    return;
+  }
+  i = g_wpMenuSubSel;
+  if (g_wpMenuSub == 1) {                 /* 类型 */
+    set_brush(i);
+    g_wpMenuSub = 0;
+    g_wpArm = 1;
+    menu_refresh();
+    return;
+  }
+  if (g_wpMenuSub == 2) {                 /* 路径方向 */
+    g_wpPath = i;
+    g_wpMenuSub = 0;
+    g_wpLinkStep = 1;
+    g_nedHasA = 0;
+    elog("wpmenu: path dir=%d, select A first", g_wpPath);
+    menu_refresh();
+    return;
+  }
+  if (g_wpMenuSub == 3) {                 /* 聚集区 */
+    V3 p;
+    if (!cam_point(&p)) { elog("wpmenu: no ground under crosshair"); return; }
+    p.y += 0.05f;
+    if (i == 0) { make_area(30, p); }
+    else if (i == 1) {
+      if (g_curArea >= 0 && g_curArea < g_n && g_mk[g_curArea].type == 3)
+        make_nanopos(g_mk[g_curArea].aid, p, 3);
+      else { make_area(30, p); if (g_curArea >= 0) make_nanopos(g_mk[g_curArea].aid, p, 3); }
+    } else {
+      elog("wpmenu: entrance/escape not wired yet");
+    }
+    save_file();
+    menu_refresh();
+    return;
+  }
+  if (g_wpMenuSub == 4) {                 /* 撤销 / 保存 */
+    if (i == 0) nav_undo();
+    else if (i == 1) nav_redo();
+    else if (i == 2) nav_save();
+    else nav_reapply();
+    menu_refresh();
+    return;
+  }
+  if (g_wpMenuSub == 5) {                 /* 图层 */
+    if (i == 0) vis_toggle_layer(LAY_A);
+    else if (i == 1) { g_lblMode = (g_lblMode + 1) % 3; }
+    else if (i == 2) nm_toggle();
+    else vis_toggle();
+    menu_refresh();
+    return;
+  }
+}
+
+/* 菜单打开时，Enter / 左键：先放点，再执行当前项 */
+static void menu_confirm(void) {
+  if (!g_wpMenuOpen) return;
+  if (g_wpArm) { wp_place(); menu_refresh(); return; }
+  if (g_wpLinkStep) { nav_link_one(); menu_refresh(); return; }
+  menu_activate();
+}
+
+/* 菜单打开时：菜单键（数字/回车/Esc/小键盘等）先在插件里处理并吞掉；
+ * 移动键 W/A/S/D/空格/Shift/Ctrl 留给游戏（选完 A 要能走到 B 再连边）；
+ * 其余游戏键（Q/R/G/F/Tab 等）拦掉，避免菜单开着时误触。
+ * 2026-11-18 二次调整：用户反馈 Enter/Esc/W/S 与游戏内按键冲突；
+ * 菜单主操作改为小键盘 8/2/5/0，W/S 不再控制菜单。 */
+static int menu_sys_key(unsigned vk) {
+  if (vk == VK_SHIFT || vk == VK_CONTROL || vk == VK_MENU) return 1;
+  if (vk == VK_LWIN || vk == VK_RWIN || vk == VK_APPS) return 1;
+  if (vk == VK_CAPITAL || vk == VK_NUMLOCK || vk == VK_SCROLL) return 1;
+  if (vk == VK_SNAPSHOT) return 1;
+  /* Tab/F4/Enter/Space 的 Alt 组合放行；普通 Tab/F4/Enter 仍归菜单，
+   * 普通 Space 在下面当移动键放行（跳跃）。 */
+  if (vk == VK_TAB || vk == VK_F4 || vk == VK_SPACE || vk == VK_RETURN)
+    return (GetAsyncKeyState(VK_MENU) & 0x8000) ? 1 : 0;
+  return 0;
+}
+
+int editor_menu_key(unsigned vk, int ext) {
+  (void)ext;
+  /* Win 组合键交给系统（Win+L / Win+Tab 等） */
+  if ((GetAsyncKeyState(VK_LWIN) & 0x8000) || (GetAsyncKeyState(VK_RWIN) & 0x8000))
+    return 0;
+  if (vk == VK_F2) { menu_toggle(); return 1; }
+  if (vk == 'E') {
+    if (g_wpMenuOn && !g_wpEDownAt) { g_wpEDownAt = GetTickCount(); g_wpEFired = 0; }
+    return 1;   /* UCF 没有 E 交互；E 只给菜单长按 */
+  }
+  if (!g_wpMenuOpen) return 0;
+  /* Ctrl+Shift+Esc 留给任务管理器 */
+  if (vk == VK_ESCAPE &&
+      (GetAsyncKeyState(VK_CONTROL) & 0x8000) &&
+      (GetAsyncKeyState(VK_SHIFT) & 0x8000)) return 0;
+  if (menu_sys_key(vk)) return 0;
+
+  if (vk == VK_NUMPAD8 || vk == VK_UP) { menu_move(-1); return 1; }
+  if (vk == VK_NUMPAD2 || vk == VK_DOWN) { menu_move(1); return 1; }
+  if (vk == VK_NUMPAD5 || vk == VK_CLEAR || vk == VK_RETURN) { menu_confirm(); return 1; }
+  if (vk == VK_NUMPAD0 || vk == VK_INSERT || vk == VK_BACK || vk == VK_ESCAPE) {
+    menu_back();
+    return 1;
+  }
+  if (vk >= '0' && vk <= '9') {
+    int i = (int)(vk - '1');
+    if (vk == '0') {
+      if (g_wpMenuSub) menu_back();
+      else { g_wpMenuSel = 9; menu_activate(); }
+      return 1;
+    }
+    if (g_wpMenuSub) {
+      if (i < menu_sub_count()) { g_wpMenuSubSel = i; menu_activate(); }
+    } else if (i >= 0 && i < 10) {
+      g_wpMenuSel = i;
+      menu_activate();
+    }
+    return 1;
+  }
+  /* 移动键留给游戏：选完 A 可以走到 B，再按小键盘5 连边。
+   * 只拦菜单键和会误触的武器/功能键（Q/R/G/F/Tab/小键盘等）。 */
+  if (vk == 'W' || vk == 'A' || vk == 'S' || vk == 'D' ||
+      vk == VK_SPACE || vk == VK_SHIFT || vk == VK_CONTROL) return 0;
+  return 1;
+}
+
+/* 兼容旧调用：WM_APP+0x53 测试钩子仍走这里 */
+void editor_on_key_plain(unsigned vk) { (void)editor_menu_key(vk, 0); }
+
+void editor_on_mouse(int btn) {
+  if (!g_wpMenuOpen) return;
+  if (btn == 1) menu_confirm();
+  else if (btn == 2) menu_back();
+}
+
+void editor_menu_wheel(int delta) {
+  if (!g_wpMenuOpen) return;
+  menu_move(delta > 0 ? -1 : 1);
+}
+
+int editor_menu_is_open(void) { return g_wpMenuOpen; }
+
+
+/* 每 tick：长按 E 计时 + 菜单文本刷新（0.3 s 一次） */
+static void menu_tick(void) {
+  static int tick;
+  tick++;
+  if (g_collectOnly) { g_wpMenuOpen = 0; return; }
+  if (g_wpMenuOn && g_wpEDownAt && !g_wpEFired) {
+    if (!(GetAsyncKeyState('E') & 0x8000)) g_wpEDownAt = 0;
+    else if (GetTickCount() - g_wpEDownAt >= 450) {
+      g_wpEFired = 1;
+      menu_toggle();
+    }
+  }
+  if (g_wpMenuOpen && (tick % 3) == 0) menu_refresh();
+}
+
 void editor_tick(void) {
   static int ticks;
   if (!g_inited) return;
@@ -4279,8 +5013,8 @@ void editor_tick(void) {
   }
   if (g_sceneAge < 1000000) g_sceneAge++;
   if (g_sceneAge >= VIS_SCENE_WAIT) g_sceneReadyOnce = 1;
-  if (g_autoExport) auto_export_tick();
   nm_auto_tick();
+  menu_tick();                /* F2 / 长按 E 路点菜单 */
   if (g_collectOnly) {
     if ((++ticks % 20) == 0) {   /* 每 5 s 一行心跳，崩溃时日志能指到具体地图 */
       char mn[80];
@@ -4437,7 +5171,11 @@ void editor_on_key(unsigned vk) { editor_on_key_mod(vk, 0); }
 /* headless entry used by the WM_APP+0x53 test hook (no keyboard focus needed) */
 void editor_on_key_any(unsigned vk, int shift) {
   if (!ed_init()) return;
-  elog("test-key vk=0x%02X shift=%d", vk & 0xFF, shift);
+  elog("test-key vk=0x%02X shift=%d menu=%d", vk & 0xFF, shift, g_wpMenuOpen);
+  /* 菜单开着时，数字/Enter/W/S/Esc 必须先给菜单，不能被编辑器开关抢走 */
+  if (vk == VK_F2 || vk == 'E' || g_wpMenuOpen) {
+    if (editor_menu_key(vk, 0)) return;
+  }
   editor_on_key_mod(vk, shift);
 }
 
@@ -4445,11 +5183,296 @@ void editor_on_quit(void) {
   elog("quit: editor stop (markers=%d vis nodes=%d labels=%d)", g_n, g_vnN, g_vfN);
 }
 
+/* ---- 车测自由视角（2026-11-18）----------------------------------------
+ * 为什么需要：车测用 SceneManager.LoadScene 直接进图，没有玩家、没有玩家控制器，
+ * 视角没人管。地图场景自带 Main Camera + CM FreeLook（Cinemachine 虚拟相机），
+ * 所以不新建相机，只做两件事：
+ *   1) 关掉 CM FreeLook，否则 CinemachineBrain 每帧把相机拽回它的机位；
+ *   2) 每 16 ms（navfix 的 WM_TIMER）写一次 position / eulerAngles。
+ * 操作：WASD 平移 · Space/Ctrl 升降 · Shift 加速 · 按住右键转头 · F7 开关。
+ * 只在 UCF_FREECAM=1（控制台车测页的勾选）时启动，正常游戏一行都不执行。 */
+
+HWND navfix_hwnd(void);
+int autotest_in_map(void);
+
+static void freecam_env(void) {
+  char a[16], b[8];
+  if (g_freeEnvRead) return;
+  g_freeEnvRead = 1;
+  if (GetEnvironmentVariableA("UCF_AUTOTEST", a, sizeof a) <= 0) return;
+  if (GetEnvironmentVariableA("UCF_FREECAM", b, sizeof b) <= 0 || b[0] != '1') return;
+  g_freeEnv = 1;
+  g_freeOn = 1;
+  elog("freecam: enabled by UCF_FREECAM (WASD + RMB, F7 toggles)");
+}
+
+static P freecam_find_go(const char* name) {
+  P m, s, go;
+  void* args[1];
+  void* exc = 0;
+  if (!x_class_get_method_from_name || !x_runtime_invoke || !x_string_new || !g_goCls) return 0;
+  m = x_class_get_method_from_name(g_goCls, "Find", 1);
+  if (!m) return 0;
+  s = x_string_new(name);
+  if (!s) return 0;
+  args[0] = s;
+  go = x_runtime_invoke(m, 0, args, &exc);
+  return exc ? 0 : go;
+}
+
+static void freecam_kill_vcam(P cam) {
+  P go = cam ? ((get_go_t)RVA(R_GETGO))(cam, 0) : 0;
+  P brain = 0, type = 0;
+  g_freeVcamOff = 1;                 /* 只尝试一次；失败也不反复刷日志 */
+  /* 优先关 CinemachineBrain（挂在 Main Camera 上，每帧把 Transform 拽回 vcam 的机位）。
+   * 不靠 GameObject.Find("CM FreeLook")：实测按名字找不到（多半是未激活/改名）。 */
+  if (!g_freeBrainCls) g_freeBrainCls = find_cls("Cinemachine", "CinemachineBrain");
+  if (!g_freeBrainCls) g_freeBrainCls = find_cls("", "CinemachineBrain");
+  if (g_freeBrainCls && x_class_get_type && x_type_get_object) {
+    type = x_type_get_object(x_class_get_type(g_freeBrainCls));
+  }
+  if (go && type) {
+    brain = ((getcomp_t)RVA(R_GETCOMP))(go, type, 0);   /* 唯一的 GetComponent(Type) 重载 */
+  }
+  if (brain && mem_ok(brain, 0x10)) {
+    ((set_active_t)RVA(R_SET_ENABLED))(brain, 0, 0);
+    g_freeBrain = brain;
+    elog("freecam: disabled CinemachineBrain (%p)", brain);
+    return;
+  }
+  {
+    P vc;
+    elog("freecam: CinemachineBrain not found (cls=%p brain=%p); trying CM FreeLook",
+         g_freeBrainCls, brain);
+    vc = freecam_find_go("CM FreeLook");
+    if (vc) {
+      ((set_active_t)RVA(R_SETACTIVE))(vc, 0, 0);
+      g_freeVcamGo = vc;
+      elog("freecam: disabled CM FreeLook (%p)", vc);
+    } else {
+      elog("freecam: no CinemachineBrain / CM FreeLook found (camera may still be driven)");
+    }
+  }
+}
+
+static int freecam_cam(P* camOut, P* trOut) {
+  P cam = ((cam_main_t)RVA(R_CAM_MAIN))(0);
+  P go, tr;
+  if (!cam || !mem_ok(cam, 0x20) || !uobj_live(cam)) return 0;
+  go = ((get_go_t)RVA(R_GETGO))(cam, 0);
+  tr = get_tr(go);
+  if (!tr || !mem_ok(tr, 0x10) || !uobj_live(tr)) return 0;
+  if (!g_freeTrCls) g_freeTrCls = find_cls("UnityEngine", "Transform");
+  if (g_freeTrCls && *(P*)tr != g_freeTrCls) return 0;
+  if (camOut) *camOut = cam;
+  if (trOut) *trOut = tr;
+  return 1;
+}
+
+static void freecam_apply(P tr) {
+  V3 e;
+  ((set_pos_t)RVA(R_SET_POS))(tr, g_freePos, 0);
+  e.x = g_freePitch; e.y = g_freeYaw; e.z = 0.0f;
+  ((set_pos_t)RVA(R_SET_EULER))(tr, e, 0);
+}
+
+/* 用路点图的包围盒算一个能俯视全图的机位；没有路点图的图返回 0（保持游戏机位） */
+static int freecam_center(V3* c, float* span) {
+  P g = navfix_point_graph();
+  int i, n, cnt = 0;
+  double sx = 0, sy = 0, sz = 0;
+  float minx = 1e9f, maxx = -1e9f, minz = 1e9f, maxz = -1e9f;
+  if (!g) return 0;
+  n = nav_count(g);
+  if (n <= 0) return 0;
+  for (i = 0; i < n; i++) {
+    P nd = nav_node(g, i);
+    V3 p;
+    if (!nd || !mem_ok(nd, 0x28)) continue;
+    nav_pos(nd, &p);
+    if (!(p.x > -20000.0f && p.x < 20000.0f)) continue;
+    if (!(p.z > -20000.0f && p.z < 20000.0f)) continue;
+    if (!(p.y > -5000.0f && p.y < 5000.0f)) continue;
+    sx += p.x; sy += p.y; sz += p.z; cnt++;
+    if (p.x < minx) minx = p.x;
+    if (p.x > maxx) maxx = p.x;
+    if (p.z < minz) minz = p.z;
+    if (p.z > maxz) maxz = p.z;
+  }
+  if (cnt < 8) return 0;
+  c->x = (float)(sx / cnt);
+  c->y = (float)(sy / cnt);
+  c->z = (float)(sz / cnt);
+  {
+    float dx = maxx - minx, dz = maxz - minz;
+    *span = dx > dz ? dx : dz;
+    if (*span < 30.0f) *span = 30.0f;
+    if (*span > 400.0f) *span = 400.0f;
+  }
+  return 1;
+}
+
+static int freecam_place(P tr) {
+  V3 c;
+  float span = 0.0f;
+  g_freeLastTick = GetTickCount();
+  if (freecam_center(&c, &span)) {
+    float dx, dy, dz, len;
+    g_freePos.x = c.x;
+    g_freePos.z = c.z - span * 0.75f;
+    g_freePos.y = c.y + span * 0.45f + 15.0f;
+    dx = c.x - g_freePos.x; dy = c.y - g_freePos.y; dz = c.z - g_freePos.z;
+    len = sqrtf(dx * dx + dy * dy + dz * dz);
+    if (len < 1.0f) len = 1.0f;
+    g_freeYaw = atan2f(dx, dz) * 57.29578f;
+    g_freePitch = -asinf(dy / len) * 57.29578f;
+    elog("freecam: place %.1f %.1f %.1f yaw=%.0f pitch=%.0f (graph view, span=%.0f)",
+         g_freePos.x, g_freePos.y, g_freePos.z, g_freeYaw, g_freePitch, span);
+    return 1;
+  }
+  {
+    V3 cur;
+    ((get_pos_t)RVA(R_GET_POS_INJ))(tr, &cur, 0);
+    /* 大厅/加载中：相机还在原点、也没有路点图 -> 这一帧不接管，等真正进图再放机位 */
+    if (fabsf(cur.x) + fabsf(cur.y) + fabsf(cur.z) < 1.0f) return 0;
+    g_freePos = cur;
+    g_freeYaw = 0.0f;
+    g_freePitch = 12.0f;
+    elog("freecam: place %.1f %.1f %.1f (keep scene camera, no point graph)",
+         g_freePos.x, g_freePos.y, g_freePos.z);
+    return 1;
+  }
+}
+
+static void freecam_input(P tr) {
+  DWORD now = GetTickCount();
+  float dt = (now - g_freeLastTick) / 1000.0f;
+  HWND hwnd = navfix_hwnd();
+  int fg = hwnd && GetForegroundWindow() == hwnd;
+  V3 np;
+  if (dt < 0.001f) return;
+  if (dt > 0.15f) dt = 0.15f;       /* 卡顿/切图后不要一下飞很远 */
+  g_freeLastTick = now;
+  if (!fg) return;                  /* 游戏不在前台：只保持机位，不读键鼠 */
+
+  if (GetAsyncKeyState(VK_RBUTTON) & 0x8000) {
+    RECT rc;
+    POINT pt, ctr;
+    if (GetClientRect(hwnd, &rc)) {
+      ctr.x = (rc.right - rc.left) / 2;
+      ctr.y = (rc.bottom - rc.top) / 2;
+      ClientToScreen(hwnd, &ctr);
+      GetCursorPos(&pt);
+      {
+        float dx = (float)(pt.x - ctr.x), dy = (float)(pt.y - ctr.y);
+        if (dx != 0.0f || dy != 0.0f) {
+          g_freeYaw += dx * 0.16f;
+          g_freePitch += dy * 0.16f;
+          if (g_freePitch > 89.0f) g_freePitch = 89.0f;
+          if (g_freePitch < -89.0f) g_freePitch = -89.0f;
+          SetCursorPos(ctr.x, ctr.y);
+        }
+      }
+    }
+  }
+
+  {
+    float sp = 15.0f, step, cy, sy, cyaw, syaw;
+    V3 fw, rt;
+    np = g_freePos;
+    if (GetAsyncKeyState(VK_SHIFT) & 0x8000) sp *= 4.0f;
+    step = sp * dt;
+    cy = cosf(g_freePitch / 57.29578f);
+    sy = sinf(g_freePitch / 57.29578f);
+    cyaw = cosf(g_freeYaw / 57.29578f);
+    syaw = sinf(g_freeYaw / 57.29578f);
+    fw.x = syaw * cy; fw.y = -sy; fw.z = cyaw * cy;
+    rt.x = cyaw;      rt.y = 0.0f; rt.z = -syaw;
+    if (GetAsyncKeyState('W') & 0x8000) { np.x += fw.x * step; np.y += fw.y * step; np.z += fw.z * step; }
+    if (GetAsyncKeyState('S') & 0x8000) { np.x -= fw.x * step; np.y -= fw.y * step; np.z -= fw.z * step; }
+    if (GetAsyncKeyState('D') & 0x8000) { np.x += rt.x * step; np.z += rt.z * step; }
+    if (GetAsyncKeyState('A') & 0x8000) { np.x -= rt.x * step; np.z -= rt.z * step; }
+    if (GetAsyncKeyState(VK_SPACE) & 0x8000) np.y += step;
+    if (GetAsyncKeyState(VK_CONTROL) & 0x8000) np.y -= step;
+  }
+  g_freePos = np;
+  freecam_apply(tr);
+}
+
+void editor_freecam_toggle(void) {
+  freecam_env();
+  if (!g_freeEnv) return;
+  g_freeOn = !g_freeOn;
+  elog("freecam: %s", g_freeOn ? "ON" : "OFF");
+  if (!g_freeOn) {
+    if (g_freeBrain) {
+      ((set_active_t)RVA(R_SET_ENABLED))(g_freeBrain, 1, 0);
+      elog("freecam: CinemachineBrain re-enabled");
+    }
+    if (g_freeVcamGo) {
+      ((set_active_t)RVA(R_SETACTIVE))(g_freeVcamGo, 1, 0);
+      elog("freecam: CM FreeLook re-enabled");
+    }
+    g_freeBrain = 0;
+    g_freeVcamGo = 0;
+    g_freeVcamOff = 0;
+  }
+}
+
+void editor_freecam_tick(void) {
+  P cam, tr;
+  freecam_env();
+  if (!g_freeEnv || !g_freeOn || !g_inited) return;
+  if (!autotest_in_map()) return;    /* 大厅/热身阶段不接管相机 */
+  if (!freecam_cam(&cam, &tr)) return;
+  if (cam != g_freeCam) {
+    g_freeCam = cam;
+    g_freeInited = 0;
+    g_freeVcamOff = 0;
+    g_freeVcamGo = 0;
+    g_freeBrain = 0;
+    g_freeWarned = 0;
+  }
+  if (!g_freeVcamOff) {
+    if (!freecam_place(tr)) return;     /* 大厅/加载中：下一 tick 再试 */
+    g_freeInited = 1;
+    freecam_kill_vcam(cam);
+    freecam_apply(tr);
+  } else if (!g_freeInited) {
+    if (!freecam_place(tr)) return;
+    g_freeInited = 1;
+    freecam_apply(tr);
+  }
+  if (!g_freeWarned) {
+    V3 cur;
+    ((get_pos_t)RVA(R_GET_POS_INJ))(tr, &cur, 0);
+    if (fabsf(cur.x - g_freePos.x) + fabsf(cur.y - g_freePos.y) +
+        fabsf(cur.z - g_freePos.z) > 3.0f) {
+      elog("freecam: camera is being overwritten (vcam still active?) - check 'CM FreeLook'");
+      g_freeWarned = 1;
+    }
+  }
+  freecam_input(tr);
+}
+
 void editor_start(const char* modDir) {
   if (!modDir) return;
   strncpy(g_dir, modDir, sizeof(g_dir) - 1);
   sprintf(g_log, "%s\\ucf_mod.log", g_dir);
   sprintf(g_file, "%s\\markers\\markers.txt", g_dir);
+  /* 四版路径先定下来：pack_init 要用 g_packRoot，导出要用 g_expDir。
+   * 控制台启动游戏时会带 UCF_EXPORT_DIR / UCF_PACK_DIR / UCF_NAV_READONLY。 */
+  {
+    char def[MAX_PATH], ro[8];
+    sprintf(def, "%s\\vis", g_dir);
+    dir_choice("UCF_EXPORT_DIR", "export_dir", def, g_expDir, sizeof g_expDir);
+    sprintf(def, "%s\\packs", g_dir);
+    dir_choice("UCF_PACK_DIR", "pack_dir", def, g_packRoot, sizeof g_packRoot);
+    mkdir_p(g_expDir);
+    mkdir_p(g_packRoot);
+    g_navReadOnly = (GetEnvironmentVariableA("UCF_NAV_READONLY", ro, sizeof ro) > 0 &&
+                     ro[0] == '1') ? 1 : 0;
+  }
   pack_init();   /* UCF_PACK / UCF_FP：这次读哪个目录、只对哪张图生效 */
   /* 开关全部来自 ucf_mod.json（cfg.c）：这里各取一次，日志里写清楚，
    * 关掉哪个在日志里都看得见，不用猜。 */
@@ -4467,12 +5490,27 @@ void editor_start(const char* modDir) {
   if (g_lblMode < 0 || g_lblMode > 2) g_lblMode = 0;
   g_nmShow     = cfg_bool("navmesh_show", 1);
   g_visLists   = cfg_bool("vis_lists", 1);
-  g_autoExport = cfg_bool("auto_export", 1);
   g_editAllow  = cfg_bool("editor", 1);
+  g_wpMenuOn   = cfg_bool("wp_menu", 1);
+  g_wpAutoGround = cfg_bool("wp_autoground", 1);
+  cfg_str("wp_brush", "normal", g_wpBrushName, sizeof g_wpBrushName);
+  g_wpBrush    = brush_from_name(g_wpBrushName);
+  g_expEnabled = cfg_bool("export_enabled", 1);
+  g_expNodes   = cfg_bool("export_nodes", 1);
+  g_expCrouch  = cfg_bool("export_crouch", 1);
+  g_expArea    = cfg_bool("export_area", 1);
+  g_expGuard   = cfg_bool("export_guard", 1);
+  g_expSpawn   = cfg_bool("export_spawn", 1);
+  g_expTags    = cfg_bool("export_tags", 1);
   elog("editor ready: hud=%d states=%d keys=%d log=%d visualizer=%d layers=0x%X labels=%d "
-       "navmesh=%d auto_export=%d editor=%d file=%s",
+       "navmesh=%d editor=%d file=%s",
        g_hudOn, g_hudStates, g_helpOn, g_logOn, g_visOn, g_lay, g_lblMode,
-       g_nmShow, g_autoExport, g_editAllow, g_file);
+       g_nmShow, g_editAllow, g_file);
+  elog("wpmenu: on=%d autoground=%d brush=%s", g_wpMenuOn, g_wpAutoGround, g_wpBrushName);
+  elog("export content: enabled=%d nodes=%d crouch=%d area=%d guard=%d spawn=%d tags=%d",
+       g_expEnabled, g_expNodes, g_expCrouch, g_expArea, g_expGuard, g_expSpawn, g_expTags);
+  elog("four versions: export=%s packs=%s officialNavSave=%s",
+       g_expDir, g_packRoot, g_navReadOnly ? "blocked(read-only)" : "allowed");
   veh_install();   /* 挂了 VEH：任何崩溃都会把调用链写进 ucf_mod.log */
   { void autotest_start(const char*); autotest_start(g_dir); }   /* UCF_AUTOTEST=7,10 才动作 */
   {

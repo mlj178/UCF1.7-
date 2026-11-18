@@ -1,0 +1,1910 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>UCF 控制台 · 人机路点（设计稿 v1）</title>
+<style>
+/* ============================================================
+   UCF 控制台 · 人机路点 设计稿
+   左：控制台新增页签（照 CustomTkinter 实际观感）
+   右：游戏内 SyPB 式路点菜单 / 路点显示
+   纯设计样稿，不读写任何游戏文件
+   ============================================================ */
+:root{
+  --page:#07090b; --page2:#0a0d10;
+  --cwin:#1b1b1b; --cbar:#242424; --cpanel:#2b2b2b; --cpanel2:#232323;
+  --cline:#383838; --ctx:#ececec; --ctx2:#9aa0a6; --ctx3:#71787f;
+  --blue:#2f6fdb; --blue2:#255bb4; --green:#2f9e44; --orange:#8a4b1e;
+  --gblue:#4f8cff; --ggold:#f5b942; --gcyan:#22d3ee; --gpurple:#a78bfa;
+  --gpink:#f472b6; --ggreen:#3ecf8e; --gred:#ff5c5c; --glime:#84cc16;
+  --panel:#0d1217; --panel2:#101820; --line:#1d2731; --line2:#273442;
+  --tx:#dfe6ef; --tx2:#96a2b4; --tx3:#647081;
+}
+*{box-sizing:border-box}
+html{color-scheme:dark}
+body{
+  margin:0; background:radial-gradient(1200px 700px at 50% -10%,#101820 0%,#07090b 55%,#050708 100%);
+  color:var(--tx); font:13px/1.5 "Microsoft YaHei UI","Microsoft YaHei","Segoe UI",sans-serif;
+  min-width:1180px; padding:26px 28px 40px;
+}
+button,select{font:inherit;color:inherit}
+button{background:none;border:none;cursor:pointer}
+button:focus-visible,select:focus-visible{outline:2px solid #4f8cff;outline-offset:2px}
+::-webkit-scrollbar{width:8px;height:8px}
+::-webkit-scrollbar-thumb{background:#323b46;border-radius:8px}
+::-webkit-scrollbar-track{background:transparent}
+.hidden{display:none !important}
+
+/* ---------------- 页头 ---------------- */
+.page-head{
+  max-width:2040px;margin:0 auto 16px;display:flex;align-items:flex-end;justify-content:space-between;gap:28px;
+}
+.ph-badge{
+  display:inline-flex;align-items:center;gap:6px;height:22px;padding:0 9px;border-radius:20px;
+  border:1px solid #3b2f14;background:#211a0b;color:#f5c56a;font:10px/1 Consolas,monospace;letter-spacing:.06em;
+}
+.ph-badge i{width:5px;height:5px;border-radius:50%;background:#f5b942;box-shadow:0 0 8px #f5b942}
+.page-head h1{
+  margin:9px 0 4px;font-size:25px;line-height:1.2;letter-spacing:.02em;font-weight:800;color:#f2f7fd;
+}
+.page-head h1 span{
+  font-size:12px;font-weight:500;color:#8fb8ff;margin-left:8px;letter-spacing:.02em;
+}
+.page-head p{margin:0;color:var(--tx2);font-size:12px;max-width:920px}
+.ph-right{display:flex;gap:7px;flex-wrap:wrap;justify-content:flex-end;padding-bottom:4px}
+.pill{
+  display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 10px;border-radius:7px;
+  border:1px solid #23303d;background:#0f151b;color:#9fb0c2;font-size:11px;white-space:nowrap;
+}
+.pill b{color:#dbe7f5;font-weight:600}
+.pill.blue{border-color:#24466e;background:#101d2c;color:#a9cdfb}
+.pill.green{border-color:#22523a;background:#0e1f17;color:#87e0b5}
+.pill.gold{border-color:#4a3a17;background:#211a0b;color:#f0c477}
+
+/* ---------------- 版面 ---------------- */
+.stage{
+  max-width:2040px;margin:0 auto;display:grid;grid-template-columns:760px minmax(0,1fr);gap:22px;align-items:start;
+}
+@media (max-width:1700px){ .stage{grid-template-columns:1fr} }
+
+/* ============================================================
+   一、控制台窗口（照 CustomTkinter 控制台）
+   ============================================================ */
+.console{
+  width:760px;max-width:100%;margin:0 auto;background:var(--cwin);border:1px solid #2e2e2e;border-radius:12px;
+  box-shadow:0 30px 80px rgba(0,0,0,.55),0 0 0 1px rgba(255,255,255,.02) inset;
+  padding:16px 14px 12px;position:relative;
+}
+.c-head{display:flex;align-items:center;justify-content:space-between;padding:0 4px}
+.c-title{font:700 17px/1 "Microsoft YaHei UI","Microsoft YaHei",sans-serif;color:#f0f0f0;letter-spacing:.2px}
+.c-master{display:inline-flex;align-items:center;gap:8px;color:#d8d8d8;font-size:12px;background:none}
+.sw{
+  width:42px;height:23px;border-radius:23px;background:#3a3a3a;position:relative;display:inline-block;
+  transition:background .18s;flex:0 0 42px;border:1px solid #4a4a4a;
+}
+.sw i{
+  position:absolute;top:2px;left:2px;width:17px;height:17px;border-radius:50%;background:#d7d7d7;
+  transition:left .18s,background .18s;box-shadow:0 1px 2px rgba(0,0,0,.4);
+}
+.sw.on{background:var(--green);border-color:#39b152}
+.sw.on i{left:21px;background:#fff}
+.c-help{
+  margin:7px 4px 12px;color:var(--ctx2);font-size:11px;line-height:1.65;
+}
+.c-help b{color:#c9d1da;font-weight:500}
+.c-body{padding:0 0 2px}
+.tabs{
+  display:flex;justify-content:center;gap:2px;background:var(--cbar);border:1px solid #303030;
+  border-radius:9px;padding:4px;margin:0 2px 10px;overflow:auto;
+}
+.tab{
+  height:27px;padding:0 10px;border-radius:6px;font-size:11.5px;color:#c9c9c9;white-space:nowrap;
+  transition:background .15s,color .15s;letter-spacing:.01em;
+}
+.tab:hover{background:#303030;color:#eee}
+.tab.active{background:var(--blue);color:#fff;box-shadow:0 2px 8px rgba(0,0,0,.28)}
+.tab .newdot{display:inline-block;width:5px;height:5px;border-radius:50%;background:#f5b942;margin-left:5px;vertical-align:2px}
+.c-tabwrap{
+  background:var(--cbar);border:1px solid #2f2f2f;border-radius:10px;padding:10px;
+  max-height:848px;overflow:auto;
+}
+.card{
+  background:var(--cpanel);border:1px solid #333;border-radius:8px;padding:10px 12px;margin-bottom:9px;
+}
+.card:last-child{margin-bottom:0}
+.card-head{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:8px}
+.card-head b{font-size:12.5px;color:#f0f0f0;font-weight:700;letter-spacing:.02em}
+.card-head b .num{
+  display:inline-flex;align-items:center;justify-content:center;width:17px;height:17px;border-radius:5px;
+  background:#3a3f47;color:#cfd6df;font:10px/1 Consolas,monospace;margin-right:6px;vertical-align:1px;
+}
+.card-head span{font-size:10.5px;color:var(--ctx2);text-align:right;line-height:1.35;max-width:56%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.card-head .live{display:inline-flex;align-items:center;gap:5px;color:#8bcf9f}
+.card-head .live i{width:5px;height:5px;border-radius:50%;background:#3ecf8e;box-shadow:0 0 7px #3ecf8e}
+.row{display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap}
+.field{display:flex;flex-direction:column;gap:4px;min-width:0}
+.field.grow{flex:1 1 210px}
+.field > span{font-size:10px;color:var(--ctx2);letter-spacing:.02em}
+select,.cinput{
+  height:30px;border-radius:6px;border:1px solid #474747;background:#343638;color:#e8e8e8;
+  padding:0 8px;font-size:11.5px;min-width:0;width:100%;outline:none;
+}
+select:hover,.cinput:hover{border-color:#5a5a5a}
+select:disabled{opacity:.45;cursor:not-allowed}
+.seg{display:inline-flex;background:#1f1f1f;border:1px solid #3c3c3c;border-radius:6px;padding:2px;gap:2px}
+.seg button{
+  height:26px;padding:0 7px;border-radius:5px;font-size:10px;color:#b9b9b9;white-space:nowrap;
+}
+.seg button:hover{color:#eee}
+.seg button.on{background:var(--blue);color:#fff}
+.mini{
+  height:30px;padding:0 10px;border-radius:6px;border:1px solid #4a4a4a;background:#3a3f47;color:#dfe3e8;
+  font-size:11px;white-space:nowrap;transition:background .15s,border-color .15s;
+}
+.mini:hover{background:#49505a;border-color:#5b626c}
+.mini.primary{background:var(--blue);border-color:#3f7ee5;color:#fff;font-weight:600}
+.mini.primary:hover{background:#3b7ceb}
+.mini.danger{background:#4a2a1e;border-color:#6b3d2c;color:#ffb59d}
+.mini.danger:hover{background:#5a3324}
+.mini:disabled{opacity:.4;cursor:not-allowed}
+.meta{
+  margin-top:8px;font:10.5px/1.55 Consolas,"Cascadia Mono",monospace;color:#9aa0a6;
+  background:#232323;border:1px solid #343434;border-radius:5px;padding:5px 7px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.meta b{color:#d8dee6;font-weight:600}
+.swgrid{display:grid;grid-template-columns:1fr 1fr;gap:7px 12px}
+.srow{
+  display:flex;align-items:flex-start;gap:9px;padding:6px 7px;border-radius:6px;background:#262626;
+  border:1px solid #333;text-align:left;transition:border-color .15s,background .15s;
+}
+.srow:hover{background:#2c2c2c;border-color:#414141}
+.srow .sw{width:36px;height:20px;flex:0 0 36px;margin-top:1px}
+.srow .sw i{width:14px;height:14px}
+.srow .sw.on i{left:18px}
+.srow .txt{min-width:0}
+.srow .txt b{display:block;font-size:11.5px;color:#e7e7e7;font-weight:600;line-height:1.35}
+.srow .txt em{display:block;font-style:normal;font-size:9.5px;color:#8f969e;line-height:1.4;margin-top:1px}
+.srow.off{opacity:.62}
+.srow.ro{background:#2a2420;border-color:#443a2c}
+.types{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px}
+.ttile{
+  background:#262626;border:1px solid #363636;border-radius:7px;padding:7px 8px;text-align:left;
+  position:relative;overflow:hidden;transition:border-color .15s,background .15s,transform .1s;
+}
+.ttile:hover{background:#2d2d2d;border-color:#474747}
+.ttile:active{transform:translateY(1px)}
+.ttile::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--tc);opacity:.85}
+.ttile.on{border-color:var(--tc);background:linear-gradient(180deg,rgba(79,140,255,.13),rgba(79,140,255,.03))}
+.ttile.ro{opacity:.55}
+.tt1{display:flex;align-items:center;gap:6px;min-width:0}
+.tdot{width:7px;height:7px;border-radius:50%;background:var(--tc);box-shadow:0 0 6px var(--tc);flex:0 0 7px}
+.tt1 b{font-size:11px;color:#ececec;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.tbadge{
+  margin-left:auto;font:8.5px/1 "Microsoft YaHei UI",sans-serif;padding:2px 4px;border-radius:3px;
+  white-space:nowrap;border:1px solid #3a3a3a;color:#9aa0a6;background:#222;
+}
+.tbadge.reuse{color:#8fd6a8;border-color:#26503a;background:#122116}
+.tbadge.new{color:#f5c56a;border-color:#4a3a17;background:#221a0c}
+.tbadge.ro{color:#c9a0ff;border-color:#4b3268;background:#20152e}
+.tt2{display:flex;align-items:baseline;justify-content:space-between;gap:6px;margin-top:3px;padding-left:13px}
+.tkey{font:9px/1 Consolas,monospace;color:#7d858d;border:1px solid #3f3f3f;background:#202020;border-radius:3px;padding:2px 4px}
+.tcount{font:700 13px/1 Consolas,monospace;color:#f2f2f2;letter-spacing:-.02em}
+.ttile.on .tcount{color:#fff}
+.stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px;margin-bottom:8px}
+.stat{background:#262626;border:1px solid #343434;border-radius:6px;padding:6px 8px}
+.stat span{display:block;font-size:9.5px;color:#8f969e;margin-bottom:1px}
+.stat b{font:700 15px/1.2 Consolas,monospace;color:#f0f0f0}
+.stat em{font:10px/1 Consolas,monospace;color:#8bcf9f;font-style:normal;margin-left:4px}
+.stat em.neg{color:#ff9b8a}
+.stat em.zero{color:#6f767d}
+.btns{display:flex;gap:6px;flex-wrap:wrap}
+.btns .mini{flex:0 0 auto}
+.ready{
+  margin-top:8px;padding:6px 8px;border-radius:5px;border:1px dashed #3f4854;background:#232323;
+  color:#aeb7c2;font-size:10.5px;line-height:1.5;
+}
+.ready b{color:#dbe7f5;font-weight:600}
+.ready .arrow{color:#f5b942;padding:0 4px}
+.c-status{
+  background:#242424;border:1px solid #303030;border-radius:10px;margin-top:9px;padding:9px 11px 10px;
+}
+.c-status-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:5px}
+.c-status-head b{font-size:12px;color:#ededed;font-weight:700}
+.c-status-head span{font-size:10px;color:#8f969e}
+.c-log{
+  margin:0;height:120px;overflow:auto;background:#141414;border:1px solid #2d2d2d;border-radius:6px;
+  padding:7px 8px;color:#b9c2cc;font:10.5px/1.55 Consolas,"Cascadia Mono",monospace;white-space:pre-wrap;
+}
+.c-log .t{color:#6f7b88}
+.c-log .k{color:#8fb8ff}
+.c-log .g{color:#8fd6a8}
+.c-log .y{color:#f0c477}
+.c-log .r{color:#ff9b8a}
+.c-actions{display:flex;gap:8px;margin-top:9px}
+.cbtn{
+  height:38px;border-radius:7px;flex:1 1 0;font-size:12.5px;font-weight:600;border:1px solid transparent;
+  transition:background .15s;
+}
+.cbtn.primary{background:var(--blue);color:#fff}
+.cbtn.primary:hover{background:#3b7ceb}
+.cbtn.secondary{background:#3a3f47;color:#e2e6ea;border-color:#4a5058}
+.cbtn.secondary:hover{background:#49505a}
+.other-panel{padding:42px 20px;text-align:center;color:#9aa0a6}
+.other-panel .oi{font-size:34px;color:#4f5a67;line-height:1;margin-bottom:8px}
+.other-panel b{display:block;color:#e6e6e6;font-size:15px;margin-bottom:6px}
+.other-panel p{font-size:11.5px;line-height:1.7;margin:0 0 14px}
+
+/* ============================================================
+   二、游戏内预览
+   ============================================================ */
+.gwrap{min-width:0;width:100%;max-width:1268px;margin:0 auto}
+.game{
+  background:#0b0f13;border:1px solid #24303c;border-radius:10px;overflow:hidden;
+  box-shadow:0 30px 80px rgba(0,0,0,.55);
+}
+.g-bar{
+  height:36px;display:flex;align-items:center;gap:8px;padding:0 11px;background:linear-gradient(180deg,#111820,#0c1218);
+  border-bottom:1px solid #1e2a35;
+}
+.g-dots{display:flex;gap:5px;margin-right:2px}
+.g-dots i{width:7px;height:7px;border-radius:50%;background:#38434e}
+.g-dots i:nth-child(1){background:#6b4a3a}
+.g-name{font:11px/1 Consolas,monospace;color:#8d9aa8;letter-spacing:.03em}
+.g-map{font-size:10.5px;color:#c9d6e4;background:#16212c;border:1px solid #263544;border-radius:4px;padding:3px 6px}
+.g-chips{margin-left:auto;display:flex;gap:5px;align-items:center}
+.gchip{font:9.5px/1 Consolas,monospace;color:#8d9aa8;border:1px solid #29333d;border-radius:4px;padding:4px 6px;white-space:nowrap}
+.gchip.on{color:#8fe3b3;border-color:#2a5a40;background:#0f2119}
+.gchip.blue{color:#a9cdfb;border-color:#2a4669;background:#101c2a}
+.gchip.dim{opacity:.55}
+.g-view{position:relative;aspect-ratio:900/506;background:#070b0e;overflow:hidden;cursor:crosshair}
+.scene{position:absolute;inset:0;width:100%;height:100%}
+.g-vignette{
+  position:absolute;inset:0;pointer-events:none;z-index:2;
+  background:radial-gradient(120% 90% at 50% 45%,transparent 35%,rgba(0,0,0,.34) 78%,rgba(0,0,0,.62) 100%);
+}
+.navmesh{position:absolute;inset:0;width:100%;height:100%;z-index:3;opacity:0;transition:opacity .2s;pointer-events:none}
+.navmesh.show{opacity:1}
+.navmesh polygon{fill:rgba(56,217,245,.035);stroke:rgba(56,217,245,.42);stroke-width:1;stroke-dasharray:3 3}
+.points{position:absolute;inset:0;width:100%;height:100%;z-index:4;pointer-events:none;overflow:visible}
+.points.hidden{display:none}
+.points .edges.hide,.points .dots.hide-labels .plabel{display:none}
+.edge{stroke:#f5b942;stroke-width:1.5;opacity:.5;stroke-linecap:round}
+.edge.hot{opacity:.95;stroke-width:2.2}
+.edge.k-jump{stroke:#a78bfa;stroke-dasharray:4 4}
+.edge.k-out{stroke:#e5e7eb}
+.edge.k-in{stroke:#3ecf8e}
+.arrow{fill:#e5e7eb;opacity:.7}
+.arrow.k-in{fill:#3ecf8e}
+.arrow.k-out{fill:#e5e7eb}
+.wp .halo{fill:currentColor;opacity:.09}
+.wp .shape{fill:currentColor;stroke:rgba(3,8,11,.9);stroke-width:1.3}
+.wp text{font-family:Consolas,"Cascadia Mono",monospace;text-anchor:middle;pointer-events:none}
+.wp .plabel{font-size:8.5px;font-weight:700;fill:#e8f4ff;opacity:.82}
+.wp .pshort{font-size:7px;font-weight:700;fill:#071016}
+.wp.sel .sel{fill:none;stroke:currentColor;stroke-width:1.4;opacity:.9;animation:selring 1.6s ease-out infinite}
+.wp.nowalk{opacity:.5}
+.wp.nowalk .shape{stroke:#ff5c5c;stroke-dasharray:3 2}
+@keyframes selring{0%{r:13;opacity:.85}70%{r:23;opacity:0}100%{r:23;opacity:0}}
+.hud{
+  position:absolute;left:15px;top:13px;z-index:6;pointer-events:none;
+  font:10px/1.55 Consolas,"Cascadia Mono",monospace;color:#ffd166;
+  background:rgba(3,7,10,.46);border-left:2px solid #ffd166;border-radius:0 5px 5px 0;padding:6px 9px 6px 8px;
+  text-shadow:0 1px 2px rgba(0,0,0,.9);max-width:520px;
+}
+.hud .h1{display:flex;align-items:center;gap:7px;color:#fff1c4;font-weight:700;letter-spacing:.02em}
+.hud .h1 i{width:7px;height:7px;background:#ffd166;box-shadow:0 0 8px #ffd166;display:inline-block}
+.hud .h1 em{font-style:normal;color:#8fe3b3;font-size:9px;border:1px solid #2a5a40;background:#0f2119;border-radius:3px;padding:2px 4px}
+.hud .h1 em.off{color:#ff9b8a;border-color:#5a2a2e;background:#241214}
+.hud .hm{color:#cfe3f7;opacity:.9}
+.hud .hc{color:#ffd166}
+.hud .hs{color:#a9e7ff}
+.hud .hd{color:#8fe3b3;opacity:.9}
+.hud .hd.warn{color:#ffb59d}
+.cross{position:absolute;left:50%;top:50%;z-index:6;pointer-events:none;width:30px;height:30px;transform:translate(-50%,-50%)}
+.cross i{position:absolute;background:#eaf6ff;box-shadow:0 0 3px rgba(0,0,0,.9);opacity:.9}
+.cross i:nth-child(1){left:14px;top:0;width:1px;height:10px}
+.cross i:nth-child(2){left:14px;bottom:0;width:1px;height:10px}
+.cross i:nth-child(3){top:14px;left:0;height:1px;width:10px}
+.cross i:nth-child(4){top:14px;right:0;height:1px;width:10px}
+.cross::after{content:"";position:absolute;left:13px;top:13px;width:3px;height:3px;border-radius:50%;background:#eaf6ff;opacity:.9}
+.cross .dist{
+  position:absolute;left:50%;top:32px;transform:translateX(-50%);white-space:nowrap;
+  font:9px/1 Consolas,monospace;color:#bfe2ff;background:rgba(4,10,14,.65);border:1px solid #2d4358;
+  border-radius:3px;padding:3px 5px;
+}
+.menu{
+  position:absolute;left:18px;top:112px;z-index:9;width:310px;
+  background:linear-gradient(180deg,rgba(9,14,20,.97),rgba(7,11,15,.95));
+  border:1px solid #2b4b6d;border-radius:8px;box-shadow:0 20px 50px rgba(0,0,0,.62),0 0 0 1px rgba(79,140,255,.08) inset;
+  backdrop-filter:blur(4px);
+}
+.menu.closed{display:none}
+.m-head{display:flex;align-items:center;gap:7px;padding:8px 10px;border-bottom:1px solid #1d3348}
+.m-ico{width:18px;height:18px;border-radius:4px;background:linear-gradient(135deg,#4f8cff,#38d9f5);display:grid;place-items:center;color:#071018;font-size:10px;font-weight:800}
+.m-head b{font-size:12px;color:#eaf3ff;letter-spacing:.05em}
+.m-head .m-close{margin-left:auto;font:9px/1 Consolas,monospace;color:#8ea4bd;border:1px solid #2b3d50;border-radius:3px;padding:3px 5px}
+.m-list{padding:4px}
+.mi{
+  width:100%;height:27px;display:grid;grid-template-columns:22px minmax(0,1fr) 14px;align-items:center;gap:2px;
+  padding:0 7px;border-radius:4px;color:#c5d3e2;font-size:11px;text-align:left;position:relative;
+}
+.mi:hover{background:#132234;color:#fff}
+.mi i{font:9px/1 Consolas,monospace;color:#6f8aa6;font-style:normal}
+.mi span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mi em{font-style:normal;font-size:9px;color:#5f7891;text-align:right}
+.mi.on{background:linear-gradient(90deg,rgba(79,140,255,.28),rgba(79,140,255,.04));color:#fff;box-shadow:inset 2px 0 0 #4f8cff}
+.mi.on i,.mi.on em{color:#a9cdfb}
+.mi.flash{animation:flashrow .5s ease}
+@keyframes flashrow{0%{background:rgba(79,140,255,.5)}100%{background:rgba(79,140,255,.08)}}
+.m-foot{display:flex;justify-content:space-between;gap:8px;padding:6px 9px;border-top:1px solid #1b2c3d;font:9px/1.3 Consolas,monospace;color:#7f97ae}
+.m-foot b{color:#cfe2ff;font-weight:600}
+.sub{
+  position:absolute;left:100%;top:0;width:232px;display:none;
+  background:linear-gradient(180deg,rgba(10,16,23,.98),rgba(8,12,17,.97));
+  border:1px solid #2b4b6d;border-radius:7px;box-shadow:16px 14px 40px rgba(0,0,0,.55);
+  padding:5px;margin-left:5px;
+}
+.sub.open{display:block}
+.sub-head{font:9px/1 Consolas,monospace;color:#6f8aa6;letter-spacing:.08em;padding:5px 7px 3px}
+.si{
+  width:100%;height:26px;display:grid;grid-template-columns:20px minmax(0,1fr) auto;align-items:center;gap:2px;
+  padding:0 6px;border-radius:4px;font-size:10.5px;color:#c5d3e2;text-align:left;
+}
+.si:hover{background:#132234;color:#fff}
+.si i{font:9px/1 Consolas,monospace;color:#6f8aa6;font-style:normal}
+.si em{font-style:normal;font-size:8.5px;color:#7f97ae;border:1px solid #2b3d50;border-radius:3px;padding:2px 4px;white-space:nowrap}
+.si em.new{color:#f5c56a;border-color:#4a3a17;background:#221a0c}
+.si em.reuse{color:#8fd6a8;border-color:#26503a;background:#122116}
+.si em.ro{color:#c9a0ff;border-color:#4b3268;background:#20152e}
+.si.off{opacity:.45;cursor:not-allowed}
+.si .chk{font-size:10px;color:#4f8cff;width:20px}
+.inspector{
+  position:absolute;right:15px;top:112px;z-index:9;width:238px;
+  background:linear-gradient(180deg,rgba(10,16,22,.96),rgba(7,11,15,.94));
+  border:1px solid #263a4e;border-radius:8px;box-shadow:0 18px 45px rgba(0,0,0,.55);
+  padding:8px 9px 9px;backdrop-filter:blur(3px);
+}
+.i-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+.i-head b{font-size:11px;color:#dbe7f5;letter-spacing:.04em}
+.i-head span{font:9px/1 Consolas,monospace;color:#8ea4bd;border:1px solid #2b3d50;border-radius:3px;padding:3px 5px}
+.i-type{display:flex;align-items:center;gap:6px;padding:5px 6px;background:#111c26;border:1px solid #223547;border-radius:5px}
+.i-type .dot{width:8px;height:8px;border-radius:50%;background:#22d3ee;box-shadow:0 0 7px currentColor}
+.i-type b{font-size:11px;color:#eaf3ff;font-weight:600}
+.i-type em{margin-left:auto;font-style:normal;font-size:8.5px;color:#8fd6a8;border:1px solid #26503a;background:#122116;border-radius:3px;padding:2px 4px}
+.i-coords{display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;margin-top:6px}
+.i-coords span{background:#101922;border:1px solid #1f3244;border-radius:4px;padding:4px 5px;font:9px/1.2 Consolas,monospace;color:#7f97ae}
+.i-coords b{display:block;color:#dbe7f5;font-size:10.5px;margin-top:2px}
+.i-rows{margin-top:6px;display:grid;gap:3px}
+.i-rows div{display:flex;justify-content:space-between;font-size:9.5px;color:#8ea4bd}
+.i-rows b{color:#cfe2ff;font-weight:600}
+.i-rows b.ok{color:#8fe3b3}
+.i-rows b.no{color:#ff9b8a}
+.i-acts{display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-top:7px}
+.i-acts button{
+  height:25px;border-radius:4px;border:1px solid #2b3d50;background:#131f2b;color:#b9cbe0;font-size:9.5px;
+}
+.i-acts button:hover{background:#1a2b3a;color:#fff}
+.i-acts button.danger{grid-column:1/-1;border-color:#5a2a2e;background:#241214;color:#ffb4b4}
+.i-acts button.danger:hover{background:#32171a}
+.i-empty{padding:16px 6px;text-align:center;font-size:10px;color:#7f97ae;line-height:1.7}
+.ghint{
+  position:absolute;left:50%;bottom:11px;transform:translateX(-50%);z-index:8;white-space:nowrap;
+  background:rgba(4,8,12,.72);border:1px solid #263a4e;border-radius:6px;padding:5px 9px;
+  font-size:9.5px;color:#b9cbe0;backdrop-filter:blur(3px);
+}
+.ghint .k{display:inline-block;font:9px/1 Consolas,monospace;color:#eaf3ff;background:#1a2a3a;border:1px solid #2f465c;border-radius:3px;padding:3px 4px;margin-right:2px}
+.ghint .sep{color:#4f6276;padding:0 5px}
+.toast{
+  position:absolute;left:50%;top:16px;transform:translate(-50%,-8px);z-index:20;pointer-events:none;
+  background:rgba(8,14,20,.94);border:1px solid #2f5d86;color:#dff0ff;border-radius:6px;padding:7px 11px;
+  font-size:10.5px;opacity:0;transition:opacity .18s,transform .18s;box-shadow:0 8px 24px rgba(0,0,0,.5);
+}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+.g-under{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:10px}
+.ucard{background:#0d1319;border:1px solid #1c2833;border-radius:8px;padding:8px 9px;min-width:0}
+.ucard .ut{display:flex;align-items:center;gap:6px;font-size:10.5px;color:#cfe2ff;font-weight:600;margin-bottom:3px}
+.ucard .ut i{width:6px;height:6px;border-radius:2px;background:#4f8cff;box-shadow:0 0 7px #4f8cff}
+.ucard p{margin:0;font-size:9.5px;line-height:1.55;color:#7f97ae}
+.ucard p b{color:#b9cbe0;font-weight:600}
+.flow{
+  margin-top:8px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;background:#0c1218;border:1px solid #1b2733;
+  border-radius:7px;padding:7px 9px;font-size:9.5px;color:#7f97ae;
+}
+.flow b{color:#b9cbe0;font-weight:600}
+.g-ref{margin-top:8px;background:#0c1218;border:1px solid #1b2733;border-radius:8px;padding:9px 10px 8px}
+.gr-head{display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:10.5px;color:#cfe2ff;font-weight:600;margin-bottom:6px}
+.gr-head span{font-size:9px;color:#6f8296;font-weight:400}
+.gr-grid{display:grid;grid-template-columns:1fr 1fr;gap:3px 12px}
+.gr-item{display:flex;align-items:center;gap:6px;font-size:9.5px;color:#8fa1b4;min-width:0}
+.gr-item i{width:15px;height:15px;flex:0 0 15px;border-radius:4px;background:#132234;border:1px solid #27405a;color:#8fb8ff;font:9px/15px Consolas,monospace;font-style:normal;text-align:center}
+.gr-item b{color:#dbe7f5;font-weight:600;white-space:nowrap}
+.gr-item em{font-style:normal;color:#6f8296;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.flow .fa{color:#f5b942}
+.flow .fp{font-family:Consolas,monospace;color:#8fb8ff;background:#101c2a;border:1px solid #24415f;border-radius:3px;padding:2px 5px}
+
+/* ---------------- 理解 / 文档区 ---------------- */
+.understand{
+  max-width:2040px;margin:18px auto 0;background:linear-gradient(180deg,#0e151c,#0a1015);
+  border:1px solid #1e2c38;border-radius:12px;padding:14px 18px 15px;
+}
+.understand .u-top{display:flex;align-items:center;gap:9px;margin-bottom:8px}
+.understand .u-top b{font-size:14px;color:#eaf3ff;letter-spacing:.02em}
+.understand .u-top span{font-size:10px;color:#7f97ae;border:1px solid #243444;background:#0e1922;border-radius:4px;padding:3px 6px}
+.understand ol{margin:0;padding:0;list-style:none;display:grid;grid-template-columns:1fr 1fr;gap:6px 20px;counter-reset:u}
+.understand li{
+  counter-increment:u;position:relative;padding-left:25px;font-size:11.5px;line-height:1.65;color:#a9b8c8;
+}
+.understand li::before{
+  content:counter(u);position:absolute;left:0;top:1px;width:17px;height:17px;border-radius:5px;
+  background:#152435;border:1px solid #27405a;color:#8fb8ff;font:10px/17px Consolas,monospace;text-align:center;
+}
+.understand li b{color:#eaf3ff;font-weight:600}
+.understand .u-foot{margin-top:9px;padding-top:8px;border-top:1px solid #18242f;font-size:10.5px;color:#7f97ae}
+.understand .u-foot b{color:#f0c477;font-weight:600}
+.docs{max-width:2040px;margin:20px auto 0;display:grid;gap:16px}
+.doc-card{background:linear-gradient(180deg,#0d1319,#0a0f14);border:1px solid var(--line);border-radius:12px;padding:17px 19px}
+.doc-head{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:10px}
+.doc-head h2{margin:0;font-size:16px;color:#eaf3ff;letter-spacing:.02em}
+.doc-head p{margin:0;font-size:10.5px;color:#6f8296;text-align:right}
+.doc-sub{font-size:11px;color:#8fa1b4;line-height:1.7;margin:0 0 10px}
+.doc-sub b{color:#cfe2ff;font-weight:600}
+.table-wrap{overflow:auto;border:1px solid #1c2834;border-radius:9px}
+table{border-collapse:collapse;width:100%;font-size:11px}
+th{
+  text-align:left;font-weight:600;color:#9fb4c9;background:#101922;border-bottom:1px solid #22303d;
+  padding:8px 10px;white-space:nowrap;font-size:10.5px;letter-spacing:.02em;
+}
+td{padding:8px 10px;border-bottom:1px solid #17222c;color:#a9b8c8;vertical-align:top;line-height:1.6}
+tr:last-child td{border-bottom:none}
+tbody tr:hover td{background:#0c151c}
+td b{color:#dbe7f5;font-weight:600}
+td .code{font-family:Consolas,"Cascadia Mono",monospace;font-size:10px;color:#8fb8ff;background:#101c2a;border:1px solid #24415f;border-radius:3px;padding:2px 5px;white-space:nowrap}
+.chips{display:flex;gap:4px;flex-wrap:wrap}
+.chip{display:inline-flex;align-items:center;gap:4px;font-size:9.5px;color:#9fb4c9;border:1px solid #24313d;background:#101821;border-radius:20px;padding:2px 6px;white-space:nowrap}
+.chip b{color:#dbe7f5;font-weight:600}
+.chip.ok{color:#8fe3b3;border-color:#26503a;background:#0f2119}
+.chip.warn{color:#f0c477;border-color:#4a3a17;background:#211a0b}
+.chip.no{color:#ff9b8a;border-color:#5a2a2e;background:#241214}
+.chip.blue{color:#a9cdfb;border-color:#2a4669;background:#101c2a}
+.scope{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.scope-card{border:1px solid #1e2c38;border-radius:10px;background:#0b1117;padding:12px 13px}
+.scope-card h3{margin:0 0 7px;font-size:12px;color:#eaf3ff;display:flex;align-items:center;gap:6px}
+.scope-card h3 i{width:6px;height:6px;border-radius:2px;background:#4f8cff}
+.scope-card ul{margin:0;padding-left:15px;color:#9fb0c1;font-size:10.5px;line-height:1.75}
+.scope-card li{margin-bottom:4px}
+.scope-card li b{color:#dbe7f5;font-weight:600}
+.scope-card .tag-line{margin-top:8px;padding-top:7px;border-top:1px solid #18242f;font-size:9.5px;color:#7f97ae}
+.scope-card.new h3 i{background:#f5b942}
+.scope-card.no h3 i{background:#ff5c5c}
+.confirm{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:4px}
+.q{border:1px solid #24313d;border-radius:9px;background:#0b1117;padding:10px 12px;display:flex;gap:9px}
+.q .qn{width:20px;height:20px;flex:0 0 20px;border-radius:6px;background:#152435;border:1px solid #27405a;color:#8fb8ff;font:10px/20px Consolas,monospace;text-align:center}
+.q b{display:block;color:#eaf3ff;font-size:11px;font-weight:600;margin-bottom:2px}
+.q p{margin:0;color:#8fa1b4;font-size:10.5px;line-height:1.6}
+.q p em{font-style:normal;color:#f0c477}
+.foot{
+  max-width:2040px;margin:18px auto 0;border-top:1px solid #16212b;padding-top:12px;
+  display:flex;justify-content:space-between;gap:18px;font-size:10px;color:#5f7082;
+}
+.foot b{color:#8fa1b4;font-weight:600}
+</style>
+</head>
+<body>
+<header class="page-head">
+  <div>
+    <div class="ph-badge"><i></i>设计稿 v1 · 2026-11-18 · 只做样式与交互演示</div>
+    <h1>UCF 控制台 · 人机路点 <span>SyPB 式游戏内编辑</span></h1>
+    <p>左边是控制台新增的页签；右边是同一套操作在游戏里的样子。先确认视觉和操作，再落地到 CustomTkinter 页签 + DLL 内菜单。</p>
+  </div>
+  <div class="ph-right">
+    <span class="pill green"><b>点 / 边</b> 写 ④ 测试包</span>
+    <span class="pill gold"><b>蹲守 / 守区 / 守点</b> 写 markers</span>
+    <span class="pill blue"><b>只读工作台</b> 保持不动</span>
+  </div>
+</header>
+
+<div class="understand">
+  <div class="u-top"><b>我理解你要的</b><span>先说清楚，避免做偏</span></div>
+  <ol>
+    <li>不是再做一个只读工作台，而是 SyPB 式<b>「进游戏现场编辑」</b>：长按 E（或 F2）出菜单，放点、设类型、连线、删点、存盘。</li>
+    <li>控制台新增一页，负责<b>开局前选图 / 选数据版本 / 选测试包</b>；开局后看连接状态、节点边计数和最近操作。</li>
+    <li>点位按 UCF 真实结构分层：<b>普通路点、跳跃、蹲守、守点、聚集区、出生点、补给箱、标签区</b>；路径分双向 / 单向。</li>
+    <li>先 HTML 样稿确认视觉和操作，再落地：<b>控制台页签用 CTk，游戏内菜单用 DLL</b>；点/边复用现有 pack 格式，特征写 markers。</li>
+  </ol>
+  <div class="u-foot">如果哪一条不对，直接说，我按你的判断改。下面所有数字都来自 <b>docs/地图对照表.md</b> 与 <b>dump.cs</b> 的真实结构；交互是本页模拟，不写游戏文件。</div>
+</div>
+<main class="stage">
+<section class="console" aria-label="UCF 控制台设计稿">
+  <div class="c-head">
+    <div class="c-title">UCF 控制台</div>
+    <button class="c-master" id="masterSwitch" role="switch" aria-checked="true">
+      <span>插件总开关</span><span class="sw on"><i></i></span>
+    </button>
+  </div>
+  <div class="c-help">
+    只有从本窗口「开始游戏」才会加载 mod；直接双击 UnityCrossFire.exe 是原版。<br>
+    开关改完存进 ucf_mod.json，下次启动生效（游戏开着时要重开）。<br>
+    测试包模式、四版数据的路径 / 部署 / 还原 / 校验：切到「测试数据」「数据」页。<br>
+    路点数据只读查看在工作台；<b>现场编辑在新页「人机路点」</b>。
+  </div>
+
+  <div class="c-body">
+    <div class="tabs" id="tabs" role="tablist" aria-label="控制台页签">
+      <button class="tab" data-tab="地图">地图</button>
+      <button class="tab" data-tab="查看">查看</button>
+      <button class="tab" data-tab="导出">导出</button>
+      <button class="tab" data-tab="状态面板">状态面板</button>
+      <button class="tab" data-tab="手动">手动</button>
+      <button class="tab active" data-tab="人机路点">人机路点<span class="newdot"></span></button>
+      <button class="tab" data-tab="测试数据">测试数据</button>
+      <button class="tab" data-tab="数据">数据</button>
+      <button class="tab" data-tab="车测">车测</button>
+    </div>
+
+    <div class="c-tabwrap">
+      <div class="tabpanel" id="panel-waypoint" role="tabpanel">
+
+        <div class="card">
+          <div class="card-head">
+            <b><span class="num">1</span>选图与数据</b>
+            <span>④ 包只对一张图生效</span>
+          </div>
+          <div class="row">
+            <label class="field grow"><span>地图</span>
+              <select id="mapSel">
+                <option value="desert" selected>08 沙漠要塞 · 生化剑客</option>
+                <option value="ship">01 运输船 · 团队模式</option>
+                <option value="village">11 新寂静村 · 多人生化</option>
+                <option value="hotel">09 生化酒店 · 生化模式</option>
+                <option value="arena">05 竞技场 · 特殊战</option>
+                <option value="storm">10 飓风危城 · 0 点（不能空白包）</option>
+              </select>
+            </label>
+            <div class="field"><span>数据版本</span>
+              <div class="seg" id="verSeg">
+                <button class="on" data-ver="test">④ 测试包</button>
+                <button data-ver="official">③ 正式版</button>
+              </div>
+            </div>
+          </div>
+          <div class="row" style="margin-top:7px">
+            <label class="field grow"><span>测试包（④）</span>
+              <select id="packSel">
+                <option value="desert_a" selected>desert_a · 仅本图 · 3 项改动</option>
+                <option value="lab_a">lab_a · 空白底图</option>
+                <option value="chain_a">chain_a · 单链测试</option>
+              </select>
+            </label>
+            <button class="mini" id="btnNewPack">新建空白包</button>
+            <button class="mini" id="btnDataDir">打开数据目录</button>
+          </div>
+          <div class="meta" id="mapMeta">指纹 n12-17a93cfb246913e1 · 原生 12 点 / 7 边 · ④ desert_a · 3 项改动</div>
+          <div class="ready" style="margin-top:7px">
+            <b>空白底图</b> = 先把这张图原生点全部禁用，再只用你放的点。用 <b>运输船 / 新寂静村</b>（有原生点可借槽位）；
+            <b>飓风危城原生 0 点，建不了空白包</b>（没有可复用槽位），只能开自动铺点。正式版 <b>③</b> 游戏内只读。
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <b><span class="num">2</span>游戏内编辑</b>
+            <span class="live"><i></i>演示中 · 已连接</span>
+          </div>
+          <div class="swgrid">
+            <button class="srow" data-sw="menu" role="switch" aria-checked="true">
+              <span class="sw on"><i></i></span>
+              <span class="txt"><b>编辑菜单</b><em>长按 E / F2 打开</em></span>
+            </button>
+            <button class="srow" data-sw="visual" role="switch" aria-checked="true">
+              <span class="sw on"><i></i></span>
+              <span class="txt"><b>路点 / 边显示</b><em>Ctrl+V 总开关</em></span>
+            </button>
+            <button class="srow off" data-sw="navmesh" role="switch" aria-checked="false">
+              <span class="sw"><i></i></span>
+              <span class="txt"><b>可走面线框</b><em>Ctrl+Shift+6，NavMeshGraph</em></span>
+            </button>
+            <button class="srow" data-sw="ground" role="switch" aria-checked="true">
+              <span class="sw on"><i></i></span>
+              <span class="txt"><b>加点自动落地</b><em>沿射线贴到地板 / 箱顶</em></span>
+            </button>
+            <button class="srow" data-sw="hud" role="switch" aria-checked="true">
+              <span class="sw on"><i></i></span>
+              <span class="txt"><b>显示 HUD</b><em>左上角状态数字</em></span>
+            </button>
+            <button class="srow ro" data-sw="collect" role="switch" aria-checked="false">
+              <span class="sw"><i></i></span>
+              <span class="txt"><b>只读采集</b><em>不创建对象，编辑菜单自动关闭</em></span>
+            </button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <b><span class="num">3</span>点类型</b>
+            <span>菜单 1-9 · 点选笔刷</span>
+          </div>
+          <div class="types" id="types">
+            <button class="ttile on" data-type="normal" style="--tc:#4f8cff">
+              <span class="tt1"><i class="tdot"></i><b>普通路点</b><span class="tbadge reuse">复用</span></span>
+              <span class="tt2"><span class="tkey">1</span><b class="tcount">12</b></span>
+            </button>
+            <button class="ttile" data-type="jump" style="--tc:#a78bfa">
+              <span class="tt1"><i class="tdot"></i><b>跳跃点</b><span class="tbadge new">新增</span></span>
+              <span class="tt2"><span class="tkey">2</span><b class="tcount">5</b></span>
+            </button>
+            <button class="ttile" data-type="crouch" style="--tc:#f59e0b">
+              <span class="tt1"><i class="tdot"></i><b>蹲守点</b><span class="tbadge reuse">复用</span></span>
+              <span class="tt2"><span class="tkey">3</span><b class="tcount">0</b></span>
+            </button>
+            <button class="ttile" data-type="guard" style="--tc:#22d3ee">
+              <span class="tt1"><i class="tdot"></i><b>守点</b><span class="tbadge reuse">复用</span></span>
+              <span class="tt2"><span class="tkey">4</span><b class="tcount">51</b></span>
+            </button>
+            <button class="ttile" data-type="area" style="--tc:#f472b6">
+              <span class="tt1"><i class="tdot"></i><b>聚集区</b><span class="tbadge reuse">复用</span></span>
+              <span class="tt2"><span class="tkey">5</span><b class="tcount">3</b></span>
+            </button>
+            <button class="ttile" data-type="tag" style="--tc:#84cc16">
+              <span class="tt1"><i class="tdot"></i><b>标签区</b><span class="tbadge new">新增</span></span>
+              <span class="tt2"><span class="tkey">6</span><b class="tcount">1</b></span>
+            </button>
+            <button class="ttile ro" data-type="spawn" style="--tc:#34d399">
+              <span class="tt1"><i class="tdot"></i><b>出生点</b><span class="tbadge ro">只读</span></span>
+              <span class="tt2"><span class="tkey">7</span><b class="tcount">只读</b></span>
+            </button>
+            <button class="ttile ro" data-type="box" style="--tc:#facc15">
+              <span class="tt1"><i class="tdot"></i><b>补给箱</b><span class="tbadge ro">只读</span></span>
+              <span class="tt2"><span class="tkey">8</span><b class="tcount">只读</b></span>
+            </button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <b><span class="num">4</span>本次编辑</b>
+            <span id="dirtyTag">已自动存 ④ desert_a</span>
+          </div>
+          <div class="stats">
+            <div class="stat"><span>节点</span><b id="stNodes">12</b><em id="stNodesD" class="zero">0</em></div>
+            <div class="stat"><span>边</span><b id="stEdges">7</b><em id="stEdgesD" class="zero">0</em></div>
+            <div class="stat"><span>特征</span><b id="stFeat">55</b><em id="stFeatD" class="zero">0</em></div>
+            <div class="stat"><span>撤销栈</span><b id="stUndo">0</b><em>步</em></div>
+          </div>
+          <div class="btns">
+            <button class="mini" id="btnUndo">撤销 Ctrl+Z</button>
+            <button class="mini" id="btnRedo">重做 Ctrl+Y</button>
+            <button class="mini primary" id="btnSave">保存 Ctrl+S</button>
+            <button class="mini" id="btnReload">重读 Ctrl+Shift+R</button>
+            <button class="mini danger" id="btnClear">清空本图</button>
+          </div>
+          <div class="ready">
+            <b>就绪：</b>点底部「开始游戏（加载 mod）」<span class="arrow">→</span>进图后长按 <b>E</b> 打开菜单
+            <span class="arrow">→</span>数字键选类型，左键放点。点/边写 ④ 包；蹲守 / 守区 / 守点写 markers（需加指纹）。
+          </div>
+        </div>
+
+      </div>
+
+      <div class="tabpanel hidden" id="panel-other" role="tabpanel">
+        <div class="other-panel">
+          <div class="oi">▤</div>
+          <b id="otherName">地图</b>
+          <p>这一页沿用现有控制台，不在本次设计范围内。<br>本设计稿只展开「人机路点」页。</p>
+          <button class="mini" id="backWaypoint">回到「人机路点」</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="c-status">
+    <div class="c-status-head"><b>上次运行</b><span id="cfgTag">配置：已读取</span></div>
+    <pre class="c-log" id="logText">09:41:02 [naved] pack: desert_a target=n12-17a93cfb246913e1 (only this map)
+09:41:03 [naved] applied 3/3 edits on n12-17a93cfb246913e1 (nodes 12 -> 13)
+09:41:07 [naved] menu open: type=normal mode=add
+09:41:12 [naved] add node W8 (4.20, 2.50, 3.10) type=normal
+09:41:12 [naved] edge W7 <-> W8 (both) len=1.83 m
+09:41:18 [naved] saved 4 edits -> packs/desert_a/n12-17a93cfb246913e1.txt</pre>
+  </div>
+
+  <div class="c-actions">
+    <button class="cbtn primary" id="btnStart">开始游戏（加载 mod）</button>
+    <button class="cbtn secondary" id="btnWorkbench">路点工作台（查看）</button>
+  </div>
+</section>
+<section class="gwrap" aria-label="游戏内编辑效果预览">
+  <div class="game">
+    <div class="g-bar">
+      <div class="g-dots"><i></i><i></i><i></i></div>
+      <div class="g-name">UnityCrossFire 1.7.1</div>
+      <div class="g-map" id="gMapName">沙漠要塞 · 生化剑客</div>
+      <div class="g-chips">
+        <span class="gchip on" id="gEditChip">编辑 ON</span>
+        <span class="gchip blue">菜单 E</span>
+        <span class="gchip dim">FPS 60</span>
+      </div>
+    </div>
+
+    <div class="g-view" id="gview">
+      <svg class="scene" viewBox="0 0 900 506" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+        <defs>
+          <linearGradient id="gWall" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color="#1c2831"/><stop offset="1" stop-color="#0e161b"/>
+          </linearGradient>
+          <linearGradient id="gFloor" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color="#0a1014"/><stop offset="1" stop-color="#172128"/>
+          </linearGradient>
+          <radialGradient id="gGlow" cx="50%" cy="8%" r="72%">
+            <stop offset="0" stop-color="#8fd4ff" stop-opacity=".10"/><stop offset="1" stop-color="#000" stop-opacity="0"/>
+          </radialGradient>
+          <linearGradient id="gLight" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color="#ffd88a" stop-opacity=".14"/><stop offset="1" stop-color="#ffd88a" stop-opacity="0"/>
+          </linearGradient>
+        </defs>
+        <rect width="900" height="506" fill="#070b0e"/>
+        <polygon points="0,0 900,0 762,148 138,148" fill="#0b1115"/>
+        <polygon points="138,148 762,148 762,432 138,432" fill="url(#gWall)"/>
+        <polygon points="0,0 138,148 138,432 0,506" fill="#0a1014"/>
+        <polygon points="900,0 762,148 762,432 900,506" fill="#090e12"/>
+        <polygon points="0,506 900,506 762,432 138,432" fill="url(#gFloor)"/>
+        <g stroke="#22313a" stroke-width="1" opacity=".58">
+          <path d="M450 253 L0 506 M450 253 L150 506 M450 253 L300 506 M450 253 L450 506 M450 253 L600 506 M450 253 L750 506 M450 253 L900 506"/>
+          <path d="M120 470 L780 470 M80 492 L820 492 M190 440 L710 440"/>
+        </g>
+        <g fill="#111a20" stroke="#26343d">
+          <rect x="190" y="190" width="130" height="242"/>
+          <rect x="580" y="190" width="130" height="242"/>
+          <rect x="390" y="190" width="120" height="242" fill="#0a0f13"/>
+        </g>
+        <rect x="404" y="206" width="92" height="226" fill="#060a0d" stroke="#2b3c46"/>
+        <rect x="412" y="214" width="76" height="9" fill="#1a2a33"/>
+        <rect x="412" y="414" width="76" height="9" fill="#1a2a33"/>
+        <g stroke="#1b2831" stroke-width="7" opacity=".9">
+          <path d="M138 148 L762 148"/>
+          <path d="M210 148 L210 96 M330 148 L330 96 M570 148 L570 96 M690 148 L690 96"/>
+        </g>
+        <path d="M210 96 L690 96" stroke="#20303a" stroke-width="4"/>
+        <g>
+          <ellipse cx="330" cy="96" rx="54" ry="7" fill="#ffe2a1" opacity=".5"/>
+          <ellipse cx="570" cy="96" rx="54" ry="7" fill="#ffe2a1" opacity=".5"/>
+          <polygon points="300,96 360,96 470,400 190,400" fill="url(#gLight)" opacity=".48"/>
+          <polygon points="540,96 600,96 710,400 430,400" fill="url(#gLight)" opacity=".38"/>
+        </g>
+        <g>
+          <polygon points="200,360 292,348 330,366 238,380" fill="#1a242b" stroke="#2c3d47"/>
+          <polygon points="200,360 238,380 238,454 200,432" fill="#111a20" stroke="#2c3d47"/>
+          <polygon points="238,380 330,366 330,440 238,454" fill="#162028" stroke="#2c3d47"/>
+          <polygon points="640,384 712,374 742,390 670,402" fill="#1a242b" stroke="#2c3d47"/>
+          <polygon points="640,384 670,402 670,458 640,440" fill="#111a20" stroke="#2c3d47"/>
+          <polygon points="670,402 742,390 742,446 670,458" fill="#162028" stroke="#2c3d47"/>
+        </g>
+        <g stroke="#1f2f38" stroke-width="5" fill="none" opacity=".8">
+          <path d="M138 168 L210 168 L210 148"/>
+          <path d="M762 168 L690 168 L690 148"/>
+        </g>
+        <g>
+          <rect x="466" y="176" width="38" height="13" rx="2" fill="#12351f" stroke="#2f9e44"/>
+          <text x="485" y="186" text-anchor="middle" font-size="7" fill="#7ee2a0" font-family="Consolas,monospace">EXIT</text>
+        </g>
+        <rect width="900" height="506" fill="url(#gGlow)"/>
+      </svg>
+
+      <div class="g-vignette"></div>
+
+      <svg class="navmesh" id="navmesh" viewBox="0 0 900 506" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+        <polygon points="250,432 336,404 428,434 330,470"></polygon>
+        <polygon points="330,470 428,434 522,462 424,492"></polygon>
+        <polygon points="428,434 522,404 610,436 522,462"></polygon>
+        <polygon points="336,404 424,376 512,404 428,434"></polygon>
+        <polygon points="512,404 600,378 684,408 610,436"></polygon>
+      </svg>
+
+      <div class="hud" id="hud">
+        <div class="h1"><i></i><em id="hudMode">编辑 ON</em><span>UCF 路点编辑</span></div>
+        <div class="hm" id="hudMap">地图 沙漠要塞 · level7 · n12-17a93cfb246913e1</div>
+        <div class="hc" id="hudCount">节点 12 · 边 7 · 特征 55</div>
+        <div class="hs" id="hudSel">选中 W4 · 守点 · (4.64, 2.44, 5.41) · 2 条边</div>
+        <div class="hd" id="hudData">数据 测试包 desert_a · 只对 沙漠要塞 生效 · 包内 3 项改动</div>
+      </div>
+
+      <svg class="points" id="points" viewBox="0 0 900 506" preserveAspectRatio="xMidYMid slice" aria-hidden="true"></svg>
+
+      <div class="cross" aria-hidden="true">
+        <i></i><i></i><i></i><i></i>
+        <span class="dist" id="crossDist">1.8 m</span>
+      </div>
+
+      <div class="menu" id="menu">
+        <div class="m-head"><span class="m-ico">◈</span><b>路点菜单</b><span class="m-close">长按 E / F2</span></div>
+        <div class="m-list" id="mList">
+          <button class="mi on" data-act="add"><i>1</i><span>添加路点</span><em>▸</em></button>
+          <button class="mi" data-act="type"><i>2</i><span>设置类型 / 标记</span><em>▸</em></button>
+          <button class="mi" data-act="link"><i>3</i><span>建立路径</span><em>▸</em></button>
+          <button class="mi" data-act="unlink"><i>4</i><span>删除路径</span><em></em></button>
+          <button class="mi" data-act="del"><i>5</i><span>删除路点</span><em></em></button>
+          <button class="mi" data-act="move"><i>6</i><span>移动 / 落地</span><em></em></button>
+          <button class="mi" data-act="area"><i>7</i><span>聚集区工具</span><em>▸</em></button>
+          <button class="mi" data-act="edit"><i>8</i><span>撤销 / 保存</span><em>▸</em></button>
+          <button class="mi" data-act="layers"><i>9</i><span>显示图层</span><em>▸</em></button>
+          <button class="mi" data-act="close"><i>0</i><span>关闭菜单</span><em></em></button>
+        </div>
+        <div class="m-foot"><span>当前 <b id="mType">普通路点</b></span><span id="mSel">选中 W4</span></div>
+        <div class="sub" id="sub"></div>
+      </div>
+
+      <div class="inspector" id="inspector">
+        <div class="i-head"><b>点信息</b><span id="iId">W4</span></div>
+        <div class="i-type"><i class="dot" id="iDot"></i><b id="iType">守点</b><em id="iBadge">复用</em></div>
+        <div class="i-coords">
+          <span>X<b id="ix">4.64</b></span><span>Y<b id="iy">2.44</b></span><span>Z<b id="iz">5.41</b></span>
+        </div>
+        <div class="i-rows">
+          <div><span>可走 walkable</span><b class="ok" id="iWalk">是</b></div>
+          <div><span>连边</span><b id="iEdges">2 条</b></div>
+          <div><span>所属聚集区</span><b id="iArea">A2 · 中东门</b></div>
+        </div>
+        <div class="i-acts">
+          <button id="iGround">落地</button>
+          <button id="iWalkBtn">设不可走</button>
+          <button class="danger" id="iDel">删除这个点</button>
+        </div>
+      </div>
+
+      <div class="ghint" id="ghint"><span class="k">左键</span>放置普通路点<span class="sep">·</span><span class="k">右键</span>取消<span class="sep">·</span><span class="k">1-9</span>菜单<span class="sep">·</span><span class="k">Ctrl+Z</span>撤销</div>
+      <div class="toast" id="toast"></div>
+    </div>
+  </div>
+
+  <div class="g-under">
+    <div class="ucard">
+      <div class="ut"><i></i>控制台「人机路点」</div>
+      <p>选图、选 <b>④ 测试包</b>、开编辑菜单；看节点/边/特征和最近操作。开始游戏仍用底部按钮。</p>
+    </div>
+    <div class="ucard">
+      <div class="ut"><i style="background:#f5b942;box-shadow:0 0 7px #f5b942"></i>游戏内长按 E</div>
+      <p>SyPB 式键盘菜单：<b>1-9 直选</b>、<b>小键盘 8/2 上下</b>、<b>5 确认</b>、<b>0 返回</b>；左键确认 / 右键返回。菜单打开时只保留移动键（W/A/S/D/空格），Q/R/G/F 等会拦掉。</p>
+    </div>
+    <div class="ucard">
+      <div class="ut"><i style="background:#3ecf8e;box-shadow:0 0 7px #3ecf8e"></i>数据落点</div>
+      <p>点 / 边 → <b>④ 包 &lt;指纹&gt;.txt</b>；蹲守 / 守区 / 守点 → <b>markers.txt</b>。工作台继续只读。</p>
+    </div>
+  </div>
+  <div class="flow">
+    <b>一次编辑的数据流</b><span class="fa">→</span>左键放点<span class="fa">→</span>内存里的 PointGraph<span class="fa">→</span>自动写 <span class="fp">packs/desert_a/n12-...txt</span><span class="fa">→</span>控制台计数<span class="fa">→</span>Ctrl+Shift+R 重读
+  </div>
+  <div class="g-ref">
+    <div class="gr-head"><b>游戏内菜单速查</b><span>键盘优先 · 1-9 直选 · 小键盘 8/2 上下 · 5 确认 · 0 返回</span></div>
+    <div class="gr-grid">
+      <div class="gr-item"><i>1</i><b>添加路点</b><em>选类型后左键放置</em></div>
+      <div class="gr-item"><i>2</i><b>设置类型</b><em>改选中点的类型 / 标记</em></div>
+      <div class="gr-item"><i>3</i><b>建立路径</b><em>双向 / 单向 A→B / B→A</em></div>
+      <div class="gr-item"><i>4</i><b>删除路径</b><em>断开一个点的全部边</em></div>
+      <div class="gr-item"><i>5</i><b>删除路点</b><em>连边一起删，可撤销</em></div>
+      <div class="gr-item"><i>6</i><b>移动 / 落地</b><em>先点旧位置，再点新位置</em></div>
+      <div class="gr-item"><i>7</i><b>聚集区工具</b><em>新建区 / 加守点 / 入口</em></div>
+      <div class="gr-item"><i>8</i><b>撤销 / 保存</b><em>Ctrl+Z / Ctrl+Y / Ctrl+S</em></div>
+      <div class="gr-item"><i>9</i><b>显示图层</b><em>边 / 文字标签 / 可走面</em></div>
+      <div class="gr-item"><i>0</i><b>关闭菜单</b><em>小键盘 0 逐级返回</em></div>
+    </div>
+  </div>
+</section>
+</main>
+<div class="docs">
+
+  <section class="doc-card">
+    <div class="doc-head">
+      <h2>SyPB 的操作，在 UCF 里对应什么</h2>
+      <p>左边是 CS 1.6 SyPB 的习惯；右边是 UCF 1.7 的真实数据落点</p>
+    </div>
+    <p class="doc-sub">
+      SyPB 的路点 = <b>中心坐标 + 半径</b>，路径分向外 / 向内 / 双向。UCF 的 <b>PointNode</b> 只有坐标，
+      能不能连边由全局 <b>maxDistance</b>（多数图 2.1 m）+ 射线决定，所以没有“单点半径”这一项；
+      但“双向 / 单向 / 删路径”可以一一对应。<br>
+      <b>两个不能照搬的地方：</b>跳跃点 = <b>Bot_JumpLink</b>（挂在起点、指向终点，两点成对，不是单独一个点）；
+      标签区 = <b>PointNodeTagModifier</b>（给范围内的点打 tag，不是新增点）。控制台仍用 SyPB 的叫法，但落数据时按组件处理。
+    </p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>SyPB 操作</th><th>UCF 1.7 对应</th><th>写到哪里</th><th>本设计的入口</th></tr></thead>
+        <tbody>
+          <tr><td><b>add waypoint</b><br>添加路点</td><td>添加 A* 路点 <b>PointNode</b></td><td><span class="code">node add x y z</span> → ④ 包 / ③ nav</td><td>菜单 <b>1</b> → 选类型 → 左键</td></tr>
+          <tr><td><b>set waypoint flag</b><br>改路点类型</td><td>普通 / 跳跃链接 / 蹲守 / 守点 / 聚集区 / 标签区</td><td>普通点走 flags；跳跃/标签/守点等走组件；特征写 <span class="code">markers.txt</span></td><td>菜单 <b>2</b> 或页签里的类型笔刷</td></tr>
+          <tr><td><b>create path</b><br>向外 / 向内 / 双向</td><td>添加 <b>PointNode 连接</b>（A* 的边是有向的）</td><td><span class="code">edge add</span>；双向 = 写两条</td><td>菜单 <b>3</b> → 方向 → 点起点、终点</td></tr>
+          <tr><td><b>delete path</b><br>删除路径</td><td>删除连接</td><td><span class="code">edge del</span></td><td>菜单 <b>4</b> → 点一个点，断开它的全部边</td></tr>
+          <tr><td><b>delete waypoint</b><br>删除路点</td><td>删除节点，连带删边</td><td><span class="code">node del</span></td><td>菜单 <b>5</b> 或 Delete</td></tr>
+          <tr><td><b>camp point</b><br>蹲守点</td><td><b>Bot_CrouchPos</b> / <b>Bot_NanoGuardPos</b></td><td><span class="code">crouch</span> / <span class="code">nanopos</span> → markers</td><td>菜单 <b>1</b> → 蹲守 / 守点</td></tr>
+          <tr><td><b>waypoint radius</b><br>路点半径</td><td>没有单点半径；连边半径是全局 <b>maxDistance</b></td><td>只读显示，不写单点</td><td>HUD 第 3 行显示当前图半径</td></tr>
+          <tr><td><b>save waypoints</b><br>保存</td><td>自动存 + Ctrl+S</td><td>④ 包 / ③ nav / markers</td><td>菜单 <b>8</b> → 保存</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="doc-card">
+    <div class="doc-head">
+      <h2>模式 × 地图：哪些图能编辑什么</h2>
+      <p>原生点 / 边与组件数量来自《地图对照表》2026-11-17 统计</p>
+    </div>
+    <p class="doc-sub">
+      游戏里没有单独叫“聚集点”的类；你说的聚集点，对应 <b>Bot_NanoGuardArea</b>（聚集区）+ <b>Bot_NanoGuardPos</b>（守点）
+      + <b>entrancePos / escapePos</b>（入口 / 逃跑点）。这类编辑只在生化图有意义，所以页签里单列“聚集区工具”。
+    </p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>模式</th><th>地图（原生 点 / 边）</th><th>这张图特有的组件</th><th>第一版建议</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><b>团队模式</b><br><span class="chip">TeamDeath</span></td>
+            <td><div class="chips"><span class="chip blue">运输船 <b>786 / 1391</b></span><span class="chip">小型工厂 <b>12 / 6</b></span><span class="chip">椰岛之巅 <b>2 / 0</b></span></div></td>
+            <td>NodeLink 22 / 0 / 4；蹲点 0 / 8 / 10；JumpLink 0 / 0 / 2</td>
+            <td><b>运输船最适合练手</b>（纯点图）；小型工厂、椰岛之巅主要走可走面，点图只是 link 端点</td>
+          </tr>
+          <tr>
+            <td><b>个人竞技</b><br><span class="chip">DeathMatch</span></td>
+            <td><div class="chips"><span class="chip no">胜利广场 <b>0 点</b></span></div></td>
+            <td>只有 NavMeshGraph <span class="chip">nm716 · 976 三角</span>；没有 PointGraph</td>
+            <td><b>第一版只读</b>：没有点图，加点要先新建 PointGraph（另立任务，先验证）</td>
+          </tr>
+          <tr>
+            <td><b>特殊战</b><br><span class="chip">Special</span></td>
+            <td><div class="chips"><span class="chip blue">竞技场 <b>17 / 24</b></span><span class="chip blue">刀锋寨 <b>18 / 9</b></span><span class="chip no">死亡擂台 <b>0 点</b></span></div></td>
+            <td>JumpLink 21 / 18 / 0；NodeLink 22 / 12 / 0；NodeLink2 0 / 9 / 0</td>
+            <td>竞技场、刀锋寨可编辑点 + 跳跃；<b>死亡擂台只读</b>（同胜利广场）</td>
+          </tr>
+          <tr>
+            <td><b>生化模式</b><br><span class="chip">Nano3</span></td>
+            <td><div class="chips"><span class="chip blue">生化酒店 <b>3063 / 5584</b></span></div></td>
+            <td>NodeLink 447；旧守卫点 25（<span class="chip no">死数据</span>）</td>
+            <td>可编辑点 / 边 / 蹲守；<b>不要改旧 Bot_GuardPos</b>，改了不会有人机反应</td>
+          </tr>
+          <tr>
+            <td><b>生化剑客</b><br><span class="chip">Nano4</span></td>
+            <td><div class="chips"><span class="chip blue">沙漠要塞 <b>12 / 7</b></span></div></td>
+            <td>守点 51；聚集区 3；标签区 1；JumpLink 5；NodeLink 9</td>
+            <td><b>最适合演示聚集区 / 守点</b>；第一版主推这张图</td>
+          </tr>
+          <tr>
+            <td><b>多人生化</b><br><span class="chip">Nano6 / Nano4_Terminator</span></td>
+            <td><div class="chips"><span class="chip blue">新寂静村 <b>180 / 98</b></span><span class="chip no">飓风危城 <b>0 / 0</b></span></div></td>
+            <td>新寂静村：守点 55、聚集区 10、JumpLink 58、NodeLink 262；飓风危城：什么都没有</td>
+            <td>新寂静村测完整一局；飓风危城 0 点，只能先开自动铺点或手工从 0 铺，<b>空白包建不了</b></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="doc-card">
+    <div class="doc-head">
+      <h2>落地范围：复用、新增、暂不做</h2>
+      <p>这份样稿只解决“长什么样、怎么操作”；下面是代码边界</p>
+    </div>
+    <div class="scope">
+      <div class="scope-card">
+        <h3><i></i>复用（已经有的）</h3>
+        <ul>
+          <li><b>点 / 边读写</b>：node add/del、edge add/del、blank 头、撤销、自动存</li>
+          <li><b>蹲守 / 守区 / 守点</b>：现有 type 1/2/3 标记 + markers.txt</li>
+          <li><b>可视化</b>：五层、可走面线框、文字标签、HUD</li>
+          <li><b>测试包</b>：UCF_PACK / UCF_FP 只对一张图生效</li>
+          <li><b>开关不动</b>：editor / collect_only 仍读 ucf_mod.json，新页只做联动，不新增第二套配置</li>
+          <li><b>重套用</b>：Ctrl+Shift+R、控制台 ucf_navcmd.txt</li>
+        </ul>
+        <div class="tag-line">风险：低，底层已经实机验证过</div>
+      </div>
+      <div class="scope-card new">
+        <h3><i></i>新增（这次要做的）</h3>
+        <ul>
+          <li><b>控制台页签</b>：选图 / ④ 包 / 开关 / 计数 / 最近操作</li>
+          <li><b>游戏内菜单</b>：长按 E / F2，1-9 直选，小键盘 8/2 上下、5 确认、0 返回</li>
+          <li><b>类型笔刷</b>：普通 / 跳跃 / 蹲守 / 守点 / 聚集区 / 标签</li>
+          <li><b>单向 / 双向</b>路径，删除路径 / 点，移动 / 落地</li>
+          <li><b>markers 加指纹</b>：现有 markers.txt 不分图，必须升级成按指纹分文件</li>
+        </ul>
+        <div class="tag-line">风险：中；菜单是纯数据层之上的 UI，不改行为层</div>
+      </div>
+      <div class="scope-card no">
+        <h3><i></i>暂不做（明确边界）</h3>
+        <ul>
+          <li><b>出生点 / 补给箱写入</b>：MapManager 静态数组，第一版只读</li>
+          <li><b>胜利广场 / 死亡擂台加点</b>：没有 PointGraph，要新建图</li>
+          <li><b>改 NavMesh 烘焙面</b>：只加点/连边，不动三角网</li>
+          <li><b>自动铺全图 / 联机同步</b>：单人编辑工具，不碰对局逻辑</li>
+          <li><b>旧 Bot_GuardPos / Bot_GuardArea</b>：当前版本死数据</li>
+        </ul>
+        <div class="tag-line">这些会写进页签的灰色说明，不让操作看起来“能用”</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="doc-card">
+    <div class="doc-head">
+      <h2>需要你拍板的 4 件事</h2>
+      <p>你确认后，我按这个顺序落地：控制台页签 → 菜单骨架 → 运输船空白包实测</p>
+    </div>
+    <div class="confirm">
+      <div class="q"><span class="qn">1</span><div><b>菜单入口用哪个键？</b><p>SyPB 是长按 <b>E</b>，但 UCF 的 E 可能是交互/安装键，容易冲突。建议 <em>F2 主入口 + 长按 E 备用</em>，菜单里都显示。</p></div></div>
+      <div class="q"><span class="qn">2</span><div><b>第一版类型做到哪一步？</b><p>建议：普通 / 跳跃 / 蹲守 / 守点 / 聚集区 / 标签区；出生点、补给箱只读。若想更稳，可先砍掉跳跃和标签，只做点 + 边 + 蹲守 + 守区。</p></div></div>
+      <div class="q"><span class="qn">3</span><div><b>页签名用哪个？</b><p>建议 <b>「人机路点」</b>，和底部「路点工作台（查看）」区分开：一个是编辑，一个是只读查看。</p></div></div>
+      <div class="q"><span class="qn">4</span><div><b>默认写哪一版数据？</b><p>建议默认 <b>④ 测试包</b>（只对一张图生效，安全）；<b>③ 正式版</b> 置灰或二次确认，避免现场编辑直接改坏游戏正在读的 nav/。</p></div></div>
+    </div>
+  </section>
+
+</div>
+
+<div class="foot">
+  <div><b>依据：</b>docs/人机与路线设计.md（三层结构 / 优先级 / 点线面）· docs/地图对照表.md（11 图原生点边 / 组件数 / 模式分组）· dump.cs（Bot_NanoGuardArea / Bot_NanoGuardPos / Bot_JumpLink / Bot_CrouchPos / MapManager 字段）</div>
+  <div><b>文件：</b>06-测试/ucf_mod/design/console-waypoint-tab.html · <b>不写任何游戏文件</b></div>
+</div>
+<script>
+(function () {
+  "use strict";
+
+  var $ = function (s, r) { return (r || document).querySelector(s); };
+  var $$ = function (s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); };
+  var NL = String.fromCharCode(10);
+
+  /* ---------------- 真实地图数据（docs/地图对照表.md） ---------------- */
+  var MAPS = {
+    desert: { name: "沙漠要塞", level: "level7", scene: "DesertFort", fp: "n12-17a93cfb246913e1", nodes: 12, edges: 7, jump: 5, crouch: 0, guard: 51, area: 3, tag: 1, mode: "生化剑客", radius: "2.1 m" },
+    ship: { name: "运输船", level: "level1", scene: "TransportShip", fp: "n786-57a46e3465c847cb", nodes: 786, edges: 1391, jump: 0, crouch: 0, guard: 0, area: 0, tag: 0, mode: "团队模式", radius: "2.1 m" },
+    village: { name: "新寂静村", level: "level10", scene: "Nano_DawnVillage", fp: "n180-03b43b7ee737fcdc", nodes: 180, edges: 98, jump: 58, crouch: 0, guard: 55, area: 10, tag: 0, mode: "多人生化", radius: "2.1 m" },
+    hotel: { name: "生化酒店", level: "level8", scene: "NanoResort", fp: "n3063-b04b59b2593bfae4", nodes: 3063, edges: 5584, jump: 33, crouch: 0, guard: 0, area: 0, tag: 0, mode: "生化模式", radius: "2.1 m" },
+    arena: { name: "竞技场", level: "level5", scene: "Arena", fp: "n17-f352f68820fae99c", nodes: 17, edges: 24, jump: 21, crouch: 0, guard: 0, area: 0, tag: 0, mode: "特殊战", radius: "2.1 m" },
+    storm: { name: "飓风危城", level: "level9", scene: "Nano30_Storm", fp: "n0-0000000000000000", nodes: 0, edges: 0, jump: 0, crouch: 0, guard: 0, area: 0, tag: 0, mode: "多人生化 · 隐藏", radius: "2.1 m" }
+  };
+
+  var ORDER = ["normal", "jump", "crouch", "guard", "area", "tag", "spawn", "box"];
+  var TYPES = {
+    normal: { name: "普通路点", short: "普", color: "#4f8cff", badge: "复用", baseKey: "nodes", kind: "node" },
+    jump: { name: "跳跃点", short: "跳", color: "#a78bfa", badge: "新增", baseKey: "jump", kind: "node" },
+    crouch: { name: "蹲守点", short: "蹲", color: "#f59e0b", badge: "复用", baseKey: "crouch", kind: "feature" },
+    guard: { name: "守点", short: "守", color: "#22d3ee", badge: "复用", baseKey: "guard", kind: "feature" },
+    area: { name: "聚集区", short: "区", color: "#f472b6", badge: "复用", baseKey: "area", kind: "feature" },
+    tag: { name: "标签区", short: "签", color: "#84cc16", badge: "新增", baseKey: "tag", kind: "feature" },
+    spawn: { name: "出生点", short: "生", color: "#34d399", badge: "只读", baseKey: null, kind: "readonly" },
+    box: { name: "补给箱", short: "箱", color: "#facc15", badge: "只读", baseKey: null, kind: "readonly" }
+  };
+
+  /* ---------------- 演示点（真实图里的一个子集，不是全图） ---------------- */
+  var DEMO_PTS = [
+    { id: 1, x: 352, y: 402, type: "normal" },
+    { id: 2, x: 420, y: 372, type: "normal" },
+    { id: 3, x: 486, y: 350, type: "jump" },
+    { id: 4, x: 552, y: 372, type: "guard" },
+    { id: 5, x: 632, y: 330, type: "area" },
+    { id: 6, x: 678, y: 410, type: "normal" },
+    { id: 7, x: 442, y: 448, type: "tag" }
+  ];
+  var DEMO_EDGES = [
+    { a: 1, b: 2, kind: "both" },
+    { a: 2, b: 3, kind: "both" },
+    { a: 3, b: 6, kind: "both" }
+  ];
+
+  var MAP = MAPS.desert;
+  var pts = [], edges = [], deltas = { nodes: 0, edges: 0, byType: {} };
+  var selected = 3, brush = "normal", mode = "add", pathKind = "both";
+  var linkFrom = null, moveId = null, nextId = 8;
+  var menuOpen = true, visual = true, showEdges = true, showLabels = true;
+  var navmeshOn = false, autoGround = true, hudOn = true, collectOnly = false;
+  var history = [], future = [];
+  var ver = "test", pack = "desert_a";
+  var subCtx = "", subItems = [];
+  var logLines = [];
+  var toastTimer = null, eHoldTimer = null;
+
+  /* ---------------- 小工具 ---------------- */
+  function byId(id) {
+    for (var i = 0; i < pts.length; i++) if (pts[i].id === id) return pts[i];
+    return null;
+  }
+  function isNodeType(t) { return t === "normal" || t === "jump"; }
+  function worldOf(p) {
+    return { x: (p.x - 450) / 22, y: (506 - p.y) / 55, z: (p.y - 253) / 22 };
+  }
+  function fmtD(n) { return n > 0 ? "+" + n : (n < 0 ? String(n) : "0"); }
+  function featuresBase() { return MAP.guard + MAP.crouch + MAP.area + MAP.tag; }
+  function featureDelta() {
+    return (deltas.byType.crouch || 0) + (deltas.byType.guard || 0) + (deltas.byType.area || 0) + (deltas.byType.tag || 0);
+  }
+  function featuresNow() { return featuresBase() + featureDelta(); }
+  function badgeCls(b) { return b === "复用" ? "reuse" : (b === "新增" ? "new" : "ro"); }
+  function countFor(k) {
+    var t = TYPES[k];
+    if (!t.baseKey) return "只读";
+    return (MAP[t.baseKey] || 0) + (deltas.byType[k] || 0);
+  }
+  function pad2(n) { return n < 10 ? "0" + n : String(n); }
+
+  function toast(msg) {
+    var el = $("#toast");
+    if (!el) return;
+    el.textContent = msg;
+    el.classList.add("show");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { el.classList.remove("show"); }, 1900);
+  }
+
+  function log(tag, msg) {
+    var d = new Date();
+    var t = pad2(d.getHours()) + ":" + pad2(d.getMinutes()) + ":" + pad2(d.getSeconds());
+    logLines.push(t + " [naved] " + msg);
+    if (logLines.length > 9) logLines.shift();
+    var el = $("#logText");
+    if (el) { el.textContent = logLines.join(NL); el.scrollTop = el.scrollHeight; }
+  }
+
+  /* ---------------- 撤销 / 重做 ---------------- */
+  function snap() {
+    return JSON.stringify({ pts: pts, edges: edges, deltas: deltas, selected: selected, nextId: nextId });
+  }
+  function restore(s) {
+    var o = JSON.parse(s);
+    pts = o.pts; edges = o.edges; deltas = o.deltas; selected = o.selected; nextId = o.nextId;
+    linkFrom = null; moveId = null;
+  }
+  function pushHistory() {
+    history.push(snap());
+    if (history.length > 40) history.shift();
+    future = [];
+  }
+  function undo() {
+    if (!history.length) { toast("没有可撤销的操作"); return; }
+    future.push(snap());
+    restore(history.pop());
+    renderAll();
+    log("undo", "undo (remaining " + history.length + ")");
+    toast("已撤销一步");
+  }
+  function redo() {
+    if (!future.length) { toast("没有可重做的操作"); return; }
+    history.push(snap());
+    restore(future.pop());
+    renderAll();
+    log("redo", "redo");
+    toast("已重做一步");
+  }
+
+  function blankState() {
+    pts = []; edges = []; selected = null; linkFrom = null; moveId = null;
+    deltas = { nodes: -MAP.nodes, edges: -MAP.edges, byType: {} };
+    ORDER.forEach(function (k) {
+      var b = TYPES[k].baseKey;
+      if (b) deltas.byType[k] = -(MAP[b] || 0);
+    });
+  }
+
+  function reloadScenario() {
+    if (pack === "lab_a") { blankState(); history = []; future = []; }
+    else resetDemo();
+  }
+
+  function resetDemo() {
+    if (MAP.nodes === 0) { pts = []; edges = []; selected = null; }
+    else {
+      pts = DEMO_PTS.map(function (p) { return { id: p.id, x: p.x, y: p.y, type: p.type, walk: true }; });
+      edges = DEMO_EDGES.map(function (e) { return { a: e.a, b: e.b, kind: e.kind }; });
+      selected = 3;
+    }
+    deltas = { nodes: 0, edges: 0, byType: {} };
+    nextId = 1;
+    pts.forEach(function (p) { if (p.id >= nextId) nextId = p.id + 1; });
+    history = []; future = []; linkFrom = null; moveId = null;
+  }
+
+  /* ---------------- 编辑动作 ---------------- */
+  function addPoint(x, y) {
+    var t = TYPES[brush];
+    if (!t || t.badge === "只读") { toast("只读类型：第一版不写出生点 / 补给箱"); return; }
+    pushHistory();
+    var p = { id: nextId++, x: Math.round(x), y: Math.round(y), type: brush, walk: true };
+    pts.push(p);
+    selected = p.id;
+    deltas.byType[brush] = (deltas.byType[brush] || 0) + 1;
+    if (isNodeType(brush)) deltas.nodes++;
+    var w = worldOf(p);
+    log("add", "add node W" + p.id + " (" + w.x.toFixed(2) + ", " + w.y.toFixed(2) + ", " + w.z.toFixed(2) + ") type=" + t.name);
+    renderAll();
+    toast("已放置 " + t.name + " W" + p.id);
+  }
+
+  function addEdge(a, b, kind) {
+    if (a === b) { toast("起点和终点不能是同一个点"); return; }
+    var pa = byId(a), pb = byId(b);
+    if (!pa || !pb) return;
+    if (!isNodeType(pa.type) || !isNodeType(pb.type)) {
+      toast("只有路点类能连边；守点 / 蹲守 / 聚集区不参与 PointGraph");
+      return;
+    }
+    if (kind === "in") { var tmp = a; a = b; b = tmp; }
+    var dup = edges.some(function (e) { return (e.a === a && e.b === b) || (e.a === b && e.b === a); });
+    if (dup) { toast("这两个点之间已经有边"); return; }
+    pushHistory();
+    edges.push({ a: a, b: b, kind: kind });
+    deltas.edges++;
+    log("edge", "edge W" + a + (kind === "both" ? " <-> " : " -> ") + "W" + b + " (" + (kind === "both" ? "both" : "one-way") + ")");
+    renderAll();
+    toast("已连边 W" + a + (kind === "both" ? " ↔ " : " → ") + "W" + b);
+  }
+
+  function deletePoint(id) {
+    var p = byId(id);
+    if (!p) return;
+    pushHistory();
+    var removed = edges.filter(function (e) { return e.a === id || e.b === id; }).length;
+    edges = edges.filter(function (e) { return e.a !== id && e.b !== id; });
+    pts = pts.filter(function (q) { return q.id !== id; });
+    deltas.byType[p.type] = (deltas.byType[p.type] || 0) - 1;
+    if (isNodeType(p.type)) deltas.nodes--;
+    deltas.edges -= removed;
+    if (selected === id) selected = pts.length ? pts[0].id : null;
+    log("del", "node del W" + id + " (" + TYPES[p.type].name + "), edges removed=" + removed);
+    renderAll();
+    toast("已删除 W" + id + " 和 " + removed + " 条边");
+  }
+
+  function unlinkPoint(id) {
+    var p = byId(id);
+    if (!p) return;
+    var n = edges.filter(function (e) { return e.a === id || e.b === id; }).length;
+    if (!n) { toast("W" + id + " 没有边可断"); return; }
+    pushHistory();
+    edges = edges.filter(function (e) { return e.a !== id && e.b !== id; });
+    deltas.edges -= n;
+    log("del", "edge del W" + id + " all " + n + " edges");
+    renderAll();
+    toast("已断开 W" + id + " 的 " + n + " 条边");
+  }
+
+  function movePoint(id, x, y) {
+    var p = byId(id);
+    if (!p) return;
+    pushHistory();
+    p.x = Math.round(x); p.y = Math.round(y);
+    var w = worldOf(p);
+    log("move", "move W" + id + " -> (" + w.x.toFixed(2) + ", " + w.y.toFixed(2) + ", " + w.z.toFixed(2) + ")");
+    renderAll();
+    toast("W" + id + " 已移动");
+  }
+
+  function applyType(k) {
+    if (selected === null) { toast("先左键选中一个点"); return; }
+    var p = byId(selected), t = TYPES[k];
+    if (!p) return;
+    if (t.badge === "只读") { toast("只读类型不能写入"); return; }
+    if (p.type === k) { toast("类型没有变化"); return; }
+    pushHistory();
+    var oldNode = isNodeType(p.type), newNode = isNodeType(k);
+    deltas.byType[p.type] = (deltas.byType[p.type] || 0) - 1;
+    p.type = k;
+    deltas.byType[k] = (deltas.byType[k] || 0) + 1;
+    if (oldNode && !newNode) deltas.nodes--;
+    if (!oldNode && newNode) deltas.nodes++;
+    log("type", "set W" + p.id + " type=" + t.name);
+    renderAll();
+    toast("W" + p.id + " → " + t.name);
+  }
+
+  /* ---------------- 渲染 ---------------- */
+  function renderPoints() {
+    var edgeArt = [];
+    edges.forEach(function (e) {
+      var a = byId(e.a), b = byId(e.b);
+      if (!a || !b) return;
+      var hot = (selected === e.a || selected === e.b);
+      edgeArt.push('<line class="edge k-' + e.kind + (hot ? ' hot' : '') + '" x1="' + a.x + '" y1="' + a.y + '" x2="' + b.x + '" y2="' + b.y + '"></line>');
+      if (e.kind !== "both") {
+        var mx = a.x + (b.x - a.x) * 0.62, my = a.y + (b.y - a.y) * 0.62;
+        var ang = Math.atan2(b.y - a.y, b.x - a.x) * 180 / Math.PI;
+        edgeArt.push('<polygon class="arrow k-' + e.kind + '" points="0,-3.2 7,0 0,3.2" transform="translate(' + mx.toFixed(1) + ',' + my.toFixed(1) + ') rotate(' + ang.toFixed(1) + ')"></polygon>');
+      }
+    });
+    var dotArt = [];
+    pts.forEach(function (p) {
+      var t = TYPES[p.type];
+      var ring = (selected === p.id || linkFrom === p.id);
+      var g = '<g class="wp' + (ring ? ' sel' : '') + (p.walk ? '' : ' nowalk') + '" data-id="' + p.id + '" transform="translate(' + p.x + ',' + p.y + ')" style="color:' + t.color + '">';
+      g += '<circle class="halo" r="15"></circle>';
+      if (p.type === "area") g += '<rect class="shape" x="-7" y="-7" width="14" height="14" rx="3"></rect>';
+      else if (p.type === "jump") g += '<path class="shape" d="M0,-8 L8,0 L0,8 L-8,0 Z"></path>';
+      else if (p.type === "tag") g += '<path class="shape" d="M0,-8 L7,-4 L7,4 L0,8 L-7,4 L-7,-4 Z"></path>';
+      else if (p.type === "guard") g += '<circle class="shape" r="8" fill="none" stroke-width="3"></circle><circle r="2.4" fill="currentColor"></circle>';
+      else if (p.type === "crouch") g += '<circle class="shape" r="6.5"></circle><path d="M-3,0 L0,3 L3,0" fill="none" stroke="#10151a" stroke-width="1.4"></path>';
+      else g += '<circle class="shape" r="6.5"></circle>';
+      if (selected === p.id) g += '<circle class="sel" r="18"></circle>';
+      g += '<text class="plabel" x="0" y="-18">W' + p.id + '</text>';
+      g += '<text class="pshort" x="0" y="3.2">' + t.short + '</text>';
+      g += '</g>';
+      dotArt.push(g);
+    });
+    var svg = $("#points");
+    svg.innerHTML = '<g class="edges' + (showEdges ? '' : ' hide') + '">' + edgeArt.join('') + '</g>' +
+      '<g class="dots' + (showLabels ? '' : ' hide-labels') + '">' + dotArt.join('') + '</g>';
+    svg.classList.toggle("hidden", !visual);
+  }
+
+  function renderHUD() {
+    var n = MAP.nodes + deltas.nodes, e = MAP.edges + deltas.edges, f = featuresNow();
+    var p = selected === null ? null : byId(selected);
+    $("#hudMap").textContent = "地图 " + MAP.name + " · " + MAP.level + " · " + MAP.fp;
+    $("#hudCount").textContent = "节点 " + n + (deltas.nodes ? " (" + fmtD(deltas.nodes) + ")" : "") +
+      " · 边 " + e + (deltas.edges ? " (" + fmtD(deltas.edges) + ")" : "") +
+      " · 特征 " + f + " · 连边半径 " + MAP.radius;
+    if (p) {
+      var w = worldOf(p);
+      var cnt = edges.filter(function (x) { return x.a === p.id || x.b === p.id; }).length;
+      $("#hudSel").textContent = "选中 W" + p.id + " · " + TYPES[p.type].name + " · (" + w.x.toFixed(2) + ", " + w.y.toFixed(2) + ", " + w.z.toFixed(2) + ") · " + cnt + " 条边";
+    } else {
+      $("#hudSel").textContent = "选中 无 · 准星对准路点，左键选中";
+    }
+    var edits = Math.max(0, 3 + deltas.nodes + deltas.edges + featureDelta());
+    var dataLine;
+    if (ver === "test") dataLine = "数据 测试包 " + pack + " · 只对 " + MAP.name + " 生效 · 包内 " + edits + " 项改动" + (pack === "lab_a" ? " · 空白底图" : "");
+    else dataLine = "数据 正式版（nav） · 直接写 ③ · 改前先备份";
+    $("#hudData").textContent = dataLine;
+    $("#hudData").className = "hd" + (ver === "official" ? " warn" : "");
+    var mt = collectOnly ? "只读采集" : (menuOpen ? "编辑 ON" : "菜单关闭");
+    $("#hudMode").textContent = mt;
+    $("#hudMode").className = (collectOnly || !menuOpen) ? "off" : "";
+    $("#gEditChip").textContent = collectOnly ? "只读采集" : (menuOpen ? "编辑 ON" : "菜单关闭");
+    $("#gEditChip").classList.toggle("on", menuOpen && !collectOnly);
+    $("#gMapName").textContent = MAP.name + " · " + MAP.mode;
+  }
+
+  function renderTypes() {
+    var host = $("#types");
+    host.innerHTML = ORDER.map(function (k, i) {
+      var t = TYPES[k];
+      var on = brush === k;
+      var ro = t.badge === "只读";
+      return '<button class="ttile' + (on ? " on" : "") + (ro ? " ro" : "") + '" data-type="' + k + '" style="--tc:' + t.color + '">' +
+        '<span class="tt1"><i class="tdot"></i><b>' + t.name + '</b><span class="tbadge ' + badgeCls(t.badge) + '">' + t.badge + '</span></span>' +
+        '<span class="tt2"><span class="tkey">' + (i + 1) + '</span><b class="tcount">' + countFor(k) + '</b></span>' +
+        '</button>';
+    }).join("");
+  }
+
+  function setDelta(el, v) {
+    if (!el) return;
+    el.textContent = v === 0 ? "0" : fmtD(v);
+    el.className = v > 0 ? "" : (v < 0 ? "neg" : "zero");
+  }
+
+  function renderStats() {
+    $("#stNodes").textContent = MAP.nodes + deltas.nodes;
+    $("#stEdges").textContent = MAP.edges + deltas.edges;
+    $("#stFeat").textContent = featuresNow();
+    $("#stUndo").textContent = history.length;
+    setDelta($("#stNodesD"), deltas.nodes);
+    setDelta($("#stEdgesD"), deltas.edges);
+    setDelta($("#stFeatD"), featureDelta());
+  }
+
+  function renderMeta() {
+    $("#mapMeta").textContent = "指纹 " + MAP.fp + " · 原生 " + MAP.nodes + " 点 / " + MAP.edges + " 边 · " +
+      (ver === "test" ? "④ " + pack : "③ 正式版 nav");
+    $("#dirtyTag").textContent = "已自动存 " + (ver === "test" ? "④ " + pack : "③ nav");
+  }
+
+  function renderInspector() {
+    var p = selected === null ? null : byId(selected);
+    var acts = [$("#iGround"), $("#iWalkBtn"), $("#iDel")];
+    if (!p) {
+      $("#iId").textContent = "—";
+      $("#iType").textContent = "未选中";
+      $("#iBadge").textContent = "";
+      $("#iDot").style.background = "#4a5563";
+      $("#iDot").style.boxShadow = "none";
+      $("#ix").textContent = "—"; $("#iy").textContent = "—"; $("#iz").textContent = "—";
+      $("#iWalk").textContent = "—"; $("#iWalk").className = "";
+      $("#iEdges").textContent = "—";
+      $("#iArea").textContent = "—";
+      acts.forEach(function (b) { b.disabled = true; });
+      return;
+    }
+    var t = TYPES[p.type], w = worldOf(p);
+    var cnt = edges.filter(function (x) { return x.a === p.id || x.b === p.id; }).length;
+    $("#iId").textContent = "W" + p.id;
+    $("#iType").textContent = t.name;
+    $("#iBadge").textContent = t.badge;
+    $("#iDot").style.background = t.color;
+    $("#iDot").style.boxShadow = "0 0 7px " + t.color;
+    $("#ix").textContent = w.x.toFixed(2);
+    $("#iy").textContent = w.y.toFixed(2);
+    $("#iz").textContent = w.z.toFixed(2);
+    $("#iWalk").textContent = p.walk ? "是" : "否";
+    $("#iWalk").className = p.walk ? "ok" : "no";
+    $("#iEdges").textContent = cnt + " 条";
+    $("#iArea").textContent = (p.type === "guard" || p.type === "area") ? "A2 · 中东门" : "—";
+    acts.forEach(function (b) { b.disabled = false; });
+  }
+
+  function renderMenuFooter() {
+    $("#mType").textContent = TYPES[brush].name;
+    $("#mSel").textContent = selected === null ? "未选中" : ("W" + selected);
+  }
+
+  function renderMenuActive() {
+    var map = { add: "add", link: "link", unlink: "unlink", "delete": "del", move: "move" };
+    var act = map[mode] || "";
+    $$("#mList .mi").forEach(function (b) {
+      b.classList.toggle("on", b.getAttribute("data-act") === act);
+    });
+  }
+
+  function updateHint() {
+    var el = $("#ghint");
+    var h;
+    if (collectOnly) {
+      h = '<span class="k">只读采集</span>不创建对象 · 关闭「只读采集」后才能编辑';
+    } else if (!menuOpen) {
+      h = '<span class="k">长按 E</span>打开路点菜单<span class="sep">·</span><span class="k">F2</span>也可以<span class="sep">·</span><span class="k">Ctrl+V</span>显示 / 隐藏路点';
+    } else if (mode === "add") {
+      h = '<span class="k">左键</span>放置' + TYPES[brush].name + '<span class="sep">·</span><span class="k">右键</span>取消<span class="sep">·</span><span class="k">1-9</span>菜单<span class="sep">·</span><span class="k">Ctrl+Z</span>撤销';
+    } else if (mode === "link") {
+      var dir = pathKind === "both" ? "双向" : (pathKind === "out" ? "起点 → 终点" : "终点 → 起点");
+      h = '<span class="k">连边</span>' + dir + (linkFrom === null ? '：先点起点 A' : '：起点 W' + linkFrom + ' 已选，再点终点') + '<span class="sep">·</span><span class="k">右键</span>取消';
+    } else if (mode === "unlink") {
+      h = '<span class="k">左键</span>点一个路点，断开它的全部边<span class="sep">·</span><span class="k">右键</span>取消';
+    } else if (mode === "delete") {
+      h = '<span class="k">左键</span>删除准星下的点，连同它的边<span class="sep">·</span><span class="k">Delete</span>删除选中<span class="sep">·</span><span class="k">右键</span>取消';
+    } else if (mode === "move") {
+      h = '<span class="k">左键</span>先点要移动的点，再点新位置' + (moveId !== null ? '（当前 W' + moveId + '）' : '') + '<span class="sep">·</span><span class="k">右键</span>取消';
+    } else {
+      h = '<span class="k">左键</span>选中路点<span class="sep">·</span><span class="k">1-9</span>菜单<span class="sep">·</span><span class="k">E</span>关闭';
+    }
+    el.innerHTML = h;
+  }
+
+  function syncSwitches() {
+    var st = { menu: menuOpen, visual: visual, navmesh: navmeshOn, ground: autoGround, hud: hudOn, collect: collectOnly };
+    $$(".srow").forEach(function (b) {
+      var k = b.getAttribute("data-sw"), on = !!st[k];
+      b.setAttribute("aria-checked", on ? "true" : "false");
+      if (k !== "collect") b.classList.toggle("off", !on);
+      var sw = b.querySelector(".sw");
+      if (sw) sw.classList.toggle("on", on);
+    });
+    $("#hud").classList.toggle("hidden", !hudOn);
+    $("#navmesh").classList.toggle("show", navmeshOn);
+    $("#points").classList.toggle("hidden", !visual);
+  }
+
+  function renderAll() {
+    renderPoints();
+    renderHUD();
+    renderTypes();
+    renderStats();
+    renderMeta();
+    renderInspector();
+    renderMenuFooter();
+    renderMenuActive();
+    updateHint();
+    syncSwitches();
+  }
+
+  /* ---------------- 菜单 / 子菜单 ---------------- */
+  function toggleMenu(force, silent) {
+    menuOpen = typeof force === "boolean" ? force : !menuOpen;
+    var menu = $("#menu");
+    if (menu) menu.classList.toggle("closed", !menuOpen);
+    if (!menuOpen) closeSub();
+    if (!silent) log("menu", menuOpen ? "menu open" : "menu close");
+    renderHUD();
+    renderMenuFooter();
+    updateHint();
+    syncSwitches();
+  }
+
+  function closeSub() {
+    var sub = $("#sub");
+    if (sub) { sub.classList.remove("open"); sub.innerHTML = ""; }
+    subCtx = ""; subItems = [];
+  }
+
+  function openSub(kind, anchor, ctx) {
+    var sub = $("#sub");
+    var title = "", items = [];
+    if (kind === "types") {
+      title = ctx === "apply" ? "设置选中点类型" : "选择要放的点类型";
+      ORDER.forEach(function (k, i) {
+        var t = TYPES[k];
+        items.push({
+          label: t.name, key: String(i + 1), meta: t.badge, cls: badgeCls(t.badge), off: t.badge === "只读",
+          run: function () {
+            if (ctx === "apply") applyType(k);
+            else {
+              brush = k; mode = "add";
+              log("brush", "brush -> " + t.name);
+              toast("当前笔刷：" + t.name);
+            }
+            closeSub(); renderAll();
+          }
+        });
+      });
+    } else if (kind === "paths") {
+      title = "建立路径（PointNode 有向边）";
+      items = [
+        { label: "双向路径", key: "1", meta: "A ↔ B", run: function () { pathKind = "both"; mode = "link"; linkFrom = null; closeSub(); renderAll(); toast("双向：点起点 A，再点终点 B"); } },
+        { label: "单向 A → B", key: "2", meta: "向外", run: function () { pathKind = "out"; mode = "link"; linkFrom = null; closeSub(); renderAll(); toast("单向：点起点 A，再点终点 B"); } },
+        { label: "单向 B → A", key: "3", meta: "向内", run: function () { pathKind = "in"; mode = "link"; linkFrom = null; closeSub(); renderAll(); toast("单向：点终点 B，再点起点 A"); } }
+      ];
+    } else if (kind === "areas") {
+      title = "聚集区工具（Bot_NanoGuardArea）";
+      items = [
+        { label: "新建聚集区", key: "1", meta: "A", run: function () { brush = "area"; mode = "add"; closeSub(); renderAll(); toast("放置新的聚集区中心"); } },
+        { label: "加守点", key: "2", meta: "Pos", run: function () { brush = "guard"; mode = "add"; closeSub(); renderAll(); toast("放置守点，记得挂在聚集区下"); } },
+        { label: "加入口 entrancePos", key: "3", meta: "新增", run: function () { closeSub(); log("area", "entrance pos (demo)"); toast("入口坐标：第一版先追加到当前聚集区（待实现）"); } },
+        { label: "加逃跑点 escapePos", key: "4", meta: "新增", run: function () { closeSub(); log("area", "escape pos (demo)"); toast("逃跑点：第一版先追加到当前聚集区（待实现）"); } },
+        { label: "连接相邻区", key: "5", meta: "区网", run: function () { closeSub(); toast("相邻区 / 逃跑区连线：第一版只做单区，区网后续加"); } }
+      ];
+    } else if (kind === "edit") {
+      title = "撤销 / 保存";
+      items = [
+        { label: "撤销一步", key: "1", meta: "Ctrl+Z", run: function () { closeSub(); undo(); } },
+        { label: "重做一步", key: "2", meta: "Ctrl+Y", run: function () { closeSub(); redo(); } },
+        { label: "保存到 ④ 包", key: "3", meta: "Ctrl+S", run: function () { closeSub(); saveDemo(); } },
+        { label: "重读当前包", key: "4", meta: "Ctrl+Shift+R", run: function () { closeSub(); reloadDemo(); } }
+      ];
+    } else if (kind === "layers") {
+      title = "显示图层";
+      items = [
+        { label: "显示边", key: showEdges ? "✓" : " ", meta: showEdges ? "开" : "关", check: true, run: function () { showEdges = !showEdges; closeSub(); renderAll(); } },
+        { label: "显示文字标签", key: showLabels ? "✓" : " ", meta: showLabels ? "开" : "关", check: true, run: function () { showLabels = !showLabels; closeSub(); renderAll(); } },
+        { label: "显示可走面", key: navmeshOn ? "✓" : " ", meta: navmeshOn ? "开" : "关", check: true, run: function () { navmeshOn = !navmeshOn; closeSub(); renderAll(); } },
+        { label: "路点总开关", key: visual ? "✓" : " ", meta: visual ? "开" : "关", check: true, run: function () { visual = !visual; closeSub(); renderAll(); } }
+      ];
+    }
+    var html = '<div class="sub-head">' + title + '</div>';
+    items.forEach(function (it, i) {
+      html += '<button class="si' + (it.off ? " off" : "") + '" data-idx="' + i + '">' +
+        '<i class="' + (it.check ? "chk" : "") + '">' + (it.key || "") + '</i>' +
+        '<span>' + it.label + '</span>' +
+        '<em class="' + (it.cls || "") + '">' + (it.meta || "") + '</em></button>';
+    });
+    sub.innerHTML = html;
+    var top = anchor ? anchor.offsetTop - 4 : 0;
+    sub.style.top = Math.max(2, top) + "px";
+    sub.classList.add("open");
+    subCtx = kind;
+    subItems = items;
+    sub.onclick = function (ev) {
+      var b = ev.target.closest("[data-idx]");
+      if (!b) return;
+      var it = subItems[Number(b.getAttribute("data-idx"))];
+      if (!it || it.off) return;
+      it.run();
+    };
+  }
+
+  function act(name, btn) {
+    closeSub();
+    if (name === "add") {
+      mode = "add"; linkFrom = null; moveId = null;
+      openSub("types", btn, "add");
+    } else if (name === "type") {
+      if (selected === null) { toast("先左键选中一个点，再改类型"); return; }
+      openSub("types", btn, "apply");
+    } else if (name === "link") {
+      openSub("paths", btn);
+    } else if (name === "unlink") {
+      mode = "unlink"; linkFrom = null; moveId = null;
+      renderAll();
+      toast("点一个路点，断开它的全部边");
+    } else if (name === "del") {
+      mode = "delete"; linkFrom = null; moveId = null;
+      renderAll();
+      toast("点一个路点删除（连带它的边）");
+    } else if (name === "move") {
+      mode = "move"; linkFrom = null; moveId = null;
+      renderAll();
+      toast("先点要移动的点，再点新位置");
+    } else if (name === "area") {
+      openSub("areas", btn);
+    } else if (name === "edit") {
+      openSub("edit", btn);
+    } else if (name === "layers") {
+      openSub("layers", btn);
+    } else if (name === "close") {
+      toggleMenu(false);
+    }
+    renderMenuActive();
+    updateHint();
+  }
+
+  /* ---------------- 保存 / 清空 ---------------- */
+  function saveDemo() {
+    var edits = Math.max(0, 3 + deltas.nodes + deltas.edges + featureDelta());
+    var target = ver === "test" ? ("packs/" + pack + "/" + MAP.fp + ".txt") : ("nav/" + MAP.fp + ".txt");
+    log("save", "saved " + edits + " edits -> " + target);
+    toast(ver === "test" ? "已保存（演示：写 ④ 包）" : "已保存（演示：写 ③ 正式版）");
+    var tag = $("#dirtyTag");
+    tag.textContent = "刚保存 · " + (ver === "test" ? "④ " + pack : "③ nav");
+    setTimeout(function () { renderMeta(); }, 1800);
+  }
+  function reloadDemo() {
+    log("reload", "reload " + (ver === "test" ? "pack " + pack : "official nav"));
+    toast("已重读（演示）");
+  }
+  function clearDemo() {
+    if (!window.confirm("清空当前图的演示点 / 边？真实实现会先把这张图标成 blank，再只保留你放的点。")) return;
+    pushHistory();
+    blankState();
+    log("blank", "clear -> blank base " + MAP.fp + " (native points disabled)");
+    toast("已清空：现在是从 0 开始的空白图");
+    renderAll();
+  }
+
+  function setVerUI() {
+    $$("#verSeg button").forEach(function (b) {
+      b.classList.toggle("on", b.getAttribute("data-ver") === ver);
+    });
+    var ps = $("#packSel");
+    if (ps) ps.disabled = ver !== "test";
+  }
+
+  function newPack() {
+    var name = "lab_a";
+    var sel = $("#packSel");
+    var found = false;
+    for (var i = 0; i < sel.options.length; i++) if (sel.options[i].value === name) { found = true; break; }
+    if (!found) {
+      var o = document.createElement("option");
+      o.value = name; o.textContent = name + " · 空白底图（新建）";
+      sel.appendChild(o);
+    }
+    pack = name; sel.value = name; ver = "test"; setVerUI();
+    log("pack", "new blank pack " + name + " (demo)");
+    toast("已新建并选中空白包 " + name);
+    reloadScenario();
+    renderAll();
+  }
+
+  /* ---------------- 事件 ---------------- */
+  function selectBrush(k) {
+    var t = TYPES[k];
+    if (!t) return;
+    if (t.badge === "只读") { toast("只读图层：出生点 / 补给箱第一版只读"); return; }
+    brush = k; mode = "add"; linkFrom = null;
+    log("brush", "brush -> " + t.name);
+    renderAll();
+    toast("当前笔刷：" + t.name);
+  }
+
+  function toggleSwitch(k) {
+    if (k === "menu") { toggleMenu(); return; }
+    if (k === "visual") { visual = !visual; log("vis", "points " + (visual ? "ON" : "OFF")); }
+    else if (k === "navmesh") { navmeshOn = !navmeshOn; log("vis", "navmesh " + (navmeshOn ? "ON" : "OFF")); }
+    else if (k === "ground") { autoGround = !autoGround; log("cfg", "auto ground " + (autoGround ? "ON" : "OFF")); }
+    else if (k === "hud") { hudOn = !hudOn; log("cfg", "hud " + (hudOn ? "ON" : "OFF")); }
+    else if (k === "collect") {
+      collectOnly = !collectOnly;
+      if (collectOnly) { menuOpen = false; $("#menu").classList.add("closed"); closeSub(); }
+      log("cfg", "collect only " + (collectOnly ? "ON" : "OFF"));
+      toast(collectOnly ? "只读采集：不创建任何对象" : "已回到可编辑模式");
+    }
+    renderAll();
+  }
+
+  function pointFromEvent(ev) {
+    var r = $("#gview").getBoundingClientRect();
+    return { x: (ev.clientX - r.left) / r.width * 900, y: (ev.clientY - r.top) / r.height * 506 };
+  }
+  function nearestPoint(x, y) {
+    var best = null, bd = 26 * 26;
+    pts.forEach(function (p) {
+      var dx = p.x - x, dy = p.y - y, d = dx * dx + dy * dy;
+      if (d < bd) { bd = d; best = p; }
+    });
+    return best;
+  }
+
+  function bind() {
+    $("#tabs").addEventListener("click", function (ev) {
+      var b = ev.target.closest(".tab");
+      if (!b) return;
+      $$("#tabs .tab").forEach(function (t) { t.classList.remove("active"); });
+      b.classList.add("active");
+      var name = b.getAttribute("data-tab");
+      var isWay = name === "人机路点";
+      $("#panel-waypoint").classList.toggle("hidden", !isWay);
+      $("#panel-other").classList.toggle("hidden", isWay);
+      if (!isWay) $("#otherName").textContent = name;
+    });
+    $("#backWaypoint").addEventListener("click", function () {
+      $$("#tabs .tab").forEach(function (t) { t.classList.remove("active"); });
+      var b = $('[data-tab="人机路点"]');
+      if (b) b.classList.add("active");
+      $("#panel-waypoint").classList.remove("hidden");
+      $("#panel-other").classList.add("hidden");
+    });
+
+    $("#mapSel").addEventListener("change", function () {
+      MAP = MAPS[this.value];
+      reloadScenario();
+      log("map", "map -> " + MAP.name + " (" + MAP.level + ") native " + MAP.nodes + "/" + MAP.edges);
+      toast("已切到 " + MAP.name + (MAP.nodes === 0 ? " · 0 点（真实实现不能建空白包，演示仍清空）" : ""));
+      renderAll();
+    });
+    $("#verSeg").addEventListener("click", function (ev) {
+      var b = ev.target.closest("button[data-ver]");
+      if (!b) return;
+      ver = b.getAttribute("data-ver");
+      setVerUI();
+      log("data", "version -> " + (ver === "test" ? "test pack " + pack : "official nav"));
+      renderAll();
+      toast(ver === "test" ? "数据版本：④ 测试包" : "数据版本：③ 正式版（直接写 nav，先备份）");
+    });
+    $("#packSel").addEventListener("change", function () {
+      pack = this.value;
+      log("pack", "pack -> " + pack + (pack === "lab_a" ? " (blank base)" : ""));
+      reloadScenario();
+      renderAll();
+    });
+
+    $("#types").addEventListener("click", function (ev) {
+      var b = ev.target.closest("[data-type]");
+      if (b) selectBrush(b.getAttribute("data-type"));
+    });
+    $$(".srow").forEach(function (b) {
+      b.addEventListener("click", function () { toggleSwitch(b.getAttribute("data-sw")); });
+    });
+
+    $("#btnUndo").addEventListener("click", undo);
+    $("#btnRedo").addEventListener("click", redo);
+    $("#btnSave").addEventListener("click", saveDemo);
+    $("#btnReload").addEventListener("click", reloadDemo);
+    $("#btnClear").addEventListener("click", clearDemo);
+    $("#btnNewPack").addEventListener("click", newPack);
+    $("#btnDataDir").addEventListener("click", function () { toast("演示：打开 ④ navdata/test/packs"); });
+    $("#btnStart").addEventListener("click", function () {
+      log("launch", "start game UCF_MOD=1 pack=" + (ver === "test" ? pack : "official nav"));
+      toast("演示：启动 UnityCrossFire.exe 并加载 mod");
+    });
+    $("#btnWorkbench").addEventListener("click", function () { toast("演示：浏览器打开只读路点工作台"); });
+    $("#masterSwitch").addEventListener("click", function () {
+      var on = this.getAttribute("aria-checked") !== "true";
+      this.setAttribute("aria-checked", on ? "true" : "false");
+      this.querySelector(".sw").classList.toggle("on", on);
+      log("cfg", "master switch " + (on ? "ON" : "OFF"));
+      toast(on ? "插件总开关：开" : "插件总开关：关（游戏里不加载）");
+    });
+
+    $("#mList").addEventListener("click", function (ev) {
+      var b = ev.target.closest("[data-act]");
+      if (b) act(b.getAttribute("data-act"), b);
+    });
+
+    $("#gview").addEventListener("click", function (ev) {
+      if (ev.target.closest(".menu, .inspector, .ghint, .toast, .cross")) return;
+      if (collectOnly) { toast("只读采集：不能编辑"); return; }
+      if (!menuOpen) { toast("先长按 E 打开路点菜单"); return; }
+      var pos = pointFromEvent(ev);
+      var hit = nearestPoint(pos.x, pos.y);
+      if (mode === "add") {
+        if (hit) { selected = hit.id; renderAll(); toast("已选中 W" + hit.id + "（再点空白处放置新点）"); return; }
+        addPoint(pos.x, pos.y); return;
+      }
+      if (mode === "link") {
+        if (!hit) { toast("请点一个路点作为起点 / 终点"); return; }
+        if (linkFrom === null) { linkFrom = hit.id; renderAll(); toast("起点 W" + hit.id + " 已选，再点终点"); }
+        else if (linkFrom === hit.id) { linkFrom = null; renderAll(); toast("已取消起点"); }
+        else { var from = linkFrom; linkFrom = null; addEdge(from, hit.id, pathKind); }
+        return;
+      }
+      if (mode === "delete") { if (hit) deletePoint(hit.id); else toast("准星下没有点"); return; }
+      if (mode === "unlink") { if (hit) unlinkPoint(hit.id); else toast("准星下没有点"); return; }
+      if (mode === "move") {
+        if (hit) { moveId = hit.id; selected = hit.id; renderAll(); toast("已选中 W" + hit.id + "，再点新位置"); }
+        else if (moveId !== null) { movePoint(moveId, pos.x, pos.y); moveId = null; }
+        return;
+      }
+      if (hit) { selected = hit.id; renderAll(); }
+    });
+    $("#gview").addEventListener("contextmenu", function (ev) {
+      ev.preventDefault();
+      closeSub();
+      if (mode !== "add") { mode = "add"; linkFrom = null; moveId = null; renderAll(); toast("已取消，回到放点"); }
+    });
+
+    $("#iGround").addEventListener("click", function () {
+      if (selected === null) return;
+      var p = byId(selected);
+      if (!p) return;
+      log("ground", "ground W" + p.id + " ray hit floor (demo)");
+      toast("落地：射线命中地板（演示不移动）");
+    });
+    $("#iWalkBtn").addEventListener("click", function () {
+      if (selected === null) return;
+      var p = byId(selected);
+      if (!p) return;
+      pushHistory();
+      p.walk = !p.walk;
+      log("walk", "W" + p.id + " walkable=" + p.walk);
+      renderAll();
+      toast("W" + p.id + (p.walk ? " 可走" : " 不可走"));
+    });
+    $("#iDel").addEventListener("click", function () { if (selected !== null) deletePoint(selected); });
+
+    document.addEventListener("pointerdown", function (ev) {
+      if (!ev.target.closest(".menu")) closeSub();
+    });
+
+    document.addEventListener("keydown", function (ev) {
+      var tag = ev.target && ev.target.tagName ? ev.target.tagName.toLowerCase() : "";
+      if (tag === "input" || tag === "select" || tag === "textarea") return;
+      var k = ev.key;
+
+      if ((k === "e" || k === "E") && !ev.repeat) {
+        if (eHoldTimer) return;
+        eHoldTimer = setTimeout(function () { eHoldTimer = null; toggleMenu(); }, 450);
+        return;
+      }
+      if (k === "F2") { ev.preventDefault(); toggleMenu(); return; }
+
+      if (ev.ctrlKey || ev.metaKey) {
+        var lk = k.toLowerCase();
+        if (lk === "z") { ev.preventDefault(); undo(); return; }
+        if (lk === "y") { ev.preventDefault(); redo(); return; }
+        if (lk === "s") { ev.preventDefault(); saveDemo(); return; }
+      }
+      if (k === "Escape") {
+        if (subCtx) { closeSub(); return; }
+        toggleMenu(false);
+        return;
+      }
+      if (k === "0" && menuOpen) {
+        ev.preventDefault();
+        if (subCtx) closeSub(); else toggleMenu(false);
+        return;
+      }
+      if (k === "Delete") {
+        if (selected !== null && menuOpen && !collectOnly) deletePoint(selected);
+        return;
+      }
+      if ((k.length === 1 && k >= "1" && k <= "9") && menuOpen) {
+        var idx = Number(k) - 1;
+        if (subCtx && subItems.length) {
+          var it = subItems[idx];
+          if (it && !it.off) it.run();
+        } else {
+          var list = $$("#mList .mi");
+          if (list[idx]) list[idx].click();
+        }
+      }
+    });
+    document.addEventListener("keyup", function (ev) {
+      var k = ev.key;
+      if ((k === "e" || k === "E") && eHoldTimer) {
+        clearTimeout(eHoldTimer); eHoldTimer = null;
+        toast("按住 E 0.4 秒打开菜单（或按 F2）");
+      }
+    });
+  }
+
+  /* ---------------- 启动 ---------------- */
+  function clockAgo(sec) {
+    var d = new Date(Date.now() - sec * 1000);
+    return pad2(d.getHours()) + ":" + pad2(d.getMinutes()) + ":" + pad2(d.getSeconds());
+  }
+  resetDemo();
+  logLines = [
+    clockAgo(16) + " [naved] pack: desert_a target=" + MAP.fp + " (only this map)",
+    clockAgo(15) + " [naved] applied 3/3 edits on " + MAP.fp + " (nodes 12 -> 13)",
+    clockAgo(11) + " [naved] menu open: type=normal mode=add",
+    clockAgo(6) + " [naved] add node W8 (4.20, 2.50, 3.10) type=normal",
+    clockAgo(6) + " [naved] edge W7 <-> W8 (both) len=1.83 m",
+    clockAgo(0) + " [naved] saved 4 edits -> packs/desert_a/" + MAP.fp + ".txt"
+  ];
+  bind();
+  setVerUI();
+  renderAll();
+  var lt = $("#logText");
+  if (lt) lt.textContent = logLines.join(NL);
+  log("ready", "design mock ready · map=" + MAP.name + " · pack=" + pack);
+})();
+</script>
+</body>
+</html>

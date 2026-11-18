@@ -1,0 +1,291 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>UCF 路点工作台</title>
+<link rel="stylesheet" href="nav-studio.css">
+</head>
+<body>
+<div class="window">
+  <div class="titlebar">
+    <div class="logo"><svg viewBox="0 0 24 24" fill="none" stroke="#07131f" stroke-width="2.4"><path d="M4 17l5-6 4 3 7-8"/><circle cx="4" cy="17" r="1.6" fill="#07131f"/><circle cx="20" cy="6" r="1.6" fill="#07131f"/></svg></div>
+    <div class="tname">UCF 路点工作台</div>
+    <div class="tchip" id="topVer">② 开发版 · 只读</div>
+    <div class="tspace"></div>
+    <div class="gstatus" id="conn"><i></i><span>连接 navserver…</span></div>
+    <div class="wbtns"><button class="wbtn" id="btnReload" title="刷新数据">⟳</button></div>
+  </div>
+
+  <div class="app">
+    <aside class="side">
+      <div class="slabel">工作区</div>
+      <div class="nav" data-page="overview"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>总览</div>
+      <div class="nav on" data-page="waypoints"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="5" r="2"/><circle cx="19" cy="12" r="2"/><circle cx="12" cy="19" r="2"/><path d="M6.6 10.6l3.8-3.8M13.6 6.8l3.8 3.8M17.4 13.4l-3.8 3.8M10.4 17.2l-3.8-3.8"/></svg>路点库<span class="badge on" id="badgeNodes">—</span></div>
+      <div class="nav" data-page="routes"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 19l4-1 9-9-3-3-9 9-1 4z"/><path d="M4 21h16"/></svg>路线<span class="badge" id="badgeRoutes">0</span></div>
+      <div class="nav" data-page="zones"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 7l5-2 6 2 5-2v12l-5 2-6-2-5 2V7z" stroke-dasharray="3 2"/></svg>区域<span class="badge" id="badgeZones">0</span></div>
+      <div class="nav" data-page="auto"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M12 3l1.8 4.9L19 9.6l-4 3.4 1.1 5.2L12 15.6 7.9 18.2 9 13 5 9.6l5.2-1.7L12 3z"/></svg>自动铺设</div>
+      <div class="nav" data-page="maps"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M12 3l9 5-9 5-9-5 9-5z"/><path d="M3 13l9 5 9-5"/></svg>地图数据</div>
+      <div class="nav" data-page="logs"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M5 6h14M5 12h14M5 18h9"/></svg>日志</div>
+      <div class="slabel">查看器</div>
+      <button class="nav" type="button" id="nav3d" title="在右侧停靠 3D，不离开当前页"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M2 12s3.6-6 10-6 10 6 10 6-3.6 6-10 6S2 12 2 12z"/><circle cx="12" cy="12" r="2.4"/></svg>3D / 可走面<span class="badge" id="dockBadge">关</span></button>
+      <div class="grow"></div>
+      <div class="mapcard">
+        <div class="r"><span>当前地图</span><span id="sideKind">—</span></div>
+        <div class="m" id="sideName">未加载</div>
+        <div class="fp" id="sideFp">—</div>
+        <div class="src" id="sideSrc"><i></i><span>等待数据</span></div>
+      </div>
+    </aside>
+
+    <main class="main">
+      <div class="top">
+        <div class="maptitle">
+          <h1 id="mapTitle">未加载 <span id="mapMeta">—</span><em class="pagebadge" id="pageName">路点库</em><em class="pagebadge ro">只读</em></h1>
+          <p id="pageSub">正在连接本地服务…</p>
+        </div>
+        <div class="topacts">
+          <div class="modes" id="mapPickWrap">
+            <button class="mode on" id="btnPickMap">选择地图 ▾</button>
+            <div id="mapPick"></div>
+          </div>
+          <div class="acts">
+            <select id="profSel" class="vsel" title="切换查看的数据版本"></select>
+            <button class="btn" id="btnRefresh">刷新</button>
+            <button class="btn" id="btnOpen3d" type="button" title="在右侧停靠 3D，不离开当前页">3D 侧栏</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="pages">
+        <!-- ============ 总览 ============ -->
+        <section class="page" data-page="overview">
+          <div class="dash">
+            <div class="card hero">
+              <div class="ch"><b>路点工作台</b><span class="sub" id="ovSub">—</span><div class="right"><span class="chip" id="ovVerChip">只读 · ② 开发版</span></div></div>
+              <div class="herobody">
+                <div class="heroh" id="ovTitle">—</div>
+                <p class="herop" id="ovDesc">—</p>
+                <div class="statgrid" id="ovStats"></div>
+                <div class="flow" id="ovFlow"></div>
+                <div class="heromap"><canvas id="cvHero"></canvas></div>
+                <div class="quick">
+                  <button class="btn primary" data-go="waypoints">路点库</button>
+                  <button class="btn" data-go="routes">跳跃链路</button>
+                  <button class="btn" data-go="zones">区域</button>
+                  <button class="btn" data-go="auto">自动铺设</button>
+                </div>
+              </div>
+            </div>
+            <div class="card">
+              <div class="ch"><b>四版数据</b><span class="sub">①备份 → ②开发 → ③部署 · ④测试</span></div>
+              <div class="presetrow" id="ovVersions"></div>
+              <div class="listnote" id="ovPaths">—</div>
+            </div>
+            <div class="card">
+              <div class="ch"><b>最近文件</b><span class="sub">按修改时间</span></div>
+              <div class="actlist" id="ovActions"></div>
+            </div>
+            <div class="card">
+              <div class="ch"><b>下一步</b><span class="sub">按真实数据算</span></div>
+              <div class="tips" id="ovTips"></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ============ 路点库 ============ -->
+        <section class="page on" data-page="waypoints">
+          <div class="grid">
+            <div class="card">
+              <div class="ch"><b>图层 / 路点种类</b><span class="sub" id="layerMode">点眼睛显隐</span><div class="right"><button class="btn sm" id="btnShowAllLayers" type="button">显示全部</button><span class="kk" id="layerSum">—</span></div></div>
+              <div class="tlist" id="layerList"></div>
+              <div class="thints">
+                <div><b>这个游戏里</b>：路点 = PointNode；蹲守 = Bot_CrouchPos；跳跃 = Bot_JumpLink；守区 = Bot_NanoGuardArea。</div>
+                <div>按当前模式只列生效图层；实际数据里没有的层显示 0，可用「显示全部」查看其余。</div>
+                <div id="layerHint">网页只读；加点 / 连线 / 保存都在游戏内或 <b>navdata.py</b>。</div>
+              </div>
+            </div>
+
+            <div class="col">
+              <div class="card mapcard">
+                <div class="ch"><b id="mapCardTitle">俯视图</b><span class="sub" id="mapCardSub">—</span><div class="right"><span class="chip" id="editChip">只读</span></div></div>
+                <div class="mapbody" id="mapBody">
+                  <canvas id="cvMain"></canvas>
+                  <div class="mapctl">
+                    <button class="mbtn on" data-toggle="grid">网格</button>
+                    <button class="mbtn on" data-toggle="edges">连线</button>
+                    <button class="mbtn on" data-toggle="navmesh">可走面</button>
+                    <button class="mbtn on" data-toggle="labels">标签</button>
+                    <button class="mbtn" data-toggle="height">高度</button>
+                  </div>
+                  <div class="zoom"><button id="zoomOut">−</button><span id="zoomVal">100%</span><button id="zoomIn">+</button><button id="zoomFit" style="width:34px;font-size:8.5px">适配</button></div>
+                  <div class="maphint"><span class="bar"></span><span id="scaleTxt">10 m</span></div>
+                  <div class="tip" id="mapTip" style="display:none"></div>
+                  <div class="splash" id="mapSplash"><div class="spin"></div><h2>正在载入地图数据…</h2><p id="splashMsg">从 navdata\dev\maps 读取</p></div>
+                </div>
+                <div class="stats" id="statRow"></div>
+                <div class="legend" id="legend"></div>
+              </div>
+
+              <div class="card rcard">
+                <div class="ch"><b>实际数据对照</b><span class="sub">这个游戏里真正有的东西</span><div class="right"><span class="kk" id="rzSum">—</span></div></div>
+                <div class="rbody">
+                  <div class="routes" id="quickRoutes"></div>
+                  <div class="areas" id="quickZones"></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="col">
+              <div class="card detail">
+                <div class="ch"><b>种类详情</b><span class="sub" id="layerSub">—</span><div class="right"><span class="kk" id="layerKey">—</span></div></div>
+                <div class="dbody" id="layerDetail"></div>
+              </div>
+              <div class="card auto">
+                <div class="ch"><b>当前地图</b><span class="sub" id="mapSub2">—</span><div class="right"><span class="chip" id="mapChip">—</span></div></div>
+                <div class="abody" id="mapInfo"></div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ============ 路线 ============ -->
+        <section class="page" data-page="routes">
+          <div class="wgrid">
+            <div class="card">
+              <div class="ch"><b>跳跃链接 / 路线</b><span class="sub" id="routeSub">—</span><div class="right"><span class="chip">只读</span></div></div>
+              <div class="listbody" id="routeList"></div>
+              <div class="listnote">这个游戏的人机路线不是手画的线：<b>点图 + 自动连边 + 跳跃链接</b>。这里列的是真实存在的跳跃链路与地图 JSON 里的 routes[]。</div>
+            </div>
+            <div class="card diagramcard">
+              <div class="ch"><b id="routeTitle">链路预览</b><span class="sub" id="routeMeta">—</span><div class="right"><span class="chip" id="routeMode">浏览</span></div></div>
+              <div class="diagrambody">
+                <canvas id="cvRoute"></canvas>
+                <div class="mapbadge tl" id="mbRoute">—</div>
+                <div class="mapbadge bl">— 选中链路　·　○ 路点</div>
+                <div class="mapbadge br" id="mbRouteMeta">—</div>
+              </div>
+              <div class="dtimeline">
+                <div class="dtlhead"><b>端点</b><span style="margin-left:8px">起点 → 终点</span><span class="r" id="routeTime">—</span></div>
+                <div class="tlnodes" id="routeSeq"></div>
+                <div class="tlcap"><span>起点</span><span>终点</span></div>
+              </div>
+            </div>
+            <div class="card">
+              <div class="ch"><b>链路详情</b><div class="right"><span class="kk" id="routeKk">—</span></div></div>
+              <div class="detailbody" id="routeDetail"></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ============ 区域 ============ -->
+        <section class="page" data-page="zones">
+          <div class="wgrid">
+            <div class="card">
+              <div class="ch"><b>区域 / 守点</b><span class="sub" id="zoneSub">—</span><div class="right"><span class="chip">只读</span></div></div>
+              <div class="listbody" id="zoneList"></div>
+              <div class="listnote">能用的守区是 <b>Bot_NanoGuardArea</b> + <b>Bot_NanoGuardPos</b>；<b>Bot_GuardArea</b> / <b>Bot_GuardPos</b> 是没人用的旧类。插件没导出守区半径，所以这里只画守点包围圈，不编半径。</div>
+            </div>
+            <div class="card diagramcard">
+              <div class="ch"><b id="zoneTitle">区域预览</b><span class="sub" id="zoneMeta">—</span><div class="right"><span class="chip" id="zoneMode">浏览</span></div></div>
+              <div class="diagrambody">
+                <canvas id="cvZone"></canvas>
+                <div class="mapbadge tl" id="mbZone">—</div>
+                <div class="mapbadge bl">● 守点　○ 守区中心　· 顶点可看不可改</div>
+              </div>
+              <div class="dtimeline" style="flex:0 0 58px">
+                <div class="dtlhead"><b>区域规则</b><span class="r" id="zoneRule">—</span></div>
+                <div class="tlcap" style="margin-top:8px"><span>入口 entrancePos（未导出）</span><span>逃跑 escapePos（未导出）</span><span>邻区（未导出）</span></div>
+              </div>
+            </div>
+            <div class="card">
+              <div class="ch"><b>区域详情</b><div class="right"><span class="kk" id="zoneKk">—</span></div></div>
+              <div class="detailbody" id="zoneDetail"></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ============ 自动铺设 ============ -->
+        <section class="page" data-page="auto">
+          <div class="wgrid">
+            <div class="card">
+              <div class="ch"><b>三个自动动作</b><span class="sub">进图时自动跑</span><div class="right"><span class="kk" id="autoCfgChip">—</span></div></div>
+              <div class="abody" id="autoActions"></div>
+              <div class="listnote" id="autoCfgNote">—</div>
+            </div>
+            <div class="card diagramcard">
+              <div class="ch"><b>这张图会发生什么</b><span class="sub" id="autoMapSub">—</span><div class="right"><span class="chip" id="autoMapChip">—</span></div></div>
+              <div class="detailbody" id="autoMapBody"></div>
+              <div class="dtimeline" style="flex:0 0 176px">
+                <div class="dtlhead"><b>插件处理管线</b><span class="r">src/navfix.c</span></div>
+                <div class="steps" id="autoPipe" style="padding:2px 2px 0"></div>
+              </div>
+            </div>
+            <div class="card">
+              <div class="ch"><b>触发规则 / 参数</b><span class="sub">真实源码值</span></div>
+              <div class="detailbody" id="autoRules"></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ============ 地图数据 ============ -->
+        <section class="page" data-page="maps">
+          <div class="wgrid" style="grid-template-columns:minmax(0,1.55fr) minmax(0,1fr)">
+            <div class="card">
+              <div class="ch"><b>地图数据</b><span class="sub" id="mapsSub">—</span><div class="right"><button class="btn sm" id="mapsReload">刷新列表</button></div></div>
+              <div class="tablewrap"><table class="mtable" id="mapTable">
+                <thead><tr><th>#</th><th>地图</th><th>关卡</th><th>指纹</th><th>点 / 边</th><th>特征</th><th>可走面</th><th>编辑</th><th>状态</th></tr></thead>
+                <tbody id="mapTbody"></tbody>
+              </table></div>
+              <div class="listnote" id="mapsNote">点一行把这张图载入工作台；③部署版状态按文件 SHA256 比对，不碰游戏。</div>
+            </div>
+            <div class="card">
+              <div class="ch"><b>四版数据</b><span class="sub">①→②→③ · ④测试</span><div class="right"><span class="chip" id="verChip">—</span></div></div>
+              <div class="detailbody" id="verBody"></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ============ 日志 ============ -->
+        <section class="page" data-page="logs">
+          <div class="card fullcard">
+            <div class="ch"><b>操作日志</b><span class="sub" id="logSub">ucf_mod.log · 最近</span><div class="right"><span class="chip" id="logChip">只读</span><button class="btn sm" id="logRefresh">刷新</button></div></div>
+            <div class="pgrow" id="logFilters"></div>
+            <div class="loglist" id="logList"></div>
+            <div class="listnote">只读 <b>ucf_mod.log</b> 的尾部；默认隐藏 <b>[at] resolve</b> 这类每帧底层行。自动刷新只在日志页打开时跑。</div>
+          </div>
+        </section>
+      </div>
+
+      <div class="status">
+        <span id="stProfile">UCF_PROFILE —</span><span class="sep"></span>
+        <span id="stMap">未加载地图</span><span class="sep"></span>
+        <span id="stData">② 开发版</span>
+        <span class="right"><span class="ok" id="stServer">—</span> · 只读</span>
+      </div>
+    </main>
+
+    <!-- 3D 停靠栏：和当前页并排，不跳页、不盖住工作台 -->
+    <aside class="dock" id="dock3d" aria-hidden="true">
+      <div class="dgrip" id="dockGrip" title="拖动调宽 · 双击复位"></div>
+      <div class="dhead">
+        <svg class="i" viewBox="0 0 24 24" fill="none" stroke="#8fb8ff" stroke-width="1.7"><path d="M2 12s3.6-6 10-6 10 6 10 6-3.6 6-10 6S2 12 2 12z"/><circle cx="12" cy="12" r="2.4"/></svg>
+        <b>3D / 可走面</b>
+        <span class="dmap" id="dockMap">—</span>
+        <span class="chip">只读</span>
+        <div class="dright">
+          <button class="btn sm" id="dockReload" type="button">重载</button>
+          <button class="btn sm" id="dockClose" type="button">关闭 ✕</button>
+        </div>
+      </div>
+      <div class="dbody">
+        <div class="dsplash" id="dockSplash"><div class="spin"></div><h2>正在打开 3D 查看器…</h2></div>
+        <iframe id="dockFrame" title="3D / 可走面查看器"></iframe>
+      </div>
+    </aside>
+  </div>
+</div>
+<div id="toast"></div>
+<script src="nav-studio-app.js"></script>
+</body>
+</html>

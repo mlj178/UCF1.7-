@@ -24,11 +24,12 @@ CFG_C = os.path.join(PROJ, "src", "cfg.c")
 CONSOLE = os.path.join(HERE, "控制台.pyw")
 
 # 2026-11-17：控制台删掉「建图」页（自动铺路点 / 自动补蹲守点 / 幽灵守卫区）。
-# C 侧键保留默认开，旧 ucf_mod.json 与回滚仍然有效；面板里不许再出现。
-RETIRED = {"auto_waypoints", "auto_crouch", "ghost_areas"}
-TABS = ["地图", "查看", "状态面板", "手动"]   # 「测试数据」「数据」不是开关页，不在此列
+# 2026-11-18：用户要求自动铺设回控制台，落在「手动」页（不再是 RETIRED）。
+RETIRED = set()
+TABS = ["地图", "查看", "导出", "状态面板", "手动"]   # 「测试数据」「数据」「车测」不是开关页，不在此列
 # 三态开关（0 关 / 1 近距 / 2 全部）：控件不是 switch，但必须在「状态面板」页有入口
-CUSTOM = {"vis_labels": "状态面板"}
+CUSTOM = {"vis_labels": "状态面板",
+          "wp_menu": "人机路点", "wp_autoground": "人机路点"}
 
 
 def read(path):
@@ -101,6 +102,9 @@ def main():
         "hidden_map（加载暴风地图）必须留在「地图」页"
     assert seen.get("hud") == "状态面板", \
         "hud（进图显示状态面板）必须单独在「状态面板」页，不许混在「查看」"
+    for key in ("auto_waypoints", "auto_crouch", "ghost_areas"):
+        assert seen.get(key) == "手动", \
+            "自动铺设开关 %s 必须在「手动」页（2026-11-18 用户要求）" % key
     for key in console_const("LAYER_KEYS"):
         assert seen.get(key) == "状态面板", \
             "可视化开关 %s 必须在「状态面板」页" % key
@@ -108,6 +112,8 @@ def main():
         "文字标签（vis_labels）必须在「状态面板」页"
 
     editor_c = read(os.path.join(PROJ, "src", "editor.c"))
+    assert "editor_freecam_tick" in editor_c and "CinemachineBrain" in editor_c, \
+        "车测自由视角（freecam）实现缺失：editor_freecam_tick / CinemachineBrain"
     keys = console_const("HUD_KEYS").splitlines()
     for line in keys:
         assert line in editor_c, \
@@ -131,6 +137,25 @@ def main():
         "「测试数据」页应在「数据」页之前"
     assert 'text="打开文件夹"' in src and "def open_folder" in src, \
         "数据页的「打开文件夹」按钮 / open_folder 不见了"
+
+    # 车测页（2026-11-18 用户要求：启动器里能直接跑车测，不用命令行 autotest.ps1）
+    assert 'self.tabview.add("车测")' in src, "车测必须是页签"
+    assert src.index('add("数据")') < src.index('add("车测")'), \
+        "「车测」页应在「数据」页之后"
+    assert "UCF_AUTOTEST" in src and "def run_autotest" in src, \
+        "车测页缺少 UCF_AUTOTEST / run_autotest"
+    assert "UCF_FREECAM" in src and 'text="自由视角' in src, \
+        "车测页缺少「自由视角」（UCF_FREECAM）"
+    assert "os.remove(AUTOTEST_TXT)" in src, \
+        "车测开跑前必须删旧 autotest.txt，否则上一次的 PASS 会被当成这次的结果"
+    can = console_const("AT_CAN")
+    cannot = console_const("AT_CANNOT")
+    assert len(can) == 7 and len(cannot) == 4, \
+        "车测说明应为「7 项能做 + 4 项不能做」，实际 %d / %d" % (len(can), len(cannot))
+    joined = " ".join(name + desc for name, desc in can) + " ".join(cannot)
+    for key in ("!!! crash", "buildIndex", "pack: skip", "PointGraph", "大厅"):
+        assert key in joined, "车测说明缺少 %s" % key
+    assert "假通过" in console_const("AT_NOTE"), "车测说明缺少「假通过」提醒"
 
     print("OK: %d feature switches in %d tabs (%s); %d build-map switches retired; "
           "HUD keys %d/%d match editor.c" % (

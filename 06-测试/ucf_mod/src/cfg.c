@@ -23,7 +23,6 @@ static const CFG_DEF g_defs[] = {
   { "auto_waypoints", 1, "没路点的图自动铺路点 + 连线" },
   { "auto_crouch",    1, "没有蹲守点时自动补" },
   { "ghost_areas",    1, "凭空造幽灵守卫区" },
-  { "auto_export",    1, "进图稳定后自动导出路点 JSON" },
   { "hud",            1, "进图显示状态面板" },
   { "hud_states",     0, "HUD 第一行：可视化/五层/标签的开关状态（默认不显示）" },
   { "hud_keys",       0, "HUD 快捷键帮助块（默认不显示；Ctrl+H 可临时叫出）" },
@@ -37,8 +36,17 @@ static const CFG_DEF g_defs[] = {
   { "vis_labels",     0, "可视化文字标签：0 关 / 1 近距 35m / 2 全部（Ctrl+Shift+L）" },
   { "navmesh_show",   1, "画 A* 可走面（NavMeshGraph 三角网线框）" },
   { "vis_lists",      1, "读游戏自己的组件表（守区/蹲守/出生点）：崩溃时可关" },
+  { "export_enabled", 1, "Ctrl+E 导出总开关" },
+  { "export_nodes",   1, "Ctrl+E 导出：路点 / 连线" },
+  { "export_crouch",  1, "Ctrl+E 导出：人类蹲守点" },
+  { "export_area",    1, "Ctrl+E 导出：幽灵守区 / 幽灵守点" },
+  { "export_guard",   1, "Ctrl+E 导出：守卫区 / 守卫点" },
+  { "export_spawn",   1, "Ctrl+E 导出：出生点 / 补给箱" },
+  { "export_tags",    1, "Ctrl+E 导出：跳点 / 标签区" },
   { "editor",         1, "允许游戏内编辑（Ctrl+1）" },
   { "collect_only",   0, "只读采集：只导出，不改游戏" },
+  { "wp_menu",        1, "游戏内路点菜单（F2 / 长按 E）" },
+  { "wp_autoground",  1, "加点自动贴地（菜单加普通路点）" },
   { 0, 0, 0 }
 };
 
@@ -124,7 +132,16 @@ void cfg_str(const char* key, const char* def, char* out, int n) {
 
 void cfg_dump(void) {
   int i;
+  char dirbuf[MAX_PATH];
   cflog("======== ucf_mod.json %s ========", g_ok ? "loaded" : "MISSING (defaults)");
+  /* 字符串项（2026-11-18 四版分离）：空 = 用插件目录下的默认位置。
+   * 控制台启动游戏时用环境变量覆盖，手改 ucf_mod.json 也能生效。 */
+  cfg_str("export_dir", "", dirbuf, sizeof dirbuf);
+  cflog("  %-14s = %s%s", "export_dir", dirbuf[0] ? dirbuf : "(plugin dir \\vis)",
+        dirbuf[0] ? "" : "  (default)");
+  cfg_str("pack_dir", "", dirbuf, sizeof dirbuf);
+  cflog("  %-14s = %s%s", "pack_dir", dirbuf[0] ? dirbuf : "(plugin dir \\packs)",
+        dirbuf[0] ? "" : "  (default)");
   for (i = 0; g_defs[i].key; i++) {
     const char* v = find_value(g_defs[i].key);
     int on;
