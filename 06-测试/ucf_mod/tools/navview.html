@@ -323,7 +323,7 @@ body.embed .hud{font-size:10px;padding:3px 6px;max-width:calc(100% - 12px)}
           </div>
           <div class="field">
             <label>测试包</label>
-            <input type="text" id="s-pack" class="txt" placeholder="包名（空=正式版）">
+            <input type="text" id="s-pack" class="txt" placeholder="包名（地图文件夹/包名；空=正式版）">
           </div>
           <div class="btn-row" style="margin-top:4px">
             <button class="btn mini" id="b-pack-load" title="读取 packs\&lt;包名&gt;\&lt;指纹&gt;.txt 继续编辑">载入包</button>
@@ -826,8 +826,8 @@ async function loadPack(name, forceBlank) {
   if (!S.doc) { setMsg("先打开一张地图文件", "bad"); return; }
   if (!S.targetFp) { setMsg("没有目标指纹：先选一张有路点图的地图", "bad"); return; }
   name = String(name || "").trim();
-  if (!/^[A-Za-z0-9_-]{1,48}$/.test(name)) {
-    setMsg("包名只能用 ASCII 字母/数字/_/-，1~48 字符", "bad");
+  if (!/^[^\\/:*?"<>|]{1,30}(\/[A-Za-z0-9_-]{1,48})?$/.test(name)) {
+    setMsg("包名格式不对：地图文件夹不能含 \\ / : * ? \" < > |，包名只能用英文字母、数字、下划线、短横线", "bad");
     return;
   }
   if (S.dirty && !confirm("当前有未保存改动，仍切换测试包？")) return;
@@ -3071,7 +3071,7 @@ function bindTopbar() {
   $("b-pack").onclick = async function () {
     const fp = S.targetFp || S.fp;
     if (!fp) { setMsg("没有指纹：先打开一张有路点图的地图文件", "bad"); return; }
-    const name = (prompt("测试包名（ASCII 字母/数字/_/-，例：chain_a）", "chain_a") || "").trim();
+    const name = (prompt("测试包名（只能用英文字母、数字、下划线、短横线，例：chain_a）", "chain_a") || "").trim();
     if (!name) return;
     setMsg("存为测试包 中…", "warn");
     try {
@@ -3104,7 +3104,7 @@ function bindTopbar() {
   };
   $("b-pack-new").onclick = function () {
     const def = ($("s-pack").value || "").trim() || "blank_a";
-    const name = (prompt("空白测试包名（ASCII 字母/数字/_/-）", def) || "").trim();
+    const name = (prompt("空白测试包名（只能用英文字母、数字、下划线、短横线）", def) || "").trim();
     if (!name) return;
     loadPack(name, true);
   };

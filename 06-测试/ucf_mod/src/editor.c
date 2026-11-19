@@ -94,7 +94,7 @@ static int  g_saveWarned;
  * 包目录固定放在插件目录内：vis / markers / 日志也都挂在 g_dir 下，把 nav 单独指到
  * 工程端会让两套数据混用（导出、读数全乱），所以这里只换最后一级目录。 */
 static char g_navDir[MAX_PATH];   /* 路线数据目录：<dir>\nav 或 <dir>\packs\<包名> */
-static char g_packName[64];       /* 空 = 正式版 */
+static char g_packName[160];      /* 空 = 正式版；地图文件夹\包名，可以是中文文件夹 */
 static char g_packFp[48];         /* 空 = 不限图 */
 static char g_packFpLabel[64];    /* 只用于显示 */
 static int  g_packSkip;           /* 1 = 当前图不在本次测试清单里 */
@@ -190,6 +190,11 @@ static int g_nedN;
 static NAVED g_redo[NAV_ED_MAX];
 static int g_redoN;
 static int g_nedBlank;      /* 1 = 测试包 blank：先把原生点全禁掉，再套清单里的点/边 */
+static int g_nedGrow;       /* 1 = 文件写了 grow：原生点标死 + 真正新建节点（不借槽位） */
+static P   g_growGraph;     /* 已经 grow 过的图：同一张图只新建一次（节点没有删除 API） */
+static int g_growBase;      /* grow 之前的原生节点数 */
+static int g_growMade;      /* 上次 grow 新建的点数 */
+static int g_nedZeroTicks;  /* 0 节点图连续帧计数（grow 放行前要等 5 帧） */
 static char g_nedPath[MAX_PATH];
 static char g_nedFp[48];
 static int g_nedBaseN;
@@ -1072,6 +1077,7 @@ static P spawn_vis(V3 p, float s, int slot) {
  *   E  mode state (log only)
  * ------------------------------------------------------------------------- */
 P navfix_point_graph(void);
+P navfix_astar(void);
 P navfix_add_guard_area(float x, float y, float z);
 
 #define VIS_MAXN    6000
@@ -3172,6 +3178,20 @@ static void set_collect_only(int on) {
  * 不可走的节点不会被选中。
  */
 #define R_PG_REBUILD   0x5F0370
+/* grow 模式（真·新建节点）要用的 A* 内部入口。2026-11-19 对 GameAssembly.dll
+ * 做静态核对（x86 32-bit；VA = RVA + 0x10000000）：
+ *   PathProcessor.Lock(bool) -> int      0x5E9660   queue.Block() 后自旋等线程停
+ *   PathProcessor.Unlock(int id)         0x5E9910
+ *   PointGraph.AddNode(Int3) -> PointNode 0x5EE7D0  自己扩 nodes 数组
+ * 关键：PathProcessor.InitializeNode 第一件事就是
+ *     if (!queue.AllReceiversBlocked) throw ...
+ * 所以建点必须整段发生在 Lock(true) … Unlock 之间，否则节点拿到 nodeIndex 却没
+ * 进每一条线程的 PathHandler，第一条路径就在 GetPathNode(idx) 越界。
+ * 扩容本身由引擎负责（PathHandler.InitializeNode: Max(len*2, 0x80)），
+ * 这里没有 786 这类数量上限。 */
+#define R_PP_LOCK      0x5E9660
+#define R_PP_UNLOCK    0x5E9910
+#define R_PG_ADD_NODE  0x5EE7D0
 #define NADD 1
 #define NDEL 2
 #define EADD 3
@@ -3288,6 +3308,21 @@ static int nav_needs_apply(P g) {
   n = nav_count(g);
   if (n != g_nedExpect) return 1;   /* 图被重扫/重建过：节点数不再是我们套完的样子 */
   for (i = 0; i < NAV_EXP_MAX; i++) g_navExp[i].a = -1;
+  if (g_nedGrow && g_packName[0]) {
+    /* grow：原生点本来就永久标死，没有「原生点复活」这回事；节点数已由上面的
+     * g_nedExpect 兜住。这里只核对边，省掉 n×M 的坐标扫描（grow 图比 blank 大）。 */
+    int j;
+    if (!g_nedN) return 0;
+    for (j = 0; j < g_nedN; j++) {
+      NAVED* e = &g_ned[j];
+      if (e->kind != EADD && e->kind != EDEL) continue;
+      ia = nav_find(g, &e->a, 0.35f);
+      ib = nav_find(g, &e->b, 0.35f);
+      if (ia < 0 || ib < 0) return 1;
+      if (nav_exp_record(e, ia, ib, e->kind == EADD) < 0) return 1;
+    }
+    return nav_exp_check(g);
+  }
   if (g_nedBlank && g_packName[0]) {
     /* 空白底图：可走的点必须全是清单里的 node add；原生点只要有一个又活了就重套。 */
     int j;
@@ -3443,8 +3478,11 @@ static int nav_add_node(P g, const V3* p) {
     nav_conn_clear(nd);
     return i;
   }
-  elog("naved: add refused: no free slot (graph full, %d nodes) - delete a node first; "
-       "runtime graph must not grow (PathHandler is sized in AstarPath.Awake)", n);
+  /* 2026-11-19 更正：PathHandler 不是进图时一次分配——它按节点创建懒增长，
+   * 786 不是上限。这里仍然只借槽位（稳妥路径）；要真·新增节点用 grow 模式，
+   * 见 nav_apply_grow（必须在 PathProcessor.Lock(true) 窗口里建点）。 */
+  elog("naved: add refused: no free slot (graph full, %d nodes) - delete a node first, "
+       "or use a grow pack (真·新增节点)", n);
   return -1;
 }
 static void nav_refresh(P g) {
@@ -3468,11 +3506,18 @@ static void nav_edge(P g, P a, P b, int on) {
     nav_refresh(g);
   }
 }
-/* ---- 编辑清单的落盘/读取（每张图一个文件） ---- */
+/* ---- 编辑清单的落盘/读取（每张图一个文件） ----
+ * 指纹只算「进图时的原生点数」：grow 新建的点会把 nav_count 变大，
+ * 要是也算进去，重新应用 / 切回正式版时指纹就变了，文件反而找不到。 */
+static P g_fpGraph;
+static int g_fpBaseN = -1;        /* <0 = 还不知道；0 = 空图（0 点图也合法） */
 static void nav_fp(char* out, int cap) {
   P g = navfix_point_graph();
   unsigned long long xr = 0;
   int i, n = nav_count(g);
+  /* 原生点数由 nav_edit_tick 在「图稳定」那一刻记下来（g_fpBaseN），这里只截断：
+   * grow 新建的点不参与指纹，否则文件名会从 n786-… 变成 n786+N-…。 */
+  if (g && g_fpBaseN >= 0 && n > g_fpBaseN) n = g_fpBaseN;
   for (i = 0; i < n; i++) {
     P nd = nav_node(g, i);
     V3 p;
@@ -3482,6 +3527,24 @@ static void nav_fp(char* out, int cap) {
   }
   sprintf(out, "n%d-%016llx", n, xr);
   (void)cap;
+}
+/* 0 节点图（飓风危城）：只有 grow 包能套——它不借原生槽位。
+ * 进图初期图可能还没扫出来，所以只在「测试包 + 文件里有 grow」时放行，
+ * 其它 0 节点情况继续等下一帧。 */
+static int nav_zero_grow_ready(void) {
+  char path[MAX_PATH], line[64];
+  FILE* f;
+  int grow = 0;
+  if (!g_packName[0] || !g_navDir[0]) return 0;
+  nav_fp(g_nedFp, sizeof(g_nedFp));
+  sprintf(path, "%s\\%s.txt", g_navDir, g_nedFp);
+  f = fopen(path, "r");
+  if (!f) return 0;
+  while (fgets(line, sizeof line, f)) {
+    if (!strncmp(line, "grow", 4)) { grow = 1; break; }
+  }
+  fclose(f);
+  return grow;
 }
 static void nav_save(void) {
   FILE* f;
@@ -3503,6 +3566,7 @@ static void nav_save(void) {
   if (!f) { elog("naved: save failed %s", g_nedPath); return; }
   fprintf(f, "# ucf-navedit v1 fp=%s\n", g_nedFp);
   if (blank) fprintf(f, "blank\n");
+  if (blank && g_nedGrow) fprintf(f, "grow\n");
   for (i = 0; i < g_nedN; i++) {
     NAVED* e = &g_ned[i];
     if (e->kind == NADD)
@@ -3519,7 +3583,8 @@ static void nav_save(void) {
     }
   }
   fclose(f);
-  elog("naved: saved %d edits -> %s%s", g_nedN, g_nedPath, blank ? " (blank base)" : "");
+  elog("naved: saved %d edits -> %s%s%s", g_nedN, g_nedPath,
+       blank ? " (blank base)" : "", (blank && g_nedGrow) ? " [grow]" : "");
 }
 static void nav_edit_load(const char* path) {
   FILE* f = fopen(path, "r");
@@ -3527,6 +3592,7 @@ static void nav_edit_load(const char* path) {
   g_nedN = 0;
   g_redoN = 0;
   g_nedBlank = 0;
+  g_nedGrow = 0;
   if (!f) return;
   while (fgets(line, sizeof(line), f)) {
     NAVED e;
@@ -3537,6 +3603,14 @@ static void nav_edit_load(const char* path) {
     /* blank：测试包专用。先把原生图整张禁掉，文件里的 node add / edge add 才是唯一路线。 */
     if (!strncmp(line, "blank", 5) &&
         (line[5] == 0 || line[5] == '\r' || line[5] == '\n' || line[5] == ' ')) {
+      g_nedBlank = 1;
+      continue;
+    }
+    /* grow：blank 的加强版——原生点标死后「新建」节点，不借槽位。
+     * 只有测试包才允许（和 blank 同一条规矩）。 */
+    if (!strncmp(line, "grow", 4) &&
+        (line[4] == 0 || line[4] == '\r' || line[4] == '\n' || line[4] == ' ')) {
+      g_nedGrow = 1;
       g_nedBlank = 1;
       continue;
     }
@@ -3629,11 +3703,15 @@ static void nav_base_take(P g) {
   int i, n;
   if (!g) return;
   n = nav_count(g);
-  if (n <= 0 || n > NAV_MAXN) return;
+  if (n < 0 || n > NAV_MAXN) return;
   nav_fp(fp, sizeof fp);
+  /* 快照只收原生点：grow 新建出来的点不属于「底图」，不能写进快照，
+   * 否则切包/回正式版时会把它们当成原生点复活。0 点图也拍一份空快照，
+   * 这样「回正式版」能把 grow 出来的点全部收回。 */
+  if (g_fpBaseN >= 0 && n > g_fpBaseN) n = g_fpBaseN;
   if (g_navBase && g_navBaseG == g && g_navBaseN == n && !strcmp(g_navBaseFp, fp)) return;
   nav_base_free();
-  g_navBase = (NAVBASENODE*)calloc((size_t)n, sizeof(NAVBASENODE));
+  g_navBase = (NAVBASENODE*)calloc((size_t)(n > 0 ? n : 1), sizeof(NAVBASENODE));
   if (!g_navBase) { elog("naved: base snapshot alloc failed (%d nodes)", n); return; }
   for (i = 0; i < n; i++) {
     P nd = nav_node(g, i), c = 0;
@@ -3670,12 +3748,14 @@ static int nav_base_restore(P g) {
   int i, n;
   if (!g) return 0;
   n = nav_count(g);
-  if (!g_navBase || g_navBaseG != g || g_navBaseN != n) return 0;
+  /* grow 之后 n > 快照点数：快照仍是前 g_navBaseN 个节点的原生状态，
+   * 超出部分（我们自己新建的）在下面统一标死。 */
+  if (!g_navBase || g_navBaseG != g || n < g_navBaseN) return 0;
   if (!g_connCls || !x_array_new) {
     elog("naved: restore skipped (connection class unavailable)");
     return 0;
   }
-  for (i = 0; i < n; i++) {
+  for (i = 0; i < g_navBaseN; i++) {
     P nd = nav_node(g, i);
     NAVBASENODE* s = &g_navBase[i];
     if (!nd) continue;
@@ -3712,9 +3792,17 @@ static int nav_base_restore(P g) {
       nav_conn_bind(nd, nc);
     }
   }
+  /* grow 加出来的点不在快照里：标死 + 断边，别让它们留在正式版 / 别的包里 */
+  for (i = g_navBaseN; i < n; i++) {
+    P ex = nav_node(g, i);
+    if (!ex) continue;
+    nav_set_walk(ex, 0);
+    nav_conn_clear(ex);
+  }
   g_navDeadN = 0;
   nav_refresh(g);
-  elog("naved: base restored (%d nodes)", n);
+  elog("naved: base restored (%d native nodes%s)", g_navBaseN,
+       (n > g_navBaseN) ? ", extra grow nodes disabled" : "");
   return 1;
 }
 
@@ -3768,6 +3856,82 @@ static int nav_revive_slot(P g, const V3* p) {
     return i;
   }
   return -1;
+}
+/* ---- grow：真正新建节点（A 方案第一步）--------------------------------
+ * blank 是「把原生点标死，再借被标死的槽位改坐标」，所以点位数永远等于原生数。
+ * grow 不动原生点的数量：原生点照样全部标死，然后用 PointGraph.AddNode 新建节点，
+ * nodeIndex 直接超过原生数量。数量只受 NAV_MAXN（20000）和内存限制。
+ *
+ * 2026-11-16「append 之后只会直走」的真正原因不是数组不能长，而是建点没在阻塞窗口：
+ * PathProcessor.InitializeNode 第一件事就是 queue.AllReceiversBlocked 检查，
+ * 不满足就抛异常；节点于是「有 nodeIndex、没进 handler」，寻路线程在
+ * PointNode.Open -> GetPathNode(idx) 越界，A* 停摆。Lock(true) 会一直等到线程停。
+ *
+ * 已知边界（step 1 故意不做，日志里写清楚）：
+ *   - 节点只增不减：同一张图只新建一次；要重来得重进图（场景重建后图从原生点重扫）。
+ *   - 边仍按坐标 ±0.35 m 匹配，点位不能比这个容差更近。 */
+static P nav_pp(void) {
+  P a = navfix_astar();
+  return a ? *(P*)((char*)a + 0x88) : 0;      /* AstarPath.pathProcessor @0x88 */
+}
+static int nav_grow_enabled(void) {
+  char v[8];
+  if (GetEnvironmentVariableA("UCF_NAVGROW", v, sizeof v) > 0 && v[0] == '0') return 0;
+  return 1;
+}
+static P nav_grow_node(P g, const V3* p) {
+  return ((P (*)(P, int, int, int, void*))RVA(R_PG_ADD_NODE))(
+      g, (int)(p->x * 1000.0f), (int)(p->y * 1000.0f), (int)(p->z * 1000.0f), 0);
+}
+static int nav_apply_grow(P g) {
+  P pp, nd;
+  int i, n, killed = 0, made = 0, skipped = 0, ops = 0, lockId;
+  if (!g) return 0;
+  n = nav_count(g);
+  /* n == 0 也允许：0 点图（飓风危城）正是 grow 唯一能用的场景 */
+  if (n < 0 || n > NAV_MAXN) { elog("naved: grow skipped: bad node count %d", n); return 0; }
+  /* 同一张图只新建一次：重套 / 重新应用只补边，不再加点 */
+  if (g == g_growGraph && nav_count(g) == g_growBase + g_growMade) {
+    ops = nav_apply_edges(g);
+    elog("naved: grow already applied on this graph (%d base + %d new); edges only (%d)",
+         g_growBase, g_growMade, ops);
+    return ops;
+  }
+  pp = nav_pp();
+  if (!pp) {                      /* AstarPath.Awake 还没跑完：下一个 tick 再来 */
+    elog("naved: grow waiting: pathProcessor not ready yet");
+    return -1;
+  }
+  lockId = ((int (*)(P, int, void*))RVA(R_PP_LOCK))(pp, 1, 0);
+  /* 1) 原生点全部标死 + 清边：不留任何一条原生路线 */
+  for (i = 0; i < n; i++) {
+    nd = nav_node(g, i);
+    if (!nd) continue;
+    if (nav_walk(nd)) killed++;
+    nav_set_walk(nd, 0);
+    nav_conn_clear(nd);
+  }
+  /* 2) 新建点：AddNode 自己扩 nodes 数组、分配 nodeIndex、注册到每条 PathHandler */
+  for (i = 0; i < g_nedN; i++) {
+    NAVED* e = &g_ned[i];
+    if (e->kind != NADD) continue;
+    if (!nav_grow_node(g, &e->a)) { skipped++; continue; }
+    made++;
+  }
+  if (!made) {
+    elog("naved: grow WARNING: no 'node add' lines - this map now has 0 walkable nodes; "
+         "bots will stand until the file has points");
+  }
+  /* 3) 查表树 + 边（边按坐标匹配，必须在点建完之后） */
+  nav_refresh(g);
+  ops = nav_apply_edges(g);
+  ((void (*)(P, int, void*))RVA(R_PP_UNLOCK))(pp, lockId, 0);
+  g_growGraph = g;
+  g_growBase = n;
+  g_growMade = made;
+  elog("naved: grow: %d native disabled, %d new nodes, %d adds skipped, %d edges "
+       "(graph %d -> %d nodes)", killed, made, skipped, ops, n, nav_count(g));
+  return made + ops;
 }
 static int nav_apply_core(P g) {
   int i, n, kill = 0, revived = 0, skipped = 0, ok = 0;
@@ -3828,7 +3992,13 @@ static int nav_apply_core(P g) {
 }
 /* 把清单套到活图上；返回实际生效条数 */
 static int nav_apply_all(P g) {
-  int ok = nav_apply_core(g);
+  int ok;
+  if (g_nedGrow && g_packName[0] && nav_grow_enabled()) {
+    ok = nav_apply_grow(g);
+    if (ok < 0) return ok;            /* grow 还没就绪：本帧不标记已套用 */
+  } else {
+    ok = nav_apply_core(g);
+  }
   g_nedExpect = nav_count(g);
   return ok;
 }
@@ -4241,6 +4411,39 @@ static int pack_ok_name(const char* s) {
   return 1;
 }
 
+/* 测试包 id：允许一层地图子目录，如 TransportShip运输船\blank_b（/ 也认）。
+ * 地图文件夹可以是中文（系统代码页 GBK 下 ANSI 路径能读；UTF-8 beta 模式会挂）。
+ * 只挡 Windows 非法字符、空格（navcmd 用空格分字段）和 . / .. 段。 */
+static int pack_ok_id(const char* s) {
+  int i, segs = 1, seglen = 0, dot = 0;
+  unsigned char c;
+  if (!s || !s[0] || strlen(s) > 120) return 0;
+  for (i = 0; s[i]; i++) {
+    c = (unsigned char)s[i];
+    if (c == '\\' || c == '/') {
+      int only_dots = (dot && (seglen == dot));
+      if (seglen == 0 || segs >= 2) return 0;
+      if (only_dots && seglen <= 2) return 0;   /* "." / ".." */
+      segs++;
+      seglen = 0;
+      dot = 0;
+      continue;
+    }
+    if (c < 0x20 || c == ' ' || strchr(":*?\"<>|", c)) return 0;
+    if (c == '.') dot++;
+    if (++seglen > 60) return 0;
+  }
+  if (seglen == 0) return 0;
+  if (dot && seglen == dot && seglen <= 2) return 0;   /* "." / ".." */
+  return 1;
+}
+
+/* / 统一成 \，拼路径和日志都省心。 */
+static void pack_norm_id(char* s) {
+  int i;
+  for (i = 0; s[i]; i++) if (s[i] == '/') s[i] = '\\';
+}
+
 /* 逐级建目录：④ 可能在工程端，路径跨盘且多层目录不一定存在。 */
 static void mkdir_p(const char* path) {
   char buf[MAX_PATH];
@@ -4272,20 +4475,29 @@ static void dir_choice(const char* envName, const char* cfgKey, const char* def,
   }
   out[cap - 1] = 0;
 }
+/* 正式版数据目录：UCF_NAV_DIR > cfg nav_dir > <插件目录>\nav。
+ * 2026-11-19：nav\ 不再写死在游戏目录里——工程端可以把正式版数据放到游戏外，
+ * 让游戏目录只读（写盘全部落在插件自己的目录或工程端）。 */
+static void nav_dir_official(char* out, int cap) {
+  char def[MAX_PATH];
+  sprintf(def, "%s\\nav", g_dir);
+  dir_choice("UCF_NAV_DIR", "nav_dir", def, out, cap);
+}
 
 static void pack_init(void) {
-  char buf[160];
+  char buf[320];
   g_packName[0] = g_packFp[0] = g_packFpLabel[0] = 0;
   g_packSkip = 0;
-  sprintf(g_navDir, "%s\\nav", g_dir);
+  nav_dir_official(g_navDir, sizeof g_navDir);
   if (GetEnvironmentVariableA("UCF_PACK", buf, sizeof buf) > 0 && buf[0]) {
-    if (!pack_ok_name(buf)) {
-      elog("pack: ignore UCF_PACK=%s (only [A-Za-z0-9_-], <=48 chars)", buf);
+    if (!pack_ok_id(buf)) {
+      elog("pack: ignore UCF_PACK=%s (map/pack, [A-Za-z0-9_-], <=60 chars)", buf);
     } else {
       strcpy(g_packName, buf);
+      pack_norm_id(g_packName);
       mkdir_p(g_packRoot);
       sprintf(g_navDir, "%s\\%s", g_packRoot, g_packName);
-      CreateDirectoryA(g_navDir, 0);
+      mkdir_p(g_navDir);          /* 地图文件夹 + 包目录一起建 */
     }
   }
   if (GetEnvironmentVariableA("UCF_FP", buf, sizeof buf) > 0 && buf[0]) {
@@ -4319,7 +4531,7 @@ static void pack_init(void) {
  * 这里在主线程 tick 里轮询，不在别的线程碰 Unity 对象。 */
 static int nav_cmd_set_pack(P g, const char* pack, const char* fp) {
   int dirty, mapChanged;
-  if (pack && pack[0] && !pack_ok_name(pack)) {
+  if (pack && pack[0] && !pack_ok_id(pack)) {
     elog("navcmd: bad pack name '%s'", pack);
     return 0;
   }
@@ -4335,15 +4547,16 @@ static int nav_cmd_set_pack(P g, const char* pack, const char* fp) {
   mapChanged = !fp || !fp[0] || strcmp(fp, g_packFp) != 0;
   if (pack && pack[0]) {
     strcpy(g_packName, pack);
+    pack_norm_id(g_packName);
     mkdir_p(g_packRoot);
     sprintf(g_navDir, "%s\\%s", g_packRoot, g_packName);
-    CreateDirectoryA(g_navDir, 0);
+    mkdir_p(g_navDir);          /* 地图文件夹 + 包目录一起建 */
     if (fp && fp[0]) strcpy(g_packFp, fp);
     else g_packFp[0] = 0;
   } else {
     g_packName[0] = 0;
     g_packFp[0] = 0;
-    sprintf(g_navDir, "%s\\nav", g_dir);
+    nav_dir_official(g_navDir, sizeof g_navDir);
   }
   if (mapChanged) g_packFpLabel[0] = 0;   /* 换图后旧图名不再适用，宁可显示指纹 */
   g_packSkip = 0;
@@ -4351,6 +4564,10 @@ static int nav_cmd_set_pack(P g, const char* pack, const char* fp) {
   g_nedWaitN = -1;
   g_nedN = 0;
   g_nedBlank = 0;
+  g_nedGrow = 0;
+  g_growGraph = 0;
+  g_growBase = 0;
+  g_growMade = 0;
   g_nedPath[0] = 0;
   g_nedExpect = 0;
   g_nedGraph = g;
@@ -4369,7 +4586,7 @@ static void nav_cmd_tick(P g) {
   FILE* f;
   char line[256];
   char cmd[24] = "";
-  char pack[64] = "";
+  char pack[160] = "";
   char fp[48] = "";
   char brush[24] = "";
   char menu[8] = "";
@@ -4381,7 +4598,7 @@ static void nav_cmd_tick(P g) {
   while (fgets(line, sizeof line, f)) {
     if (sscanf(line, "seq=%llu", &seq) == 1) { have = 1; continue; }
     if (sscanf(line, "cmd=%23s", cmd) == 1) continue;
-    if (sscanf(line, "pack=%63s", pack) == 1) continue;
+    if (sscanf(line, "pack=%159s", pack) == 1) continue;
     if (sscanf(line, "fp=%47s", fp) == 1) continue;
     if (sscanf(line, "brush=%23s", brush) == 1) continue;
     if (sscanf(line, "menu=%7s", menu) == 1) continue;
@@ -4428,14 +4645,32 @@ static void nav_edit_tick(void) {
     g_nedHasA = 0;
     g_nedN = 0;
     g_nedBlank = 0;
+    g_nedGrow = 0;
     g_nedPath[0] = 0;
+    g_growGraph = 0;     /* 换图：grow 记录只对旧图有效 */
+    g_growBase = 0;
+    g_growMade = 0;
     g_packSkip = 0;      /* 换图：让下一张图重新判断一次，并在日志里各记一行 */
     nav_base_free();     /* 旧图的快照只对旧图有效 */
+    g_fpGraph = 0;       /* 指纹的原生点数只对这张图有效 */
+    g_fpBaseN = -1;
+    g_nedZeroTicks = 0;
   }
   n = nav_count(g);
   if (!g_nedApplied) {
-    if (n <= 0) return;
+    /* 0 节点图只能靠 grow：它不需要原生槽位。图可能还没扫出来，所以要求
+     * 「文件里有 grow + 连续 5 帧都是 0」才放行，避免空图瞬间误建点。 */
+    if (n <= 0) {
+      if (!nav_zero_grow_ready()) { g_nedZeroTicks = 0; return; }
+      if (++g_nedZeroTicks < 5) return;
+    } else {
+      g_nedZeroTicks = 0;
+    }
     if (n != g_nedWaitN) { g_nedWaitN = n; return; }       /* 等两跳稳定 */
+    if (g != g_fpGraph || g_fpBaseN < 0) {                 /* 图稳定了：记下原生点数 */
+      g_fpGraph = g;
+      g_fpBaseN = n;
+    }
     nav_fp(g_nedFp, sizeof(g_nedFp));
     /* 测试包只对一张图生效：指纹不符就整包跳过（宁可不动，也别改错图） */
     if (g_packFp[0] && strcmp(g_packFp, g_nedFp) != 0) {
@@ -4456,12 +4691,14 @@ static void nav_edit_tick(void) {
     sprintf(g_nedPath, "%s\\%s.txt", g_navDir, g_nedFp);
     nav_base_take(g);     /* 先拍原生底图，再套文件；切包时才能还原 */
     nav_edit_load(g_nedPath);
-    if (g_nedBlank && !g_packName[0]) {
+    if ((g_nedBlank || g_nedGrow) && !g_packName[0]) {
       g_nedBlank = 0;
-      elog("naved: ignore blank (only a test pack may blank the base)");
+      g_nedGrow = 0;
+      elog("naved: ignore blank/grow (only a test pack may replace the base)");
     }
     g_nedBaseN = n;
     ops = nav_apply_all(g);
+    if (ops < 0) { g_nedWaitN = -1; return; }   /* grow 要等 A* 就绪：下一帧重来 */
     g_nedApplied = 1;
     pack_stat();
     if (ops) elog("naved: applied %d/%d edits on %s (nodes %d -> %d)%s",
@@ -4475,6 +4712,7 @@ static void nav_edit_tick(void) {
     static int probe;
     if ((++probe % 16) == 0 && nav_needs_apply(g)) {
       ops = nav_apply_all(g);
+      if (ops < 0) return;
       if (ops) {
         elog("naved: graph rebuilt, re-applied %d edits", ops);
         nav_refresh(g);
@@ -5147,9 +5385,9 @@ static void bot_probe(void) {
           g_bp[k2].p = p; g_bp[k2].t = GetTickCount();
         }
       }
-      elog("beh: bot=%p p=(%.1f,%.1f,%.1f) spd=%.2f acts=[%s] isS=%d tgt=(%.1f,%.1f,%.1f) over=%d reach=%d path=%p pts=%d enemy=%p enemyD=%.1f nearN=%p nextN=%p",
+      elog("beh: bot=%p p=(%.1f,%.1f,%.1f) spd=%.2f acts=[%s] isS=%d tgt=(%.1f,%.1f,%.1f) over=%d reach=%d path=%p pts=%d enemy=%p enemyD=%.1f nearN=%p nearD=%.1f nextN=%p",
            b, p.x, p.y, p.z, spd, names, isS, tp.x, tp.y, tp.z, over, reach,
-           path, pts, enemy, enemyD, gnear, gnext);
+           path, pts, enemy, enemyD, gnear, d, gnext);
     }
     shown++;
   }
