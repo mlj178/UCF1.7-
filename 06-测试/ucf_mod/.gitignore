@@ -20,19 +20,18 @@ geo/tex/
 # 本机路径配置
 tools/deploy.json
 
-# 部署端数据：只存在于游戏目录，不在工程端
-nav/
-maps/
-vis/
-markers/
-backup/
-screenshots/
+# 部署端数据：只存在于游戏目录，不在工程端（锚定 ucf_mod 根目录，避免误伤 navdata/**）
+/nav/
+/maps/
+/vis/
+/markers/
+/backup/
 
-# 数据四版：原生备份进库（冻结、只读），开发版 / 测试版是工作区数据，不进库
-navdata/dev/
-navdata/test/
-navdata/*.tmp/
-navdata/_before_cleanup_*.zip
+# 数据四版：原生备份（冻结只读）/ 开发版 / 测试版统一进库备份
+navdata/*.tmp
 navdata/native/**/*.tmp
 tools/_*
 navdata/_logs/
+
+# 根 .gitignore 的 *.zip 规则例外：清理前的工作区备份入库
+!navdata/_before_cleanup_*.zip

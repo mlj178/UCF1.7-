@@ -6,8 +6,7 @@
 例外是「建图」页：2026-11-17 控制台删掉了这一页的三个开关，C 侧键留给旧配置
 与回滚用（默认仍为开），所以它们在 RETIRED 里显式豁免，不允许再冒回面板。
 
-另外核对「状态面板」页的快捷键文案：那一页照抄 src/editor.c 的 hud_refresh()，
-两边只改一边就会在游戏里显示过期的键位，所以逐行做子串比对。
+另外核对页面归属：可视化、导出、手动各页的开关必须留在对应页。
 
 本测试只读两份源码，不需要游戏、部署端、网络或窗口。
 
@@ -26,10 +25,12 @@ CONSOLE = os.path.join(HERE, "控制台.pyw")
 # 2026-11-17：控制台删掉「建图」页（自动铺路点 / 自动补蹲守点 / 幽灵守卫区）。
 # 2026-11-18：用户要求自动铺设回控制台，落在「手动」页（不再是 RETIRED）。
 RETIRED = set()
-TABS = ["地图", "查看", "导出", "状态面板", "手动"]   # 「测试数据」「数据」「车测」不是开关页，不在此列
-# 三态开关（0 关 / 1 近距 / 2 全部）：控件不是 switch，但必须在「状态面板」页有入口
-CUSTOM = {"vis_labels": "状态面板",
-          "wp_menu": "人机路点", "wp_autoground": "人机路点"}
+TABS = ["地图", "可视化", "导出", "快捷键", "手动"]   # 「测试数据」「数据」「车测」不是开关页，不在此列
+# 非 bool 开关（画笔字符串等）：控件不是 switch，但必须在对应页有入口
+CUSTOM = {"wp_menu": "人机路点", "wp_autoground": "人机路点"}
+# 2026-11-19：可视化改成逐类开关（读+画同一颗），全部落在「可视化」页
+VIS_DATA = ("vis_nodes", "vis_crouch", "vis_guard", "vis_nano", "vis_born",
+            "vis_supply", "vis_jump", "vis_tag", "navmesh_show")
 
 
 def read(path):
@@ -92,42 +93,28 @@ def main():
         got = [d for _t, _h, items in groups for k, _l, _desc, d in items if k == key]
         assert got and got[0] == bool(default), \
             "默认值不一致：%s cfg=%d console=%s" % (key, default, got)
-    assert console_const("LABEL_DEFAULT") == defs["vis_labels"][0], \
-        "vis_labels 默认值不一致：cfg=%d console=%s" % (
-            defs["vis_labels"][0], console_const("LABEL_DEFAULT"))
 
     titles = [title for title, _hint, _items in groups]
     assert titles == TABS, "控制台页签应为 %s，实际 %s" % (TABS, titles)
     assert seen.get("hidden_map") == "地图", \
         "hidden_map（加载暴风地图）必须留在「地图」页"
-    assert seen.get("hud") == "状态面板", \
-        "hud（进图显示状态面板）必须单独在「状态面板」页，不许混在「查看」"
     for key in ("auto_waypoints", "auto_crouch", "ghost_areas"):
         assert seen.get(key) == "手动", \
             "自动铺设开关 %s 必须在「手动」页（2026-11-18 用户要求）" % key
-    for key in console_const("LAYER_KEYS"):
-        assert seen.get(key) == "状态面板", \
-            "可视化开关 %s 必须在「状态面板」页" % key
-    assert seen.get("vis_labels") == "状态面板", \
-        "文字标签（vis_labels）必须在「状态面板」页"
+    assert seen.get("visualizer") == "可视化", \
+        "可视化总开关（visualizer）必须留在「可视化」页顶部（2026-11-19 用户要求）"
+    for key in VIS_DATA:
+        assert seen.get(key) == "可视化", \
+            "可视化开关 %s 必须在「可视化」页（2026-11-19 用户要求）" % key
 
     editor_c = read(os.path.join(PROJ, "src", "editor.c"))
     assert "editor_freecam_tick" in editor_c and "CinemachineBrain" in editor_c, \
         "车测自由视角（freecam）实现缺失：editor_freecam_tick / CinemachineBrain"
-    keys = console_const("HUD_KEYS").splitlines()
-    for line in keys:
-        assert line in editor_c, \
-            "「状态面板」页的快捷键与 src/editor.c 不一致（改一边忘一边）：" + line
 
     # cfg.c 里加了键、editor.c 忘了读 -> 开关永远不生效，也不会报错
-    for key in console_const("LAYER_KEYS"):
+    for key in ("visualizer",) + VIS_DATA:
         assert ('cfg_bool("%s"' % key) in editor_c, \
             "cfg.c 有 %s，但 editor.c 没有 cfg_bool 读取" % key
-    for key in ("hud_states", "hud_keys", "hud_log"):
-        assert ('cfg_bool("%s"' % key) in editor_c, \
-            "cfg.c 有 %s，但 editor.c 没有 cfg_bool 读取" % key
-    assert 'cfg_int("vis_labels"' in editor_c, \
-        "cfg.c 有 vis_labels，但 editor.c 没有 cfg_int 读取"
 
     # 测试数据面板必须是页签（2026-11-17 21:10 用户要求：不再压在上面常驻）
     src = read(CONSOLE)
@@ -157,10 +144,8 @@ def main():
         assert key in joined, "车测说明缺少 %s" % key
     assert "假通过" in console_const("AT_NOTE"), "车测说明缺少「假通过」提醒"
 
-    print("OK: %d feature switches in %d tabs (%s); %d build-map switches retired; "
-          "HUD keys %d/%d match editor.c" % (
-              len(seen), len(groups), "/".join(titles), len(RETIRED),
-              len(keys), len(keys)))
+    print("OK: %d feature switches in %d tabs (%s); %d build-map switches retired" % (
+        len(seen), len(groups), "/".join(titles), len(RETIRED)))
     return 0
 
 

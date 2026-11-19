@@ -1,0 +1,32 @@
+{
+ "format": "ucf-navgraph",
+ "version": 1,
+ "generated": "2026-11-17 08:43:25",
+ "plugin": "navdata.py freeze",
+ "map": {
+  "name": "level9_Nano30_Storm",
+  "label": "暴风",
+  "level": "level9",
+  "scene": "Nano30_Storm",
+  "source": "native",
+  "origin": "native-empty",
+  "node_count": 0,
+  "edge_count": 0,
+  "fingerprint": "",
+  "native_only": true,
+  "note": "UCF 原版这张图没有原生导航数据：场景里 0 个 WayPoint 物体、也没有 NavMeshGraph；游戏里能跑的点是插件 auto_waypoints 运行时铺的（不落盘，不算原生）。"
+ },
+ "counts": {
+  "nodes": 0,
+  "edges": 0,
+  "features": 0
+ },
+ "nodes": [],
+ "edges": [],
+ "features": [],
+ "lines": {
+  "nano_neighbor": [],
+  "entrance_escape": [],
+  "jump": []
+ }
+}
