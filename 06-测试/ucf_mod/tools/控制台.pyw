@@ -407,33 +407,32 @@ GROUPS = [
     ("地图", "房间选图列表里要不要多一张「暴风」；关掉后就是原版列表", [
         ("hidden_map", "加载暴风地图", "把隐藏图 Nano30_Storm 插进房间下拉框；关掉后选不到暴风", True),
     ]),
-    ("查看", "读游戏组件表；导出相关已移到「导出」页", [
-        ("vis_lists", "读游戏组件表", "可视化时读游戏的守区/蹲守/出生点静态表；进图闪退时的兜底开关——关掉后完全不碰这些表，只画 A* 图与可走面", True),
+    # 2026-11-19 用户要求：可视化按数据类别拆成勾选框，一颗开关同时管「读不读」和「画不画」；
+    # 总开关（visualizer）排在本页顶部。「导出」页那 6 个 export_* 是另一套，互不影响。
+    ("可视化", "进图时读什么、画什么都在这一页；关掉哪类就不读也不画（不影响 Ctrl+E 导出）", [
+        ("visualizer", "可视化总开关（Visualizer）", "整套彩色点线的总开关；关掉后进图不画（可走面独立，不受影响）；Ctrl+V 随时开关", False),
+        ("vis_nodes", "路点 / 连线（PointNode / Connection）", "浅蓝点 = 普通路点，橙点 = 带标签，红点 = 禁走点；蓝线 = 连线", True),
+        ("vis_crouch", "蹲守点（Bot_CrouchPos）", "红色实心小方块（两阵营同色）", True),
+        ("vis_guard", "守卫区 / 守卫点（Bot_GuardArea / Bot_GuardPos）", "紫色线框区 + 橙色实心点", True),
+        ("vis_nano", "幽灵守区 / 幽灵守点（Bot_NanoGuardArea / Bot_NanoGuardPos）", "绿色线框区 + 青色实心点", True),
+        ("vis_born", "出生点（SpawnPoint）", "潜伏者(蓝)/保卫者(红)/中立点(灰)；个人竞技用中立点、全员敌对；生化/剑客与补给箱混布，叠色偏粉紫", True),
+        ("vis_supply", "补给箱（SupplyBox / RedBox / BlueBox）", "金/粉/青实心高柱 = 补给/红/蓝", True),
+        ("vis_jump", "跳点（Bot_JumpLink）", "黄色连线（没有点标记）", True),
+        ("vis_tag", "标签区（PointNodeTagModifier）", "橙色线框小方块", True),
+        ("navmesh_show", "可走面（NavMeshGraph）", "绿色三角网线框（人机真正在上面跑的面）；Ctrl+Shift+6 随时开关；与可视化总开关无关", True),
     ]),
     # 2026-11-18：导出单独成页 —— 一个总开关 + 六项内容，默认全勾
-    ("导出", "Ctrl+E 导出的总开关与内容（与可视化五层互相独立）", [
+    ("导出", "Ctrl+E 导出的总开关与内容（与可视化开关互相独立）", [
         ("export_enabled", "启用导出", "总开关；关掉后下面勾选全部不生效，Ctrl+E 不读也不写", True),
         ("export_nodes", "路点 / 连线", "JSON 主体；关掉后只导特征点（文件名 f<特征数>，不写 _seen 去重）", True),
-        ("export_crouch", "人类蹲守点", "读 B 层蹲守点；关掉后 JSON 里 crouch=0", True),
-        ("export_area", "幽灵守区 / 守点", "读 C 层幽灵守区与幽灵守点；关掉后 nano_area/nano_pos=0", True),
-        ("export_guard", "守卫区 / 守卫点", "读 B 层守卫区与守卫点；关掉后 guard=0", True),
-        ("export_spawn", "出生点 / 补给箱", "读 D 层出生点与补给箱；关掉后 spawn=0", True),
-        ("export_tags", "跳点 / 标签区", "读 A 层跳点与标签区；关掉后 jump/tag=0", True),
+        ("export_crouch", "人类蹲守点", "读人类蹲守点；关掉后 JSON 里 crouch=0", True),
+        ("export_area", "幽灵守区 / 守点", "读幽灵守区与幽灵守点；关掉后 nano_area/nano_pos=0", True),
+        ("export_guard", "守卫区 / 守卫点", "读守卫区与守卫点；关掉后 guard=0", True),
+        ("export_spawn", "出生点 / 补给箱", "读出生点与补给箱；关掉后 spawn=0", True),
+        ("export_tags", "跳点 / 标签区", "读跳点与标签区；关掉后 jump/tag=0", True),
     ]),
-    # 2026-11-17 20:5x：面板的开关从游戏里搬到这一页（用户要求：开关进控制台，游戏里不再展示）。
-    ("状态面板", "游戏内左上角只留状态数字；开关都在这一页（写 ucf_mod.json，下次启动生效）", [
-        ("hud", "显示状态面板", "左上角那块字；关掉后进图不建；Ctrl+H 仍能叫出", True),
-        ("hud_states", "显示开关状态行", "面板第一行：可视化 / 五层 / 标签 各自的开关状态（默认不显示）", False),
-        ("hud_keys", "显示快捷键帮助块", "Ctrl+H 那四行键位表（默认不显示；Ctrl+H 仍可临时叫出）", False),
-        ("hud_log", "显示导出 / 最近日志行", "导出结果 + 最近 3 行日志；Ctrl+M 随时开关", True),
-        ("visualizer", "可视化总开关", "彩色点线；Ctrl+V 随时开关", False),
-        ("vis_layer_a", "A 路点 / 连线", "关掉后不画 A 层（导出仍全量）", True),
-        ("vis_layer_b", "B 人类蹲守", "关掉后不画 B 层", True),
-        ("vis_layer_c", "C 幽灵守区", "关掉后不画 C 层", True),
-        ("vis_layer_d", "D 出生点 / 补给箱", "关掉后不画 D 层", True),
-        ("vis_layer_e", "E 模式", "关掉后不画 E 层", True),
-        ("navmesh_show", "F 可走面", "NavMeshGraph 三角网线框（人机真正在上面跑的面）；Ctrl+Shift+6 随时开关；与可视化总开关无关", True),
-    ]),
+    # 2026-11-19：文字标签控件已删除；这一页保留游戏内热键速查。
+    ("快捷键", "游戏内热键速查（屏幕不再显示数据面板和文字标签）", []),
     ("手动", "只有你按键时才发生；下面「自动铺设」是进图时自动补，不按键也会跑", [
         ("editor", "允许游戏内编辑", "Ctrl+1 进入编辑模式，放蹲守点/改路点", True),
         ("collect_only", "只读采集", "只导出路点，绝不创建任何游戏对象", False),
@@ -444,28 +443,47 @@ GROUPS = [
     ]),
 ]
 
-# ---- 「状态面板」页的控件编排 -----------------------------------------
-# 五层开关排成 2 列；文字标签是三态，单独一张卡（GROUPS 只认 bool）。
-LAYER_KEYS = ("vis_layer_a", "vis_layer_b", "vis_layer_c", "vis_layer_d",
-              "vis_layer_e", "navmesh_show")
-LABEL_VALUES = ["关", "近距 35 m", "全部"]
-LABEL_DEFAULT = 0
+# 「可视化」页各类数据的图例色块：游戏里画成什么颜色（照抄 src/editor.c 的 COL_* 与 vis_draw）。
+# 顺序与 GROUPS 里各项的说明文字一一对应；C 侧改颜色这里要一起改。
+VIS_COLORS = {
+    "vis_nodes": ("#CCE0FF", "#FF8C0D", "#FF261F", "#4073F2"),
+    "vis_crouch": ("#FF261F",),
+    "vis_guard": ("#BF59FF", "#FF8C0D"),
+    "vis_nano": ("#1AFF40", "#1AF2F2"),
+    "vis_born": ("#2666FF", "#FF261F", "#B3B3B3"),
+    "vis_supply": ("#FFD933", "#FF59B3", "#1AF2F2"),
+    "vis_jump": ("#FFE00D",),
+    "vis_tag": ("#FF8C0D",),
+    "navmesh_show": ("#26FF8C",),
+}
 
-# 文案照抄 src/editor.c 的 hud_refresh()：C 侧改了这里也要改。
-# tools/test_console_switches.py 会逐行核对 HUD_KEYS，忘了同步会直接报错。
+# 游戏内热键速查（控制台专用文档；游戏里不再显示这块）。按功能分组，组间空一行。
 HUD_KEYS = (
-    "Ctrl+V 可视化总开关   Ctrl+Shift+1..6  A路点/B人类/C幽灵/D出生/箱/E模式/F可走面   Ctrl+Shift+L 文字标签 关/近距/全部\n"
-    "Ctrl+E 手动导出   Ctrl+M 日志行开关   Ctrl+H 本面板开关   Delete 删除准星最近标记   Ctrl+0 显示/隐藏已放标记\n"
-    "Ctrl+1 编辑模式  Ctrl+2 蹲守点  Ctrl+4 幽灵守区  Ctrl+5 撤销  Ctrl+6 保存  Ctrl+7 重载  Ctrl+8 阵营  Ctrl+9 状态\n"
-    "路点编辑: Ctrl+Shift+A 选A点  Ctrl+Shift+N 加点  Ctrl+Shift+J A↔点 连/断  Ctrl+Shift+D 禁用点  Ctrl+Shift+Z 撤销  Ctrl+Shift+R 重套用（改完自动存盘）\n"
-    "路点菜单: F2 开关 / 长按 E 备用   1-9 直选   小键盘 8/2 上下   5 确认   0 返回   左键确认 / 右键返回"
+    "【可视化】\n"
+    "Ctrl+V 可视化总开关   Ctrl+Shift+6 可走面\n"
+    "\n"
+    "【导出与采集】\n"
+    "Ctrl+E 手动导出   Ctrl+Shift+X 只读采集（不创建对象）\n"
+    "\n"
+    "【标记】\n"
+    "Delete 删除准星最近标记   Ctrl+0 显示/隐藏已放标记\n"
+    "\n"
+    "【编辑模式】\n"
+    "Ctrl+1 编辑模式   Ctrl+2 放蹲守点   Ctrl+4 建守卫区\n"
+    "Ctrl+5 撤销   Ctrl+6 保存   Ctrl+7 重载   Ctrl+8 阵营   Ctrl+9 状态写日志\n"
+    "\n"
+    "【路点编辑（Ctrl+Shift+字母）】\n"
+    "Ctrl+Shift+A 选A点   Ctrl+Shift+N 加点   Ctrl+Shift+J A↔点 连/断\n"
+    "Ctrl+Shift+D 禁用点   Ctrl+Shift+Z 撤销   Ctrl+Shift+S 手动保存   Ctrl+Shift+R 重套用\n"
+    "\n"
+    "【F2 路点菜单】\n"
+    "F2 开关 / 长按 E 备用\n"
+    "1-9 直选   小键盘 8/2 上下   5 确认   0 返回   左键确认 / 右键返回"
 )
 
 HUD_NOTES = (
-    "· 游戏里面板只留状态数字（节点 / 可走面 / 标记 / 数据来源）；开关状态行和快捷键块默认不显示。\n"
-    "· 本页开关写进 ucf_mod.json，下次启动生效；游戏内热键仍可临时改（Ctrl+V / Ctrl+Shift+1..6 / "
-    "Ctrl+Shift+L / Ctrl+M / Ctrl+H），但只对本次进程有效、画面不再回显状态。\n"
-    "· 文字标签「近距」= 35 m；只读采集模式不创建 HUD，没有路点图的图也不画。"
+    "· 游戏内数据面板和文字标签已删除；节点/守区等计数看 ucf_mod.log 里的 [vis] 行，"
+    "或控制台「上次运行」日志框。"
 )
 
 
@@ -627,74 +645,89 @@ class App(ctk.CTk):
             feats = {}
             self.cfg["features"] = feats
         self.feats = feats
+        # 2026-11-19：可视化改成逐类开关；HUD、文字标签都已从游戏里删除
+        for _old in ("vis_lists", "vis_layer_a", "vis_layer_b", "vis_layer_c", "vis_layer_d",
+                     "hud", "hud_states", "hud_keys", "hud_log", "vis_labels"):
+            feats.pop(_old, None)
         # 控制台自己的界面记忆（上次停在哪个页签）：只给控制台读，插件不认这一节
         ui = self.cfg.get("ui")
         if not isinstance(ui, dict):
             ui = {}
             self.cfg["ui"] = ui
         self.ui = ui
-        # 文字标签是三态（0 关 / 1 近距 / 2 全部），不在 self.vars 的 bool 表里
-        lm = feats.get("vis_labels", LABEL_DEFAULT)
-        try:
-            lm = int(lm)
-        except (TypeError, ValueError):
-            lm = LABEL_DEFAULT
-        self.label_mode = lm if lm in (0, 1, 2) else LABEL_DEFAULT
 
         self.vars = {}
         self.widgets = []
 
-        head = ctk.CTkFrame(self, fg_color="transparent")
-        head.pack(fill="x", padx=18, pady=(16, 4))
-        ctk.CTkLabel(head, text="UCF 控制台", font=FONT_B).pack(side="left")
+        self.head = ctk.CTkFrame(self, fg_color="transparent")
+        self.head.pack(fill="x", padx=18, pady=(16, 4))
+        ctk.CTkLabel(self.head, text="UCF 控制台", font=FONT_B).pack(side="left")
+        # 2026-11-19 用户要求：右上角加「窗口置顶」勾选 + 折叠成小条的开关。
+        self.btn_fold = ctk.CTkButton(self.head, text="折叠", width=52, height=24,
+                                      font=FONT_S, fg_color="#3a3f47", hover_color="#4a5058",
+                                      command=self.toggle_fold)
+        self.btn_fold.pack(side="right", padx=(10, 0))
         self.master_var = tk.BooleanVar(value=bool(self.cfg.get("enabled", True)))
-        ctk.CTkSwitch(head, text="插件总开关", variable=self.master_var,
+        ctk.CTkSwitch(self.head, text="插件总开关", variable=self.master_var,
                       font=FONT, progress_color="#2f9e44",
                       command=self.on_master).pack(side="right")
+        self.topmost_var = tk.BooleanVar(value=bool(self.ui.get("topmost", False)))
+        ctk.CTkCheckBox(self.head, text="窗口置顶", variable=self.topmost_var, font=FONT_S,
+                        checkbox_width=20, checkbox_height=20,
+                        command=self.on_topmost).pack(side="right", padx=(0, 14))
+        self._folded = False
+        self._geom_saved = ""
+        try:
+            self.attributes("-topmost", bool(self.topmost_var.get()))
+        except tk.TclError:
+            pass
 
-        ctk.CTkLabel(
+        self.intro = ctk.CTkLabel(
             self,
             text="只有从本窗口「开始游戏」才会加载 mod；直接双击 UnityCrossFire.exe 是原版。\n"
                  "开关改完存进 ucf_mod.json，下次启动生效（游戏开着时要重开）。\n"
                  "测试包模式、四版数据的路径 / 部署 / 还原 / 校验：切到「测试数据」「数据」页。\n"
                  "路点数据只读查看在工作台；现场编辑在「人机路点」页（游戏内 F2 菜单）。",
-            font=FONT_S, text_color="#9aa0a6", justify="left").pack(anchor="w", padx=20)
+            font=FONT_S, text_color="#9aa0a6", justify="left")
+        self.intro.pack(anchor="w", padx=20)
 
         # ---- 按钮 / 状态：先按底边占位，窗口再矮也不会被页签挤没 ----
-        bar = ctk.CTkFrame(self, fg_color="transparent")
-        bar.pack(side="bottom", fill="x", padx=14, pady=(0, 12))
-        self.btn_game = ctk.CTkButton(bar, text="开始游戏（加载 mod）", font=FONT, height=42,
+        self.bar = ctk.CTkFrame(self, fg_color="transparent")
+        self.bar.pack(side="bottom", fill="x", padx=14, pady=(0, 12))
+        self.btn_game = ctk.CTkButton(self.bar, text="开始游戏（加载 mod）", font=FONT, height=42,
                                       fg_color="#2f6fdb", hover_color="#255bb4",
                                       command=self.launch_game)
         self.btn_game.pack(side="left", fill="x", expand=True, padx=(0, 6))
-        ctk.CTkButton(bar, text="路点工作台（查看）", font=FONT, height=42,
+        ctk.CTkButton(self.bar, text="路点工作台（查看）", font=FONT, height=42,
                       fg_color="#3a3f47", hover_color="#4a5058",
                       command=self.open_workbench).pack(side="left", fill="x", expand=True, padx=(6, 0))
 
-        stat = ctk.CTkFrame(self, corner_radius=10)
-        stat.pack(side="bottom", fill="x", padx=14, pady=(0, 8))
-        top = ctk.CTkFrame(stat, fg_color="transparent")
+        self.stat = ctk.CTkFrame(self, corner_radius=10)
+        self.stat.pack(side="bottom", fill="x", padx=14, pady=(0, 8))
+        top = ctk.CTkFrame(self.stat, fg_color="transparent")
         top.pack(fill="x", padx=14, pady=(10, 2))
         ctk.CTkLabel(top, text="上次运行", font=("Microsoft YaHei UI", 14, "bold")).pack(side="left")
         self.dot = ctk.CTkLabel(top, text="", font=FONT_S, text_color="#9aa0a6")
         self.dot.pack(side="right")
-        self.logbox = ctk.CTkTextbox(stat, height=104, font=("Consolas", 11),
+        self.logbox = ctk.CTkTextbox(self.stat, height=104, font=("Consolas", 11),
                                      fg_color="#141414", activate_scrollbars=True)
         self.logbox.pack(fill="x", padx=14, pady=(2, 12))
 
-        # 地图 / 查看 / 状态面板 / 手动 / 测试数据 / 数据 / 车测 —— 全部页签切换，上方不再压一块常驻面板。
+        # 地图 / 可视化 / 导出 / 手动 / 测试数据 / 数据 / 车测 —— 全部页签切换，上方不再压一块常驻面板。
         self.tabview = ctk.CTkTabview(self, corner_radius=10, command=self.on_tab)
         self.tabview.pack(fill="both", expand=True, padx=14, pady=(8, 4))
         self.tab_titles = []
         for title, hint, items in GROUPS:
             self.tab_titles.append(title)
             tab = self.tabview.add(title)
-            if title == "状态面板":
-                self.build_hud_tab(tab, hint, items)    # 开关 + 面板长什么样 + Ctrl+H 快捷键
-            elif title == "导出":
+            if title == "导出":
                 self.build_export_tab(tab, hint, items)  # 总开关 + 六项勾选（一行多个）+ 最近导出
+            elif title == "快捷键":
+                self.build_hotkey_tab(tab, hint)          # 热键速查（游戏内已不显示）
             elif title == "手动":
                 self.build_manual_tab(tab, hint, items)  # 按键开关 + 自动铺设（进图自动补）
+            elif title == "可视化":
+                self.build_vis_tab(tab, hint, items)     # 总开关 + 九类数据（勾选）
             else:
                 self.build_group_tab(tab, hint, items)
         # 人机路点必须排在「测试数据」前面：页签顺序 = 添加顺序。
@@ -717,7 +750,7 @@ class App(ctk.CTk):
 
     # ---- 页签内容：一组开关 = 一页 ----
     def switch_card(self, parent, key, label, desc, default):
-        r"""一个开关 + 一行说明；「查看」「状态面板」等页共用这份样式。"""
+        r"""一个开关 + 一行说明；「可视化」「手动」等页共用这份样式。"""
         box = ctk.CTkFrame(parent, corner_radius=8)
         box.pack(fill="x", padx=10, pady=(8, 0))
         var = tk.BooleanVar(value=bool(self.feats.get(key, default)))
@@ -739,6 +772,80 @@ class App(ctk.CTk):
             fill="x", padx=12, pady=(8, 2))
         for key, label, desc, default in items:
             self.switch_card(body, key, label, desc, default)
+
+    # ---- 「可视化」页：总开关 + 九类数据（勾选）----
+    # 2026-11-19 用户要求：一颗开关同时管「读不读」和「画不画」；总开关排最上面。
+    def build_vis_tab(self, tab, hint, items):
+        body = ctk.CTkScrollableFrame(tab, corner_radius=0, fg_color="transparent")
+        body.pack(fill="both", expand=True, padx=2, pady=2)
+        ctk.CTkLabel(body, text=hint, font=FONT_S, text_color="#9aa0a6",
+                     anchor="w", justify="left", wraplength=620).pack(
+            fill="x", padx=12, pady=(8, 2))
+        by = {k: (label, desc, default) for k, label, desc, default in items}
+        if "visualizer" in by:
+            self.switch_card(body, "visualizer", *by["visualizer"])
+        keys = [k for k in by if k != "visualizer"]
+        box = ctk.CTkFrame(body, corner_radius=8)
+        box.pack(fill="x", padx=10, pady=(8, 0))
+        ctk.CTkLabel(box, text="画哪些数据", font=("Microsoft YaHei UI", 12, "bold"),
+                     anchor="w").pack(fill="x", padx=12, pady=(8, 2))
+        grid = ctk.CTkFrame(box, fg_color="transparent")
+        grid.pack(fill="x", padx=12, pady=(2, 4))
+        # 2026-11-19 用户要求：并列展示；英文类名太长就在勾选项里换行，不排成一行一个。
+        # CTkCheckBox 的文字不会换行，所以勾选框留空，文字用旁边可换行的 CTkLabel 画。
+        txts, legends = [], []
+        for idx, key in enumerate(keys):
+            label, desc, default = by[key]
+            var = tk.BooleanVar(value=bool(self.feats.get(key, default)))
+            self.vars[key] = var
+            cell = ctk.CTkFrame(grid, fg_color="transparent")
+            cell.grid(row=idx // 3, column=idx % 3, sticky="w", padx=(0, 18), pady=6)
+            row = ctk.CTkFrame(cell, fg_color="transparent")
+            row.pack(anchor="w")
+            cb = ctk.CTkCheckBox(row, text="", width=24, variable=var,
+                                 command=lambda k=key: self.on_toggle(k))
+            cb.pack(side="left", anchor="n")
+            txt = ctk.CTkLabel(row, text=label, font=FONT_S, anchor="w",
+                               justify="left", wraplength=200, cursor="hand2")
+            txt.pack(side="left", padx=(4, 0), anchor="n")
+            txt.bind("<Button-1>", lambda _e, c=cb: c.toggle())
+            txts.append(txt)
+            legends.append(self.vis_legend_row(cell, key, desc))
+        for c in range(3):
+            grid.grid_columnconfigure(c, weight=1)
+        self.after(120, lambda: self.wrap_cells(body, txts, legends))
+        ctk.CTkLabel(box, text="勾上 = 进图时读这一类并画出来；关掉 = 不读也不画（少一次可能出事的读取）。\n"
+                              "只影响画面，不影响 Ctrl+E 导出（导出读什么由「导出」页那 6 项决定），"
+                              "也不改动游戏本身。改完重启游戏生效。",
+                     font=FONT_S, text_color="#9aa0a6", anchor="w",
+                     justify="left", wraplength=590).pack(
+            fill="x", padx=12, pady=(8, 10))
+
+    def wrap_cells(self, body, txts, legends):
+        r"""按滚动区可见宽度给勾选项文字定换行；量的是画布，不是会被长文字撑大的内层。"""
+        w = body._parent_canvas.winfo_width()
+        if w <= 1:                                  # 还没显示出来，下一拍再量
+            self.after(120, lambda: self.wrap_cells(body, txts, legends))
+            return
+        # 逻辑宽度扣掉：卡片左右 10、网格左右 12、滚动条余量 6；再按 3 列分
+        logical = w / self._get_window_scaling() - (10 * 2 + 12 * 2 + 6)
+        textw = max(120, int(logical / 3 - 18 - 30 - 12))  # 18 列距 / 30 勾选框 / 12 余量
+        for txt in txts:
+            txt.configure(wraplength=textw)
+        for lg in legends:                          # 图例前面还有缩进和色块，留 30
+            lg.configure(wraplength=max(120, textw - 30))
+
+    def vis_legend_row(self, parent, key, text):
+        r"""图例行：色块 + 游戏里的形状说明（颜色和形状照抄 editor.c 的 vis_draw）。"""
+        row = ctk.CTkFrame(parent, fg_color="transparent")
+        row.pack(anchor="w", padx=(24, 0), pady=(2, 0))
+        for c in VIS_COLORS.get(key, ()):
+            ctk.CTkFrame(row, width=12, height=12, corner_radius=2,
+                         fg_color=c).pack(side="left", padx=(0, 3))
+        lbl = ctk.CTkLabel(row, text=text, font=FONT_S, text_color="#9aa0a6",
+                           anchor="w", justify="left", wraplength=230)
+        lbl.pack(side="left")
+        return lbl
 
     # ---- 「手动」页：按键开关 + 自动铺设（进图时自动补，不按键也跑） ----
     def build_manual_tab(self, tab, hint, items):
@@ -867,7 +974,13 @@ class App(ctk.CTk):
             return
         self.refresh_export_info()
 
-    # ---- 「状态面板」页：开关 + 面板内容 + Ctrl+H 快捷键（只读示意）----
+    # ---- 小标题（车测页用） ----
+    def section_title(self, parent, text):
+        ctk.CTkLabel(parent, text=text, font=("Microsoft YaHei UI", 12, "bold"),
+                     text_color="#c9d1d9", anchor="w").pack(
+            fill="x", padx=14, pady=(12, 0))
+
+    # ---- 「快捷键」页：只读速查表 ----
     def text_card(self, parent, title, text, height):
         r"""深色只读文本框（和「上次运行」日志同一套配色），插完内容立刻锁死。"""
         box = ctk.CTkFrame(parent, corner_radius=8)
@@ -881,73 +994,13 @@ class App(ctk.CTk):
         tb.configure(state="disabled")
         return tb
 
-    # ---- 「状态面板」页：游戏里的开关全部搬到这里 ----
-    def section_title(self, parent, text):
-        ctk.CTkLabel(parent, text=text, font=("Microsoft YaHei UI", 12, "bold"),
-                     text_color="#c9d1d9", anchor="w").pack(
-            fill="x", padx=14, pady=(12, 0))
-
-    def multi_switch_card(self, parent, keys, by, note=""):
-        r"""一张卡里排 2 列开关（显示内容 / 可视化层）：只留标题，末尾一行小字。"""
-        box = ctk.CTkFrame(parent, corner_radius=8)
-        box.pack(fill="x", padx=10, pady=(6, 0))
-        for idx, key in enumerate(keys):
-            label, _desc, default = by[key]
-            var = tk.BooleanVar(value=bool(self.feats.get(key, default)))
-            self.vars[key] = var
-            ctk.CTkSwitch(box, text=label, variable=var, font=FONT_S,
-                          progress_color="#2f9e44",
-                          command=lambda k=key: self.on_toggle(k)).grid(
-                row=idx // 2, column=idx % 2, sticky="w",
-                padx=(12, 8), pady=(10 if idx < 2 else 6, 0))
-        for c in range(2):
-            box.grid_columnconfigure(c, weight=1)
-        last = (len(keys) + 1) // 2
-        if note:
-            ctk.CTkLabel(box, text=note, font=FONT_S, text_color="#9aa0a6",
-                         anchor="w", justify="left", wraplength=590).grid(
-                row=last, column=0, columnspan=2, sticky="w",
-                padx=12, pady=(6, 10))
-        else:
-            ctk.CTkLabel(box, text="", height=4).grid(
-                row=last, column=0, columnspan=2)
-        return box
-
-    def label_card(self, parent):
-        r"""文字标签三态：关 / 近距 35 m / 全部。GROUPS 只认 bool，这里单独做一张卡。"""
-        box = ctk.CTkFrame(parent, corner_radius=8)
-        box.pack(fill="x", padx=10, pady=(6, 0))
-        seg = ctk.CTkSegmentedButton(box, values=LABEL_VALUES, font=FONT_S,
-                                     command=self.on_labels)
-        seg.pack(anchor="w", padx=12, pady=(10, 10))
-        seg.set(LABEL_VALUES[self.label_mode])
-        self.seg_labels = seg
-
-    def build_hud_tab(self, tab, hint, items):
-        r"""状态面板独立成页：开关全在控制台，游戏里只留状态数字（用户 2026-11-17 要求）。"""
+    def build_hotkey_tab(self, tab, hint):
         body = ctk.CTkScrollableFrame(tab, corner_radius=0, fg_color="transparent")
         body.pack(fill="both", expand=True, padx=2, pady=2)
         ctk.CTkLabel(body, text=hint, font=FONT_S, text_color="#9aa0a6",
                      anchor="w", justify="left", wraplength=620).pack(
             fill="x", padx=12, pady=(8, 2))
-        by = {k: (label, desc, default) for k, label, desc, default in items}
-
-        self.section_title(body, "面板")
-        self.multi_switch_card(
-            body, ("hud", "hud_states", "hud_keys", "hud_log"), by,
-            note="「显示状态面板」关掉后进图不建（Ctrl+H 仍能叫出）；状态行 / 快捷键块默认不显示，"
-                 "导出与最近日志行默认显示。")
-
-        self.section_title(body, "可视化（进图时画什么）")
-        self.multi_switch_card(
-            body, ("visualizer",) + LAYER_KEYS, by,
-            note="热键仍可用：Ctrl+V 总开关，Ctrl+Shift+1..6 分层，Ctrl+Shift+L 标签；"
-                 "F 可走面独立于可视化总开关。")
-
-        self.section_title(body, "文字标签")
-        self.label_card(body)
-
-        self.text_card(body, "游戏内热键（面板里默认不显示，仍然可用）", HUD_KEYS, 128)
+        self.text_card(body, "游戏内热键", HUD_KEYS, 330)
         ctk.CTkLabel(body, text=HUD_NOTES, font=FONT_S, text_color="#9aa0a6",
                      anchor="w", justify="left", wraplength=620).pack(
             fill="x", padx=14, pady=(10, 12))
@@ -1194,7 +1247,6 @@ class App(ctk.CTk):
             ("visualizer", "路点 / 边显示（Ctrl+V）", False),
             ("navmesh_show", "可走面线框（Ctrl+Shift+6）", True),
             ("wp_autoground", "加点自动落地", True),
-            ("hud", "显示 HUD", True),
             ("collect_only", "只读采集（不创建对象）", False),
         ]
         for idx, (key, label, default) in enumerate(switches):
@@ -2019,8 +2071,6 @@ class App(ctk.CTk):
             feats[k] = bool(v.get())
         if hasattr(self, "wp_brush"):
             feats["wp_brush"] = str(self.wp_brush)
-        if hasattr(self, "seg_labels"):
-            feats["vis_labels"] = int(self.label_mode)
         if hasattr(self, "seg_mode"):
             self.cfg["pack"] = self.pack_dict()
         try:
@@ -2036,13 +2086,46 @@ class App(ctk.CTk):
     def on_toggle(self, key):
         self.persist(key)
 
-    def on_labels(self, value):
-        r"""文字标签三态：写 vis_labels（0/1/2），不是 bool，单独一条路径。"""
-        self.label_mode = LABEL_VALUES.index(value)
-        self.persist("文字标签")
-
     def on_master(self):
         self.persist("总开关")
+
+    # ---- 窗口置顶 / 折叠成小条 ----------------------------------------
+    def on_topmost(self):
+        r"""窗口置顶：勾上就一直浮在游戏上面；状态记进 ucf_mod.json 的 ui 段。"""
+        on = bool(self.topmost_var.get())
+        self.ui["topmost"] = on
+        self.attributes("-topmost", on)
+        try:
+            save_cfg(self.cfg)
+        except OSError:
+            pass
+
+    def toggle_fold(self):
+        r"""折叠：藏起介绍/页签/日志/底部按钮，窗口缩成只剩标题行的一条；
+        再点「展开」按原尺寸、原位置回来。折叠条宽度按标题行实际内容收窄，不留空档。"""
+        if not self._folded:
+            self._geom_saved = str(self.tk.call("wm", "geometry", self))
+            self._folded = True
+            self.intro.pack_forget()
+            self.tabview.pack_forget()
+            self.stat.pack_forget()
+            self.bar.pack_forget()
+            self.minsize(1, 1)
+            _size, x, y = self._geom_saved.split("+")
+            w = self.head.winfo_reqwidth() + int(self._apply_window_scaling(44))
+            h = self.head.winfo_reqheight() + int(self._apply_window_scaling(30))
+            self.tk.call("wm", "geometry", self, "%dx%d+%s+%s" % (w, h, x, y))
+            self.btn_fold.configure(text="展开")
+        else:
+            self._folded = False
+            # 按原来的 pack 顺序装回去：介绍 → 底栏 → 日志 → 页签
+            self.intro.pack(anchor="w", padx=20)
+            self.bar.pack(side="bottom", fill="x", padx=14, pady=(0, 12))
+            self.stat.pack(side="bottom", fill="x", padx=14, pady=(0, 8))
+            self.tabview.pack(fill="both", expand=True, padx=14, pady=(8, 4))
+            self.minsize(720, 620)
+            self.tk.call("wm", "geometry", self, self._geom_saved)
+            self.btn_fold.configure(text="折叠")
 
     def on_close(self):
         r"""关窗口 = 最后一次落盘：正停在哪个页签、车测输入框里没失焦的数字都不丢。"""

@@ -90,7 +90,7 @@ static int  g_saveWarned;
  *   UCF_PACK=chain_a   读 <插件目录>\packs\chain_a\<指纹>.txt
  *                      （不设 = 读 <插件目录>\nav\<指纹>.txt，即一直以来的正式版）
  *   UCF_FP=n0-...      只有当前场景指纹等于它才套用；别的图整包跳过，不动一个字节
- *   UCF_FPLABEL=...    只用于 HUD/日志显示（图的中文名）
+ *   UCF_FPLABEL=...    只用于日志显示（图的中文名）
  * 包目录固定放在插件目录内：vis / markers / 日志也都挂在 g_dir 下，把 nav 单独指到
  * 工程端会让两套数据混用（导出、读数全乱），所以这里只换最后一级目录。 */
 static char g_navDir[MAX_PATH];   /* 路线数据目录：<dir>\nav 或 <dir>\packs\<包名> */
@@ -98,7 +98,7 @@ static char g_packName[64];       /* 空 = 正式版 */
 static char g_packFp[48];         /* 空 = 不限图 */
 static char g_packFpLabel[64];    /* 只用于显示 */
 static int  g_packSkip;           /* 1 = 当前图不在本次测试清单里 */
-static char g_packStat[224] = "数据 正式版（nav）";   /* HUD 第 5 行 */
+static char g_packStat[224] = "数据 正式版（nav）";   /* 日志里的数据来源一行 */
 
 /* ---- 控制台命令通道（游戏运行中切包 / 重读 / 保存）----------------------
  * 控制台写 <插件目录>\ucf_navcmd.txt，插件每 ~0.5 s 查一次 seq；seq 变了才执行。
@@ -207,10 +207,6 @@ static int g_nedHasA;
 static V3  g_nedA;
 static P   g_pnodeCls, g_connCls;
 
-static P g_hud;          /* UGUI Text component: status panel */
-static P g_hudGo;
-static P g_keys;         /* UGUI Text component: hotkey panel */
-static P g_keysGo;
 static P g_cat;          /* UGUI Text: D-layer category list (left edge) */
 static P g_catGo;
 static P g_menu;         /* UGUI Text: SyPB-style waypoint menu */
@@ -218,7 +214,7 @@ static P g_menuGo;
 static int g_wpMenuOn = 1;      /* cfg: wp_menu */
 static int g_wpMenuOpen;
 static int g_wpMenuSel;
-static int g_wpMenuSub;         /* 0 main 1 types 2 paths 3 areas 4 edit 5 layers */
+static int g_wpMenuSub;         /* 0 main 1 types 2 paths 3 areas 4 edit 5 display */
 static int g_wpMenuSubSel;
 static int g_wpBrush;           /* 0 normal 1 jump 2 crouch 3 guard 4 area 5 tag */
 static int g_wpPath;            /* 0 both 1 A->B 2 B->A */
@@ -375,12 +371,10 @@ static const COL COL_GOLD   = { 1.00f, 0.85f, 0.20f, 1.0f };
 static const COL COL_GRAY   = { 0.70f, 0.70f, 0.70f, 1.0f };
 static const COL COL_NAVM   = { 0.15f, 1.00f, 0.55f, 1.0f };  /* A* 可走面（NavMeshGraph 三角网） */
 
-/* --- 最近日志环形缓冲：游戏里 HUD 直接能看到，不用去翻 ucf_mod.log ------ */
+/* --- 最近日志环形缓冲：崩溃时回显最后几行到 ucf_mod.log ---------------- */
 #define LOG_RING 24
 static char g_ring[LOG_RING][128];
 static int  g_ringN = 0;
-static int  g_logOn = 1;          /* Ctrl+M 开关 */
-static char g_expStat[160];       /* 最近一次导出结果，HUD 单独一行 */
 
 static void log_ring_push(const char* s) {
   int i = g_ringN % LOG_RING, n = 0;
@@ -656,7 +650,7 @@ static void veh_install(void) {
  * 2026-11-17 10:22 / 10:23 / 10:35 三次闪退都落在 GameAssembly.dll+0x1290b1/e1
  * （il2cpp 运行时读 obj->klass，然后 klass 是 0 —— Boehm 回收后的内存是清零的）。
  * 也就是说：有代码在用**已经被 GC 收掉的托管对象**。Boehm 只扫托管堆和线程栈，
- * 不扫 DLL 的 .data，所以 g_matSlot / g_hud / g_keys / g_cat / g_lblComp /
+ * 不扫 DLL 的 .data，所以 g_matSlot / g_cat *
  * g_visObj / g_nmObj 这些 C 静态指针必须自己做成 GC 根。
  *
  * 第一版（10:33）用的是「object[2048] + 一个 gchandle」，但 System.Object 找不到
@@ -1075,7 +1069,7 @@ static P spawn_vis(V3 p, float s, int slot) {
  *   B  Bot_CrouchPos (SpareList_BL/GR), Bot_GuardPos, Bot_GuardArea
  *   C  Bot_NanoGuardArea (SpareAreaList) + Bot_NanoGuardPos
  *   D  MapManager SP_BL / GR / Netural / SupplyBox / RedBox / BlueBox
- *   E  mode state (HUD only)
+ *   E  mode state (log only)
  * ------------------------------------------------------------------------- */
 P navfix_point_graph(void);
 P navfix_add_guard_area(float x, float y, float z);
@@ -1090,14 +1084,6 @@ P navfix_add_guard_area(float x, float y, float z);
  * 2026-11-17：沙漠要塞一进图就闪退（crash dump 显示停在 comp_pos -> UnityPlayer
  * 0x755e86）。这些静态表在换图瞬间还指着上一张图正在销毁的组件，读位置就是野指针。 */
 #define VIS_SCENE_WAIT 90
-
-#define LAY_A 0x01
-#define LAY_B 0x02
-#define LAY_C 0x04
-#define LAY_D 0x08
-#define LAY_E 0x10
-/* A* 可走面（NavMeshGraph 三角网线框）不在 A..E 图层里：
- * 它是独立开关（cfg navmesh_show / Ctrl+Shift+6），可视化关着也能单独显示。 */
 
 #define K_NAREA   1
 #define K_NPOS    2
@@ -1129,19 +1115,14 @@ static int g_tpN;
 
 static P g_visObj[80];
 static int g_visObjN;
-static P g_lblCanvas, g_lblTr;
-static P g_lblComp[VIS_MAXF];
-static unsigned char g_lblHidden[VIS_MAXF];
-static int g_lblShown;
 
-static int g_exporting;            /* 正在导出：忽略图层开关，五层全读，绝不少导数据 */
-static int g_visOn, g_lay = LAY_A | LAY_B | LAY_C | LAY_D | LAY_E, g_lblMode = 0;  /* 0 = no world-space text: it clutters the view */
+static int g_exporting;            /* 正在导出：忽略可视化开关，各类全读，绝不少导数据 */
+static int g_visOn;
 static int g_visDirty, g_visNoMesh;
-static int g_hudOn = 1;           /* cfg: hud —— 状态面板总开关（Ctrl+H 可强行叫出） */
 static int g_editAllow = 1;       /* cfg: editor —— 是否允许进编辑模式 */
 static int g_collectOnly;         /* 只读采集：不建图/不建蹲点/不建守区/不建任何 UI 对象 */
 static int g_exportForce;         /* Ctrl+E 手动导出时绕过“已采过/太小”的过滤 */
-/* Ctrl+E 导出：总开关 + 六类内容（独立于可视化五层；关掉哪类，JSON 里就不读/不写哪类） */
+/* Ctrl+E 导出：总开关 + 六类内容（独立于可视化开关；关掉哪类，JSON 里就不读/不写哪类） */
 static int g_expEnabled = 1;      /* cfg: export_enabled —— 导出总开关 */
 static int g_expNodes = 1;        /* cfg: export_nodes —— 路点 / 连线 */
 static int g_expCrouch = 1;       /* cfg: export_crouch —— 人类蹲守点 */
@@ -1151,25 +1132,33 @@ static int g_expSpawn = 1;        /* cfg: export_spawn —— 出生点 / 补给
 static int g_expTags = 1;         /* cfg: export_tags —— 跳点 / 标签区 */
 static int g_nmVert, g_nmTri;     /* 本次导出的 NavMeshGraph 顶点/三角形数 */
 static int g_nmShow = 1;          /* cfg: navmesh_show —— 画不画 A* 可走面线框 */
-static int g_visLists = 1;        /* cfg: vis_lists —— 读不读游戏静态组件表（崩溃兜底开关） */
-static int g_nmWireTri, g_nmWireVert;  /* 可走面当前三角形/顶点数（HUD 显示） */
-static P   g_nmObj[16];           /* 可走面自己的网格对象（和可视化的 5 层分开） */
+/* cfg: vis_* —— 每一类一个开关，同时决定「读不读」和「画不画」。
+ * 「名单」= 游戏加载场景时登记出来、一直挂在类上的静态 List，不是实时算出来的；
+ * 换图瞬间它们还指着上一张图正在销毁的组件，读位置就是野指针（2026-11-17 沙漠要塞
+ * 进图闪退就是这么死的）。哪一类出问题就单独关哪一类。 */
+static int g_visNodes  = 1;       /* PointGraph 路点 / 连线（A* 图，不是名单） */
+static int g_visNano   = 1;       /* SpareAreaList：幽灵守区 + 幽灵守点 */
+static int g_visCrouch = 1;       /* SpareList_BL/GR：人类蹲守点（蓝/红） */
+static int g_visGuard  = 1;       /* Bot_GuardArea + Bot_GuardPos：守卫区 / 守卫点 */
+static int g_visBorn   = 1;       /* MapManager：幽灵出生 / 保卫者出生 */
+static int g_visSupply = 1;       /* MapManager：中立点 / 补给箱 / 红箱 / 蓝箱 */
+static int g_visJump   = 1;       /* Bot_JumpLink：跳点（FindObjectsOfType，不是名单） */
+static int g_visTag    = 1;       /* PointNodeTagModifier：标签区（同上） */
+static int g_nmWireTri, g_nmWireVert;  /* 可走面当前三角形/顶点数（日志显示） */
+static P   g_nmObj[16];           /* 可走面自己的网格对象（和可视化对象分开） */
 static int g_nmObjN;
 static int g_nmDirty = 1;         /* 换图/开关变化后要重建 */
 static int g_sceneAge;            /* 进图后过了多少帧（VIS_SCENE_WAIT 之前不碰游戏组件表） */
 static int g_sceneReadyOnce;      /* 本张图已经稳定过一次 */
 
 static P   g_trKlass;             /* Transform 的 il2cpp 类：comp_pos 用它挡掉「不是 Transform」的指针 */
-static int g_badTr;               /* comp_pos 拦下的坏指针个数（日志/HUD 可看） */
+static int g_badTr;               /* comp_pos 拦下的坏指针个数（日志可看） */
 static char g_nmFile[128];        /* 导航网格二进制文件名 */
 static unsigned long long nm_seenFp;  /* 已落盘的导航网格指纹 */
 static int nm_seen;
 static int g_cArea, g_cPos, g_cCrouch, g_cSpawn, g_cJump, g_cTag, g_cGuard;
-static int g_helpOn;              /* cfg: hud_keys —— 快捷键块默认不显示（Ctrl+H 临时开/关） */
-static int g_hudStates;           /* cfg: hud_states —— HUD 第一行（各开关状态）默认不显示 */
-
-static void hud_refresh(void);
-static void hud_reset(void);
+static void overlay_refresh(void);
+static void overlay_reset(void);
 static void nm_tick(void);           /* A* 可走面：按需重建（定义在 nm_dump 之后） */
 static void nm_toggle(void);
 static void nm_walk(int draw);       /* 只统计 = 0 / 画 = 1 */
@@ -1347,138 +1336,6 @@ static void draw_vf(int kind, int slot, int wire, float sx, float sy, float sz) 
     c++;
   }
   if (c) vis_flush_mesh("vis_layer", slot, c);
-}
-
-/* --- labels (lazy UGUI Text, moved from the main-thread tick) ----------- */
-static int vis_canvas_init(void) {
-  P go, comp;
-  if (g_lblCanvas) return 1;
-  if (!g_textType || !g_canvasType || !g_guiFont) return 0;
-  go = new_go("UCF_VIS_LABELS");
-  if (!go) return 0;
-  comp = ((addcomp_t)RVA(R_ADDCOMP))(go, g_canvasType, 0);
-  if (!comp) return 0;
-  ((set_int1_t)RVA(R_CANVAS_MODE))(comp, 0, 0);          /* ScreenSpaceOverlay */
-  ((set_int1_t)RVA(R_CANVAS_SORT))(comp, 31000, 0);
-  g_lblCanvas = go;
-  root_put(go);
-  g_lblTr = get_tr(go);
-  return 1;
-}
-
-static P vis_label_make(int i, const COL* c) {
-  P go, comp, tr;
-  V2 amin = { 0.0f, 0.0f }, amax = { 0.0f, 0.0f }, piv = { 0.5f, 0.5f };
-  V2 ap = { -9999.0f, -9999.0f }, sz = { 300.0f, 26.0f };
-  if (!vis_canvas_init()) return 0;
-  go = new_go("UCF_VLBL");
-  if (!go) return 0;
-  comp = ((addcomp_t)RVA(R_ADDCOMP))(go, g_textType, 0);
-  if (!comp) return 0;
-  tr = get_tr(go);
-  if (g_lblTr && tr) ((set_parent_t)RVA(R_SET_PARENT))(tr, g_lblTr, 0, 0);
-  ((set_v2_t)RVA(R_RT_AMIN))(tr, amin, 0);
-  ((set_v2_t)RVA(R_RT_AMAX))(tr, amax, 0);
-  ((set_v2_t)RVA(R_RT_PIVOT))(tr, piv, 0);
-  ((set_v2_t)RVA(R_RT_APOS))(tr, ap, 0);
-  ((set_v2_t)RVA(R_RT_SDELTA))(tr, sz, 0);
-  ((set_font_t)RVA(R_TEXT_SETFONT))(comp, g_guiFont, 0);
-  ((set_int1_t)RVA(R_TEXT_SETSIZE))(comp, 12, 0);
-  ((set_int1_t)RVA(R_TEXT_ALIGN))(comp, 4, 0);           /* MiddleCenter */
-  ((set_int1_t)RVA(R_TEXT_HOVER))(comp, 1, 0);
-  ((set_int1_t)RVA(R_TEXT_VOVER))(comp, 1, 0);
-  ((set_int1_t)RVA(R_GRAPHIC_RAY))(comp, 0, 0);
-  ((set_col_t)RVA(R_GRAPHIC_COL))(comp, *c, 0);
-  (void)i;
-  return comp;
-}
-
-static const COL* label_col(int kind, int aux) {
-  switch (kind) {
-    case K_NAREA:  return &COL_POS;
-    case K_NPOS:   return &COL_CYAN;
-    case K_CROUCH: return &COL_CROUCH;
-    case K_GUARD:  return &COL_NODE1;
-    case K_GAREA:  return &COL_PURPLE;
-    case K_SPAWN:
-      switch (aux) {
-        case 0:  return &COL_AREA;    /* 幽灵出生   */
-        case 1:  return &COL_CROUCH;  /* 保卫者出生 */
-        case 2:  return &COL_GRAY;    /* 中立点     */
-        case 3:  return &COL_GOLD;    /* 普通补给箱 */
-        case 4:  return &COL_PINK;    /* 红色补给箱 */
-        case 5:  return &COL_CYAN;    /* 蓝色补给箱 */
-        default: return &COL_GOLD;
-      }
-    case K_JUMP:   return &COL_JUMP;
-    case K_TAG:    return &COL_NODE1;
-    default:       return &COL_WHITE;
-  }
-}
-
-static void vis_label_build(int i) {
-  char buf[160];
-  P comp;
-  VF* f = &g_vf[i];
-  if (f->kind == K_NPOS) sprintf(buf, "%s#%d\n%.1f,%.1f,%.1f\nsafe=%d", f->name, i, f->p.x, f->p.y, f->p.z, f->aux);
-  else if (f->kind == K_TAG) sprintf(buf, "%s#%d\n%.1f,%.1f,%.1f\ntag=%d", f->name, i, f->p.x, f->p.y, f->p.z, f->aux);
-  else sprintf(buf, "%s#%d\n%.1f,%.1f,%.1f", f->name, i, f->p.x, f->p.y, f->p.z);
-  comp = vis_label_make(i, label_col(f->kind, f->aux));
-  if (!comp) return;
-  ((set_txt_t)RVA(R_TEXT_SETTEXT))(comp, x_string_new(buf), 0);
-  g_lblComp[i] = comp;
-  root_put(comp);
-  g_lblHidden[i] = 1;
-}
-
-static void vis_label_hide(int i) {
-  V2 v = { -9999.0f, -9999.0f };
-  P tr;
-  if (!g_lblComp[i] || g_lblHidden[i]) return;
-  tr = comp_tr(g_lblComp[i]);
-  if (!tr) return;
-  ((set_v2_t)RVA(R_RT_APOS))(tr, v, 0);
-  g_lblHidden[i] = 1;
-}
-
-static void vis_label_tick(void) {
-  P cam, ctr;
-  V3 cp;
-  int i, shown = 0;
-  if (!g_visOn || g_lblMode == 0 || !g_vfN) return;
-  cam = ((cam_main_t)RVA(R_CAM_MAIN))(0);
-  if (!uobj_live(cam)) return;
-  ctr = get_tr(((get_go_t)RVA(R_GETGO))(cam, 0));
-  if (!ctr) return;
-  ((get_pos_t)RVA(R_GET_POS_INJ))(ctr, &cp, 0);
-  for (i = 0; i < g_vfN; i++) {
-    float dx = g_vf[i].p.x - cp.x, dy = g_vf[i].p.y - cp.y, dz = g_vf[i].p.z - cp.z;
-    float d2 = dx * dx + dy * dy + dz * dz;
-    float rng = (g_lblMode == 1) ? 35.0f : 400.0f;
-    V3 wp, sp;
-    if (d2 > rng * rng) { vis_label_hide(i); continue; }
-    if (!g_lblComp[i]) {
-      vis_label_build(i);
-      if (!g_lblComp[i]) continue;
-    }
-    wp = g_vf[i].p;
-    wp.y += 0.6f;
-    sp = ((w2s2_t)RVA(R_W2S))(cam, wp, 0);
-    if (sp.z <= 0.1f || sp.x < -200.0f || sp.y < -100.0f || sp.x > 6000.0f || sp.y > 4000.0f) {
-      vis_label_hide(i);
-      continue;
-    }
-    {
-      V2 v;
-      P tr = comp_tr(g_lblComp[i]);
-      if (!tr) continue;
-      v.x = sp.x; v.y = sp.y;
-      ((set_v2_t)RVA(R_RT_APOS))(tr, v, 0);
-    }
-    g_lblHidden[i] = 0;
-    shown++;
-  }
-  g_lblShown = shown;
 }
 
 /* --- readers ------------------------------------------------------------ */
@@ -1741,7 +1598,7 @@ static int g_navBadNode, g_navBadConn;   /* 读图时发现的坏节点/坏连�
 static void read_nav(void) {
   P pg, arr;
   int n, i;
-  if (!(g_lay & LAY_A) && !g_exporting) return;   /* 导出时忽略图层开关 */
+  if (!g_visNodes && !g_exporting) return;        /* 导出时忽略可视化开关 */
   pg = navfix_point_graph();
   if (!pg) { miss("pointgraph"); return; }
   if (!mem_ok(pg, 0xF0)) { miss("badgraph"); return; }
@@ -1791,7 +1648,7 @@ static void read_nano(void) {
   P l, items, aptr[VIS_MAXF];
   V3 apos[VIS_MAXF];
   int n, an = 0, i;
-  if ((!(g_lay & LAY_C) && !g_exporting) || !g_areaCls) return;
+  if ((!g_visNano && !g_exporting) || !g_areaCls) return;
   l = static_obj(g_areaCls, "SpareAreaList");
   if (!l) { miss("SpareAreaList"); return; }
   n = list_n(l);
@@ -1883,7 +1740,7 @@ static void read_crouch(void) {
   static const char* fld[2] = { "SpareList_BL", "SpareList_GR" };
   static const char* nm[2] = { "蹲守点BL", "蹲守点GR" };
   int k;
-  if ((!(g_lay & LAY_B) && !g_exporting) || !g_crouchCls) return;
+  if ((!g_visCrouch && !g_exporting) || !g_crouchCls) return;
   for (k = 0; k < 2; k++) {
     P l = static_obj(g_crouchCls, fld[k]);
     int n = list_n(l), i;
@@ -1924,7 +1781,7 @@ static void read_typed(P type, P cls, int kind, const char* nm, int skip_crouch)
 }
 
 static void read_guardareas(void) {
-  if (!(g_lay & LAY_B) && !g_exporting) return;
+  if (!g_visGuard && !g_exporting) return;
   read_typed(g_gareaType, g_gareaCls, K_GAREA, "守卫区域", 0);
 }
 
@@ -1933,12 +1790,18 @@ static void read_spawns(void) {
   static const int off[6] = { 0x10, 0x14, 0x18, 0x1C, 0x20, 0x24 };
   P mm = 0;
   int k;
-  if (!(g_lay & LAY_D) && !g_exporting) return;
+  if (!g_visBorn && !g_visSupply && !g_exporting) return;
   if (g_mmInstField) x_field_static_get_value(g_mmInstField, &mm);
   if (!uobj_live(mm)) { miss("MapManager"); return; }
   for (k = 0; k < 6; k++) {
-    P arr = *(P*)((char*)mm + off[k]);
+    P arr;
     int n, i;
+    /* cfg: vis_born —— k 0..2 幽灵出生 / 保卫者出生 / 中立点；
+     * cfg: vis_supply —— k 3..5 补给箱 / 红箱 / 蓝箱。两类各自管理：
+     * 关掉哪一类，对应的数组都不读（连同 mem_ok 校验一起跳过）。
+     * 导出路径（collect_read）不受这些开关影响：g_exporting 时不看它们。 */
+    if (!g_exporting && (k <= 2 ? !g_visBorn : !g_visSupply)) continue;
+    arr = *(P*)((char*)mm + off[k]);
     if (!arr || !mem_ok(arr, 0x10)) { miss(nm[k]); continue; }
     n = *(int*)((char*)arr + 0x0C);
     if (n < 0) n = 0;
@@ -1955,7 +1818,7 @@ static void read_spawns(void) {
 static void read_jump(void) {
   P arr;
   int n, i;
-  if ((!(g_lay & LAY_A) && !g_exporting) || !g_jumpType) return;
+  if ((!g_visJump && !g_exporting) || !g_jumpType) return;
   arr = ((find_objs_t)RVA(R_FINDOBJS))(g_jumpType, 1, 0);
   if (!arr) return;
   n = *(int*)((char*)arr + 0x0C);
@@ -1986,7 +1849,7 @@ static void read_jump(void) {
 static void read_tags(void) {
   P arr;
   int n, i;
-  if ((!(g_lay & LAY_A) && !g_exporting) || !g_tagType) return;
+  if ((!g_visTag && !g_exporting) || !g_tagType) return;
   arr = ((find_objs_t)RVA(R_FINDOBJS))(g_tagType, 1, 0);
   if (!arr) return;
   n = *(int*)((char*)arr + 0x0C);
@@ -2015,7 +1878,7 @@ static void vis_draw(void) {
   /* create every layer material before the big vertex/index arrays exist, so a
    * GC during those allocations cannot invalidate a material we still need */
   for (i = 1; i <= 15; i++) if (!g_matSlot[i]) mat_for(i);
-  if (g_lay & LAY_A) {
+  if (g_visNodes) {
     for (g = 0; g < 3; g++) {
       int c = 0;
       bs_reset();
@@ -2034,27 +1897,27 @@ static void vis_draw(void) {
     bs_reset();
     for (i = 0; i < g_veN; i++) bs_line(g_vn[g_ve[i].a].p, g_vn[g_ve[i].b].p, 0.05f);
     vis_flush_mesh("vis_edges", 10, g_veN);
-    if (g_jN) {
-      bs_reset();
-      for (i = 0; i < g_jN; i++) bs_line(g_jA[i], g_jB[i], 0.10f);
-      vis_flush_mesh("vis_jump", 4, g_jN);
-    }
-    if (g_tpN) {
-      bs_reset();
-      for (i = 0; i < g_tpN; i++) {
-        V3 h;
-        h.x = 0.45f; h.y = 0.45f; h.z = 0.45f;
-        bs_wbox(g_tp[i], h, 0.06f);
-      }
-      vis_flush_mesh("vis_tags", 7, g_tpN);
-    }
   }
-  if (g_lay & LAY_B) {
-    draw_vf(K_CROUCH, 1, 0, 0.18f, 0.24f, 0.18f);
+  if (g_visJump && g_jN) {
+    bs_reset();
+    for (i = 0; i < g_jN; i++) bs_line(g_jA[i], g_jB[i], 0.10f);
+    vis_flush_mesh("vis_jump", 4, g_jN);
+  }
+  if (g_visTag && g_tpN) {
+    bs_reset();
+    for (i = 0; i < g_tpN; i++) {
+      V3 h;
+      h.x = 0.45f; h.y = 0.45f; h.z = 0.45f;
+      bs_wbox(g_tp[i], h, 0.06f);
+    }
+    vis_flush_mesh("vis_tags", 7, g_tpN);
+  }
+  if (g_visCrouch) draw_vf(K_CROUCH, 1, 0, 0.18f, 0.24f, 0.18f);
+  if (g_visGuard) {
     draw_vf(K_GUARD, 7, 0, 0.26f, 0.32f, 0.26f);
     draw_vf(K_GAREA, 8, 1, 1.8f, 1.3f, 1.8f);
   }
-  if (g_lay & LAY_C) {
+  if (g_visNano) {
     draw_vf(K_NAREA, 2, 1, 2.4f, 1.7f, 2.4f);
     draw_vf(K_NPOS, 6, 0, 0.16f, 0.26f, 0.16f);
     if (g_eN) {
@@ -2068,10 +1931,11 @@ static void vis_draw(void) {
       vis_flush_mesh("vis_nb", 7, g_nN);
     }
   }
-  if (g_lay & LAY_D) {
+  if (g_visBorn || g_visSupply) {
     int k;
     for (k = 0; k < 6; k++) {
       int c = 0, slot = 13;
+      if (k <= 2 ? !g_visBorn : !g_visSupply) continue;
       if (k == 0) slot = 11;
       else if (k == 1) slot = 12;
       else if (k == 2) slot = 13;
@@ -2094,26 +1958,14 @@ static void vis_draw(void) {
 static void vis_show(int on) {
   int i;
   for (i = 0; i < g_visObjN; i++) if (g_visObj[i]) ((set_active_t)RVA(R_SETACTIVE))(g_visObj[i], (unsigned char)on, 0);
-  if (g_lblCanvas) ((set_active_t)RVA(R_SETACTIVE))(g_lblCanvas, (unsigned char)on, 0);
 }
 
 static void vis_clear(void) {
   int i;
-  for (i = 0; i < g_vfN; i++) {
-    if (g_lblComp[i]) {
-      if (uobj_live(g_lblComp[i])) {
-        P go = ((get_go_t)RVA(R_GETGO))(g_lblComp[i], 0);
-        if (uobj_live(go)) ((destroy_t)RVA(R_DESTROY))(go, 0);
-      }
-      g_lblComp[i] = 0;
-      g_lblHidden[i] = 0;
-    }
-  }
   for (i = 0; i < g_visObjN; i++) if (g_visObj[i]) ((destroy_t)RVA(R_DESTROY))(g_visObj[i], 0);
   g_visObjN = 0;
   g_vnN = g_veN = g_vfN = 0;
   g_nN = g_eN = g_jN = g_tpN = 0;
-  g_lblShown = 0;
 }
 
 static void vis_rebuild(void) {
@@ -2121,20 +1973,20 @@ static void vis_rebuild(void) {
   g_cArea = g_cPos = g_cCrouch = g_cSpawn = g_cJump = g_cTag = g_cGuard = 0;
   g_miss[0] = 0;
   read_nav();
-  if (g_visLists) {          /* 关掉它 = 完全不碰游戏自己的组件表（崩溃兜底） */
-    read_nano();
-    read_crouch();
+  if (g_visNano)   read_nano();   else miss("vis_nano=off");
+  if (g_visCrouch) read_crouch(); else miss("vis_crouch=off");
+  if (g_visGuard) {
     read_guardareas();
     read_typed(g_guardType, g_guardCls, K_GUARD, "守卫点", 1);
-    read_spawns();
-  } else {
-    miss("vis_lists=off");
-  }
-  read_jump();
-  read_tags();
+  } else miss("vis_guard=off");
+  if (g_visBorn || g_visSupply) read_spawns();
+  else miss("vis_born/supply=off");
+  /* 跳点 / 标签区走 FindObjectsOfType，不碰静态名单，各有一个自己的开关。 */
+  if (g_visJump) read_jump(); else miss("vis_jump=off");
+  if (g_visTag)  read_tags(); else miss("vis_tag=off");
   vis_draw();
   vis_show(1);
-  elog("vis: nodes=%d edges=%d labels=%d (area=%d pos=%d crouch=%d guard=%d spawn=%d jump=%d tag=%d) badnode=%d badconn=%d badtr=%d missing=[%s]",
+  elog("vis: nodes=%d edges=%d features=%d (area=%d pos=%d crouch=%d guard=%d spawn=%d jump=%d tag=%d) badnode=%d badconn=%d badtr=%d missing=[%s]",
        g_vnN, g_veN, g_vfN, g_cArea, g_cPos, g_cCrouch, g_cGuard, g_cSpawn, g_cJump, g_cTag,
        g_navBadNode, g_navBadConn, g_badTr, g_miss);
   {
@@ -2147,15 +1999,12 @@ static void vis_rebuild(void) {
     }
     elog("vis: spawn groups = 出生点%d 普通补给箱%d 红蓝补给箱%d", s0, s1, s2);
   }
-  hud_refresh();
+  overlay_refresh();
 }
 
 /* the scene changed: the old overlay objects were destroyed with the level */
 static void vis_scene_reset(void) {
   g_visObjN = 0;
-  g_lblCanvas = 0;
-  g_lblTr = 0;
-  g_lblShown = 0;
   g_vnN = g_veN = g_vfN = 0;
   g_nN = g_eN = g_jN = g_tpN = 0;
   g_miss[0] = 0;
@@ -2171,15 +2020,16 @@ static void vis_toggle(void) {
   g_visOn = !g_visOn;
   if (g_visOn) { g_visDirty = 0; vis_rebuild(); }
   else vis_show(0);
-  elog("vis %s (layers=0x%X labels=%d)", g_visOn ? "ON" : "OFF", g_lay, g_vfN);
-  hud_refresh();
+  elog("vis %s (features=%d)", g_visOn ? "ON" : "OFF", g_vfN);
+  overlay_refresh();
 }
 
-static void vis_toggle_layer(int bit) {
-  g_lay ^= bit;
+/* 路点 / 连线：只对本次进程生效（配置开关在控制台「可视化」页） */
+static void vis_toggle_nodes(void) {
+  g_visNodes = !g_visNodes;
   if (g_visOn) { g_visDirty = 0; vis_rebuild(); }
-  elog("vis layers=0x%X (toggled 0x%X)", g_lay, bit);
-  hud_refresh();
+  elog("vis nodes=%d", g_visNodes);
+  overlay_refresh();
 }
 
 /* --- export v2: stable ids + map fingerprint -----------------------------
@@ -2402,7 +2252,7 @@ static int nm_dump(const char* path, int* out_nv, int* out_nt) {
  *   * 顶点是 Int3（1/1000 m，世界坐标）。多 tile 时索引高 12 位才是 tile 号，
  *     低 12 位是 tile 内的顶点号 —— 和 nm_dump 的掩码一致。
  *   * 抬高 5 cm，避免和地面/地形网格打架（z-fighting）。
- * draw=0 时只统计不建面，给 HUD 报数用（可视化关着也能报）。 */
+ * draw=0 时只统计不建面（旧 HUD 用过；现在仅保留给内部统计）。 */
 static void nm_walk(int draw) {
   extern P navfix_navmesh_graph(void);
   P g, tiles;
@@ -2455,9 +2305,9 @@ static void nm_walk(int draw) {
   if (draw) elog("vis: navmesh wire tris=%d verts=%d meshes=%d", g_nmWireTri, g_nmWireVert, g_nmObjN);
 }
 
-/* ---- 可走面开关（独立于 Ctrl+V 的五层）--------------------------------
+/* ---- 可走面开关（独立于 Ctrl+V 总开关）--------------------------------
  * cfg navmesh_show 决定进图默认开不开；Ctrl+Shift+6 随时开关，立即重建。
- * 没有 NavMeshGraph 的图（运输船 / 生化酒店 / 暴风）什么都不画，HUD 会写
+ * 没有 NavMeshGraph 的图（运输船 / 生化酒店 / 暴风）什么都不画，日志里会写
  * 「无（这张图没有 NavMeshGraph）」。 */
 static void nm_clear(void) {
   int i;
@@ -2502,7 +2352,7 @@ static void nm_toggle(void) {
   g_nmDirty = 1;
   nm_tick();
   elog("navmesh %s (%d tris / %d verts)", g_nmShow ? "ON" : "OFF", g_nmWireTri, g_nmWireVert);
-  hud_refresh();
+  overlay_refresh();
 }
 
 static void vis_export(void) {
@@ -2517,7 +2367,6 @@ static void vis_export(void) {
 
   if (!g_expEnabled) {
     elog("vis: export disabled (export_enabled=false)");
-    sprintf(g_expStat, "导出总开关已关");
     return;
   }
 
@@ -2528,7 +2377,6 @@ static void vis_export(void) {
   if (g_sceneAge < VIS_SCENE_WAIT && !g_sceneReadyOnce) {
     elog("vis: export deferred (scene age %d/%d) - component tables are still the old level's",
          g_sceneAge, VIS_SCENE_WAIT);
-    sprintf(g_expStat, "场景还没稳定，稍后再导（%d/%d）", g_sceneAge, VIS_SCENE_WAIT);
     return;
   }
   g_exporting = 1;
@@ -2536,7 +2384,6 @@ static void vis_export(void) {
   g_exporting = 0;
   if (g_vnN <= 0 && g_vfN <= 0) {
     elog("vis: export skipped: nothing selected (nodes=0 features=0) - no empty file");
-    sprintf(g_expStat, "导出内容全关，未导出");
     return;
   }
   GetLocalTime(&st);
@@ -2569,7 +2416,6 @@ static void vis_export(void) {
     if (mf) {
       fclose(mf);
       elog("vis: fp=%s already collected, skip duplicate", fp);
-      sprintf(g_expStat, "点%d 已采集过，跳过 %s", g_vnN, fp);
       return;
     }
   }
@@ -2654,9 +2500,8 @@ static void vis_export(void) {
   { FILE* mf = fopen(mark, "w"); if (mf) { fprintf(mf, "%s\n", path); fclose(mf); } }
   elog("vis: exported nodes=%d edges=%d features=%d map='%s' fp=%s src=%s -> %s",
        g_vnN, g_veN, g_vfN, mapname, fp, src ? "ours" : "game", path);
-  sprintf(g_expStat, "点%d 边%d %s %s", g_vnN, g_veN, fp, src ? "(mod铺的点)" : "已写入");
   (void)ok;
-  if (g_cjk && !g_collectOnly) hud_refresh();
+  if (g_cjk && !g_collectOnly) overlay_refresh();
 }
 
 /* ---- on-screen mode hint ------------------------------------------------ */
@@ -2687,7 +2532,7 @@ static P mk_text_ui(P canvasTr, const char* name, float ax, float ay, float px, 
 
 /* 选一个真的带中文字形的字体。
  * 2026-11-16：原来直接拿 FindObjectOfType(Text) 的第一个字体，常常拿到
- * FPS/数字字体，HUD 的中文标签全被吞掉，屏幕上只剩 "00000000" 和 "|++|"。
+ * FPS/数字字体，图例和菜单的中文标签全被吞掉，屏幕上只剩 "00000000" 和 "|++|"。
  * 这里遍历场景里所有 UGUI Text 的字体，用 Font.HasCharacter('中') 验证。 */
 static P find_cjk_font(void) {
   P arr;
@@ -2706,20 +2551,19 @@ static P find_cjk_font(void) {
     if (!font || !uobj_live(font)) continue;
     for (j = 0; j < (int)(sizeof(probe) / sizeof(probe[0])); j++) {
       if (((has_char_t)RVA(R_FONT_HASCHAR))(font, probe[j], 0)) {
-        elog("hud: cjk font %p from Text #%d (probe U+%04X)", font, i, probe[j]);
+        elog("ui: cjk font %p from Text #%d (probe U+%04X)", font, i, probe[j]);
         return font;
       }
     }
   }
-  elog("hud: no cjk font among %d Text objects", n);
+  elog("ui: no cjk font among %d Text objects", n);
   return 0;
 }
 
-static int hud_init(void) {
-  P canvasGo, canvasTr, txtGo, tr, comp;
-  V2 v;
-  if (g_hud) return 1;
-  if (!g_textType || !g_canvasType) { elog("hud: UGUI Text/Canvas class missing"); return 0; }
+static int overlay_init(void) {
+  P canvasGo, canvasTr, comp;
+  if (g_cat) return 1;
+  if (!g_textType || !g_canvasType) { elog("ui: UGUI Text/Canvas class missing"); return 0; }
   if (g_guiFont && !uobj_live(g_guiFont)) { g_guiFont = 0; g_cjk = 0; }  /* 上个场景的字体被卸载 */
 
   /* 字体必须真的带中文字形。以前直接拿第一个 Text 的字体（常常是 FPS 数字字体），
@@ -2744,7 +2588,7 @@ static int hud_init(void) {
     if (!g_guiFont) g_guiFont = ((builtin_t)RVA(R_RES_BUILTIN))(g_fontType, p2, 0);
     if (g_guiFont) g_cjk = 0;
   }
-  if (!g_guiFont) { elog("hud: no usable font"); return 0; }
+  if (!g_guiFont) { elog("ui: no usable font"); return 0; }
   if (x_gchandle_new && g_fontRooted != g_guiFont) {
     if (g_fontHandle && x_gchandle_free) x_gchandle_free((P)g_fontHandle);
     g_fontHandle = x_gchandle_new(g_guiFont, 0);
@@ -2752,45 +2596,13 @@ static int hud_init(void) {
   }
 
   canvasGo = new_go("UCF_HUD");
-  if (!canvasGo) { elog("hud: canvas go failed"); return 0; }
+  if (!canvasGo) { elog("ui: canvas go failed"); return 0; }
   comp = ((addcomp_t)RVA(R_ADDCOMP))(canvasGo, g_canvasType, 0);
-  if (!comp) { elog("hud: Canvas AddComponent failed"); return 0; }
+  if (!comp) { elog("ui: Canvas AddComponent failed"); return 0; }
   ((set_int1_t)RVA(R_CANVAS_MODE))(comp, 0, 0);            /* ScreenSpaceOverlay */
   ((set_int1_t)RVA(R_CANVAS_SORT))(comp, 32000, 0);
   canvasTr = get_tr(canvasGo);
 
-  txtGo = new_go("UCF_HUD_Text");
-  if (!txtGo) { elog("hud: text go failed"); return 0; }
-  comp = ((addcomp_t)RVA(R_ADDCOMP))(txtGo, g_textType, 0);
-  if (!comp) { elog("hud: Text AddComponent failed"); return 0; }
-  tr = get_tr(txtGo);
-  if (canvasTr && tr) ((set_parent_t)RVA(R_SET_PARENT))(tr, canvasTr, 0, 0);
-
-  v.x = 0.0f; v.y = 1.0f;
-  ((set_v2_t)RVA(R_RT_AMIN))(tr, v, 0);
-  ((set_v2_t)RVA(R_RT_AMAX))(tr, v, 0);      /* top-left anchored */
-  v.x = 0.0f; v.y = 1.0f;
-  ((set_v2_t)RVA(R_RT_PIVOT))(tr, v, 0);
-  v.x = 14.0f; v.y = -10.0f;
-  ((set_v2_t)RVA(R_RT_APOS))(tr, v, 0);
-  v.x = 760.0f; v.y = 268.0f;
-  ((set_v2_t)RVA(R_RT_SDELTA))(tr, v, 0);
-
-  ((set_font_t)RVA(R_TEXT_SETFONT))(comp, g_guiFont, 0);
-  ((set_int1_t)RVA(R_TEXT_SETSIZE))(comp, 20, 0);
-  ((set_int1_t)RVA(R_TEXT_ALIGN))(comp, 0, 0);    /* UpperLeft  */
-  ((set_int1_t)RVA(R_TEXT_HOVER))(comp, 1, 0);    /* Overflow   */
-  ((set_int1_t)RVA(R_TEXT_VOVER))(comp, 1, 0);
-  ((set_int1_t)RVA(R_GRAPHIC_RAY))(comp, 0, 0);   /* no raycast */
-  ((set_col_t)RVA(R_GRAPHIC_COL))(comp, COL_WHITE, 0);
-
-  g_hud = comp;
-  root_put(comp);
-  g_hudGo = txtGo;
-  g_keys = mk_text_ui(canvasTr, "UCF_HUD_Keys", 0.0f, 1.0f, 0.0f, 1.0f, 14.0f, -130.0f, 1180.0f, 96.0f, 14);
-  root_put(g_keys);
-  if (g_keys) elog("hud: keys go=%p font=%p", g_keysGo, ((get_font_t)RVA(R_TEXT_GETFONT))(g_keys, 0));
-  g_keysGo = g_keys ? ((get_go_t)RVA(R_GETGO))(g_keys, 0) : 0;
   /* left-edge legend: three horizontal rows, stacked vertically */
   g_cat = mk_text_ui(canvasTr, "UCF_HUD_Cats", 0.0f, 0.5f, 0.0f, 0.5f, 14.0f, -140.0f, 520.0f, 132.0f, 26);
   root_put(g_cat);
@@ -2806,14 +2618,14 @@ static int hud_init(void) {
     g_menuGo = ((get_go_t)RVA(R_GETGO))(g_menu, 0);
   }
   /* 记下 Transform 的类对象：comp_pos 用它区分「真 Transform」和野指针 */
-  if (!g_trKlass && g_hud) {
-    P t = comp_tr(g_hud);
+  if (!g_trKlass && g_cat) {
+    P t = comp_tr(g_cat);
     if (t && mem_ok(t, 0x10) && uobj_live(t)) {
       g_trKlass = *(P*)t;
-      elog("hud: transform klass=%p", g_trKlass);
+      elog("ui: transform klass=%p", g_trKlass);
     }
   }
-  elog("hud: ready font=%p (%s) keys=%p cats=%p", g_guiFont, g_cjk ? "game/CJK" : "builtin/ASCII", g_keys, g_cat);
+  elog("ui: ready font=%p (%s) cats=%p", g_guiFont, g_cjk ? "game/CJK" : "builtin/ASCII", g_cat);
   return 1;
 }
 
@@ -2826,144 +2638,51 @@ static int cat_count(int lo, int hi) {
 
 static void cat_refresh(void) {
   char s[512];
-  int spawn, box, color;
+  int len = 0, spawn, box, color;
   if (!g_cat) return;
-  if (!g_visOn || !(g_lay & LAY_D)) {
+  if (!g_visOn || (!g_visBorn && !g_visSupply)) {
     ((set_txt_t)RVA(R_TEXT_SETTEXT))(g_cat, x_string_new(""), 0);
     return;
   }
-  spawn = cat_count(0, 2);   /* 幽灵出生 / 保卫者出生 / 中立点 */
-  box   = cat_count(3, 3);   /* 普通补给箱 */
-  color = cat_count(4, 5);   /* 红色 / 蓝色补给箱 */
-  if (g_cjk) {
-    sprintf(s,
-      "<color=#6EC6FF>出生点  %d</color>\n"
-      "<color=#FFD24A>普通补给箱  %d</color>\n"
-      "<color=#FF6FB5>红色</color><color=#B9C2CE>/</color><color=#4FE3E3>蓝色</color><color=#EDEDED>补给箱  %d</color>",
-      spawn, box, color);
-  } else {
-    sprintf(s, "Spawn %d\nAmmo %d\nRed/Blue %d", spawn, box, color);
+  s[0] = 0;
+  /* 两类各自管理：只显示自己开关打开的那几行，没开的整行不出现 */
+  if (g_visBorn) {
+    spawn = cat_count(0, 2);   /* 幽灵出生 / 保卫者出生 / 中立点 */
+    if (g_cjk) len += sprintf(s + len, "<color=#6EC6FF>出生点  %d</color>", spawn);
+    else       len += sprintf(s + len, "Spawn %d", spawn);
+  }
+  if (g_visSupply) {
+    box   = cat_count(3, 3);   /* 普通补给箱 */
+    color = cat_count(4, 5);   /* 红色 / 蓝色补给箱 */
+    if (g_cjk) {
+      if (len) len += sprintf(s + len, "\n");
+      len += sprintf(s + len, "<color=#FFD24A>普通补给箱  %d</color>", box);
+      len += sprintf(s + len,
+        "\n<color=#FF6FB5>红色</color><color=#B9C2CE>/</color><color=#4FE3E3>蓝色</color>"
+        "<color=#EDEDED>补给箱  %d</color>", color);
+    } else {
+      if (len) len += sprintf(s + len, "\n");
+      len += sprintf(s + len, "Ammo %d\nRed/Blue %d", box, color);
+    }
   }
   ((set_txt_t)RVA(R_TEXT_SETTEXT))(g_cat, x_string_new(s), 0);
 }
 
-static void hud_refresh(void) {
-  char s[2400];
-  char miss[320];   /* g_miss 最多 255 字节（UTF-8 中文 3 字节/字），2400 缓冲区也别写爆 */
-  int c1 = 0, c2 = 0, c3 = 0, i;
-  /* 大厅/房间没有 PointGraph：绝不在这里建 HUD。
-   * 2026-11-16 之前 editor_tick 不分场景，HUD 在大厅就建出来了；中文又缺字形，
-   * 屏幕上只剩 "00000000" / "|++|" 这种残片。 */
+/* 屏幕覆盖层：只建出生点/补给箱图例和 F2 菜单；数据面板已删除，数看 ucf_mod.log */
+static void overlay_refresh(void) {
+  /* 大厅/房间没有 PointGraph：不建任何 UGUI 对象。 */
   if (!navfix_point_graph()) return;
   /* 换图后旧 Canvas 已被场景销毁，但 AstarPath 指针可能没变 -> editor_on_scene
    * 不会 reset。这里先验活，避免对已销毁的 UGUI Text 调 SetText 直接崩溃。 */
-  if ((g_hud && !uobj_live(g_hud)) || (g_keys && !uobj_live(g_keys)) || (g_cat && !uobj_live(g_cat))) {
-    elog("hud: stale objects after scene change, rebuilding");
-    hud_reset();
+  if (g_cat && !uobj_live(g_cat)) {
+    elog("ui: stale objects after scene change, rebuilding");
+    overlay_reset();
   }
-  /* cfg: hud = off —— 不建对象、不定时刷新；控制台「状态面板」页是入口，屏上不留提示 */
-  if (!g_hudOn) {
-    if (g_hud)  ((set_txt_t)RVA(R_TEXT_SETTEXT))(g_hud, x_string_new(""), 0);
-    if (g_keys) ((set_txt_t)RVA(R_TEXT_SETTEXT))(g_keys, x_string_new(""), 0);
-    if (g_cat)  ((set_txt_t)RVA(R_TEXT_SETTEXT))(g_cat, x_string_new(""), 0);
-    if (g_menu && !g_wpMenuOpen)
-      ((set_txt_t)RVA(R_TEXT_SETTEXT))(g_menu, x_string_new(""), 0);
-    return;
-  }
-  if (!g_hud && !hud_init()) return;
-  for (i = 0; i < g_n; i++) {
-    if (g_mk[i].type == 1) c1++;
-    else if (g_mk[i].type == 2) c2++;
-    else if (g_mk[i].type == 3) c3++;
-  }
-  if (g_miss[0]) snprintf(miss, sizeof miss, "   缺:%s", g_miss);
-  else miss[0] = 0;
-  nm_walk(0);   /* 只统计：可视化关着，HUD 也能报可走面有多少 */
-  if (g_cjk) {
-    int len = 0;
-    /* 第一行（各开关状态）默认不显示：开关已经搬到控制台「状态面板」页，
-     * 游戏里不再展示；只有 cfg: hud_states 打开时才画。 */
-    if (g_hudStates) {
-      len = sprintf(s,
-        "可视化 %s   A路点:%s B人类:%s C幽灵:%s D出生/箱:%s E模式:%s   可走面:%s   标签:%s\n",
-        g_visOn ? "开" : "关",
-        (g_lay & LAY_A) ? "开" : "关", (g_lay & LAY_B) ? "开" : "关",
-        (g_lay & LAY_C) ? "开" : "关", (g_lay & LAY_D) ? "开" : "关",
-        (g_lay & LAY_E) ? "开" : "关", g_nmShow ? "开" : "关",
-        g_lblMode == 0 ? "关" : (g_lblMode == 1 ? "近距" : "全部"));
-    }
-    sprintf(s + len,
-      "节点 %d  连接 %d  守区 %d  守点 %d  蹲守 %d  守卫 %d  跳链 %d  标签区 %d%s\n"
-      "可走面 %s  %d 三角 / %d 顶点  (A* NavMeshGraph，Ctrl+Shift+6 开关)\n"
-      "编辑 %s   已放标记 %d (蹲%d/守%d/区%d)   屏上标签 %d/%d%s",
-      g_vnN, g_veN, g_cArea, g_cPos, g_cCrouch, g_cGuard, g_cJump, g_cTag, miss,
-      g_nmWireTri ? "已载入" : "无（这张图没有 NavMeshGraph）", g_nmWireTri, g_nmWireVert,
-      g_on ? "开" : "关", g_n, c1, c2, c3, g_lblShown, g_vfN,
-      g_visOn && g_visDirty ? "  [待重建]" : "");
-  } else {
-    int len = 0;
-    if (g_hudStates) {
-      len = sprintf(s,
-        "VIS %s | A %s B %s C %s D %s E %s | walk-srf %s | labels %s\n",
-        g_visOn ? "ON" : "OFF",
-        (g_lay & LAY_A) ? "on" : "off", (g_lay & LAY_B) ? "on" : "off",
-        (g_lay & LAY_C) ? "on" : "off", (g_lay & LAY_D) ? "on" : "off",
-        (g_lay & LAY_E) ? "on" : "off", g_nmShow ? "on" : "off",
-        g_lblMode == 0 ? "off" : (g_lblMode == 1 ? "near" : "all"));
-    }
-    sprintf(s + len,
-      "nodes %d edges %d nano %d/%d crouch %d guard %d jump %d tag %d%s\n"
-      "walkable %s %d tris / %d verts (NavMeshGraph, Ctrl+Shift+6)\n"
-      "edit %s markers %d (c %d/p %d/a %d) on-screen labels %d/%d",
-      g_vnN, g_veN, g_cArea, g_cPos, g_cCrouch, g_cGuard, g_cJump, g_cTag, miss,
-      g_nmWireTri ? "yes" : "none", g_nmWireTri, g_nmWireVert,
-      g_on ? "ON" : "OFF", g_n, c1, c2, c3, g_lblShown, g_vfN);
-  }
-  /* 数据来源（正式版 / 测试包 + 本次只对哪张图生效）：出问题先看这一行 */
-  {
-    int len = (int)strlen(s);
-    if (len < (int)sizeof(s) - 260) {
-      len += snprintf(s + len, sizeof(s) - len, "\n%s", g_packStat);
-    }
-  }
-  /* 最近日志 + 导出结果：进了图抬头就能看见，不用开文件、不用看控制台 */
-  if (g_logOn) {
-    int k, st0, len = (int)strlen(s);
-    if (g_expStat[0]) {
-      len += sprintf(s + len, "\n导出 %s", g_expStat);
-    }
-    st0 = g_ringN > 3 ? g_ringN - 3 : 0;
-    for (k = st0; k < g_ringN; k++) {
-      if (len > (int)sizeof(s) - 200) break;
-      len += sprintf(s + len, "\n%s", g_ring[k]);
-    }
-  }
-  ((set_txt_t)RVA(R_TEXT_SETTEXT))(g_hud, x_string_new(s), 0);
-  if (g_keys) {
-    const char* k;
-    if (g_helpOn) {
-      if (g_cjk) {
-        k = "Ctrl+V 可视化总开关   Ctrl+Shift+1..6  A路点/B人类/C幽灵/D出生/箱/E模式/F可走面   Ctrl+Shift+L 文字标签 关/近距/全部\n"
-            "Ctrl+E 手动导出   Ctrl+M 日志行开关   Ctrl+H 本面板开关   Delete 删除准星最近标记   Ctrl+0 显示/隐藏已放标记\n"
-            "Ctrl+1 编辑模式  Ctrl+2 蹲守点  Ctrl+4 幽灵守区  Ctrl+5 撤销  Ctrl+6 保存  Ctrl+7 重载  Ctrl+8 阵营  Ctrl+9 状态\n"
-            "路点编辑: Ctrl+Shift+A 选A点  Ctrl+Shift+N 加点  Ctrl+Shift+J A↔点 连/断  Ctrl+Shift+D 禁用点  Ctrl+Shift+Z 撤销  Ctrl+Shift+R 重套用（改完自动存盘）\n"
-            "路点菜单: F2 开关 / 长按 E 备用   1-9 直选   小键盘 8/2 上下   5 确认   0 返回   左键确认 / 右键返回";
-      } else {
-        k = "Ctrl+V visualizer   Ctrl+Shift+1..6  A/B/C/D/E/F layers   Ctrl+Shift+L labels\n"
-            "Ctrl+E export   Ctrl+M log lines   Ctrl+H this panel   Delete nearest marker   Ctrl+0 marker balls\n"
-            "Ctrl+1 edit   Ctrl+2 crouch   Ctrl+4 guard area   Ctrl+5 undo   Ctrl+6 save   Ctrl+7 reload   Ctrl+8 team   Ctrl+9 status\n"
-            "Waypoints: Ctrl+Shift+A select A   Ctrl+Shift+N add   Ctrl+Shift+J link/unlink   Ctrl+Shift+D disable   Ctrl+Shift+Z undo   Ctrl+Shift+R reapply\n"
-            "Menu: F2 toggle / hold E  1-9 select  Numpad 8/2 move  5 ok  0 back  LMB ok / RMB back";
-      }
-    } else {
-      k = "";   /* 默认不显示快捷键块：按 Ctrl+H 才叫出来 */
-    }
-    ((set_txt_t)RVA(R_TEXT_SETTEXT))(g_keys, x_string_new(k), 0);
-  }
+  if (!g_cat && !overlay_init()) return;
   cat_refresh();
 }
 
-static void hud_reset(void) { g_hud = 0; g_hudGo = 0; g_keys = 0; g_keysGo = 0; g_cat = 0; g_catGo = 0; g_menu = 0; g_menuGo = 0; g_lblCanvas = 0; g_lblTr = 0; }
+static void overlay_reset(void) { g_cat = 0; g_catGo = 0; g_menu = 0; g_menuGo = 0; }
 
 /* ---- marker store ------------------------------------------------------- */
 static int add_mk(int type, V3 p, int aid, int parent, int prm, P go, P comp, P vis) {
@@ -2973,6 +2692,7 @@ static int add_mk(int type, V3 p, int aid, int parent, int prm, P go, P comp, P 
   m->type = type; m->p = p; m->aid = aid; m->parent = parent; m->prm = prm;
   m->go = go; m->comp = comp; m->vis = vis;
   g_n++;
+  g_visDirty = 1;      /* 新建标记后让可视化/计数下一帧重读 */
   return 1;
 }
 
@@ -2989,7 +2709,7 @@ static int make_crouch(V3 p) {
   if (!add_mk(1, p, -1, -1, g_team, go, comp, spawn_vis(p, 0.24f, 1))) return 0;
   elog("crouch #%d at %.2f %.2f %.2f team=%d type=%s", g_n, p.x, p.y, p.z, g_team,
        comp ? type_name(*(P*)comp) : "?");
-  hud_refresh();
+  overlay_refresh();
   return 1;
 }
 
@@ -3017,7 +2737,7 @@ static int make_area(int scale10, V3 p) {
   if (!add_mk(3, p, aid, -1, scale10, go, comp, spawn_vis(p, 0.42f, 3))) return 0;
   g_curArea = g_n - 1;
   elog("area #%d (aid=%d scale=%.1f) at %.2f %.2f %.2f -> current", g_n - 1, aid, s, p.x, p.y, p.z);
-  hud_refresh();
+  overlay_refresh();
   return 1;
 }
 
@@ -3045,31 +2765,82 @@ static int make_nanopos(int aid, V3 p, int safety) {
     int cnt = list ? *(int*)((char*)list + 0x0C) : -1;
     elog("nanopos #%d at %.2f %.2f %.2f aid=%d safety=%d areaPosList=%d", g_n, p.x, p.y, p.z, aid, safety, cnt);
   }
-  hud_refresh();
+  overlay_refresh();
   return 1;
 }
 
 /* delete marker at idx, its children, and fix every index reference */
 static void del_index(int idx);
+static int  save_file(void);
+void editor_delete_nearest(void);          /* 定义在文件末尾；菜单里的 Delete 也走它 */
 
-static void kill_children(int idx) {
-  int i = 0;
-  while (i < g_n) {
-    if (g_mk[i].parent == idx) del_index(i);
-    else i++;
+/* 从游戏自己的 List<T> 里摘掉一个元素。
+ * 不调用 List.Remove：2026-11-17 的闪退就是 SpareAreaList.Remove →
+ * ObjectEqualityComparer.IndexOf 碰到被写花的槽位。这里沿用 navfix.c
+ * purge_guard_areas() 验证过的做法：显式 4 字节读槽位、只在需要时 4 字节搬，
+ * 最后改 _size / _version，不碰泛型比较器。 */
+static int list_drop_item(P list, P item) {
+  P items;
+  int n, i, w = 0, cap;
+  if (!list || !item || !mem_ok(list, 0x14)) return 0;
+  items = *(P*)((char*)list + 0x08);
+  n = *(int*)((char*)list + 0x0C);
+  if (!items || n <= 0 || n > 20000 || !mem_ok(items, 0x10)) return 0;
+  cap = *(int*)((char*)items + 0x0C);
+  if (cap <= 0 || n > cap) return 0;
+  for (i = 0; i < n; i++) {
+    unsigned tmp = 0;
+    memcpy(&tmp, (char*)items + 0x10 + i * 4, 4);
+    if ((P)tmp == item) continue;          /* 丢掉这一个 */
+    if (w != i) memcpy((char*)items + 0x10 + w * 4, &tmp, 4);
+    w++;
+  }
+  if (w == n) return 0;
+  *(int*)((char*)list + 0x0C) = w;
+  (*(int*)((char*)list + 0x10))++;         /* _version：让游戏的枚举/缓存失效 */
+  return 1;
+}
+
+/* Destroy 之前先把组件从游戏的静态池/父列表里摘掉：
+ * 否则 SpareList_BL/GR、SpareAreaList、area.posList 里还挂着已销毁的对象，
+ * 人机下一次取点会拿到 Unity 假空指针，可视化也会把死点算进数量。 */
+static void marker_unregister(MK* m) {
+  int ra, rb;
+  if (!m || !m->comp || !uobj_live(m->comp)) return;
+  if (m->type == 1) {
+    ra = list_drop_item(static_obj(g_crouchCls, "SpareList_BL"), m->comp);
+    rb = list_drop_item(static_obj(g_crouchCls, "SpareList_GR"), m->comp);
+    if (ra || rb) elog("delete: crouch removed from SpareList (%d/%d)", ra, rb);
+  } else if (m->type == 2) {
+    if (m->parent >= 0 && m->parent < g_n && g_mk[m->parent].type == 3) {
+      P area = g_mk[m->parent].comp;
+      if (area && uobj_live(area)) {
+        P pl = *(P*)((char*)area + 0x10);  /* Bot_NanoGuardArea.posList */
+        if (list_drop_item(pl, m->comp)) elog("delete: nanopos removed from area.posList");
+      }
+    }
+  } else if (m->type == 3) {
+    if (list_drop_item(static_obj(g_areaCls, "SpareAreaList"), m->comp))
+      elog("delete: area removed from SpareAreaList");
   }
 }
 
 static void del_index(int idx) {
-  MK* m;
+  MK m;
   int i;
   if (idx < 0 || idx >= g_n) return;
-  m = &g_mk[idx];
-  kill_children(idx);
-  if (m->vis) ((destroy_t)RVA(R_DESTROY))(m->vis, 0);
-  if (m->go) ((destroy_t)RVA(R_DESTROY))(m->go, 0);
-  if (m->type == 3) {
-    if (m->aid >= 0 && m->aid < MAX_AID) g_aidMk[m->aid] = 0;
+  /* 子项先删，且从后往前：删子项不会移动父项下标。
+   * 旧实现先取 &g_mk[idx] 再 kill_children()，数组一左移，指针就指向了别人的
+   * 对象——删聚集区时真正销毁的是下一个标记。 */
+  for (i = g_n - 1; i > idx; i--) {
+    if (g_mk[i].parent == idx) del_index(i);
+  }
+  m = g_mk[idx];
+  marker_unregister(&m);
+  if (m.vis) ((destroy_t)RVA(R_DESTROY))(m.vis, 0);
+  if (m.go) ((destroy_t)RVA(R_DESTROY))(m.go, 0);
+  if (m.type == 3) {
+    if (m.aid >= 0 && m.aid < MAX_AID) g_aidMk[m.aid] = 0;
     if (g_areaCount > 0) g_areaCount--;
   }
   for (i = idx; i < g_n - 1; i++) g_mk[i] = g_mk[i + 1];
@@ -3081,22 +2852,23 @@ static void del_index(int idx) {
   }
   if (g_curArea == idx) g_curArea = -1;
   else if (g_curArea > idx) g_curArea--;
+  g_visDirty = 1;      /* 让可视化/计数下一帧重读，别留着已删点的圆点 */
 }
 
 static void undo_last(void) {
   if (g_n <= 0) { elog("undo: nothing to undo"); return; }
   elog("undo: removing marker #%d type=%d", g_n - 1, g_mk[g_n - 1].type);
   del_index(g_n - 1);
-  hud_refresh();
+  overlay_refresh();
 }
 
-static void delete_nearest(void) {
+static int delete_nearest(void) {
   V3 cp, fw, hp;
   int i, byRay = -1, byHit = -1, target = -1;
   float bestPerp = 1e9f, bestHit = 1e9f, bestCam = 1e9f;
   int haveHit, byCam = -1;
-  if (!g_n) { elog("delete: no markers"); return; }
-  if (!cam_ray(&cp, &fw)) { elog("delete: no camera"); return; }
+  if (!g_n) { elog("delete: no markers"); return 0; }
+  if (!cam_ray(&cp, &fw)) { elog("delete: no camera"); return 0; }
   haveHit = cam_point(&hp);
   for (i = 0; i < g_n; i++) {
     float vx = g_mk[i].p.x - cp.x, vy = g_mk[i].p.y - cp.y, vz = g_mk[i].p.z - cp.z;
@@ -3122,22 +2894,28 @@ static void delete_nearest(void) {
   } else if (byHit >= 0 && bestHit <= 144.0f) {
     target = byHit;
     elog("delete: nearest marker #%d to aim point (%.2f m)", byHit, sqrt(bestHit));
-  } else if (byCam >= 0 && bestCam <= 16.0f) {
+  } else if (byCam >= 0 && bestCam <= 144.0f) {   /* 相机 12 m 内兜底（原来只有 4 m） */
     target = byCam;
     elog("delete: closest marker #%d to camera (%.2f m)", byCam, sqrt(bestCam));
   } else {
-    elog("delete: nothing chosen (ray %.2f m, aim %.2f m, cam %.2f m) - aim at a marker",
+    elog("delete: nothing chosen (markers=%d, ray %.2f m, aim %.2f m, cam %.2f m) - aim at a marker",
+         g_n,
          byRay >= 0 ? bestPerp : -1.0f,
          haveHit ? sqrt(bestHit) : -1.0f,
          byCam >= 0 ? sqrt(bestCam) : -1.0f);
-    return;
+    return 0;
   }
   if (target >= 0) {
     elog("delete: removing #%d type=%d at %.2f %.2f %.2f", target, g_mk[target].type,
          g_mk[target].p.x, g_mk[target].p.y, g_mk[target].p.z);
     del_index(target);
-    hud_refresh();
+    /* 立刻落盘：editor_on_scene() 每次进图都会 load_file() 重放 markers.txt，
+     * 不存盘的话删掉的点下次进图又回来了（看起来就像“删不了”）。 */
+    save_file();
+    overlay_refresh();
+    return 1;
   }
+  return 0;
 }
 
 static void toggle_visuals(void) {
@@ -3149,7 +2927,7 @@ static void toggle_visuals(void) {
     ((set_active_t)RVA(R_SETACTIVE))(v, (unsigned char)g_vis, 0);
   }
   elog("visuals %s (markers=%d)", g_vis ? "ON" : "OFF", g_n);
-  hud_refresh();
+  overlay_refresh();
 }
 
 static void make_tag(V3 p, int tag, float radius);
@@ -3187,7 +2965,7 @@ static int save_file(void) {
   }
   fclose(f);
   elog("saved %d markers (crouch=%d nanopos=%d area=%d tag=%d) -> %s", g_n, c1, c2, c3, c5, g_file);
-  hud_refresh();
+  overlay_refresh();
   return 1;
 }
 
@@ -3230,7 +3008,7 @@ static int load_file(void) {
   }
   fclose(f);
   elog("loaded %d markers from %s", made, g_file);
-  hud_refresh();
+  overlay_refresh();
   return made;
 }
 
@@ -3242,9 +3020,10 @@ static void status(void) {
     else if (g_mk[i].type == 3) c3++;
     else if (g_mk[i].type == 5) c5++;
   }
-  elog("status: edit=%d vis=%d team=%d markers=%d (crouch=%d nanopos=%d area=%d tag=%d) curAreaAid=%d hud=%d",
+  elog("status: edit=%d vis=%d team=%d markers=%d (crouch=%d nanopos=%d area=%d tag=%d) curAreaAid=%d ui=%d",
        g_on, g_vis, g_team, g_n, c1, c2, c3, c5,
-       (g_curArea >= 0 && g_curArea < g_n) ? g_mk[g_curArea].aid : -1, g_hud ? 1 : 0);
+       (g_curArea >= 0 && g_curArea < g_n) ? g_mk[g_curArea].aid : -1, g_cat ? 1 : 0);
+  /* 最后一个字段是「屏幕覆盖层是否已建」：1 = 图例/菜单文字已创建 */
   if (g_areaCls && x_class_get_field_from_name) {
     P f = x_class_get_field_from_name(g_areaCls, "SpareAreaList");
     if (f) {
@@ -3280,8 +3059,8 @@ void editor_on_scene(void* astar) {
   g_lastAstar = (P)astar;
   reset_markers();
   elog("scene: markers reset");
-  hud_reset();
-  elog("scene: hud reset");
+  overlay_reset();
+  elog("scene: ui reset");
   vis_scene_reset();
   elog("scene: vis reset");
   roots_clear();          /* 上一张图的对象已经销毁，句柄还回去 */
@@ -3309,7 +3088,7 @@ void editor_on_scene(void* astar) {
     return;
   }
   load_file();
-  hud_refresh();
+  overlay_refresh();
 }
 
 /* called by navfix after it rebuilds the point graph */
@@ -3361,7 +3140,7 @@ static void nm_auto_tick(void) {
   sprintf(path, "%s\\navmesh_%s.bin", g_expDir, fp);
   if (nm_dump(path, &g_nmVert, &g_nmTri)) {
     elog("nm: verts=%d tris=%d tiles=%d -> %s", g_nmVert, g_nmTri, ntile, path);
-    /* 这里不再 hud_refresh()：刚进图就 set UGUI 文本是历史崩溃点之一，HUD 下一次 tick 自己会刷 */
+    /* 这里不再 overlay_refresh()：刚进图就 set UGUI 文本是历史崩溃点之一，覆盖层下一次 tick 自己会刷 */
   }
 }
 
@@ -3375,7 +3154,7 @@ static void set_collect_only(int on) {
   if (on) { FILE* fh = fopen(p, "w"); if (fh) { fputs("1\n", fh); fclose(fh); } }
   else DeleteFileA(p);
   elog("collect-only %s -> %s", on ? "ON (只读采集)" : "OFF (可编辑)", on ? p : "(flag removed)");
-  hud_refresh();
+  overlay_refresh();
 }
 
 /* ============ 路点图手动编辑（游戏内） + 进图自动套用 ==================
@@ -4426,11 +4205,11 @@ static void wp_place(void) {
     default: break;
   }
   if (g_wpBrush == 2 || g_wpBrush == 3 || g_wpBrush == 4 || g_wpBrush == 5) save_file();
-  hud_refresh();
+  overlay_refresh();
   menu_refresh();
 }
 
-/* ---- 测试包：把环境变量翻译成「读哪个目录」+ HUD 一行状态 -------------- */
+/* ---- 测试包：把环境变量翻译成「读哪个目录」+ 日志一行数据来源 ------------ */
 static void pack_stat(void) {
   const char* want = g_packFpLabel[0] ? g_packFpLabel : g_packFp;
   if (!g_packName[0]) {
@@ -4446,6 +4225,7 @@ static void pack_stat(void) {
              "数据 测试包 %s · 只对 %s 生效 · 包内 %d 项改动%s",
              g_packName, want, g_nedN, g_nedBlank ? " · 空白底图" : "");
   }
+  elog("pack data: %s", g_packStat);
 }
 
 /* 包名/指纹只允许 ASCII 字母数字 _ -：插件用 ANSI 的 CreateDirectoryA/fopen，
@@ -4717,7 +4497,7 @@ void editor_map_name(char* out, int cap) {
  * 菜单只做「选操作 → 调已有的 naved / make_* 函数」，不改游戏行为层。
  */
 static const char* WP_MENU[10] = {
-  "添加路点", "设置笔刷 / 标记", "建立路径", "删除路径", "删除路点",
+  "添加路点", "设置笔刷 / 标记", "建立路径", "删除路径 / 路点", "删除标记（准星最近）",
   "落地 / 贴地", "聚集区工具", "撤销 / 保存", "显示图层", "关闭菜单"
 };
 static const char* WP_TYPES[6] = {
@@ -4728,7 +4508,8 @@ static const char* WP_AREAS[4] = {
   "新建聚集区", "加守点", "加入口 entrancePos", "加逃跑点 escapePos"
 };
 static const char* WP_EDIT[4] = { "撤销一步", "重做一步", "保存到文件", "重读并套用" };
-static const char* WP_LAYERS[4] = { "边", "文字标签", "可走面", "路点总开关" };
+static const char* WP_LAYERS[3] = { "路点/连线", "可走面", "路点总开关" };
+static const char* WP_DEL[2] = { "删除路径（A-B 连线）", "删除路点（A* 节点）" };
 
 /* 小键盘键码：mingw 的 winuser.h 一般都有；老头文件缺失时兜底。 */
 #ifndef VK_NUMPAD0
@@ -4757,6 +4538,7 @@ static void menu_sub_title(char* out, int cap) {
   else if (g_wpMenuSub == 3) s = "聚集区工具";
   else if (g_wpMenuSub == 4) s = "撤销 / 保存";
   else if (g_wpMenuSub == 5) s = "显示图层";
+  else if (g_wpMenuSub == 6) s = "删除：选类型";
   snprintf(out, (size_t)cap, "%s", s);
 }
 
@@ -4765,7 +4547,8 @@ static int menu_sub_count(void) {
   if (g_wpMenuSub == 2) return 3;
   if (g_wpMenuSub == 3) return 4;
   if (g_wpMenuSub == 4) return 4;
-  if (g_wpMenuSub == 5) return 4;
+  if (g_wpMenuSub == 5) return 3;
+  if (g_wpMenuSub == 6) return 2;
   return 10;
 }
 
@@ -4774,7 +4557,8 @@ static const char* menu_sub_label(int i) {
   if (g_wpMenuSub == 2) return (i >= 0 && i < 3) ? WP_PATHS[i] : "";
   if (g_wpMenuSub == 3) return (i >= 0 && i < 4) ? WP_AREAS[i] : "";
   if (g_wpMenuSub == 4) return (i >= 0 && i < 4) ? WP_EDIT[i] : "";
-  if (g_wpMenuSub == 5) return (i >= 0 && i < 4) ? WP_LAYERS[i] : "";
+  if (g_wpMenuSub == 5) return (i >= 0 && i < 3) ? WP_LAYERS[i] : "";
+  if (g_wpMenuSub == 6) return (i >= 0 && i < 2) ? WP_DEL[i] : "";
   return "";
 }
 
@@ -4782,14 +4566,15 @@ static void menu_refresh(void) {
   char s[2048];
   char title[64];
   int i, n, off = 0;
-  if (g_menu && !uobj_live(g_menu)) hud_reset();
+  if (g_menu && !uobj_live(g_menu)) overlay_reset();
   if (!g_menu) return;
   if (!g_wpMenuOn || !g_wpMenuOpen) {
     ((set_txt_t)RVA(R_TEXT_SETTEXT))(g_menu, x_string_new(""), 0);
     return;
   }
   menu_sub_title(title, sizeof title);
-  off += snprintf(s + off, sizeof s - (size_t)off, "%s   [F2 / 长按E 关闭]\n", title);
+  off += snprintf(s + off, sizeof s - (size_t)off,
+                  "%s   [F2/长按E 关] [Delete 删标记]\n", title);
   if (g_wpMenuSub == 0) {
     for (i = 0; i < 10 && off < (int)sizeof s - 80; i++) {
       off += snprintf(s + off, sizeof s - (size_t)off, "%s%d  %s\n",
@@ -4820,8 +4605,8 @@ static void menu_refresh(void) {
 static void menu_open(void) {
   if (!g_wpMenuOn) { elog("wpmenu: disabled by cfg wp_menu=0"); return; }
   if (g_collectOnly) { elog("wpmenu: collect-only, menu disabled"); return; }
-  if (g_menu && !uobj_live(g_menu)) hud_reset();
-  if (!g_menu) hud_init();
+  if (g_menu && !uobj_live(g_menu)) overlay_reset();
+  if (!g_menu) overlay_init();
   g_wpMenuOpen = 1;
   g_wpMenuSel = 0;
   g_wpMenuSub = 0;
@@ -4907,8 +4692,16 @@ static void menu_activate(void) {
     if (i == 0) { g_wpMenuSub = 1; g_wpMenuSubSel = g_wpBrush; menu_refresh(); return; }
     if (i == 1) { g_wpMenuSub = 1; g_wpMenuSubSel = g_wpBrush; menu_refresh(); return; }
     if (i == 2) { g_wpMenuSub = 2; g_wpMenuSubSel = g_wpPath; menu_refresh(); return; }
-    if (i == 3) { nav_unlink_here(); menu_refresh(); return; }
-    if (i == 4) { nav_del_here(); menu_refresh(); return; }
+    if (i == 3) { g_wpMenuSub = 6; g_wpMenuSubSel = 0; menu_refresh(); return; }
+    if (i == 4) {
+      /* 和游戏内 Delete 键同一条路径：删准星最近的那个标记
+       * （蹲守点 / 幽灵守点 / 聚集区 / 跳跃链接）。A* 路点的删除在
+       * 「删除路径 / 路点」子菜单里，两边分开，不会互相误删。 */
+      if (!delete_nearest())
+        elog("wpmenu: 准星附近没有可删的标记（蹲守/守点/聚集区/跳链）");
+      menu_refresh();
+      return;
+    }
     if (i == 5) { nav_ground_here(); menu_refresh(); return; }
     if (i == 6) { g_wpMenuSub = 3; g_wpMenuSubSel = 0; menu_refresh(); return; }
     if (i == 7) { g_wpMenuSub = 4; g_wpMenuSubSel = 0; menu_refresh(); return; }
@@ -4957,11 +4750,17 @@ static void menu_activate(void) {
     menu_refresh();
     return;
   }
-  if (g_wpMenuSub == 5) {                 /* 图层 */
-    if (i == 0) vis_toggle_layer(LAY_A);
-    else if (i == 1) { g_lblMode = (g_lblMode + 1) % 3; }
-    else if (i == 2) nm_toggle();
+  if (g_wpMenuSub == 5) {                 /* 显示 */
+    if (i == 0) vis_toggle_nodes();
+    else if (i == 1) nm_toggle();
     else vis_toggle();
+    menu_refresh();
+    return;
+  }
+  if (g_wpMenuSub == 6) {                 /* 删除：路径 / 路点 */
+    if (i == 0) nav_unlink_here();
+    else nav_del_here();
+    g_wpMenuSub = 0;
     menu_refresh();
     return;
   }
@@ -5008,6 +4807,10 @@ int editor_menu_key(unsigned vk, int ext) {
       (GetAsyncKeyState(VK_CONTROL) & 0x8000) &&
       (GetAsyncKeyState(VK_SHIFT) & 0x8000)) return 0;
   if (menu_sys_key(vk)) return 0;
+
+  /* 菜单开着时旧版把其余键全部吞掉：Delete 根本到不了编辑器，蹲守点就“删不了”。
+   * 这里直接走和游戏内 Delete 同一条路径。 */
+  if (vk == VK_DELETE) { editor_delete_nearest(); return 1; }
 
   if (vk == VK_NUMPAD8 || vk == VK_UP) { menu_move(-1); return 1; }
   if (vk == VK_NUMPAD2 || vk == VK_DOWN) { menu_move(1); return 1; }
@@ -5070,6 +4873,289 @@ static void menu_tick(void) {
   if (g_wpMenuOpen && (tick % 3) == 0) menu_refresh();
 }
 
+/* ---- 2026-11-19 人机巡线驱动 -------------------------------------------------
+ * 证据（blank_b 实测）：bot.path=0、enemy=0、crouchList BL=9/GR=9、
+ * gameRoundOver=0——游戏 AI 不给目的地，人机全程原地。
+ * 这里对没有 path 的 bot 用 Seeker.StartPath 沿本图可走点下一条路径，
+ * 算完调用 Bot.OnPathComplete 装车；AI 自己有目标/有敌人时不抢。
+ * 只在测试包（blank）里生效，正常游戏一行不执行。 */
+#define R_SEEK_STARTPATH 0x5A4260
+#define R_BOT_ONPATH    0xB31950
+typedef P    (*seek_start_t)(P seeker, V3 start, V3 end, P cb, void* mi);
+typedef void (*bot_onpath_t)(P bot, P path, void* mi);
+
+static P g_prBotCls, g_prBotType, g_prStopFld;
+static int pr_readable(P p, size_t n);
+typedef struct { P bot; V3 p; unsigned t; } BPOS;
+static BPOS g_bp[32];
+
+typedef struct { P bot, path; unsigned h; unsigned next; } DRV;
+static DRV g_drv[32];
+
+static void drv_release(DRV* d) {
+  if (d->h && x_gchandle_free) x_gchandle_free((P)(size_t)d->h);
+  d->path = 0; d->h = 0;
+}
+
+static void drive_tick(void) {
+  static int on = -1;
+  P arr, g = navfix_point_graph();
+  int n, i, j, nn2;
+  unsigned now = GetTickCount();
+  if (on < 0) on = cfg_bool("bot_drive", 0) ? 1 : 0;   /* 默认关：先复现原版 AI 的目标来源 */
+  if (!on || !g || !g_nedBlank || !g_packName[0]) return;
+  if (!g_prBotType || g_sceneAge < 12) return;
+  nn2 = nav_count(g);
+  if (nn2 <= 0) return;
+  for (j = 0; j < 32; j++) {
+    if (g_drv[j].bot && !uobj_live(g_drv[j].bot)) {
+      drv_release(&g_drv[j]); g_drv[j].bot = 0;
+    }
+  }
+  arr = ((find_objs_t)RVA(R_FINDOBJS))(g_prBotType, 1, 0);
+  if (!arr) return;
+  n = *(int*)((char*)arr + 0x0C);
+  if (n > 32) n = 32;
+  for (i = 0; i < n; i++) {
+    P b = *(P*)((char*)arr + 0x10 + i * 4);
+    P tr, path, seeker, ei, enemy;
+    DRV* d = 0;
+    V3 bp;
+    int cand[64], nc = 0;
+    if (!b || !uobj_live(b)) continue;
+    for (j = 0; j < 32; j++) if (g_drv[j].bot == b) { d = &g_drv[j]; break; }
+    if (!d) for (j = 0; j < 32; j++) if (!g_drv[j].bot) { d = &g_drv[j]; d->bot = b; break; }
+    if (!d) continue;
+    path = *(P*)((char*)b + 0x80);
+    if (path) { if (d->path) drv_release(d); d->next = now + 500; continue; }
+    ei = *(P*)((char*)b + 0x28);
+    enemy = (pr_readable(ei, 0x40) && pr_readable(*(P*)((char*)ei + 0x0C), 0x30))
+              ? *(P*)((char*)ei + 0x0C) : 0;
+    if (enemy) { if (d->path) drv_release(d); d->next = now + 500; continue; }
+    if (d->path) {
+      int st = pr_readable(d->path, 0x40) ? *(int*)((char*)d->path + 0x20) : -1;
+      P lst = pr_readable(d->path, 0x40) ? *(P*)((char*)d->path + 0x2C) : 0;
+      int pts = pr_readable(lst, 0x20) ? *(int*)((char*)lst + 0xC) : -1;
+      if ((st == 2 || st == 3) && pts > 0) {
+        ((bot_onpath_t)RVA(R_BOT_ONPATH))(b, d->path, 0);
+        elog("drive: adopt bot=%p pts=%d", b, pts);
+        drv_release(d); d->next = now + 700;
+      } else if (now > d->next) {
+        drv_release(d); d->next = now + 1500;
+      }
+      continue;
+    }
+    if (now < d->next) continue;
+    tr = ((get_tr_t)RVA(R_COMP_TR))(b, 0);
+    if (!tr) continue;
+    ((get_pos_t)RVA(R_GET_POS_INJ))(tr, &bp, 0);
+    seeker = *(P*)((char*)b + 0x78);
+    if (!seeker) continue;
+    /* 选一个离自己 >20m、在对侧的可走点当目标 */
+    for (j = 0; j < nn2 && nc < 64; j++) {
+      P nd = nav_node(g, j);
+      V3 q;
+      float dx, dz, dd;
+      if (!nd || !nav_walk(nd)) continue;
+      nav_pos(nd, &q);
+      dx = q.x - bp.x; dz = q.z - bp.z; dd = dx * dx + dz * dz;
+      if (dd < 400.0f) continue;
+      if (bp.x > 0.0f ? (q.x > bp.x + 5.0f) : (q.x < bp.x - 5.0f)) continue;
+      cand[nc++] = j;
+    }
+    if (!nc) continue;
+    {
+      V3 tp;
+      P pth;
+      nav_pos(nav_node(g, cand[(now + (unsigned)(size_t)b) % (unsigned)nc]), &tp);
+      pth = ((seek_start_t)RVA(R_SEEK_STARTPATH))(seeker, bp, tp, 0, 0);
+      if (pth) {
+        d->path = pth;
+        d->h = x_gchandle_new ? x_gchandle_new(pth, 0) : 0;
+        d->next = now + 4000;
+      } else {
+        d->next = now + 2000;
+      }
+      elog("drive: ask bot=%p -> (%.1f,%.1f) path=%p", b, tp.x, tp.z, pth);
+    }
+  }
+}
+
+/* ---- 2026-11-19 人机探针：排查「路线通了人机还是不动」 -----------------
+ * 每 ~5 s 打一行：AstarPath 的吸附半径、bot 数、前 3 个 bot 的位置 /
+ * 最近可走节点距离 / 当前 path 点数 / 敌人 / stopAllBot。
+ * ucf_mod.json 里 "bot_probe": false 可关。 */
+static int g_prOn = -1;
+
+static int pr_readable(P p, size_t n) {
+  MEMORY_BASIC_INFORMATION m;
+  if (!p) return 0;
+  if (!VirtualQuery(p, &m, sizeof m)) return 0;
+  (void)n;
+  return m.State == MEM_COMMIT && !(m.Protect & (PAGE_NOACCESS | PAGE_GUARD));
+}
+
+static int pr_walk_count(P g) {
+  int n = g ? nav_count(g) : 0, i, c = 0;
+  for (i = 0; i < n; i++) { P nd = nav_node(g, i); if (nd && nav_walk(nd)) c++; }
+  return c;
+}
+
+static float pr_near_walk(P g, const V3* p, P* out) {
+  int n = g ? nav_count(g) : 0, i;
+  float best = 1e9f;
+  P bn = 0;
+  for (i = 0; i < n; i++) {
+    P nd = nav_node(g, i);
+    V3 q;
+    float dx, dy, dz, d;
+    if (!nd || !nav_walk(nd)) continue;
+    nav_pos(nd, &q);
+    dx = q.x - p->x; dy = q.y - p->y; dz = q.z - p->z;
+    d = dx * dx + dy * dy + dz * dz;
+    if (d < best) { best = d; bn = nd; }
+  }
+  if (out) *out = bn;
+  return bn ? sqrtf(best) : -1.0f;
+}
+
+static void bot_probe(void) {
+  P arr, g = navfix_point_graph();
+  unsigned char st = 0;
+  int n, i, cnt = 0, shown = 0;
+  if (g_prOn < 0) g_prOn = cfg_bool("bot_probe", 1) ? 1 : 0;
+  if (!g_prOn) return;
+  /* 场景刚切完的头几帧别碰 walkable 节点数组；12 tick ≈ 3 s 后连接表已重建 */
+  if (g_sceneAge < 12) return;
+  if (!g_prBotType) {
+    g_prBotCls = find_cls("", "Bot");
+    if (!g_prBotCls || !x_class_get_type) { elog("probe: Bot class not found"); g_prOn = 0; return; }
+    g_prBotType = x_type_get_object ? x_type_get_object(x_class_get_type(g_prBotCls)) : 0;
+    if (x_class_get_field_from_name) g_prStopFld = x_class_get_field_from_name(g_prBotCls, "stopAllBot");
+    if (!g_prBotType) { elog("probe: Bot type missing"); g_prOn = 0; return; }
+  }
+  if (g_prStopFld && x_field_static_get_value) x_field_static_get_value(g_prStopFld, &st);
+  /* 蹲点静态表：我们建的 18 个点有没有被游戏收进 SpareList_BL/GR */
+  {
+    P ccls = find_cls("", "Bot_CrouchPos");
+    if (ccls && x_class_get_field_from_name && x_field_static_get_value) {
+      P fb = x_class_get_field_from_name(ccls, "SpareList_BL");
+      P fg = x_class_get_field_from_name(ccls, "SpareList_GR");
+      P lb = 0, lg = 0;
+      if (fb) x_field_static_get_value(fb, &lb);
+      if (fg) x_field_static_get_value(fg, &lg);
+      elog("probe: crouchList BL=%d GR=%d",
+           pr_readable(lb, 0x20) ? *(int*)((char*)lb + 0xC) : -1,
+           pr_readable(lg, 0x20) ? *(int*)((char*)lg + 0xC) : -1);
+    }
+  }
+  /* 回合状态：gameRoundOver 为真时游戏会停掉人机的寻路/行动 */
+  {
+    P gcls = find_cls("", "GameManager");
+    P ff = (gcls && x_class_get_field_from_name)
+             ? x_class_get_field_from_name(gcls, "<gameRoundOver>k__BackingField") : 0;
+    unsigned char ro = 0;
+    if (ff && x_field_static_get_value) {
+      x_field_static_get_value(ff, &ro);
+      elog("probe: gameRoundOver=%d", (int)ro);
+    }
+  }
+  {
+    P acls = find_cls("", "AstarPath"), af, a = 0;
+    if (acls && x_class_get_field_from_name && x_field_static_get_value) {
+      af = x_class_get_field_from_name(acls, "active");
+      if (af) x_field_static_get_value(af, &a);
+      if (a) elog("probe: astar=%p maxNearest=%.2f fullGetNearest=%d scanOnStart=%d walk=%d/%d",
+                  a, *(float*)((char*)a + 0x30), *(unsigned char*)((char*)a + 0x35),
+                  *(unsigned char*)((char*)a + 0x34), pr_walk_count(g), g ? nav_count(g) : -1);
+    }
+  }
+  arr = ((find_objs_t)RVA(R_FINDOBJS))(g_prBotType, 1, 0);
+  if (!arr) { elog("probe: bots array null (stop=%d)", (int)st); return; }
+  n = *(int*)((char*)arr + 0x0C);
+  if (n < 0) n = 0;
+  if (n > 64) n = 64;
+  for (i = 0; i < n; i++) {
+    P b = *(P*)((char*)arr + 0x10 + i * 4);
+    P tr, nn = 0, path, enemy = 0, ei;
+    V3 p;
+    float d;
+    int pts = -1;
+    if (!b || !uobj_live(b)) continue;
+    cnt++;
+    if (shown >= 3) continue;
+    tr = ((get_tr_t)RVA(R_COMP_TR))(b, 0);   /* Component.get_transform：传 GameObject 那个会崩 */
+    if (!tr) continue;
+    ((get_pos_t)RVA(R_GET_POS_INJ))(tr, &p, 0);
+    d = g ? pr_near_walk(g, &p, &nn) : -1.0f;
+    path = *(P*)((char*)b + 0x80);
+    if (pr_readable(path, 0x40) && pr_readable(*(P*)((char*)path + 0x2C), 0x20)) {
+      P lst = *(P*)((char*)path + 0x2C);
+      pts = *(int*)((char*)lst + 0xC);
+    }
+    ei = *(P*)((char*)b + 0x28);
+    if (pr_readable(ei, 0x40)) enemy = *(P*)((char*)ei + 0x0C);
+    {
+      P acts = *(P*)((char*)b + 0x58);
+      P sa = *(P*)((char*)b + 0x64);
+      P gnear = *(P*)((char*)b + 0x88);
+      P gnext = *(P*)((char*)b + 0x8C);
+      int an = pr_readable(acts, 0x20) ? *(int*)((char*)acts + 0xC) : -1;
+      int isS = -1, over = -1, reach = -1;
+      float enemyD = -1.0f;
+      float spd = -1.0f;
+      char names[200];
+      V3 tp;
+      int k2;
+      names[0] = 0;
+      tp.x = tp.y = tp.z = 0.0f;
+      if (pr_readable(sa, 0x30)) {
+        isS = *(unsigned char*)((char*)sa + 0x10);
+        tp.x = *(float*)((char*)sa + 0x14);
+        tp.y = *(float*)((char*)sa + 0x18);
+        tp.z = *(float*)((char*)sa + 0x1C);
+        over = *(unsigned char*)((char*)sa + 0x20);
+        reach = *(unsigned char*)((char*)sa + 0x21);
+      }
+      /* 行为名：actionList 里每个 BotActionBase 的类名（Saunter / GoCrouchPos / CrabStep ...） */
+      if (pr_readable(acts, 0x20)) {
+        P items = *(P*)((char*)acts + 0x8);
+        int ai, cnt2 = an > 10 ? 10 : an;
+        if (pr_readable(items, 0x20)) {
+          for (ai = 0; ai < cnt2; ai++) {
+            P o = *(P*)((char*)items + 0x10 + ai * 4);
+            const char* nm = "?";
+            if (pr_readable(o, 0x10)) nm = type_name(*(P*)o);
+            if (ai) strncat(names, ",", sizeof names - strlen(names) - 1);
+            strncat(names, nm, sizeof names - strlen(names) - 1);
+          }
+        }
+      }
+      if (enemy && pr_readable(ei, 0x40)) enemyD = *(float*)((char*)ei + 0x28);
+      /* 速度：同一 bot 两次采样间的水平位移 / 时间 */
+      for (k2 = 0; k2 < 32; k2++) if (g_bp[k2].bot == b) break;
+      if (k2 == 32) {
+        for (k2 = 0; k2 < 32; k2++) if (!g_bp[k2].bot) {
+          g_bp[k2].bot = b; g_bp[k2].p = p; g_bp[k2].t = GetTickCount(); break;
+        }
+      }
+      if (k2 < 32) {
+        unsigned dt = GetTickCount() - g_bp[k2].t;
+        if (dt > 200) {
+          float dx = p.x - g_bp[k2].p.x, dz = p.z - g_bp[k2].p.z;
+          spd = sqrtf(dx * dx + dz * dz) / ((float)dt / 1000.0f);
+          g_bp[k2].p = p; g_bp[k2].t = GetTickCount();
+        }
+      }
+      elog("beh: bot=%p p=(%.1f,%.1f,%.1f) spd=%.2f acts=[%s] isS=%d tgt=(%.1f,%.1f,%.1f) over=%d reach=%d path=%p pts=%d enemy=%p enemyD=%.1f nearN=%p nextN=%p",
+           b, p.x, p.y, p.z, spd, names, isS, tp.x, tp.y, tp.z, over, reach,
+           path, pts, enemy, enemyD, gnear, gnext);
+    }
+    shown++;
+  }
+  elog("probe: bots=%d stopAllBot=%d", cnt, (int)st);
+}
+
 void editor_tick(void) {
   static int ticks;
   if (!g_inited) return;
@@ -5108,9 +5194,11 @@ void editor_tick(void) {
     return;
   }
   nav_edit_tick();            /* 等图稳定后自动套用本图的编辑（不看 vis 开关） */
+  { static int pr; if ((++pr % 20) == 0) bot_probe(); }   /* 人机状态探针：~5 s 一次 */
+  { static int dr; if ((++dr % 4) == 0) drive_tick(); }    /* 人机巡线：~1 s 一次 */
   nm_tick();                  /* 可走面独立于可视化：Ctrl+V 关着也能显示 */
   if (!g_visOn) {
-    if ((++ticks % 8) == 0) hud_refresh();   /* 可视化关着也保持面板数字是活的 */
+    if ((++ticks % 8) == 0) overlay_refresh();   /* 可视化关着也保持面板数字是活的 */
     return;
   }
   if ((ticks % 60) == 0) {
@@ -5129,8 +5217,7 @@ void editor_tick(void) {
       vis_rebuild();
     }
   }
-  vis_label_tick();
-  if ((++ticks % 8) == 0) hud_refresh();   /* keep counters live at ~2 s */
+  if ((++ticks % 8) == 0) overlay_refresh();   /* keep the spawn legend live at ~2 s */
 }
 
 /* 练习场开关：<插件目录>\nav\nogen.txt 存在时，插件不再自己铺路点。
@@ -5168,23 +5255,6 @@ void editor_on_key_mod(unsigned vk, int shift) {
   if (vk == 'V') { vis_toggle(); return; }
   if (shift && vk == 'X') { set_collect_only(!g_collectOnly); return; }
   if (vk == 'E') { g_exportForce = 1; vis_export(); g_exportForce = 0; return; }
-  if (vk == 'H') {
-    if (!g_hudOn) { g_hudOn = 1; g_helpOn = 1; elog("hud: on (was off by config)"); }
-    else g_helpOn = !g_helpOn;
-    hud_refresh();
-    return;
-  }
-  if (vk == 'M') { g_logOn = !g_logOn; hud_refresh(); return; }
-  if (shift && vk == 'L') {
-    g_lblMode = (g_lblMode + 1) % 3;
-    elog("vis labels -> %d (0=off 1=near 2=all)", g_lblMode);
-    hud_refresh();
-    return;
-  }
-  if (shift && vk >= '1' && vk <= '5') {
-    vis_toggle_layer(1 << (vk - '1'));
-    return;
-  }
   if (shift && vk == '6') { nm_toggle(); return; }   /* 可走面独立开关 */
 
   /* ---- 路点编辑（Ctrl+Shift+字母） ---- */
@@ -5197,13 +5267,13 @@ void editor_on_key_mod(unsigned vk, int shift) {
   if (shift && vk == 'R') { nav_reapply(); return; }      /* 强制重新套用 */
 
   if (vk == '1') {
-    if (!g_editAllow) { elog("[cfg] editor = off, 游戏内编辑已关闭"); hud_refresh(); return; }
+    if (!g_editAllow) { elog("[cfg] editor = off, 游戏内编辑已关闭"); overlay_refresh(); return; }
     g_on = !g_on;
     elog("editor %s (markers=%d)", g_on ? "ON" : "OFF", g_n);
-    hud_refresh();
+    overlay_refresh();
     return;
   }
-  if (vk == '9') { status(); hud_refresh(); return; }
+  if (vk == '9') { status(); overlay_refresh(); return; }
   if (!g_on) return;
   switch (vk) {
     case '0':
@@ -5223,7 +5293,7 @@ void editor_on_key_mod(unsigned vk, int shift) {
         elog("area: navfix created %p at %.2f %.2f %.2f", ext, p.x, p.y, p.z);
         editor_mark_dirty();
         vis_rebuild();
-        hud_refresh();
+        overlay_refresh();
       }
       break;
     case 0x2E:  /* VK_DELETE */
@@ -5242,7 +5312,7 @@ void editor_on_key_mod(unsigned vk, int shift) {
     case '8':
       g_team = g_team ? 0 : 1;
       elog("team -> %d (%s) for new crouch points", g_team, g_team ? "GR" : "BL");
-      hud_refresh();
+      overlay_refresh();
       break;
     default:
       break;
@@ -5267,7 +5337,7 @@ void editor_on_key_any(unsigned vk, int shift) {
 }
 
 void editor_on_quit(void) {
-  elog("quit: editor stop (markers=%d vis nodes=%d labels=%d)", g_n, g_vnN, g_vfN);
+  elog("quit: editor stop (markers=%d vis nodes=%d features=%d)", g_n, g_vnN, g_vfN);
   nav_conn_roots_release();
 }
 
@@ -5564,20 +5634,16 @@ void editor_start(const char* modDir) {
   pack_init();   /* UCF_PACK / UCF_FP：这次读哪个目录、只对哪张图生效 */
   /* 开关全部来自 ucf_mod.json（cfg.c）：这里各取一次，日志里写清楚，
    * 关掉哪个在日志里都看得见，不用猜。 */
-  g_hudOn      = cfg_bool("hud", 1);
-  g_hudStates  = cfg_bool("hud_states", 0);
-  g_helpOn     = cfg_bool("hud_keys", 0);
-  g_logOn      = cfg_bool("hud_log", 1);
   g_visOn      = cfg_bool("visualizer", 0);
-  g_lay        = (cfg_bool("vis_layer_a", 1) ? LAY_A : 0)
-               | (cfg_bool("vis_layer_b", 1) ? LAY_B : 0)
-               | (cfg_bool("vis_layer_c", 1) ? LAY_C : 0)
-               | (cfg_bool("vis_layer_d", 1) ? LAY_D : 0)
-               | (cfg_bool("vis_layer_e", 1) ? LAY_E : 0);
-  g_lblMode    = cfg_int("vis_labels", 0);
-  if (g_lblMode < 0 || g_lblMode > 2) g_lblMode = 0;
   g_nmShow     = cfg_bool("navmesh_show", 1);
-  g_visLists   = cfg_bool("vis_lists", 1);
+  g_visNodes   = cfg_bool("vis_nodes", 1);
+  g_visNano    = cfg_bool("vis_nano", 1);
+  g_visCrouch  = cfg_bool("vis_crouch", 1);
+  g_visGuard   = cfg_bool("vis_guard", 1);
+  g_visBorn    = cfg_bool("vis_born", 1);
+  g_visSupply  = cfg_bool("vis_supply", 1);
+  g_visJump    = cfg_bool("vis_jump", 1);
+  g_visTag     = cfg_bool("vis_tag", 1);
   g_editAllow  = cfg_bool("editor", 1);
   g_wpMenuOn   = cfg_bool("wp_menu", 1);
   g_wpAutoGround = cfg_bool("wp_autoground", 1);
@@ -5590,11 +5656,12 @@ void editor_start(const char* modDir) {
   g_expGuard   = cfg_bool("export_guard", 1);
   g_expSpawn   = cfg_bool("export_spawn", 1);
   g_expTags    = cfg_bool("export_tags", 1);
-  elog("editor ready: hud=%d states=%d keys=%d log=%d visualizer=%d layers=0x%X labels=%d "
-       "navmesh=%d editor=%d file=%s",
-       g_hudOn, g_hudStates, g_helpOn, g_logOn, g_visOn, g_lay, g_lblMode,
-       g_nmShow, g_editAllow, g_file);
+  elog("editor ready: visualizer=%d navmesh=%d editor=%d file=%s",
+       g_visOn, g_nmShow, g_editAllow, g_file);
   elog("wpmenu: on=%d autoground=%d brush=%s", g_wpMenuOn, g_wpAutoGround, g_wpBrushName);
+  elog("vis data: nodes=%d nano=%d crouch=%d guard=%d born=%d supply=%d jump=%d tag=%d",
+       g_visNodes, g_visNano, g_visCrouch, g_visGuard, g_visBorn, g_visSupply,
+       g_visJump, g_visTag);
   elog("export content: enabled=%d nodes=%d crouch=%d area=%d guard=%d spawn=%d tags=%d",
        g_expEnabled, g_expNodes, g_expCrouch, g_expArea, g_expGuard, g_expSpawn, g_expTags);
   elog("four versions: export=%s packs=%s officialNavSave=%s",
