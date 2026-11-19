@@ -748,15 +748,51 @@ def cmd_status(args):
 
 
 # ---------------------------------------------------------------- ④ 测试包
-# 测试包 = 一份「只对某一张图生效」的路线改动：<游戏目录>\packs\<包名>\<指纹>.txt
-# 插件靠环境变量 UCF_PACK（读哪个包）+ UCF_FP（只对哪张图套用）工作，
-# 正式版 <游戏目录>\nav\ 一个字节都不动。包名只允许 ASCII（插件是 C，用 ANSI 的
+# 测试包 = 一份「只对某一张图生效」的路线改动：
+#   <游戏目录>\packs\<地图文件夹>\<包名>\<指纹>.txt
+# 地图文件夹 = 地图英文场景名（TransportShip / Nano_DawnVillage …），按图归类。
+# 插件靠环境变量 UCF_PACK（地图文件夹/包名）+ UCF_FP（只对哪张图套用）工作，
+# 正式版 <游戏目录>\nav\ 一个字节都不动。两段都只允许 ASCII（插件是 C，用 ANSI 的
 # CreateDirectoryA / fopen，中文路径没验证过）。
 PACK_NAME_RE = re.compile(r"^[A-Za-z0-9_-]{1,48}$")
 
 
 def packs_root():
     return P.PACKS_DIR
+
+
+def _is_pack(path):
+    if os.path.isfile(os.path.join(path, "manifest.json")):
+        return True
+    try:
+        return any(re.match(r"^n\d+-[0-9a-fA-F]{16}\.txt$", fn) for fn in os.listdir(path))
+    except OSError:
+        return False
+
+
+def pack_ids():
+    r"""packs\ 下所有包 id（地图文件夹/包名）；根目录平铺的老包也算。"""
+    root = packs_root()
+    out = []
+    try:
+        entries = sorted(os.listdir(root))
+    except OSError:
+        return out
+    for entry in entries:
+        d = os.path.join(root, entry)
+        if entry.startswith("_") or not os.path.isdir(d):
+            continue
+        if _is_pack(d):
+            out.append(entry)
+            continue
+        try:
+            subs = sorted(os.listdir(d))
+        except OSError:
+            continue
+        for sub in subs:
+            if os.path.isdir(os.path.join(d, sub)) and _is_pack(os.path.join(d, sub)):
+                out.append("%s/%s" % (entry, sub))
+    return out
 
 
 def maps_index():
@@ -807,8 +843,19 @@ def write_json(path, obj):
 
 
 def find_pack(name):
-    pdir = os.path.join(packs_root(), name)
-    if not os.path.isdir(pdir):
+    r"""按 id（地图文件夹/包名）或只给包名找目录；只给包名时在各地图文件夹里找。"""
+    root = packs_root()
+    name = str(name or "").replace("\\", "/").strip("/")
+    pdir = os.path.join(root, *name.split("/")) if name else ""
+    if not pdir or not os.path.isdir(pdir):
+        tail = name.split("/")[-1]
+        hits = [x for x in pack_ids() if x.split("/")[-1] == tail]
+        if len(hits) > 1:
+            sys.exit("有多个同名测试包，请写全「地图文件夹/包名」：%s"
+                     % ", ".join(hits))
+        if hits:
+            pdir = os.path.join(root, *hits[0].split("/"))
+    if not pdir or not os.path.isdir(pdir):
         sys.exit("没有测试包 %r。先看 python navdata.py pack list" % name)
     man = {}
     try:
@@ -827,20 +874,16 @@ def find_pack(name):
 def cmd_pack_list(args):
     root = packs_root()
     print("测试包目录：%s" % root)
-    if not os.path.isdir(root):
-        print("（还没有任何测试包）")
-        print("新建：python navdata.py pack new chain_a --level 11")
-        return 0
-    names = sorted(d for d in os.listdir(root) if os.path.isdir(os.path.join(root, d)))
+    names = pack_ids()
     if not names:
         print("（还没有任何测试包）")
         print("新建：python navdata.py pack new chain_a --level 11")
         return 0
     print("")
-    print("| 包名 | 地图 | 指纹 | 改动 | 建于 |")
+    print("| 测试包（地图文件夹/包名） | 地图 | 指纹 | 改动 | 建于 |")
     print("| --- | --- | --- | --- | --- |")
     for n in names:
-        pdir = os.path.join(root, n)
+        pdir = os.path.join(root, *n.split("/"))
         try:
             man = read_json(os.path.join(pdir, "manifest.json")) or {}
         except (OSError, ValueError):
@@ -852,9 +895,103 @@ def cmd_pack_list(args):
         nd, ed = edit_counts(os.path.join(pdir, fp + ".txt")) if fp else (0, 0)
         print("| %s | %s %s | %s | node %d / edge %d%s | %s |" % (
             n, man.get("level", "?"), man.get("label", ""), fp or "-", nd, ed,
-            " · 空白底图" if man.get("blank") else "", man.get("created", "-")))
+            (" · grow（真·新建）" if man.get("grow") else
+             (" · 空白底图" if man.get("blank") else "")), man.get("created", "-")))
     print("")
     print("用法：控制台里选「测试包」+ 包名 + 地图，再点开始游戏。")
+    return 0
+
+
+def native_map_doc(fp):
+    r"""按指纹在 ① 备份版 maps/ 里找原生地图 JSON；找不到返回 None。"""
+    d = os.path.join(P.NATIVE, "maps")
+    if not os.path.isdir(d):
+        return None
+    for fn in sorted(os.listdir(d)):
+        if not fn.endswith(".json") or fn.startswith("_"):
+            continue
+        try:
+            with open(os.path.join(d, fn), "r", encoding="utf-8") as f:
+                doc = json.load(f)
+        except (OSError, ValueError):
+            continue
+        if str((doc.get("map") or {}).get("fingerprint") or "") == fp:
+            return doc
+    return None
+
+
+def seed_pack_lines(fp):
+    r"""把原版点图展开成「全量重放」行：node add × N + edge add × M。
+
+    返回 (lines, npoints, nedges)；没有原生数据返回 (None, 0, 0)。
+    只收 walkable 的原生点，边按无向去重 —— 和插件运行期看到的图一致。
+    """
+    doc = native_map_doc(fp)
+    if not doc:
+        return None, 0, 0
+    nodes = [n for n in (doc.get("nodes") or []) if int(n.get("walk", 1)) != 0]
+    pos = {}
+    for n in nodes:
+        p = n.get("p") or (0.0, 0.0, 0.0)
+        pos[str(n.get("id"))] = tuple(float(v) for v in p)
+    lines = ["node add %.3f %.3f %.3f" % pos[k] for k in pos]
+    seen, edges = set(), []
+    for e in doc.get("edges") or []:
+        if len(e) < 2:
+            continue
+        a, b = str(e[0]), str(e[1])
+        if a == b or a not in pos or b not in pos:
+            continue
+        k = (a, b) if a < b else (b, a)
+        if k in seen:
+            continue
+        seen.add(k)
+        edges.append(k)
+    for a, b in edges:
+        lines.append("edge add %.3f %.3f %.3f %.3f %.3f %.3f" % (pos[a] + pos[b]))
+    return lines, len(pos), len(edges)
+
+
+def cmd_pack_seed(args):
+    r"""从原版点图播种一个 grow 测试包：原版全量点+边，之后随便加。"""
+    if not PACK_NAME_RE.match(args.name):
+        sys.exit("包名只能用 ASCII 字母/数字/下划线/减号，1~48 字符：%r" % args.name)
+    idx = maps_index()
+    want = args.level if args.level.startswith("level") else "level" + args.level.strip("lL ")
+    info = idx.get(want)
+    if not info:
+        sys.exit("maps/*.json 里没有 %s 的路点数据。可用：%s" % (
+            want, ", ".join("%s(%s)" % (k, v["label"]) for k, v in sorted(idx.items()))))
+    fp = info["fp"]
+    if not fp or fp == "n0-0000000000000000":
+        sys.exit("%s 原生 0 个点，没有可播种的原版路点" % want)
+    lines, np_, ne = seed_pack_lines(fp)
+    if lines is None:
+        sys.exit("找不到 %s 的原生地图数据（%s）" % (fp, os.path.join(P.NATIVE, "maps")))
+    if not np_:
+        sys.exit("%s 的原生点全是不可走，没有可播种的点" % fp)
+    folder = re.sub(r'[<>:"/\\|?*\x00-\x1f]+', "_",
+                    str(info.get("scene") or want) + str(info.get("label") or "")).strip(" .") or want
+    pdir = os.path.join(packs_root(), folder, args.name)
+    os.makedirs(pdir, exist_ok=True)
+    dst = os.path.join(pdir, fp + ".txt")
+    with open(dst, "w", encoding="utf-8", newline="\n") as f:
+        f.write("# ucf-navedit v1 fp=%s\n# seed: 原版点图全量重放\nblank\ngrow\n" % fp)
+        for ln in lines:
+            f.write(ln + "\n")
+    with open(os.path.join(pdir, "nogen.txt"), "w", encoding="utf-8") as f:
+        f.write("")
+    write_json(os.path.join(pdir, "manifest.json"), {
+        "name": args.name, "folder": folder, "level": info["level"], "label": info["label"],
+        "fp": fp, "scene": info.get("scene", ""),
+        "created": time.strftime("%Y-%m-%d %H:%M:%S"),
+        "source": "seed", "blank": True, "grow": True, "seed": True,
+        "note": "原版播种：%d 个点 + %d 条边全量重放，之后可以继续加点（不受原生点数限制）" % (np_, ne),
+    })
+    print("已播种测试包：%s" % pdir)
+    print("  地图 %s(%s) 指纹 %s" % (info["label"], info["level"], fp))
+    print("  node %d / edge %d" % (np_, ne))
+    print("下一步：控制台 → 人机路点 → 选这个包 + 同一张图 → 开始游戏")
     return 0
 
 
@@ -875,17 +1012,25 @@ def cmd_pack_new(args):
         sys.exit("%s 没有指纹（这张图没有路点图，测试包对它没有意义）" % args.level)
     srcroot = P.DEV if args.src == "dev" else P.DEPLOY
     src = os.path.join(srcroot, "nav", fp + ".txt")
-    pdir = os.path.join(packs_root(), args.name)
+    folder = re.sub(r'[<>:"/\\|?*\x00-\x1f]+', "_",
+                    str(info.get("scene") or want) + str(info.get("label") or "")).strip(" .") or want
+    pdir = os.path.join(packs_root(), folder, args.name)
     os.makedirs(pdir, exist_ok=True)
     dst = os.path.join(pdir, fp + ".txt")
     blank = bool(getattr(args, "blank", False))
-    if blank and fp == "n0-0000000000000000":
+    grow = bool(getattr(args, "grow", False))
+    if grow:
+        blank = True          # grow 自带 blank 语义：先清空原生点，再新建节点
+        print("  grow 模式：原生点会全部标死，路线点按 PointGraph.AddNode 新建（数量不受原生点数限制）")
+    if blank and not grow and fp == "n0-0000000000000000":
         print("  !! 注意：暴风原生 0 个点，空白包没有可复用的节点槽位，node add 套不进去；"
-              "建议换成有原生路点的图（如运输船）。")
+              "0 点图只能用 --grow（真·新建节点）。")
     if blank:
         # 空白底图：原生点由插件先全禁掉，包里的 node add / edge add 才是唯一路线。
         with open(dst, "w", encoding="utf-8", newline="\n") as f:
             f.write("# ucf-navedit v1 fp=%s\nblank\n" % fp)
+            if grow:
+                f.write("grow\n")
         with open(os.path.join(pdir, "nogen.txt"), "w", encoding="utf-8") as f:
             f.write("")                       # 存在即关掉自动铺路点
         print("已写空白底图：%s（node 0 / edge 0；原生点会在进图时全部禁用）" % dst)
@@ -901,6 +1046,7 @@ def cmd_pack_new(args):
         print("%s 不存在（这张图还没有改动）—— 已建一份空清单，编辑器里改完再复制过来" % src)
     man = {
         "name": args.name,
+        "folder": folder,
         "level": info["level"],
         "label": info["label"],
         "fp": fp,
@@ -908,15 +1054,18 @@ def cmd_pack_new(args):
         "created": time.strftime("%Y-%m-%d %H:%M:%S"),
         "source": "blank" if blank else ("dev" if args.src == "dev" else "deploy"),
         "blank": True if blank else False,
-        "note": "空白底图测试包：原生点全禁用 + nogen.txt 关自动铺点；路线自己画" if blank
-                else "测试包：只对 %s(%s) 生效；插件用 UCF_PACK + UCF_FP 读它" % (info["label"], info["level"]),
+        "grow": True if grow else False,
+        "note": ("grow 测试包：原生点全禁用 + 节点按 AddNode 新建（不受原生点数限制）；路线自己画" if grow
+                 else "空白底图测试包：原生点全禁用 + nogen.txt 关自动铺点；路线自己画" if blank
+                 else "测试包：只对 %s(%s) 生效；插件用 UCF_PACK + UCF_FP 读它" % (info["label"], info["level"])),
     }
     write_json(os.path.join(pdir, "manifest.json"), man)
     print("")
     print("已建测试包：%s" % pdir)
-    print("  包名 %s   地图 %s(%s)   指纹 %s" % (args.name, info["label"], info["level"], fp))
-    print("下一步：控制台 → 测试数据 → 测试包（选 %s）→ 地图（%s）→ 开始游戏" % (
-        args.name, info["label"]))
+    print("  包名 %s   地图 %s(%s)   指纹 %s" % ("%s/%s" % (folder, args.name),
+                                               info["label"], info["level"], fp))
+    print("下一步：控制台 → 人机路点 → 测试包（选 %s/%s）→ 地图（%s）→ 开始游戏" % (
+        folder, args.name, info["label"]))
     return 0
 
 
@@ -949,9 +1098,14 @@ def cmd_pack_promote(args):
         sys.exit("包里没有 %s（先在里面写改动）" % (fp + ".txt"))
     try:
         with open(src, "r", encoding="utf-8", errors="replace") as f:
-            is_blank = any(ln.strip() == "blank" for ln in f)
+            lines = [ln.strip() for ln in f]
+        is_blank = any(ln == "blank" for ln in lines)
+        is_grow = any(ln == "grow" for ln in lines)
     except OSError:
-        is_blank = False
+        is_blank = is_grow = False
+    if is_grow:
+        sys.exit("这是 grow 测试包（真·新建节点），不能升到正式版 nav\\："
+                 "正式版走增量改动，节点只增不减，先把 grow 的套用逻辑做成正式链路再说。")
     if is_blank:
         sys.exit("这是空白底图测试包（blank），不能升到正式版 nav\\："
                  "正式版只做增量改动，没有清空底图机制。")
@@ -1025,7 +1179,13 @@ def main():
     q2.add_argument("--from", dest="src", choices=["dev", "deploy"], default="dev")
     q2.add_argument("--blank", action="store_true",
                     help="空白底图：原生点全部禁用 + 关自动铺点，路线从 0 画")
+    q2.add_argument("--grow", action="store_true",
+                    help="真·新建节点（实验）：原生点标死后新建节点，突破原生点位数")
     q2.set_defaults(func=cmd_pack_new)
+    q2 = ps.add_parser("seed", help="从原版点图播种：全量复制原生点+边，再用 grow 自由加点")
+    q2.add_argument("name")
+    q2.add_argument("--level", required=True, help="levelN 或纯数字，例：--level 1")
+    q2.set_defaults(func=cmd_pack_seed)
     q2 = ps.add_parser("diff", help="包 vs 开发版 / 部署版")
     q2.add_argument("name")
     q2.set_defaults(func=cmd_pack_diff)

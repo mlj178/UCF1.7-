@@ -123,6 +123,9 @@ static P astar_active(void) {
   return n_live(v) ? v : 0;
 }
 
+/* editor.c 用：拿 AstarPath.active（grow 模式要它的 pathProcessor 来阻塞寻路） */
+P navfix_astar(void) { return astar_active(); }
+
 static P point_graph(P astar) {
   if (!n_live(astar)) return 0;
   P data = *(P*)((char*)astar + 0x10);

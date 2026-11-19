@@ -1,0 +1,1147 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>UCF 控制台 · 启动条件可视化（交互样稿）</title>
+<style>
+/* ============================================================
+   UCF 控制台 · 启动条件可视化 交互样稿
+   现状 / 改进 两套界面，同一份状态；纯前端，不读写游戏文件
+   ============================================================ */
+:root{
+  --page:#07090b;
+  --cwin:#1b1b1b; --cbar:#242424; --cpanel:#2b2b2b; --cpanel2:#232323;
+  --cline:#383838; --ctx:#ececec; --ctx2:#9aa0a6; --ctx3:#71787f;
+  --blue:#2f6fdb; --blue2:#255bb4; --green:#2f9e44; --orange:#8a4b1e;
+  --amber:#f5b942; --amber-deep:#a86a12; --amber-line:#7a5a17;
+  --red:#ff5c5c;
+  --tx:#dfe6ef; --tx2:#96a2b4; --tx3:#647081;
+}
+*{box-sizing:border-box}
+html{color-scheme:dark}
+body{
+  margin:0; padding:26px 28px 44px; min-width:1000px;
+  background:radial-gradient(1200px 700px at 50% -10%,#101820 0%,#07090b 55%,#050708 100%);
+  color:var(--tx); font:13px/1.5 "Microsoft YaHei UI","Microsoft YaHei","Segoe UI",sans-serif;
+}
+button,select,input{font:inherit;color:inherit}
+button{background:none;border:none;cursor:pointer}
+button:focus-visible,select:focus-visible{outline:2px solid #4f8cff;outline-offset:2px}
+::-webkit-scrollbar{width:8px;height:8px}
+::-webkit-scrollbar-thumb{background:#323b46;border-radius:8px}
+::-webkit-scrollbar-track{background:transparent}
+.hidden{display:none !important}
+
+/* ---------------- 页头 ---------------- */
+.page-head{max-width:1160px;margin:0 auto 14px;display:flex;align-items:flex-end;justify-content:space-between;gap:24px}
+.ph-badge{
+  display:inline-flex;align-items:center;gap:6px;height:22px;padding:0 9px;border-radius:20px;
+  border:1px solid #3b2f14;background:#211a0b;color:#f5c56a;font:10px/1 Consolas,monospace;letter-spacing:.06em;
+}
+.ph-badge i{width:5px;height:5px;border-radius:50%;background:#f5b942;box-shadow:0 0 8px #f5b942}
+.page-head h1{margin:9px 0 5px;font-size:24px;line-height:1.25;font-weight:800;color:#f2f7fd;letter-spacing:.01em}
+.page-head h1 span{font-size:12.5px;font-weight:500;color:#8fb8ff;margin-left:8px}
+.page-head p{margin:0;color:var(--tx2);font-size:12px;max-width:780px}
+.ph-right{display:flex;align-items:center;gap:8px;padding-bottom:3px;flex-wrap:wrap;justify-content:flex-end}
+.ph-k{font-size:11px;color:var(--tx3)}
+.seg{display:inline-flex;background:#1f1f1f;border:1px solid #3c3c3c;border-radius:7px;padding:2px;gap:2px}
+.seg button{height:28px;padding:0 10px;border-radius:5px;font-size:11px;color:#b9b9b9;white-space:nowrap}
+.seg button:hover{color:#eee}
+.seg button.on{background:var(--blue);color:#fff}
+.seg.big button{height:34px;padding:0 13px;font-size:12px}
+.seg.big button.on.amber{background:var(--amber-deep)}
+.mini{
+  height:30px;padding:0 10px;border-radius:6px;border:1px solid #4a4a4a;background:#3a3f47;color:#dfe3e8;
+  font-size:11px;white-space:nowrap;transition:background .15s,border-color .15s;
+}
+.mini:hover{background:#49505a;border-color:#5b626c}
+.mini:disabled{opacity:.4;cursor:not-allowed}
+.mini.primary{background:var(--blue);border-color:#3f7ee5;color:#fff;font-weight:600}
+.mini.primary:hover{background:#3b7ceb}
+
+/* ---------------- 提示条 ---------------- */
+.hintbar{
+  max-width:1160px;margin:0 auto 16px;padding:9px 13px;border-radius:8px;font-size:12px;line-height:1.6;
+  border:1px solid #24466e;background:#0f1a27;color:#a9cdfb;
+}
+.hintbar.warn{border-color:#6b3d2c;background:#211511;color:#ffb59d}
+.hintbar b{color:#fff;font-weight:600}
+
+/* ---------------- 控制台窗口 ---------------- */
+.stage{max-width:1160px;margin:0 auto}
+.console{
+  width:880px;max-width:100%;margin:0 auto;background:var(--cwin);border:1px solid #2e2e2e;border-radius:12px;
+  box-shadow:0 30px 80px rgba(0,0,0,.55),0 0 0 1px rgba(255,255,255,.02) inset;
+  padding:16px 14px 12px;position:relative;
+}
+.c-head{display:flex;align-items:center;justify-content:space-between;padding:0 4px;gap:10px}
+.c-title{font:700 17px/1 "Microsoft YaHei UI","Microsoft YaHei",sans-serif;color:#f0f0f0;letter-spacing:.2px;white-space:nowrap}
+.c-head-right{display:flex;align-items:center;gap:12px}
+.foldbtn{
+  height:24px;padding:0 10px;border-radius:5px;background:#3a3f47;color:#dfe3e8;font-size:11px;
+}
+.foldbtn:hover{background:#4a5058}
+.c-master{display:inline-flex;align-items:center;gap:8px;color:#d8d8d8;font-size:12px;background:none;padding:0}
+.topmost{display:inline-flex;align-items:center;gap:6px;color:#d8d8d8;font-size:11.5px;cursor:pointer;user-select:none}
+.chk{
+  width:20px;height:20px;border-radius:4px;border:1px solid #4a4a4a;background:#2b2b2b;color:#fff;
+  display:inline-flex;align-items:center;justify-content:center;font-size:12px;line-height:1;
+}
+.chk.on{background:var(--blue);border-color:#3f7ee5}
+.sw{
+  width:42px;height:23px;border-radius:23px;background:#3a3a3a;position:relative;display:inline-block;
+  transition:background .18s;flex:0 0 42px;border:1px solid #4a4a4a;
+}
+.sw i{
+  position:absolute;top:2px;left:2px;width:17px;height:17px;border-radius:50%;background:#d7d7d7;
+  transition:left .18s,background .18s;box-shadow:0 1px 2px rgba(0,0,0,.4);
+}
+.sw.on{background:var(--green);border-color:#39b152}
+.sw.on i{left:21px;background:#fff}
+.c-help{margin:7px 4px 11px;color:var(--ctx2);font-size:11px;line-height:1.7}
+.c-help b{color:#c9d1da;font-weight:500}
+
+/* 页签 */
+.tabs{
+  display:flex;justify-content:center;gap:2px;background:var(--cbar);border:1px solid #303030;
+  border-radius:9px;padding:4px;margin:0 2px 10px;overflow:auto;
+}
+.tab{
+  height:28px;padding:0 12px;border-radius:6px;font-size:11.5px;color:#c9c9c9;white-space:nowrap;
+  transition:background .15s,color .15s;display:inline-flex;align-items:center;gap:5px;
+}
+.tab:hover{background:#303030;color:#eee}
+.tab.active{background:var(--blue);color:#fff;box-shadow:0 2px 8px rgba(0,0,0,.28)}
+.tabdot{width:6px;height:6px;border-radius:50%;background:var(--amber);box-shadow:0 0 6px rgba(245,185,66,.8);display:inline-block}
+
+/* 页签内容区 */
+.c-tabwrap{
+  background:var(--cbar);border:1px solid #2f2f2f;border-radius:10px;padding:10px;
+  max-height:566px;overflow:auto;
+}
+.card{
+  background:var(--cpanel);border:1px solid #333;border-radius:8px;padding:10px 12px;margin-bottom:9px;
+  transition:box-shadow .3s,border-color .3s;
+}
+.card:last-child{margin-bottom:0}
+.card.pulse{border-color:var(--amber);box-shadow:0 0 0 3px rgba(245,185,66,.18)}
+.card-head{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:6px}
+.card-head b{font-size:12.5px;color:#f0f0f0;font-weight:700;letter-spacing:.02em}
+.card-head b .num{
+  display:inline-flex;align-items:center;justify-content:center;width:17px;height:17px;border-radius:5px;
+  background:#3a3f47;color:#cfd6df;font:10px/1 Consolas,monospace;margin-right:6px;vertical-align:1px;
+}
+.card-head span{font-size:10.5px;color:var(--ctx2);text-align:right;line-height:1.35;max-width:56%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.help{color:var(--ctx2);font-size:11px;line-height:1.65;margin:0;padding:2px 0}
+.help b{color:#c9d1da;font-weight:500}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:6px}
+.row .lab{font-size:11px;color:var(--ctx2);white-space:nowrap}
+select{
+  height:30px;border-radius:6px;border:1px solid #474747;background:#343638;color:#e8e8e8;
+  padding:0 8px;font-size:11.5px;min-width:0;outline:none;
+}
+select:hover{border-color:#5a5a5a}
+select:disabled{opacity:.45;cursor:not-allowed}
+.opt{width:250px}
+.meta{font:11px/1.6 Consolas,monospace;color:var(--ctx2);margin-top:7px;word-break:break-all}
+.meta b{color:#cfd6df;font-weight:500}
+
+/* 开关行 */
+.swgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px 14px;padding:2px 0 4px}
+.srow{display:flex;align-items:center;gap:9px;padding:2px 0;background:none;text-align:left;min-width:0}
+.srow .txt{display:flex;flex-direction:column;min-width:0}
+.srow .txt b{font-size:11.5px;color:#e8e8e8;font-weight:500;line-height:1.4}
+.srow .txt em{font-style:normal;font-size:10px;color:var(--ctx3);line-height:1.35;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.srow.off .txt b{color:#aeb4bc}
+
+/* 点类型 */
+.types{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;padding:2px 0 4px}
+.ttile{
+  border:2px solid #3a3a3a;background:#262626;border-radius:7px;padding:6px 8px;text-align:left;
+  display:flex;flex-direction:column;gap:5px;transition:border-color .15s,background .15s;min-width:0;
+}
+.ttile:hover{background:#2e2e2e}
+.ttile.on{border-color:var(--tc);background:#2f2f2f}
+.tt1{display:flex;align-items:center;gap:6px;min-width:0}
+.tdot{width:7px;height:7px;border-radius:50%;background:var(--tc);flex:0 0 7px}
+.tt1 b{font-size:11.5px;font-weight:500;color:#ececec;white-space:nowrap}
+.tbadge{font:9px/1 Consolas,monospace;padding:2px 4px;border-radius:4px;border:1px solid #4a4a4a;color:#9aa0a6;white-space:nowrap}
+.tbadge.new{border-color:#3b4a2a;color:#b7e07a;background:#1e2412}
+.tbadge.ro{border-color:#3a3a3a;color:#8a9098;background:#262626}
+.tt2{display:flex;align-items:center;justify-content:space-between;color:#9aa0a6;font-size:10.5px}
+.tkey{font:10px/1 Consolas,monospace;color:#71787f;border:1px solid #3f3f3f;border-radius:3px;padding:1px 4px}
+.tcount{font:11px/1 Consolas,monospace;color:#cfd6df}
+.ttile.ro{opacity:.8}
+.ttile.ro .tcount{color:#71787f}
+
+/* 统计 + 操作 */
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;padding:2px 0 0}
+.stat{background:#232323;border:1px solid #333;border-radius:6px;padding:5px 9px 6px}
+.stat span{display:block;font-size:10px;color:var(--ctx2)}
+.stat b{font:15px/1.35 Consolas,monospace;color:#f0f0f0}
+.stat em{font-style:normal;font-size:10px;color:var(--ctx3);margin-left:4px}
+.btns{display:flex;gap:5px;flex-wrap:wrap;margin-top:8px}
+.wp-ready{color:#c9d1d9;font-size:11px;line-height:1.6;margin-top:8px}
+.wp-ready b{color:#fff;font-weight:600}
+.wp-log{
+  margin:6px 0 0;background:#141414;border:1px solid #2f2f2f;border-radius:6px;padding:6px 9px;
+  height:58px;overflow:auto;font:10.5px/1.55 Consolas,monospace;color:#b9c3ce;white-space:pre-wrap;
+}
+
+/* 其他页签占位 */
+.other-panel{padding:44px 20px;text-align:center;color:var(--ctx2)}
+.other-panel .oi{font-size:26px;color:#4b5563;margin-bottom:8px}
+.other-panel b{display:block;color:#e8e8e8;font-size:13px;margin-bottom:6px}
+.other-panel p{margin:0 0 14px;font-size:11.5px;line-height:1.7}
+.other-panel .hintline{max-width:560px;margin:8px auto 0;color:#8a9098;font-size:11px}
+.other-panel .swgrid{max-width:620px;margin:10px auto 0;text-align:left}
+
+/* 状态区 */
+.c-status{margin-top:10px}
+.c-status-head{display:flex;align-items:baseline;justify-content:space-between;padding:0 4px 4px}
+.c-status-head b{font-size:12px;color:#f0f0f0;font-weight:700}
+.c-status-head span{font-size:10.5px;color:var(--ctx2);max-width:70%;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.c-log{
+  margin:0;background:#141414;border:1px solid #2c2c2c;border-radius:7px;padding:7px 10px;
+  height:74px;overflow:auto;font:10.5px/1.55 Consolas,monospace;color:#b9c3ce;white-space:pre-wrap;
+}
+
+/* 启动条件条（改进方案核心） */
+.launch-strip{
+  display:flex;align-items:center;gap:10px;margin-top:11px;padding:9px 11px;border-radius:8px;
+  border:1px solid #3a3f47;background:#232323;
+}
+.launch-strip.test{
+  border-color:var(--amber-line);
+  background:linear-gradient(180deg,#2c2310,#221b0c);
+  box-shadow:0 0 0 1px rgba(245,185,66,.06) inset;
+}
+.launch-strip.off{border-color:#5a3434;background:linear-gradient(180deg,#2a1a1a,#221616)}
+.ls-badge{
+  flex:0 0 auto;height:24px;padding:0 9px;border-radius:6px;display:inline-flex;align-items:center;
+  font-size:11px;font-weight:700;letter-spacing:.02em;white-space:nowrap;
+  border:1px solid #3f7ee5;background:#16233a;color:#9cc3ff;
+}
+.ls-badge.test{border-color:#8a6414;background:#3a2c0d;color:#f7cd74}
+.ls-badge.off{border-color:#6b3d3d;background:#301c1c;color:#ff9d9d}
+.ls-main{flex:1 1 auto;min-width:0}
+.ls-main b{font-size:12px;color:#f0f0f0;font-weight:600;margin-right:6px}
+.ls-main span{display:block;font-size:10.5px;color:var(--ctx2);line-height:1.5;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.launch-strip.test .ls-main b{color:#f7cd74}
+.ls-go{
+  flex:0 0 auto;height:26px;padding:0 9px;border-radius:5px;border:1px solid #4a4a4a;background:#3a3f47;
+  color:#dfe3e8;font-size:10.5px;white-space:nowrap;
+}
+.ls-go:hover{background:#49505a}
+
+/* 现状模式：按钮旁的红框批注 */
+.anno{
+  margin-top:11px;padding:7px 10px;border-radius:7px;border:1px dashed #7a3a3a;background:#241414;
+  color:#ff9d9d;font-size:10.5px;line-height:1.55;
+}
+.anno b{color:#ffd0d0;font-weight:600}
+
+/* 底部按钮 */
+.c-actions{display:flex;gap:10px;margin-top:11px}
+.cbtn{
+  height:42px;border-radius:8px;font-size:12.5px;font-weight:600;flex:1 1 0;min-width:0;
+  transition:background .18s,border-color .18s,color .18s;
+}
+.cbtn.primary{background:var(--blue);color:#fff;border:1px solid #3f7ee5}
+.cbtn.primary:hover{background:#3b7ceb}
+.cbtn.amber{background:var(--amber-deep);color:#fff2d6;border:1px solid #c88a22}
+.cbtn.amber:hover{background:#bf7c17}
+.cbtn.gray{background:#3a3f47;color:#cfd6df;border:1px solid #4a4a4a}
+.cbtn.gray:hover{background:#49505a}
+.cbtn.secondary{background:#3a3f47;color:#dfe3e8;border:1px solid #4a4a4a}
+.cbtn.secondary:hover{background:#49505a}
+.cbtn:disabled{opacity:.5;cursor:not-allowed}
+
+/* ---------------- 预检弹窗 ---------------- */
+.overlay{
+  position:fixed;inset:0;background:rgba(3,5,8,.72);backdrop-filter:blur(3px);
+  display:flex;align-items:center;justify-content:center;z-index:60;padding:20px;
+}
+.modal{
+  width:520px;max-width:100%;background:#1d1d1d;border:1px solid #444;border-radius:12px;
+  box-shadow:0 40px 100px rgba(0,0,0,.7);padding:16px 18px 14px;
+}
+.m-head{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.m-head b{font-size:15px;color:#fff;font-weight:700}
+.m-head span{font-size:10.5px;color:var(--ctx2)}
+.m-sub{margin:3px 0 12px;font-size:11px;color:var(--ctx2)}
+.m-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.m-cell{background:#262626;border:1px solid #383838;border-radius:7px;padding:7px 10px;min-width:0}
+.m-cell span{display:block;font-size:10px;color:var(--ctx2);margin-bottom:3px}
+.m-cell b{font-size:12px;color:#f0f0f0;font-weight:600;word-break:break-all}
+.m-cell b.amber{color:#f7cd74}
+.m-alert{
+  margin-top:10px;padding:8px 10px;border-radius:7px;border:1px solid #6b3d2c;background:#241511;
+  color:#ffb59d;font-size:11px;line-height:1.6;
+}
+.m-alert b{color:#ffd0c9}
+.m-note{margin-top:9px;font-size:10.5px;color:var(--ctx3);line-height:1.6}
+.m-check{display:flex;align-items:center;gap:7px;margin-top:11px;font-size:11px;color:#b9c0c9;cursor:pointer;user-select:none}
+.m-check .chk{width:17px;height:17px;font-size:11px;flex:0 0 17px}
+.m-btns{display:flex;gap:8px;margin-top:13px;justify-content:flex-end}
+.mbtn{
+  height:34px;padding:0 14px;border-radius:7px;border:1px solid #4a4a4a;background:#3a3f47;
+  color:#dfe3e8;font-size:12px;
+}
+.mbtn:hover{background:#49505a}
+.mbtn.primary{background:var(--amber-deep);border-color:#c88a22;color:#fff2d6;font-weight:600}
+.mbtn.primary:hover{background:#bf7c17}
+.mbtn.ghost{background:none;border-color:#3a3a3a;color:#9aa0a6}
+.mbtn.ghost:hover{background:#262626;color:#cfd6df}
+
+/* ---------------- 说明卡 ---------------- */
+.notes{max-width:1160px;margin:22px auto 0;display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+.note{
+  background:linear-gradient(180deg,#0e141a,#0a1015);border:1px solid #1d2731;border-radius:10px;
+  padding:13px 15px 14px;
+}
+.note h3{margin:0 0 8px;font-size:12.5px;color:#dbe7f5;font-weight:700;display:flex;align-items:center;gap:7px}
+.note h3 i{width:6px;height:6px;border-radius:50%;background:#4f8cff;box-shadow:0 0 8px #4f8cff}
+.note.warn h3 i{background:#ff8c6b;box-shadow:0 0 8px #ff8c6b}
+.note.ok h3 i{background:#3ecf8e;box-shadow:0 0 8px #3ecf8e}
+.note ul{margin:0;padding-left:16px;color:var(--tx2);font-size:11.5px;line-height:1.75}
+.note li{margin-bottom:5px}
+.note li b{color:#e6eef8;font-weight:600}
+.note code{
+  font:10.5px/1.5 Consolas,monospace;color:#a9cdfb;background:#101820;border:1px solid #1d2731;
+  border-radius:4px;padding:0 4px;
+}
+.note .foot{margin-top:8px;padding-top:8px;border-top:1px dashed #1d2731;font-size:10.5px;color:var(--tx3);line-height:1.6}
+.page-foot{max-width:1160px;margin:16px auto 0;text-align:center;font-size:10.5px;color:var(--tx3)}
+</style>
+</head>
+<body>
+
+<header class="page-head">
+  <div class="ph-left">
+    <span class="ph-badge"><i></i>交互样稿 · 纯前端演示，不读写游戏文件</span>
+    <h1>UCF 控制台 <span>把「这次启动加载什么」摆到按钮上</span></h1>
+    <p>数据版本（正式版 / 测试包）只存在于「人机路点」页 ①；底部「开始游戏」按钮却永远长一个样。用户不看那一页就能开局，事后才发现跑的是测试包——或者想跑测试包，结果加载了正式版。</p>
+  </div>
+  <div class="ph-right">
+    <span class="ph-k">界面对比</span>
+    <div class="seg big" id="modeSeg">
+      <button data-mode="before">现状：版本藏在页签里</button>
+      <button data-mode="after" class="on">改进：常驻 + 预检</button>
+    </div>
+    <button class="mini" id="btnResetDemo">重置演示</button>
+  </div>
+</header>
+
+<div class="hintbar" id="modeHint"></div>
+
+<main class="stage">
+<section class="console" id="console" aria-label="UCF 控制台样稿">
+
+  <div class="c-head">
+    <div class="c-title">UCF 控制台</div>
+    <div class="c-head-right">
+      <button class="foldbtn" type="button">折叠</button>
+      <button class="c-master" id="masterSwitch" role="switch" aria-checked="true" type="button">
+        <span>插件总开关</span><span class="sw on" id="masterSw"><i></i></span>
+      </button>
+      <span class="topmost" id="topmost"><span class="chk on" id="topChk">✓</span>窗口置顶</span>
+    </div>
+  </div>
+
+  <div class="c-help">
+    只有从本窗口「开始游戏」才会加载 mod；直接双击 UnityCrossFire.exe 是原版。<br>
+    开关改完存进 ucf_mod.json，下次启动生效（游戏开着时要重开）。<br>
+    测试包模式在「人机路点」页；四版数据的路径 / 部署 / 还原 / 校验：切到「数据」页。<br>
+    路点数据只读查看在工作台；现场编辑在「人机路点」页（游戏内 F2 菜单）。
+  </div>
+
+  <div class="tabs" id="tabs" role="tablist">
+    <button class="tab" data-tab="地图" role="tab">地图</button>
+    <button class="tab" data-tab="可视化" role="tab">可视化</button>
+    <button class="tab" data-tab="导出" role="tab">导出</button>
+    <button class="tab" data-tab="快捷键" role="tab">快捷键</button>
+    <button class="tab active" data-tab="人机路点" role="tab">人机路点<span class="tabdot hidden" id="wpTabDot"></span></button>
+    <button class="tab" data-tab="数据" role="tab">数据</button>
+    <button class="tab" data-tab="车测" role="tab">车测</button>
+  </div>
+
+  <div class="c-tabwrap">
+    <!-- ================= 人机路点页 ================= -->
+    <div id="panelWaypoint" role="tabpanel">
+
+      <p class="help" style="padding:2px 2px 8px">
+        进游戏现场编辑：F2 打开路点菜单（长按 E 备用）；1-9 直选，小键盘 8/2 上下、5 确认、0 返回，左键/右键也可。<br>
+        菜单打开时 W/A/S/D/空格仍可移动，Q/R/G/F/Tab 等会拦掉；选完 A 可走到 B 再按小键盘 5 连边。<br>
+        按 F2 / 小键盘前先点一下游戏画面，让游戏窗口拿到焦点（控制台在前台时游戏收不到键）。<br>
+        空白包=原生点全禁用；必须整图连通。只连主路还不够：孤立点、出生点、蹲守标记都可能让 Bot 取不到路。<br>
+        markers 目前全局不分图，换图前先清掉别图的蹲守点；只测局部请用 ③ 正式版 + 先删几个远处点腾槽位。
+      </p>
+
+      <div class="card" id="cardPick">
+        <div class="card-head">
+          <b><span class="num">①</span>选图与数据</b>
+          <span>④ 包只对一张图生效</span>
+        </div>
+        <div class="row">
+          <span class="lab">数据版本</span>
+          <div class="seg" id="verSeg">
+            <button data-ver="official" type="button">正式版（nav）</button>
+            <button data-ver="test" class="on" type="button">测试包（packs）</button>
+          </div>
+        </div>
+        <div class="row">
+          <span class="lab">测试包</span>
+          <select id="packSel" class="opt"></select>
+          <button class="mini" type="button">新建空白包</button>
+          <button class="mini" type="button">打开目录</button>
+        </div>
+        <div class="row">
+          <span class="lab">地图</span>
+          <select id="mapSel" class="opt"></select>
+          <label class="topmost" style="font-size:11px" id="onlyMapWrap">
+            <span class="chk on" id="onlyMapChk">✓</span>只对这张图生效
+          </label>
+        </div>
+        <div class="meta" id="mapMeta"></div>
+        <p class="help" style="margin-top:6px">
+          空白底图用运输船 / 新寂静村（有原生点可借槽位）；飓风危城原生 0 点，建不了空白包，
+          只能开自动铺点。④ 包只影响选中的图，③ 正式版游戏内只读。
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <b><span class="num">②</span>游戏内编辑</b>
+          <span>配置写 ucf_mod.json</span>
+        </div>
+        <div class="swgrid">
+          <button class="srow" data-sw="wp_menu" role="switch" aria-checked="true" type="button">
+            <span class="sw on"><i></i></span>
+            <span class="txt"><b>编辑菜单（F2 / 长按 E）</b><em>进图后开菜单</em></span>
+          </button>
+          <button class="srow off" data-sw="visualizer" role="switch" aria-checked="false" type="button">
+            <span class="sw"><i></i></span>
+            <span class="txt"><b>路点 / 边显示（Ctrl+V）</b><em>画点线</em></span>
+          </button>
+          <button class="srow" data-sw="navmesh_show" role="switch" aria-checked="true" type="button">
+            <span class="sw on"><i></i></span>
+            <span class="txt"><b>可走面线框（Ctrl+Shift+6）</b><em>NavMeshGraph</em></span>
+          </button>
+          <button class="srow" data-sw="wp_autoground" role="switch" aria-checked="true" type="button">
+            <span class="sw on"><i></i></span>
+            <span class="txt"><b>加点自动落地</b><em>沿射线贴地板 / 箱顶</em></span>
+          </button>
+        </div>
+        <p class="help" style="margin-top:6px">
+          改完存进 ucf_mod.json；游戏开着时这些开关要重启才生效。游戏内快捷键（Ctrl+Shift+N/J/D/Z、Ctrl+V）仍然可用。
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <b><span class="num">③</span>点类型</b>
+          <span>菜单 1-9 · 点选笔刷</span>
+        </div>
+        <div class="types" id="types"></div>
+        <p class="help" style="margin-top:6px">
+          点一下 = 设为当前笔刷；游戏运行中立即发 brush=... 给插件。出生点 / 补给箱只读；
+          跳跃点会新建 Bot_JumpLink（实验性，重启不保留）；标签区写 node tag + markers。
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <b><span class="num">④</span>本次编辑</b>
+          <span>点/边写 ④ 包；特征写 markers</span>
+        </div>
+        <div class="stats">
+          <div class="stat"><span>节点</span><b id="stNodes">786</b></div>
+          <div class="stat"><span>边</span><b id="stEdges">1391</b></div>
+          <div class="stat"><span>特征</span><b id="stFeat">16</b></div>
+          <div class="stat"><span>④ 包改动</span><b id="stEdits">0</b></div>
+        </div>
+        <div class="btns">
+          <button class="mini" type="button">撤销 Ctrl+Z</button>
+          <button class="mini" type="button">重做 Ctrl+Y</button>
+          <button class="mini primary" type="button">保存 Ctrl+S</button>
+          <button class="mini" type="button">重读 Ctrl+Shift+R</button>
+          <button class="mini" style="background:#8a4b1e;border-color:#a55d26;color:#ffd9c2" type="button">清空本图</button>
+        </div>
+        <div class="wp-ready" id="wpReady"></div>
+        <pre class="wp-log" id="wpLog">09:41:02 [naved] blank base: 786 native nodes disabled (n786-57a46e3465c847cb)
+09:41:03 [naved] pack: blank_a target=n786-57a46e3465c847cb (only this map)
+09:41:05 [naved] menu open: type=normal mode=add</pre>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <b><span class="num">⑤</span>自动铺设</b>
+          <span>预留</span>
+        </div>
+        <p class="help">预留位置：自动铺设暂未接入，这里不做任何事。</p>
+      </div>
+
+    </div>
+
+    <!-- ================= 其他页签 ================= -->
+    <div id="panelOther" class="hidden" role="tabpanel">
+      <div class="other-panel">
+        <div class="oi">▤</div>
+        <b id="otherName">地图</b>
+        <p>这一页沿用现有控制台，不在本次样稿范围内。<br>切回「人机路点」看选图与数据版本。</p>
+        <div id="otherBody"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="c-status">
+    <div class="c-status-head"><b>上次运行</b><span id="statusDot">配置：已读取</span></div>
+    <pre class="c-log" id="logText">09:41:02 [naved] blank base: 786 native nodes disabled (n786-57a46e3465c847cb)
+09:41:03 [naved] pack: blank_a target=n786-57a46e3465c847cb (only this map)
+09:41:05 [naved] menu open: type=normal mode=add</pre>
+  </div>
+
+  <!-- 现状：按钮旁的批注（仅 before 显示） -->
+  <div class="anno hidden" id="btnAnno"></div>
+
+  <!-- 改进：常驻启动条件条（仅 after 显示） -->
+  <div class="launch-strip hidden" id="launchStrip"></div>
+
+  <div class="c-actions">
+    <button class="cbtn primary" id="btnStart" type="button">开始游戏（加载 mod）</button>
+    <button class="cbtn secondary" type="button">路点工作台（查看）</button>
+  </div>
+
+</section>
+</main>
+
+<div class="notes">
+  <div class="note warn">
+    <h3><i></i>问题在哪：状态离动作太远</h3>
+    <ul>
+      <li><b>版本选择在第 5 个页签里</b>：在「地图 / 可视化 / 导出」等页看不到当前是正式版还是测试包。</li>
+      <li><b>按钮不携带状态</b>：无论什么模式，按钮都写「开始游戏（加载 mod）」。</li>
+      <li><b>提示出现在事后</b>：只有启动后的状态行和日志会写「mod + 测试包 xxx」，那时人已经在游戏里了。</li>
+      <li><b>高风险路径没有重量</b>：空白包会禁用原生点，和正式版长得一模一样。</li>
+    </ul>
+  </div>
+  <div class="note ok">
+    <h3><i></i>样板怎么处理：状态靠近动作</h3>
+    <ul>
+      <li><b>常驻启动条</b>：按钮正上方，任何页签都能看见版本、包名、生效地图、范围。</li>
+      <li><b>按钮变成状态载体</b>：正式版蓝、测试包琥珀、插件关灰，文案直接写包名。</li>
+      <li><b>只有测试包弹预检</b>：正式版零打扰；测试包多一步确认，还能顺带提示「包里 0 处改动，进图人机不会动」。</li>
+      <li><b>闭环入口</b>：「去调整」直接跳到人机路点页并高亮 ① 卡，人机路点页签带琥珀点。</li>
+    </ul>
+  </div>
+  <div class="note">
+    <h3><i></i>落到 控制台.pyw 的改动</h3>
+    <ul>
+      <li>新增 <code>refresh_launch_strip()</code>：数据直接取现有 <code>pack_dict()</code> 和 <code>manifest.json</code>，不加新文件。</li>
+      <li>启动条在 <code>self.bar</code> 之后 pack：位置在状态区与按钮之间。</li>
+      <li><code>refresh_status()</code> 每 4 秒重绘按钮文案与颜色（复用现有定时器）。</li>
+      <li><code>launch_game()</code> 开头：测试包模式弹一次确认（包名 / 生效图 / 空白说明），正式版直接启动。</li>
+      <li>「去调整」= <code>self.tabview.set("人机路点")</code>；页签小圆点属可选增强。</li>
+    </ul>
+  </div>
+</div>
+
+<div class="page-foot">样稿数据取自 navdata 当前内容：3 个测试包（blank_a / blank_b / chain_a）· 9 张可选图</div>
+
+<!-- ================= 预检弹窗 ================= -->
+<div class="overlay hidden" id="overlay">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="mTitle">
+    <div class="m-head">
+      <b id="mTitle">启动预检 · 测试包模式</b>
+      <span>正式版不会弹这一步</span>
+    </div>
+    <div class="m-sub">按你当前在「人机路点」页的选择，这次启动会加载：</div>
+    <div class="m-grid">
+      <div class="m-cell"><span>数据版本</span><b class="amber">④ 测试包（packs）</b></div>
+      <div class="m-cell"><span>测试包</span><b id="mPack">blank_a</b></div>
+      <div class="m-cell"><span>生效地图</span><b id="mMap">01 运输船（level1）</b></div>
+      <div class="m-cell"><span>生效范围</span><b id="mScope">只对这张图生效</b></div>
+    </div>
+    <div class="m-alert" id="mAlert"></div>
+    <div class="m-note">预检只做一次确认，不改任何数据；确认后才会带 UCF_PACK / UCF_FP 启动游戏。</div>
+    <label class="m-check">
+      <span class="chk" id="muteChk"></span>本次控制台会话不再提示（底部启动条仍会一直显示）
+    </label>
+    <div class="m-btns">
+      <button class="mbtn ghost" id="mCancel" type="button">取消</button>
+      <button class="mbtn" id="mAdjust" type="button">先去人机路点</button>
+      <button class="mbtn primary" id="mGo" type="button">确认启动</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ============================================================
+   数据：与 navdata\dev\maps 和 navdata\test\packs 当前内容一致
+   ============================================================ */
+const MAPS = [
+  { lv:'level1',  label:'运输船',   fp:'n786-57a46e3465c847cb',  nodes:786,  edges:1391, feat:16  },
+  { lv:'level2',  label:'小型工厂', fp:'n12-0e2829fa03c469e3',   nodes:12,   edges:6,    feat:35  },
+  { lv:'level3',  label:'椰岛之巅', fp:'n2-24a647eff15d6ca4',    nodes:2,    edges:0,    feat:43  },
+  { lv:'level5',  label:'竞技场',   fp:'n17-f352f68820fae99c',   nodes:17,   edges:24,   feat:48  },
+  { lv:'level6',  label:'刀锋寨',   fp:'n18-1976c65d7f7ef2db',   nodes:18,   edges:9,    feat:34  },
+  { lv:'level7',  label:'沙漠要塞', fp:'n12-17a93cfb246913e1',   nodes:12,   edges:7,    feat:46  },
+  { lv:'level8',  label:'生化酒店', fp:'n3063-b04b59b2593bfae4', nodes:3063, edges:5584, feat:118 },
+  { lv:'level9',  label:'暴风',     fp:'n0-0000000000000000',     nodes:0,    edges:0,    feat:0   },
+  { lv:'level10', label:'新寂静村', fp:'n180-03b43b7ee737fcdc',  nodes:180,  edges:98,   feat:105 },
+];
+
+const PACKS = {
+  blank_a: { map:'level1', blank:true,  edits:0,
+    note:'空白底图：786 个原生点全部禁用 + nogen.txt，路线全靠包里画' },
+  blank_b: { map:'level1', blank:true,  edits:110,
+    note:'blank_a 清理版：786 槽位改写成自定义路线点（110 主点 + 676 副点）' },
+  chain_a: { map:'level9', blank:false, edits:0,
+    note:'测试包：只对 暴风（level9）生效；暴风原生 0 点' },
+};
+
+const TYPES = [
+  { key:'normal', label:'普通路点', badge:'复用', color:'#4f8cff', keyno:'1' },
+  { key:'jump',   label:'跳跃点',   badge:'新增', color:'#a78bfa', keyno:'2' },
+  { key:'crouch', label:'蹲守点',   badge:'复用', color:'#f59e0b', keyno:'3' },
+  { key:'guard',  label:'守点',     badge:'复用', color:'#22d3ee', keyno:'4' },
+  { key:'area',   label:'聚集区',   badge:'复用', color:'#f472b6', keyno:'5' },
+  { key:'tag',    label:'标签区',   badge:'新增', color:'#84cc16', keyno:'6' },
+  { key:'spawn',  label:'出生点',   badge:'只读', color:'#34d399', keyno:'7', ro:true },
+  { key:'box',    label:'补给箱',   badge:'只读', color:'#facc15', keyno:'8', ro:true },
+];
+
+const OTHER_TABS = {
+  '地图': {
+    hint:'房间选图列表里要不要多一张「暴风」；关掉后就是原版列表',
+    items:[['hidden_map','加载暴风地图','把隐藏图 Nano30_Storm 插进房间下拉框；关掉后选不到暴风',true]],
+  },
+  '可视化': {
+    hint:'进图时读什么、画什么都在这一页；关掉哪类就不读也不画（不影响 Ctrl+E 导出）',
+    items:[
+      ['visualizer','可视化总开关（Visualizer）','整套彩色点线的总开关；Ctrl+V 随时开关',false],
+      ['vis_nodes','路点 / 连线（PointNode / Connection）','浅蓝点 = 普通路点，橙点 = 带标签，红点 = 禁走点',true],
+      ['vis_crouch','蹲守点（Bot_CrouchPos）','红色实心小方块（两阵营同色）',true],
+      ['vis_guard','守卫区 / 守卫点（Bot_GuardArea / Bot_GuardPos）','紫色线框区 + 橙色实心点',true],
+      ['vis_nano','幽灵守区 / 幽灵守点','绿色线框区 + 青色实心点',true],
+      ['vis_born','出生点（SpawnPoint）','潜伏者蓝 / 保卫者红 / 中立灰',true],
+      ['vis_supply','补给箱（SupplyBox / RedBox / BlueBox）','金/粉/青实心高柱',true],
+      ['vis_jump','跳点（Bot_JumpLink）','黄色连线（没有点标记）',true],
+      ['vis_tag','标签区（PointNodeTagModifier）','橙色线框小方块',true],
+      ['navmesh_show','可走面（NavMeshGraph）','绿色三角网线框；Ctrl+Shift+6',true],
+    ],
+  },
+  '导出': {
+    hint:'Ctrl+E 导出的总开关与内容（与可视化开关互相独立）',
+    items:[
+      ['export_enabled','启用导出','总开关；关掉后 Ctrl+E 不读也不写',true],
+      ['export_nodes','路点 / 连线','JSON 主体',true],
+      ['export_crouch','人类蹲守点','关掉后 JSON 里 crouch=0',true],
+      ['export_area','幽灵守区 / 守点','关掉后 nano_area / nano_pos=0',true],
+      ['export_guard','守卫区 / 守卫点','关掉后 guard=0',true],
+      ['export_spawn','出生点 / 补给箱','关掉后 spawn=0',true],
+      ['export_tags','跳点 / 标签区','关掉后 jump / tag=0',true],
+    ],
+  },
+  '快捷键': { hint:'游戏内热键速查（屏幕不再显示数据面板和文字标签）', keys:true },
+  '数据': { hint:'四版数据：路径 / 部署 / 还原 / 校验', data:true },
+  '车测': { hint:'不用鼠标键盘：插件自己在进程内切图跑一圈', data:true },
+};
+
+const HUD_KEYS = `【可视化】
+Ctrl+V 可视化总开关   Ctrl+Shift+6 可走面
+
+【导出与采集】
+Ctrl+E 手动导出   Ctrl+Shift+X 只读采集（不创建对象）
+
+【标记】
+Delete 删除准星最近标记   Ctrl+0 显示/隐藏已放标记
+
+【编辑模式】
+Ctrl+1 编辑模式   Ctrl+2 放蹲守点   Ctrl+4 建守卫区
+Ctrl+5 撤销   Ctrl+6 保存   Ctrl+7 重载   Ctrl+8 阵营   Ctrl+9 状态写日志
+
+【路点编辑（Ctrl+Shift+字母）】
+Ctrl+Shift+A 选A点   Ctrl+Shift+N 加点   Ctrl+Shift+J A↔点 连/断
+Ctrl+Shift+D 禁用点   Ctrl+Shift+Z 撤销   Ctrl+Shift+S 手动保存   Ctrl+Shift+R 重套用
+
+【F2 路点菜单】
+F2 开关 / 长按 E 备用
+1-9 直选   小键盘 8/2 上下   5 确认   0 返回   左键确认 / 右键返回`;
+
+const INIT_LOG = `09:41:02 [naved] blank base: 786 native nodes disabled (n786-57a46e3465c847cb)
+09:41:03 [naved] pack: blank_a target=n786-57a46e3465c847cb (only this map)
+09:41:05 [naved] menu open: type=normal mode=add`;
+
+/* ============================================================
+   状态
+   ============================================================ */
+const state = {
+  view: 'after',          // before | after
+  tab: '人机路点',
+  version: 'test',        // test | official
+  pack: 'blank_a',
+  mapLv: 'level1',
+  onlyMap: true,
+  pluginOn: true,
+  running: false,
+  mute: false,
+  brush: 'normal',
+  switches: {},           // 各页签开关
+};
+
+const $ = s => document.querySelector(s);
+const $$ = s => Array.from(document.querySelectorAll(s));
+
+const mapByLv = lv => MAPS.find(m => m.lv === lv) || MAPS[0];
+const packMap = () => mapByLv(PACKS[state.pack].map);
+
+/* ============================================================
+   渲染：页签 / 面板
+   ============================================================ */
+function renderTabs(){
+  $$('#tabs .tab').forEach(b => b.classList.toggle('active', b.dataset.tab === state.tab));
+  const showDot = state.view === 'after' && state.version === 'test' && state.pluginOn;
+  $('#wpTabDot').classList.toggle('hidden', !showDot);
+}
+
+function renderPanels(){
+  const wp = state.tab === '人机路点';
+  $('#panelWaypoint').classList.toggle('hidden', !wp);
+  $('#panelOther').classList.toggle('hidden', wp);
+  if (!wp) {
+    $('#otherName').textContent = state.tab;
+    const cfg = OTHER_TABS[state.tab] || {};
+    let html = '';
+    if (cfg.keys) {
+      html = `<pre class="wp-log" style="height:auto;max-height:340px;text-align:left">${HUD_KEYS}</pre>`;
+    } else if (cfg.items) {
+      html = `<div class="help" style="margin-bottom:4px">${cfg.hint || ''}</div>
+        <div class="swgrid">` + cfg.items.map(([k,label,desc,dflt]) => {
+          const on = state.switches[k] ?? dflt;
+          return `<button class="srow ${on ? '' : 'off'}" data-sw="${k}" role="switch" aria-checked="${on}" type="button">
+            <span class="sw ${on ? 'on' : ''}"><i></i></span>
+            <span class="txt"><b>${label}</b><em>${desc}</em></span>
+          </button>`;
+        }).join('') + `</div>`;
+    } else {
+      html = `<div class="hintline">这一页的路径 / 部署 / 还原 / 校验沿用现有控制台，本样稿不复刻。</div>
+        <div class="hintline" style="font-family:Consolas,monospace;text-align:left;max-width:520px">
+          ① navdata\\native　② navdata\\dev　③ &lt;游戏目录&gt;\\maps · nav　④ navdata\\test
+        </div>`;
+    }
+    $('#otherBody').innerHTML = html;
+    bindSwitches($('#otherBody'));
+  }
+}
+
+/* ============================================================
+   渲染：人机路点 ① 卡
+   ============================================================ */
+function fillSelects(){
+  const packSel = $('#packSel');
+  packSel.innerHTML = Object.keys(PACKS).map(n => {
+    const p = PACKS[n];
+    const tag = p.blank ? '空白底图' : '增量';
+    return `<option value="${n}" ${n === state.pack ? 'selected' : ''}>${n} · ${tag} · ${mapByLv(p.map).label}</option>`;
+  }).join('');
+  const mapSel = $('#mapSel');
+  mapSel.innerHTML = MAPS.map(m =>
+    `<option value="${m.lv}" ${m.lv === state.mapLv ? 'selected' : ''}>${m.label}（${m.lv}）</option>`
+  ).join('');
+}
+
+function renderWaypoint(){
+  const isTest = state.version === 'test';
+  $$('#verSeg button').forEach(b => b.classList.toggle('on', b.dataset.ver === state.version));
+  $('#packSel').disabled = !isTest;
+  $('#mapSel').disabled = !isTest;
+  $('#packSel').value = state.pack;
+  $('#mapSel').value = state.mapLv;
+
+  const m = mapByLv(state.mapLv);
+  const p = PACKS[state.pack];
+  $('#stNodes').textContent = m.nodes;
+  $('#stEdges').textContent = m.edges;
+  $('#stFeat').textContent = m.feat;
+  $('#stEdits').textContent = isTest ? p.edits : '—';
+
+  let meta = `指纹 ${m.fp} · 原生 ${m.nodes} 点 / ${m.edges} 边`;
+  if (!isTest) {
+    meta += ` · ③ 正式版：游戏内只读（改动不落盘）`;
+  } else {
+    meta += ` · ④ ${state.pack}` + (p.blank ? ` · 空白底图（原生点全禁用）` : ` · 增量改动`);
+    if (state.onlyMap) meta += ` · 只对 ${m.label}`;
+  }
+  $('#mapMeta').innerHTML = meta;
+
+  const ready = !state.pluginOn
+    ? '插件总开关已关：现在启动就是原版，不读 nav、不出 F2 菜单。'
+    : isTest
+      ? `就绪：将按 <b>测试包 ${state.pack}</b> 启动${state.onlyMap ? `（只对 ${m.label}）` : ''}；进图后 F2 打开菜单。`
+      : `就绪：将按 <b>正式版（nav）</b> 启动；游戏内只读，改动请走 ② / ④。`;
+  $('#wpReady').innerHTML = ready;
+}
+
+/* ============================================================
+   渲染：启动条 / 按钮 / 批注
+   ============================================================ */
+function launchState(){
+  const p = PACKS[state.pack];
+  const m = packMap();
+  return { p, m, isTest: state.version === 'test' };
+}
+
+function renderLaunch(){
+  const before = state.view === 'before';
+  const { p, m, isTest } = launchState();
+
+  const strip = $('#launchStrip');
+  strip.classList.toggle('hidden', before);
+  const anno = $('#btnAnno');
+  anno.classList.toggle('hidden', !before || state.running);
+
+  // 现状：批注真实说明「现在按下去会加载什么」，但按钮上没有任何提示
+  if (before && !state.running) {
+    let what = !state.pluginOn
+      ? '原版（插件已关）'
+      : isTest
+        ? `测试包 ${state.pack}${state.onlyMap ? ` · 仅 ${m.label}` : ' · 全部地图'}`
+        : '正式版 nav（只读）';
+    anno.innerHTML = `现在按下去 → 加载 <b>${what}</b>。按钮上没有写；要确认只能切到「人机路点」页看 ①。`;
+  }
+
+  // 改进：常驻条（运行中也保留，再补一句「改版本只影响下次启动」）
+  if (!before) {
+    const pre = state.running ? '运行中 · ' : '';
+    const tail = state.running ? ' · 改版本只影响下次启动' : '';
+    if (!state.pluginOn) {
+      strip.className = 'launch-strip off';
+      strip.innerHTML = `<span class="ls-badge off">${pre}插件已关</span>
+        <div class="ls-main"><b>本次启动 = 原版游戏</b>
+          <span>插件总开关关闭：不读 nav、不出 F2 菜单，选了什么版本都不会生效${tail}</span></div>
+        <button class="ls-go" id="stripGo" type="button">去打开</button>`;
+    } else if (isTest) {
+      strip.className = 'launch-strip test';
+      strip.innerHTML = `<span class="ls-badge test">${pre}测试包</span>
+        <div class="ls-main"><b>${state.pack}</b>${p.blank ? ' · 空白底图' : ' · 增量'} · ${state.onlyMap ? `只对 ${m.label} 生效` : '全部地图生效'}
+          <span>${p.note}${p.edits === 0 ? ' · 包内 0 处改动' : ` · 包内 ${p.edits} 处改动`}${tail}</span></div>
+        <button class="ls-go" id="stripGo" type="button">去人机路点改</button>`;
+    } else {
+      strip.className = 'launch-strip';
+      strip.innerHTML = `<span class="ls-badge">${pre}正式版</span>
+        <div class="ls-main"><b>本次启动加载 ③ 部署版 nav</b>
+          <span>游戏内只读：改动不落盘；要改数据请用 ② 开发版 / ④ 测试包${tail}</span></div>
+        <button class="ls-go" id="stripGo" type="button">查看版本</button>`;
+    }
+    const go = $('#stripGo');
+    if (go) go.onclick = jumpToPick;
+  }
+
+  renderButton();
+  renderTabs();
+}
+
+function renderButton(){
+  const btn = $('#btnStart');
+  const { isTest } = launchState();
+  btn.classList.remove('primary', 'amber', 'gray');
+  btn.disabled = state.running;
+
+  if (state.running) {
+    btn.textContent = '游戏运行中';
+    btn.classList.add('gray');
+    return;
+  }
+  if (state.view === 'before') {
+    btn.textContent = '开始游戏（加载 mod）';
+    btn.classList.add('primary');
+    return;
+  }
+  if (!state.pluginOn) {
+    btn.textContent = '开始游戏 · 插件已关（原版）';
+    btn.classList.add('gray');
+    return;
+  }
+  if (isTest) {
+    btn.textContent = `开始游戏 · 测试包 ${state.pack}`;
+    btn.classList.add('amber');
+  } else {
+    btn.textContent = '开始游戏 · 正式版（nav）';
+    btn.classList.add('primary');
+  }
+}
+
+/* ============================================================
+   渲染：提示条 / 开关 / 点类型
+   ============================================================ */
+function renderHint(){
+  const hint = $('#modeHint');
+  if (state.view === 'before') {
+    hint.className = 'hintbar warn';
+    hint.innerHTML = `<b>现状：</b>版本选择只存在于「人机路点」页 ①。试试点到「地图」页——
+      这时你看不到当前是正式版还是测试包，直接按底部按钮，加载的就是上次留下的测试包。`;
+  } else {
+    hint.className = 'hintbar';
+    hint.innerHTML = `<b>改进：</b>按钮正上方常驻「启动条件条」，切到任何页签都在；按钮文案与颜色跟随版本变化。
+      测试包模式点启动会先弹一次预检（正式版不弹）。点「去人机路点改」可跳到 ① 卡。`;
+  }
+}
+
+function bindSwitches(root){
+  root.querySelectorAll('.srow').forEach(row => {
+    row.onclick = () => {
+      const k = row.dataset.sw;
+      const on = !(state.switches[k] ?? (row.getAttribute('aria-checked') === 'true'));
+      state.switches[k] = on;
+      row.classList.toggle('off', !on);
+      row.setAttribute('aria-checked', String(on));
+      row.querySelector('.sw').classList.toggle('on', on);
+    };
+  });
+}
+
+function renderTypes(){
+  $('#types').innerHTML = TYPES.map(t => `
+    <button class="ttile ${state.brush === t.key ? 'on' : ''} ${t.ro ? 'ro' : ''}"
+            data-type="${t.key}" style="--tc:${t.color}" type="button">
+      <span class="tt1"><i class="tdot"></i><b>${t.label}</b>
+        <span class="tbadge ${t.ro ? 'ro' : (t.badge === '新增' ? 'new' : '')}">${t.badge}</span></span>
+      <span class="tt2"><span class="tkey">${t.keyno}</span>
+        <b class="tcount">${t.ro ? '只读' : (t.key === 'normal' ? $('#stNodes').textContent : '')}</b></span>
+    </button>`).join('');
+  $$('#types .ttile').forEach(b => {
+    if (b.classList.contains('ro')) return;
+    b.onclick = () => { state.brush = b.dataset.type; renderTypes(); };
+  });
+}
+
+/* ============================================================
+   动作：启动 / 预检 / 重置
+   ============================================================ */
+function nowStamp(){
+  const d = new Date();
+  const p = n => String(n).padStart(2, '0');
+  return `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+}
+
+function appendLog(lines){
+  const box = $('#logText');
+  box.textContent = lines.join('\n');
+  box.scrollTop = box.scrollHeight;
+}
+
+function launch(){
+  const t = nowStamp();
+  const { p, m, isTest } = launchState();
+  let note = '';
+
+  if (!state.pluginOn) {
+    appendLog([
+      `${t} [boot] 控制台插件总开关关闭：已跳过 UCF_MOD`,
+      `${t} [boot] vanilla launch：不读 nav / 不出 F2 菜单`,
+    ]);
+    note = '游戏已启动（原版：插件总开关关闭）';
+  } else if (isTest) {
+    const lines = [
+      `${t} [boot] UCF_MOD=1 UCF_PACK=${state.pack}${state.onlyMap ? ` UCF_FP=${m.fp}` : ''}`,
+      `${t} [naved] pack: ${state.pack} target=${m.fp} (${state.onlyMap ? 'only this map' : 'all maps'})`,
+      `${t} [naved] ${p.blank ? `blank base: ${m.nodes} native nodes disabled` : 'pack applied on native nodes'}`,
+    ];
+    appendLog(lines);
+    note = `游戏已启动（mod + 测试包 ${state.pack}${state.onlyMap ? `（只对 ${m.label}）` : ''}）`;
+  } else {
+    appendLog([
+      `${t} [boot] UCF_MOD=1 UCF_NAV_READONLY=1`,
+      `${t} [boot] mode=official nav（部署版只读）`,
+      `${t} [nav] diag: graphs=1 waiting for PointGraph`,
+    ]);
+    note = '游戏已启动（mod 已启用（正式版：游戏内改动不落盘，改数据请用 ②/④））';
+  }
+
+  $('#statusDot').textContent = note;
+  state.running = true;
+  renderLaunch();
+}
+
+function openPreflight(){
+  const { p, m } = launchState();
+  $('#mPack').textContent = state.pack;
+  $('#mMap').textContent = `${m.label}（${m.lv}）`;
+  $('#mScope').textContent = state.onlyMap ? '只对这张图生效' : '全部地图生效';
+  const alert = $('#mAlert');
+  if (p.blank && p.edits === 0) {
+    alert.innerHTML = `<b>注意：</b>这是空白底图，包里目前 <b>0 处改动</b>——
+      进图后原生点全部禁用，人机没有可走路点，不会移动。`;
+    alert.style.display = '';
+  } else if (p.blank) {
+    alert.innerHTML = `空白底图：原生点全部禁用，人机只走包内 ${p.edits} 处改动画出的路线。`;
+    alert.style.display = '';
+  } else {
+    alert.innerHTML = `增量改动：包内 ${p.edits} 处改动，套在原生点上执行。`;
+    alert.style.display = '';
+  }
+  $('#muteChk').classList.toggle('on', state.mute);
+  $('#overlay').classList.remove('hidden');
+}
+
+function closePreflight(){ $('#overlay').classList.add('hidden'); }
+
+function jumpToPick(){
+  state.tab = '人机路点';
+  renderTabs();
+  renderPanels();
+  const card = $('#cardPick');
+  card.classList.add('pulse');
+  card.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  setTimeout(() => card.classList.remove('pulse'), 1800);
+}
+
+function resetDemo(){
+  state.running = false;
+  state.mute = false;
+  state.switches = {};
+  state.pluginOn = true;
+  state.version = 'test';
+  state.pack = 'blank_a';
+  state.mapLv = 'level1';
+  state.onlyMap = true;
+  state.brush = 'normal';
+  state.tab = '人机路点';
+  $('#masterSw').classList.add('on');
+  $('#masterSwitch').setAttribute('aria-checked', 'true');
+  $('#statusDot').textContent = '配置：已读取';
+  $('#logText').textContent = INIT_LOG;
+  $('#wpLog').textContent = INIT_LOG;
+  fillSelects();
+  renderWaypoint();
+  renderTypes();
+  renderTypesCounts();
+  renderLaunch();
+  renderPanels();
+  renderHint();
+  closePreflight();
+}
+
+// 点类型计数：普通路点写真实节点数，其余按图给示意值
+function renderTypesCounts(){
+  const m = mapByLv(state.mapLv);
+  const extra = { jump: 0, crouch: 0, guard: 0, area: 0, tag: 0 };
+  $$('#types .ttile').forEach(b => {
+    const k = b.dataset.type;
+    if (k === 'spawn' || k === 'box') return;
+    const el = b.querySelector('.tcount');
+    if (!el) return;
+    if (k === 'normal') el.textContent = m.nodes;
+    else if (k === 'jump' || k === 'crouch' || k === 'guard' || k === 'area' || k === 'tag') {
+      const v = extra[k];
+      el.textContent = v === 0 ? '0' : String(v);
+    }
+  });
+}
+
+/* ============================================================
+   事件绑定
+   ============================================================ */
+function init(){
+  // 模式切换
+  $$('#modeSeg button').forEach(b => b.onclick = () => {
+    state.view = b.dataset.mode;
+    $$('#modeSeg button').forEach(x => x.classList.toggle('on', x === b));
+    renderHint();
+    renderLaunch();
+  });
+
+  // 页签
+  $$('#tabs .tab').forEach(b => b.onclick = () => {
+    state.tab = b.dataset.tab;
+    renderTabs();
+    renderPanels();
+  });
+
+  // 数据版本
+  $$('#verSeg button').forEach(b => b.onclick = () => {
+    state.version = b.dataset.ver;
+    if (state.version === 'test') state.mapLv = PACKS[state.pack].map;
+    renderWaypoint();
+    renderLaunch();
+  });
+
+  // 测试包
+  $('#packSel').onchange = e => {
+    state.pack = e.target.value;
+    state.mapLv = PACKS[state.pack].map;
+    renderWaypoint();
+    renderLaunch();
+  };
+
+  // 地图
+  $('#mapSel').onchange = e => {
+    state.mapLv = e.target.value;
+    renderWaypoint();
+    renderTypesCounts();
+    renderLaunch();
+  };
+
+  // 只对这张图
+  $('#onlyMapWrap').onclick = () => {
+    state.onlyMap = !state.onlyMap;
+    $('#onlyMapChk').classList.toggle('on', state.onlyMap);
+    renderWaypoint();
+    renderLaunch();
+  };
+
+  // 插件总开关
+  $('#masterSwitch').onclick = () => {
+    state.pluginOn = !state.pluginOn;
+    $('#masterSw').classList.toggle('on', state.pluginOn);
+    $('#masterSwitch').setAttribute('aria-checked', String(state.pluginOn));
+    renderWaypoint();
+    renderLaunch();
+  };
+
+  // 窗口置顶（纯装饰）
+  $('#topmost').onclick = () => $('#topChk').classList.toggle('on');
+
+  // 开始游戏
+  $('#btnStart').onclick = () => {
+    if (state.running) return;
+    const risky = state.view === 'after' && state.pluginOn && state.version === 'test';
+    if (risky && !state.mute) openPreflight();
+    else launch();
+  };
+
+  // 预检弹窗
+  $('#mGo').onclick = () => { closePreflight(); launch(); };
+  $('#mCancel').onclick = closePreflight;
+  $('#mAdjust').onclick = () => { closePreflight(); jumpToPick(); };
+  $('#muteChk').onclick = e => {
+    e.preventDefault();
+    state.mute = !state.mute;
+    $('#muteChk').classList.toggle('on', state.mute);
+  };
+  $('#overlay').onclick = e => { if (e.target === $('#overlay')) closePreflight(); };
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && !$('#overlay').classList.contains('hidden')) closePreflight();
+  });
+
+  // 重置
+  $('#btnResetDemo').onclick = resetDemo;
+
+  // 初始化
+  fillSelects();
+  renderWaypoint();
+  renderTypes();
+  renderTypesCounts();
+  bindSwitches($('.c-tabwrap'));
+  renderHint();
+  renderLaunch();
+  renderPanels();
+}
+
+init();
+</script>
+</body>
+</html>

@@ -16,12 +16,13 @@ import json
 import os
 import queue
 import re
+import shutil
 import subprocess
 import sys
 import threading
 import time
 import tkinter as tk
-from tkinter import messagebox, simpledialog
+from tkinter import messagebox
 
 import customtkinter as ctk
 
@@ -138,23 +139,85 @@ def load_scene_counts():
 
 
 def pack_name_ok(name):
-    r"""插件只认 ASCII 包名（fopen/CreateDirectoryA），先在控制台挡掉。"""
+    r"""包名只能用英文字母、数字、下划线、短横线（插件是 C + ANSI 路径，中文读不了）。"""
     return bool(re.match(r"^[A-Za-z0-9_-]{1,48}$", name or ""))
 
 
-def pack_manifest(name):
-    r"""读 packs/<包名>/manifest.json；没有就返回空 dict。"""
+def pack_id_ok(pid):
+    r"""包 id = 地图文件夹/包名：文件夹允许中文（如 TransportShip运输船），包名仍只认英文。"""
+    parts = [s for s in str(pid or "").replace("\\", "/").split("/") if s]
+    if not (1 <= len(parts) <= 2):
+        return False
+    if len(parts) == 1:
+        return pack_name_ok(parts[0])            # 老布局：根目录平铺的包名
+    folder, name = parts
+    if not pack_name_ok(name):
+        return False
+    return (bool(re.match(r'^[^\\/:*?"<>|]{1,30}$', folder))
+            and folder not in (".", ".."))
+
+
+def pack_dir(pid):
+    r"""包 id → 目录：TransportShip/blank_b → packs\TransportShip\blank_b。
+
+    老布局（packs\blank_b，没分类）也认，旧包和自检脚本还能直接用。
+    """
+    return os.path.join(PACKS, *[s for s in str(pid).replace("\\", "/").split("/") if s])
+
+
+def _is_pack_dir(path):
+    r"""目录里有没有包的内容：manifest.json 或 <指纹>.txt。"""
+    if os.path.isfile(os.path.join(path, "manifest.json")):
+        return True
     try:
-        with open(os.path.join(PACKS, name, "manifest.json"), "r", encoding="utf-8") as f:
+        return any(re.match(r"^n\d+-[0-9a-fA-F]{16}\.txt$", fn)
+                   for fn in os.listdir(path))
+    except OSError:
+        return False
+
+
+def map_scene(lv, fp=""):
+    r"""地图英文场景名（默认包名前缀用）：maps\*.json 的 scene，缺了查《地图对照表》。"""
+    doc, _p = find_map_doc(fp)
+    scene = str(((doc or {}).get("map") or {}).get("scene") or "")
+    if not scene:
+        scene = str((load_scene_counts().get(lv) or {}).get("scene") or "")
+    scene = re.sub(r"[^A-Za-z0-9_-]+", "_", scene).strip("_-")
+    return scene or str(lv or "blank")
+
+
+def map_folder(lv, fp=""):
+    r"""测试包文件夹名：英文场景名 + 中文名，如 TransportShip运输船。
+
+    Windows 文件系统支持中英混排；插件的 ANSI 路径在本机（代码页 936）能读中文，
+    所以目录用「英文+中文」，包名仍用英文（navcmd / 日志更稳）。
+    """
+    doc, _p = find_map_doc(fp)
+    m = (doc or {}).get("map") or {}
+    scene = str(m.get("scene") or "")
+    label = str(m.get("label") or "")
+    if not scene or not label:
+        row = load_scene_counts().get(lv) or {}
+        scene = scene or str(row.get("scene") or "")
+        label = label or str(row.get("name") or "")
+    base = "%s%s" % (scene or lv or "blank", label)
+    base = re.sub(r'[<>:"/\\|?*\x00-\x1f]+', "_", base).strip(" .")
+    return base or str(lv or "blank")
+
+
+def pack_manifest(pid):
+    r"""读 packs/<地图文件夹>/<包名>/manifest.json；没有就返回空 dict。"""
+    try:
+        with open(os.path.join(pack_dir(pid), "manifest.json"), "r", encoding="utf-8") as f:
             doc = json.load(f)
         return doc if isinstance(doc, dict) else {}
     except (OSError, ValueError):
         return {}
 
 
-def pack_txt(name, fp=""):
+def pack_txt(pid, fp=""):
     r"""包内某张图的 txt；不给指纹就取第一个。"""
-    d = os.path.join(PACKS, name)
+    d = pack_dir(pid)
     if fp:
         p = os.path.join(d, fp + ".txt")
         return p if os.path.isfile(p) else ""
@@ -165,12 +228,12 @@ def pack_txt(name, fp=""):
     return os.path.join(d, files[0]) if files else ""
 
 
-def pack_target_fp(name):
+def pack_target_fp(pid):
     r"""这个包针对哪张图：manifest.fp 优先，其次 <指纹>.txt 的文件名。"""
-    fp = str(pack_manifest(name).get("fp") or "")
+    fp = str(pack_manifest(pid).get("fp") or "")
     if fp:
         return fp
-    p = pack_txt(name)
+    p = pack_txt(pid)
     if p:
         base = os.path.basename(p)[:-4]
         if re.match(r"^n\d+-[0-9a-fA-F]{16}$", base):
@@ -178,10 +241,56 @@ def pack_target_fp(name):
     return ""
 
 
-def pack_summary(name, fp=""):
+def seed_lines(fp):
+    r"""从 ① 备份版 maps/*.json 生成「原版全量重放」行（node add + edge add）。
+
+    给 grow 包做底：等于把这张图的原版点图整份复制过来，之后可以继续加点，
+    不受原生点数限制（插件会先把原生点全标死，再按这些行新建节点）。
+    """
+    d = os.path.join(NATIVE, "maps")
+    if not os.path.isdir(d):
+        return None, 0, 0
+    doc = None
+    for fn in sorted(os.listdir(d)):
+        if not fn.endswith(".json") or fn.startswith("_"):
+            continue
+        try:
+            with open(os.path.join(d, fn), "r", encoding="utf-8") as f:
+                cur = json.load(f)
+        except (OSError, ValueError):
+            continue
+        if str((cur.get("map") or {}).get("fingerprint") or "") == fp:
+            doc = cur
+            break
+    if not doc:
+        return None, 0, 0
+    nodes = [n for n in (doc.get("nodes") or []) if int(n.get("walk", 1)) != 0]
+    pos = {}
+    for n in nodes:
+        p = n.get("p") or (0.0, 0.0, 0.0)
+        pos[str(n.get("id"))] = tuple(float(v) for v in p)
+    lines = ["node add %.3f %.3f %.3f" % pos[k] for k in pos]
+    seen, edges = set(), []
+    for e in doc.get("edges") or []:
+        if len(e) < 2:
+            continue
+        a, b = str(e[0]), str(e[1])
+        if a == b or a not in pos or b not in pos:
+            continue
+        k = (a, b) if a < b else (b, a)
+        if k in seen:
+            continue
+        seen.add(k)
+        edges.append(k)
+    for a, b in edges:
+        lines.append("edge add %.3f %.3f %.3f %.3f %.3f %.3f" % (pos[a] + pos[b]))
+    return lines, len(pos), len(edges)
+
+
+def pack_summary(pid, fp=""):
     r"""包内容摘要：空白底图？几个加点 / 删点 / 加边 / 删边、最后写入时间。"""
-    p = pack_txt(name, fp)
-    out = {"path": p, "blank": False, "nadd": 0, "ndel": 0,
+    p = pack_txt(pid, fp)
+    out = {"path": p, "blank": False, "grow": False, "nadd": 0, "ndel": 0,
            "eadd": 0, "edel": 0, "mtime": 0.0}
     if not p:
         return out
@@ -193,6 +302,8 @@ def pack_summary(name, fp=""):
                     continue
                 if s == "blank":
                     out["blank"] = True
+                elif s == "grow":
+                    out["grow"] = True       # blank 的加强版：新增节点，不借槽位
                 elif s.startswith("node add "):
                     out["nadd"] += 1
                 elif s.startswith("node del "):
@@ -232,18 +343,72 @@ def write_nav_cmd(cmd, name="", fp="", extra=None):
     if d:
         os.makedirs(d, exist_ok=True)
     tmp = NAVCMD + ".tmp"
-    with open(tmp, "w", encoding="ascii", newline="\n") as f:
+    # 包 id 里可能带中文地图文件夹；插件是 ANSI(GBK) 文件路径，命令文件也按 GBK 写。
+    with open(tmp, "w", encoding="gbk", newline="\n") as f:
         f.write("\n".join(lines) + "\n")
     os.replace(tmp, NAVCMD)
     return _CMD_SEQ
 
 
 def load_packs():
-    r"""packs\ 下有哪些测试包（目录名 = 包名，只认 ASCII 名）。"""
+    r"""packs\ 下所有测试包 id：地图文件夹/包名（老布局的 packs\<包名> 也算，排后面）。"""
+    out = []
     try:
-        return sorted(d for d in os.listdir(PACKS) if os.path.isdir(os.path.join(PACKS, d)))
+        entries = sorted(os.listdir(PACKS))
     except OSError:
-        return []
+        return out
+    for entry in entries:
+        if entry.startswith("_"):
+            continue
+        d = os.path.join(PACKS, entry)
+        if not os.path.isdir(d):
+            continue
+        if _is_pack_dir(d):
+            out.append(entry)                      # 老布局：直接放在根目录
+            continue
+        try:
+            subs = sorted(os.listdir(d))
+        except OSError:
+            continue
+        for sub in subs:
+            sd = os.path.join(d, sub)
+            if sub.startswith("_") or not os.path.isdir(sd):
+                continue
+            if _is_pack_dir(sd):
+                out.append("%s/%s" % (entry, sub))
+    return out
+
+
+def migrate_flat_packs():
+    r"""把老的 packs\<包名>\ 自动挪进 packs\<地图文件夹>\<包名>\；返回 [(旧, 新)]。
+
+    文件夹名用地图英文场景名（插件是 C + ANSI 路径，读不了中文目录）。
+    目标已存在就原地不动，绝不覆盖。
+    """
+    moved = []
+    try:
+        entries = sorted(os.listdir(PACKS))
+    except OSError:
+        return moved
+    for entry in entries:
+        d = os.path.join(PACKS, entry)
+        if entry.startswith("_") or not os.path.isdir(d) or not _is_pack_dir(d):
+            continue
+        man = pack_manifest(entry)                # 老布局按平铺名字读
+        fp = str(man.get("fp") or "")
+        if not fp:
+            fp = pack_target_fp(entry)
+        folder = map_folder(str(man.get("level") or ""), fp)
+        dst = os.path.join(PACKS, folder, entry)
+        if os.path.abspath(dst) == os.path.abspath(d) or os.path.isdir(dst):
+            continue
+        try:
+            os.makedirs(os.path.dirname(dst), exist_ok=True)
+            shutil.move(d, dst)
+        except OSError:
+            continue
+        moved.append((entry, "%s/%s" % (folder, entry)))
+    return moved
 
 def _python():
     r"""跑 navdata.py 用的解释器：控制台是 .pyw，sys.executable 可能是 pythonw.exe，
@@ -369,7 +534,16 @@ def test_stats(root):
     packs = 0
     pk_dir = os.path.join(root, "packs")
     try:
-        packs = len([d for d in os.listdir(pk_dir) if os.path.isdir(os.path.join(pk_dir, d))])
+        for entry in os.listdir(pk_dir):
+            d = os.path.join(pk_dir, entry)
+            if not os.path.isdir(d):
+                continue
+            if _is_pack_dir(d):
+                packs += 1
+                continue
+            for sub in _listdir(d):
+                if os.path.isdir(os.path.join(d, sub)) and _is_pack_dir(os.path.join(d, sub)):
+                    packs += 1
     except OSError:
         pass
     return n_json, n_bin, packs, total, latest
@@ -399,7 +573,7 @@ def diff_count(a, b):
 
 CREATE_NO_WINDOW = 0x08000000
 FONT = ("Microsoft YaHei UI", 13)
-FONT_S = ("Microsoft YaHei UI", 11)
+FONT_S = ("Microsoft YaHei UI", 12)
 FONT_B = ("Microsoft YaHei UI", 15, "bold")
 
 # ---- 开关定义：(key, 标题, 说明, 默认值) --------------------------------
@@ -433,14 +607,10 @@ GROUPS = [
     ]),
     # 2026-11-19：文字标签控件已删除；这一页保留游戏内热键速查。
     ("快捷键", "游戏内热键速查（屏幕不再显示数据面板和文字标签）", []),
-    ("手动", "只有你按键时才发生；下面「自动铺设」是进图时自动补，不按键也会跑", [
-        ("editor", "允许游戏内编辑", "Ctrl+1 进入编辑模式，放蹲守点/改路点", True),
-        ("collect_only", "只读采集", "只导出路点，绝不创建任何游戏对象", False),
-        # 2026-11-18：自动铺设从工作台搬回控制台「手动」页（用户要求）
-        ("auto_waypoints", "自动铺路点 + 连线", "进图时这张图没有 PointGraph（没路点）才触发：沿可走面铺点并连边；已有路点的图不动", True),
-        ("auto_crouch", "自动补蹲守点", "没有蹲守点的图自动补一批 Bot_CrouchPos；已有蹲守点的图不动", True),
-        ("ghost_areas", "自动造幽灵守区", "没有幽灵守区/守点的图凭空造一套；已有守区的图不动", True),
-    ]),
+    # 2026-11-19 用户要求：删除「自动铺设」整块（auto_waypoints / auto_crouch / ghost_areas）。
+    # 2026-11-19 用户要求：删除「允许游戏内编辑」（editor），C 侧键保留（默认开）。
+    # 2026-11-19 用户要求：整个「手动」页删除（collect_only 入口随之去掉，功能仍可用
+    # collect.flag / Ctrl+Shift+X）。
 ]
 
 # 「可视化」页各类数据的图例色块：游戏里画成什么颜色（照抄 src/editor.c 的 COL_* 与 vis_draw）。
@@ -658,6 +828,9 @@ class App(ctk.CTk):
 
         self.vars = {}
         self.widgets = []
+        # 2026-11-19：启动条件条（版本 / 包 / 生效图）—— 测试包模式的一次性预检可被静音
+        self._mute_preflight = False
+        self._strip_run = None
 
         self.head = ctk.CTkFrame(self, fg_color="transparent")
         self.head.pack(fill="x", padx=18, pady=(16, 4))
@@ -686,7 +859,7 @@ class App(ctk.CTk):
             self,
             text="只有从本窗口「开始游戏」才会加载 mod；直接双击 UnityCrossFire.exe 是原版。\n"
                  "开关改完存进 ucf_mod.json，下次启动生效（游戏开着时要重开）。\n"
-                 "测试包模式、四版数据的路径 / 部署 / 还原 / 校验：切到「测试数据」「数据」页。\n"
+                 "测试包模式在「人机路点」页；四版数据的路径 / 部署 / 还原 / 校验：切到「数据」页。\n"
                  "路点数据只读查看在工作台；现场编辑在「人机路点」页（游戏内 F2 菜单）。",
             font=FONT_S, text_color="#9aa0a6", justify="left")
         self.intro.pack(anchor="w", padx=20)
@@ -702,6 +875,29 @@ class App(ctk.CTk):
                       fg_color="#3a3f47", hover_color="#4a5058",
                       command=self.open_workbench).pack(side="left", fill="x", expand=True, padx=(6, 0))
 
+        # 2026-11-19：启动条件条 —— 版本/包/生效图常驻在按钮上方，
+        # 切到任何页签都看得见；这里只摆控件，文案由 refresh_launch_strip() 刷。
+        self.strip = ctk.CTkFrame(self, corner_radius=8, fg_color="#232323",
+                                  border_width=1, border_color="#3a3f47")
+        self.strip.pack(side="bottom", fill="x", padx=14, pady=(0, 8))
+        self.strip_badge = ctk.CTkLabel(self.strip, text="正式版", width=78, height=26,
+                                        corner_radius=6, fg_color="#16233a",
+                                        text_color="#9cc3ff",
+                                        font=("Microsoft YaHei UI", 12, "bold"))
+        self.strip_badge.pack(side="left", padx=(10, 8), pady=9)
+        self.strip_go = ctk.CTkButton(self.strip, text="去人机路点改", width=112, height=28,
+                                      font=FONT_S, fg_color="#3a3f47", hover_color="#4a5058",
+                                      command=self.on_strip_go)
+        self.strip_go.pack(side="right", padx=(8, 10), pady=8)
+        self.strip_main = ctk.CTkFrame(self.strip, fg_color="transparent")
+        self.strip_main.pack(side="left", fill="x", expand=True, pady=8)
+        self.strip_title = ctk.CTkLabel(self.strip_main, text="", anchor="w", justify="left",
+                                        font=("Microsoft YaHei UI", 12, "bold"))
+        self.strip_title.pack(fill="x")
+        self.strip_sub = ctk.CTkLabel(self.strip_main, text="", anchor="w", justify="left",
+                                      font=FONT_S, text_color="#9aa0a6", wraplength=500)
+        self.strip_sub.pack(fill="x")
+
         self.stat = ctk.CTkFrame(self, corner_radius=10)
         self.stat.pack(side="bottom", fill="x", padx=14, pady=(0, 8))
         top = ctk.CTkFrame(self.stat, fg_color="transparent")
@@ -709,11 +905,11 @@ class App(ctk.CTk):
         ctk.CTkLabel(top, text="上次运行", font=("Microsoft YaHei UI", 14, "bold")).pack(side="left")
         self.dot = ctk.CTkLabel(top, text="", font=FONT_S, text_color="#9aa0a6")
         self.dot.pack(side="right")
-        self.logbox = ctk.CTkTextbox(self.stat, height=104, font=("Consolas", 11),
+        self.logbox = ctk.CTkTextbox(self.stat, height=104, font=("Consolas", 12),
                                      fg_color="#141414", activate_scrollbars=True)
         self.logbox.pack(fill="x", padx=14, pady=(2, 12))
 
-        # 地图 / 可视化 / 导出 / 手动 / 测试数据 / 数据 / 车测 —— 全部页签切换，上方不再压一块常驻面板。
+        # 地图 / 可视化 / 导出 / 快捷键 / 人机路点 / 数据 / 车测 —— 全部页签切换，上方不再压一块常驻面板。
         self.tabview = ctk.CTkTabview(self, corner_radius=10, command=self.on_tab)
         self.tabview.pack(fill="both", expand=True, padx=14, pady=(8, 4))
         self.tab_titles = []
@@ -724,20 +920,16 @@ class App(ctk.CTk):
                 self.build_export_tab(tab, hint, items)  # 总开关 + 六项勾选（一行多个）+ 最近导出
             elif title == "快捷键":
                 self.build_hotkey_tab(tab, hint)          # 热键速查（游戏内已不显示）
-            elif title == "手动":
-                self.build_manual_tab(tab, hint, items)  # 按键开关 + 自动铺设（进图自动补）
             elif title == "可视化":
                 self.build_vis_tab(tab, hint, items)     # 总开关 + 九类数据（勾选）
             else:
                 self.build_group_tab(tab, hint, items)
-        # 人机路点必须排在「测试数据」前面：页签顺序 = 添加顺序。
-        # 但它的控件要读 opt_pack / opt_map，所以先占位，等测试数据页建完再填内容。
+        # 人机路点要在「数据」「车测」之前：后两页读它建的 opt_pack / opt_map。
         wp_tab = self.tabview.add("人机路点")               # SyPB 式现场编辑入口
-        self.build_pack_tab(self.tabview.add("测试数据"))   # 正式版 / 测试包 + 只对哪张图生效
         self.build_waypoint_tab(wp_tab)
         self.build_data_tab(self.tabview.add("数据"))       # 四版路径/时间 + 部署/还原/校验
         self.build_autotest_tab(self.tabview.add("车测"))   # 不用鼠标键盘：插件自己在进程内切图
-        self.tab_titles += ["人机路点", "测试数据", "数据", "车测"]
+        self.tab_titles += ["人机路点", "数据", "车测"]
 
         # 回到上次停留的页签；记住的页签已经不存在（改版删页）就落在默认第一页
         saved_tab = str(self.ui.get("tab") or "")
@@ -750,7 +942,7 @@ class App(ctk.CTk):
 
     # ---- 页签内容：一组开关 = 一页 ----
     def switch_card(self, parent, key, label, desc, default):
-        r"""一个开关 + 一行说明；「可视化」「手动」等页共用这份样式。"""
+        r"""一个开关 + 一行说明；「可视化」等页共用这份样式。"""
         box = ctk.CTkFrame(parent, corner_radius=8)
         box.pack(fill="x", padx=10, pady=(8, 0))
         var = tk.BooleanVar(value=bool(self.feats.get(key, default)))
@@ -847,30 +1039,6 @@ class App(ctk.CTk):
         lbl.pack(side="left")
         return lbl
 
-    # ---- 「手动」页：按键开关 + 自动铺设（进图时自动补，不按键也跑） ----
-    def build_manual_tab(self, tab, hint, items):
-        body = ctk.CTkScrollableFrame(tab, corner_radius=0, fg_color="transparent")
-        body.pack(fill="both", expand=True, padx=2, pady=2)
-        ctk.CTkLabel(body, text=hint, font=FONT_S, text_color="#9aa0a6",
-                     anchor="w", justify="left", wraplength=620).pack(
-            fill="x", padx=12, pady=(8, 2))
-        auto_keys = ("auto_waypoints", "auto_crouch", "ghost_areas")
-        manual = [it for it in items if it[0] not in auto_keys]
-        auto = [it for it in items if it[0] in auto_keys]
-        for key, label, desc, default in manual:
-            self.switch_card(body, key, label, desc, default)
-        if auto:
-            ctk.CTkLabel(body, text="自动铺设", font=("Microsoft YaHei UI", 12, "bold"),
-                         anchor="w").pack(fill="x", padx=12, pady=(14, 0))
-            ctk.CTkLabel(body, text="进图时自动补数据：只补缺的，不覆盖已有的；改完重启游戏生效。",
-                         font=FONT_S, text_color="#9aa0a6", anchor="w", justify="left",
-                         wraplength=620).pack(fill="x", padx=12, pady=(2, 0))
-            for key, label, desc, default in auto:
-                self.switch_card(body, key, label, desc, default)
-            ctk.CTkLabel(body, text="录制（F9）仍在游戏里；路线编辑在游戏内完成，工作台只读查看。",
-                         font=FONT_S, text_color="#9aa0a6", anchor="w", justify="left",
-                         wraplength=620).pack(fill="x", padx=12, pady=(8, 12))
-
     # ---- 「导出」页：总开关（开关）+ 六项内容（一行多个勾选框）+ 最近导出 ----
     def build_export_tab(self, tab, hint, items):
         body = ctk.CTkScrollableFrame(tab, corner_radius=0, fg_color="transparent")
@@ -925,7 +1093,7 @@ class App(ctk.CTk):
         self.exp_name = ctk.CTkLabel(box, text="（还没有导出）", font=FONT_S,
                                      anchor="w", justify="left", wraplength=600)
         self.exp_name.pack(fill="x", padx=12, pady=(4, 0))
-        self.exp_path = ctk.CTkLabel(box, text="", font=("Consolas", 11),
+        self.exp_path = ctk.CTkLabel(box, text="", font=("Consolas", 12),
                                      anchor="w", justify="left", wraplength=600)
         self.exp_path.pack(fill="x", padx=12, pady=(4, 0))
         self.exp_time = ctk.CTkLabel(box, text="", font=FONT_S, text_color="#9aa0a6",
@@ -987,7 +1155,7 @@ class App(ctk.CTk):
         box.pack(fill="x", padx=10, pady=(8, 0))
         ctk.CTkLabel(box, text=title, font=FONT, anchor="w").pack(
             fill="x", padx=12, pady=(8, 0))
-        tb = ctk.CTkTextbox(box, height=height, font=("Consolas", 11),
+        tb = ctk.CTkTextbox(box, height=height, font=("Consolas", 12),
                             fg_color="#141414", wrap="word")
         tb.pack(fill="x", padx=12, pady=(4, 10))
         tb.insert("1.0", text)
@@ -1004,102 +1172,6 @@ class App(ctk.CTk):
         ctk.CTkLabel(body, text=HUD_NOTES, font=FONT_S, text_color="#9aa0a6",
                      anchor="w", justify="left", wraplength=620).pack(
             fill="x", padx=14, pady=(10, 12))
-
-    # ---- 测试数据页：正式版 / 测试包 + 只对哪张图生效（S3）----
-    def build_pack_tab(self, tab):
-        r"""启动前在这里选：这次进图读 nav\（正式）还是 packs\<包名>（测试），
-        以及只让哪一张图的路线生效。选完点「开始游戏」，两个值以环境变量
-        （UCF_PACK / UCF_FP）递给游戏进程；选了测试包也不会动正式版一个文件。"""
-        self.maps = load_maps()                 # [(level, 中文名, 指纹)]
-        self.map_disp = {("%s（%s）" % (lab, lv)): (lv, lab, fp) for lv, lab, fp in self.maps}
-        pk = self.cfg.get("pack") if isinstance(self.cfg.get("pack"), dict) else {}
-        self.pack_on = tk.BooleanVar(value=bool(pk.get("on", False)))
-        self.pack_only = tk.BooleanVar(value=bool(pk.get("only_map", True)))
-        self.pack_name = str(pk.get("name") or "")
-        self.pack_map = str(pk.get("map") or (self.maps[0][0] if self.maps else ""))
-
-        body = ctk.CTkScrollableFrame(tab, corner_radius=0, fg_color="transparent")
-        body.pack(fill="both", expand=True, padx=2, pady=2)
-        ctk.CTkLabel(body, text="选「测试包」= 进图读 ④ navdata\\test\\packs\\<包名> 里的路线；"
-                              "选「正式版」= 读 ③ 部署版 nav\\。\n"
-                              "进图后直接在游戏里画：Ctrl+Shift+N 加点 · Ctrl+Shift+A 选起点 · "
-                              "Ctrl+Shift+J 连/断边 · Ctrl+Shift+D 删点 · Ctrl+Shift+Z 撤销；改完自动存盘。\n"
-                              "「新建空白包」= 原生点全禁用后从 0 画；「载入到游戏」= 不重启就切到当前包。",
-                     font=FONT_S, text_color="#9aa0a6", anchor="w", justify="left",
-                     wraplength=620).pack(fill="x", padx=12, pady=(8, 2))
-        box = ctk.CTkFrame(body, corner_radius=8)
-        box.pack(fill="x", padx=10, pady=(8, 0))
-
-        row = ctk.CTkFrame(box, fg_color="transparent")
-        row.pack(fill="x", padx=14, pady=(8, 0))
-        self.seg_mode = ctk.CTkSegmentedButton(
-            row, values=["正式版（nav）", "测试包（packs）"], font=FONT_S,
-            command=lambda _v: self.on_pack_change())
-        self.seg_mode.pack(side="left")
-        self.seg_mode.set("测试包（packs）" if self.pack_on.get() else "正式版（nav）")
-
-        row = ctk.CTkFrame(box, fg_color="transparent")
-        row.pack(fill="x", padx=14, pady=(8, 0))
-        ctk.CTkLabel(row, text="测试包", font=FONT, width=64, anchor="w").pack(side="left")
-        pack_values = self._pack_values()
-        self.opt_pack = ctk.CTkOptionMenu(row, values=pack_values, font=FONT_S,
-                                          width=200, command=lambda _v: self.on_pack_change())
-        self.opt_pack.pack(side="left", padx=(0, 6))
-        if self.pack_name in pack_values:   # 上次选的包重启后接着选中（包被删了就落第一个）
-            self.opt_pack.set(self.pack_name)
-        ctk.CTkButton(row, text="刷新", width=56, font=FONT_S, fg_color="#3a3f47",
-                      hover_color="#4a5058",
-                      command=self.refresh_packs).pack(side="left", padx=(0, 6))
-        ctk.CTkButton(row, text="打开目录", width=80, font=FONT_S, fg_color="#3a3f47",
-                      hover_color="#4a5058",
-                      command=self.open_packs_dir).pack(side="left", padx=(0, 6))
-        ctk.CTkButton(row, text="新建空白包", width=96, font=FONT_S, fg_color="#2f6fdb",
-                      hover_color="#255bb4",
-                      command=self.create_blank_pack).pack(side="left")
-
-        row = ctk.CTkFrame(box, fg_color="transparent")
-        row.pack(fill="x", padx=14, pady=(8, 0))
-        ctk.CTkCheckBox(row, text="只对这张图生效", variable=self.pack_only, font=FONT,
-                        checkbox_width=20, checkbox_height=20,
-                        command=self.on_pack_change).pack(side="left", padx=(0, 10))
-        self.opt_map = ctk.CTkOptionMenu(
-            row, values=list(self.map_disp) or ["（没有可测的路点图）"], font=FONT_S,
-            width=240, command=lambda _v: self.on_pack_change())
-        self.opt_map.pack(side="left")
-        if self.pack_map:
-            for disp, (lv, _lab, _fp) in self.map_disp.items():
-                if lv == self.pack_map:
-                    self.opt_map.set(disp)
-                    break
-
-        row = ctk.CTkFrame(box, fg_color="transparent")
-        row.pack(fill="x", padx=14, pady=(8, 0))
-        ctk.CTkButton(row, text="载入到游戏", width=92, font=FONT_S, fg_color="#2f6fdb",
-                      hover_color="#255bb4",
-                      command=lambda: self.send_pack_cmd("apply")).pack(side="left", padx=(0, 6))
-        ctk.CTkButton(row, text="重新应用", width=80, font=FONT_S, fg_color="#3a3f47",
-                      hover_color="#4a5058",
-                      command=lambda: self.send_pack_cmd("reload")).pack(side="left", padx=(0, 6))
-        ctk.CTkButton(row, text="保存路线", width=80, font=FONT_S, fg_color="#3a3f47",
-                      hover_color="#4a5058",
-                      command=self.save_pack_now).pack(side="left", padx=(0, 6))
-        ctk.CTkButton(row, text="清空当前图", width=92, font=FONT_S, fg_color="#8a4b1e",
-                      hover_color="#a55d26",
-                      command=self.clear_pack_map).pack(side="left", padx=(0, 6))
-        ctk.CTkButton(row, text="回正式版", width=80, font=FONT_S, fg_color="#3a3f47",
-                      hover_color="#4a5058",
-                      command=self.back_to_official).pack(side="left")
-
-        self.lbl_pack = ctk.CTkLabel(box, text="", font=FONT_S, text_color="#c9d1d9",
-                                     anchor="w", justify="left", wraplength=620)
-        self.lbl_pack.pack(fill="x", padx=14, pady=(8, 0))
-        ctk.CTkLabel(box, text="游戏运行中改完点「载入到游戏」立即生效；游戏没开时只是选中，点「开始游戏」生效。\n"
-                              "「重新应用」= 重读 pack 文件（外部改过 txt 时用它）；「保存路线」= 让游戏把内存里的改动写回文件。",
-                     font=FONT_S, text_color="#9aa0a6", anchor="w", justify="left",
-                     wraplength=620).pack(fill="x", padx=14, pady=(2, 0))
-
-        ctk.CTkLabel(box, text="", font=FONT_S).pack(pady=1)
-        self.on_pack_change(persist=False)
 
     # ---- 「人机路点」页：SyPB 式现场编辑的控制台入口 ----
     def wp_card(self, parent, title, sub=""):
@@ -1128,113 +1200,102 @@ class App(ctk.CTk):
                            command=lambda k=key: self.on_toggle(k))
         return sw
 
-    def wp_type_counts(self):
-        r"""当前选中地图的「场景组件」计数。
-
-        normal/edges 来自 maps/*.json；守点/聚集区/蹲点/标签来自
-        《地图对照表》第二张表（地图 JSON 不导这些组件）。
-        """
-        fp = self.selected_fp() if hasattr(self, "opt_map") else ""
-        doc, _path = find_map_doc(fp)
-        counts = (doc or {}).get("counts") or {}
-        disp = self.opt_map.get() if hasattr(self, "opt_map") else ""
-        lv = self.map_disp.get(disp, ("", "", ""))[0]
-        sc = self.wp_scene.get(lv, {})
-        return {
-            "normal": int(counts.get("nodes") or 0),
-            "jump": int(sc.get("jump") or counts.get("jump") or 0),
-            "crouch": int(sc.get("crouch") or counts.get("crouch") or 0),
-            "guard": int(sc.get("guard") or counts.get("guard") or 0),
-            "area": int(sc.get("area") or counts.get("area") or 0),
-            "tag": int(sc.get("tag") or counts.get("tag") or 0),
-            "spawn": int(counts.get("spawn") or 0),
-            "box": None,
-        }, doc, sc
-
     def build_waypoint_tab(self, tab):
         r"""控制台「人机路点」页。
 
-        设计：docs/design/console-waypoint-tab.html。它不直接改游戏，
+        设计：design/console-waypoint-tab.html。它不直接改游戏，
         只负责选图/包、写 ucf_mod.json 开关、给运行中的插件发 ucf_navcmd，
-        并把节点/边/特征计数和最近 [naved] 日志显示出来。
+        并显示当前图的指纹与原生点/边数。
         """
-        self._wp_syncing = False
+        # 测试包 / 地图选择的状态由本页持有（2026-11-19 「测试数据」页删除后并入这里）；
+        # 数据页、车测页仍然读 opt_pack / opt_map / seg_mode。
+        self.maps = load_maps()                 # [(level, 中文名, 指纹)]
+        self.map_disp = {("%s（%s）" % (lab, lv)): (lv, lab, fp) for lv, lab, fp in self.maps}
+        pk = self.cfg.get("pack") if isinstance(self.cfg.get("pack"), dict) else {}
+        self.pack_on = tk.BooleanVar(value=bool(pk.get("on", False)))
+        self.pack_only = tk.BooleanVar(value=bool(pk.get("only_map", True)))
+        self.pack_name = str(pk.get("name") or "")
+        self.pack_map = str(pk.get("map") or (self.maps[0][0] if self.maps else ""))
         self.wp_scene = load_scene_counts()
-        self.wp_brush = str(self.feats.get("wp_brush") or "normal")
-        if self.wp_brush not in ("normal", "jump", "crouch", "guard", "area", "tag"):
-            self.wp_brush = "normal"
-        self.wp_type_defs = [
-            ("normal", "普通路点", "复用", "#4f8cff"),
-            ("jump", "跳跃点", "新增", "#a78bfa"),
-            ("crouch", "蹲守点", "复用", "#f59e0b"),
-            ("guard", "守点", "复用", "#22d3ee"),
-            ("area", "聚集区", "复用", "#f472b6"),
-            ("tag", "标签区", "新增", "#84cc16"),
-            ("spawn", "出生点", "只读", "#34d399"),
-            ("box", "补给箱", "只读", "#facc15"),
-        ]
-        self.wp_type_btns = {}
-
+        self.pack_disp = {}                     # 下拉框显示文字 → 包 id（地图文件夹/包名）
+        self.ensure_pack_folders()              # 按地图自动建 packs\<场景名>\
+        migrate_flat_packs()                    # 根目录的老包挪进地图文件夹
         body = ctk.CTkScrollableFrame(tab, corner_radius=0, fg_color="transparent")
         body.pack(fill="both", expand=True, padx=2, pady=2)
+        self.wp_body = body        # 「去人机路点改」跳过来时滚回 ① 卡
         ctk.CTkLabel(
             body,
             text="进游戏现场编辑：F2 打开路点菜单（长按 E 备用）；1-9 直选，小键盘 8/2 上下、5 确认、0 返回，左键/右键也可。\n"
                  "菜单打开时 W/A/S/D/空格仍可移动，Q/R/G/F/Tab 等会拦掉；选完 A 可走到 B 再按小键盘 5 连边。\n"
                  "按 F2 / 小键盘前先点一下游戏画面，让游戏窗口拿到焦点（控制台在前台时游戏收不到键）。\n"
                  "空白包=原生点全禁用；必须整图连通。只连主路还不够：孤立点、出生点、蹲守标记都可能让 Bot 取不到路。\n"
-                 "markers 目前全局不分图，换图前先清掉别图的蹲守点；只测局部请用 ③ 正式版 + 先删几个远处点腾槽位。",
+                 "markers 目前全局不分图，换图前先清掉别图的蹲守点；只测局部请用正式版 + 先删几个远处点腾槽位。",
             font=FONT_S, text_color="#9aa0a6", anchor="w", justify="left",
             wraplength=620).pack(fill="x", padx=12, pady=(8, 2))
 
         # ① 选图与数据
-        box = self.wp_card(body, "① 选图与数据", "④ 包只对一张图生效")
+        box = self.wp_card(body, "① 选图与数据", "测试包只对一张图生效")
+        self.card_pick = box       # 跳转时高亮这一张
         row = ctk.CTkFrame(box, fg_color="transparent")
         row.pack(fill="x", padx=12, pady=(6, 0))
         ctk.CTkLabel(row, text="数据版本", font=FONT_S,
                      text_color="#9aa0a6").pack(side="left", padx=(0, 6))
-        self.wp_seg = ctk.CTkSegmentedButton(
-            row, values=["④ 测试包", "③ 正式版"], font=FONT_S,
-            command=lambda _v: self.apply_wp_selection())
-        self.wp_seg.pack(side="left")
+        self.seg_mode = ctk.CTkSegmentedButton(
+            row, values=["正式版（nav）", "测试包（packs）"], font=FONT_S,
+            command=lambda _v: self.on_pack_change())
+        self.seg_mode.pack(side="left")
+        self.seg_mode.set("测试包（packs）" if self.pack_on.get() else "正式版（nav）")
 
         row = ctk.CTkFrame(box, fg_color="transparent")
         row.pack(fill="x", padx=12, pady=(6, 0))
         ctk.CTkLabel(row, text="测试包", font=FONT_S,
                      text_color="#9aa0a6").pack(side="left", padx=(0, 6))
-        self.wp_pack = ctk.CTkOptionMenu(
-            row, values=self._pack_values(), font=FONT_S, width=190,
-            command=lambda _v: self.apply_wp_selection())
-        self.wp_pack.pack(side="left", padx=(0, 6))
-        ctk.CTkButton(row, text="新建空白包", width=96, height=28, font=FONT_S,
+        pack_values = self._pack_values()
+        self.opt_pack = ctk.CTkOptionMenu(
+            row, values=pack_values, font=FONT_S, width=262,
+            command=lambda _v: self.on_pack_change())
+        self.opt_pack.pack(side="left", padx=(0, 6))
+        want = self.resolve_pack_id(self.pack_name)   # 上次选的包重启后接着选中
+        if want and self.disp_of(want):
+            self.opt_pack.set(self.disp_of(want))
+        ctk.CTkButton(row, text="新建测试包", width=96, height=28, font=FONT_S,
                       fg_color="#2f6fdb", hover_color="#255bb4",
                       command=self.create_blank_pack).pack(side="left", padx=(0, 6))
         ctk.CTkButton(row, text="打开目录", width=76, height=28, font=FONT_S,
                       fg_color="#3a3f47", hover_color="#4a5058",
-                      command=self.open_packs_dir).pack(side="left")
+                      command=self.open_packs_dir).pack(side="left", padx=(0, 6))
+        ctk.CTkButton(row, text="清空本图", width=80, height=28, font=FONT_S,
+                      fg_color="#8a4b1e", hover_color="#a55d26",
+                      command=self.clear_pack_map).pack(side="left")
 
         row = ctk.CTkFrame(box, fg_color="transparent")
         row.pack(fill="x", padx=12, pady=(6, 0))
         ctk.CTkLabel(row, text="地图", font=FONT_S,
                      text_color="#9aa0a6").pack(side="left", padx=(0, 6))
-        self.wp_map = ctk.CTkOptionMenu(
+        self.opt_map = ctk.CTkOptionMenu(
             row, values=list(self.map_disp) or ["（没有可测的路点图）"],
             font=FONT_S, width=250,
-            command=lambda _v: self.apply_wp_selection())
-        self.wp_map.pack(side="left", padx=(0, 8))
-        self.wp_only = tk.BooleanVar(value=True)
-        ctk.CTkCheckBox(row, text="只对这张图生效", variable=self.wp_only,
+            command=lambda _v: self.on_pack_change())
+        self.opt_map.pack(side="left", padx=(0, 8))
+        if self.pack_map:
+            for disp, (lv, _lab, _fp) in self.map_disp.items():
+                if lv == self.pack_map:
+                    self.opt_map.set(disp)
+                    break
+        ctk.CTkCheckBox(row, text="只对这张图生效", variable=self.pack_only,
                         font=FONT_S, checkbox_width=18, checkbox_height=18,
-                        command=self.apply_wp_selection).pack(side="left")
+                        command=self.on_pack_change).pack(side="left")
 
-        self.wp_meta = ctk.CTkLabel(box, text="", font=("Consolas", 10),
+        self.wp_meta = ctk.CTkLabel(box, text="", font=("Consolas", 11),
                                     text_color="#9aa0a6", anchor="w",
                                     justify="left", wraplength=620)
         self.wp_meta.pack(fill="x", padx=12, pady=(6, 0))
         ctk.CTkLabel(
             box,
-            text="空白底图用运输船 / 新寂静村（有原生点可借槽位）；飓风危城原生 0 点，"
-                 "建不了空白包，只能开自动铺点。④ 包只影响选中的图，③ 正式版游戏内只读。",
+            text="测试包按地图归类：packs\\<地图>\\<包名>\\，打开目录就能看到每张图一个文件夹。\n"
+                 "空白底图两种建法：复用原生槽位（blank，点数 ≤ 原生点数）/ 真·新建节点（grow，不限点数）。\n"
+                 "用运输船 / 新寂静村这种有原生点的图；飓风危城原生 0 点：只能建「真·新建节点（grow）」，"
+                 "测试包只影响选中的图，正式版游戏内只读。",
             font=FONT_S, text_color="#9aa0a6", anchor="w", justify="left",
             wraplength=620).pack(fill="x", padx=12, pady=(2, 8))
 
@@ -1247,7 +1308,6 @@ class App(ctk.CTk):
             ("visualizer", "路点 / 边显示（Ctrl+V）", False),
             ("navmesh_show", "可走面线框（Ctrl+Shift+6）", True),
             ("wp_autoground", "加点自动落地", True),
-            ("collect_only", "只读采集（不创建对象）", False),
         ]
         for idx, (key, label, default) in enumerate(switches):
             self.wp_switch(grid, key, label, default).grid(
@@ -1262,250 +1322,37 @@ class App(ctk.CTk):
             font=FONT_S, text_color="#9aa0a6", anchor="w", justify="left",
             wraplength=600).pack(fill="x", padx=12, pady=(0, 8))
 
-        # ③ 点类型
-        box = self.wp_card(body, "③ 点类型", "菜单 1-9 · 点选笔刷")
-        grid = ctk.CTkFrame(box, fg_color="transparent")
-        grid.pack(fill="x", padx=8, pady=(4, 4))
-        for idx, (key, label, badge, color) in enumerate(self.wp_type_defs):
-            btn = ctk.CTkButton(
-                grid, text=label, font=FONT_S, width=110, height=46, anchor="w",
-                fg_color="#262626", hover_color="#333333",
-                text_color="#e8e8e8", border_width=2, border_color="#3a3a3a",
-                command=lambda k=key: self.set_wp_brush(k))
-            btn.grid(row=idx // 4, column=idx % 4, sticky="nsew", padx=3, pady=3)
-            self.wp_type_btns[key] = btn
-        for c in range(4):
-            grid.grid_columnconfigure(c, weight=1)
+        # ③ 自动铺设：只占位，不接任何功能（2026-11-19 用户要求）
+        box = self.wp_card(body, "③ 自动铺设", "预留")
         ctk.CTkLabel(
             box,
-            text="点一下 = 设为当前笔刷；游戏运行中立即发 brush=... 给插件。"
-                 "出生点 / 补给箱只读；跳跃点会新建 Bot_JumpLink（实验性，重启不保留）；"
-                 "标签区写 node tag + markers。",
+            text="预留位置：自动铺设暂未接入，这里不做任何事。",
             font=FONT_S, text_color="#9aa0a6", anchor="w", justify="left",
-            wraplength=600).pack(fill="x", padx=12, pady=(0, 8))
+            wraplength=620).pack(fill="x", padx=12, pady=(2, 12))
 
-        # ④ 本次编辑
-        box = self.wp_card(body, "④ 本次编辑", "点/边写 ④ 包；特征写 markers")
-        stats = ctk.CTkFrame(box, fg_color="transparent")
-        stats.pack(fill="x", padx=8, pady=(4, 0))
-        self.wp_stat_nodes = self.wp_stat_cell(stats, 0, "节点")
-        self.wp_stat_edges = self.wp_stat_cell(stats, 1, "边")
-        self.wp_stat_feat = self.wp_stat_cell(stats, 2, "特征")
-        self.wp_stat_edits = self.wp_stat_cell(stats, 3, "④ 包改动")
-        for c in range(4):
-            stats.grid_columnconfigure(c, weight=1)
-
-        row = ctk.CTkFrame(box, fg_color="transparent")
-        row.pack(fill="x", padx=8, pady=(6, 0))
-        ctk.CTkButton(row, text="撤销 Ctrl+Z", width=88, height=28, font=FONT_S,
-                      fg_color="#3a3f47", hover_color="#4a5058",
-                      command=lambda: self.wp_cmd("undo", "撤销")).pack(side="left", padx=(0, 5))
-        ctk.CTkButton(row, text="重做 Ctrl+Y", width=88, height=28, font=FONT_S,
-                      fg_color="#3a3f47", hover_color="#4a5058",
-                      command=lambda: self.wp_cmd("redo", "重做")).pack(side="left", padx=(0, 5))
-        ctk.CTkButton(row, text="保存 Ctrl+S", width=88, height=28, font=FONT_S,
-                      fg_color="#2f6fdb", hover_color="#255bb4",
-                      command=lambda: self.wp_cmd("save", "保存")).pack(side="left", padx=(0, 5))
-        ctk.CTkButton(row, text="重读 Ctrl+Shift+R", width=112, height=28, font=FONT_S,
-                      fg_color="#3a3f47", hover_color="#4a5058",
-                      command=lambda: self.wp_cmd("reload", "重读")).pack(side="left", padx=(0, 5))
-        ctk.CTkButton(row, text="清空本图", width=80, height=28, font=FONT_S,
-                      fg_color="#8a4b1e", hover_color="#a55d26",
-                      command=self.clear_pack_map).pack(side="left")
-
-        self.wp_action_status = ctk.CTkLabel(
-            box, text="就绪：点底部「开始游戏（加载 mod）」→ 进图后 F2 打开菜单；小键盘 8/2 上下，5 确认，0 返回。",
-            font=FONT_S, text_color="#c9d1d9", anchor="w", justify="left",
-            wraplength=620)
-        self.wp_action_status.pack(fill="x", padx=12, pady=(6, 0))
-
-        self.wp_log = ctk.CTkTextbox(box, height=72, font=("Consolas", 10),
-                                     fg_color="#141414", wrap="word",
-                                     activate_scrollbars=True)
-        self.wp_log.pack(fill="x", padx=12, pady=(4, 8))
-        self.wp_log.configure(state="disabled")
-
-        self.sync_wp_from_pack()
-        self.refresh_wp_types()
-        self.refresh_wp_status()
-
-    def wp_stat_cell(self, parent, col, title):
-        cell = ctk.CTkFrame(parent, corner_radius=6)
-        cell.grid(row=0, column=col, sticky="nsew", padx=3, pady=2)
-        ctk.CTkLabel(cell, text=title, font=FONT_S, text_color="#9aa0a6",
-                     anchor="w").pack(fill="x", padx=8, pady=(4, 0))
-        value = ctk.CTkLabel(cell, text="—", font=("Consolas", 15, "bold"),
-                             anchor="w")
-        value.pack(fill="x", padx=8, pady=(0, 4))
-        return value
-
-    def sync_wp_from_pack(self):
-        r"""把「测试数据」页的当前选择同步到人机路点页（只读镜像）。"""
-        if not hasattr(self, "wp_seg") or self._wp_syncing:
-            return
-        self._wp_syncing = True
-        try:
-            pk = self.pack_dict()
-            self.wp_seg.set("④ 测试包" if pk.get("on") else "③ 正式版")
-            packs = self._pack_values()
-            self.wp_pack.configure(values=packs)
-            name = str(pk.get("name") or "")
-            if name and name in packs:
-                self.wp_pack.set(name)
-            elif packs:
-                self.wp_pack.set(packs[0])
-            disp = ""
-            for d, (lv, _lab, _fp) in self.map_disp.items():
-                if lv == pk.get("map"):
-                    disp = d
-                    break
-            if disp:
-                self.wp_map.set(disp)
-            self.wp_only.set(bool(pk.get("only_map", True)))
-        finally:
-            self._wp_syncing = False
-
-    def apply_wp_selection(self):
-        r"""人机路点页改了图/包 → 推回「测试数据」页的正式控件。
-
-        game_env()/pack_dict() 仍然只读 opt_pack / opt_map / seg_mode，
-        所以这里不另造一套选择，避免两页各选各的。
-        """
-        if getattr(self, "_wp_syncing", False) or not hasattr(self, "opt_pack"):
-            return
-        self._wp_syncing = True
-        try:
-            on = self.wp_seg.get().startswith("④")
-            self.seg_mode.set("测试包（packs）" if on else "正式版（nav）")
-            self.pack_on.set(on)
-            self.pack_only.set(bool(self.wp_only.get()))
-            name = self.wp_pack.get()
-            if name.startswith("（"):
-                name = ""
-            packs = load_packs()
-            self.opt_pack.configure(values=packs or ["（还没有测试包）"])
-            if name:
-                self.opt_pack.set(name)
-            disp = self.wp_map.get()
-            if disp in self.map_disp:
-                self.opt_map.set(disp)
-            self.on_pack_change()
-        finally:
-            self._wp_syncing = False
-        self.sync_wp_from_pack()
-        self.refresh_wp_types()
+        self.on_pack_change(persist=False)
         self.refresh_wp_status()
 
     def refresh_wp_tab(self):
-        if not hasattr(self, "wp_seg"):
+        if not hasattr(self, "wp_meta"):
             return
-        self.sync_wp_from_pack()
-        self.refresh_wp_types()
         self.refresh_wp_status()
-
-    def refresh_wp_types(self):
-        if not hasattr(self, "wp_type_btns"):
-            return
-        counts, _doc, _sc = self.wp_type_counts()
-        for idx, (key, label, badge, color) in enumerate(self.wp_type_defs):
-            cnt = counts.get(key)
-            shown = "—" if cnt is None else str(cnt)
-            if key == "box":
-                shown = "—"
-            text = "%s  %s" % (label, shown)
-            text += chr(10) + "%s · 菜单 %d" % (badge, idx + 1)
-            btn = self.wp_type_btns[key]
-            btn.configure(
-                text=text,
-                border_color=(color if self.wp_brush == key else "#3a3a3a"),
-                border_width=2,
-                state=("disabled" if badge == "只读" else "normal"))
-
-    def set_wp_brush(self, key):
-        defs = {k: (label, badge, color) for k, label, badge, color in self.wp_type_defs}
-        if key not in defs:
-            return
-        label, badge, _color = defs[key]
-        if badge == "只读":
-            self.set_status("%s 是只读图层，第一版不写" % label)
-            return
-        self.wp_brush = key
-        self.feats["wp_brush"] = key
-        self.persist("笔刷")
-        if game_running():
-            try:
-                seq = write_nav_cmd("brush", extra={"brush": key})
-                self.set_status("已发送 #%d：笔刷 → %s" % (seq, label))
-            except OSError as exc:
-                self.set_status("写不进 ucf_navcmd.txt：%s" % exc)
-        else:
-            self.set_status("笔刷 → %s（游戏没开，进图后生效）" % label)
-        self.refresh_wp_types()
 
     def refresh_wp_status(self):
         if not hasattr(self, "wp_meta"):
             return
-        self.refresh_wp_types()
         pk = self.pack_dict() if hasattr(self, "opt_pack") else {}
         fp = self.selected_fp() if hasattr(self, "opt_map") else ""
         name = self.selected_pack() if hasattr(self, "opt_pack") else ""
-        disp = self.opt_map.get() if hasattr(self, "opt_map") else ""
-        lv, label, _fp = self.map_disp.get(disp, ("", "", ""))
         doc, _path = find_map_doc(fp)
         counts = (doc or {}).get("counts") or {}
-        sc = self.wp_scene.get(lv, {})
         nodes = int(counts.get("nodes") or 0)
         edges = int(counts.get("edges") or 0)
-        feat = (int(sc.get("guard") or 0) + int(sc.get("crouch") or 0) +
-                int(sc.get("area") or 0) + int(sc.get("tag") or 0))
         pack_on = bool(pk.get("on"))
-        if name:
-            info = pack_summary(name, fp)
-            edits = info["nadd"] + info["eadd"] + info["ndel"] + info["edel"]
-            edits_text = str(edits)
-        else:
-            edits_text = "—"
-        self.wp_stat_nodes.configure(text=str(nodes))
-        self.wp_stat_edges.configure(text=str(edges))
-        self.wp_stat_feat.configure(text=str(feat))
-        self.wp_stat_edits.configure(text=edits_text)
         self.wp_meta.configure(
             text="指纹 %s · 原生 %d 点 / %d 边 · %s" % (
                 fp or "—", nodes, edges,
-                ("④ " + name if pack_on and name else "③ 正式版（只读）")))
-        if pack_on and name:
-            self.wp_action_status.configure(
-                text="④ 测试包 %s · 只对 %s 生效；游戏运行中点按钮会写 ucf_navcmd。" % (
-                    name, label or lv or "本图"))
-        else:
-            self.wp_action_status.configure(
-                text="③ 正式版（nav）· 游戏内只读（UCF_NAV_READONLY=1）；"
-                     "要保存请先切 ④ 测试包。")
-        lines = [ln for ln in tail_log(40)
-                 if ("[naved]" in ln or "[edit]" in ln or "[wp]" in ln)]
-        lines = lines[-5:]
-        text = chr(10).join(lines) if lines else "（还没有编辑日志）"
-        self.wp_log.configure(state="normal")
-        self.wp_log.delete("1.0", "end")
-        self.wp_log.insert("end", text)
-        self.wp_log.configure(state="disabled")
-
-    def wp_cmd(self, cmd, label=""):
-        if not game_running():
-            self.set_status("游戏没开：进图后「%s」才有效" % (label or cmd))
-            return
-        if cmd in ("save", "reload"):
-            if not self.pack_on.get() or not self.selected_pack():
-                self.set_status("③ 正式版只读：先切 ④ 测试包再%s" % (label or cmd))
-                return
-            self.send_pack_cmd(cmd)
-            return
-        try:
-            seq = write_nav_cmd(cmd)
-        except OSError as exc:
-            self.set_status("写不进 ucf_navcmd.txt：%s" % exc)
-            return
-        self.set_status("已发送 #%d：%s；日志看 naved" % (seq, label or cmd))
+                ("测试包 " + (self.disp_of(name) or name) if pack_on and name else "正式版（只读）")))
 
     # ---- 数据页：四版在哪 / 什么时候写的 / 一致不一致（原来三个 .bat 的活）----
     def build_data_tab(self, tab):
@@ -1537,7 +1384,7 @@ class App(ctk.CTk):
                                      font=FONT_S, fg_color="#3a3f47", hover_color="#4a5058",
                                      command=lambda p=root: self.open_folder(p))
             open_btn.pack(side="right", padx=(8, 0))
-            ctk.CTkLabel(prow, text=root, font=("Consolas", 10), text_color="#7f8792",
+            ctk.CTkLabel(prow, text=root, font=("Consolas", 11), text_color="#7f8792",
                          anchor="w", justify="left", wraplength=500).pack(
                 side="left", fill="x", expand=True)
             info = ctk.CTkLabel(box, text="", font=FONT_S, anchor="w", justify="left",
@@ -1568,7 +1415,7 @@ class App(ctk.CTk):
                       hover_color="#4a5058",
                       command=self.refresh_data).pack(side="left")
 
-        self.data_out = ctk.CTkTextbox(body, height=118, font=("Consolas", 10),
+        self.data_out = ctk.CTkTextbox(body, height=118, font=("Consolas", 11),
                                        fg_color="#141414", activate_scrollbars=True)
         self.data_out.pack(fill="x", padx=12, pady=(8, 12))
         self.data_out.insert("end", "（点上面的按钮，命令输出会贴在这里）")
@@ -1602,7 +1449,8 @@ class App(ctk.CTk):
                                        else "（还没有导出）")
                 card["info"].configure(
                     text="导出 %d 份 JSON · 可走面 %d 份 · 测试包 %d 个（%s）· %s"
-                         % (n_json, n_bin, n_packs, "、".join(names) if names else "无",
+                         % (n_json, n_bin, n_packs,
+                            "、".join(x.split("/")[-1] for x in names) if names else "无",
                             human_size(total)))
                 continue
             n, total, latest = dir_stats(root)
@@ -1718,7 +1566,7 @@ class App(ctk.CTk):
                       command=lambda: self.open_file(AUTOTEST_TXT, "autotest.txt")).pack(
             side="right")
 
-        self.at_out = ctk.CTkTextbox(body, height=110, font=("Consolas", 10),
+        self.at_out = ctk.CTkTextbox(body, height=110, font=("Consolas", 11),
                                      fg_color="#141414", activate_scrollbars=True)
         self.at_out.pack(fill="x", padx=12, pady=(6, 12))
         self.at_out.insert("end", "（点「开跑」后这里贴 [at] 进度：warm / LOAD / OK / RESULT）")
@@ -1828,6 +1676,9 @@ class App(ctk.CTk):
 
         self.at_busy = True
         self.at_stop.clear()
+        # 车测也是本窗口启动的：记下启动瞬间的条件，启动条别误报成「外部启动」
+        strip_info = self.launch_strip_info()
+        self._strip_run = strip_info
         self.btn_at_run.configure(state="disabled")
         self.btn_at_stop.configure(state="normal")
         names = " → ".join("%s(%s)" % (name, lv) for lv, name in self.at_levels if lv in picked)
@@ -1839,7 +1690,8 @@ class App(ctk.CTk):
                            % (idx, warm, settle, timeout, note))
         self.at_out.configure(state="disabled")
         self.set_status("车测：正在关闭游戏 …")
-        threading.Thread(target=self._at_worker, args=(env, idx, timeout), daemon=True).start()
+        threading.Thread(target=self._at_worker,
+                         args=(env, idx, timeout, strip_info), daemon=True).start()
 
     def stop_autotest(self):
         if not self.at_busy:
@@ -1871,7 +1723,7 @@ class App(ctk.CTk):
             return
         self.set_status("已保存 车测设置")
 
-    def _at_worker(self, env, idx, timeout):
+    def _at_worker(self, env, idx, timeout, strip_info=None):
         r"""工作线程只读日志/开进程/写队列，Tk 控件一律回主线程改（pump_autotest）。"""
         q = self.at_q
 
@@ -1895,6 +1747,9 @@ class App(ctk.CTk):
             except OSError:
                 pass
             put("line", "启动 UnityCrossFire.exe  UCF_AUTOTEST=%s" % idx)
+            # 关游戏和重开之间 refresh 可能把快照清掉，这里补回（只写数据，不碰 Tk）
+            if strip_info:
+                self._strip_run = strip_info
             proc = subprocess.Popen([GAME_EXE], cwd=os.path.dirname(GAME_EXE), env=env)
             offset = 0
             seen = ""
@@ -1990,11 +1845,12 @@ class App(ctk.CTk):
             self.refresh_export_info()
         elif name == "车测":
             self.refresh_at()
-        elif name == "测试数据" and hasattr(self, "opt_pack"):
-            names = load_packs()            # 编辑器新存的包，切过来就能看到
-            self.opt_pack.configure(values=names or ["（还没有测试包）"])
-            self.refresh_pack_status()
         elif name == "人机路点":
+            if hasattr(self, "opt_pack"):
+                cur = self.selected_pack()
+                self.opt_pack.configure(values=self._pack_values())   # 编辑器新存的包也刷进来
+                if cur and self.disp_of(cur):
+                    self.opt_pack.set(self.disp_of(cur))
             self.refresh_wp_tab()
 
     # ---- 原来三个 .bat 的按钮：后台跑 navdata.py，输出贴回本页 ----
@@ -2069,8 +1925,6 @@ class App(ctk.CTk):
         feats = self.cfg.setdefault("features", {})
         for k, v in self.vars.items():
             feats[k] = bool(v.get())
-        if hasattr(self, "wp_brush"):
-            feats["wp_brush"] = str(self.wp_brush)
         if hasattr(self, "seg_mode"):
             self.cfg["pack"] = self.pack_dict()
         try:
@@ -2088,6 +1942,7 @@ class App(ctk.CTk):
 
     def on_master(self):
         self.persist("总开关")
+        self.refresh_launch_strip()
 
     # ---- 窗口置顶 / 折叠成小条 ----------------------------------------
     def on_topmost(self):
@@ -2109,6 +1964,7 @@ class App(ctk.CTk):
             self.intro.pack_forget()
             self.tabview.pack_forget()
             self.stat.pack_forget()
+            self.strip.pack_forget()
             self.bar.pack_forget()
             self.minsize(1, 1)
             _size, x, y = self._geom_saved.split("+")
@@ -2121,6 +1977,7 @@ class App(ctk.CTk):
             # 按原来的 pack 顺序装回去：介绍 → 底栏 → 日志 → 页签
             self.intro.pack(anchor="w", padx=20)
             self.bar.pack(side="bottom", fill="x", padx=14, pady=(0, 12))
+            self.strip.pack(side="bottom", fill="x", padx=14, pady=(0, 8))
             self.stat.pack(side="bottom", fill="x", padx=14, pady=(0, 8))
             self.tabview.pack(fill="both", expand=True, padx=14, pady=(8, 4))
             self.minsize(720, 620)
@@ -2139,18 +1996,92 @@ class App(ctk.CTk):
             pass
         self.destroy()
 
-    # ---- 测试数据：取值 / 切换 / 刷新 ----
+    # ---- 测试包：取值 / 切换（UI 在「人机路点」① 选图与数据）----
+    def ensure_pack_folders(self):
+        r"""packs\ 下按地图建文件夹：英文场景名+中文名（如 TransportShip运输船）。
+
+        以前建过的纯英文文件夹（TransportShip）会自动改名合并过来，已有的包跟着走。
+        """
+        pairs = []
+        for lv, _lab, fp in self.maps:
+            pairs.append((map_scene(lv, fp), map_folder(lv, fp)))
+        for lv, _row in self.wp_scene.items():
+            pairs.append((map_scene(lv), map_folder(lv)))
+        for old, new in pairs:
+            oldp, newp = os.path.join(PACKS, old), os.path.join(PACKS, new)
+            try:
+                if old != new and os.path.isdir(oldp):
+                    if not os.path.isdir(newp):
+                        os.rename(oldp, newp)
+                    else:                      # 两边都在：把包挪过去，不覆盖同名
+                        for sub in os.listdir(oldp):
+                            src = os.path.join(oldp, sub)
+                            dst = os.path.join(newp, sub)
+                            if os.path.isdir(src) and not os.path.exists(dst):
+                                shutil.move(src, dst)
+                        try:
+                            os.rmdir(oldp)
+                        except OSError:
+                            pass
+                os.makedirs(newp, exist_ok=True)
+            except OSError:
+                pass
+
+    def folder_label(self, folder):
+        r"""地图文件夹 → 界面上显示的中文名（兼容旧的纯英文文件夹）。"""
+        for lv, lab, fp in self.maps:
+            if folder in (map_folder(lv, fp), map_scene(lv, fp)):
+                return lab
+        for lv, row in self.wp_scene.items():
+            if folder in (map_folder(lv), map_scene(lv)):
+                return str(row.get("name") or folder)
+        return folder
+
+    def resolve_pack_id(self, pid):
+        r"""老配置里存的是平铺包名：按尾名找回分类后的 id（地图文件夹/包名）。"""
+        pid = str(pid or "").replace("\\", "/").strip("/")
+        if not pid:
+            return ""
+        if os.path.isdir(pack_dir(pid)):
+            return pid
+        tail = pid.split("/")[-1]
+        for x in load_packs():
+            if x.split("/")[-1] == tail:
+                return x
+        return ""
+
+    def disp_of(self, pid):
+        for disp, x in getattr(self, "pack_disp", {}).items():
+            if x == pid:
+                return disp
+        return ""
+
     def _pack_values(self):
-        names = load_packs()
-        return names or ["（还没有测试包）"]
+        r"""下拉框：按地图分组排列，显示成「运输船 · blank_b」。"""
+        ids = load_packs()
+        self.pack_disp = {}
+        order = {lv: i for i, (lv, _l, _f) in enumerate(self.maps)}
+
+        def sort_key(pid):
+            lv = str(pack_manifest(pid).get("level") or "")
+            return (order.get(lv, 99), pid)
+
+        vals = []
+        for pid in sorted(ids, key=sort_key):
+            folder, _sep, name = pid.rpartition("/")
+            lab = self.folder_label(folder) if folder else "未分类"
+            disp = "%s · %s" % (lab, name)
+            while disp in self.pack_disp:      # 同名包极少见，重了就加空格区分
+                disp += " "
+            self.pack_disp[disp] = pid
+            vals.append(disp)
+        return vals or ["（还没有测试包）"]
 
     def pack_dict(self):
         """当前选择 → 写回 ucf_mod.json 的 pack 段（只给控制台自己用，插件不读它）。"""
         disp = self.opt_map.get() if hasattr(self, "opt_map") else ""
         lv, lab, fp = self.map_disp.get(disp, ("", "", ""))
-        name = self.opt_pack.get() if hasattr(self, "opt_pack") else ""
-        if name.startswith("（"):
-            name = ""
+        name = self.selected_pack() if hasattr(self, "opt_pack") else ""
         return {
             "on": bool(self.pack_on.get()),
             "name": name,
@@ -2158,30 +2089,36 @@ class App(ctk.CTk):
             "only_map": bool(self.pack_only.get()),
         }
 
-    def pack_manifest_map(self, name):
-        """包对应的地图（manifest.json 的 level）；没有 manifest 就返回空。"""
-        try:
-            with open(os.path.join(PACKS, name, "manifest.json"), "r", encoding="utf-8") as f:
-                return str((json.load(f) or {}).get("level") or "")
-        except (OSError, ValueError):
-            return ""
+    def pack_manifest_map(self, pid):
+        """包对应的地图（manifest.json 的 level）；没有 manifest 就按文件夹名反查。"""
+        lv = str(pack_manifest(pid).get("level") or "")
+        if lv:
+            return lv
+        folder = str(pid).replace("\\", "/").split("/")[0]
+        for lvl, _lab, fp in self.maps:
+            if folder in (map_folder(lvl, fp), map_scene(lvl, fp)):
+                return lvl
+        return ""
 
     def on_pack_change(self, persist=True):
         on = self.seg_mode.get().startswith("测试包")
         self.pack_on.set(on)
-        name = self.opt_pack.get()
-        if name.startswith("（"):
-            packs = load_packs()
-            name = packs[0] if packs else ""
-            self.opt_pack.configure(values=packs or ["（还没有测试包）"])
-            if name:
-                self.opt_pack.set(name)
+        disp = self.opt_pack.get()
+        name = "" if disp.startswith("（") else getattr(self, "pack_disp", {}).get(disp, "")
+        if not name and not disp.startswith("（"):
+            name = self.resolve_pack_id(disp)
+        if not name:
+            packs = self._pack_values()
+            self.opt_pack.configure(values=packs)
+            if packs and not packs[0].startswith("（"):
+                self.opt_pack.set(packs[0])
+                name = self.pack_disp.get(packs[0], "")
         # 换包时自动把地图切到包对应的那张图（包只对它生效，选错图等于空跑）
         if on and name and name != getattr(self, "_last_pack", ""):
             lv = self.pack_manifest_map(name)
-            for disp, (lvl, _lab, _fp) in self.map_disp.items():
+            for mdisp, (lvl, _lab, _fp) in self.map_disp.items():
                 if lv and lvl == lv:
-                    self.opt_map.set(disp)
+                    self.opt_map.set(mdisp)
                     break
         self._last_pack = name
         self.pack_name = name
@@ -2192,18 +2129,8 @@ class App(ctk.CTk):
         except Exception:
             pass
         if persist:
-            self.persist("测试数据")
-        self.refresh_pack_status()
-        self.sync_wp_from_pack()
-
-    def refresh_packs(self):
-        packs = load_packs()
-        self.opt_pack.configure(values=packs or ["（还没有测试包）"])
-        if packs and self.opt_pack.get().startswith("（"):
-            self.opt_pack.set(packs[0])
-        self.on_pack_change()
-        self.refresh_pack_status()
-        self.set_status("测试包：%d 个" % len(packs))
+            self.persist("测试包")
+        self.refresh_launch_strip()
 
     def open_packs_dir(self):
         try:
@@ -2226,44 +2153,24 @@ class App(ctk.CTk):
 
     # ---- 控制台 → 运行中插件：载入 / 重读 / 保存 / 回正式版 ----
     def selected_pack(self):
-        name = self.opt_pack.get() if hasattr(self, "opt_pack") else ""
-        return "" if name.startswith("（") else name
+        r"""当前选中的包 id（地图文件夹/包名）；没选返回空串。"""
+        disp = self.opt_pack.get() if hasattr(self, "opt_pack") else ""
+        if not disp or disp.startswith("（"):
+            return ""
+        return getattr(self, "pack_disp", {}).get(disp) or self.resolve_pack_id(disp)
 
     def selected_fp(self):
         disp = self.opt_map.get() if hasattr(self, "opt_map") else ""
         return self.map_disp.get(disp, ("", "", ""))[2]
 
-    def refresh_pack_status(self):
-        r"""测试数据页底部那行：当前包是不是空白、几个点/边、最后写入时间。"""
-        if not hasattr(self, "lbl_pack"):
-            return
-        name = self.selected_pack()
-        if not name:
-            self.lbl_pack.configure(text="当前：正式版 nav\\（官方路线 / 没有选测试包）")
-            return
-        fp = pack_target_fp(name) or self.selected_fp()
-        info = pack_summary(name, fp)
-        man = pack_manifest(name)
-        label = str(man.get("label") or man.get("level") or "")
-        when = time.strftime("%H:%M:%S", time.localtime(info["mtime"])) if info["mtime"] else "（空）"
-        bits = ["空白底图" if info["blank"] else "增量改动",
-                "%d 点 / %d 边" % (info["nadd"], info["eadd"])]
-        if info["ndel"] or info["edel"]:
-            bits.append("删 %d 点 / %d 边" % (info["ndel"], info["edel"]))
-        bits.append("改于 " + when)
-        text = "当前包 %s%s · %s" % (name, ("（%s）" % label) if label else "", " · ".join(bits))
-        if not info["path"]:
-            text += " · 还没有 %s.txt" % (fp or "本图")
-        self.lbl_pack.configure(text=text)
-
     def send_pack_cmd(self, cmd):
         r"""把「载入 / 重新应用 / 保存」写进 ucf_navcmd.txt，插件 0.5 s 内执行。"""
         name = self.selected_pack()
         if not name:
-            self.set_status("先选一个测试包（或点「新建空白包」）")
+            self.set_status("先选一个测试包（或点「新建测试包」）")
             return
-        if not pack_name_ok(name):
-            self.set_status("包名只能是 ASCII 字母/数字/_/-：%s" % name)
+        if not pack_id_ok(name):
+            self.set_status("包名只能用英文字母、数字、下划线（_）和短横线（-）：%s" % name)
             return
         fp = pack_target_fp(name) if self.pack_only.get() else ""
         if self.pack_only.get() and not fp:
@@ -2273,23 +2180,14 @@ class App(ctk.CTk):
         except OSError as exc:
             self.set_status("写不进 ucf_navcmd.txt：%s" % exc)
             return
-        self.persist("测试数据")
+        self.persist("测试包")
         running = game_running()
         act = {"apply": "载入", "reload": "重新应用", "save": "保存"}.get(cmd, cmd)
+        short = name.split("/")[-1]
         if running:
             self.set_status("已发送 #%d：%s %s；游戏日志看 navcmd / naved" % (seq, act, name))
         else:
-            self.set_status("游戏没开：已选中 %s，点「开始游戏」生效" % name)
-        self.refresh_pack_status()
-
-    def save_pack_now(self):
-        if not self.selected_pack():
-            self.set_status("先选一个测试包")
-            return
-        if not game_running():
-            self.set_status("游戏没开：游戏里加点/删点本来就会自动写回 pack，不需要手动保存")
-            return
-        self.send_pack_cmd("save")
+            self.set_status("游戏没开：已选中 %s，点「开始游戏」生效" % short)
 
     def clear_pack_map(self):
         name = self.selected_pack()
@@ -2303,23 +2201,31 @@ class App(ctk.CTk):
         if not messagebox.askyesno(
                 "清空当前图",
                 "把测试包 %s 里 %s 的路线清成「空白底图」？\n"
-                "只重写 packs\\%s\\%s.txt，不动正式版 nav\\。" % (name, fp, name, fp),
+                "（grow 包会保留 grow：清的是点，不降级成借槽位）\n"
+                "只重写 packs\\%s\\%s.txt，不动正式版 nav\\。"
+                % (name.split("/")[-1], fp, name.replace("/", "\\"), fp),
                 parent=self):
             return
-        pdir = os.path.join(PACKS, name)
+        pdir = pack_dir(name)
         txt = os.path.join(pdir, fp + ".txt")
+        summ = pack_summary(name, fp)
+        keep_grow = bool(pack_manifest(name).get("grow") or summ["grow"])
         try:
             os.makedirs(pdir, exist_ok=True)
             with open(txt, "w", encoding="utf-8", newline="\n") as f:
                 f.write("# ucf-navedit v1 fp=%s\nblank\n" % fp)
+                if keep_grow:
+                    f.write("grow\n")      # 清空只清点，不把 grow 模式降级成 blank
             with open(os.path.join(pdir, "nogen.txt"), "w", encoding="utf-8") as f:
                 f.write("")
             man = pack_manifest(name)
-            man.setdefault("name", name)
+            man.setdefault("name", name.split("/")[-1])
+            man.setdefault("folder", name.replace("\\", "/").split("/")[0])
             man.setdefault("fp", fp)
             if "level" not in man:
                 man["level"] = self.map_disp.get(self.opt_map.get(), ("", "", ""))[0]
             man["blank"] = True
+            man["grow"] = keep_grow
             man["cleared"] = time.strftime("%Y-%m-%d %H:%M:%S")
             with open(os.path.join(pdir, "manifest.json"), "w", encoding="utf-8",
                       newline="\n") as f:
@@ -2331,16 +2237,168 @@ class App(ctk.CTk):
         self.send_pack_cmd("apply")
         self.set_status("已清空 %s / %s：进图后从 0 画（Ctrl+Shift+N 加点）" % (name, fp))
 
-    def back_to_official(self):
+    def default_pack_name(self, lv, fp):
+        r"""空白包默认名：地图英文场景名 + 当前日期时间，如 TransportShip_20261119_213512。
+
+        插件是 C + ANSI 路径，包里不能有中文，所以用场景名（《地图对照表》里那一列）；
+        中文名照旧写进 manifest 的 label，界面上显示的仍是中文。
+        """
+        base = map_scene(lv, fp)
+        stamp = time.strftime("%Y%m%d_%H%M%S")
+        return "%s_%s" % (base[:48 - len(stamp) - 1], stamp)
+
+    def ask_blank_pack_name(self, lab, lv, fp):
+        r"""新建空白包的名字弹窗；点「创建」返回包名，取消返回空串。"""
+        default = self.default_pack_name(lv, fp)
+        top = ctk.CTkToplevel(self)
+        top.title("新建空白测试包")
+        top.resizable(False, False)
+        top.transient(self)
+        if bool(self.topmost_var.get()):
+            top.attributes("-topmost", True)   # 控制台置顶时别把弹窗藏到后面
+
+        def grab():
+            try:
+                if top.winfo_exists():
+                    top.grab_set()
+            except tk.TclError:
+                pass
+
         try:
-            write_nav_cmd("off")
-        except OSError as exc:
-            self.set_status("写不进 ucf_navcmd.txt：%s" % exc)
-            return
-        self.seg_mode.set("正式版（nav）")
-        self.pack_on.set(False)
-        self.on_pack_change()
-        self.set_status("已切回正式版 nav\\%s" % ("，游戏运行中立即生效" if game_running() else ""))
+            top.grab_set()
+        except tk.TclError:
+            top.after(150, grab)
+        top.bind("<Escape>", lambda _e: top.destroy())
+
+        out = {"name": "", "grow": False, "seed": False}
+
+        ctk.CTkLabel(top, text="新建空白测试包", font=("Microsoft YaHei UI", 17, "bold"),
+                     anchor="w").pack(fill="x", padx=18, pady=(16, 0))
+        ctk.CTkLabel(
+            top,
+            text="进图后原生路点全部禁用、自动铺点也一起关掉，人机只走你自己画的路线。",
+            font=FONT_S, text_color="#9aa0a6", anchor="w", justify="left",
+            wraplength=460).pack(fill="x", padx=18, pady=(4, 10))
+
+        # 新建方式：blank（借槽位） / grow（真·新建，空底图） / seed（原版全量复制 + grow）
+        mode = {"grow": False, "seed": False}
+        ctk.CTkLabel(top, text="新建方式", font=FONT_S, text_color="#9aa0a6",
+                     anchor="w").pack(fill="x", padx=20, pady=(2, 4))
+        seg = ctk.CTkSegmentedButton(
+            top, values=["复用原生槽位（blank）", "真·新建节点（grow）", "复制原版路点（seed）"],
+            font=FONT_S, height=32)
+        seg.set("复用原生槽位（blank）")
+        seg.pack(fill="x", padx=18)
+        mode_hint = ctk.CTkLabel(top, text="", font=FONT_S, text_color="#9aa0a6",
+                                 anchor="w", justify="left", wraplength=460)
+        mode_hint.pack(fill="x", padx=20, pady=(4, 10))
+
+        grid = ctk.CTkFrame(top, fg_color="transparent")
+        grid.pack(fill="x", padx=14)
+        cells = [("地图", "%s（%s）" % (lab, lv)), ("建好后的效果", "空白底图 · 从 0 画路线")]
+        effect_lbl = [None]
+        for i, (k, v) in enumerate(cells):
+            cell = ctk.CTkFrame(grid, corner_radius=7, fg_color="#262626",
+                                border_width=1, border_color="#383838")
+            cell.grid(row=0, column=i, sticky="nsew", padx=4, pady=4)
+            ctk.CTkLabel(cell, text=k, font=FONT_S, text_color="#9aa0a6",
+                         anchor="w").pack(fill="x", padx=10, pady=(6, 0))
+            lbl = ctk.CTkLabel(cell, text=v, font=("Microsoft YaHei UI", 13, "bold"),
+                               anchor="w")
+            lbl.pack(fill="x", padx=10, pady=(0, 6))
+            if k == "建好后的效果":
+                effect_lbl[0] = lbl
+        for c in range(2):
+            grid.grid_columnconfigure(c, weight=1)
+
+        def on_mode(_v=None):
+            name = str(seg.get())
+            seed = name.startswith("复制")
+            grow = name.startswith("真") or seed
+            mode["grow"] = grow
+            mode["seed"] = seed
+            if seed:
+                text = ("seed：把这张图的原版点 + 边整份复制进包里，再用 grow 新建；"
+                        "等于「原版底图 + 随便加点」，不受原生点数限制。")
+            elif grow:
+                text = ("grow：原生点照样标死，但路线点用 PointGraph.AddNode 新建，"
+                        "点数不受原生点数限制（同一张图只建一次，改点集要重进图）。")
+            else:
+                text = ("blank：原生点标死后，路线点借用这些腾出来的槽位；"
+                        "点数不能超过原生点数，抽到没借到的槽位会站住。")
+            mode_hint.configure(text=text)
+            if effect_lbl[0] is not None:
+                effect_lbl[0].configure(
+                    text=("原版复制 · 新建节点" if seed else
+                          "空白底图 · 新建节点" if grow else "空白底图 · 借原生槽位"))
+
+        seg.configure(command=on_mode)
+        on_mode()
+
+        ctk.CTkLabel(top, text="包名", font=FONT_S, text_color="#9aa0a6",
+                     anchor="w").pack(fill="x", padx=20, pady=(12, 2))
+        var = tk.StringVar(value=default)
+        entry = ctk.CTkEntry(top, textvariable=var, font=FONT, height=38,
+                             placeholder_text="给这个包起个名字")
+        entry.pack(fill="x", padx=18)
+        hint = ctk.CTkLabel(top, text="", font=FONT_S, anchor="w",
+                            justify="left", wraplength=460)
+        hint.pack(fill="x", padx=20, pady=(4, 0))
+        path = ctk.CTkLabel(top, text="", font=("Consolas", 11),
+                            text_color="#6f767d", anchor="w")
+        path.pack(fill="x", padx=20, pady=(2, 0))
+        folder_dir = map_folder(lv, fp)
+
+        def refresh(*_a):
+            name = var.get().strip()
+            if not name:
+                msg, color = "还没起名", "#9aa0a6"
+            elif not pack_name_ok(name):
+                msg, color = "名字里只能用英文字母、数字、下划线（_）和短横线（-）", "#ff8f8f"
+            elif os.path.isdir(os.path.join(folder_dir, name)):
+                msg, color = "已有同名测试包：创建会覆盖这张图的旧路线", "#ffc46b"
+            else:
+                msg, color = "名字可以用", "#69db7c"
+            hint.configure(text=msg, text_color=color)
+            path.configure(text="保存到  packs\\%s\\%s\\" % (folder_dir, name or "…"))
+
+        var.trace_add("write", refresh)
+        refresh()
+
+        def ok(_e=None):
+            name = var.get().strip()
+            if not pack_name_ok(name):
+                refresh()
+                entry.focus_set()
+                self.bell()
+                return
+            out["name"] = name
+            out["grow"] = bool(mode["grow"])
+            out["seed"] = bool(mode["seed"])
+            top.destroy()
+
+        btns = ctk.CTkFrame(top, fg_color="transparent")
+        btns.pack(fill="x", padx=18, pady=(12, 16))
+        ctk.CTkButton(btns, text="创建测试包", width=112, height=34, font=FONT,
+                      fg_color="#2f6fdb", hover_color="#255bb4",
+                      command=ok).pack(side="right")
+        ctk.CTkButton(btns, text="取消", width=76, height=34, font=FONT_S,
+                      fg_color="transparent", border_width=1, border_color="#4a4a4a",
+                      hover_color="#2e2e2e", command=top.destroy).pack(
+            side="right", padx=(0, 8))
+
+        entry.bind("<Return>", ok)
+        entry.bind("<KP_Enter>", ok)
+        top.update_idletasks()
+        w = max(520, top.winfo_reqwidth())
+        h = top.winfo_reqheight()
+        x = self.winfo_rootx() + (self.winfo_width() - w) // 2
+        y = self.winfo_rooty() + (self.winfo_height() - h) // 2
+        top.geometry("%dx%d+%d+%d" % (w, h, max(x, 0), max(y, 0)))
+        entry.select_range(0, "end")
+        entry.focus_set()
+        self.wait_window(top)
+        return dict(out)
 
     def create_blank_pack(self):
         r"""给当前选中的地图建一份「空白底图」测试包。
@@ -2354,21 +2412,37 @@ class App(ctk.CTk):
             self.set_status("先选一张有指纹的图，再建空白包")
             return
         lv, lab, fp = self.map_disp[disp]
+        got = self.ask_blank_pack_name(lab, lv, fp)
+        if not got or not got.get("name"):
+            return
+        name = got["name"]
+        seed = bool(got.get("seed"))
+        grow = bool(got.get("grow")) or seed
+        # 0 点图（暴风）：没有原生槽位、也没有原版点可复制，只有 grow 能用
         if fp == "n0-0000000000000000":
+            if seed:
+                messagebox.showwarning(
+                    "0 点图没有原版点可复制",
+                    "暴风原生 0 个路点，没有可播种的原版数据；改选「真·新建节点（grow）」",
+                    parent=self)
+                return
+            if not grow:
+                messagebox.showwarning(
+                    "这张图只能建 grow 包",
+                    "暴风原生 0 个路点，没有可复用的节点槽位；\n"
+                    "只有「真·新建节点（grow）」能在 0 点图上建路线。", parent=self)
+                return
+        seed_lines_, sn, se = (seed_lines(fp) if seed else (None, 0, 0))
+        if seed and not seed_lines_:
             messagebox.showwarning(
-                "这张图做不了空白包",
-                "暴风原生 0 个路点，插件没有可复用的节点槽位；空白包里的 node add 套不进去。\n"
-                "请选运输船 / 新寂静村这种有原生路点的图。", parent=self)
+                "没有原版点图数据",
+                "① 备份版 maps\\ 里找不到 %s 的原生点图，没法播种。\n"
+                "先用 navdata.py freeze 生成备份版，或改用「真·新建节点（grow）" % fp,
+                parent=self)
             return
-        name = simpledialog.askstring(
-            "新建空白测试包", "包名（ASCII 字母/数字/_/-，例：blank_a）：", parent=self)
-        if not name:
-            return
-        name = name.strip()
-        if not re.match(r"^[A-Za-z0-9_-]{1,48}$", name):
-            self.set_status("包名只能用 ASCII 字母/数字/_/-，1~48 字符")
-            return
-        pdir = os.path.join(PACKS, name)
+        folder = map_folder(lv, fp)
+        pid = "%s/%s" % (folder, name)
+        pdir = pack_dir(pid)
         tpath = os.path.join(pdir, fp + ".txt")
         if os.path.isfile(tpath) and not messagebox.askyesno(
                 "覆盖测试包", "测试包 %s 里已经有 %s.txt，覆盖成空白底图？" % (name, fp),
@@ -2377,14 +2451,27 @@ class App(ctk.CTk):
         try:
             os.makedirs(pdir, exist_ok=True)
             with open(tpath, "w", encoding="utf-8", newline="\n") as f:
-                f.write("# ucf-navedit v1 fp=%s\nblank\n" % fp)
+                if seed:
+                    f.write("# ucf-navedit v1 fp=%s\n# seed: 原版点图全量重放\nblank\ngrow\n" % fp)
+                    for ln in seed_lines_:
+                        f.write(ln + "\n")
+                else:
+                    f.write("# ucf-navedit v1 fp=%s\nblank\n" % fp)
+                    if grow:
+                        f.write("grow\n")
             with open(os.path.join(pdir, "nogen.txt"), "w", encoding="utf-8") as f:
                 f.write("")                       # 存在即关掉自动铺点
             man = {
-                "name": name, "level": lv, "label": lab, "fp": fp,
+                "name": name, "folder": folder, "level": lv, "label": lab, "fp": fp,
                 "created": time.strftime("%Y-%m-%d %H:%M:%S"),
-                "source": "console-blank", "blank": True,
-                "note": "空白底图测试包：原生点全禁用 + nogen.txt 关自动铺点；路线自己画",
+                "source": ("console-seed" if seed else
+                           "console-grow" if grow else "console-blank"),
+                "blank": True, "grow": bool(grow), "seed": bool(seed),
+                "note": ("原版播种测试包：%d 点 + %d 边全量复制，再按 grow 新建（可继续加点）" % (sn, se)
+                         if seed else
+                         "grow 测试包：原生点全禁用，路线点按 AddNode 新建（数量不受原生点数限制）"
+                         if grow else
+                         "空白底图测试包：原生点全禁用 + nogen.txt 关自动铺点；路线自己画"),
             }
             with open(os.path.join(pdir, "manifest.json"), "w", encoding="utf-8",
                       newline="\n") as f:
@@ -2393,31 +2480,29 @@ class App(ctk.CTk):
         except OSError as exc:
             self.set_status("建包失败：%s" % exc)
             return
-        packs = load_packs()
-        self.opt_pack.configure(values=packs or ["（还没有测试包）"])
-        self.opt_pack.set(name)
+        values = self._pack_values()
+        self.opt_pack.configure(values=values)
+        self.opt_pack.set(self.disp_of(pid))
         self.seg_mode.set("测试包（packs）")
         self.pack_on.set(True)
         self.on_pack_change()
-        msg = "已建空白测试包 %s（%s）" % (name, lab)
+        msg = "已建%s测试包 %s（%s · %s）" % (
+            "原版播种" if seed else (" grow" if grow else "空白"), name, lab, folder)
         if game_running():
             try:
-                write_nav_cmd("apply", name, fp)
+                write_nav_cmd("apply", pid, fp)
                 msg += "，已发送到运行中的游戏"
             except OSError:
                 pass
         self.set_status(msg)
-        self.refresh_pack_status()
 
     # ---- 状态 ----
     def set_status(self, text):
         self.dot.configure(text=text)
 
     def refresh_status(self):
-        if game_running():
-            self.btn_game.configure(text="游戏运行中", state="disabled")
-        else:
-            self.btn_game.configure(text="开始游戏（加载 mod）", state="normal")
+        running = game_running()
+        self.refresh_game_button(running)
         lines = tail_log(6)
         self.logbox.configure(state="normal")
         self.logbox.delete("1.0", "end")
@@ -2425,11 +2510,274 @@ class App(ctk.CTk):
         self.logbox.configure(state="disabled")
         if not self.dot.cget("text"):
             self.set_status("配置：%s" % ("已读取" if os.path.isfile(CFG_PATH) else "未找到，用默认值"))
-        self.refresh_pack_status()
         self.refresh_export_info()
         if hasattr(self, "wp_meta"):
             self.refresh_wp_status()
+        self.refresh_launch_strip(running)
         self.after(4000, self.refresh_status)
+
+    def refresh_game_button(self, running=None):
+        r"""底部「开始游戏」按钮：文案和颜色跟着版本走，别让用户猜。"""
+        if not hasattr(self, "btn_game"):
+            return
+        if running is None:
+            running = game_running()
+        if running:
+            self.btn_game.configure(text="游戏运行中", state="disabled",
+                                    fg_color="#3a3f47", hover_color="#49505a")
+            return
+        pk = self.pack_dict() if hasattr(self, "seg_mode") else {}
+        if not bool(self.master_var.get()):
+            # 总开关关 = 插件加载但待机（plugin.c: loaded but idle）
+            self.btn_game.configure(text="开始游戏 · 插件已关（原版）", state="normal",
+                                    fg_color="#3a3f47", hover_color="#49505a")
+        elif pk.get("on") and pk.get("name"):
+            self.btn_game.configure(text="开始游戏 · 测试包 %s" % pk["name"].split("/")[-1],
+                                    state="normal",
+                                    fg_color="#a86a12", hover_color="#bf7c17")
+        else:
+            self.btn_game.configure(text="开始游戏 · 正式版（nav）", state="normal",
+                                    fg_color="#2f6fdb", hover_color="#255bb4")
+
+    # ---- 启动条件条 / 测试包预检（2026-11-19 用户要求）---------------
+    # 版本选择原本只活在「人机路点」① 卡里，底部按钮又不带状态；
+    # 这里把「这次启动加载什么」常驻到按钮上方，测试包再补一道预检。
+    def launch_strip_info(self):
+        r"""当前启动条件的文案；与 game_env() 同一套判断：总开关 → 测试包 → 正式版。"""
+        pk = self.pack_dict() if hasattr(self, "seg_mode") else {}
+        if not bool(self.master_var.get()):
+            return {"mode": "off", "badge": "插件已关",
+                    "title": "本次启动 = 原版（插件待机）",
+                    "sub": "总开关关闭：插件加载但不动作，不读 nav、不出 F2 菜单",
+                    "go": "去打开"}
+        if not (pk.get("on") and pk.get("name")):
+            return {"mode": "official", "badge": "正式版",
+                    "title": "本次启动加载 ③ 部署版 nav",
+                    "sub": "游戏内只读：改动不落盘；要改数据请用 ② 开发版 / ④ 测试包",
+                    "go": "查看版本"}
+        name = pk["name"]
+        short = name.split("/")[-1]
+        man = pack_manifest(name)
+        summ = pack_summary(name, pack_target_fp(name))
+        ops = summ["nadd"] + summ["ndel"] + summ["eadd"] + summ["edel"]
+        blank = bool(man.get("blank") or summ["blank"])
+        grow = bool(man.get("grow") or summ["grow"])
+        seed = bool(man.get("seed"))
+        kind = ("原版播种" if seed else
+                "真·新建" if grow else ("空白底图" if blank else "增量"))
+        label = str(man.get("label") or pk.get("label") or pk.get("map") or "")
+        scope = ("只对 %s 生效" % label) if (pk.get("only_map") and label) else "全部地图生效"
+        title = "%s · %s · %s" % (self.disp_of(name) or short, kind, scope)
+        if seed:
+            sub = "包内 %d 处改动；原版点+边全量重放，按 AddNode 新建（可继续加点）" % ops
+        elif grow and ops == 0:
+            sub = "包内 0 处改动：原生点全禁用且不新建节点，人机没有可走路点"
+        elif grow:
+            sub = "包内 %d 处改动；原生点全禁用，节点按 AddNode 新建（不受原生点数限制）" % ops
+        elif blank and ops == 0:
+            sub = "包内 0 处改动：进图后原生点全禁用，人机没有可走路点，不会移动"
+        elif blank:
+            sub = "包内 %d 处改动；原生点全禁用，人机只走包里画的路线" % ops
+        else:
+            sub = "包内 %d 处改动，套在原生点上执行" % ops
+        return {"mode": "test", "badge": "测试包", "title": title, "sub": sub,
+                "go": "去人机路点改"}
+
+    def refresh_launch_strip(self, running=None):
+        r"""把启动条件画到按钮上方；运行中显示启动瞬间的快照，改选只影响下次。"""
+        if not hasattr(self, "strip"):
+            return
+        if running is None:
+            running = game_running()
+        if running:
+            if getattr(self, "_strip_run", None) is None:
+                # 外部双击 exe 起的进程：没有 mod，更谈不上版本；单独说清楚
+                info = {"mode": "off", "badge": "外部启动",
+                        "title": "游戏在运行，但不是从本窗口启动的",
+                        "sub": "直接双击 UnityCrossFire.exe 是原版（无 mod）；要加载版本请关掉游戏再点底部按钮",
+                        "go": "去人机路点"}
+            else:
+                info = dict(self._strip_run)
+                info["badge"] = "运行中 · " + info["badge"]
+                info["sub"] += " · 改版本只影响下次启动"
+        else:
+            self._strip_run = None
+            info = self.launch_strip_info()
+        # mode -> (外框, 底色, 徽标底, 徽标字)
+        style = {
+            "off": ("#5a3434", "#2a1a1a", "#301c1c", "#ff9d9d"),
+            "test": ("#7a5a17", "#2c2310", "#3a2c0d", "#f7cd74"),
+            "official": ("#3a3f47", "#232323", "#16233a", "#9cc3ff"),
+        }[info["mode"]]
+        self.strip.configure(border_color=style[0], fg_color=style[1])
+        self.strip_badge.configure(text=info["badge"], fg_color=style[2],
+                                   text_color=style[3],
+                                   width=max(78, 15 * len(info["badge"]) + 14))
+        self.strip_title.configure(text=info["title"],
+                                   text_color="#f7cd74" if info["mode"] == "test" else "#f0f0f0")
+        self.strip_sub.configure(text=info["sub"])
+        self.strip_go.configure(text=info["go"])
+        self.refresh_game_button(running)
+
+    def on_strip_go(self):
+        r"""启动条右侧按钮：插件关着就先打开；否则跳到人机路点 ① 卡。"""
+        if not bool(self.master_var.get()):
+            self.master_var.set(True)
+            self.on_master()
+            return
+        self.jump_to_pick()
+
+    def jump_to_pick(self):
+        r"""跳到「人机路点」页，滚回 ① 选图与数据并闪一下边框。"""
+        try:
+            self.tabview.set("人机路点")
+        except Exception:
+            pass
+        body = getattr(self, "wp_body", None)
+        if body is not None:
+            try:
+                body._parent_canvas.yview_moveto(0.0)   # noqa: SLF001  CTk 内部画布
+            except Exception:
+                pass
+        card = getattr(self, "card_pick", None)
+        if card is None:
+            return
+        try:
+            card.configure(border_width=2, border_color="#f5b942")
+        except Exception:
+            return
+
+        def clear():
+            try:
+                if card.winfo_exists():
+                    card.configure(border_width=0, border_color="#383838")
+            except Exception:
+                pass
+
+        self.after(1600, clear)
+
+    def preflight_start(self):
+        r"""测试包模式的启动预检；返回 True = 继续启动。
+
+        只拦「总开关开 + 测试包选中」的启动；正式版和插件待机直接放行。
+        顺带把空包风险提前说出来：空白底图 + 包内 0 处改动 = 人机没有可走路点。
+        """
+        pk = self.pack_dict()
+        name = pk.get("name") or ""
+        man = pack_manifest(name)
+        summ = pack_summary(name, pack_target_fp(name))
+        ops = summ["nadd"] + summ["ndel"] + summ["eadd"] + summ["edel"]
+        blank = bool(man.get("blank") or summ["blank"])
+        grow = bool(man.get("grow") or summ["grow"])
+        seed = bool(man.get("seed"))
+        label = str(man.get("label") or pk.get("label") or pk.get("map") or "")
+        level = str(man.get("level") or pk.get("map") or "")
+        where = ("%s（%s）" % (label, level)) if (label and level) else (label or level or "（未知）")
+        scope = "只对这张图生效" if pk.get("only_map") else "全部地图生效"
+        if seed:
+            alert = ("原版播种：包里是这张图原版点+边的全量副本（%d 处），"
+                     "按 grow 新建；原生点全部禁用，之后可以继续加点。" % ops)
+        elif grow and ops == 0:
+            alert = ("注意：真·新建（grow）+ 包内 0 处改动。进图后原生点全部禁用、"
+                     "又不会新建节点，人机没有可走路点，不会移动。")
+        elif grow:
+            alert = ("真·新建（grow）：原生点全部禁用，节点按 AddNode 新建，"
+                     "包内 %d 处改动不受原生点数限制。" % ops)
+        elif blank and ops == 0:
+            alert = ("注意：空白底图 + 包内 0 处改动。进图后原生点全部禁用，"
+                     "人机没有可走路点，不会移动。")
+        elif blank:
+            alert = "空白底图：原生点全部禁用，人机只走包内 %d 处改动画出的路线。" % ops
+        else:
+            alert = "增量改动：包内 %d 处改动，套在原生点上执行。" % ops
+
+        top = ctk.CTkToplevel(self)
+        top.title("启动预检 · 测试包模式")
+        top.resizable(False, False)
+        top.transient(self)
+        if bool(self.topmost_var.get()):
+            top.attributes("-topmost", True)   # 控制台置顶时别把预检藏到后面
+
+        def grab():
+            try:
+                if top.winfo_exists():
+                    top.grab_set()
+            except tk.TclError:
+                pass
+
+        try:
+            top.grab_set()
+        except tk.TclError:
+            top.after(150, grab)   # CTkToplevel 还没 viewable 时等它映射出来
+        top.bind("<Escape>", lambda _e: top.destroy())
+
+        ctk.CTkLabel(top, text="启动预检 · 测试包模式",
+                     font=("Microsoft YaHei UI", 17, "bold"),
+                     anchor="w").pack(fill="x", padx=18, pady=(16, 0))
+        ctk.CTkLabel(top, text="正式版不会弹这一步；确认后才会带 UCF_PACK / UCF_FP 启动游戏。",
+                     font=FONT_S, text_color="#9aa0a6", anchor="w",
+                     justify="left", wraplength=470).pack(fill="x", padx=18, pady=(4, 10))
+
+        grid = ctk.CTkFrame(top, fg_color="transparent")
+        grid.pack(fill="x", padx=14)
+        cells = [("数据版本", "④ 测试包（packs）"),
+                 ("测试包", self.disp_of(name) or name.split("/")[-1]),
+                 ("生效地图", where), ("生效范围", scope)]
+        for i, (k, v) in enumerate(cells):
+            cell = ctk.CTkFrame(grid, corner_radius=7, fg_color="#262626",
+                                border_width=1, border_color="#383838")
+            cell.grid(row=i // 2, column=i % 2, sticky="nsew", padx=4, pady=4)
+            ctk.CTkLabel(cell, text=k, font=FONT_S, text_color="#9aa0a6",
+                         anchor="w").pack(fill="x", padx=10, pady=(6, 0))
+            ctk.CTkLabel(cell, text=v, font=("Microsoft YaHei UI", 13, "bold"),
+                         anchor="w", justify="left", wraplength=210).pack(
+                fill="x", padx=10, pady=(0, 6))
+        for c in range(2):
+            grid.grid_columnconfigure(c, weight=1)
+
+        warn = ctk.CTkFrame(top, corner_radius=7, fg_color="#241511",
+                            border_width=1, border_color="#6b3d2c")
+        warn.pack(fill="x", padx=18, pady=(6, 0))
+        ctk.CTkLabel(warn, text=alert, font=FONT_S, text_color="#ffb59d",
+                     anchor="w", justify="left", wraplength=440).pack(
+            fill="x", padx=10, pady=8)
+
+        mute_var = tk.BooleanVar(value=self._mute_preflight)
+        ctk.CTkCheckBox(top, text="本次控制台会话不再提示（启动条仍会一直显示）",
+                        variable=mute_var, font=FONT_S,
+                        checkbox_width=18, checkbox_height=18).pack(
+            anchor="w", padx=20, pady=(10, 0))
+
+        result = {"go": False}
+
+        def go():
+            result["go"] = True
+            if mute_var.get():
+                self._mute_preflight = True
+            top.destroy()
+
+        btns = ctk.CTkFrame(top, fg_color="transparent")
+        btns.pack(fill="x", padx=18, pady=(12, 16))
+        ctk.CTkButton(btns, text="确认启动", width=104, height=34, font=FONT,
+                      fg_color="#a86a12", hover_color="#bf7c17",
+                      text_color="#fff2d6", command=go).pack(side="right")
+        ctk.CTkButton(btns, text="先去人机路点", width=118, height=34, font=FONT_S,
+                      fg_color="#3a3f47", hover_color="#4a5058",
+                      command=lambda: (top.destroy(), self.jump_to_pick())).pack(
+            side="right", padx=(0, 8))
+        ctk.CTkButton(btns, text="取消", width=76, height=34, font=FONT_S,
+                      fg_color="transparent", border_width=1, border_color="#4a4a4a",
+                      hover_color="#2e2e2e", command=top.destroy).pack(
+            side="right", padx=(0, 8))
+
+        top.update_idletasks()
+        w = max(520, top.winfo_reqwidth())
+        h = top.winfo_reqheight()
+        x = self.winfo_rootx() + (self.winfo_width() - w) // 2
+        y = self.winfo_rooty() + (self.winfo_height() - h) // 2
+        top.geometry("%dx%d+%d+%d" % (w, h, max(x, 0), max(y, 0)))
+        self.wait_window(top)
+        return result["go"]
 
     # ---- 动作 ----
     def game_env(self):
@@ -2445,11 +2793,15 @@ class App(ctk.CTk):
         env["UCF_EXPORT_DIR"] = TEST_VIS
         env["UCF_PACK_DIR"] = PACKS
         pk = self.pack_dict() if hasattr(self, "seg_mode") else {}
+        enabled = bool(self.master_var.get()) if hasattr(self, "master_var") else True
         note = "mod 已启用"
-        if pk.get("on") and pk.get("name"):
-            env["UCF_PACK"] = pk["name"]
+        if not enabled:
+            # 总开关关 = 插件加载但待机（plugin.c）；状态行别再写「mod + 测试包」
+            note = "插件总开关关闭：插件待机（不读 nav、不出菜单）"
+        elif pk.get("on") and pk.get("name"):
+            env["UCF_PACK"] = pk["name"]           # 地图文件夹/包名，插件按子目录读
             env.pop("UCF_NAV_READONLY", None)      # 测试包允许游戏内保存
-            note = "mod + 测试包 %s" % pk["name"]
+            note = "mod + 测试包 %s" % pk["name"].split("/")[-1]
             if pk.get("only_map") and pk.get("fp"):
                 env["UCF_FP"] = pk["fp"]
                 env["UCF_FPLABEL"] = pk.get("label") or pk["map"]
@@ -2463,10 +2815,18 @@ class App(ctk.CTk):
         if not os.path.isfile(GAME_EXE):
             self.set_status("找不到 %s" % GAME_EXE)
             return
+        # 2026-11-19：测试包模式先过一道预检（正式版 / 插件待机直接放行）
+        pk = self.pack_dict() if hasattr(self, "seg_mode") else {}
+        if (bool(self.master_var.get()) and pk.get("on") and pk.get("name")
+                and not self._mute_preflight):
+            if not self.preflight_start():
+                self.set_status("已取消启动（测试包 %s）" % pk.get("name"))
+                return
         # 通行证：只有这里启动才会带上 UCF_MOD=1，插件据此决定是否工作
         env, note = self.game_env()
         try:
             subprocess.Popen([GAME_EXE], cwd=os.path.dirname(GAME_EXE), env=env)
+            self._strip_run = self.launch_strip_info()   # 运行中显示启动瞬间的快照
             self.set_status("游戏已启动（%s）" % note)
         except OSError as exc:
             self.set_status("启动失败：%s" % exc)

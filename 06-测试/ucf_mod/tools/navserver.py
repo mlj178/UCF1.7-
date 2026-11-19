@@ -95,8 +95,8 @@ def set_profile(name):
 
 set_profile(PROFILE)
 
-# 工作台（设计版真应用）放在工程端 design/，由本服务托管给浏览器
-DESIGN = os.path.join(os.path.dirname(ROOT), "design")
+# 工作台（实际运行的前端）放在工程端 workbench/，由本服务托管给浏览器
+WORKBENCH = os.path.join(os.path.dirname(ROOT), "workbench")
 # ④ 测试包目录（ucf_paths.PACKS_DIR）：只对某一张图生效的路线改动
 
 # ---------------------------------------------------------------- 可走面（NavMeshGraph）
@@ -333,7 +333,8 @@ def default_names():
 
 TOKEN_RE = re.compile(r"^[A-Za-z0-9._-]{1,80}$")
 FP_RE = re.compile(r"^n\d+-[0-9a-fA-F]{16}$")
-PACK_NAME_RE = re.compile(r"^[A-Za-z0-9_-]{1,48}$")   # 测试包名：插件是 C，只认 ASCII
+PACK_NAME_RE = re.compile(r"^[A-Za-z0-9_-]{1,48}$")   # 测试包名：插件是 C，保持英文
+SAFE_FOLDER_RE = re.compile(r'^[^\\/:*?"<>|]{1,30}$')  # 地图文件夹：英文+中文，挡非法字符
 
 
 EDIT_FILE_RE = re.compile(r"^n\d+-[0-9a-fA-F]{16}\.txt$")
@@ -1008,7 +1009,7 @@ def collect_test_maps():
         base = by_fp.get(fp0)
         if not name or not base:
             continue
-        txt_path = os.path.join(PACKS_DIR, name, fp0 + ".txt")
+        txt_path = os.path.join(PACKS_DIR, *name.split("/"), fp0 + ".txt")
         if not os.path.isfile(txt_path):
             continue
         entry = dict(base)
@@ -1017,7 +1018,8 @@ def collect_test_maps():
         entry["packBlank"] = bool(pk.get("blank"))
         entry["packOps"] = int(pk.get("ops") or 0)
         entry["packNogen"] = bool(pk.get("nogen"))
-        entry["label"] = ((base.get("label") or pk.get("label") or fp0) + " · " + name +
+        entry["label"] = ((base.get("label") or pk.get("label") or fp0) + " · " +
+                          name.split("/")[-1] +
                           ("（空白底图）" if pk.get("blank") else "（测试包）"))
         entry["mtime"] = mt or entry.get("mtime") or ""
         entry["mtimeTs"] = mts or entry.get("mtimeTs") or 0
@@ -1209,17 +1211,39 @@ def _consistency():
     }
 
 
+def _is_pack_dir(path):
+    if os.path.isfile(os.path.join(path, "manifest.json")):
+        return True
+    try:
+        return any(re.match(r"^n\d+-[0-9a-fA-F]{16}\.txt$", fn) for fn in os.listdir(path))
+    except OSError:
+        return False
+
+
 def collect_packs():
-    """④ 测试包：名字、图、指纹、指令数、nogen、创建时间。"""
+    """④ 测试包：地图文件夹/包名、图、指纹、指令数、nogen、创建时间。"""
     out = []
     try:
-        names = sorted(os.listdir(PACKS_DIR))
+        entries = sorted(os.listdir(PACKS_DIR))
     except OSError:
         return out
-    for name in names:
-        d = os.path.join(PACKS_DIR, name)
-        if not os.path.isdir(d):
+    ids = []
+    for entry in entries:
+        d = os.path.join(PACKS_DIR, entry)
+        if entry.startswith("_") or not os.path.isdir(d):
             continue
+        if _is_pack_dir(d):
+            ids.append(entry)                       # 老布局：直接放在根目录
+            continue
+        try:
+            subs = sorted(os.listdir(d))
+        except OSError:
+            continue
+        for sub in subs:
+            if os.path.isdir(os.path.join(d, sub)) and _is_pack_dir(os.path.join(d, sub)):
+                ids.append("%s/%s" % (entry, sub))
+    for name in ids:
+        d = os.path.join(PACKS_DIR, *name.split("/"))
         manifest = {}
         try:
             with open(os.path.join(d, "manifest.json"), "r", encoding="utf-8") as f:
@@ -1246,6 +1270,7 @@ def collect_packs():
         nogen = os.path.isfile(os.path.join(d, "nogen.txt"))
         out.append({
             "name": name,
+            "folder": name.split("/")[0] if "/" in name else "",
             "label": str(manifest.get("label") or ""),
             "level": str(manifest.get("level") or ""),
             "fp": str(manifest.get("fp") or ""),
@@ -1329,7 +1354,7 @@ def collect_events(limit=24):
                 rel = os.path.relpath(p, VIS).replace("\\", "/")
                 _add("导出", "④ 测试版 · " + rel, p)
     for pk in collect_packs():
-        d = os.path.join(PACKS_DIR, pk["name"])
+        d = os.path.join(PACKS_DIR, *pk["name"].split("/"))
         _add("测试包", "④ %s · %s · %d 条指令" % (pk["name"], pk["label"] or pk["level"], pk["ops"]),
              os.path.join(d, "manifest.json"))
     events.sort(key=lambda e: e["ts"], reverse=True)
@@ -1412,7 +1437,7 @@ class Handler(SimpleHTTPRequestHandler):
         self.send_bytes(json.dumps(obj, ensure_ascii=False).encode("utf-8"),
                         "application/json; charset=utf-8", code)
 
-    # ---- design/（工作台页面 + 静态资源） ----
+    # ---- workbench/（工作台页面 + 静态资源） ----
     MIME = {
         ".html": "text/html; charset=utf-8",
         ".css": "text/css; charset=utf-8",
@@ -1436,11 +1461,11 @@ class Handler(SimpleHTTPRequestHandler):
         except (BrokenPipeError, ConnectionResetError):
             pass
 
-    def serve_design(self, rel):
-        """只允许 design/ 目录内的文件，挡住 .. 和绝对路径。"""
+    def serve_workbench(self, rel):
+        """只允许 workbench/ 目录内的文件，挡住 .. 和绝对路径。"""
         rel = unquote(rel or "").replace("\\", "/").lstrip("/")
-        full = os.path.abspath(os.path.join(DESIGN, *[x for x in rel.split("/") if x]))
-        if os.path.commonpath([os.path.abspath(DESIGN), full]) != os.path.abspath(DESIGN):
+        full = os.path.abspath(os.path.join(WORKBENCH, *[x for x in rel.split("/") if x]))
+        if os.path.commonpath([os.path.abspath(WORKBENCH), full]) != os.path.abspath(WORKBENCH):
             return self.send_json({"ok": False, "error": "路径越界: " + rel}, 400)
         if not os.path.isfile(full):
             return self.send_json({"ok": False, "error": "没有 " + rel}, 404)
@@ -1460,14 +1485,17 @@ class Handler(SimpleHTTPRequestHandler):
         q = parse_qs(u.query)
         path = u.path
         if path in ("/", "/index.html"):
-            return self.redirect("/design/nav-studio.html")
+            return self.redirect("/workbench/nav-studio.html")
         if path == "/navview.html":
             self.path = "/navview.html"
             return SimpleHTTPRequestHandler.do_GET(self)
         if path in ("/studio", "/studio/", "/studio.html"):
-            return self.redirect("/design/nav-studio.html")
-        if path.startswith("/design/"):
-            return self.serve_design(path[len("/design/"):])
+            return self.redirect("/workbench/nav-studio.html")
+        # 旧入口兼容：2026-11-19 前端从 design/ 挪到 workbench/
+        if path == "/design/nav-studio.html":
+            return self.redirect("/workbench/nav-studio.html")
+        if path.startswith("/workbench/"):
+            return self.serve_workbench(path[len("/workbench/"):])
         try:
             if path == "/api/maps":
                 index = {}
@@ -1562,11 +1590,28 @@ class Handler(SimpleHTTPRequestHandler):
                 with open(p, "r", encoding="utf-8", errors="replace") as f:
                     return self.send_json({"ok": True, "fp": fp, "text": f.read(), "exists": True})
             if path == "/api/pack-txt":
-                name = safe_token((q.get("name") or [""])[0])
+                name = (q.get("name") or [""])[0].replace("\\", "/")
                 fp = safe_token((q.get("fp") or [""])[0])
-                if not PACK_NAME_RE.match(name or "") or not FP_RE.match(fp or ""):
+                parts = [safe_token(x) for x in name.split("/") if x]
+                # 包 id = 地图文件夹(可中文)/包名(英文)；只给包名时按尾名找
+                ok = (1 <= len(parts) <= 2 and FP_RE.match(fp or ""))
+                if ok and len(parts) == 1:
+                    ok = bool(PACK_NAME_RE.match(parts[0]))
+                elif ok:
+                    ok = (bool(PACK_NAME_RE.match(parts[1])) and
+                          bool(SAFE_FOLDER_RE.match(parts[0])) and
+                          parts[0] not in (".", ".."))
+                if not ok:
                     return self.send_json({"ok": False, "error": "包名或指纹格式不对"}, 400)
-                p = os.path.join(PACKS_DIR, name, fp + ".txt")
+                pdir = os.path.join(PACKS_DIR, *parts)
+                if not os.path.isdir(pdir) and len(parts) == 1:
+                    tail = parts[0]
+                    for d in os.listdir(PACKS_DIR) if os.path.isdir(PACKS_DIR) else []:
+                        cand = os.path.join(PACKS_DIR, d, tail)
+                        if os.path.isdir(cand):
+                            pdir = cand
+                            break
+                p = os.path.join(pdir, fp + ".txt")
                 if not os.path.isfile(p):
                     return self.send_json({"ok": True, "name": name, "fp": fp,
                                            "text": "", "exists": False})
@@ -1660,7 +1705,7 @@ def main():
     ensure_dirs()
     port = pick_port()
     # 2026-11-18 起只有一个只读入口；--studio 保留为无操作，防旧快捷方式报错。
-    url = "http://127.0.0.1:%d/design/nav-studio.html" % port
+    url = "http://127.0.0.1:%d/workbench/nav-studio.html" % port
     srv = ThreadingHTTPServer(("127.0.0.1", port), Handler)
     srv.daemon_threads = True
     print("UCF 路点工作台 · 本地服务（只读查看）")

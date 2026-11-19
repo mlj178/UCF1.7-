@@ -6,7 +6,7 @@
 例外是「建图」页：2026-11-17 控制台删掉了这一页的三个开关，C 侧键留给旧配置
 与回滚用（默认仍为开），所以它们在 RETIRED 里显式豁免，不允许再冒回面板。
 
-另外核对页面归属：可视化、导出、手动各页的开关必须留在对应页。
+另外核对页面归属：可视化、导出两页的开关必须留在对应页。
 
 本测试只读两份源码，不需要游戏、部署端、网络或窗口。
 
@@ -24,8 +24,11 @@ CONSOLE = os.path.join(HERE, "控制台.pyw")
 
 # 2026-11-17：控制台删掉「建图」页（自动铺路点 / 自动补蹲守点 / 幽灵守卫区）。
 # 2026-11-18：用户要求自动铺设回控制台，落在「手动」页（不再是 RETIRED）。
-RETIRED = set()
-TABS = ["地图", "可视化", "导出", "快捷键", "手动"]   # 「测试数据」「数据」「车测」不是开关页，不在此列
+# 2026-11-19：用户要求删除「手动」页的自动铺设整块，回到 RETIRED（C 侧键保留，默认仍为开）。
+# 2026-11-19：用户要求删除 editor（允许游戏内编辑）；C 侧仍按默认 1 运行。
+# 2026-11-19：用户要求整个「手动」页删除，collect_only 入口一并下线（collect.flag 仍可用）。
+RETIRED = {"auto_waypoints", "auto_crouch", "ghost_areas", "editor", "collect_only"}
+TABS = ["地图", "可视化", "导出", "快捷键"]   # 「测试数据」「数据」「车测」不是开关页，不在此列
 # 非 bool 开关（画笔字符串等）：控件不是 switch，但必须在对应页有入口
 CUSTOM = {"wp_menu": "人机路点", "wp_autoground": "人机路点"}
 # 2026-11-19：可视化改成逐类开关（读+画同一颗），全部落在「可视化」页
@@ -78,7 +81,7 @@ def main():
         seen[key] = title
 
     for key in RETIRED:
-        assert key not in seen, "「建图」开关 %s 已从控制台删除，不能再出现在「%s」页" % (
+        assert key not in seen, "自动铺设开关 %s 已从控制台删除，不能再出现在「%s」页" % (
             key, seen[key])
 
     expected = set(defs) - {"enabled"} - RETIRED   # enabled 是窗口顶部的总开关
@@ -98,9 +101,6 @@ def main():
     assert titles == TABS, "控制台页签应为 %s，实际 %s" % (TABS, titles)
     assert seen.get("hidden_map") == "地图", \
         "hidden_map（加载暴风地图）必须留在「地图」页"
-    for key in ("auto_waypoints", "auto_crouch", "ghost_areas"):
-        assert seen.get(key) == "手动", \
-            "自动铺设开关 %s 必须在「手动」页（2026-11-18 用户要求）" % key
     assert seen.get("visualizer") == "可视化", \
         "可视化总开关（visualizer）必须留在「可视化」页顶部（2026-11-19 用户要求）"
     for key in VIS_DATA:
@@ -116,12 +116,13 @@ def main():
         assert ('cfg_bool("%s"' % key) in editor_c, \
             "cfg.c 有 %s，但 editor.c 没有 cfg_bool 读取" % key
 
-    # 测试数据面板必须是页签（2026-11-17 21:10 用户要求：不再压在上面常驻）
+    # 2026-11-19 用户要求：「测试数据」页删除，选图/选包并入「人机路点」①；
+    # 人机路点必须在数据页之前（数据页读它建的 opt_pack / opt_map）。
     src = read(CONSOLE)
-    assert 'self.tabview.add("测试数据")' in src, "测试数据必须是页签"
+    assert 'add("测试数据")' not in src, "「测试数据」页已删除，不能再出现"
     assert "build_pack_panel" not in src, "build_pack_panel 旧入口应已删除"
-    assert src.index('add("测试数据")') < src.index('add("数据")'), \
-        "「测试数据」页应在「数据」页之前"
+    assert src.index('add("人机路点")') < src.index('add("数据")'), \
+        "「人机路点」页应在「数据」页之前"
     assert 'text="打开文件夹"' in src and "def open_folder" in src, \
         "数据页的「打开文件夹」按钮 / open_folder 不见了"
 

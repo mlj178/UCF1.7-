@@ -28,12 +28,23 @@ def main():
     assert 'strncmp(line, "blank"' in editor, "editor.c 不再解析 blank 行"
     assert "blank base" in editor, "editor.c 不再记录/应用空白底图"
     assert "nav_drop_add" in editor, "editor.c 丢了「删自己加的点」修正"
+    # grow（2026-11-19）：真·新建节点 + 正式版 nav 目录可外置
+    assert "g_nedGrow" in editor, "editor.c 丢了 g_nedGrow"
+    assert 'strncmp(line, "grow"' in editor, "editor.c 不再解析 grow 行"
+    assert "nav_apply_grow" in editor, "editor.c 丢了 grow 新建节点路径"
+    assert "R_PP_LOCK" in editor and "0x5E9660" in editor, \
+        "editor.c 丢了 PathProcessor.Lock（建点必须在阻塞窗口里）"
+    assert "UCF_NAV_DIR" in editor, "editor.c 丢了 UCF_NAV_DIR（正式版 nav 可放游戏外）"
     assert "ucf_navcmd.txt" in editor and "nav_cmd_tick" in editor, \
         "editor.c 丢了控制台运行中命令（ucf_navcmd.txt / nav_cmd_tick）"
 
     navdata = read(os.path.join("tools", "navdata.py"))
     assert '"--blank"' in navdata, "navdata.py pack new 丢了 --blank"
+    assert '"--grow"' in navdata, "navdata.py pack new 丢了 --grow"
     assert "is_blank" in navdata, "navdata.py promote 不再拦空白包"
+    assert "is_grow" in navdata, "navdata.py promote 不再拦 grow 包"
+    assert "def cmd_pack_seed" in navdata and "def seed_pack_lines" in navdata, \
+        "navdata.py 丢了 pack seed（从原版点图播种）"
 
     server = read(os.path.join("tools", "navserver.py"))
     assert "/api/pack-txt" in server, "navserver.py 丢了 /api/pack-txt（只读看包）"
@@ -45,7 +56,11 @@ def main():
     assert '"blank"' in view and "blankBase" in view, "navview.html 不再写 blank"
 
     console = read(os.path.join("tools", "控制台.pyw"))
-    assert "def create_blank_pack" in console, "控制台丢了「新建空白包」"
+    assert "def create_blank_pack" in console, "控制台丢了「新建测试包」"
+    assert "真·新建节点（grow）" in console, "控制台新建弹窗丢了 grow 选项"
+    assert "keep_grow" in console, "控制台「清空当前图」不再保留 grow 模式"
+    assert "def seed_lines" in console, "控制台丢了「复制原版路点（seed）」"
+    assert "复制原版路点（seed）" in console, "控制台新建弹窗丢了 seed 选项"
     assert "blank" in console and "nogen.txt" in console, "控制台不再写 blank / nogen"
     assert "def send_pack_cmd" in console and "ucf_navcmd" in console, \
         "控制台丢了「载入到游戏 / 重新应用 / 保存路线」命令入口"
