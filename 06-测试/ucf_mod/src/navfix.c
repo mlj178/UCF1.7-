@@ -654,11 +654,19 @@ static void act_crouch(void) {
   raycast_t rc;
   char hit[96];
   int existing, made2 = 0;
+  int gridOn = 1, pmN = 0;
   float cx, cz;
 
   if (g_crDone) return;
   g_crDone = 1;
-  if (!cfg_bool("auto_crouch", 1)) { nlog("[cfg] auto_crouch = off, skip crouch points"); return; }
+  /* auto_crouch 只管 9 m 网格撒点；玩家记录点是用户亲自站过的位置，始终要造，
+   * 否则关掉网格就一条蹲守点都没有，人机又没目标了。 */
+  {
+    extern int editor_pm_count(void);
+    gridOn = cfg_bool("auto_crouch", 1);
+    pmN = editor_pm_count();
+    if (!gridOn && pmN <= 0) { nlog("[cfg] auto_crouch = off and no player marks, skip crouch"); return; }
+  }
   if (!g_crouchCls || !i_class_get_type || !i_type_get_object) { nlog("crouch: Bot_CrouchPos class missing"); return; }
 
   spareField = i_class_get_field_from_name(g_crouchCls, "SpareList_BL");
@@ -670,8 +678,6 @@ static void act_crouch(void) {
     nlog("crouch: existing SpareList_BL count=%d (editor-made=%d)", existing, own);
     if (existing > 0 && own > 0) existing -= own;
   }
-  if (existing > 0) { nlog("crouch: map already has %d, skip", existing); return; }
-
   rc = (raycast_t)RVA(0xABB0A0);
   ctor = (ctor_str_t)RVA(0x331EA0);
   gtr = (get_tr_t)RVA(0x332010);
@@ -681,24 +687,55 @@ static void act_crouch(void) {
   nameStr = i_string_new("CrouchPos");
   if (i_gchandle_new) hname2 = (P)i_gchandle_new(nameStr, 0);
 
-  for (cx = g_minX - 2.0f; cx <= g_maxX + 2.0f; cx += 9.0f)
-    for (cz = g_minZ - 2.0f; cz <= g_maxZ + 2.0f; cz += 9.0f) {
-      V3 o = { cx, 300.0f, cz }, d = { 0.0f, -1.0f, 0.0f };
+  if (!gridOn) {
+    nlog("crouch: grid off, player marks only");
+  } else if (existing > 0) {
+    nlog("crouch: map already has %d, skip grid", existing);
+  } else {
+    for (cx = g_minX - 2.0f; cx <= g_maxX + 2.0f; cx += 9.0f)
+      for (cz = g_minZ - 2.0f; cz <= g_maxZ + 2.0f; cz += 9.0f) {
+        V3 o = { cx, 300.0f, cz }, d = { 0.0f, -1.0f, 0.0f };
+        P co, comp, ct;
+        V3 cpos;
+        if (!rc(o, d, hit, 700.0f, 1, 0)) continue;
+        if (*(float*)(hit + 16) < 0.8f) continue;
+        co = i_object_new(g_goCls);
+        ctor(co, nameStr, 0);
+        comp = addComp(co, typeObj, 0);
+        if (!comp) continue;
+        ct = gtr(co, 0);
+        cpos.x = *(float*)hit;
+        cpos.y = *(float*)(hit + 4) + 0.05f;
+        cpos.z = *(float*)(hit + 8);
+        sp(ct, cpos, 0);
+        made2++;
+      }
+  }
+
+  /* 玩家坐标记录：每个记录点直接造一个蹲守点（记录的就是脚下地面，不再向下打射线）。
+   * 这样用户站在箱子顶 / 任意路口记一条，人机就会把那里当成目标走过去。 */
+  {
+    extern int editor_pm_get(int idx, float* x, float* y, float* z);
+    int k2, made3 = 0;
+    for (k2 = 0; k2 < pmN; k2++) {
+      float px, py, pz;
       P co, comp, ct;
       V3 cpos;
-      if (!rc(o, d, hit, 700.0f, 1, 0)) continue;
-      if (*(float*)(hit + 16) < 0.8f) continue;
+      if (!editor_pm_get(k2, &px, &py, &pz)) continue;
       co = i_object_new(g_goCls);
+      if (!co) continue;
       ctor(co, nameStr, 0);
       comp = addComp(co, typeObj, 0);
       if (!comp) continue;
       ct = gtr(co, 0);
-      cpos.x = *(float*)hit;
-      cpos.y = *(float*)(hit + 4) + 0.05f;
-      cpos.z = *(float*)(hit + 8);
+      cpos.x = px;
+      cpos.y = py + 0.05f;
+      cpos.z = pz;
       sp(ct, cpos, 0);
-      made2++;
+      made3++;
     }
+    if (made3) nlog("crouch: player marks -> %d crouch points", made3);
+  }
   {
     P list2 = 0;
     int now;
@@ -877,7 +914,9 @@ static LRESULT CALLBACK NavProc(HWND h, UINT msg, WPARAM w, LPARAM l) {
   }
   if (msg == WM_TIMER && w == 0xF3C1) {
     void editor_freecam_tick(void);
+    void editor_compass_tick(void);
     editor_freecam_tick();
+    editor_compass_tick();      /* 方向罗盘跟着镜头转（函数内部节流到 ~30 Hz） */
     return 0;
   }
   if (msg == WM_CHAR || msg == WM_SYSCHAR) {
@@ -896,11 +935,16 @@ static LRESULT CALLBACK NavProc(HWND h, UINT msg, WPARAM w, LPARAM l) {
     } else if (w == VK_F7) {
       void editor_freecam_toggle(void);
       editor_freecam_toggle();
-    } else if (!editor_menu_is_open() && (GetAsyncKeyState(VK_CONTROL) & 0x8000)) {
-      /* 菜单开着时 W/A/S/D 要留给游戏走路，不能顺带触发 Ctrl+Shift+A/D/S 等编辑器热键 */
+    } else if (GetAsyncKeyState(VK_CONTROL) & 0x8000) {
+      /* 菜单开着时 W/A/S/D 要留给游戏走路，所以「只按 Ctrl」的编辑器热键在菜单里不触发。
+       * 但 Ctrl+Shift+字母 是编辑器专用组合（选 A 点 / 连边 / 落地…），菜单开着也必须能用：
+       * 否则选 A 只剩「建立路径」第 1 步那一条路，而它一进主菜单就被清掉，
+       * 跳跃点（要 A -> B 两个点）在菜单里根本建不出来（2026-11-20 用户现场）。 */
       int shift = (GetAsyncKeyState(VK_SHIFT) & 0x8000) ? 1 : 0;
-      void editor_on_key_mod(unsigned, int);
-      editor_on_key_mod((unsigned)w, shift);
+      if (!editor_menu_is_open() || shift) {
+        void editor_on_key_mod(unsigned, int);
+        editor_on_key_mod((unsigned)w, shift);
+      }
     }
   }
   if (msg == WM_LBUTTONDOWN || msg == WM_RBUTTONDOWN) {

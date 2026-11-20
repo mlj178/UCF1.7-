@@ -122,6 +122,8 @@ select.sel{
 .pane{position:relative; min-width:0; min-height:0; overflow:hidden; background:#080b0f}
 #pane3{flex:1 1 0}
 .pane canvas{position:absolute; inset:0; width:100%; height:100%; display:block; outline:none}
+/* 3D 画布上面的透明 2D 层（方向罗盘）：不吃鼠标，3D 的拖动/缩放照常 */
+.pane canvas.ovl{pointer-events:none; z-index:4}
 #pane2{flex:0 0 50%}
 #splitter{
   flex:0 0 6px; background:#141b24; cursor:col-resize; position:relative; border-left:1px solid var(--line);
@@ -368,6 +370,7 @@ body.embed .hud{font-size:10px;padding:3px 6px;max-width:calc(100% - 12px)}
 
       <div class="pane" id="pane3">
         <canvas id="cv3"></canvas>
+        <canvas id="cv3ui" class="ovl"></canvas>
         <div class="panebar">
           <span class="tag">3D</span>
           <button class="btn" id="b3-iso" title="斜视">等距</button>
@@ -378,6 +381,7 @@ body.embed .hud{font-size:10px;padding:3px 6px;max-width:calc(100% - 12px)}
           <label class="chk" style="padding:0 4px" title="按楼层带剖切，看室内"><input type="checkbox" id="c3-cut">切层</label>
           <label class="chk" style="padding:0 4px" title="只在选中点附近 ±25 m 画地形"><input type="checkbox" id="c3-near">近处</label>
           <label class="chk" style="padding:0 4px" title="路点穿透墙壁也能看见（半透明叠加）"><input type="checkbox" id="c3-xray" checked>穿透</label>
+          <label class="chk" style="padding:0 4px" title="汉字罗盘：北 = 世界 -Z（俯视的上方），和工作台平面图同一套方向"><input type="checkbox" id="c3-comp" checked>方向</label>
         </div>
         <div class="hint">右键拖动转视角 · 鼠标停在这里就能 WASD 飞（Q/E 升降，Shift 加速）<br>中键平移 · 滚轮推拉 · 左键点选 / 拖动框选 · 双击对准</div>
         <div class="hud" id="hud3"></div>
@@ -498,6 +502,7 @@ const S = {
   plan: null, planKey: "",
   showGeo: true, showEdges: true, showBlocked: true, showTagged: true,
   showFeats: true, showIso: true, cut3: false, near3: false, xray3: true,
+  showCompass: true,          /* 方向罗盘（东南西北）：与路点工作台的「方向」开关同一个状态 */
   follow: true
 };
 
@@ -1398,6 +1403,9 @@ function renderTargetSelect() { renderSavePanel(); }/* =========================
  * ===================================================================*/
 const cv2 = $("cv2"), ctx2 = cv2.getContext("2d");
 let W2 = 800, H2 = 500, DPR = Math.min(2, window.devicePixelRatio || 1);
+/* 3D 画布上面的透明 2D 层：只画方向和文字提示，不碰 WebGL */
+const cv3ui = $("cv3ui"), ctx3ui = cv3ui.getContext("2d");
+let W3U = 800, H3U = 500;
 
 function sizeCanvas(cv) {
   const r = cv.getBoundingClientRect();
@@ -1410,6 +1418,7 @@ function sizeCanvas(cv) {
 function syncSizes() {
   const a = sizeCanvas(cv2); W2 = a.w; H2 = a.h;
   const b = sizeCanvas(cv3); W3 = b.w; H3 = b.h;
+  const u = sizeCanvas(cv3ui); W3U = u.w; H3U = u.h;
 }
 
 function sx(x) { return (x - S.v2.cx) * S.v2.s + W2 / 2; }
@@ -1519,6 +1528,99 @@ function ensurePlan() {
     S.planBuilding = false;
     S.planMs = Math.round(performance.now() - t0);
   }
+}
+
+/* ---- 方向（东南西北）--------------------------------------------------
+ * 和路点工作台 nav-studio-app.js、游戏内 src/editor.c 的罗盘是同一套约定：
+ *   北 = 世界 -Z（俯视 / 平面图的正上方）   东 = +X（右）
+ *   南 = 世界 +Z（下）                     西 = -X（左）
+ * yaw = 3D 视线朝向（弧度，0 = 朝 -Z，同 S.v3.yaw）；俯视图固定 yaw = 0。
+ * 改方向约定要三处一起改。 */
+const DIR4 = [
+  { name: "北", x: 0, z: -1 },
+  { name: "东", x: 1, z: 0 },
+  { name: "南", x: 0, z: 1 },
+  { name: "西", x: -1, z: 0 }
+];
+const DIR8 = ["北", "东北", "东", "东南", "南", "西南", "西", "西北"];
+const DIR_GOLD = "#ffd24a";
+const DIR_DIM = "rgba(168,190,214,.92)";
+
+/* 世界方向 (dx,dz) 在画面上从「正上方」顺时针落点：返回单位向量 [右, 上] */
+function dirScreen(dx, dz, yaw) {
+  const cy = Math.cos(yaw || 0), sy = Math.sin(yaw || 0);
+  const right = dx * cy - dz * sy;
+  const up = -(dx * sy + dz * cy);
+  const l = Math.sqrt(right * right + up * up) || 1;
+  return [right / l, up / l];
+}
+/* 画面上方正对着的世界方向（八向中文名） */
+function dirHeading(yaw) {
+  let best = 0, bestUp = -2;
+  for (let i = 0; i < 8; i++) {
+    const a = i * Math.PI / 4;
+    const v = dirScreen(Math.sin(a), -Math.cos(a), yaw);
+    if (v[1] > bestUp) { bestUp = v[1]; best = i; }
+  }
+  return DIR8[best];
+}
+function compassR(w, h) { return Math.max(18, Math.min(34, Math.min(w, h) * 0.078)); }
+/* 罗盘整块（圆环 + 顶上那枚三角）的半径，摆位置时按它留边距，免得贴边被裁。
+ * 和 drawCompassRose 里的 rr / 三角位置一一对应，改那边要一起改。 */
+function compassOuter(R) {
+  const fs = Math.max(9, R * 0.36);
+  return R + fs * 0.95 + fs * 0.98;
+}
+
+/* 罗盘：四方位字 + 中心当前朝向 + 顶部三角（画面正上方） */
+function drawCompassRose(c, cx, cy, R, yaw) {
+  const head = dirHeading(yaw);
+  const fs = Math.max(9, R * 0.36);
+  const rr = R + fs * 0.95;          /* 圆环比方位字再外一圈，字不压线 */
+  c.save();
+  c.beginPath();
+  c.arc(cx, cy, rr, 0, Math.PI * 2);
+  c.fillStyle = "rgba(8,12,17,.68)";
+  c.fill();
+  c.strokeStyle = "rgba(126,158,196,.32)";
+  c.lineWidth = 1;
+  c.stroke();
+  c.textAlign = "center";
+  c.textBaseline = "middle";
+  c.beginPath();
+  c.moveTo(cx, cy - rr - fs * 0.98);
+  c.lineTo(cx - fs * 0.36, cy - rr - fs * 0.22);
+  c.lineTo(cx + fs * 0.36, cy - rr - fs * 0.22);
+  c.closePath();
+  c.fillStyle = DIR_GOLD;
+  c.fill();
+  c.font = "600 " + Math.round(fs * 0.92) + 'px "Microsoft YaHei UI","Segoe UI",sans-serif';
+  /* 最靠近正上方的那一格点亮（正好 45° 时取先出现的那个；游戏内罗盘同一规则） */
+  const v4 = DIR4.map(function (d) { return dirScreen(d.x, d.z, yaw); });
+  let lit = 0;
+  for (let k = 1; k < 4; k++) if (v4[k][1] > v4[lit][1]) lit = k;
+  DIR4.forEach(function (d, i) {
+    c.fillStyle = (i === lit) ? DIR_GOLD : DIR_DIM;
+    c.fillText(d.name, cx + v4[i][0] * R, cy - v4[i][1] * R);
+  });
+  c.font = "700 " + Math.round(fs * 1.05) + 'px "Microsoft YaHei UI","Segoe UI",sans-serif';
+  c.fillStyle = "#e8f2ff";
+  c.fillText(head, cx, cy + 0.5);
+  c.restore();
+}
+/* 俯视图四条边上的方位字（上 = 北，固定不变） */
+function drawCompassEdges(c, w, h) {
+  c.save();
+  c.textAlign = "center";
+  c.textBaseline = "middle";
+  c.font = '600 11px "Microsoft YaHei UI","Segoe UI",sans-serif';
+  c.fillStyle = DIR_GOLD;
+  c.fillText("北", w / 2, 13);
+  c.fillStyle = "rgba(150,176,206,.75)";
+  c.fillText("南", w / 2, h - 11);
+  c.fillText("东", w - 13, h / 2);
+  c.fillText("西", 13, h / 2);
+  c.restore();
 }
 
 function render2() {
@@ -1773,6 +1875,14 @@ function render2() {
       ? ("\n路线 <b>" + ((S.routes || []).length) + "</b> · 区域 <b>" + ((S.zones || []).length) + "</b>")
       : "") +
     (S.plan ? ("\n地形图 " + S.plan.pw + "×" + S.plan.ph + " px" + (S.planMs ? (" · " + S.planMs + " ms") : "")) : "");
+
+  /* 方向：俯视图永远「上 = 北」，罗盘放右上角（右下角是操作提示） */
+  if (S.showCompass) {
+    drawCompassEdges(c, W2, H2);
+    const rc = compassR(W2, H2);
+    const m = compassOuter(rc) + 8;
+    drawCompassRose(c, W2 - m, H2 - m - 40, rc, 0);   /* 抬 40 px：右下角是操作提示 */
+  }
 }
 /* =====================================================================
  * 9. 3D 视图（手写 WebGL，不依赖任何外部库）
@@ -2184,6 +2294,15 @@ function render3() {
       : "") +
     (S.cut3 ? " · 切层" : "") +
     ((S.v3.fly || S.keys.size) ? " · 飞行 " + Math.round(S.flySpd || 0) + " m/s" : "");
+
+  /* 方向：3D 里画面会转，罗盘跟着视角转（右上角，俯视时和平面图完全一致） */
+  ctx3ui.setTransform(DPR, 0, 0, DPR, 0, 0);
+  ctx3ui.clearRect(0, 0, W3U, H3U);
+  if (S.showCompass) {
+    const rc = compassR(W3U, H3U);
+    const m = compassOuter(rc) + 8;
+    drawCompassRose(ctx3ui, W3U - m, H3U / 2, rc, S.v3.yaw);   /* 右侧居中：顶上是工具条、左下是读数 */
+  }
 }
 
 function drawPoints(alpha, depthOn) {
@@ -3251,6 +3370,20 @@ function bindPanes() {
   $("c3-cut").addEventListener("change", function () { S.cut3 = this.checked; schedule(); });
   $("c3-near").addEventListener("change", function () { S.near3 = this.checked; schedule(); });
   $("c3-xray").addEventListener("change", function () { S.xray3 = this.checked; schedule(); });
+  /* 方向：嵌在工作台里时两边是同一个状态（工作台发消息过来，这里改了也发回去） */
+  $("c3-comp").addEventListener("change", function () {
+    S.showCompass = this.checked;
+    schedule();
+    notifyParentCompass();
+  });
+  window.addEventListener("message", function (e) {
+    const d = e.data || {};
+    if (d.ucf !== "compass" || typeof d.on !== "boolean") return;
+    S.showCompass = d.on;
+    const cb = $("c3-comp");
+    if (cb) cb.checked = d.on;
+    schedule();
+  });
 
   /* ---- 分屏拖动 ---- */
   (function () {
@@ -3660,6 +3793,12 @@ function showBanner(html) {
   b.style.display = "block";
 }
 
+/* 嵌在工作台 3D 侧栏里时：把「方向」开关的新状态告诉外层，让平面图的开关跟着变 */
+function notifyParentCompass() {
+  if (!EMBED || window.parent === window) return;
+  try { window.parent.postMessage({ ucf: "compass", on: !!S.showCompass }, "*"); } catch (x) {}
+}
+
 function emptyState() {
   if (!S.doc) {
     $("issues").innerHTML = "<span style='color:var(--tx3)'>没有载入地图</span>";
@@ -3733,6 +3872,12 @@ async function boot() {
     S.showNavm = false;
     const cb = $("c-navmesh");
     if (cb) cb.checked = false;
+  }
+  /* 深链接：?compass=0 打开时就关掉方向罗盘（工作台按自己的「方向」开关带过来） */
+  if (/[?&]compass=0(&|$)/.test(location.search)) {
+    S.showCompass = false;
+    const cc = $("c3-comp");
+    if (cc) cc.checked = false;
   }
   syncSizes();
   applyLayout();

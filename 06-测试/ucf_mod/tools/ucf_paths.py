@@ -137,9 +137,12 @@ def profile_info():
 
 
 def doc(name):
-    """docs/ 里的文档；找不到回退工程根（兼容旧布局）。"""
-    p = os.path.join(DOCS, name)
-    return p if os.path.exists(p) else os.path.join(PROJ, name)
+    """docs/ 里的文档；按 docs/ → docs/guide/ → docs/record/ 顺序找，最后回退工程根（兼容旧布局）。"""
+    for sub in ("", "guide", "record"):
+        p = os.path.join(DOCS, sub, name) if sub else os.path.join(DOCS, name)
+        if os.path.exists(p):
+            return p
+    return os.path.join(PROJ, name)
 
 
 def describe():
