@@ -32,8 +32,10 @@ TABS = ["地图", "可视化", "导出", "快捷键"]   # 「测试数据」「�
 # 非 bool 开关（画笔字符串等）：控件不是 switch，但必须在对应页有入口
 CUSTOM = {"wp_menu": "人机路点", "wp_autoground": "人机路点"}
 # 2026-11-19：可视化改成逐类开关（读+画同一颗），全部落在「可视化」页
+# 2026-11-20：加 vis_compass（方向罗盘，东南西北）——它不读游戏数据，但同样是
+#              「画不画」，所以和可走面一样归在「可视化」页并在 editor.c 里读。
 VIS_DATA = ("vis_nodes", "vis_crouch", "vis_guard", "vis_nano", "vis_born",
-            "vis_supply", "vis_jump", "vis_tag", "navmesh_show")
+            "vis_supply", "vis_jump", "vis_tag", "navmesh_show", "vis_compass")
 
 
 def read(path):

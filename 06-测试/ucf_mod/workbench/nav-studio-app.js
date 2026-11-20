@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿/* UCF 路点工作台 · 七页只读版（2026-11-18）
+﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿/* UCF 路点工作台 · 七页只读版（2026-11-18）
  * 数据全部来自 tools/navserver.py 的 GET 接口：
  *   /api/workbench  地图统计 / 四版 / 测试包 / 配置 / 事件 / 日志
  *   /api/raw        地图 JSON（②开发版 maps/）
@@ -92,7 +92,7 @@ var ST = {
   nm: null,
   bounds: { lo: [-10, -10], hi: [10, 10] },
   cam: { cx: 0, cz: 0, zoom: 1 },
-  show: { edges: true, grid: true, navmesh: true, labels: true, height: false },
+  show: { edges: true, grid: true, navmesh: true, labels: true, height: false, compass: true },
   layerVis: {},
   showAllLayers: false,
   focus: null,
@@ -538,6 +538,109 @@ function drawEmpty(c, w, h, text) {
   c.fillText(text, w / 2, h / 2);
 }
 
+/* ---- 方向（东南西北）--------------------------------------------------
+ * 全工具只有这一套约定，改这里要连 navview.html 的罗盘、控制台说明、
+ * src/editor.c 的游戏内罗盘一起改：
+ *
+ *   北 = 世界 -Z（平面图 / 3D 俯视的正上方）   东 = 世界 +X（右）
+ *   南 = 世界 +Z（下）                        西 = 世界 -X（左）
+ *
+ * 为什么北是 -Z：平面图把世界 x 画到屏幕右、z 画到屏幕下，3D 俯视
+ * （navview 的「俯视」按钮 yaw=0）屏幕上方同样是 -Z。这样「图的上方 = 北」
+ * 在平面图和 3D 里是同一件事，游戏内罗盘也照这个算。
+ * yaw = 视线朝向（弧度，0 = 朝 -Z；与 navview 的 S.v3.yaw 同义）。 */
+var DIR4 = [
+  { name: '北', x: 0, z: -1 },
+  { name: '东', x: 1, z: 0 },
+  { name: '南', x: 0, z: 1 },
+  { name: '西', x: -1, z: 0 }
+];
+var DIR8 = ['北', '东北', '东', '东南', '南', '西南', '西', '西北'];
+var DIR_GOLD = '#ffd24a';
+var DIR_DIM = 'rgba(168,190,214,.92)';
+
+/* 世界方向 (dx,dz) 在画面上从「正上方」顺时针的落点：返回单位向量 [右, 上] */
+function dirScreen(dx, dz, yaw) {
+  var cy = Math.cos(yaw || 0), sy = Math.sin(yaw || 0);
+  var right = dx * cy - dz * sy;
+  var up = -(dx * sy + dz * cy);
+  var l = Math.sqrt(right * right + up * up) || 1;
+  return [right / l, up / l];
+}
+/* 画面上方正对着的世界方向（八向中文名） */
+function dirHeading(yaw) {
+  var best = 0, bestUp = -2;
+  for (var i = 0; i < 8; i++) {
+    var a = i * Math.PI / 4;
+    var v = dirScreen(Math.sin(a), -Math.cos(a), yaw);
+    if (v[1] > bestUp) { bestUp = v[1]; best = i; }
+  }
+  return DIR8[best];
+}
+function dirCss(size, weight) {
+  return (weight || 600) + ' ' + Math.round(size) + 'px "Microsoft YaHei UI","Segoe UI",sans-serif';
+}
+/* 罗盘：四方位字 + 中心当前朝向 + 顶部三角（画面正上方） */
+function drawCompassRose(c, cx, cy, R, yaw) {
+  var head = dirHeading(yaw);
+  var fs = Math.max(9, R * 0.36);
+  var rr = R + fs * 0.95;          /* 圆环比方位字再外一圈，字不压线 */
+  c.save();
+  c.beginPath();
+  c.arc(cx, cy, rr, 0, Math.PI * 2);
+  c.fillStyle = 'rgba(8,12,17,.68)';
+  c.fill();
+  c.strokeStyle = 'rgba(126,158,196,.32)';
+  c.lineWidth = 1;
+  c.stroke();
+  c.textAlign = 'center';
+  c.textBaseline = 'middle';
+  /* 圆环外面的小三角：它指着哪，就是「你正对着哪」 */
+  c.beginPath();
+  c.moveTo(cx, cy - rr - fs * 0.98);
+  c.lineTo(cx - fs * 0.36, cy - rr - fs * 0.22);
+  c.lineTo(cx + fs * 0.36, cy - rr - fs * 0.22);
+  c.closePath();
+  c.fillStyle = DIR_GOLD;
+  c.fill();
+  c.font = dirCss(fs * 0.92);
+  /* 最靠近正上方的那一格点亮（正好 45° 时取先出现的那个；游戏内罗盘同一规则） */
+  var v4 = DIR4.map(function (d) { return dirScreen(d.x, d.z, yaw); });
+  var lit = 0, k;
+  for (k = 1; k < 4; k++) if (v4[k][1] > v4[lit][1]) lit = k;
+  DIR4.forEach(function (d, i) {
+    c.fillStyle = (i === lit) ? DIR_GOLD : DIR_DIM;
+    c.fillText(d.name, cx + v4[i][0] * R, cy - v4[i][1] * R);
+  });
+  c.font = dirCss(fs * 1.05, 700);
+  c.fillStyle = '#e8f2ff';
+  c.fillText(head, cx, cy + 0.5);
+  c.restore();
+}
+/* 平面图四条边上的方位字（俯视图固定「上 = 北」） */
+function drawCompassEdges(c, w, h) {
+  var fs = '600 11px "Microsoft YaHei UI","Segoe UI",sans-serif';
+  c.save();
+  c.textAlign = 'center';
+  c.textBaseline = 'middle';
+  c.font = fs;
+  c.fillStyle = DIR_GOLD;
+  c.fillText('北', w / 2, 13);
+  c.fillStyle = 'rgba(150,176,206,.75)';
+  c.fillText('南', w / 2, h - 11);
+  c.fillText('东', w - 13, h / 2);
+  c.fillText('西', 13, h / 2);
+  c.restore();
+}
+/* 2D 地图上的方向层：角落罗盘 + 四边方位字；由「方向」开关控制。
+ * 俯视图不会转镜头，所以 yaw 恒为 0（北永远在图的上方）。 */
+function drawCompass(c, v) {
+  drawCompassEdges(c, v.w, v.h);
+  var R = Math.max(20, Math.min(34, Math.min(v.w, v.h) * 0.062));
+  var pad = R + 26;
+  drawCompassRose(c, v.w - pad, v.h - pad, R, 0);
+}
+
 /* ---- 可走面（A* NavMeshGraph）：插件导出的 UCFNM3，格式同 navview.html ----
  *   "UCFNM3\0" | int32 nv | int32 索引数 | int32 ntile | uint8 flags[4]
  *   | float matrix[16] | float translation[3]
@@ -865,6 +968,7 @@ function drawMap(cv, kind) {
   ST.feats.forEach(function (f) { drawFeature(c, f, v, 1); });
   if (kind === 'zone') drawZoneGroups(c, v);
   if (kind === 'main' && ST.focus && (ST.focus === 'jump')) drawJumpLinks(c, v, 'main');
+  if (ST.show.compass) drawCompass(c, v);
 }
 
 /* =====================================================================
@@ -1059,7 +1163,8 @@ function updateHeader() {
   var dir = (m && m.dir) || 'maps';
   ST.dockUrl = '/navview.html?view=1&embed=1&notour=1&profile=' + encodeURIComponent(ST.profile) +
     (m && m.file ? '&open=' + encodeURIComponent(dir + '/' + m.file) : '') +
-    (m && m.pack ? '&pack=' + encodeURIComponent(m.pack) : '');
+    (m && m.pack ? '&pack=' + encodeURIComponent(m.pack) : '') +
+    '&compass=' + (ST.show.compass ? 1 : 0);   /* 3D 侧栏的罗盘跟着工作台的「方向」开关 */
   var dm = $('dockMap');
   if (dm) dm.textContent = m && m.file ? ((m.label || m.level) + ' · ' + m.file) : '未载入地图';
 }
@@ -2356,6 +2461,7 @@ function bindTop() {
       var k = b.dataset.toggle;
       ST.show[k] = !ST.show[k];
       b.classList.toggle('on', !!ST.show[k]);
+      if (k === 'compass') syncCompassToDock();
       drawAll();
     });
   });
@@ -2369,6 +2475,7 @@ function bindTop() {
   $('dockFrame').addEventListener('load', function () {
     var s = $('dockSplash');
     if (s) s.classList.add('hide');
+    syncCompassToDock();
   });
   bindDockGrip();
   document.addEventListener('keydown', function (e) {
@@ -2377,7 +2484,15 @@ function bindTop() {
   /* 3D 画面里按 Esc：iframe 里的 navview 发消息回来，一起收起侧栏 */
   window.addEventListener('message', function (e) {
     if (e.origin !== 'null' && e.origin !== location.origin) return;
-    if (e.data && e.data.ucf === 'dock-close' && ST.dockOpen) closeDock();
+    var d = e.data || {};
+    if (d.ucf === 'dock-close' && ST.dockOpen) closeDock();
+    /* 3D 侧栏里点了「方向」：平面图跟着一起开 / 关，两边永远是同一个状态 */
+    if (d.ucf === 'compass' && typeof d.on === 'boolean' && ST.show.compass !== d.on) {
+      ST.show.compass = d.on;
+      var btn = document.querySelector('.mapctl [data-toggle="compass"]');
+      if (btn) btn.classList.toggle('on', ST.show.compass);
+      drawAll();
+    }
   });
 }
 
@@ -2445,6 +2560,13 @@ function closeDock() {
   requestAnimationFrame(function () { drawAll(); });
 }
 function toggleDock() { if (ST.dockOpen) closeDock(); else openDock(); }
+
+/* 3D 侧栏的罗盘和工作台「方向」开关是同一个状态：发消息，不重载 iframe */
+function syncCompassToDock() {
+  var f = $('dockFrame');
+  if (!ST.dockOpen || !f || !f.contentWindow) return;
+  try { f.contentWindow.postMessage({ ucf: 'compass', on: !!ST.show.compass }, '*'); } catch (e) {}
+}
 
 /* 拖左边框调宽度；双击回到默认 */
 function bindDockGrip() {

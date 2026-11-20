@@ -377,7 +377,7 @@ def build_index(rows, suspect=None, extras=None):
     save_json(os.path.join(MAPS, "_index.json"), doc)
     md = ["# 原始地图数据集（自动生成，勿手改）", "",
           "生成时间：" + doc["generated"], "",
-          "序号 / 关卡 / 中文名 / 场景名的**权威表**在 ../docs/地图对照表.md（手写、持久）；",
+          "序号 / 关卡 / 中文名 / 场景名的**权威表**在 docs/guide/地图对照表.md（手写、持久）；",
           "本文件只是按那张表整理出来的结果，每次跑脚本都会重写。", "",
           "| 序号 | 关卡 | 中文名 | 场景名 | 节点 | 边 | 特征 | 文件 | 状态 | 备注 |",
           "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |"]
@@ -404,7 +404,7 @@ def build_index(rows, suspect=None, extras=None):
            "- 只读还原点：navdata\\test\\archive\\maps_original_<日期>/（含 sha256 清单）。",
            "- 早先标成「疑似大厅数据」、还没进数据集的导出在 ucf_mod/backup/review_20261116/；",
            "  其中小型工厂那 12 点已证实是 node link 端点（真数据），已经收进数据集。",
-           "- 序号/关卡/中文名/场景名以 ucf_mod/docs/地图对照表.md 为准，本文件不定义名字。"]
+           "- 序号/关卡/中文名/场景名以 ucf_mod/docs/guide/地图对照表.md 为准，本文件不定义名字。"]
     if extras:
         md += ["", "## maps/ 里的其它文件（不在对照表里，原样保留）", "",
                "| 文件 | 关卡 | 说明 | 节点 |", "| --- | --- | --- | --- |"]

@@ -9,6 +9,8 @@
  * Ctrl+7  reload markers file     Ctrl+8  team BL/GR for new crouch points
  * Ctrl+9  status log              Ctrl+0  show/hide every marker visual
  * Ctrl+Del remove the marker nearest the crosshair (within 3 m)
+ * Ctrl+Shift+6  A* navmesh wireframe on/off            (cfg navmesh_show)
+ * Ctrl+Shift+7  compass rose on/off (汉字东南西北)      (cfg vis_compass)
  *
  * Marker colours: crouch=red  nanopos=green  area=blue  jumplink=yellow
  */
@@ -159,7 +161,11 @@ static P g_mfType, g_mrType, g_guardType, g_jumpType, g_tagType, g_gareaType;
 static P g_matProto;     /* working template material (game shader) */
 static char g_shaderName[96]; /* cached shader path, so materials survive asset unloads */
 static P g_matSlot[16];  /* cached material per marker type 1..15   */
+static unsigned g_matSlotH[16];  /* 每个槽位材质的 gchandle（换图时释放，见 mat_reset） */
+static unsigned g_matProtoH;     /* g_matProto 的 gchandle */
 static int g_matReady;
+static unsigned g_matSetupFailMs; /* mat_setup 失败冷却：别每帧跑 8 次 Shader.Find */
+static int g_matDeadLog;          /* 「材质死了」只记一次日志，免得刷屏 */
 
 /* 路点图编辑（定义在文件后半段，这里提前声明给 ed_init/editor_on_scene 用） */
 typedef struct { int kind; int dir; V3 a, b; } NAVED;   /* dir: 0 双向 / 1 A->B / 2 B->A */
@@ -189,9 +195,16 @@ static NAVED g_ned[NAV_ED_MAX];
 static int g_nedN;
 static NAVED g_redo[NAV_ED_MAX];
 static int g_redoN;
-static int g_nedBlank;      /* 1 = 测试包 blank：先把原生点全禁掉，再套清单里的点/边 */
-static int g_nedGrow;       /* 1 = 文件写了 grow：原生点标死 + 真正新建节点（不借槽位） */
+static int g_nedBlank;      /* 1 = 空白地图：原生点全禁；旧文件里的 blank 行也当 grow 读 */
+static int g_nedGrow;       /* 1 = 文件写了 grow：原生点标死 + 用 AddNode 新建节点 */
+static int g_nedKeep;       /* 1 = 文件写了 keep：原生点一个都不动，只新增节点 */
 static P   g_growGraph;     /* 已经 grow 过的图：同一张图只新建一次（节点没有删除 API） */
+/* 本次进图已经建过的跳链（起终点坐标）：重套包时只补新建的，不整批重建。
+ * Bot_JumpLink 组件删不掉，重复建会「一图多条」。 */
+#define JSEEN_MAX 128
+static V3  g_jumpSeenA[JSEEN_MAX];
+static V3  g_jumpSeenB[JSEEN_MAX];
+static int g_jumpSeenN;
 static int g_growBase;      /* grow 之前的原生节点数 */
 static int g_growMade;      /* 上次 grow 新建的点数 */
 static int g_nedZeroTicks;  /* 0 节点图连续帧计数（grow 放行前要等 5 帧） */
@@ -949,6 +962,9 @@ static int mat_setup(void) {
   };
   int i;
   if (g_matReady) return 1;
+  /* 上一次一个候选都没拿到：冷却 1 秒再试（换图瞬间 shader 可能还没加载回来），
+   * 冷却期一过就重试，别一失败就整局不画；也不会每帧跑 8 次 Shader.Find。 */
+  if (g_matSetupFailMs && GetTickCount() - g_matSetupFailMs < 1000) return 0;
   if (!g_matCls) { elog("mat: no Material class"); return 0; }
   for (i = 0; i < (int)(sizeof(cand) / sizeof(cand[0])); i++) {
     P sh = ((shader_find_t)RVA(R_SHADER_FIND))(x_string_new(cand[i]), 0);
@@ -960,9 +976,10 @@ static int mat_setup(void) {
     if (mat_usable(m)) {
       g_matProto = m;
     root_put(m);
+      g_matProtoH = x_gchandle_new ? x_gchandle_new(m, 1) : 0;
+      g_matSetupFailMs = 0;
       g_matReady = 1;
       strncpy(g_shaderName, cand[i], sizeof(g_shaderName) - 1);
-      if (x_gchandle_new) x_gchandle_new(m, 1);
       elog("mat: using shader '%s' (candidate #%d)", cand[i], i);
       return 1;
     }
@@ -977,6 +994,8 @@ static int mat_setup(void) {
         ((ctor_mat_t)RVA(R_MAT_CTOR_MT))(m, src, 0);
         g_matProto = m;
     root_put(m);
+        g_matProtoH = x_gchandle_new ? x_gchandle_new(m, 1) : 0;
+        g_matSetupFailMs = 0;
         g_matReady = 1;
         str_ascii(((get_name_t)RVA(R_OBJ_NAME))(src, 0), nm, sizeof(nm));
         elog("mat: cloned scene material '%s'", nm);
@@ -985,6 +1004,8 @@ static int mat_setup(void) {
     }
   }
   elog("mat: no usable shader - markers stay invisible");
+  g_matSetupFailMs = GetTickCount();
+  if (!g_matSetupFailMs) g_matSetupFailMs = 1;   /* 0 是"没失败"，别撞上 */
   return 0;
 }
 
@@ -1017,8 +1038,50 @@ static P mat_for(int slot) {
   if (hasProp(m, x_string_new("_BaseColor"), 0)) setColS(m, x_string_new("_BaseColor"), c, 0);
   if (hasProp(m, x_string_new("_Color"), 0)) setColS(m, x_string_new("_Color"), c, 0);
   g_matSlot[slot] = m;
-  if (x_gchandle_new) x_gchandle_new(m, 1);   /* root: C globals are not GC roots */
+  /* root: C globals are not GC roots。句柄要存下来，换图时 mat_reset 才能还回去
+   * （以前是建了句柄就丢，每换一张图漏 15 个）。 */
+  g_matSlotH[slot] = x_gchandle_new ? x_gchandle_new(m, 1) : 0;
   return m;
+}
+
+/* ---- 材质有效性 / 换图重建 ------------------------------------------------
+ * 2026-11-20：同一张图、同一个 DLL，两次启动一次线框是绿的、一次是洋红 #FF00FF。
+ * 取色证实洋红不是调色板里的任何颜色，而是 Unity 对「没有 shader 的材质」的兜底
+ * 错误材质（Hidden/InternalErrorShader）。根因：g_matSlot 是「这一局第一张图」
+ * 建的那套材质，换图只重建网格、从不重建材质（vis_scene_reset 只清网格和计数），
+ * 旧材质的 shader 随场景资源卸载后就一直失效 —— 整局洋红，重启才重掷一次。
+ * 处理：① 换图时把材质缓存整批丢掉，下一张图重新 Shader.Find + 上色；
+ *       ② 用之前自检一次，死了就地重建，重建不出来就这一帧不画，
+ *          绝不把网格挂到坏材质上（那条路必出洋红）。
+ * ------------------------------------------------------------------------- */
+static int mat_alive(P m) {
+  P sh;
+  if (!m || !uobj_live(m)) return 0;                 /* 材质对象本身被销毁 */
+  sh = ((get_shader_t)RVA(R_MAT_GETSH))(m, 0);
+  if (!sh || !uobj_live(sh)) return 0;               /* shader 被卸载 */
+  return 1;
+}
+
+static void mat_drop(int slot) {
+  if (slot < 1 || slot > 15) return;
+  if (g_matSlotH[slot] && x_gchandle_free) x_gchandle_free((P)g_matSlotH[slot]);
+  g_matSlotH[slot] = 0;
+  g_matSlot[slot] = 0;
+}
+
+/* 换图 / 检测到材质失效：整批丢掉，下一帧按当前场景重新建 */
+static void mat_reset(const char* why) {
+  int i, n = 0;
+  for (i = 1; i <= 15; i++) { if (g_matSlot[i]) n++; mat_drop(i); }
+  if (g_matProtoH && x_gchandle_free) x_gchandle_free((P)g_matProtoH);
+  g_matProtoH = 0;
+  g_matProto = 0;
+  g_matReady = 0;
+  g_matSetupFailMs = 0;
+  g_shaderName[0] = 0;
+  g_tintLogged = 0;
+  g_matDeadLog = 0;
+  if (n) elog("mat: reset %d slot(s) (%s) - rebuild for this scene", n, why);
 }
 
 static void tint(P go, int slot) {
@@ -1028,6 +1091,7 @@ static void tint(P go, int slot) {
   if (!rend) return;
   ((set_int1_t)RVA(R_REND_SHADOW))(rend, 0, 0);      /* no shadows */
   mat = mat_for(slot);
+  if (mat && !mat_alive(mat)) { mat_drop(slot); g_matReady = 0; mat = mat_for(slot); }
   if (mat) {
     ((set_shmat_t)RVA(R_REND_SETSM))(rend, mat, 0);
     if (!g_tintLogged) {
@@ -1101,7 +1165,11 @@ P navfix_add_guard_area(float x, float y, float z);
 #define K_TAG     8
 
 typedef struct { V3 p; int tag; int walk; unsigned int pen; } VN;
-typedef struct { int a, b; } VE;
+/* 反向连接查询：read_nav 扫边时要用（定义在导航段，先声明） */
+static int nav_conn_has(P nd, P other);
+
+/* dir: 0 = 双向；1 = a->b 单向；2 = b->a 单向（2026-11-20 方向可视化） */
+typedef struct { int a, b; unsigned char dir; } VE;
 typedef struct { V3 p; int kind; int aux; char name[48]; } VF;
 
 static VN g_vn[VIS_MAXN];
@@ -1121,6 +1189,8 @@ static int g_tpN;
 
 static P g_visObj[80];
 static int g_visObjN;
+static P g_edgeArrowGo;      /* 单向边箭头层：只在 F2 菜单打开时显示 */
+static int g_edgeArrowOn = -1;
 
 static int g_exporting;            /* 正在导出：忽略可视化开关，各类全读，绝不少导数据 */
 static int g_visOn;
@@ -1150,6 +1220,17 @@ static int g_visBorn   = 1;       /* MapManager：幽灵出生 / 保卫者出生
 static int g_visSupply = 1;       /* MapManager：中立点 / 补给箱 / 红箱 / 蓝箱 */
 static int g_visJump   = 1;       /* Bot_JumpLink：跳点（FindObjectsOfType，不是名单） */
 static int g_visTag    = 1;       /* PointNodeTagModifier：标签区（同上） */
+static int g_visPm     = 1;       /* 玩家坐标记录：控制台按钮记下的位置（金色方块 + 顺序折线） */
+/* 玩家坐标记录：控制台点「记录当前位置」-> ucf_navcmd.txt 的 cmd=mark ->
+ * 这里向下打射线取脚下地面点，追加进 <插件目录>\player_marks.txt。
+ * 控制台负责删除（直接改文件），这里每 0.5 s 比一次修改时间重读。 */
+#define PM_MAX 256
+static V3   g_pmP[PM_MAX];
+static int  g_pmN;
+static unsigned g_pmMtime;
+static int  g_pmLoaded;
+static char g_pmPath[MAX_PATH];
+static int g_visCompass = 1;      /* 方向罗盘：屏幕下方汉字东南西北（独立于可视化总开关） */
 static int g_nmWireTri, g_nmWireVert;  /* 可走面当前三角形/顶点数（日志显示） */
 static P   g_nmObj[16];           /* 可走面自己的网格对象（和可视化对象分开） */
 static int g_nmObjN;
@@ -1158,6 +1239,7 @@ static int g_sceneAge;            /* 进图后过了多少帧（VIS_SCENE_WAIT �
 static int g_sceneReadyOnce;      /* 本张图已经稳定过一次 */
 
 static P   g_trKlass;             /* Transform 的 il2cpp 类：comp_pos 用它挡掉「不是 Transform」的指针 */
+static P   g_trBaseKlass;         /* 普通 GameObject 的 Transform 类（g_trKlass 若是 RectTransform，父类就是它） */
 static int g_badTr;               /* comp_pos 拦下的坏指针个数（日志可看） */
 static char g_nmFile[128];        /* 导航网格二进制文件名 */
 static unsigned long long nm_seenFp;  /* 已落盘的导航网格指纹 */
@@ -1167,6 +1249,7 @@ static void overlay_refresh(void);
 static void overlay_reset(void);
 static void nm_tick(void);           /* A* 可走面：按需重建（定义在 nm_dump 之后） */
 static void nm_toggle(void);
+static void ghost_reset(void);       /* 预置预览：换图时清掉（定义在 wp_place 之前） */
 static void nm_walk(int draw);       /* 只统计 = 0 / 画 = 1 */
 static P comp_tr(P comp);
 /* 路点体检（实现在 probe.c，本文件末尾 #include） */
@@ -1275,38 +1358,25 @@ static void bs_wbox(V3 c, V3 h, float w) {
 }
 
 /* --- one batched mesh per colour ---------------------------------------- */
-static int flush_mesh_to(const char* name, int slot, int items, P* list, int* count, int cap) {
-  P go, mf, mr, mesh, av, ai, mat;
-  if (g_bNI == 0) return 1;
-  if (!g_meshCls || !g_mfType || !g_mrType || !g_vec3Cls || !g_i32Cls || !x_array_new) {
-    if (!g_visNoMesh) {
-      elog("vis: mesh classes missing (mesh=%p mf=%p mr=%p vec3=%p i32=%p arr=%p)",
-           g_meshCls, g_mfType, g_mrType, g_vec3Cls, g_i32Cls, (void*)x_array_new);
-      g_visNoMesh = 1;
-    }
-    return 0;
-  }
-  go = new_go(name);
-  if (!go) return 0;
-  ((set_layer_t)RVA(R_SETLAYER))(go, 0, 0);
-  mf = ((addcomp_t)RVA(R_ADDCOMP))(go, g_mfType, 0);
-  mr = ((addcomp_t)RVA(R_ADDCOMP))(go, g_mrType, 0);
-  if (!mf || !mr) { elog("vis: MeshFilter/MeshRenderer add failed"); return 0; }
+/* 把当前批（g_bV / g_bI）做成一个 Mesh 对象；调用者自己挂到 MeshFilter 上。
+ * 预置预览（ghost）和可视化层共用这一份，别写两套顶点/索引搬运。 */
+static P build_mesh(void) {
+  P mesh, av, ai;
+  if (g_bNI == 0 || g_bNV == 0) return 0;
+  if (!g_meshCls || !g_vec3Cls || !g_i32Cls || !x_array_new) return 0;
   mesh = x_object_new(g_meshCls);
   if (!mesh) return 0;
   ((mesh_ctor_t)RVA(R_MESH_CTOR))(mesh, 0);
   av = x_array_new(g_vec3Cls, (unsigned)g_bNV);
   ai = x_array_new(g_i32Cls, (unsigned)g_bNI);
-  if (!av || !ai) { elog("vis: array alloc failed"); return 0; }
+  if (!av || !ai) return 0;
   {
-    /* 这两条 memset 是往托管堆里写，长度必须和请求的完全一致。
-     * 万一 il2cpp 给的数组比要的小（元素类型不对），memcpy 就会越界，
-     * 把隔壁的托管对象写花 —— 后面任何一次 GC / 列表遍历都会崩。
-     * 12:39 那次 SpareAreaList 里出现野值（0xacf898f8）就是这个味道。 */
+    /* 长度必须和请求的完全一致：万一 il2cpp 给的数组比要的小（元素类型不对），
+     * memcpy 就会越界写花隔壁的托管对象（12:39 那次 SpareAreaList 野值）。 */
     int vlen = *(int*)((char*)av + 0xC);
     int ilen = *(int*)((char*)ai + 0xC);
     if (vlen != g_bNV || ilen != g_bNI) {
-      elog("!!! vis: ARRAY LEN MISMATCH vec3 %d/%d i32 %d/%d - skip (would overflow)",
+      elog("!!! mesh: ARRAY LEN MISMATCH vec3 %d/%d i32 %d/%d - skip (would overflow)",
            vlen, g_bNV, ilen, g_bNI);
       return 0;
     }
@@ -1316,9 +1386,45 @@ static int flush_mesh_to(const char* name, int slot, int items, P* list, int* co
   ((mesh_arr_t)RVA(R_MESH_VERTS))(mesh, av, 0);
   ((mesh_arr_t)RVA(R_MESH_TRIS))(mesh, ai, 0);
   ((mesh_1_t)RVA(R_MESH_BOUNDS))(mesh, 0);
-  ((mf_setmesh_t)RVA(R_MF_SETMESH))(mf, mesh, 0);
+  return mesh;
+}
+static int flush_mesh_to(const char* name, int slot, int items, P* list, int* count, int cap) {
+  P go, mf, mr, mesh, mat;
+  if (g_bNI == 0) return 1;
+  /* 材质必须先活着：以前是先把 GO/网格建好、最后才拿材质，材质死了就直接
+   * 挂空材质 —— Unity 渲染成洋红 #FF00FF，看起来像"这条线自己变了颜色"。 */
   mat = mat_for(slot);
-  if (mat) ((set_shmat_t)RVA(R_REND_SETSM))(mr, mat, 0);
+  if (!mat_alive(mat)) {
+    if (!g_matDeadLog) {
+      elog("vis: material slot=%d dead (shader unloaded) - rebuild", slot);
+      g_matDeadLog = 1;
+    }
+    mat_drop(slot);
+    g_matReady = 0;   /* 连原型都可能死了：让 mat_setup 重来（它自己有 5 秒冷却） */
+    mat = mat_for(slot);
+    if (!mat_alive(mat)) {
+      elog("vis: slot=%d has no usable material - skip mesh '%s' (no magenta)", slot, name);
+      return 0;
+    }
+  }
+  if (!g_meshCls || !g_mfType || !g_mrType || !g_vec3Cls || !g_i32Cls || !x_array_new) {
+    if (!g_visNoMesh) {
+      elog("vis: mesh classes missing (mesh=%p mf=%p mr=%p vec3=%p i32=%p arr=%p)",
+           g_meshCls, g_mfType, g_mrType, g_vec3Cls, g_i32Cls, (void*)x_array_new);
+      g_visNoMesh = 1;
+    }
+    return 0;
+  }
+  mesh = build_mesh();
+  if (!mesh) return 0;
+  go = new_go(name);
+  if (!go) return 0;
+  ((set_layer_t)RVA(R_SETLAYER))(go, 0, 0);
+  mf = ((addcomp_t)RVA(R_ADDCOMP))(go, g_mfType, 0);
+  mr = ((addcomp_t)RVA(R_ADDCOMP))(go, g_mrType, 0);
+  if (!mf || !mr) { elog("vis: MeshFilter/MeshRenderer add failed"); return 0; }
+  ((mf_setmesh_t)RVA(R_MF_SETMESH))(mf, mesh, 0);
+  ((set_shmat_t)RVA(R_REND_SETSM))(mr, mat, 0);
   ((set_int1_t)RVA(R_REND_SHADOW))(mr, 0, 0);
   if (*count < cap) { list[(*count)++] = go; root_put(go); }
   elog("vis: mesh '%s' slot=%d items=%d verts=%d tris=%d", name, slot, items, g_bNV, g_bNI / 3);
@@ -1547,7 +1653,7 @@ static int comp_pos(P comp, V3* out) {
   if (!tr || !mem_ok(tr, 0x10) || !uobj_live(tr)) return 0;
   /* 组件表里可能混进「根本不是 Component」的指针：拿到的 tr 不是 Transform 类，
    * 再调 GetPosition 就崩在 UnityPlayer 里（沙漠要塞那次）。这里直接拦掉。 */
-  if (g_trKlass && *(P*)tr != g_trKlass) { g_badTr++; return 0; }
+  if (g_trKlass && *(P*)tr != g_trKlass && *(P*)tr != g_trBaseKlass) { g_badTr++; return 0; }
   ((get_pos_t)RVA(R_GET_POS_INJ))(tr, out, 0);
   return 1;
 }
@@ -1641,9 +1747,22 @@ static void read_nav(void) {
     for (j = 0; j < cn && g_veN < VIS_MAXE; j++) {
       P other = *(P*)((char*)cons + 0x10 + j * 12);
       int oi = pm_get(other);
+      int back;
+      if (oi < 0 || oi == i) continue;
+      /* 每条无向边只记一次（索引小的当 a），方向在这里就判掉：
+       *   back = 对方也连回来 → 双向；否则只有 i->oi 一条。
+       * 旧代码只记 oi > i，单向边 b->a（大索引指向小索引）会被整条漏掉，
+       * 画面上看就是"这条路不存在"。 */
+      back = nav_conn_has(other, nd);
       if (oi > i) {
         g_ve[g_veN].a = i;
         g_ve[g_veN].b = oi;
+        g_ve[g_veN].dir = back ? 0 : 1;
+        g_veN++;
+      } else if (!back) {
+        g_ve[g_veN].a = oi;
+        g_ve[g_veN].b = i;
+        g_ve[g_veN].dir = 2;      /* 真正方向是 b->a */
         g_veN++;
       }
     }
@@ -1878,6 +1997,111 @@ static void read_tags(void) {
   }
 }
 
+/* ---- 玩家坐标记录：读文件 / 记一条 -------------------------------------- */
+/* 文件格式（控制台负责删除，这里只追加）：
+ *   # ucf player marks
+ *   1 -55.919 -16.590 1.235  2026-11-20 21:30:11
+ * 返回 1 = 内容变了（要重画），0 = 没变。 */
+static int pm_load(int force) {
+  WIN32_FILE_ATTRIBUTE_DATA fa;
+  unsigned mtime = 0;
+  FILE* f;
+  char line[256];
+  int n = 0;
+  if (!g_pmPath[0]) return 0;
+  if (GetFileAttributesExA(g_pmPath, GetFileExInfoStandard, &fa))
+    mtime = fa.ftLastWriteTime.dwLowDateTime ^ (unsigned)fa.ftLastWriteTime.dwHighDateTime;
+  if (!force && g_pmLoaded && mtime == g_pmMtime) return 0;
+  g_pmMtime = mtime;
+  g_pmLoaded = 1;
+  f = fopen(g_pmPath, "r");
+  if (!f) { g_pmN = 0; return 1; }
+  while (fgets(line, sizeof line, f) && n < PM_MAX) {
+    int idx;
+    float x, y, z;
+    if (line[0] == '#') continue;
+    if (sscanf(line, "%d %f %f %f", &idx, &x, &y, &z) == 4) {
+      g_pmP[n].x = x; g_pmP[n].y = y; g_pmP[n].z = z;
+      n++;
+    }
+  }
+  fclose(f);
+  g_pmN = n;
+  return 1;
+}
+
+/* 控制台「记录当前位置」：相机向下打射线取脚下地面点（和路点同一套口径），
+ * 追加一行到文件，不覆盖；序号取现有最大值 +1，删中间也不会重号。 */
+static int pm_mark(void) {
+  P cam, go, tr;
+  V3 pos, dir;
+  char hitbuf[128];
+  FILE* f;
+  int idx = 0;
+  char line[256];
+  SYSTEMTIME st;
+  if (!g_pmPath[0]) { elog("pmark: no path (g_dir not ready)"); return 0; }
+  cam = ((cam_main_t)RVA(R_CAM_MAIN))(0);
+  if (!cam) { elog("pmark: no main camera"); return 0; }
+  go = ((get_go_t)RVA(R_GETGO))(cam, 0);
+  tr = get_tr(go);
+  if (!tr) { elog("pmark: no camera transform"); return 0; }
+  ((get_pos_t)RVA(R_GET_POS_INJ))(tr, &pos, 0);
+  dir.x = 0.0f; dir.y = -1.0f; dir.z = 0.0f;
+  if (!((raycast_t)RVA(R_RAYCAST))(pos, dir, hitbuf, 120.0f, 1, 0)) {
+    elog("pmark: no ground below camera (%.2f %.2f %.2f)", pos.x, pos.y, pos.z);
+    return 0;
+  }
+  f = fopen(g_pmPath, "r");
+  if (f) {
+    while (fgets(line, sizeof line, f)) {
+      int k;
+      if (line[0] == '#') continue;
+      if (sscanf(line, "%d", &k) == 1 && k > idx) idx = k;
+    }
+    fclose(f);
+  }
+  f = fopen(g_pmPath, "a");
+  if (!f) { elog("pmark: append open failed: %s", g_pmPath); return 0; }
+  GetLocalTime(&st);
+  fprintf(f, "%d %.3f %.3f %.3f %04d-%02d-%02d %02d:%02d:%02d\n",
+          idx + 1, ((V3*)hitbuf)->x, ((V3*)hitbuf)->y, ((V3*)hitbuf)->z,
+          st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond);
+  fclose(f);
+  elog("pmark: #%d (%.3f %.3f %.3f) -> %s",
+       idx + 1, ((V3*)hitbuf)->x, ((V3*)hitbuf)->y, ((V3*)hitbuf)->z, g_pmPath);
+  pm_load(1);
+  g_visDirty = 1;          /* 下一帧重画，新点立刻出现在游戏里 */
+  return 1;
+}
+
+/* 方向箭头：在 a->b 这条线的 62% 处画一个「>」形（两条短线），
+ * 世界坐标直接算，不用旋转 —— 网格只在可视化重建时做一次。 */
+static void edge_arrow(V3 a, V3 b) {
+  V3 d, tip, b1, b2, perp;
+  float len, pl;
+  d.x = b.x - a.x; d.y = b.y - a.y; d.z = b.z - a.z;
+  len = sqrtf(d.x * d.x + d.y * d.y + d.z * d.z);
+  if (len < 0.8f) return;                     /* 太短的边塞不下箭头 */
+  d.x /= len; d.y /= len; d.z /= len;
+  tip.x = a.x + d.x * len * 0.62f;
+  tip.y = a.y + d.y * len * 0.62f;
+  tip.z = a.z + d.z * len * 0.62f;
+  /* 侧向 = d × up；边接近竖直时退化，随便给个 X 轴 */
+  perp.x = d.z; perp.y = 0.0f; perp.z = -d.x;
+  pl = sqrtf(perp.x * perp.x + perp.z * perp.z);
+  if (pl < 0.2f) { perp.x = 1.0f; perp.y = 0.0f; perp.z = 0.0f; pl = 1.0f; }
+  perp.x /= pl; perp.z /= pl;
+  b1.x = tip.x - d.x * 0.30f + perp.x * 0.17f;
+  b1.y = tip.y - d.y * 0.30f;
+  b1.z = tip.z - d.z * 0.30f + perp.z * 0.17f;
+  b2.x = tip.x - d.x * 0.30f - perp.x * 0.17f;
+  b2.y = tip.y - d.y * 0.30f;
+  b2.z = tip.z - d.z * 0.30f - perp.z * 0.17f;
+  bs_line(tip, b1, 0.07f);
+  bs_line(tip, b2, 0.07f);
+}
+
 /* --- build / show ------------------------------------------------------- */
 static void vis_draw(void) {
   int i, g;
@@ -1903,11 +2127,42 @@ static void vis_draw(void) {
     bs_reset();
     for (i = 0; i < g_veN; i++) bs_line(g_vn[g_ve[i].a].p, g_vn[g_ve[i].b].p, 0.05f);
     vis_flush_mesh("vis_edges", 10, g_veN);
+    /* 单向边箭头（橙，slot 7）：双向边不画，所以一千多条边的图也不会糊。
+     * 这一层默认关着，只在 F2 菜单打开时由 edge_dir_sync() 打开。 */
+    g_edgeArrowGo = 0;
+    {
+      int c = 0;
+      bs_reset();
+      for (i = 0; i < g_veN; i++) {
+        V3 a, b;
+        if (!g_ve[i].dir) continue;
+        a = g_vn[g_ve[i].a].p;
+        b = g_vn[g_ve[i].b].p;
+        if (g_ve[i].dir == 2) { V3 t = a; a = b; b = t; }   /* dir=2：真正方向是 b->a */
+        edge_arrow(a, b);
+        c++;
+      }
+      if (c) {
+        int before = g_visObjN;
+        if (vis_flush_mesh("vis_edge_dir", 7, c) && g_visObjN > before)
+          g_edgeArrowGo = g_visObj[g_visObjN - 1];
+      }
+    }
+    g_edgeArrowOn = -1;
   }
   if (g_visJump && g_jN) {
     bs_reset();
     for (i = 0; i < g_jN; i++) bs_line(g_jA[i], g_jB[i], 0.10f);
     vis_flush_mesh("vis_jump", 4, g_jN);
+    /* 端点也画成小方块：跳链是「起点路点 + 落点路点」一对，只画线容易被当成普通连线 */
+    bs_reset();
+    for (i = 0; i < g_jN; i++) {
+      V3 h;
+      h.x = 0.20f; h.y = 0.20f; h.z = 0.20f;
+      bs_solid(g_jA[i], h);
+      bs_solid(g_jB[i], h);
+    }
+    vis_flush_mesh("vis_jump_pt", 4, g_jN * 2);
   }
   if (g_visTag && g_tpN) {
     bs_reset();
@@ -1959,6 +2214,21 @@ static void vis_draw(void) {
       if (c) vis_flush_mesh("vis_spawn", slot, c);
     }
   }
+  /* 玩家坐标记录：金色方块 + 按记录顺序连起来的折线（顺序一眼可见） */
+  if (g_visPm && g_pmN) {
+    bs_reset();
+    for (i = 0; i < g_pmN; i++) {
+      V3 h;
+      h.x = 0.22f; h.y = 0.22f; h.z = 0.22f;
+      bs_solid(g_pmP[i], h);
+    }
+    vis_flush_mesh("vis_pmarks", 14, g_pmN);
+    if (g_pmN > 1) {
+      bs_reset();
+      for (i = 1; i < g_pmN; i++) bs_line(g_pmP[i - 1], g_pmP[i], 0.06f);
+      vis_flush_mesh("vis_pmark_line", 14, g_pmN - 1);
+    }
+  }
 }
 
 static void vis_show(int on) {
@@ -1966,12 +2236,25 @@ static void vis_show(int on) {
   for (i = 0; i < g_visObjN; i++) if (g_visObj[i]) ((set_active_t)RVA(R_SETACTIVE))(g_visObj[i], (unsigned char)on, 0);
 }
 
+/* 单向边箭头只在 F2 菜单打开时显示：关菜单就藏起来，正常游玩画面干净。
+ * 状态没变就不碰 SetActive（每 tick 都会调）。 */
+static void edge_dir_sync(void) {
+  int want = (g_wpMenuOpen && !g_collectOnly) ? 1 : 0;
+  if (!g_edgeArrowGo || !uobj_live(g_edgeArrowGo)) { g_edgeArrowOn = -1; return; }
+  if (want == g_edgeArrowOn) return;
+  ((set_active_t)RVA(R_SETACTIVE))(g_edgeArrowGo, (unsigned char)want, 0);
+  g_edgeArrowOn = want;
+}
+
 static void vis_clear(void) {
   int i;
   for (i = 0; i < g_visObjN; i++) if (g_visObj[i]) ((destroy_t)RVA(R_DESTROY))(g_visObj[i], 0);
   g_visObjN = 0;
+  g_edgeArrowGo = 0;
+  g_edgeArrowOn = -1;
   g_vnN = g_veN = g_vfN = 0;
   g_nN = g_eN = g_jN = g_tpN = 0;
+  g_pmN = 0;
 }
 
 static void vis_rebuild(void) {
@@ -1990,8 +2273,10 @@ static void vis_rebuild(void) {
   /* 跳点 / 标签区走 FindObjectsOfType，不碰静态名单，各有一个自己的开关。 */
   if (g_visJump) read_jump(); else miss("vis_jump=off");
   if (g_visTag)  read_tags(); else miss("vis_tag=off");
+  if (g_visPm)   pm_load(1);  else g_pmN = 0;   /* 玩家坐标记录：读文件 */
   vis_draw();
   vis_show(1);
+  edge_dir_sync();          /* 刚重建的对象默认是 show 的，按菜单状态立刻纠正 */
   elog("vis: nodes=%d edges=%d features=%d (area=%d pos=%d crouch=%d guard=%d spawn=%d jump=%d tag=%d) badnode=%d badconn=%d badtr=%d missing=[%s]",
        g_vnN, g_veN, g_vfN, g_cArea, g_cPos, g_cCrouch, g_cGuard, g_cSpawn, g_cJump, g_cTag,
        g_navBadNode, g_navBadConn, g_badTr, g_miss);
@@ -2011,6 +2296,8 @@ static void vis_rebuild(void) {
 /* the scene changed: the old overlay objects were destroyed with the level */
 static void vis_scene_reset(void) {
   g_visObjN = 0;
+  g_edgeArrowGo = 0;
+  g_edgeArrowOn = -1;
   g_vnN = g_veN = g_vfN = 0;
   g_nN = g_eN = g_jN = g_tpN = 0;
   g_miss[0] = 0;
@@ -2020,6 +2307,9 @@ static void vis_scene_reset(void) {
   /* 可走面的 Mesh 对象随旧场景一起被销毁：指针作废，下一帧重建 */
   g_nmObjN = 0;
   g_nmDirty = 1;
+  /* 材质同样是"上一张图"的东西：旧图的 shader 会被游戏卸载，留着就是洋红。
+   * 换图一律丢掉，下一帧按新场景重新 Shader.Find + 上色（2026-11-20 修）。 */
+  mat_reset("scene change");
 }
 
 static void vis_toggle(void) {
@@ -2348,6 +2638,15 @@ static void nm_tick(void) {
     g_nmWireTri = g_nmWireVert = 0;
     return;
   }
+  /* 网格已经建好、但材质后来死了（换图资源卸载/被 GC）：整块重建一次，
+   * 否则屏幕上就是一片洋红三角网。 */
+  if (g_nmObjN && !mat_alive(g_matSlot[15])) {
+    elog("navmesh: material dead - rebuild");
+    nm_clear();
+    mat_drop(15);
+    g_matReady = 0;   /* 旧原型/旧 shader 可能一起没了，重新 mat_setup */
+    g_nmDirty = 1;
+  }
   if (g_nmObjN && !g_nmDirty) return;
   g_nmDirty = 0;
   nm_build();
@@ -2566,6 +2865,334 @@ static P find_cjk_font(void) {
   return 0;
 }
 
+/* ---- 方向罗盘（屏幕下方正中，汉字；刻意做成和工作台 3D 罗盘一个样子）----
+ * 和路点工作台（workbench/nav-studio-app.js）、3D 查看器（tools/navview.html）
+ * 的罗盘是同一套方向约定，改一处必须三处一起改：
+ *     北 = 世界 -Z（俯视 / 平面图的正上方）   东 = 世界 +X（右）
+ *     南 = 世界 +Z（下）                     西 = 世界 -X（左）
+ *
+ * 样子：
+ *   · 一圈**刻度**围成表盘（每 10° 一根：每 90° 金色长刻度、每 30° 亮短刻度、
+ *     其余小点）。刻度是「丨/|」这类竖线字形绕圆心摆出来的，所以天生是径向的。
+ *   · 表盘挂在「旋转容器」下面，容器绕 Z 转 = 圈在转：相机朝向 a（0=北、90=东）
+ *     时容器转 a 度，当前那一格正好转到正上方。
+ *   · 北/东/南/西 四个汉字**不挂在容器里、也从不旋转**：位置按「方位角 - 相机
+ *     朝向」摆到圈上（compass_move_rose），字本身永远是正的。
+ *     2026-11-20 用户反馈：以前四个字跟着容器一起转，转到东南就必须歪着头看，
+ *     截图里 东/南 就是躺着的 —— 所以改成「刻度转、字不转」。
+ *   · 最靠近正上方的那一格点亮成金色（其余灰蓝），圈心写八向朝向（不转）
+ *   · 圈外正上方一个金色三角 = 指针
+ * 每帧只改「容器一个 eulerAngles + 四个字的 anchoredPosition」，不重建文字网格，
+ * 16 ms 定时器里节流到 ~30 Hz 也几乎不花 CPU。
+ * 开关：ucf_mod.json 的 vis_compass（默认开），游戏内 Ctrl+Shift+7 随时切。
+ * 与可视化总开关无关：visualizer 关着也照样显示。 */
+#define COMPASS_CY      112.0f  /* 圈心离屏幕下沿的像素 */
+#define COMPASS_LABEL_R 44.0f   /* 方位字半径（在刻度圈里面） */
+#define COMPASS_PTR_DY  84.0f   /* 金三角在圈心上方多少像素（贴在刻度圈外沿） */
+#define COMPASS_TICK_R  64.0f   /* 刻度圈半径 */
+#define COMPASS_TICKS   36      /* 刻度数：每 10° 一根（90/180/270 处正好是直角刻度） */
+static const char* const g_dirCn[8] = { "北","东北","东","东南","南","西南","西","西北" };
+static const char* const g_dirEn[8] = { "N","NE","E","SE","S","SW","W","NW" };
+static const COL COL_DIR_ROSE = { 0.66f, 0.75f, 0.86f, 1.0f };   /* 方位字：灰蓝（同工作台 #a8bed6） */
+static const COL COL_DIR_HEAD = { 1.00f, 0.82f, 0.29f, 1.0f };   /* 当前朝向：金（同工作台 #ffd24a） */
+static const COL COL_DIR_CENT = { 0.91f, 0.95f, 1.00f, 1.0f };   /* 圈心朝向字（同工作台 #e8f2ff） */
+static const COL COL_DIR_RING = { 0.49f, 0.62f, 0.77f, 0.45f };   /* 细圈 ○ */
+static P g_compRoot;        /* 罗盘根：显隐只动它一个 */
+static P g_compRing;        /* 旋转容器：四个方位字挂它下面，转它 = 圈在转 */
+static P g_compRose[4];     /* 北 东 南 西（挂在 g_compRing 下，本地坐标不动） */
+static P g_compHead;        /* 圈心：当前朝向（不转） */
+static P g_compPtr;         /* 顶部金色三角（不转） */
+static float g_compRot = -999.0f;  /* 上次写进容器的 Z 旋转（度，-999 = 还没写） */
+static int g_compDir = -1;  /* 上次写进圈心的扇区（0=北 … 7=西北，-1=还没写） */
+static int g_compLit = -1;  /* 上次点亮的是哪个方位字（0=北 1=东 2=南 3=西） */
+static int g_compOn;        /* 现在是不是显示着（省掉重复 SetActive） */
+
+static void overlay_reset(void);
+
+/* ---- 临时实验开关（2026-11-20 排查「进图闪退」用，定位完就删）---------- */
+static int dbg_env(const char* name) {
+  char v[32];
+  DWORD n;
+  memset(v, 0, sizeof v);
+  n = GetEnvironmentVariableA(name, v, (DWORD)sizeof v);
+  return (n > 0 && n < (DWORD)sizeof v && v[0] && v[0] != '0') ? 1 : 0;
+}
+static int g_dbgRead;
+static int g_dbgNoEmpty, g_dbgInactive, g_dbgNoDots, g_dbgNoCompass, g_dbgNoSetText;
+static void dbg_init(void) {
+  if (g_dbgRead) return;
+  g_dbgRead = 1;
+  g_dbgNoEmpty   = dbg_env("UCF_UI_NOEMPTY");
+  g_dbgInactive  = dbg_env("UCF_UI_INACTIVE");
+  g_dbgNoDots    = dbg_env("UCF_UI_NODOTS");
+  g_dbgNoCompass = dbg_env("UCF_UI_NOCOMPASS");
+  g_dbgNoSetText = dbg_env("UCF_UI_NOSETTEXT");
+  elog("ui: dbg flags noempty=%d inactive=%d nodots=%d nocompass=%d nosettext=%d",
+       g_dbgNoEmpty, g_dbgInactive, g_dbgNoDots, g_dbgNoCompass, g_dbgNoSetText);
+}
+
+static void compass_reset(void) {
+  int i;
+  g_compRoot = 0;
+  g_compRing = 0;
+  for (i = 0; i < 4; i++) g_compRose[i] = 0;
+  g_compHead = 0;
+  g_compPtr = 0;
+  g_compRot = -999.0f;
+  g_compDir = -1;
+  g_compLit = -1;
+  g_compOn = 0;
+}
+
+static void compass_text(P t, const char* s, const COL* col) {
+  if (!t || !uobj_live(t)) return;
+  ((set_txt_t)RVA(R_TEXT_SETTEXT))(t, x_string_new(s), 0);
+  if (col) ((set_col_t)RVA(R_GRAPHIC_COL))(t, *col, 0);
+}
+
+/* 静默版：刻度有 36 根，逐根打 compass: text 会把日志刷爆 */
+static void txt_quiet(P t, const char* s, const COL* col) {
+  dbg_init();
+  if (g_dbgNoSetText) return;
+  if (g_dbgNoEmpty && (!s || !s[0])) return;
+  if (!t || !uobj_live(t)) return;
+  ((set_txt_t)RVA(R_TEXT_SETTEXT))(t, x_string_new(s), 0);
+  if (col) ((set_col_t)RVA(R_GRAPHIC_COL))(t, *col, 0);
+}
+
+/* 四个方位字绕圈心摆位：bearing = 方位角(0=北) - 相机朝向 a。
+ * 只改 anchoredPosition，**从不改 rotation** —— 这就是「字永远是正的」。
+ * 屏幕坐标：x 右、y 上；bearing 从正上方顺时针量。 */
+static void compass_move_rose(float a) {
+  int i;
+  V2 v;
+  for (i = 0; i < 4; i++) {
+    P tr;
+    float b, rad;
+    if (!g_compRose[i] || !uobj_live(g_compRose[i])) continue;
+    tr = comp_tr(g_compRose[i]);
+    if (!tr) continue;
+    b = (float)i * 90.0f - a;
+    rad = b * 0.0174533f;
+    v.x = sinf(rad) * COMPASS_LABEL_R;
+    v.y = cosf(rad) * COMPASS_LABEL_R;
+    ((set_v2_t)RVA(R_RT_APOS))(tr, v, 0);
+  }
+}
+
+/* 所有零件都挂在 g_compRoot 下，显隐只动根物体一次 */
+static void compass_show(int on) {
+  P go;
+  if (!g_compRoot || !uobj_live(g_compRoot)) { g_compOn = 0; return; }
+  go = ((get_go_t)RVA(R_GETGO))(g_compRoot, 0);
+  if (go) ((set_active_t)RVA(R_SETACTIVE))(go, (unsigned char)(on ? 1 : 0), 0);
+  g_compOn = on ? 1 : 0;
+}
+
+/* 视线 → 八向扇区（0 = 北）。只看水平分量，抬头低头不影响方向。 */
+static int compass_bucket(const V3* fwd) {
+  float a = atan2f(fwd->x, -fwd->z) * 57.29578f;
+  int b;
+  if (!(a == a)) return -1;                  /* NaN：相机还没就位 */
+  a += 22.5f;
+  a = fmodf(a, 360.0f);
+  if (a < 0.0f) a += 360.0f;
+  b = (int)(a / 45.0f) % 8;
+  return b;
+}
+
+/* 一圈转到位：容器绕 Z 转 a 度 → 当前朝向那一格正好在正上方 */
+static void compass_update(void) {
+  V3 pos, fwd, eul;
+  float a, best = 1e9f;
+  int b, i, lit = 0;
+  if (!g_compHead || !uobj_live(g_compHead)) return;
+  if (!cam_ray(&pos, &fwd)) return;
+  a = atan2f(fwd.x, -fwd.z) * 57.29578f;      /* 0 = 北，90 = 东：和工作台/游戏里同一个方向约定 */
+  if (!(a == a)) return;                       /* NaN：相机还没就位 */
+  a -= floorf(a / 360.0f) * 360.0f;            /* 归到 [0,360) */
+  {
+    /* 节流：转不到 0.08° 就一次都不算。表盘（刻度）和四个字共用一个阈值，
+     * 这样「刻度转到哪、字就摆到哪」永远同步。 */
+    float d = a - g_compRot;
+    while (d > 180.0f) d -= 360.0f;
+    while (d < -180.0f) d += 360.0f;
+    if (fabsf(d) > 0.08f) {
+      if (g_compRing && uobj_live(g_compRing)) {
+        P tr = comp_tr(g_compRing);            /* 组件 → Transform 必须用 Component.get_transform */
+        if (tr) {
+          eul.x = 0.0f; eul.y = 0.0f; eul.z = a;
+          ((set_pos_t)RVA(R_SET_EULER))(tr, eul, 0);
+        }
+      }
+      compass_move_rose(a);                    /* 字只挪位置、不转，见 compass_move_rose */
+      g_compRot = a;
+    }
+  }
+  /* 离正上方最近的方位字点亮（正好 45° 时取先出现的那个，和网页端同一规则） */
+  for (i = 0; i < 4; i++) {
+    float d = a - i * 90.0f;
+    while (d > 180.0f) d -= 360.0f;
+    while (d < -180.0f) d += 360.0f;
+    if (fabsf(d) < best) { best = fabsf(d); lit = i; }
+  }
+  b = compass_bucket(&fwd);
+  if (b < 0) return;
+  if (b == g_compDir && lit == g_compLit) return;
+  g_compDir = b;
+  if (lit != g_compLit) {
+    g_compLit = lit;
+    for (i = 0; i < 4; i++)
+      compass_text(g_compRose[i], g_cjk ? g_dirCn[i * 2] : g_dirEn[i * 2],
+                   i == lit ? &COL_DIR_HEAD : &COL_DIR_ROSE);
+  }
+  compass_text(g_compHead, g_cjk ? g_dirCn[b] : g_dirEn[b], &COL_DIR_CENT);
+}
+
+/* 挂在 UCF_HUD 这张 Canvas 下：锚点 = 屏幕下沿正中，锚点坐标是像素。
+ * 结构：根 → { 表盘小点 ×32（不转）, 旋转容器 → 四个方位字, 圈心朝向, 指针 }
+ * 建的顺序 = 绘制顺序，所以小点在字下面。 */
+static void compass_build(P canvasTr) {
+  static const float lx[4] = { 0.0f, COMPASS_LABEL_R, 0.0f, -COMPASS_LABEL_R };   /* 北 东 南 西 */
+  static const float ly[4] = { COMPASS_LABEL_R, 0.0f, -COMPASS_LABEL_R, 0.0f };
+  static const char* const nm[4] = { "UCF_HUD_DirN", "UCF_HUD_DirE", "UCF_HUD_DirS", "UCF_HUD_DirW" };
+  const char* dot = "|";
+  const char* minor = "·";
+  P rootTr = 0, ringTr = 0;
+  int i;
+  compass_reset();
+  if (!canvasTr) return;
+
+  /* 根：空 Text 只当 RectTransform 用；显隐、定位都动它 */
+  g_compRoot = mk_text_ui(canvasTr, "UCF_HUD_DirRoot", 0.5f, 0.0f, 0.5f, 0.5f,
+                          0.0f, COMPASS_CY, 8.0f, 8.0f, 10);
+  if (!g_compRoot) { elog("compass: root text failed"); return; }
+  root_put(g_compRoot);
+  compass_text(g_compRoot, "", 0);
+  rootTr = comp_tr(g_compRoot);   /* 传 GameObject 的 get_transform 会把 Text* 当 GameObject* 用 → 崩 */
+
+  /* 旋转容器：只装**刻度**。转它 = 表盘在转，刻度天然是径向的。 */
+  elog("compass: stage ring");
+  g_compRing = mk_text_ui(rootTr ? rootTr : canvasTr, "UCF_HUD_DirRing", 0.5f, 0.5f, 0.5f, 0.5f,
+                          0.0f, 0.0f, 8.0f, 8.0f, 10);
+  if (g_compRing) {
+    root_put(g_compRing);
+    compass_text(g_compRing, "", 0);
+    ringTr = comp_tr(g_compRing);
+  }
+  elog("compass: stage ticks ringTr=%p", ringTr);
+
+  /* 刻度圈：每 10° 一根。竖线字形绕圆心摆 + 各自转成径向：
+   *   每 90°（0/90/180/270）金色长刻度，每 30° 亮短刻度，其余小点。 */
+  if (g_guiFont && ((has_char_t)RVA(R_FONT_HASCHAR))(g_guiFont, 0x4E28, 0)) dot = "丨";
+  else if (g_guiFont && ((has_char_t)RVA(R_FONT_HASCHAR))(g_guiFont, 0x007C, 0)) dot = "|";
+  else dot = ".";   /* 字体里连竖线都没有（几乎不可能）：退化成小点 */
+  if (!(g_guiFont && ((has_char_t)RVA(R_FONT_HASCHAR))(g_guiFont, 0x00B7, 0))) minor = ".";
+  elog("compass: stage ticks (%d, bar='%s')", COMPASS_TICKS, dot);
+  for (i = 0; i < COMPASS_TICKS && !g_dbgNoDots; i++) {
+    float deg = (float)i * (360.0f / (float)COMPASS_TICKS);
+    float rad = deg * 0.0174533f;
+    int cardinal = ((i % (COMPASS_TICKS / 4)) == 0);    /* 0 / 90 / 180 / 270 */
+    int major = ((i % (COMPASS_TICKS / 12)) == 0);      /* 每 30° */
+    const char* glyph = major ? dot : minor;
+    P t = mk_text_ui(ringTr ? ringTr : canvasTr, "UCF_HUD_DirTick", 0.5f, 0.5f, 0.5f, 0.5f,
+                     sinf(rad) * COMPASS_TICK_R, cosf(rad) * COMPASS_TICK_R,
+                     16.0f, 18.0f, cardinal ? 15 : (major ? 12 : 10));
+    if (!t) continue;
+    ((set_int1_t)RVA(R_TEXT_ALIGN))(t, 4, 0);           /* MiddleCenter */
+    root_put(t);
+    txt_quiet(t, glyph, cardinal ? &COL_DIR_HEAD : (major ? &COL_DIR_ROSE : &COL_DIR_RING));
+    {
+      P tr = comp_tr(t);
+      V3 e;
+      if (tr) {
+        e.x = 0.0f; e.y = 0.0f; e.z = -deg;             /* 竖线转成「指向圆心」的径向刻度 */
+        ((set_pos_t)RVA(R_SET_EULER))(tr, e, 0);
+      }
+    }
+  }
+
+  /* 四个方位字：挂根物体、**从不旋转**（跟着容器转会变成截图里那种歪字），
+   * 位置由 compass_move_rose() 每帧按「方位角 - 朝向」摆到圈上。 */
+  elog("compass: stage labels");
+  for (i = 0; i < 4; i++) {
+    P t = mk_text_ui(rootTr ? rootTr : canvasTr, nm[i], 0.5f, 0.5f, 0.5f, 0.5f,
+                     lx[i], ly[i], 56.0f, 20.0f, 13);
+    if (!t) continue;
+    ((set_int1_t)RVA(R_TEXT_ALIGN))(t, 4, 0);           /* MiddleCenter */
+    g_compRose[i] = t;
+    root_put(t);
+    compass_text(t, g_cjk ? g_dirCn[i * 2] : g_dirEn[i * 2], &COL_DIR_ROSE);
+  }
+
+  /* 圈心朝向（不转）+ 顶部金三角指针（不转） */
+  elog("compass: stage head");
+  g_compHead = mk_text_ui(rootTr ? rootTr : canvasTr, "UCF_HUD_DirHead", 0.5f, 0.5f, 0.5f, 0.5f,
+                          0.0f, 0.0f, 60.0f, 20.0f, 15);
+  if (g_compHead) {
+    ((set_int1_t)RVA(R_TEXT_ALIGN))(g_compHead, 4, 0);
+    root_put(g_compHead);
+    compass_text(g_compHead, "--", &COL_DIR_CENT);   /* 紧接着的 compass_update 会写成真朝向 */
+  }
+  {
+    const char* ptr = 0;
+    if (g_guiFont && ((has_char_t)RVA(R_FONT_HASCHAR))(g_guiFont, 0x25B2, 0)) ptr = "▲";
+    else if (g_guiFont && ((has_char_t)RVA(R_FONT_HASCHAR))(g_guiFont, 0x25B3, 0)) ptr = "△";
+    else ptr = "^";
+    g_compPtr = mk_text_ui(rootTr ? rootTr : canvasTr, "UCF_HUD_DirPtr", 0.5f, 0.5f, 0.5f, 0.5f,
+                           0.0f, COMPASS_PTR_DY, 34.0f, 24.0f, 18);
+    if (g_compPtr) {
+      ((set_int1_t)RVA(R_TEXT_ALIGN))(g_compPtr, 4, 0);
+      root_put(g_compPtr);
+      compass_text(g_compPtr, ptr, &COL_DIR_HEAD);
+    }
+  }
+
+  g_compOn = 1;
+  g_compRot = -999.0f;
+  g_compDir = -1;
+  g_compLit = -1;
+  elog("compass: stage update");
+  compass_update();                    /* 立刻写一次，别等下一个 tick */
+  elog("compass: stage update done");
+  if (!g_visCompass) compass_show(0);
+  elog("compass: built (%s) root=%p dot='%s' x%d ring=%p rose=%p head=%p ptr='%s'",
+       g_cjk ? "CJK" : "ASCII", g_compRoot, dot, COMPASS_TICKS, g_compRing,
+       g_compRose[0], g_compHead, g_compPtr ? "set" : "none");
+}
+
+/* 每 tick（navfix 的 250 ms 心跳）跑一次：管建 / 显示 / 隐藏 */
+static void compass_tick(void) {
+  if (!g_visCompass) {
+    if (g_compOn) compass_show(0);
+    return;
+  }
+  if (!g_compHead || !uobj_live(g_compHead)) return;   /* 还没建 / 换图重建中 */
+  if (!g_compOn) compass_show(1);
+  compass_update();
+}
+
+/* 转镜头时用的快 tick（navfix 的 16 ms 定时器，节流到 ~30 Hz）：
+ * 只做「容器转几度 + 换字/换色」，对象没建好时立刻返回。 */
+void editor_compass_tick(void) {
+  static int spin;
+  if (!g_visCompass || !g_compOn) return;
+  if (!g_compRing || !uobj_live(g_compRing)) return;
+  if (spin++ & 1) return;
+  compass_update();
+}
+
+static void compass_toggle(void) {
+  g_visCompass = !g_visCompass;
+  elog("compass: %s (vis_compass)", g_visCompass ? "ON" : "OFF");
+  if (!g_visCompass) { compass_show(0); return; }
+  if (!g_compHead || !uobj_live(g_compHead)) {          /* 画布还没建：整块重建 */
+    overlay_reset();
+    overlay_refresh();
+  }
+  compass_tick();
+}
+
 static int overlay_init(void) {
   P canvasGo, canvasTr, comp;
   if (g_cat) return 1;
@@ -2588,13 +3215,16 @@ static int overlay_init(void) {
       }
     }
   }
-  if (!g_guiFont && g_fontType) {
-    P p1 = x_string_new("Arial.ttf"), p2 = x_string_new("LegacyRuntime.ttf");
-    g_guiFont = ((builtin_t)RVA(R_RES_BUILTIN))(g_fontType, p1, 0);
-    if (!g_guiFont) g_guiFont = ((builtin_t)RVA(R_RES_BUILTIN))(g_fontType, p2, 0);
-    if (g_guiFont) g_cjk = 0;
+  /* 2026-11-20：删掉「退回 Resources.GetBuiltinResource(Arial.ttf)」这条兜底。
+   * 场景里一个 UGUI Text 都没有时（车测 / 直进图 LoadScene 的瞬间，
+   * find_cjk_font 会报 "no cjk font among 0 Text objects"），那条兜底拿到的
+   * Font 去 SetFont + SetText 会让 UnityPlayer 在 +0x76019d 直接 0xC0000005
+   * （读 0xfffffc4a）—— 2026-11-19 与 2026-11-20 两次车测崩的都是这条路径。
+   * 现在改成：这一次不建覆盖层，等场景 UI 起来（下一个 2 s 心跳）再建。 */
+  if (!g_guiFont) {
+    elog("ui: no font in scene yet (0 Text objects) - overlay skipped, retry on next tick");
+    return 0;
   }
-  if (!g_guiFont) { elog("ui: no usable font"); return 0; }
   if (x_gchandle_new && g_fontRooted != g_guiFont) {
     if (g_fontHandle && x_gchandle_free) x_gchandle_free((P)g_fontHandle);
     g_fontHandle = x_gchandle_new(g_guiFont, 0);
@@ -2607,30 +3237,48 @@ static int overlay_init(void) {
   if (!comp) { elog("ui: Canvas AddComponent failed"); return 0; }
   ((set_int1_t)RVA(R_CANVAS_MODE))(comp, 0, 0);            /* ScreenSpaceOverlay */
   ((set_int1_t)RVA(R_CANVAS_SORT))(comp, 32000, 0);
+  dbg_init();
+  if (g_dbgInactive) ((set_active_t)RVA(R_SETACTIVE))(canvasGo, 0, 0);
   canvasTr = get_tr(canvasGo);
 
   /* left-edge legend: three horizontal rows, stacked vertically */
   g_cat = mk_text_ui(canvasTr, "UCF_HUD_Cats", 0.0f, 0.5f, 0.0f, 0.5f, 14.0f, -140.0f, 520.0f, 132.0f, 26);
   root_put(g_cat);
   if (g_cat) {
+    elog("ui: step cat-align");
     ((set_int1_t)RVA(R_TEXT_ALIGN))(g_cat, 3, 0);   /* MiddleLeft */
+    elog("ui: step cat-go");
     g_catGo = ((get_go_t)RVA(R_GETGO))(g_cat, 0);
+    elog("ui: step cat-done");
   }
   /* 路点菜单：左中一列，默认空；F2 / 长按 E 才填内容 */
   g_menu = mk_text_ui(canvasTr, "UCF_HUD_Menu", 0.0f, 0.5f, 0.0f, 0.5f, 14.0f, 30.0f, 560.0f, 400.0f, 16);
   root_put(g_menu);
   if (g_menu) {
+    elog("ui: step menu-align");
     ((set_int1_t)RVA(R_TEXT_ALIGN))(g_menu, 3, 0);   /* MiddleLeft */
+    elog("ui: step menu-go");
     g_menuGo = ((get_go_t)RVA(R_GETGO))(g_menu, 0);
+    elog("ui: step menu-done");
   }
+  /* 方向罗盘（东南西北）：和出生点图例共用这张 Canvas，开关见 vis_compass */
+  dbg_init();
+  elog("ui: step compass-begin");
+  if (!g_dbgNoCompass) compass_build(canvasTr);
+  elog("ui: step compass-done");
   /* 记下 Transform 的类对象：comp_pos 用它区分「真 Transform」和野指针 */
   if (!g_trKlass && g_cat) {
     P t = comp_tr(g_cat);
     if (t && mem_ok(t, 0x10) && uobj_live(t)) {
       g_trKlass = *(P*)t;
-      elog("ui: transform klass=%p", g_trKlass);
+      /* UI 的 transform 是 RectTransform，普通 GameObject 的是 Transform（父类）。
+       * 只记 UI 那个类会让 comp_pos 把所有非 UI 组件都当成野指针：
+       * 跳跃/蹲守/守区一个都读不出来（日志里 badtr 恰好等于跳链个数就是这么来的）。 */
+      g_trBaseKlass = x_class_get_parent ? x_class_get_parent(g_trKlass) : 0;
+      elog("ui: transform klass=%p base=%p", g_trKlass, g_trBaseKlass);
     }
   }
+  if (g_dbgInactive) ((set_active_t)RVA(R_SETACTIVE))(canvasGo, 1, 0);
   elog("ui: ready font=%p (%s) cats=%p", g_guiFont, g_cjk ? "game/CJK" : "builtin/ASCII", g_cat);
   return 1;
 }
@@ -2688,7 +3336,10 @@ static void overlay_refresh(void) {
   cat_refresh();
 }
 
-static void overlay_reset(void) { g_cat = 0; g_catGo = 0; g_menu = 0; g_menuGo = 0; }
+static void overlay_reset(void) {
+  g_cat = 0; g_catGo = 0; g_menu = 0; g_menuGo = 0;
+  compass_reset();          /* 罗盘挂在同一张 Canvas 上，一起丢 */
+}
 
 /* ---- marker store ------------------------------------------------------- */
 static int add_mk(int type, V3 p, int aid, int parent, int prm, P go, P comp, P vis) {
@@ -3057,6 +3708,20 @@ int editor_crouch_made(void) {
   return c;
 }
 
+/* 玩家坐标记录点：导出给 navfix，用来在记录位置直接造蹲守点
+ * （用户站在箱子顶/路口记一条，人机就会把那里当目标走过去）。 */
+int editor_pm_count(void) {
+  return g_pmN;
+}
+
+int editor_pm_get(int idx, float* x, float* y, float* z) {
+  if (idx < 0 || idx >= g_pmN) return 0;
+  if (x) *x = g_pmP[idx].x;
+  if (y) *y = g_pmP[idx].y;
+  if (z) *z = g_pmP[idx].z;
+  return 1;
+}
+
 void editor_on_scene(void* astar) {
   if (!astar) return;
   if (!ed_init()) return;
@@ -3069,6 +3734,7 @@ void editor_on_scene(void* astar) {
   elog("scene: ui reset");
   vis_scene_reset();
   elog("scene: vis reset");
+  ghost_reset();          /* 预置虚线框/虚线点随场景一起没了，网格缓存也要重来 */
   roots_clear();          /* 上一张图的对象已经销毁，句柄还回去 */
   g_rootsFull = 0;
   g_sceneAge = 0;
@@ -3196,8 +3862,13 @@ static void set_collect_only(int on) {
 #define NDEL 2
 #define EADD 3
 #define EDEL 4
+#define JADD 5   /* jump add：进图套完点和边后建 Bot_JumpLink（跳箱 / 上下层） */
 
 
+/* 被禁用的点会被挪到这么深的地下：游戏用 GetNearest(pos)（NNConstraint.None，
+ * 不看可走性）取人机脚下最近的节点，死点留在原地就会一直赢过真正可走的点。
+ * 挪走之后按原坐标还能找回它（nav_find_any 会试着加回这个高度）。 */
+#define NAV_DEAD_DY 20000.0f
 static int nav_count(P g) { return g ? *(int*)((char*)g + 0xEC) : 0; }
 static P nav_arr(P g) { return g ? *(P*)((char*)g + 0xE8) : 0; }
 static P nav_node(P g, int i) {
@@ -3250,6 +3921,12 @@ static int nav_find_any(P g, const V3* p, float maxd) {
     if (!nd) continue;
     nav_pos(nd, &q);
     d = nav_d2(p, &q);
+    /* 死点被挪到地下：还没超出容差就再按原高度试一次，撤销/重套才找得到它 */
+    if (d >= bestd && !nav_walk(nd)) {
+      V3 q2 = q;
+      q2.y += NAV_DEAD_DY;
+      d = nav_d2(p, &q2);
+    }
     if (d < bestd) { bestd = d; best = i; }
   }
   return best;
@@ -3310,7 +3987,7 @@ static int nav_needs_apply(P g) {
   for (i = 0; i < NAV_EXP_MAX; i++) g_navExp[i].a = -1;
   if (g_nedGrow && g_packName[0]) {
     /* grow：原生点本来就永久标死，没有「原生点复活」这回事；节点数已由上面的
-     * g_nedExpect 兜住。这里只核对边，省掉 n×M 的坐标扫描（grow 图比 blank 大）。 */
+     * g_nedExpect 兜住。这里只核对边，省掉 n×M 的坐标扫描（grow 图节点更多）。 */
     int j;
     if (!g_nedN) return 0;
     for (j = 0; j < g_nedN; j++) {
@@ -3323,35 +4000,10 @@ static int nav_needs_apply(P g) {
     }
     return nav_exp_check(g);
   }
-  if (g_nedBlank && g_packName[0]) {
-    /* 空白底图：可走的点必须全是清单里的 node add；原生点只要有一个又活了就重套。 */
-    int j;
-    for (i = 0; i < n; i++) {
-      P nd = nav_node(g, i);
-      V3 p;
-      int hitAdd = 0;
-      if (!nd || !nav_walk(nd)) continue;
-      nav_pos(nd, &p);
-      for (j = 0; j < g_nedN; j++) {
-        if (g_ned[j].kind != NADD) continue;
-        if (nav_d2(&g_ned[j].a, &p) <= 0.1225f) { hitAdd = 1; break; }
-      }
-      if (!hitAdd) return 1;
-    }
-    for (j = 0; j < g_nedN; j++) {
-      NAVED* e = &g_ned[j];
-      if (e->kind == NADD && nav_find(g, &e->a, 0.35f) < 0) return 1;
-      if (e->kind != EADD && e->kind != EDEL) continue;
-      ia = nav_find(g, &e->a, 0.35f);
-      ib = nav_find(g, &e->b, 0.35f);
-      if (ia < 0 || ib < 0) return 1;
-      if (nav_exp_record(e, ia, ib, e->kind == EADD) < 0) return 1;
-    }
-    return nav_exp_check(g);
-  }
   if (!g_nedN) return 0;
   for (i = 0; i < g_nedN; i++) {
     NAVED* e = &g_ned[i];
+    if (e->kind == JADD) continue;        /* 跳链建完就留着，不参与边的核对 */
     if (e->kind == NADD) {
       if (nav_find_any(g, &e->a, 0.35f) < 0) return 1;
     } else if (e->kind == NDEL) {
@@ -3492,8 +4144,14 @@ static void nav_refresh(P g) {
 /* 彻底断开一个节点（不可走 + 清连接 + 清别人的反向引用） */
 static void nav_kill_node(P g, P nd) {
   int i, n = nav_count(g);
+  V3 p;
   nav_set_walk(nd, 0);
   nav_conn_clear(nd);
+  /* 就地删掉的点也挪走：游戏取脚下最近节点不看可走性，留在原地会挡人机的路。
+   * 撤销时 nav_undo 会把坐标写回来。 */
+  nav_pos(nd, &p);
+  p.y -= NAV_DEAD_DY;
+  nav_put_pos(nd, &p);
   for (i = 0; i < n; i++) {
     P q = nav_node(g, i);
     if (q && q != nd && nav_conn_has(q, nd)) nav_conn_set(q, nd, 0);
@@ -3522,14 +4180,22 @@ static void nav_fp(char* out, int cap) {
     P nd = nav_node(g, i);
     V3 p;
     if (!nd) continue;
-    nav_pos(nd, &p);
+    /* grow 会把禁用掉的原生点挪到地下，指纹要用快照里的原版坐标，否则换了值 */
+    if (g_navBase && g_navBaseG == g && i < g_navBaseN) p = g_navBase[i].pos;
+    else nav_pos(nd, &p);
     xr ^= pt_hash(&p, 0);
   }
   sprintf(out, "n%d-%016llx", n, xr);
   (void)cap;
 }
-/* 0 节点图（飓风危城）：只有 grow 包能套——它不借原生槽位。
- * 进图初期图可能还没扫出来，所以只在「测试包 + 文件里有 grow」时放行，
+/* 整行 token：line 以 tok 开头，后面就是行尾或空白（防止 "grown" 之类误判）。 */
+static int nav_tok(const char* line, const char* tok) {
+  size_t n = strlen(tok);
+  return !strncmp(line, tok, n) &&
+         (line[n] == 0 || line[n] == ' ' || line[n] == '\r' || line[n] == '\n');
+}
+/* 0 节点图（飓风危城）：只有空白地图（grow）能套——它不需要原生槽位。
+ * 进图初期图可能还没扫出来，所以只在「测试包 + 文件里有 grow/keep」时放行，
  * 其它 0 节点情况继续等下一帧。 */
 static int nav_zero_grow_ready(void) {
   char path[MAX_PATH], line[64];
@@ -3541,7 +4207,10 @@ static int nav_zero_grow_ready(void) {
   f = fopen(path, "r");
   if (!f) return 0;
   while (fgets(line, sizeof line, f)) {
-    if (!strncmp(line, "grow", 4)) { grow = 1; break; }
+    if (nav_tok(line, "grow") || nav_tok(line, "keep") || nav_tok(line, "blank")) {
+      grow = 1;
+      break;
+    }
   }
   fclose(f);
   return grow;
@@ -3550,6 +4219,7 @@ static void nav_save(void) {
   FILE* f;
   int i;
   int blank = g_nedBlank && g_packName[0];
+  int keep = g_nedKeep && g_packName[0];
   if (!g_nedPath[0]) return;
   /* 四版纪律：正式版 nav\ 只允许控制台从 ② 开发版推过来，游戏内不许直接写 ③。
    * 想边玩边改就先选一个测试包（④ packs），或去网页编辑器改 ②。 */
@@ -3561,18 +4231,21 @@ static void nav_save(void) {
     }
     return;
   }
-  if (!g_nedN && !blank) { DeleteFileA(g_nedPath); return; }
+  if (!g_nedN && !blank && !keep) { DeleteFileA(g_nedPath); return; }
   f = fopen(g_nedPath, "w");
   if (!f) { elog("naved: save failed %s", g_nedPath); return; }
   fprintf(f, "# ucf-navedit v1 fp=%s\n", g_nedFp);
-  if (blank) fprintf(f, "blank\n");
-  if (blank && g_nedGrow) fprintf(f, "grow\n");
+  if (blank) fprintf(f, "grow\n");   /* 空白地图 = grow（不再写 blank 兼容行） */
+  if (keep) fprintf(f, "keep\n");    /* keep 自带 grow 语义，不写 grow */
   for (i = 0; i < g_nedN; i++) {
     NAVED* e = &g_ned[i];
     if (e->kind == NADD)
       fprintf(f, "node add %.3f %.3f %.3f\n", e->a.x, e->a.y, e->a.z);
     else if (e->kind == NDEL)
       fprintf(f, "node del %.3f %.3f %.3f\n", e->a.x, e->a.y, e->a.z);
+    else if (e->kind == JADD)
+      fprintf(f, "jump add %.3f %.3f %.3f %.3f %.3f %.3f\n",
+              e->a.x, e->a.y, e->a.z, e->b.x, e->b.y, e->b.z);
     else {
       const char* verb = "add";
       if (e->kind == EDEL) verb = e->dir == 1 ? "delout" : (e->dir == 2 ? "delin" : "del");
@@ -3583,8 +4256,9 @@ static void nav_save(void) {
     }
   }
   fclose(f);
-  elog("naved: saved %d edits -> %s%s%s", g_nedN, g_nedPath,
-       blank ? " (blank base)" : "", (blank && g_nedGrow) ? " [grow]" : "");
+  elog("naved: saved %d edits -> %s%s%s%s", g_nedN, g_nedPath,
+       blank ? " (blank base)" : "", (blank && g_nedGrow) ? " [grow]" : "",
+       keep ? " [keep native]" : "");
 }
 static void nav_edit_load(const char* path) {
   FILE* f = fopen(path, "r");
@@ -3593,6 +4267,7 @@ static void nav_edit_load(const char* path) {
   g_redoN = 0;
   g_nedBlank = 0;
   g_nedGrow = 0;
+  g_nedKeep = 0;
   if (!f) return;
   while (fgets(line, sizeof(line), f)) {
     NAVED e;
@@ -3600,18 +4275,18 @@ static void nav_edit_load(const char* path) {
     float x, y, z, x2, y2, z2;
     char k1[16];
     if (line[0] == '#' || line[0] == '\n') continue;
-    /* blank：测试包专用。先把原生图整张禁掉，文件里的 node add / edge add 才是唯一路线。 */
-    if (!strncmp(line, "blank", 5) &&
-        (line[5] == 0 || line[5] == '\r' || line[5] == '\n' || line[5] == ' ')) {
+    /* 空白地图（grow）：原生点全禁 + AddNode 新建，文件里的 node add / edge add
+     * 就是进图后的全部路线。旧的 blank 写法等价于 grow（借槽位那套已经删掉了），
+     * 照旧认，老包和网页编辑器写的文件不用改。只有测试包才允许替换底图。 */
+    if (nav_tok(line, "grow") || nav_tok(line, "blank")) {
+      g_nedGrow = 1;
       g_nedBlank = 1;
       continue;
     }
-    /* grow：blank 的加强版——原生点标死后「新建」节点，不借槽位。
-     * 只有测试包才允许（和 blank 同一条规矩）。 */
-    if (!strncmp(line, "grow", 4) &&
-        (line[4] == 0 || line[4] == '\r' || line[4] == '\n' || line[4] == ' ')) {
+    /* keep：原版底图 + 新增——原生点一个都不动，只把文件里的 node add 加到图上。 */
+    if (nav_tok(line, "keep")) {
+      g_nedKeep = 1;
       g_nedGrow = 1;
-      g_nedBlank = 1;
       continue;
     }
     memset(&e, 0, sizeof(e));
@@ -3624,13 +4299,22 @@ static void nav_edit_load(const char* path) {
               ((k1[0] == 'i' || !strcmp(k1, "delin")) ? 2 : 0);
       e.a.x = x; e.a.y = y; e.a.z = z;
       e.b.x = x2; e.b.y = y2; e.b.z = z2;
+    } else if (sscanf(line, "jump %15s %f %f %f %f %f %f", k1, &x, &y, &z, &x2, &y2, &z2) == 7) {
+      /* 跳跃链接：起点 A（人机跑到这里起跳）-> 落点 B（踩箱子 / 上层平台）。
+       * 只在点铺好之后建，见 nav_apply_jumps。 */
+      if (k1[0] != 'a') continue;
+      e.kind = JADD;
+      e.a.x = x; e.a.y = y; e.a.z = z;
+      e.b.x = x2; e.b.y = y2; e.b.z = z2;
     } else {
       continue;
     }
     if (g_nedN < NAV_ED_MAX) g_ned[g_nedN++] = e;
   }
   fclose(f);
-  elog("naved: loaded %d edits from %s%s", g_nedN, path, g_nedBlank ? " (blank base)" : "");
+  if (g_nedKeep) g_nedBlank = 0;   /* keep 与 blank 互斥：残留的 blank/grow 行不能把它降级 */
+  elog("naved: loaded %d edits from %s%s%s", g_nedN, path,
+       g_nedBlank ? " (blank base)" : "", g_nedKeep ? " [keep native]" : "");
 }
 /* 按 dir 只改一个方向（0 双向 / 1 A->B / 2 B->A）。
  * 返回值：有没有真的改到连接。 */
@@ -3857,8 +4541,8 @@ static int nav_revive_slot(P g, const V3* p) {
   }
   return -1;
 }
-/* ---- grow：真正新建节点（A 方案第一步）--------------------------------
- * blank 是「把原生点标死，再借被标死的槽位改坐标」，所以点位数永远等于原生数。
+/* ---- grow：空白地图 = 原生点全禁 + 真正新建节点 ------------------------
+ * 不再借原生槽位（借槽位永远受原生点数限制，运输船 786 点就是天花板）。
  * grow 不动原生点的数量：原生点照样全部标死，然后用 PointGraph.AddNode 新建节点，
  * nodeIndex 直接超过原生数量。数量只受 NAV_MAXN（20000）和内存限制。
  *
@@ -3883,18 +4567,67 @@ static P nav_grow_node(P g, const V3* p) {
   return ((P (*)(P, int, int, int, void*))RVA(R_PG_ADD_NODE))(
       g, (int)(p->x * 1000.0f), (int)(p->y * 1000.0f), (int)(p->z * 1000.0f), 0);
 }
+/* 跳链创建在菜单动作区（session-only 那条路径），这里先声明，套包时复用同一份实现。 */
+static int make_jump_link(V3 a, V3 b);
+
+/* 这条跳链本次进图建过没有（按起终点坐标比对） */
+static int jump_seen(const V3* a, const V3* b) {
+  int i;
+  for (i = 0; i < g_jumpSeenN; i++)
+    if (nav_d2(&g_jumpSeenA[i], a) < 1e-4f && nav_d2(&g_jumpSeenB[i], b) < 1e-4f) return 1;
+  return 0;
+}
+
+/* 套用文件里的 jump add 行：必须晚于点/边全部生效（OnLatePostScan 要按坐标找节点）。
+ * 按坐标去重：同一张图重套包时只补新建的跳链，已建过的跳过。 */
+static int nav_apply_jumps(P g) {
+  int i, made = 0, bad = 0, fixed = 0;
+  if (!g) return 0;
+  for (i = 0; i < g_nedN; i++) {
+    NAVED* e = &g_ned[i];
+    int ia, ib;
+    if (e->kind != JADD) continue;
+    if (jump_seen(&e->a, &e->b)) continue;
+    /* 体检（和 tools/check_jumps.py 同一套判据）：太短 / 端点没路点 / 两端同一个点，
+     * 这三种跳链人机永远不会用，建出来只会白占 GameObject 和 linkDic。 */
+    if (nav_d2(&e->a, &e->b) < 2.25f) { bad++; continue; }
+    ia = nav_find(g, &e->a, 1.0f);
+    ib = nav_find(g, &e->b, 1.0f);
+    if (ia < 0 || ib < 0 || ia == ib) { bad++; continue; }
+    if (!make_jump_link(e->a, e->b)) continue;
+    made++;
+    if (g_jumpSeenN < JSEEN_MAX) {
+      g_jumpSeenA[g_jumpSeenN] = e->a;
+      g_jumpSeenB[g_jumpSeenN] = e->b;
+      g_jumpSeenN++;
+    }
+    /* 跳链只在路径里「起点节点 -> 落点节点」相邻时才插跳跃段，
+     * 这两点之间没有边的话 A* 永远排不出来，跳链一次都不会触发。 */
+    if (!nav_conn_has(nav_node(g, ia), nav_node(g, ib))) {
+      nav_conn_set(nav_node(g, ia), nav_node(g, ib), 1);
+      fixed++;
+    }
+  }
+  if (made) elog("naved: %d jump link(s) created from pack (+%d A->B edge)", made, fixed);
+  if (bad) elog("naved: %d jump line(s) skipped: 两端都要是路点、不能同一个点、长度 >= 1.5 m"
+                " (python tools/check_jumps.py 可体检包文件)", bad);
+  if (fixed) nav_refresh(g);
+  return made;
+}
 static int nav_apply_grow(P g) {
   P pp, nd;
   int i, n, killed = 0, made = 0, skipped = 0, ops = 0, lockId;
+  int keep = g_nedKeep;           /* keep：原生点原样保留，只新增节点 */
   if (!g) return 0;
   n = nav_count(g);
   /* n == 0 也允许：0 点图（飓风危城）正是 grow 唯一能用的场景 */
   if (n < 0 || n > NAV_MAXN) { elog("naved: grow skipped: bad node count %d", n); return 0; }
-  /* 同一张图只新建一次：重套 / 重新应用只补边，不再加点 */
+  /* 同一张图只新建一次：重套 / 重新应用只补边和新建的跳链，不再加点 */
   if (g == g_growGraph && nav_count(g) == g_growBase + g_growMade) {
     ops = nav_apply_edges(g);
-    elog("naved: grow already applied on this graph (%d base + %d new); edges only (%d)",
-         g_growBase, g_growMade, ops);
+    ops += nav_apply_jumps(g);   /* 后加的跳链也要补建，不能只补边 */
+    elog("naved: %s already applied on this graph (%d base + %d new); edges+jumps (%d)",
+         keep ? "keep" : "grow", g_growBase, g_growMade, ops);
     return ops;
   }
   pp = nav_pp();
@@ -3903,13 +4636,27 @@ static int nav_apply_grow(P g) {
     return -1;
   }
   lockId = ((int (*)(P, int, void*))RVA(R_PP_LOCK))(pp, 1, 0);
-  /* 1) 原生点全部标死 + 清边：不留任何一条原生路线 */
-  for (i = 0; i < n; i++) {
-    nd = nav_node(g, i);
-    if (!nd) continue;
-    if (nav_walk(nd)) killed++;
-    nav_set_walk(nd, 0);
-    nav_conn_clear(nd);
+  /* 1) 原生点全部标死 + 清边：不留任何一条原生路线。
+   *    keep 模式整段跳过：原生点一个都不碰，这样才能把「新节点不被认」和
+   *    「我们改坏了原图」分开。 */
+  if (!keep) {
+    for (i = 0; i < n; i++) {
+      V3 p;
+      nd = nav_node(g, i);
+      if (!nd) continue;
+      if (nav_walk(nd)) killed++;
+      nav_set_walk(nd, 0);
+      nav_conn_clear(nd);
+      /* 关键：游戏取「脚下最近的节点」当寻路起点用的是
+       *     AstarPath.GetNearest(Vector3)   == NNConstraint.None（不看可走性）
+       * （Bot.UpdateNearestGraphNode 0xB33260 的单参重载，2026-11-20 IDA 核对）
+       * 死点留在原地会一直赢过新点：实测 seed 图里 b0 near=43/0 next=43/0，
+       * 人机认了个不可走的原生点，于是再也不动。这里把死点挪到地下 5000 m，
+       * 索引和连接表都不动，只是不再参与就近查询（边早就清空了）。 */
+      nav_pos(nd, &p);
+      p.y -= NAV_DEAD_DY;
+      nav_put_pos(nd, &p);
+    }
   }
   /* 2) 新建点：AddNode 自己扩 nodes 数组、分配 nodeIndex、注册到每条 PathHandler */
   for (i = 0; i < g_nedN; i++) {
@@ -3918,7 +4665,7 @@ static int nav_apply_grow(P g) {
     if (!nav_grow_node(g, &e->a)) { skipped++; continue; }
     made++;
   }
-  if (!made) {
+  if (!made && !keep) {
     elog("naved: grow WARNING: no 'node add' lines - this map now has 0 walkable nodes; "
          "bots will stand until the file has points");
   }
@@ -3929,26 +4676,37 @@ static int nav_apply_grow(P g) {
   g_growGraph = g;
   g_growBase = n;
   g_growMade = made;
-  elog("naved: grow: %d native disabled, %d new nodes, %d adds skipped, %d edges "
-       "(graph %d -> %d nodes)", killed, made, skipped, ops, n, nav_count(g));
+  /* 跳链放在解锁之后：建 GameObject / AddComponent 会触发 Unity 的 Awake，
+   * 在 Lock 窗口里做等于把寻路线程和主线程对锁。 */
+  ops += nav_apply_jumps(g);
+  elog("naved: %s: %d native %s, %d new nodes, %d adds skipped, %d edges "
+       "(graph %d -> %d nodes)", keep ? "keep" : "grow",
+       keep ? n : killed, keep ? "kept" : "disabled", made, skipped, ops, n, nav_count(g));
   return made + ops;
+}
+/* 运行中加一个点：grow / keep 包里原生槽位全占着，借不到空槽，必须真·新建；
+ * 其它情况（正式版 / 增量测试包）仍然借空槽位。返回 nodeIndex，失败 -1。 */
+static int nav_add_live(P g, const V3* p) {
+  P pp, nd;
+  int lockId;
+  if (!(g_nedGrow && g_packName[0] && nav_grow_enabled())) return nav_add_node(g, p);
+  pp = nav_pp();
+  if (!pp) { elog("naved: add: pathProcessor not ready"); return -1; }
+  lockId = ((int (*)(P, int, void*))RVA(R_PP_LOCK))(pp, 1, 0);
+  nd = nav_grow_node(g, p);
+  ((void (*)(P, int, void*))RVA(R_PP_UNLOCK))(pp, lockId, 0);
+  if (!nd) return -1;
+  if (g == g_growGraph) g_growMade++;   /* 让「同一张图只新建一次」的判据继续成立 */
+  return *(int*)((char*)nd + 0x8);
 }
 static int nav_apply_core(P g) {
   int i, n, kill = 0, revived = 0, skipped = 0, ok = 0;
-  int blank = g_nedBlank && g_packName[0];
   if (!g) return 0;
   n = nav_count(g);
   if (n <= 0) { elog("naved: graph is empty (0 nodes), nothing to edit"); return 0; }
   if (n > NAV_MAXN) { elog("naved: graph too big (%d > %d), skipped", n, NAV_MAXN); return 0; }
   memset(g_navDead, 0, (size_t)n);
   g_navDeadN = n;
-  if (blank) {
-    /* 空白底图：原生点全部当作已删，下一步的 node add 再从这些槽位里借点。 */
-    for (i = 0; i < n; i++) g_navDead[i] = 1;
-    kill = n;
-    ok = n;
-    elog("naved: blank base: disabled %d native nodes", n);
-  }
   /* 1) 删点：只标不可走 */
   for (i = 0; i < g_nedN; i++) {
     NAVED* e = &g_ned[i];
@@ -3958,21 +4716,28 @@ static int nav_apply_core(P g) {
     if (k >= 0 && k < n && !g_navDead[k]) { g_navDead[k] = 1; kill++; ok++; }
   }
   if (kill) {
-    /* 2) 活点：摘掉指向死点的边（每点最多重分配一次连接表）。
-     *    blank 底图连死点自己的边也摘掉，确保没有一条原生路线可走。 */
+    /* 2) 活点：摘掉指向死点的边（每点最多重分配一次连接表）。 */
     for (i = 0; i < n; i++) {
       P nd;
-      if (!blank && g_navDead[i]) continue;
+      if (g_navDead[i]) continue;
       nd = nav_node(g, i);
       if (nd) nav_conn_filter_dead(nd);
     }
-    /* 3) 死点置不可走。连接表保留：万一带野指针的 bot 指过来，nodeIndex 仍在图内，
-     *    最多走到死点为止，不会越界把寻路线程炸掉。 */
+    /* 3) 死点置不可走 + 挪到地下 5000 m。
+     *    连接表保留（带野指针的 bot 指过来也不会越界），但**位置必须挪走**：
+     *    游戏用 AstarPath.GetNearest(pos)（NNConstraint.None，不看可走性）取脚下最近节点，
+     *    死点留在原地就会一直抢走人机的起点（2026-11-20 grow 实测 near=43/0，人机全程站桩）。
+     *    被 node add 借回去的槽位会重新写坐标，所以借点/撤销都不受影响。 */
     for (i = 0; i < n; i++) {
       P nd;
+      V3 p;
       if (!g_navDead[i]) continue;
       nd = nav_node(g, i);
-      if (nd) nav_set_walk(nd, 0);
+      if (!nd) continue;
+      nav_set_walk(nd, 0);
+      nav_pos(nd, &p);
+      p.y -= NAV_DEAD_DY;
+      nav_put_pos(nd, &p);
     }
   }
   /* 4) 加点：只借被删掉的槽位，绝不 append（append 出来的 nodeIndex 会越界） */
@@ -3986,18 +4751,28 @@ static int nav_apply_core(P g) {
   if (!kill && !revived) return nav_apply_edges(g);       /* 只是连边/断边 */
   nav_refresh(g);
   ok += nav_apply_edges(g);
-  elog("naved: applied in place: %d disabled, %d revived, %d adds skipped (graph stays %d nodes)%s",
-       kill, revived, skipped, n, blank ? " [blank base]" : "");
+  elog("naved: applied in place: %d disabled, %d revived, %d adds skipped (graph stays %d nodes)",
+       kill, revived, skipped, n);
   return ok;
 }
 /* 把清单套到活图上；返回实际生效条数 */
 static int nav_apply_all(P g) {
   int ok;
-  if (g_nedGrow && g_packName[0] && nav_grow_enabled()) {
+  if (g_nedGrow && g_packName[0]) {
+    /* 空白地图 / 原版+新增都走 AddNode。借槽位那套已经删掉，所以 UCF_NAVGROW=0
+     * 只剩「整包先不套用」这一种含义（按增量套会把原生点当成活的，结果更怪）。 */
+    if (!nav_grow_enabled()) {
+      elog("naved: grow/keep disabled by UCF_NAVGROW=0; pack not applied");
+      g_nedExpect = nav_count(g);
+      return 0;
+    }
     ok = nav_apply_grow(g);
     if (ok < 0) return ok;            /* grow 还没就绪：本帧不标记已套用 */
   } else {
     ok = nav_apply_core(g);
+    /* 正式版 / 增量包也要建 jump add：以前只有 grow 包走 nav_apply_jumps，
+     * 在 ③ 正式图里加好的跳点重进图就不见了。内部按坐标去重，重套只补新建的。 */
+    ok += nav_apply_jumps(g);
   }
   g_nedExpect = nav_count(g);
   return ok;
@@ -4015,10 +4790,15 @@ static void nav_undo(void) {
     if (ia >= 0) nav_kill_node(g, nav_node(g, ia));
   } else if (e->kind == NDEL) {
     ia = nav_find_any(g, &e->a, 0.35f);   /* 被删的点已不可走，用“任意节点”找回来 */
-    if (ia >= 0) nav_set_walk(nav_node(g, ia), 1);
+    if (ia >= 0) {
+      nav_put_pos(nav_node(g, ia), &e->a);   /* 死点被挪到地下过：坐标写回原位 */
+      nav_set_walk(nav_node(g, ia), 1);
+    }
     else if (nav_add_node(g, &e->a) < 0) elog("naved: undo: re-add failed");
     /* 重建图时被删的点是从数组里摘掉的，撤销只能按坐标补一个空点回来，
      * 原来的连边要重新连（Ctrl+Shift+J）。 */
+  } else if (e->kind == JADD) {
+    /* 跳链组件做出来就删不掉了：撤销只把它从清单里去掉（重进图不再建） */
   } else {
     nav_conn_apply(g, e, e->kind == EDEL);
   }
@@ -4107,7 +4887,7 @@ static void nav_add_here(void) {
   if (!cam_point(&p)) { elog("naved: no ground under crosshair"); return; }
   p.y += 0.05f;
   if (nav_find(g, &p, 0.4f) >= 0) { elog("naved: node already exists here"); return; }
-  idx = nav_add_node(g, &p);
+  idx = nav_add_live(g, &p);
   if (idx < 0) { elog("naved: add node failed"); return; }
   nav_push(NADD, &p, 0);
   if (g_nedHasA) {
@@ -4240,9 +5020,8 @@ static void nav_link_one(void) {
   ia = nav_find(g, &g_nedA, 1.5f);
   if (ia < 0) { elog("wpmenu: A disappeared, select again"); g_nedHasA = 0; g_wpLinkStep = 1; return; }
   if (ia == i) {
-    elog("wpmenu: A and B are the same node; skip self-edge");
-    g_wpLinkStep = 0;
-    return;
+    elog("wpmenu: A 和准星是同一个点（自环跳过）；换个点继续，Esc 结束连线");
+    return;                         /* 保持连续连线，不要退回主菜单 */
   }
   nav_pos(nav_node(g, i), &q);
   if (g_wpPath == 1) {
@@ -4262,7 +5041,12 @@ static void nav_link_one(void) {
     elog("wpmenu: edge A<->B");
   }
   nav_refresh(g);
-  g_wpLinkStep = 0;
+  /* 2026-11-20 连续编辑：连完一条不退出连线模式，A 自动前进到刚落下的 B，
+   * 接着点下一个就连 B->下一个（画折线不用重复选 A）；Esc 才结束，1-3 换方向。 */
+  g_nedA = q;
+  g_nedHasA = 1;
+  g_wpLinkStep = 2;
+  elog("wpmenu: A 前进到 (%.2f %.2f %.2f)；继续点下一个连边，Esc 结束", q.x, q.y, q.z);
 }
 
 /* 手动给范围内的点打 tag（不改扫描，仅当前会话；markers 里存一条 tag 记录）。 */
@@ -4290,9 +5074,407 @@ static void make_tag(V3 p, int tag, float radius) {
   g_visDirty = 1;
 }
 
+/* =============== 预置预览（ghost）：准星处的虚线框 ===============
+ * 需求（2026-11-20 用户）：菜单里选好类型后，先在准星落点画一个虚线框，
+ * 表示「如果现在按下去，东西会放在这里」；已选 A 时再从 A 拉一条虚线到准星。
+ * 位置满意才按小键盘 5 / 左键实体化。
+ *
+ * 实现取舍：
+ *   - 虚线框尺寸对每种笔刷是固定的，所以网格只建一次缓存起来，每帧只改
+ *     GameObject 的 position 和显隐 —— 不重建网格、不分配托管数组，没 GC 抖动；
+ *   - 虚线 = 一串薄方块拼的边（bs_dash_line），材质直接用调色板槽位。
+ *     不用透明材质：URP 下改透明要动 shader 关键字/渲染队列，换图后很容易
+ *     退化成洋红（见 mat_reset 那段注释），而虚线本身已经够「虚」了；
+ *   - A→准星 那条虚线用一串小方块沿直线摆开，不做旋转（省掉四元数/欧拉那套）。
+ * ---------------------------------------------------------------------- */
+#define GHOST_MAXDOT 24
+static P g_ghostMesh[6];              /* 虚线框网格：按尺寸缓存，area/tag 共用 3 m */
+static P g_ghostMeshDot;              /* 虚线点：小实心方块 */
+static P g_ghostGo, g_ghostMf, g_ghostMr;   /* 准星处的虚线框 */
+static P g_ghostDots[GHOST_MAXDOT];   /* A→准星 的虚线点 */
+static P g_ghostDotMr[GHOST_MAXDOT];
+static int g_ghostShown;
+static V3  g_ghostPv;                 /* 本帧预置点（菜单里显示坐标用） */
+static int g_ghostPvOk;
+static int g_ghostValid;              /* 0 = 这个位置按下去会被拒绝（画灰框，菜单里提示） */
+static int g_ghostPvIdx = -1;         /* 预置点吸到的路点索引；-1 = 新点 / 没吸到 */
+
+/* 2026-11-20 用户需求：连路点时看不出谁是起点、方向朝哪。
+ *   - A 起点：绿色方块 + 细竖条，换位置跟着走；
+ *   - 终点 B：准星框变红；单向时在落点端画橙色箭头；
+ *   - 已建成的单向边：中线画小箭头（见 edge_arrow / vis_draw）。 */
+static P g_aMarkMesh, g_aMarkGo;
+static P g_ghostArrowMesh, g_ghostArrowGo;
+
+/* 一段虚线：从 a 到 b，按 dash/gap 切开，每小段一个薄方块 */
+static void bs_dash_line(V3 a, V3 b, float dash, float gap, float w) {
+  V3 d;
+  float len, step, t;
+  d.x = b.x - a.x; d.y = b.y - a.y; d.z = b.z - a.z;
+  len = sqrtf(d.x * d.x + d.y * d.y + d.z * d.z);
+  if (len < 0.05f) { bs_line(a, b, w); return; }
+  if (dash < 0.01f) dash = 0.01f;
+  if (gap < 0.0f) gap = 0.0f;
+  step = dash + gap;
+  for (t = 0.0f; t < len - 0.001f; t += step) {
+    float t0 = t, t1 = t + dash;
+    V3 p0, p1;
+    if (t1 > len) t1 = len;
+    p0.x = a.x + d.x * (t0 / len); p0.y = a.y + d.y * (t0 / len); p0.z = a.z + d.z * (t0 / len);
+    p1.x = a.x + d.x * (t1 / len); p1.y = a.y + d.y * (t1 / len); p1.z = a.z + d.z * (t1 / len);
+    bs_line(p0, p1, w);
+  }
+}
+/* 虚线长方体框（12 条边全虚线）：c = 中心，h = 半尺寸 */
+static void bs_dash_box(V3 c, V3 h, float dash, float gap, float w) {
+  int i;
+  V3 p[8];
+  static const int eg[12][2] = {
+    {0,1},{1,2},{2,3},{3,0},{4,5},{5,6},{6,7},{7,4},{0,4},{1,5},{2,6},{3,7}
+  };
+  p[0].x = c.x - h.x; p[0].y = c.y - h.y; p[0].z = c.z - h.z;
+  p[1].x = c.x + h.x; p[1].y = c.y - h.y; p[1].z = c.z - h.z;
+  p[2].x = c.x + h.x; p[2].y = c.y + h.y; p[2].z = c.z - h.z;
+  p[3].x = c.x - h.x; p[3].y = c.y + h.y; p[3].z = c.z - h.z;
+  p[4].x = c.x - h.x; p[4].y = c.y - h.y; p[4].z = c.z + h.z;
+  p[5].x = c.x + h.x; p[5].y = c.y - h.y; p[5].z = c.z + h.z;
+  p[6].x = c.x + h.x; p[6].y = c.y + h.y; p[6].z = c.z + h.z;
+  p[7].x = c.x - h.x; p[7].y = c.y + h.y; p[7].z = c.z + h.z;
+  for (i = 0; i < 12; i++) bs_dash_line(p[eg[i][0]], p[eg[i][1]], dash, gap, w);
+}
+
+/* 预置框多大：跟着「真正会被创建的东西」走，别凭感觉 */
+static float ghost_size(int brush) {
+  switch (brush) {
+    case 1: return 0.60f;   /* 跳跃点：起点/落点框，比 0.28 的标记框大一圈才看得见 */
+    case 2: return 0.50f;   /* 蹲守点（标记 0.24） */
+    case 3: return 0.66f;   /* 守点（标记 0.32） */
+    case 4: return 3.00f;   /* 聚集区：游戏里就是 3 m 的 BoxCollider */
+    case 5: return 3.00f;   /* 标签区：make_tag 半径 3.0 m */
+    default: return 0.30f;  /* 普通路点（标记 0.14） */
+  }
+}
+/* 预置框用什么颜色槽：和实体标记/图层同一套调色板，看到什么颜色就是什么类型 */
+static int ghost_slot(int brush) {
+  switch (brush) {
+    case 1: return 4;       /* 跳跃 = 青 */
+    case 2: return 1;       /* 蹲守 = 琥珀 */
+    case 3: return 2;       /* 守点 */
+    case 4: return 3;       /* 聚集区 */
+    case 5: return 6;       /* 标签区 */
+    default: return 5;      /* 普通路点 */
+  }
+}
+static int ghost_mesh_key(int brush) {
+  if (brush < 0 || brush > 5) return 0;
+  return brush == 5 ? 4 : brush;   /* 标签区复用聚集区那个 3 m 框 */
+}
+static P ghost_box_mesh(int brush) {
+  int key = ghost_mesh_key(brush);
+  float s = ghost_size(brush), dash, gap;
+  V3 c, h;
+  if (g_ghostMesh[key] && uobj_live(g_ghostMesh[key])) return g_ghostMesh[key];
+  g_ghostMesh[key] = 0;
+  if (!g_meshCls || !g_vec3Cls || !g_i32Cls || !x_array_new) return 0;
+  dash = s / 6.0f;
+  if (dash < 0.06f) dash = 0.06f;   /* 小框的虚线也得看得见 */
+  gap = dash * 0.7f;
+  bs_reset();
+  h.x = s * 0.5f; h.y = h.x; h.z = h.x;
+  c.x = 0.0f; c.y = h.y; c.z = 0.0f;   /* 贴地：框底正好落在准星落点上 */
+  bs_dash_box(c, h, dash, gap, 0.012f + s * 0.008f);
+  g_ghostMesh[key] = build_mesh();
+  if (g_ghostMesh[key]) {
+    root_put(g_ghostMesh[key]);     /* 网格只建一次：钉住，别让 GC 回收 */
+    elog("ghost: mesh brush=%d size=%.2f verts=%d tris=%d", key, s, g_bNV, g_bNI / 3);
+  }
+  return g_ghostMesh[key];
+}
+static P ghost_dot_mesh(void) {
+  V3 c = { 0.0f, 0.0f, 0.0f }, h = { 0.045f, 0.045f, 0.045f };
+  if (g_ghostMeshDot && uobj_live(g_ghostMeshDot)) return g_ghostMeshDot;
+  g_ghostMeshDot = 0;
+  if (!g_meshCls || !g_vec3Cls || !g_i32Cls || !x_array_new) return 0;
+  bs_reset();
+  bs_solid(c, h);
+  g_ghostMeshDot = build_mesh();
+  if (g_ghostMeshDot) root_put(g_ghostMeshDot);
+  return g_ghostMeshDot;
+}
+/* 建一个只挂网格的 GameObject（MeshFilter + MeshRenderer，关阴影，不参与碰撞：
+ * new_go 出来的对象本来就没有 Collider）。mrOut 拿回渲染器，后面要换材质。 */
+static P ghost_go_new(const char* name, P mesh, int slot, P* mrOut) {
+  P go, mf, mr, mat;
+  if (mrOut) *mrOut = 0;
+  if (!mesh || !g_mfType || !g_mrType) return 0;
+  mat = mat_for(slot);
+  if (!mat_alive(mat)) return 0;
+  go = new_go(name);
+  if (!go) return 0;
+  ((set_layer_t)RVA(R_SETLAYER))(go, 0, 0);
+  mf = ((addcomp_t)RVA(R_ADDCOMP))(go, g_mfType, 0);
+  mr = ((addcomp_t)RVA(R_ADDCOMP))(go, g_mrType, 0);
+  if (!mf || !mr) { ((destroy_t)RVA(R_DESTROY))(go, 0); return 0; }
+  ((mf_setmesh_t)RVA(R_MF_SETMESH))(mf, mesh, 0);
+  ((set_shmat_t)RVA(R_REND_SETSM))(mr, mat, 0);
+  ((set_int1_t)RVA(R_REND_SHADOW))(mr, 0, 0);
+  root_put(go);
+  if (mrOut) *mrOut = mr;
+  return go;
+}
+
+/* 起点 A 的立体标记：绿色方块 + 一根细竖条（远处也看得见）。
+ * 网格只建一次，之后每帧只改坐标/显隐。 */
+static P a_mark_mesh(void) {
+  V3 c, h;
+  if (g_aMarkMesh && uobj_live(g_aMarkMesh)) return g_aMarkMesh;
+  g_aMarkMesh = 0;
+  if (!g_meshCls || !g_vec3Cls || !g_i32Cls || !x_array_new) return 0;
+  bs_reset();
+  c.x = 0.0f; c.y = 0.18f; c.z = 0.0f; h.x = 0.17f; h.y = 0.17f; h.z = 0.17f;
+  bs_solid(c, h);
+  c.x = 0.0f; c.y = 0.95f; c.z = 0.0f; h.x = 0.035f; h.y = 0.85f; h.z = 0.035f;
+  bs_solid(c, h);
+  g_aMarkMesh = build_mesh();
+  if (g_aMarkMesh) root_put(g_aMarkMesh);
+  return g_aMarkMesh;
+}
+static void a_mark_hide(void) {
+  if (g_aMarkGo && uobj_live(g_aMarkGo))
+    ((set_active_t)RVA(R_SETACTIVE))(g_aMarkGo, 0, 0);
+}
+static void a_mark_tick(void) {
+  P mesh;
+  V3 q;
+  if (!g_nedHasA) { a_mark_hide(); return; }
+  mesh = a_mark_mesh();
+  if (!mesh) return;
+  if (!g_aMarkGo || !uobj_live(g_aMarkGo)) {
+    g_aMarkGo = ghost_go_new("UCF_AMark", mesh, 2, 0);   /* slot 2 = 绿 */
+    if (!g_aMarkGo) return;
+    elog("ghost: A 起点标记已创建（绿色方块 + 竖条）");
+  }
+  q = g_nedA;
+  q.y += 0.02f;
+  ((set_pos_t)RVA(R_SET_POS))(get_tr(g_aMarkGo), q, 0);
+  ((set_active_t)RVA(R_SETACTIVE))(g_aMarkGo, 1, 0);
+}
+
+/* 方向箭头网格：本地 +Z 指向箭头前方（用 euler Y 转到实际方向，不用四元数） */
+static P ghost_arrow_mesh(void) {
+  V3 tip, l, r;
+  if (g_ghostArrowMesh && uobj_live(g_ghostArrowMesh)) return g_ghostArrowMesh;
+  g_ghostArrowMesh = 0;
+  if (!g_meshCls || !g_vec3Cls || !g_i32Cls || !x_array_new) return 0;
+  bs_reset();
+  tip.x = 0.0f; tip.y = 0.0f; tip.z = 0.42f;
+  l.x = -0.19f; l.y = 0.0f; l.z = 0.0f;
+  r.x = 0.19f; r.y = 0.0f; r.z = 0.0f;
+  bs_line(tip, l, 0.075f);
+  bs_line(tip, r, 0.075f);
+  g_ghostArrowMesh = build_mesh();
+  if (g_ghostArrowMesh) root_put(g_ghostArrowMesh);
+  return g_ghostArrowMesh;
+}
+static void ghost_arrow_hide(void) {
+  if (g_ghostArrowGo && uobj_live(g_ghostArrowGo))
+    ((set_active_t)RVA(R_SETACTIVE))(g_ghostArrowGo, 0, 0);
+}
+/* dirMode: 1 = A->B，2 = B->A（单向才有）。pos/hint 都按「箭头指向哪边」来摆。 */
+static void ghost_arrow_tick(int dirMode, V3 from, V3 to) {
+  P mesh;
+  V3 d, q, e;
+  float len;
+  if (dirMode != 1 && dirMode != 2) { ghost_arrow_hide(); return; }
+  d.x = to.x - from.x; d.y = to.y - from.y; d.z = to.z - from.z;
+  len = sqrtf(d.x * d.x + d.y * d.y + d.z * d.z);
+  if (len < 0.9f) { ghost_arrow_hide(); return; }   /* 太近：跳点和边都不允许 */
+  d.x /= len; d.y /= len; d.z /= len;
+  mesh = ghost_arrow_mesh();
+  if (!mesh) { ghost_arrow_hide(); return; }
+  if (!g_ghostArrowGo || !uobj_live(g_ghostArrowGo)) {
+    g_ghostArrowGo = ghost_go_new("UCF_GhostArrow", mesh, 7, 0);   /* slot 7 = 橙 */
+    if (!g_ghostArrowGo) return;
+    elog("ghost: 方向箭头已创建（橙色，dirMode=%d）", dirMode);
+  }
+  if (dirMode == 1) {   /* A->B：箭头摆在落点前，指向落点 */
+    q.x = to.x - d.x * 0.55f; q.y = to.y - d.y * 0.55f; q.z = to.z - d.z * 0.55f;
+    e.x = 0.0f; e.y = atan2f(d.x, d.z) * 57.29578f; e.z = 0.0f;
+  } else {              /* B->A：箭头摆在起点前，指回起点 */
+    q.x = from.x + d.x * 0.55f; q.y = from.y + d.y * 0.55f; q.z = from.z + d.z * 0.55f;
+    e.x = 0.0f; e.y = atan2f(-d.x, -d.z) * 57.29578f; e.z = 0.0f;
+  }
+  q.y += 0.12f;
+  ((set_pos_t)RVA(R_SET_POS))(get_tr(g_ghostArrowGo), q, 0);
+  ((set_pos_t)RVA(R_SET_EULER))(get_tr(g_ghostArrowGo), e, 0);
+  ((set_active_t)RVA(R_SETACTIVE))(g_ghostArrowGo, 1, 0);
+}
+/* 换图 / 退出时把预览全部丢掉（对象已经随场景销毁，网格缓存也要重来） */
+static void ghost_reset(void) {
+  int i;
+  g_ghostGo = g_ghostMf = g_ghostMr = 0;
+  for (i = 0; i < GHOST_MAXDOT; i++) { g_ghostDots[i] = 0; g_ghostDotMr[i] = 0; }
+  for (i = 0; i < 6; i++) g_ghostMesh[i] = 0;
+  g_ghostMeshDot = 0;
+  g_ghostShown = 0;
+  g_ghostPvOk = 0;
+  g_ghostValid = 0;
+  g_ghostPvIdx = -1;
+  g_aMarkGo = g_aMarkMesh = 0;
+  g_ghostArrowGo = g_ghostArrowMesh = 0;
+}
+static void ghost_hide(void) {
+  int i;
+  if (g_ghostShown) {
+    if (g_ghostGo && uobj_live(g_ghostGo))
+      ((set_active_t)RVA(R_SETACTIVE))(g_ghostGo, 0, 0);
+    for (i = 0; i < GHOST_MAXDOT; i++)
+      if (g_ghostDots[i] && uobj_live(g_ghostDots[i]))
+        ((set_active_t)RVA(R_SETACTIVE))(g_ghostDots[i], 0, 0);
+  }
+  g_ghostShown = 0;
+  g_ghostPvOk = 0;
+  g_ghostValid = 0;
+  ghost_arrow_hide();
+}
+
+/* 每帧（主线程）：摆好虚线框 + A→准星 的虚线点 */
+static void ghost_tick(void) {
+  V3 p, from;
+  P mesh, dot;
+  int brush, line, i, ok = 1, needNode = 0, slot = 5, arrowMode = 0;
+  int used = 0;
+  static int uiTick;
+
+  if (!g_wpMenuOpen || g_collectOnly || (!g_wpArm && !g_wpLinkStep)) {
+    ghost_hide();
+    a_mark_hide();          /* A 标记只在编菜单里出现，关掉菜单就收起来 */
+    return;
+  }
+  /* A 起点的绿标记先摆好：后面就算准星没打到地面（抬头看天）也留着 */
+  a_mark_tick();
+  if (!g_ghostGo || !uobj_live(g_ghostGo)) { g_ghostGo = g_ghostMf = g_ghostMr = 0; }
+  if (!cam_point(&p)) { ghost_hide(); return; }
+  brush = g_wpArm ? g_wpBrush : 0;
+  if (brush < 0 || brush > 5) brush = 0;
+
+  /* 预置点必须和真正落点的规则一致，否则预览就是在骗人：
+   *   跳跃起点 / 路径两端   必须是准星 3 m 内的路点（吸到那个点，wp_place / nav_link_one 也这么找）；
+   *   跳跃落点             已有路点（2.5 m 内且不是起点）就用它，没有就按准星补一个；
+   *   普通/蹲守/守点/聚集区/标签区  就是准星落点。
+   * 吸不到节点 / 离起点太近（<1.5 m）时画灰框（slot 13）：这一下按下去会被拒绝。 */
+  ok = 1;
+  needNode = 0;
+  g_ghostPvIdx = -1;
+  if (g_wpLinkStep == 1 || g_wpLinkStep == 2) needNode = 1;
+  else if (g_wpArm && brush == 1 && !g_nedHasA) needNode = 1;
+  if (needNode) {
+    P g = navfix_point_graph();
+    int ni = g ? nav_find(g, &p, 3.0f) : -1;
+    if (ni >= 0) { nav_pos(nav_node(g, ni), &p); g_ghostPvIdx = ni; }
+    else ok = 0;
+  } else if (g_wpArm && brush == 1 && g_nedHasA) {
+    P g = navfix_point_graph();
+    int nb = g ? nav_find(g, &p, 2.5f) : -1;
+    int na = g ? nav_find(g, &g_nedA, 0.6f) : -1;
+    if (nb >= 0 && nb != na) { nav_pos(nav_node(g, nb), &p); g_ghostPvIdx = nb; }
+    else if (nav_d2(&g_nedA, &p) < 2.25f) ok = 0;   /* 1.5 m：太近会「原地跳」 */
+  }
+  /* 颜色语义：这一步会变成「起点」就绿，会变成「终点」就红，其余按类型色。
+   * （跳跃点两次点击也是先起点后落点，规则一样） */
+  {
+    int isStart = (g_wpLinkStep == 1) || (g_wpArm && brush == 1 && !g_nedHasA);
+    int isEnd   = (g_wpLinkStep == 2) || (g_wpArm && brush == 1 && g_nedHasA);
+    if (!ok) slot = 13;            /* 灰 = 这里按下去会被拒绝 */
+    else if (isStart) slot = 2;    /* 起点绿 */
+    else if (isEnd) slot = 12;     /* 终点红 */
+    else slot = ghost_slot(brush);
+  }
+
+  /* A -> 预置点 的虚线什么时候画：
+   *   跳跃点且 A 已选；或者「建立路径」已选 A 等 B（g_wpLinkStep==2）。 */
+  line = 0;
+  from.x = from.y = from.z = 0.0f;
+  if (g_nedHasA && ((g_wpArm && brush == 1) || g_wpLinkStep == 2)) {
+    line = 1;
+    from = g_nedA;
+  }
+  /* 方向箭头：跳跃链接固定 A->B；建立路径按 g_wpPath（0 = 双向不画） */
+  if (line) {
+    if (g_wpLinkStep == 2) arrowMode = g_wpPath;
+    else if (g_wpArm && brush == 1) arrowMode = 1;
+  }
+
+  p.y += 0.02f;   /* 抬高 2 cm：虚线和地面 z-fighting 会闪 */
+  g_ghostPv = p;
+  g_ghostPvOk = 1;
+  g_ghostValid = ok;
+
+  mesh = ghost_box_mesh(brush);
+  if (!mesh) { ghost_hide(); return; }
+  if (!g_ghostGo) {
+    g_ghostGo = ghost_go_new("UCF_Ghost", mesh, slot, &g_ghostMr);
+    if (!g_ghostGo) { ghost_hide(); return; }
+    g_ghostMf = ((getcomp_t)RVA(R_GETCOMP))(g_ghostGo, g_mfType, 0);
+  }
+  if (g_ghostMf) ((mf_setmesh_t)RVA(R_MF_SETMESH))(g_ghostMf, mesh, 0);
+  if (g_ghostMr) {
+    P mat = mat_for(slot);
+    if (mat_alive(mat)) ((set_shmat_t)RVA(R_REND_SETSM))(g_ghostMr, mat, 0);
+  }
+  ((set_pos_t)RVA(R_SET_POS))(get_tr(g_ghostGo), p, 0);
+  ((set_active_t)RVA(R_SETACTIVE))(g_ghostGo, 1, 0);
+  g_ghostShown = 1;
+
+  /* 终点方向箭头：只有单向（A->B / B->A）才画；位置不合法时也收起来 */
+  if (line && ok) ghost_arrow_tick(arrowMode, from, p);
+  else ghost_arrow_hide();
+
+  /* A -> 准星：等距一串小方块（不做旋转，省掉四元数那套） */
+  if (line) {
+    V3 d;
+    float len;
+    d.x = p.x - from.x; d.y = p.y - from.y; d.z = p.z - from.z;
+    len = sqrtf(d.x * d.x + d.y * d.y + d.z * d.z);
+    dot = (len > 0.4f) ? ghost_dot_mesh() : 0;
+    if (dot) {
+      int want = (int)(len / 0.55f) + 1;
+      if (want > GHOST_MAXDOT) want = GHOST_MAXDOT;
+      if (want < 2) want = 2;
+      for (i = 1; i < want; i++) {
+        float t = (float)i / (float)want;
+        V3 q;
+        q.x = from.x + d.x * t;
+        q.y = from.y + d.y * t + 0.05f;
+        q.z = from.z + d.z * t;
+        if (!g_ghostDots[used] || !uobj_live(g_ghostDots[used])) {
+          g_ghostDots[used] = ghost_go_new("UCF_GhostDot", dot, slot, &g_ghostDotMr[used]);
+          if (!g_ghostDots[used]) break;
+        }
+        ((set_pos_t)RVA(R_SET_POS))(get_tr(g_ghostDots[used]), q, 0);
+        ((set_active_t)RVA(R_SETACTIVE))(g_ghostDots[used], 1, 0);
+        used++;
+      }
+    }
+  }
+  /* 虚线点的颜色跟着当前笔刷走（切类型时旧点是别的颜色，看着会串味） */
+  if (used) {
+    P mat = mat_for(slot);
+    if (mat_alive(mat))
+      for (i = 0; i < used; i++)
+        if (g_ghostDotMr[i] && uobj_live(g_ghostDotMr[i]))
+          ((set_shmat_t)RVA(R_REND_SETSM))(g_ghostDotMr[i], mat, 0);
+  }
+  for (i = used; i < GHOST_MAXDOT; i++)
+    if (g_ghostDots[i] && uobj_live(g_ghostDots[i]))
+      ((set_active_t)RVA(R_SETACTIVE))(g_ghostDots[i], 0, 0);
+
+  /* 菜单里那行「预置点 (x y z)」要跟着准星走：文字是 UGUI，只在 ~5 Hz 刷 */
+  if ((++uiTick % 12) == 0) menu_refresh();
+}
+
 /* 跳跃链接：Bot_JumpLink.Link[] 只有一个元素，endTransform 指向终点。
- * 这是本轮的唯一“新建组件”路径；session-only（pack 格式还没有 jump 行），
- * 先用 markers 的可视化球提示，下一轮再补持久化。 */
+ * 2026-11-20 起可持久化：菜单里建一次会写 `jump add`，进图套包时 nav_apply_jumps 重建。 */
 static int make_jump_link(V3 a, V3 b) {
   P endGo, startGo, comp, links, endTr, startTr, method;
   float dx = b.x - a.x, dy = b.y - a.y, dz = b.z - a.z;
@@ -4331,9 +5513,17 @@ static int make_jump_link(V3 a, V3 b) {
 
   method = x_class_get_method_from_name ? x_class_get_method_from_name(g_jumpCls, "OnLatePostScan", 0) : 0;
   if (method && x_runtime_invoke) {
+    P startNode, endNode;
     x_runtime_invoke(method, comp, 0, 0);
-    elog("wpmenu: jump link created start=(%.2f %.2f %.2f) end=(%.2f %.2f %.2f) method=%p",
-         a.x, a.y, a.z, b.x, b.y, b.z, method);
+    /* OnLatePostScan 会按坐标把两端挂到图上：Bot_JumpLink.<startNode> @0x20，
+     * Link.endNode @0x14。读到空就是「最近节点没找到」，人机不会走这条跳链。 */
+    startNode = *(P*)((char*)comp + 0x20);
+    endNode = *(P*)((char*)links + 0x14);
+    elog("wpmenu: jump link created start=(%.2f %.2f %.2f) end=(%.2f %.2f %.2f) method=%p startNode=%p endNode=%p",
+         a.x, a.y, a.z, b.x, b.y, b.z, method, startNode, endNode);
+    if (!startNode || !endNode)
+      elog("wpmenu: jump link NOT hooked (startNode=%p endNode=%p); 起点要落在已有路点附近",
+           startNode, endNode);
   } else {
     elog("wpmenu: jump component created but OnLatePostScan missing; link inactive");
   }
@@ -4350,13 +5540,91 @@ static void wp_place(void) {
   if (g_wpAutoGround) { /* cam_point already returns the ground point */ }
   switch (g_wpBrush) {
     case 0: nav_add_here(); break;
-    case 1:
-      if (g_nedHasA) {
-        if (make_jump_link(g_nedA, p)) elog("wpmenu: jump link A -> crosshair (session only)");
-      } else {
-        elog("wpmenu: jump link needs A start first (Ctrl+Shift+A or path step 1)");
+    case 1: {
+      /* 跳跃点 = 两次点击，而且两端都必须是图上真实的路点。
+       *
+       * 游戏的判定（GameAssembly 反汇编：Bot.OnPathComplete + Bot_JumpLink.GetLink /
+       * GetLinkEndByGraphNode）：遍历 A* 路径的节点序列，只有「路径里 起点节点 的下一个
+       * 节点 正好就是这条跳链的 endNode」时才插跳跃段。也就是说
+       *   ① 起点、落点都得分到图上的节点（linkDic 按起点节点登记，endNode 由落点最近节点解析）；
+       *   ② 这两个节点之间必须有一条 A->B 的边，否则 A* 永远不会把它们连着排，跳链一次都不触发。
+       * 所以这里：起点必须吸到路点；落点没有路点就顺手补一个；建完跳链再补 A->B 的单向边。 */
+      P g = navfix_point_graph();
+      int ia, ib;
+      float len;
+      V3 b;
+      if (!g) { elog("wpmenu: jump: no point graph"); break; }
+      if (!g_nedHasA) {
+        ia = nav_find(g, &p, 3.0f);
+        if (ia < 0) {
+          elog("wpmenu: jump start: 准星 3 m 内没有路点；先在起跳处放一个普通路点再建跳链");
+          break;
+        }
+        nav_pos(nav_node(g, ia), &g_nedA);
+        g_nedHasA = 1;
+        elog("wpmenu: jump start = node idx=%d (%.2f %.2f %.2f); 对准落点再按 5",
+             ia, g_nedA.x, g_nedA.y, g_nedA.z);
+        {
+          P c0 = 0;
+          if (nav_conn_get(nav_node(g, ia), &c0) <= 0)
+            elog("wpmenu: jump start node %d 一条边都没有，Bot 根本走不到它；先给它连边", ia);
+        }
+        break;
       }
+      ia = nav_find(g, &g_nedA, 0.6f);
+      if (ia < 0) {
+        elog("wpmenu: jump start node lost (起点已不在图上); 重新选起点");
+        g_nedHasA = 0;
+        break;
+      }
+      ib = nav_find(g, &p, 2.5f);
+      if (ib >= 0 && ib != ia) {
+        nav_pos(nav_node(g, ib), &b);          /* 落点已有路点：直接用它 */
+      } else if (nav_d2(&g_nedA, &p) < 2.25f) {  /* 1.5^2 */
+        elog("wpmenu: jump landing 离起点太近（<1.5 m）；跳链没意义，换个地方再按 5");
+        break;
+      } else {
+        /* 落点附近没有路点（或最近的点又是起点）：就地补一个落点路点。
+         * 不补的话 endNode 会解析回起点，变成「原地跳」，永远不会触发。 */
+        ib = nav_add_live(g, &p);
+        if (ib < 0) { elog("wpmenu: jump landing: 新建落点路点失败"); break; }
+        nav_push(NADD, &p, 0);
+        nav_refresh(g);
+        b = p;
+        elog("wpmenu: jump landing: 新建路点 idx=%d (%.2f %.2f %.2f)", ib, b.x, b.y, b.z);
+      }
+      len = sqrtf(nav_d2(&g_nedA, &b));
+      if (len < 1.5f) {
+        elog("wpmenu: jump too short (%.2f m < 1.5); 换一个落点", len);
+        break;
+      }
+      if (!make_jump_link(g_nedA, b)) break;
+      /* 跳链要能被用上，两点之间必须有 A->B 的边（见上面 ②） */
+      ia = nav_find(g, &g_nedA, 0.6f);
+      ib = nav_find(g, &b, 0.6f);
+      if (ia >= 0 && ib >= 0 && ia != ib) {
+        if (!nav_conn_has(nav_node(g, ia), nav_node(g, ib))) {
+          nav_conn_set(nav_node(g, ia), nav_node(g, ib), 1);
+          nav_push_dir(EADD, &g_nedA, &b, 1);   /* edge out：单向 A -> B */
+          nav_refresh(g);
+          elog("wpmenu: jump edge A->B added (idx %d -> %d)", ia, ib);
+        }
+        nav_push(JADD, &g_nedA, &b);            /* 落盘成 jump add，重进图自动重建 */
+        elog("wpmenu: jump saved: node %d -> node %d (%.2f m)", ia, ib, len);
+        {
+          /* 落点只有 A->B 这一条边 = 跳过去是死胡同：只有「目标就是落点」时才有用，
+           * 要接着往别处走就得先给落点连边（和放普通路点后做的事一样）。 */
+          P c1 = 0;
+          if (nav_conn_get(nav_node(g, ib), &c1) <= 1)
+            elog("wpmenu: jump landing node %d 目前只连着起点：跳过去没法继续走"
+                 "（除非落点就是目标，否则再给它连几条边）", ib);
+        }
+      } else {
+        elog("wpmenu: jump saved but nodes not resolvable (A=%d B=%d); 跳链不会触发", ia, ib);
+      }
+      g_nedHasA = 0;                            /* 下一次点击重新设起点 */
       break;
+    }
     case 2: make_crouch(p); break;
     case 3:
       if (g_curArea >= 0 && g_curArea < g_n && g_mk[g_curArea].type == 3) {
@@ -4386,14 +5654,14 @@ static void pack_stat(void) {
     snprintf(g_packStat, sizeof g_packStat, "数据 正式版（nav）");
   } else if (!g_packFp[0]) {
     snprintf(g_packStat, sizeof g_packStat, "数据 测试包 %s · 不限图%s",
-             g_packName, g_nedBlank ? " · 空白底图" : "");
+             g_packName, g_nedBlank ? " · 空白地图" : "");
   } else if (g_packSkip) {
     snprintf(g_packStat, sizeof g_packStat,
              "数据 测试包 %s · 只对 %s 生效 · 当前图已跳过", g_packName, want);
   } else {
     snprintf(g_packStat, sizeof g_packStat,
              "数据 测试包 %s · 只对 %s 生效 · 包内 %d 项改动%s",
-             g_packName, want, g_nedN, g_nedBlank ? " · 空白底图" : "");
+             g_packName, want, g_nedN, g_nedBlank ? " · 空白地图" : "");
   }
   elog("pack data: %s", g_packStat);
 }
@@ -4565,9 +5833,11 @@ static int nav_cmd_set_pack(P g, const char* pack, const char* fp) {
   g_nedN = 0;
   g_nedBlank = 0;
   g_nedGrow = 0;
+  g_nedKeep = 0;
   g_growGraph = 0;
   g_growBase = 0;
   g_growMade = 0;
+  g_jumpSeenN = 0;
   g_nedPath[0] = 0;
   g_nedExpect = 0;
   g_nedGraph = g;
@@ -4592,6 +5862,11 @@ static void nav_cmd_tick(P g) {
   char menu[8] = "";
   unsigned long long seq = 0;
   int have = 0;
+  /* 控制台删了坐标：文件修改时间变了就重读并重画（0.5 s 一次，文件很小） */
+  if (g_pmPath[0] && g_visPm && pm_load(0)) {
+    elog("pmark: reloaded %d mark(s)", g_pmN);
+    g_visDirty = 1;
+  }
   if (!g_navCmdPath[0]) return;
   f = fopen(g_navCmdPath, "r");
   if (!f) return;
@@ -4617,6 +5892,7 @@ static void nav_cmd_tick(P g) {
   if (!strcmp(cmd, "undo")) { nav_undo(); return; }
   if (!strcmp(cmd, "redo")) { nav_redo(); return; }
   if (!strcmp(cmd, "brush")) { set_brush(brush_from_name(brush)); return; }
+  if (!strcmp(cmd, "mark")) { pm_mark(); return; }
   if (!strcmp(cmd, "menu")) {
     if (menu[0] == '0' || !strcmp(menu, "off")) menu_close();
     else if (menu[0] == '1' || !strcmp(menu, "on")) menu_open();
@@ -4646,10 +5922,12 @@ static void nav_edit_tick(void) {
     g_nedN = 0;
     g_nedBlank = 0;
     g_nedGrow = 0;
+    g_nedKeep = 0;
     g_nedPath[0] = 0;
     g_growGraph = 0;     /* 换图：grow 记录只对旧图有效 */
     g_growBase = 0;
     g_growMade = 0;
+    g_jumpSeenN = 0;     /* 换图：跳链只对旧图建过一次，新图要重来 */
     g_packSkip = 0;      /* 换图：让下一张图重新判断一次，并在日志里各记一行 */
     nav_base_free();     /* 旧图的快照只对旧图有效 */
     g_fpGraph = 0;       /* 指纹的原生点数只对这张图有效 */
@@ -4694,16 +5972,20 @@ static void nav_edit_tick(void) {
     if ((g_nedBlank || g_nedGrow) && !g_packName[0]) {
       g_nedBlank = 0;
       g_nedGrow = 0;
-      elog("naved: ignore blank/grow (only a test pack may replace the base)");
+      g_nedKeep = 0;
+      elog("naved: ignore blank/grow/keep (only a test pack may replace the base)");
     }
     g_nedBaseN = n;
     ops = nav_apply_all(g);
     if (ops < 0) { g_nedWaitN = -1; return; }   /* grow 要等 A* 就绪：下一帧重来 */
     g_nedApplied = 1;
     pack_stat();
-    if (ops) elog("naved: applied %d/%d edits on %s (nodes %d -> %d)%s",
+    if (ops) elog("naved: applied %d/%d edits on %s (nodes %d -> %d)%s%s",
                   ops, g_nedN, g_nedFp, g_nedBaseN, nav_count(g),
-                  g_nedBlank ? " [blank base]" : "");
+                  g_nedBlank ? " [blank base]" : "", g_nedKeep ? " [keep native]" : "");
+    else if (g_nedN || g_nedKeep)
+      elog("naved: %d edits loaded, 0 effective on %s (nodes %d)%s",
+           g_nedN, g_nedFp, nav_count(g), g_nedKeep ? " [keep native]" : "");
     else elog("naved: no edit file for %s (dir %s)", g_nedFp, g_navDir);
     return;
   }
@@ -4734,10 +6016,13 @@ void editor_map_name(char* out, int cap) {
  * F2 开关；长按 E 0.45 s 也可（UCF 没有 E 交互，先按用户确认）。
  * 菜单只做「选操作 → 调已有的 naved / make_* 函数」，不改游戏行为层。
  */
-static const char* WP_MENU[10] = {
-  "添加路点", "设置笔刷 / 标记", "建立路径", "删除路径 / 路点", "删除标记（准星最近）",
-  "落地 / 贴地", "聚集区工具", "撤销 / 保存", "显示图层", "关闭菜单"
+/* 2026-11-20：删掉原第 2 项「设置笔刷 / 标记」——它和「添加路点」走的是
+ * 同一条「选类型 → 左键放置」路径，纯重复。类型统一在「添加路点」子菜单选。 */
+static const char* WP_MENU[] = {
+  "添加路点", "建立路径", "删除路径 / 路点", "删除标记（准星最近 · Delete）",
+  "落地 / 贴地", "聚集区工具", "撤销 / 保存", "显示图层", "关闭菜单（Esc 逐级返回）"
 };
+#define WP_MENU_N ((int)(sizeof WP_MENU / sizeof WP_MENU[0]))
 static const char* WP_TYPES[6] = {
   "普通路点", "跳跃点", "蹲守点", "守点", "聚集区", "标签区"
 };
@@ -4771,12 +6056,14 @@ static void nav_redo(void);
 
 static void menu_sub_title(char* out, int cap) {
   const char* s = "路点菜单";
-  if (g_wpMenuSub == 1) s = "添加路点：选类型";
-  else if (g_wpMenuSub == 2) s = "建立路径：选方向";
+  /* 2026-11-20 用户需求：选定类型后停在「连续编辑」页，不要回主菜单。
+   * 标题直接写清楚现在是哪种模式；Esc 才一级一级往回退。 */
+  if (g_wpMenuSub == 1) s = g_wpArm ? "添加路点：连续放置中" : "添加路点：选类型";
+  else if (g_wpMenuSub == 2) s = g_wpLinkStep ? "建立路径：连续连线中" : "建立路径：选方向";
   else if (g_wpMenuSub == 3) s = "聚集区工具";
   else if (g_wpMenuSub == 4) s = "撤销 / 保存";
   else if (g_wpMenuSub == 5) s = "显示图层";
-  else if (g_wpMenuSub == 6) s = "删除：选类型";
+  else if (g_wpMenuSub == 6) s = "删除：选类型（可连续删）";
   snprintf(out, (size_t)cap, "%s", s);
 }
 
@@ -4805,6 +6092,20 @@ static void menu_refresh(void) {
   char title[64];
   int i, n, off = 0;
   if (g_menu && !uobj_live(g_menu)) overlay_reset();
+  /* 2026-11-20 现场反馈「编辑一次菜单就没了」：换图 / overlay_reset 之后 g_menu 会被
+   * 置 0，而 g_wpMenuOpen 还是 1。以前这里直接 return，菜单就凭空消失：按 F2 的第一下
+   * 只是把 open 清掉（看着像关了），第二下才重新出现。现在缺对象就地重建，别让菜单
+   * 自己"退出"。 */
+  if (!g_menu && g_wpMenuOpen && g_wpMenuOn) {
+    static unsigned lastTry;
+    unsigned now = GetTickCount();
+    if (now - lastTry >= 1000) {
+      lastTry = now;
+      if (!overlay_init()) return;
+    } else {
+      return;
+    }
+  }
   if (!g_menu) return;
   if (!g_wpMenuOn || !g_wpMenuOpen) {
     ((set_txt_t)RVA(R_TEXT_SETTEXT))(g_menu, x_string_new(""), 0);
@@ -4812,11 +6113,11 @@ static void menu_refresh(void) {
   }
   menu_sub_title(title, sizeof title);
   off += snprintf(s + off, sizeof s - (size_t)off,
-                  "%s   [F2/长按E 关] [Delete 删标记]\n", title);
+                  "%s   [F2/长按E 关]\n", title);
   if (g_wpMenuSub == 0) {
-    for (i = 0; i < 10 && off < (int)sizeof s - 80; i++) {
+    for (i = 0; i < WP_MENU_N && off < (int)sizeof s - 80; i++) {
       off += snprintf(s + off, sizeof s - (size_t)off, "%s%d  %s\n",
-                      i == g_wpMenuSel ? "> " : "  ", (i + 1) % 10, WP_MENU[i]);
+                      i == g_wpMenuSel ? "> " : "  ", i + 1, WP_MENU[i]);
     }
   } else {
     n = menu_sub_count();
@@ -4826,15 +6127,62 @@ static void menu_refresh(void) {
     }
   }
   if (g_wpArm) {
-    off += snprintf(s + off, sizeof s - (size_t)off, "\n[%s] 小键盘5 / 左键 放置\n", WP_TYPES[g_wpBrush]);
+    off += snprintf(s + off, sizeof s - (size_t)off,
+                    "\n[%s] 小键盘5 / 左键 放置 · 可以一直放\n", WP_TYPES[g_wpBrush]);
+    if (g_wpBrush == 1 && off < (int)sizeof s - 96) {
+      if (g_nedHasA) {
+        P pg = navfix_point_graph();
+        int ai = pg ? nav_find(pg, &g_nedA, 0.6f) : -1;
+        off += snprintf(s + off, sizeof s - (size_t)off,
+                        "起点 A #%d (%.1f %.1f %.1f)：对准落点再按 5（落点没路点会自动补一个 + 补 A->B 连线）\n",
+                        ai, g_nedA.x, g_nedA.y, g_nedA.z);
+      }
+      else
+        off += snprintf(s + off, sizeof s - (size_t)off,
+                        "两次点击：第 1 次对准起跳处（要在路点上），第 2 次对准落点\n");
+    }
+    if (off < (int)sizeof s - 96)
+      off += snprintf(s + off, sizeof s - (size_t)off,
+                      "换类型：1-6 直选或 8/2 · 结束放置：0 / Esc（菜单不会关）\n");
   } else if (g_wpLinkStep == 1) {
-    off += snprintf(s + off, sizeof s - (size_t)off, "\n对准起点，小键盘5 选 A\n");
+    off += snprintf(s + off, sizeof s - (size_t)off,
+                    "\n对准起点（准星框变绿 = 就是它），小键盘5 选 A\n"
+                    "连完一条 A 会自动前进到落点，接着连下一个\n");
+    if (off < (int)sizeof s - 96)
+      off += snprintf(s + off, sizeof s - (size_t)off,
+                      "换方向：1-3 直选或 8/2 · 结束连线：0 / Esc（菜单不会关）\n");
   } else if (g_wpLinkStep == 2) {
-    off += snprintf(s + off, sizeof s - (size_t)off, "\nA 已选，对准终点，小键盘5 连边\n");
+    P pg = navfix_point_graph();
+    int ai = pg ? nav_find(pg, &g_nedA, 0.6f) : -1;
+    const char* mode = g_wpPath == 1 ? "单向 A->B" : (g_wpPath == 2 ? "单向 B->A" : "双向");
+    off += snprintf(s + off, sizeof s - (size_t)off,
+                    "\n起点 A #%d (%.1f %.1f %.1f)\n", ai, g_nedA.x, g_nedA.y, g_nedA.z);
+    if (g_ghostPvOk && off < (int)sizeof s - 160) {
+      float dm = sqrtf(nav_d2(&g_nedA, &g_ghostPv));
+      if (g_ghostPvIdx >= 0)
+        off += snprintf(s + off, sizeof s - (size_t)off,
+                        "终点 B #%d (%.1f %.1f %.1f)  %.1f m  %s\n",
+                        g_ghostPvIdx, g_ghostPv.x, g_ghostPv.y, g_ghostPv.z, dm, mode);
+      else
+        off += snprintf(s + off, sizeof s - (size_t)off,
+                        "终点 B 新点 (%.1f %.1f %.1f)  %.1f m  %s\n",
+                        g_ghostPv.x, g_ghostPv.y, g_ghostPv.z, dm, mode);
+    } else if (off < (int)sizeof s - 96) {
+      off += snprintf(s + off, sizeof s - (size_t)off,
+                      "终点 B：对准 3 m 内的路点（绿 = 起点，红 = 终点）\n");
+    }
+    off += snprintf(s + off, sizeof s - (size_t)off,
+                    "按 5 连边 · 连完 A 前进到落点 · 0 / Esc 结束连线\n");
   } else {
     off += snprintf(s + off, sizeof s - (size_t)off, "\n当前笔刷: %s  A: %s\n",
                     WP_TYPES[g_wpBrush], g_nedHasA ? "已选" : "未选");
   }
+  /* 准星处那个虚线框的坐标（ghost_tick 每帧更新，文字 ~5 Hz 刷新）：
+   * 位置不合法（附近没路点 / 离起点太近）时框变灰，这里也直说。 */
+  if ((g_wpArm || g_wpLinkStep) && g_ghostPvOk && off < (int)sizeof s - 96)
+    off += snprintf(s + off, sizeof s - (size_t)off, "预置 (%.1f %.1f %.1f)%s\n",
+                    g_ghostPv.x, g_ghostPv.y, g_ghostPv.z,
+                    g_ghostValid ? "" : "  × 这里按下去会被拒绝");
   if (off < (int)sizeof s - 80)
     off += snprintf(s + off, sizeof s - (size_t)off, "小键盘 8/2 上下   5 确认   0 返回   1-9 直选\n");
   ((set_txt_t)RVA(R_TEXT_SETTEXT))(g_menu, x_string_new(s), 0);
@@ -4870,11 +6218,21 @@ static void menu_toggle(void) {
 }
 
 static void menu_back(void) {
-  if (g_wpArm || g_wpLinkStep) {
+  /* 连续模式下的 Esc / 0：只结束"当前这种动作"，人停在类型页/方向页，
+   * 想换类型直接 1-6、想换方向直接 1-3，不用重开菜单（2026-11-20 用户需求：
+   * "保持某一种类型的编辑，除非想换种类再 Esc 回退一下"）。 */
+  if (g_wpArm) {
     g_wpArm = 0;
+    if (g_wpMenuSub != 1) g_wpMenuSub = 1;
+    elog("wpmenu: 结束连续放置（类型 %s 记着，Esc 再按一次回主菜单）", WP_TYPES[g_wpBrush]);
+    menu_refresh();
+    return;
+  }
+  if (g_wpLinkStep) {
     g_wpLinkStep = 0;
     g_nedHasA = 0;
-    elog("wpmenu: placement cancelled");
+    if (g_wpMenuSub != 2) g_wpMenuSub = 2;
+    elog("wpmenu: 结束连续连线（方向 %s 记着，Esc 再按一次回主菜单）", WP_PATHS[g_wpPath]);
     menu_refresh();
     return;
   }
@@ -4883,10 +6241,23 @@ static void menu_back(void) {
 }
 
 static void menu_move(int delta) {
-  int n = g_wpMenuSub ? menu_sub_count() : 10;
+  int n = g_wpMenuSub ? menu_sub_count() : WP_MENU_N;
   if (!n) return;
-  if (g_wpMenuSub) g_wpMenuSubSel = (g_wpMenuSubSel + delta + n) % n;
-  else g_wpMenuSel = (g_wpMenuSel + delta + n) % n;
+  if (g_wpMenuSub) {
+    g_wpMenuSubSel = (g_wpMenuSubSel + delta + n) % n;
+    /* 连续模式里 8/2 就是"换类型 / 换方向"：高亮一变就生效，
+     * 否则 8/2 挪了高亮、按 5 放的却还是旧类型，很容易放错。 */
+    if (g_wpMenuSub == 1 && g_wpArm) {
+      set_brush(g_wpMenuSubSel);
+    } else if (g_wpMenuSub == 2 && g_wpLinkStep) {
+      g_wpPath = g_wpMenuSubSel;
+      g_nedHasA = 0;
+      g_wpLinkStep = 1;
+      elog("wpmenu: 换方向 dir=%d（A 清掉，重新选起点）", g_wpPath);
+    }
+  } else {
+    g_wpMenuSel = (g_wpMenuSel + delta + n) % n;
+  }
   elog("wpmenu: %s=%d", g_wpMenuSub ? "subsel" : "sel",
        g_wpMenuSub ? g_wpMenuSubSel : g_wpMenuSel);
   menu_refresh();
@@ -4928,10 +6299,9 @@ static void menu_activate(void) {
     }
     i = g_wpMenuSel;
     if (i == 0) { g_wpMenuSub = 1; g_wpMenuSubSel = g_wpBrush; menu_refresh(); return; }
-    if (i == 1) { g_wpMenuSub = 1; g_wpMenuSubSel = g_wpBrush; menu_refresh(); return; }
-    if (i == 2) { g_wpMenuSub = 2; g_wpMenuSubSel = g_wpPath; menu_refresh(); return; }
-    if (i == 3) { g_wpMenuSub = 6; g_wpMenuSubSel = 0; menu_refresh(); return; }
-    if (i == 4) {
+    if (i == 1) { g_wpMenuSub = 2; g_wpMenuSubSel = g_wpPath; menu_refresh(); return; }
+    if (i == 2) { g_wpMenuSub = 6; g_wpMenuSubSel = 0; menu_refresh(); return; }
+    if (i == 3) {
       /* 和游戏内 Delete 键同一条路径：删准星最近的那个标记
        * （蹲守点 / 幽灵守点 / 聚集区 / 跳跃链接）。A* 路点的删除在
        * 「删除路径 / 路点」子菜单里，两边分开，不会互相误删。 */
@@ -4940,27 +6310,26 @@ static void menu_activate(void) {
       menu_refresh();
       return;
     }
-    if (i == 5) { nav_ground_here(); menu_refresh(); return; }
-    if (i == 6) { g_wpMenuSub = 3; g_wpMenuSubSel = 0; menu_refresh(); return; }
-    if (i == 7) { g_wpMenuSub = 4; g_wpMenuSubSel = 0; menu_refresh(); return; }
-    if (i == 8) { g_wpMenuSub = 5; g_wpMenuSubSel = 0; menu_refresh(); return; }
-    if (i == 9) { menu_close(); return; }
+    if (i == 4) { nav_ground_here(); menu_refresh(); return; }
+    if (i == 5) { g_wpMenuSub = 3; g_wpMenuSubSel = 0; menu_refresh(); return; }
+    if (i == 6) { g_wpMenuSub = 4; g_wpMenuSubSel = 0; menu_refresh(); return; }
+    if (i == 7) { g_wpMenuSub = 5; g_wpMenuSubSel = 0; menu_refresh(); return; }
+    if (i == 8) { menu_close(); return; }
     return;
   }
   i = g_wpMenuSubSel;
-  if (g_wpMenuSub == 1) {                 /* 类型 */
-    set_brush(i);
-    g_wpMenuSub = 0;
-    g_wpArm = 1;
-    menu_refresh();
+  if (g_wpMenuSub == 1) {                 /* 类型：停在类型页，连续放置 */
+    g_wpArm = 1;                          /* 先置位再 set_brush：它内部会重画一次 */
+    g_wpMenuSubSel = i;
+    set_brush(i);                         /* 不再 g_wpMenuSub = 0：换类型不用重开菜单 */
     return;
   }
-  if (g_wpMenuSub == 2) {                 /* 路径方向 */
+  if (g_wpMenuSub == 2) {                 /* 路径方向：停在方向页，连续连线 */
     g_wpPath = i;
-    g_wpMenuSub = 0;
+    g_wpMenuSubSel = i;
     g_wpLinkStep = 1;
     g_nedHasA = 0;
-    elog("wpmenu: path dir=%d, select A first", g_wpPath);
+    elog("wpmenu: path dir=%d 连续连线：先按 5 选 A（Esc 结束）", g_wpPath);
     menu_refresh();
     return;
   }
@@ -4995,10 +6364,10 @@ static void menu_activate(void) {
     menu_refresh();
     return;
   }
-  if (g_wpMenuSub == 6) {                 /* 删除：路径 / 路点 */
+  if (g_wpMenuSub == 6) {                 /* 删除：路径 / 路点（连续删，不弹回主菜单） */
     if (i == 0) nav_unlink_here();
     else nav_del_here();
-    g_wpMenuSub = 0;
+    g_wpMenuSubSel = i;
     menu_refresh();
     return;
   }
@@ -5053,7 +6422,7 @@ int editor_menu_key(unsigned vk, int ext) {
   if (vk == VK_NUMPAD8 || vk == VK_UP) { menu_move(-1); return 1; }
   if (vk == VK_NUMPAD2 || vk == VK_DOWN) { menu_move(1); return 1; }
   if (vk == VK_NUMPAD5 || vk == VK_CLEAR || vk == VK_RETURN) { menu_confirm(); return 1; }
-  if (vk == VK_NUMPAD0 || vk == VK_INSERT || vk == VK_BACK || vk == VK_ESCAPE) {
+  if (vk == VK_ESCAPE) {
     menu_back();
     return 1;
   }
@@ -5061,12 +6430,12 @@ int editor_menu_key(unsigned vk, int ext) {
     int i = (int)(vk - '1');
     if (vk == '0') {
       if (g_wpMenuSub) menu_back();
-      else { g_wpMenuSel = 9; menu_activate(); }
+      else { g_wpMenuSel = WP_MENU_N - 1; menu_activate(); }
       return 1;
     }
     if (g_wpMenuSub) {
       if (i < menu_sub_count()) { g_wpMenuSubSel = i; menu_activate(); }
-    } else if (i >= 0 && i < 10) {
+    } else if (i >= 0 && i < WP_MENU_N) {
       g_wpMenuSel = i;
       menu_activate();
     }
@@ -5101,9 +6470,12 @@ static void menu_tick(void) {
   static int tick;
   tick++;
   if (g_collectOnly) { g_wpMenuOpen = 0; return; }
+  /* 抬起 E 无条件复位。以前这行藏在 !g_wpEFired 里面，第一次长按成功后
+   * g_wpEFired 一直是 1，复位永远执行不到，g_wpEDownAt 再也清不掉，
+   * 于是整个进程里长按 E 只有第一次有效。 */
+  if (!(GetAsyncKeyState('E') & 0x8000)) { g_wpEDownAt = 0; g_wpEFired = 0; }
   if (g_wpMenuOn && g_wpEDownAt && !g_wpEFired) {
-    if (!(GetAsyncKeyState('E') & 0x8000)) g_wpEDownAt = 0;
-    else if (GetTickCount() - g_wpEDownAt >= 450) {
+    if (GetTickCount() - g_wpEDownAt >= 450) {
       g_wpEFired = 1;
       menu_toggle();
     }
@@ -5394,6 +6766,111 @@ static void bot_probe(void) {
   elog("probe: bots=%d stopAllBot=%d", cnt, (int)st);
 }
 
+/* ---- 2026-11-20 寻路诊断：grow / keep 图里人机不动时，用一行日志定位 --------
+ * 字段偏移（dump.cs，x86 32-bit）：
+ *   AstarPath.pathProcessor    +0x88
+ *   PathProcessor: queue +0x14, pathHandlers +0x20
+ *   ThreadControlQueue: head +0x8, tail +0xC, numReceivers +0x14,
+ *                       blocked +0x18, blockedReceivers +0x1C
+ *   PathHandler:  pathID(ushort) +0x8       每条线程算一条路就 +1
+ *   GraphNode:    nodeIndex +0x8, flags +0xC（bit0 = 可走）
+ *   Bot:          path +0x80, gNode_Nearset +0x88, gNode_Next +0x8C,
+ *                 nextFindPathTime +0xB8（只有 Bot.PathSetting 会写它）, blockedTime +0xEC
+ * 判读（ask = 1 s 内 nextFindPathTime 变了几次）：
+ *   ask 涨、phSum 不动        → 人机请求了，但 path 没开始算（StartPath 被拒 / 队列卡住）
+ *   ask 涨、phSum 涨、path=0  → 算完了没装车（回调没触发 / OnPathComplete 丢弃）
+ *   ask 恒 0                  → 上层 AI 根本没请求移动，和寻路无关
+ * qBlk=1 = 队列还停在 blocked（我们的 Lock 没解开）；qRcv = 寻路线程数。
+ * b0 near/next 的 /1 = 该节点可走，/0 = 不可走（指向被标死的原生点就会是 0）；
+ * near 下标 < walk 基线时是原生点，>= 基线就是新建点。 */
+static P bot_type_get(void) {
+  if (g_prBotType) return g_prBotType;
+  g_prBotCls = find_cls("", "Bot");
+  if (!g_prBotCls || !x_class_get_type) return 0;
+  g_prBotType = x_type_get_object ? x_type_get_object(x_class_get_type(g_prBotCls)) : 0;
+  if (x_class_get_field_from_name) g_prStopFld = x_class_get_field_from_name(g_prBotCls, "stopAllBot");
+  return g_prBotType;
+}
+static void diag_gn(P nd, int* idx, int* walk) {
+  *idx = -1; *walk = -1;
+  if (!pr_readable(nd, 0x20)) return;
+  *idx = *(int*)((char*)nd + 0x8);
+  *walk = (int)(*(unsigned*)((char*)nd + 0xC) & 1u);
+}
+static void nav_diag(void) {
+  static int on = -1;
+  static struct { P bot; float t; } dl[32];
+  P g = navfix_point_graph(), a, pp, q, phs, bt, arr;
+  int i, j, n, bots = 0, withPath = 0, asks = 0, phN = 0, phSum = 0, bad = 0;
+  int qHead = -1, qBlk = -1, qBr = -1, qRcv = -1, shown = 0;
+  char b0[160];
+  if (on < 0) on = cfg_bool("nav_diag", 1) ? 1 : 0;
+  if (!on || g_collectOnly) return;
+  if (!g_packName[0] || !(g_nedGrow || g_nedBlank)) return;  /* 只看测试包的空白/grow/keep 图 */
+  if (g_sceneAge < 12) return;
+  b0[0] = 0;
+  a = navfix_astar();
+  pp = a ? *(P*)((char*)a + 0x88) : 0;
+  if (pr_readable(pp, 0x40)) {
+    q = *(P*)((char*)pp + 0x14);
+    if (pr_readable(q, 0x28)) {
+      qHead = *(P*)((char*)q + 0x8) ? 1 : 0;
+      qRcv = *(int*)((char*)q + 0x14);
+      qBlk = (int)*(unsigned char*)((char*)q + 0x18);
+      qBr = *(int*)((char*)q + 0x1C);
+    }
+    phs = *(P*)((char*)pp + 0x20);           /* PathHandler[] */
+    if (pr_readable(phs, 0x20)) {
+      int hn = *(int*)((char*)phs + 0xC);
+      for (i = 0; i < hn && i < 32; i++) {
+        P ph = *(P*)((char*)phs + 0x10 + i * 4);
+        if (!pr_readable(ph, 0x20)) continue;
+        phSum += (int)*(unsigned short*)((char*)ph + 0x8);
+        phN++;
+      }
+    }
+  }
+  bt = bot_type_get();
+  arr = bt ? ((find_objs_t)RVA(R_FINDOBJS))(bt, 1, 0) : 0;
+  if (arr) {
+    n = *(int*)((char*)arr + 0xC);
+    if (n < 0) n = 0;
+    if (n > 32) n = 32;
+    for (i = 0; i < n; i++) {
+      P b = *(P*)((char*)arr + 0x10 + i * 4);
+      float t;
+      if (!b || !uobj_live(b) || !pr_readable(b, 0xC0)) continue;
+      bots++;
+      if (*(P*)((char*)b + 0x80)) withPath++;
+      t = *(float*)((char*)b + 0xB8);
+      for (j = 0; j < 32; j++) if (dl[j].bot == b) break;
+      if (j == 32)
+        for (j = 0; j < 32; j++) if (!dl[j].bot) { dl[j].bot = b; dl[j].t = -1.0f; break; }
+      if (j < 32) {
+        if (dl[j].t >= 0.0f && dl[j].t != t) asks++;
+        dl[j].t = t;
+      }
+      {
+        int ni, nw;
+        diag_gn(*(P*)((char*)b + 0x88), &ni, &nw);
+        if (nw != 1) bad++;          /* 最近的节点不可走（或被死点顶掉）= 人机必站桩 */
+        if (!shown) {
+          int xi, xw;
+          diag_gn(*(P*)((char*)b + 0x8C), &xi, &xw);
+          sprintf(b0, " b0 near=%d/%d next=%d/%d p=%d blk=%.2f",
+                  ni, nw, xi, xw, *(P*)((char*)b + 0x80) ? 1 : 0,
+                  *(float*)((char*)b + 0xEC));
+          shown = 1;
+        }
+      }
+    }
+    for (j = 0; j < 32; j++)
+      if (dl[j].bot && !uobj_live(dl[j].bot)) { dl[j].bot = 0; dl[j].t = -1.0f; }
+  }
+  elog("diag: bots=%d path=%d bad=%d ask=%d phSum=%d phN=%d qHead=%d qBlk=%d qBr=%d qRcv=%d "
+       "walk=%d/%d%s", bots, withPath, bad, asks, phSum, phN, qHead, qBlk, qBr, qRcv,
+       pr_walk_count(g), g ? nav_count(g) : -1, b0);
+}
 void editor_tick(void) {
   static int ticks;
   if (!g_inited) return;
@@ -5433,8 +6910,12 @@ void editor_tick(void) {
   }
   nav_edit_tick();            /* 等图稳定后自动套用本图的编辑（不看 vis 开关） */
   { static int pr; if ((++pr % 20) == 0) bot_probe(); }   /* 人机状态探针：~5 s 一次 */
+  { static int dg; if ((++dg % 4) == 0) nav_diag(); }      /* 寻路诊断：~1 s 一行（只在测试包） */
   { static int dr; if ((++dr % 4) == 0) drive_tick(); }    /* 人机巡线：~1 s 一次 */
   nm_tick();                  /* 可走面独立于可视化：Ctrl+V 关着也能显示 */
+  compass_tick();             /* 方向罗盘独立于可视化：Ctrl+Shift+7 开关 */
+  ghost_tick();               /* 放置前的虚影预览：独立于可视化，菜单一开就在 */
+  edge_dir_sync();            /* 单向边箭头：只有菜单开着才显示 */
   if (!g_visOn) {
     if ((++ticks % 8) == 0) overlay_refresh();   /* 可视化关着也保持面板数字是活的 */
     return;
@@ -5443,6 +6924,17 @@ void editor_tick(void) {
     P pg = navfix_point_graph();
     elog("hb: interactive tick=%d age=%d nodes=%d vis=%d dirty=%d badtr=%d",
          ticks, g_sceneAge, pg ? *(int*)((char*)pg + 0xEC) : -1, g_visOn, g_visDirty, g_badTr);
+  }
+  /* 材质被卸载后，已经建好的那些网格不会自己换材质 —— 查一次，死了就整层重建 */
+  if (g_visObjN && (ticks % 8) == 0) {
+    int mi, dead = 0;
+    for (mi = 1; mi <= 15; mi++)
+      if (g_matSlot[mi] && !mat_alive(g_matSlot[mi])) { dead = 1; break; }
+    if (dead) {
+      elog("vis: material dead after scene load - rebuild all layers");
+      mat_reset("material dead");
+      g_visDirty = 1;
+    }
   }
   if (g_visDirty) {
     /* 刚进图时游戏自己的组件表还挂着上一张图的组件（见 VIS_SCENE_WAIT 注释）。
@@ -5494,6 +6986,7 @@ void editor_on_key_mod(unsigned vk, int shift) {
   if (shift && vk == 'X') { set_collect_only(!g_collectOnly); return; }
   if (vk == 'E') { g_exportForce = 1; vis_export(); g_exportForce = 0; return; }
   if (shift && vk == '6') { nm_toggle(); return; }   /* 可走面独立开关 */
+  if (shift && vk == '7') { compass_toggle(); return; }   /* 方向罗盘（东南西北）开关 */
 
   /* ---- 路点编辑（Ctrl+Shift+字母） ---- */
   if (shift && vk == 'A') { nav_sel_a(); return; }        /* 选 A 点 */
@@ -5870,6 +7363,9 @@ void editor_start(const char* modDir) {
                      ro[0] == '1') ? 1 : 0;
   }
   pack_init();   /* UCF_PACK / UCF_FP：这次读哪个目录、只对哪张图生效 */
+  /* 玩家坐标记录的数据文件：和 ucf_mod.json 同目录，控制台读同一份 */
+  snprintf(g_pmPath, sizeof g_pmPath, "%s\\player_marks.txt", g_dir);
+  pm_load(0);
   /* 开关全部来自 ucf_mod.json（cfg.c）：这里各取一次，日志里写清楚，
    * 关掉哪个在日志里都看得见，不用猜。 */
   g_visOn      = cfg_bool("visualizer", 0);
@@ -5882,6 +7378,8 @@ void editor_start(const char* modDir) {
   g_visSupply  = cfg_bool("vis_supply", 1);
   g_visJump    = cfg_bool("vis_jump", 1);
   g_visTag     = cfg_bool("vis_tag", 1);
+  g_visPm      = cfg_bool("vis_player_marks", 1);
+  g_visCompass = cfg_bool("vis_compass", 1);
   g_editAllow  = cfg_bool("editor", 1);
   g_wpMenuOn   = cfg_bool("wp_menu", 1);
   g_wpAutoGround = cfg_bool("wp_autoground", 1);
@@ -5900,6 +7398,7 @@ void editor_start(const char* modDir) {
   elog("vis data: nodes=%d nano=%d crouch=%d guard=%d born=%d supply=%d jump=%d tag=%d",
        g_visNodes, g_visNano, g_visCrouch, g_visGuard, g_visBorn, g_visSupply,
        g_visJump, g_visTag);
+  elog("compass: vis_compass=%d (屏幕下方汉字罗盘；北=世界 -Z，Ctrl+Shift+7 开关)", g_visCompass);
   elog("export content: enabled=%d nodes=%d crouch=%d area=%d guard=%d spawn=%d tags=%d",
        g_expEnabled, g_expNodes, g_expCrouch, g_expArea, g_expGuard, g_expSpawn, g_expTags);
   elog("four versions: export=%s packs=%s officialNavSave=%s",
