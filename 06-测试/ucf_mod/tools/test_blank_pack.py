@@ -54,8 +54,8 @@ def main():
     assert '"--grow"' in navdata, "navdata.py pack new 丢了 --grow"
     assert '"--keep"' in navdata, "navdata.py pack new 丢了 --keep"
     assert '"--blank"' not in navdata, "navdata.py 又加回了 --blank（已并入 --grow）"
-    assert "is_grow" in navdata, "navdata.py promote 不再拦 grow 包"
-    assert "is_keep" in navdata, "navdata.py promote 不再拦 keep 包"
+    assert "grow, keep = pack_flags(src)" in navdata, \
+        "navdata.py promote 不再读 grow/keep（grow 包照样能发，但没了标记判断）"
     assert "def cmd_pack_seed" not in navdata, "navdata.py 又加回了 pack seed（已删）"
     assert "def seed_pack_lines" not in navdata, "navdata.py 又加回了 seed_pack_lines（已删）"
 

@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""把 ④ 测试版里的历史扫描整理成「原始地图数据集」+ 只读还原点。
+"""把 ② 开发版里的历史扫描整理成「原始地图数据集」+ 只读还原点。
 
 一句话：一张图只留一份、去掉我们自己的编辑、编号+中文名、再存一份永不改动的备份。
 
     python organize_maps.py                # 整理（不删任何东西）
-    python organize_maps.py --archive      # 顺带把处理过的历史 JSON 归档到 ④ navdata\\test\\archive\\
+    python organize_maps.py --archive      # 顺带把处理过的历史 JSON 归档到 ② navdata\\dev\\archive\\
     python organize_maps.py --dry          # 只看会做什么
 
 产出：
@@ -39,15 +39,16 @@ import time
 TOOLS = os.path.dirname(os.path.abspath(__file__))
 if TOOLS not in sys.path:
     sys.path.insert(0, TOOLS)
-from ucf_paths import (DEPLOY as UCF, GEO, EXPORT as VIS, NAV, MAPS, BACKUP,  # noqa: E402
-                       ARCHIVE, NAMES_FILE, doc)
+import ucf_paths as P  # noqa: E402
+from ucf_paths import (DEPLOY as UCF, GEO, EXPORT as VIS, NAV, BACKUP,  # noqa: E402
+                       ARCHIVE, doc)
 
-# 历史归档：2026-11-18 起新快照写 ④ 测试版 archive\；旧快照仍在 ③\backup（只读兼容）。
+# 历史归档：2026-11-18 起新快照写 ② 开发版 archive\；旧快照仍在 ③\backup（只读兼容）。
 HISTORY_ROOTS = [ARCHIVE, BACKUP]
 
 
 def _find_in_history(glob_pat, name):
-    """在 ④ archive / ③ backup 的历史快照里找 raw/<name>（新快照优先）。"""
+    """在 ② archive / ③ backup 的历史快照里找 raw/<name>（新快照优先）。"""
     if not name:
         return ""
     for root in HISTORY_ROOTS:
@@ -131,7 +132,7 @@ TRUST_NODES = 100      # 低于这个点数：多半是菜单/大厅场景采到
 # 进图加载中按 Ctrl+E 会拿到「扫到一半」的点图（运输船 27 点 vs 完整 786 点）。这种残缺导出点数
 # 远小于同图其它导出，而且坐标不是它们的子集（编辑只会加点，原图一定是「原图+编辑」的子集）→ 丢掉。
 PARTIAL_RATIO = 0.5
-SUSPECT_DIR = os.path.join(MAPS, "_suspect")   # 被移出 maps/ 的可疑整理文件放这（不删）
+SUSPECT_DIR = os.path.join(P.common_dir(P.DATA), "_suspect")   # 被移出的可疑整理文件放这（不删）
 # 少数图本身路点就极少（椰岛之巅 Cebu_City 场景里只有 2 个 WayPoint 对象），
 # 这些指纹即使低于 MIN_NODES 也要收，且直接指定关卡（几何匹配对小样本无效）。
 KEEP_FP = {"n2-24a647eff15d6ca4": "level3"}
@@ -156,7 +157,7 @@ def log(*a):
 
 
 def ensure_dirs():
-    for d in (MAPS, ARCHIVE, VIS):
+    for d in (P.DATA, ARCHIVE, VIS):
         os.makedirs(d, exist_ok=True)
 
 
@@ -182,9 +183,10 @@ def save_json(path, obj, indent=1):
 
 
 def load_names():
-    if os.path.isfile(NAMES_FILE):
+    path = P.names_path(P.DATA)
+    if os.path.isfile(path):
         try:
-            data = load_json(NAMES_FILE)
+            data = load_json(path)
             if isinstance(data, dict):
                 out = {}
                 for k, v in data.items():
@@ -221,6 +223,15 @@ def parse_ops(text):
             out.append((m.group(1), [float(m.group(2)), float(m.group(3)), float(m.group(4))],
                         [float(m.group(5)), float(m.group(6)), float(m.group(7))]))
     return out
+
+
+def _edit_file(level, fp):
+    """这张图的编辑清单 <指纹>.txt：新布局 <图>\\<指纹>.txt，旧布局 nav\\<指纹>.txt。"""
+    name = (fp or "x") + ".txt"
+    p = os.path.join(P.map_dir(P.DATA, level), name)
+    if os.path.isfile(p):
+        return p
+    return os.path.join(NAV, name)
 
 
 def count_txt(path):
@@ -327,10 +338,10 @@ def snapshot_info(path):
 
 
 def write_canonical(level, snap, names):
-    idx = LEVEL_ORDER.get(level, 99)
     cn = NAME_OF.get(level) or names.get(snap["fp"], {}).get("name") or snap["mapName"] or "未知地图"
-    fname = "%02d_%s.json" % (idx, cn)
-    dst = os.path.join(MAPS, fname)
+    folder = P.map_folder(level)
+    fname = folder + "/map.json"
+    dst = os.path.join(P.DATA, folder, "map.json")
     doc = json.loads(json.dumps(snap["doc"]))
     mp = doc.setdefault("map", {})
     mp["fingerprint"] = snap["fp"]
@@ -374,7 +385,9 @@ def build_index(rows, suspect=None, extras=None):
         "maps": items,
         "extras": extras,
     }
-    save_json(os.path.join(MAPS, "_index.json"), doc)
+    out_dir = P.index_dir(P.DATA)
+    os.makedirs(out_dir, exist_ok=True)
+    save_json(os.path.join(out_dir, "_index.json"), doc)
     md = ["# 原始地图数据集（自动生成，勿手改）", "",
           "生成时间：" + doc["generated"], "",
           "序号 / 关卡 / 中文名 / 场景名的**权威表**在 docs/guide/地图对照表.md（手写、持久）；",
@@ -410,7 +423,7 @@ def build_index(rows, suspect=None, extras=None):
                "| 文件 | 关卡 | 说明 | 节点 |", "| --- | --- | --- | --- |"]
         for e in extras:
             md.append("| %s | %s | %s | %s |" % (e["file"], e["level"] or "-", e["label"] or "-", e["nodes"]))
-    with io.open(os.path.join(MAPS, "INDEX.md"), "w", encoding="utf-8", newline="\n") as f:
+    with io.open(os.path.join(out_dir, "INDEX.md"), "w", encoding="utf-8", newline="\n") as f:
         f.write("\n".join(md) + "\n")
     return doc
 
@@ -484,9 +497,10 @@ def rebuild_backup(rows, dry=False):
     os.makedirs(os.path.join(root, "raw"), exist_ok=True)
     os.makedirs(os.path.join(root, "canonical"), exist_ok=True)
     entries = []
+    data_set = {os.path.abspath(x) for _rel, x in P.map_files(P.DATA)}
     for lv, r in sorted(rows.items(), key=lambda kv: LEVEL_ORDER.get(kv[0], 99)):
         src = r.get("path")
-        if src and os.path.isfile(src) and os.path.abspath(os.path.dirname(src)) == os.path.abspath(MAPS):
+        if src and os.path.isfile(src) and os.path.abspath(src) in data_set:
             # 这次的源是 maps/ 里的整理结果（原始导出已归档）：先找旧还原点记录的 raw 文件名，
             # 再按指纹去历史归档里翻，最后才退回 maps/ 这份（保证还原点里的 raw 永远是"游戏导出的原件"）
             old_raw = _prev_raw_name(lv)
@@ -513,10 +527,11 @@ def rebuild_backup(rows, dry=False):
             continue
         raw_dst = os.path.join(root, "raw", os.path.basename(src))
         shutil.copy2(src, raw_dst)
-        canon_src = os.path.join(MAPS, r.get("fname") or "")
+        canon_src = os.path.join(P.DATA, *(r.get("fname") or "").split("/"))
         canon_dst = ""
         if r.get("fname") and os.path.isfile(canon_src):
-            canon_dst = os.path.join(root, "canonical", r["fname"])
+            canon_dst = os.path.join(root, "canonical", *r["fname"].split("/"))
+            os.makedirs(os.path.dirname(canon_dst), exist_ok=True)
             shutil.copy2(canon_src, canon_dst)
         entries.append({
             "level": lv, "name": NAME_OF.get(lv, ""), "scene": ASCII_OF.get(lv, ""),
@@ -525,7 +540,8 @@ def rebuild_backup(rows, dry=False):
             "edits_on_top": r.get("edits_on_top", 0),
             "raw": {"file": os.path.basename(src), "bytes": os.path.getsize(raw_dst),
                     "sha256": sha256(raw_dst)},
-            "canonical": ({"file": os.path.basename(canon_dst), "bytes": os.path.getsize(canon_dst),
+            "canonical": ({"file": os.path.relpath(canon_dst, os.path.join(root, "canonical")).replace(os.sep, "/"),
+                           "bytes": os.path.getsize(canon_dst),
                            "sha256": sha256(canon_dst)} if canon_dst else None),
         })
     manifest = {
@@ -582,20 +598,37 @@ def archive_vis(files, dry=False):
                     extra.append(p)
     moved = 0
     vis_root = os.path.abspath(VIS) + os.sep
-    only_vis = [p for p in (files + extra) if os.path.abspath(p).startswith(vis_root)]
-    for p in only_vis:
-        dst = os.path.join(root, os.path.relpath(p, VIS))
+    data_root = os.path.abspath(P.DATA) + os.sep
+    keep = []
+    for p in (files + extra):
+        ap = os.path.abspath(p)
+        if ap.startswith(vis_root):
+            keep.append(p)
+        elif ap.startswith(data_root) and ("导出" in ap or "\\" not in os.path.relpath(p, P.DATA)):
+            keep.append(p)
+    for p in keep:
+        ap = os.path.abspath(p)
+        rel = os.path.relpath(p, VIS) if ap.startswith(vis_root) else os.path.relpath(p, P.DATA)
+        dst = os.path.join(root, rel)
         try:
             os.makedirs(os.path.dirname(dst), exist_ok=True)
             os.replace(p, dst)
             moved += 1
         except OSError as exc:
-            log("  !! 归档失败 %s: %s" % (os.path.relpath(p, VIS), exc))
+            log("  !! 归档失败 %s: %s" % (rel, exc))
     if os.path.isdir(noise):
         try:
             shutil.move(noise, os.path.join(root, "_noise"))
         except OSError:
             pass
+    # 清掉搬空的 <图>\导出\ 目录（文件夹本身和 map.json 不动）
+    for lv, _cn, _asc, _note in LEVELS:
+        exp = os.path.join(P.map_dir(P.DATA, lv), "导出")
+        if os.path.isdir(exp) and not os.listdir(exp):
+            try:
+                os.rmdir(exp)
+            except OSError:
+                pass
     # 清掉搬空的 raw/<地图>/ 目录（不碰 navmesh/ 与 _state/）
     raw = os.path.join(VIS, "raw")
     if os.path.isdir(raw):
@@ -619,7 +652,7 @@ def archive_vis(files, dry=False):
 def main():
     ap = argparse.ArgumentParser(description="整理原始地图数据集 + 只读备份")
     ap.add_argument("--archive", action="store_true",
-                    help="把 ④ 里处理过的历史导出搬进 ④ archive/（默认不动）")
+                    help="把 ② 里处理过的历史导出搬进 ② archive/（默认不动）")
     ap.add_argument("--dry", action="store_true", help="只显示会做什么")
     ap.add_argument("--no-backup", action="store_true", help="不重建备份")
     ap.add_argument("--no-geo", action="store_true", help="不按地形判关卡")
@@ -637,19 +670,27 @@ def main():
     names = load_names()
 
     files = []
-    # vis/ 新结构：raw/<级别_中文名>/*.json；也兼容旧的平铺文件
+    # ① 收件箱 vis/：插件刚写的（可能还平铺，也可能已经被 tidy_vis 归进 raw/）
     if os.path.isdir(VIS):
         for base, dirs, fns in os.walk(VIS):
             dirs[:] = [d for d in dirs if d not in ("_state", "_noise", "navmesh")]
             for fn in sorted(fns):
                 if fn.lower().endswith(".json") and fn not in ("names.json", "_index.json"):
                     files.append(os.path.join(base, fn))
-    if os.path.isdir(MAPS):
-        for fn in sorted(os.listdir(MAPS)):
-            if fn.lower().endswith(".json") and fn not in ("names.json", "_index.json"):
-                files.append(os.path.join(MAPS, fn))
+    # ② 每张图自己的文件夹：<图>\导出\*.json（整理过的原始导出）
+    for lv, _cn, _asc, _note in LEVELS:
+        exp = os.path.join(P.map_dir(P.DATA, lv), "导出")
+        if not os.path.isdir(exp):
+            continue
+        for fn in sorted(os.listdir(exp)):
+            if fn.lower().endswith(".json"):
+                files.append(os.path.join(exp, fn))
+    # ③ 已有的整理结果 <图>\map.json（当作「这张图已有数据」的候选）
+    data_files = [x for _rel, x in P.map_files(P.DATA)]
+    files.extend(data_files)
+    data_set = {os.path.abspath(x) for x in data_files}
     if not files:
-        log("vis/ 里没有 JSON。先在游戏里 Ctrl+E 导出（或开 Ctrl+Shift+X 采集模式，进每张图自动导出）。")
+        log("没有可整理的 JSON。先在游戏里 Ctrl+E 导出（或开 Ctrl+Shift+X 采集模式，进每张图自动导出）。")
         return 0
 
     snaps = []
@@ -658,10 +699,10 @@ def main():
         if not info:
             log("跳过（不是 ucf-navgraph / 老格式）：%s" % os.path.basename(p))
             continue
-        info["from_maps"] = (os.path.abspath(os.path.dirname(p)) == os.path.abspath(MAPS))
+        info["from_maps"] = os.path.abspath(p) in data_set
         snaps.append(info)
     n_fresh = sum(1 for s in snaps if not s["from_maps"])
-    log("可用导出：%d 份（vis/ 新导出 %d + maps/ 已有 %d）" % (len(snaps), n_fresh, len(snaps) - n_fresh))
+    log("可用导出：%d 份（新导出 %d + 已整理 %d）" % (len(snaps), n_fresh, len(snaps) - n_fresh))
     if not snaps:
         return 1
 
@@ -718,7 +759,7 @@ def main():
     for lv in sorted(best, key=lambda x: LEVEL_ORDER.get(x, 99)):
         s = best[lv]
         sibs = cand[lv]
-        s["edits_on_top"] = count_txt(os.path.join(NAV, (s["fp"] or "x") + ".txt"))
+        s["edits_on_top"] = count_txt(_edit_file(lv, s["fp"]))
         log("  %-8s %-8s 原始=%d 点 / %d 边（同图 %d 份导出，最多 %d 点）%s" % (
             lv, NAME_OF.get(lv, "?"), s["nodes"], s["edges"], len(sibs),
             max(x["nodes"] for x in sibs),
@@ -728,8 +769,9 @@ def main():
     for lv in sorted(best, key=lambda x: LEVEL_ORDER.get(x, 99)):
         s = best[lv]
         if args.dry:
-            log("[dry] 会写 maps/%02d_%s.json  <- %s" % (LEVEL_ORDER.get(lv, 99), NAME_OF.get(lv, "?"), s["file"]))
-            rows[lv] = {"fname": "%02d_%s.json" % (LEVEL_ORDER.get(lv, 99), NAME_OF.get(lv, "?")),
+            rel = P.map_folder(lv) + "/map.json"
+            log("[dry] 会写 %s  <- %s" % (rel, s["file"]))
+            rows[lv] = {"fname": rel,
                         "fp": s["fp"], "nodes": s["nodes"], "edges": s["edges"],
                         "features": s["features"], "src": s["file"],
                         "generated": s["generated"], "edits_on_top": s.get("edits_on_top", 0),
@@ -740,65 +782,52 @@ def main():
                     "edges": s["edges"], "features": s["features"], "src": s["file"],
                     "generated": s["generated"], "edits_on_top": s.get("edits_on_top", 0),
                     "source": s["source"], "path": s["path"]}
-        log("  写出 maps/%s（%d 点 / %d 边，指纹 %s）" % (fname, s["nodes"], s["edges"], s["fp"] or "-"))
+        log("  写出 %s（%d 点 / %d 边，指纹 %s）" % (fname, s["nodes"], s["edges"], s["fp"] or "-"))
 
     if not args.dry:
+        items = []
+        for rel, path in P.map_files(P.DATA):
+            info = snapshot_info(path) or {}
+            lv = str((info.get("doc", {}).get("map") or {}).get("level") or "")
+            items.append((rel, path, lv, info))
         moved = []
-        if os.path.isdir(MAPS):
-            for fn in sorted(os.listdir(MAPS)):
-                p = os.path.join(MAPS, fn)
-                if not os.path.isfile(p) or not fn.lower().endswith(".json") or fn.startswith("_"):
-                    continue
-                info = snapshot_info(p) or {}
-                lv = str((info.get("doc", {}).get("map") or {}).get("level") or "")
-                # 只处理「对照表里的关卡但这次没收」的旧文件；practice 这类自定义关卡原样保留
-                if lv not in LEVEL_ORDER or lv in rows:
-                    continue
-                # 「原生为空」的空档说明文件（暴风）不是数据，别当可疑文件搬走
-                if str((info.get("doc", {}).get("map") or {}).get("origin") or "") == "native-empty":
-                    continue
-                os.makedirs(SUSPECT_DIR, exist_ok=True)
-                try:
-                    shutil.move(p, os.path.join(SUSPECT_DIR, fn))
-                    moved.append(fn)
-                except OSError:
-                    pass
+        for rel, path, lv, info in items:
+            # 只处理「对照表里的关卡但这次没收」的旧文件；practice 这类自定义关卡原样保留
+            if lv not in LEVEL_ORDER or lv in rows:
+                continue
+            # 「原生为空」的空档说明文件（飓风危城）不是数据，别当可疑文件搬走
+            if str((info.get("doc", {}).get("map") or {}).get("origin") or "") == "native-empty":
+                continue
+            os.makedirs(SUSPECT_DIR, exist_ok=True)
+            try:
+                shutil.move(path, os.path.join(SUSPECT_DIR, rel.replace("/", "_")))
+                moved.append(rel)
+            except OSError:
+                pass
         if moved:
-            log("  移到 maps/_suspect/（低于可信线或不再采用，没删）：%s" % ", ".join(moved))
+            log("  移到 00_公共/_suspect/（低于可信线或不再采用，没删）：%s" % ", ".join(moved))
 
         # 同一张图只留一个编号文件名。改序号/改名字之后，旧文件名和重复副本搬进 backup/stale_*，不删。
         stale_dir = os.path.join(ARCHIVE, "stale_" + time.strftime("%Y%m%d_%H%M%S"))
         stale = []
-        if os.path.isdir(MAPS):
-            for fn in sorted(os.listdir(MAPS)):
-                p = os.path.join(MAPS, fn)
-                if not os.path.isfile(p) or not fn.lower().endswith(".json") or fn.startswith("_"):
-                    continue
-                info = snapshot_info(p) or {}
-                lv = str((info.get("doc", {}).get("map") or {}).get("level") or "")
-                keep_name = (rows.get(lv) or {}).get("fname") or ""
-                if not keep_name or fn == keep_name:
-                    continue
-                os.makedirs(stale_dir, exist_ok=True)
-                try:
-                    shutil.move(p, os.path.join(stale_dir, fn))
-                    stale.append(fn)
-                except OSError:
-                    pass
+        for rel, path, lv, _info in items:
+            keep_rel = (rows.get(lv) or {}).get("fname") or ""
+            if not keep_rel or rel == keep_rel:
+                continue
+            os.makedirs(stale_dir, exist_ok=True)
+            try:
+                shutil.move(path, os.path.join(stale_dir, rel.replace("/", "_")))
+                stale.append(rel)
+            except OSError:
+                pass
         if stale:
             log("  旧编号/重复副本移到 %s（没删）：%s" % (stale_dir, ", ".join(stale)))
         extras = []
-        if os.path.isdir(MAPS):
-            for fn in sorted(os.listdir(MAPS)):
-                p = os.path.join(MAPS, fn)
-                if not os.path.isfile(p) or not fn.lower().endswith(".json") or fn.startswith("_"):
-                    continue
-                info = snapshot_info(p) or {}
-                lv = str((info.get("doc", {}).get("map") or {}).get("level") or "")
-                if lv not in LEVEL_ORDER:
-                    extras.append({"file": fn, "level": lv,
-                                   "label": str((info.get("doc", {}).get("map") or {}).get("label") or ""),
-                                   "nodes": info.get("nodes", 0)})
+        for rel, _path, lv, info in items:
+            if lv not in LEVEL_ORDER:
+                extras.append({"file": rel, "level": lv,
+                               "label": str((info.get("doc", {}).get("map") or {}).get("label") or ""),
+                               "nodes": info.get("nodes", 0)})
         suspect = {}
         for s in snaps:
             lv = s.get("level") or ""
@@ -827,14 +856,17 @@ def main():
                 names[r["fp"]] = want
                 changed = True
         if changed:
-            save_json(NAMES_FILE, dict(sorted(names.items())), indent=2)
-            log("  nav/names.json 已更新（%d 条）" % len(names))
+            save_json(P.names_path(P.DATA), dict(sorted(names.items())), indent=2)
+            log("  00_公共/names.json 已更新（%d 条）" % len(names))
 
     if args.archive:
         vis_root = os.path.abspath(VIS) + os.sep
-        vis_only = [p for p in files if os.path.abspath(p).startswith(vis_root)]
-        root = archive_vis(vis_only, args.dry)
-        log("  历史导出归档：%s（%d 个文件）" % (root, len(vis_only)))
+        data_root = os.path.abspath(P.DATA) + os.sep
+        cand = [p for p in files
+                if os.path.abspath(p).startswith(vis_root)
+                or ("导出" in os.path.abspath(p) and os.path.abspath(p).startswith(data_root))]
+        root = archive_vis(cand, args.dry)
+        log("  历史导出归档：%s（%d 个文件）" % (root, len(cand)))
 
     missing = [lv for lv, *_ in LEVELS if lv not in rows]
     if missing:
@@ -843,7 +875,7 @@ def main():
         log("  采集办法：游戏里按 Ctrl+Shift+X 开采集模式（只读、不改任何东西），进图稳定后按 Ctrl+E 导出，")
         log("  把缺的图各进一次，回来再跑一遍本脚本。")
     log("")
-    log("完成。原始数据集：② navdata\\dev\\maps\\    还原点：④ navdata\\test\\archive\\maps_original_*/")
+    log("完成。原始数据集：② navdata\\dev\\<图>\\map.json    还原点：② navdata\\dev\\archive\\maps_original_*/")
     return 0
 
 

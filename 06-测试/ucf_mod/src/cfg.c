@@ -33,7 +33,7 @@ static const CFG_DEF g_defs[] = {
   { "vis_supply",     1, "MapManager：补给箱 / 红箱 / 蓝箱" },
   { "vis_jump",       1, "Bot_JumpLink：跳点（不走名单）" },
   { "vis_tag",        1, "PointNodeTagModifier：标签区（不走名单）" },
-  { "vis_player_marks", 1, "玩家坐标记录：本次进图手动记录的位置（金色方块 + 顺序折线）" },
+  { "vis_player_marks", 1, "玩家坐标记录：只画本次（当前场景）记的位置（金色方块，不连折线）；旧记录只写进 player_marks.txt" },
   { "vis_compass",    1, "方向罗盘：屏幕下方汉字东南西北（独立于可视化总开关）" },
   { "export_enabled", 1, "Ctrl+E 导出总开关" },
   { "export_nodes",   1, "Ctrl+E 导出：路点 / 连线" },

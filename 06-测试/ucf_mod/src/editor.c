@@ -77,10 +77,14 @@ static char g_log[MAX_PATH];
 static char g_dir[MAX_PATH];
 static char g_file[MAX_PATH];
 
-/* ---- 四版路径（2026-11-18）------------------------------------------------
- * ① 备份版 navdata\native / ② 开发版 navdata\dev / ③ 部署版 <游戏目录> /
- * ④ 测试版 navdata\test（导出收件箱 + 测试包）。
- * 插件只负责 ④ 的写入，③ 的 maps\ nav\ 由控制台「部署到游戏」从 ② 推过来。
+/* ---- 三区路径（2026-11-18 建，2026-11-21 四区改三区）------------------------
+ * ① 备份版 navdata\native / ② 开发版 navdata\dev / ③ 游戏目录 <ucf_mod>（运行时）。
+ * ② 里 final\ 是成品（多版本，一版一整套）、packs\ 是编辑中，vis\ 收件箱，archive\ 历史。
+ * 三档启动（控制台决定）：成品 = UCF_PACK_DIR=②\final + UCF_PACK=<版本名>，
+ * 按「包」读 ②\final\<版本>\<指纹>.txt —— 一版一整套数据，控制台选启动哪个版本；
+ * 和编辑中同一套加载逻辑（grow/keep 建点也生效），只读靠文件属性（游戏内保存失败）；
+ * 编辑中 = UCF_PACK 指向 ② packs\（可写）；原版 = 总开关关，插件待机。
+ * 2026-11-21 起 ③ 不再存数据（只放 dll / 配置 / markers\），游戏不读 ③\maps。
  * 导出/测试包目录解析顺序：环境变量（控制台启动游戏时注入）> ucf_mod.json > 插件目录。 */
 static char g_expDir[MAX_PATH];    /* 导出根：UCF_EXPORT_DIR > cfg export_dir > <dir>\vis */
 static char g_packRoot[MAX_PATH];  /* 测试包根：UCF_PACK_DIR > cfg pack_dir > <dir>\packs */
@@ -906,6 +910,309 @@ static int cam_point(V3* out) {
   return 0;
 }
 
+
+/* ---- 路点录制：把玩家走位写成 jsonl（2026-11-21） ------------------------
+ * 控制台「录制」页 -> ucf_navcmd.txt:
+ *   cmd=rec
+ *   act=start|stop|pause|resume
+ *   out=<绝对路径>\...\xxx.jsonl
+ *   hz=20
+ * 每帧调 rec_tick()，按 hz 节流：cam_ray() 取相机位置/朝向，再向下打一条
+ * 射线取脚下地面，追加一行 JSON。插件不推断路点 —— 怎么走、哪里跳、哪里
+ * 跳下高台，全由玩家决定；重采样和事件识别在控制台（tools/ucf_rec.py）。
+ */
+static FILE*  g_recFp;
+static char   g_recPath[MAX_PATH];
+static int    g_recOn;            /* 正在录 */
+static int    g_recPaused;
+static int    g_recHz = 20;
+static unsigned long long g_recT0, g_recNext;
+static unsigned g_recN;
+static double g_recDist;
+static V3     g_recPrev;
+static int    g_recHasPrev;
+
+static void rec_stop(const char* why) {
+  if (!g_recFp) return;
+  fprintf(g_recFp, "{\"end\":1,\"t\":%.3f,\"n\":%u,\"dist\":%.2f}\n",
+          (GetTickCount64() - g_recT0) / 1000.0, g_recN, g_recDist);
+  fflush(g_recFp);
+  fclose(g_recFp);
+  g_recFp = 0;
+  g_recOn = g_recPaused = 0;
+  elog("rec: stop (%s) samples=%u dist=%.1fm -> %s", why, g_recN, g_recDist, g_recPath);
+}
+
+static int rec_start(const char* path, int hz) {
+  if (!path || !path[0]) { elog("rec: start without out= path"); return 0; }
+  if (strlen(path) >= sizeof g_recPath) { elog("rec: path too long"); return 0; }
+  rec_stop("restart");
+  strcpy(g_recPath, path);
+  g_recFp = fopen(g_recPath, "wb");
+  if (!g_recFp) { elog("rec: cannot create %s", g_recPath); return 0; }
+  g_recHz = (hz >= 5 && hz <= 60) ? hz : 20;
+  g_recOn = 1; g_recPaused = 0; g_recN = 0; g_recDist = 0.0; g_recHasPrev = 0;
+  g_recT0 = g_recNext = GetTickCount64();
+  elog("rec: start %d Hz -> %s", g_recHz, g_recPath);
+  return 1;
+}
+
+static void rec_tick(void) {
+  V3 pos, fwd, hit;
+  unsigned long long now, dt;
+  double gap;
+  char hitbuf[128];
+  if (!g_recOn || g_recPaused || !g_recFp) return;
+  now = GetTickCount64();
+  dt = now - g_recNext;
+  if ((long long)dt < 0) return;                 /* 还没到采样点 */
+  g_recNext += (unsigned long long)(1000 / g_recHz);
+  if (g_recNext < now) g_recNext = now + 1000 / g_recHz;   /* 落后太多就重新对齐 */
+  if (!cam_ray(&pos, &fwd)) return;
+  gap = -9999.0;
+  {
+    V3 down;
+    down.x = 0.0f; down.y = -1.0f; down.z = 0.0f;
+    if (((raycast_t)RVA(R_RAYCAST))(pos, down, hitbuf, 120.0f, 1, 0)) {
+      hit = *(V3*)hitbuf;
+      gap = hit.y;
+    }
+  }
+  if (g_recHasPrev)
+    g_recDist += sqrt((pos.x - g_recPrev.x) * (pos.x - g_recPrev.x) +
+                      (pos.z - g_recPrev.z) * (pos.z - g_recPrev.z));
+  g_recPrev = pos;
+  g_recHasPrev = 1;
+  fprintf(g_recFp, "{\"t\":%.3f,\"x\":%.3f,\"y\":%.3f,\"z\":%.3f,\"gy\":%.3f,"
+                   "\"fx\":%.4f,\"fy\":%.4f,\"fz\":%.4f,\"sp\":%d,\"ct\":%d}\n",
+          (now - g_recT0) / 1000.0, pos.x, pos.y, pos.z, gap,
+          fwd.x, fwd.y, fwd.z,
+          (GetAsyncKeyState(VK_SPACE) & 0x8000) ? 1 : 0,
+          (GetAsyncKeyState(VK_CONTROL) & 0x8000) ? 1 : 0);
+  g_recN++;
+  if ((g_recN % 20) == 0) fflush(g_recFp);       /* 控制台每 0.25 s 读一次 */
+  if ((g_recN % 100) == 0)
+    elog("rec: %u samples, %.1f m, %.1f s", g_recN, g_recDist,
+         (now - g_recT0) / 1000.0);
+}
+
+/* ---- 原始轨迹采集：给离线分析（AI / 阈值调参）用的逐帧样本（2026-11-21）----
+ * 控制台「录制」页 -> ucf_navcmd.txt:
+ *   cmd=trace act=start|stop out=<绝对路径> hz=<10|20|30|60>
+ *   map=<场景名> label=<中文图名> pack=<包 id> fp=<图指纹>
+ * 和 rec 的分工：rec 是「走完一条路线」的原料，控制台要重采样成路点；
+ * trace 不推断任何东西，只把相机 / 朝向 / 脚下地面 / 按键原样写下来，
+ * 用来回答「这一段到底该识别成跳跃、跳下、蹲行还是传送」。
+ * 第一行 header（字段表自描述），每个样本一行，结束一行 end。
+ * 时间用 QueryPerformanceCounter：60 Hz 下 GetTickCount64 的 1 ms 粒度太粗。 */
+static FILE*  g_trFp;
+static char   g_trPath[MAX_PATH];
+static char   g_trMeta[4][192];       /* map / label / pack / fp（navcmd 的 GBK 原文） */
+static int    g_trOn, g_trHz = 20, g_trHdr, g_trMissed;
+static LARGE_INTEGER g_trT0q, g_trFreq;
+static double g_trNextT, g_trPrevT, g_trDist, g_trSceneT;
+static unsigned g_trN;
+static V3     g_trPrev;
+static int    g_trHasPrev;
+static P      g_trCam;
+static char   g_trScene[64];
+
+static void map_name_from_minimap(char* out, int cap);   /* 定义在后面 */
+
+static double tr_now(void) {
+  LARGE_INTEGER c;
+  QueryPerformanceCounter(&c);
+  return (double)(c.QuadPart - g_trT0q.QuadPart) / (double)g_trFreq.QuadPart;
+}
+
+/* navcmd 是 GBK 写的；日志统一 UTF-8，中文图名 / 包名才不会变乱码。
+ * 顺带把 " \ 和回车转义掉，保证每一行都是合法 JSON。 */
+static void tr_json(const char* s, char* out, int cap) {
+  wchar_t w[256];
+  char u8[768];
+  int i, j = 0, n;
+  out[0] = 0;
+  if (!s || !s[0] || cap < 4) return;
+  u8[0] = 0;
+  n = MultiByteToWideChar(CP_ACP, 0, s, -1, w, 256);
+  if (n > 0 && WideCharToMultiByte(CP_UTF8, 0, w, -1, u8, sizeof u8, 0, 0) <= 0)
+    u8[0] = 0;
+  if (!u8[0]) {
+    strncpy(u8, s, sizeof u8 - 1);
+    u8[sizeof u8 - 1] = 0;
+  }
+  for (i = 0; u8[i] && j < cap - 2; i++) {
+    unsigned char c = (unsigned char)u8[i];
+    if (c == '"' || c == '\\') { out[j++] = '\\'; out[j++] = (char)c; }
+    else if (c < 0x20) out[j++] = ' ';
+    else out[j++] = (char)c;
+  }
+  out[j] = 0;
+}
+
+static void tr_header(void) {
+  SYSTEMTIME st;
+  char sc[72], map[384], lab[384], pk[384], fp[128];
+  GetLocalTime(&st);
+  map_name_from_minimap(sc, sizeof sc);
+  if (sc[0]) strcpy(g_trScene, sc);
+  tr_json(g_trMeta[0], map, sizeof map);
+  tr_json(g_trMeta[1], lab, sizeof lab);
+  tr_json(g_trMeta[2], pk, sizeof pk);
+  tr_json(g_trMeta[3], fp, sizeof fp);
+  fprintf(g_trFp,
+          "{\"kind\":\"trace\",\"schema\":\"ucf-trace/1\",\"hz\":%d,"
+          "\"t0\":\"%04d-%02d-%02d %02d:%02d:%02d\",\"scene\":\"%s\","
+          "\"map\":\"%s\",\"label\":\"%s\",\"pack\":\"%s\",\"fp\":\"%s\","
+          "\"fields\":[\"t\",\"dt\",\"x\",\"y\",\"z\",\"gy\",\"fx\",\"fy\","
+          "\"fz\",\"sp\",\"ct\",\"sh\",\"w\",\"a\",\"s\",\"d\"],"
+          "\"notes\":\"t/dt seconds; xyz camera; gy ground under camera (null = no hit); "
+          "f* camera forward; keys 1/0\"}\n",
+          g_trHz, st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond,
+          g_trScene, map, lab, pk, fp);
+  g_trHdr = 1;
+}
+
+static void trace_stop(const char* why) {
+  double dur;
+  if (!g_trFp) return;
+  dur = tr_now();
+  if (g_trHdr)
+    fprintf(g_trFp, "{\"end\":1,\"t\":%.3f,\"n\":%u,\"dist\":%.2f,\"missed\":%d}\n",
+            dur, g_trN, g_trDist, g_trMissed);
+  fflush(g_trFp);
+  fclose(g_trFp);
+  g_trFp = 0;
+  g_trOn = 0;
+  elog("trace: stop (%s) samples=%u dur=%.1fs avg=%.1fHz missed=%d -> %s",
+       why, g_trN, dur, dur > 0.2 ? (double)g_trN / dur : 0.0, g_trMissed, g_trPath);
+}
+
+static int trace_start(const char* path, int hz, const char* map, const char* label,
+                       const char* pack, const char* fp) {
+  if (!path || !path[0]) { elog("trace: start without out= path"); return 0; }
+  if (strlen(path) >= sizeof g_trPath) { elog("trace: path too long"); return 0; }
+  trace_stop("restart");
+  strcpy(g_trPath, path);
+  g_trFp = fopen(g_trPath, "wb");
+  if (!g_trFp) { elog("trace: cannot create %s", g_trPath); return 0; }
+  g_trHz = (hz >= 5 && hz <= 120) ? hz : 20;
+  g_trOn = 1; g_trHdr = 0; g_trN = 0; g_trMissed = 0;
+  g_trDist = 0.0; g_trPrevT = 0.0; g_trNextT = 0.0; g_trSceneT = 0.0;
+  g_trHasPrev = 0; g_trCam = 0; g_trScene[0] = 0;
+  strncpy(g_trMeta[0], map ? map : "", sizeof g_trMeta[0] - 1);
+  g_trMeta[0][sizeof g_trMeta[0] - 1] = 0;
+  strncpy(g_trMeta[1], label ? label : "", sizeof g_trMeta[1] - 1);
+  g_trMeta[1][sizeof g_trMeta[1] - 1] = 0;
+  strncpy(g_trMeta[2], pack ? pack : "", sizeof g_trMeta[2] - 1);
+  g_trMeta[2][sizeof g_trMeta[2] - 1] = 0;
+  strncpy(g_trMeta[3], fp ? fp : "", sizeof g_trMeta[3] - 1);
+  g_trMeta[3][sizeof g_trMeta[3] - 1] = 0;
+  QueryPerformanceFrequency(&g_trFreq);
+  QueryPerformanceCounter(&g_trT0q);
+  elog("trace: start %d Hz -> %s", g_trHz, g_trPath);
+  return 1;
+}
+
+static void trace_sample(void) {
+  V3 pos, fwd, dir, hit;
+  char hb[128], gyb[40];
+  P cam, go, tr;
+  double t, dt;
+  int sp, ct, sh, w, a, s, d;
+  cam = ((cam_main_t)RVA(R_CAM_MAIN))(0);
+  if (!cam) return;
+  go = ((get_go_t)RVA(R_GETGO))(cam, 0);
+  tr = get_tr(go);
+  if (!tr) return;
+  ((get_pos_t)RVA(R_GET_POS_INJ))(tr, &pos, 0);
+  dir.x = 0.0f; dir.y = 0.0f; dir.z = 1.0f;
+  ((tdir_t)RVA(R_TDIR_INJ))(tr, &dir, &fwd, 0);
+  t = tr_now();
+  if (!g_trHdr) {
+    /* 第一个样本才写 header：这时才知道图名。同时把时间原点挪到这里 ——
+     * 在大厅等的那几分钟不该算进轨迹（否则第一条样本的 t 就是 132.6 s）。 */
+    QueryPerformanceCounter(&g_trT0q);
+    g_trNextT = 1.0 / (double)g_trHz;        /* 下一条按正常间隔来 */
+    g_trSceneT = 0.0;
+    t = 0.0;
+    tr_header();
+  }
+  /* 换图 / 重新载入会换相机对象：写一行 ev=cam，断段由离线分析决定 */
+  if (cam != g_trCam) {
+    if (g_trCam) fprintf(g_trFp, "{\"t\":%.3f,\"ev\":\"cam\"}\n", t);
+    g_trCam = cam;
+    g_trHasPrev = 0;
+  }
+  /* 场景名（小地图贴图名）变了也留一行；每秒最多查一次 */
+  if (t - g_trSceneT >= 1.0) {
+    char sc[72];
+    g_trSceneT = t;
+    map_name_from_minimap(sc, sizeof sc);
+    if (sc[0] && strcmp(sc, g_trScene)) {
+      char esc[160];
+      tr_json(sc, esc, sizeof esc);
+      strcpy(g_trScene, sc);
+      fprintf(g_trFp, "{\"t\":%.3f,\"ev\":\"scene\",\"n\":\"%s\"}\n", t, esc);
+    }
+  }
+  {
+    V3 down;
+    down.x = 0.0f; down.y = -1.0f; down.z = 0.0f;
+    if (((raycast_t)RVA(R_RAYCAST))(pos, down, hb, 120.0f, 1, 0)) {
+      hit = *(V3*)hb;
+      sprintf(gyb, "%.3f", hit.y);
+    } else strcpy(gyb, "null");
+  }
+  dt = g_trN ? t - g_trPrevT : 0.0;
+  if (dt < 0.0) dt = 0.0;
+  if (g_trHasPrev) {
+    double dx = pos.x - g_trPrev.x, dz = pos.z - g_trPrev.z;
+    double dd = sqrt(dx * dx + dz * dz);
+    if (dd < 20.0) g_trDist += dd;           /* 传送 / 换图不计进里程 */
+  }
+  g_trPrev = pos;
+  g_trHasPrev = 1;
+  g_trPrevT = t;
+  sp = (GetAsyncKeyState(VK_SPACE) & 0x8000) ? 1 : 0;
+  ct = (GetAsyncKeyState(VK_CONTROL) & 0x8000) ? 1 : 0;
+  sh = (GetAsyncKeyState(VK_SHIFT) & 0x8000) ? 1 : 0;
+  w = (GetAsyncKeyState('W') & 0x8000) ? 1 : 0;
+  a = (GetAsyncKeyState('A') & 0x8000) ? 1 : 0;
+  s = (GetAsyncKeyState('S') & 0x8000) ? 1 : 0;
+  d = (GetAsyncKeyState('D') & 0x8000) ? 1 : 0;
+  fprintf(g_trFp, "{\"t\":%.3f,\"dt\":%.3f,\"x\":%.3f,\"y\":%.3f,\"z\":%.3f,"
+                  "\"gy\":%s,\"fx\":%.4f,\"fy\":%.4f,\"fz\":%.4f,"
+                  "\"sp\":%d,\"ct\":%d,\"sh\":%d,\"w\":%d,\"a\":%d,\"s\":%d,"
+                  "\"d\":%d}\n",
+          t, dt, pos.x, pos.y, pos.z, gyb, fwd.x, fwd.y, fwd.z,
+          sp, ct, sh, w, a, s, d);
+  g_trN++;
+  if ((g_trN % 16) == 0) fflush(g_trFp);      /* 控制台 0.5 s 读一次 */
+  if ((g_trN % 200) == 0)
+    elog("trace: %u samples, %.1f s, avg %.1f Hz", g_trN, t,
+         t > 0.1 ? (double)g_trN / t : 0.0);
+}
+
+static void trace_tick(void) {
+  double now;
+  if (!g_trOn || !g_trFp) return;
+  now = tr_now();
+  if (now + 0.0001 < g_trNextT) return;
+  if (now - g_trNextT > 0.5) {
+    g_trNextT = now;                          /* 卡顿超过 0.5 s：重新对齐，记一次 missed */
+    g_trMissed++;
+  } else {
+    g_trNextT += 1.0 / (double)g_trHz;
+  }
+  if (g_trNextT < now) g_trNextT = now + 1.0 / (double)g_trHz;
+  trace_sample();
+}
+
+/* navfix 的 16 ms 定时器也调一次：editor_tick 在车测/某些路径里只有 4 Hz，
+ * 只靠它会录成 4 Hz；这里补到 ~60 Hz（rec/trace 自己按 hz 节流，重复调用没事）。 */
+void editor_rec_tick(void) { rec_tick(); trace_tick(); }
+
 /* ---- per-type colour ---------------------------------------------------- */
 static void str_ascii(P s, char* out, int cap) {
   int i, n;
@@ -1220,13 +1527,17 @@ static int g_visBorn   = 1;       /* MapManager：幽灵出生 / 保卫者出生
 static int g_visSupply = 1;       /* MapManager：中立点 / 补给箱 / 红箱 / 蓝箱 */
 static int g_visJump   = 1;       /* Bot_JumpLink：跳点（FindObjectsOfType，不是名单） */
 static int g_visTag    = 1;       /* PointNodeTagModifier：标签区（同上） */
-static int g_visPm     = 1;       /* 玩家坐标记录：控制台按钮记下的位置（金色方块 + 顺序折线） */
+static int g_visPm     = 1;       /* 玩家坐标记录：只画本次记下的位置（金色方块，不画折线） */
 /* 玩家坐标记录：控制台点「记录当前位置」-> ucf_navcmd.txt 的 cmd=mark ->
  * 这里向下打射线取脚下地面点，追加进 <插件目录>\player_marks.txt。
- * 控制台负责删除（直接改文件），这里每 0.5 s 比一次修改时间重读。 */
+ * 控制台负责删除（直接改文件），这里每 0.5 s 比一次修改时间重读。
+ * 2026-11-21 用户要求：文件只是日志 —— 场景里只画「本次」记下的点（g_pmSesP），
+ * 换图 / 重开游戏就不画了；历史记录不再进场景，也不再连折线。 */
 #define PM_MAX 256
-static V3   g_pmP[PM_MAX];
+static V3   g_pmP[PM_MAX];        /* 文件里的全部记录：只当日志 / 给补蹲守点用，不画 */
 static int  g_pmN;
+static V3   g_pmSesP[PM_MAX];     /* 本次（当前场景）记下的点：唯一会画出来的东西 */
+static int  g_pmSesN;
 static unsigned g_pmMtime;
 static int  g_pmLoaded;
 static char g_pmPath[MAX_PATH];
@@ -2071,6 +2382,9 @@ static int pm_mark(void) {
   elog("pmark: #%d (%.3f %.3f %.3f) -> %s",
        idx + 1, ((V3*)hitbuf)->x, ((V3*)hitbuf)->y, ((V3*)hitbuf)->z, g_pmPath);
   pm_load(1);
+  /* 只在本次画：新点进会话表，换图即清；文件照旧留一份日志（控制台读写它） */
+  if (g_pmSesN < PM_MAX) g_pmSesP[g_pmSesN++] = *(V3*)hitbuf;
+  elog("pmark: session #%d, drawn in this scene only (file keeps the log)", g_pmSesN);
   g_visDirty = 1;          /* 下一帧重画，新点立刻出现在游戏里 */
   return 1;
 }
@@ -2214,20 +2528,17 @@ static void vis_draw(void) {
       if (c) vis_flush_mesh("vis_spawn", slot, c);
     }
   }
-  /* 玩家坐标记录：金色方块 + 按记录顺序连起来的折线（顺序一眼可见） */
-  if (g_visPm && g_pmN) {
+  /* 玩家坐标记录：只画本次记下的金色方块。
+   * 2026-11-21 用户要求：历史记录只留在 player_marks.txt 当日志，不进场景；
+   * 也不再连折线（那条金线会被当成跳点）。 */
+  if (g_visPm && g_pmSesN) {
     bs_reset();
-    for (i = 0; i < g_pmN; i++) {
+    for (i = 0; i < g_pmSesN; i++) {
       V3 h;
       h.x = 0.22f; h.y = 0.22f; h.z = 0.22f;
-      bs_solid(g_pmP[i], h);
+      bs_solid(g_pmSesP[i], h);
     }
-    vis_flush_mesh("vis_pmarks", 14, g_pmN);
-    if (g_pmN > 1) {
-      bs_reset();
-      for (i = 1; i < g_pmN; i++) bs_line(g_pmP[i - 1], g_pmP[i], 0.06f);
-      vis_flush_mesh("vis_pmark_line", 14, g_pmN - 1);
-    }
+    vis_flush_mesh("vis_pmarks", 14, g_pmSesN);
   }
 }
 
@@ -2296,6 +2607,7 @@ static void vis_rebuild(void) {
 /* the scene changed: the old overlay objects were destroyed with the level */
 static void vis_scene_reset(void) {
   g_visObjN = 0;
+  g_pmSesN = 0;            /* 本次记的方块只活在这一张图：换图即清（文件里的日志不动） */
   g_edgeArrowGo = 0;
   g_edgeArrowOn = -1;
   g_vnN = g_veN = g_vfN = 0;
@@ -5860,6 +6172,11 @@ static void nav_cmd_tick(P g) {
   char fp[48] = "";
   char brush[24] = "";
   char menu[8] = "";
+  char act[16] = "";
+  char mapname[64] = "";
+  char label[64] = "";
+  char out[MAX_PATH] = "";
+  int hz = 0;
   unsigned long long seq = 0;
   int have = 0;
   /* 控制台删了坐标：文件修改时间变了就重读并重画（0.5 s 一次，文件很小） */
@@ -5877,6 +6194,20 @@ static void nav_cmd_tick(P g) {
     if (sscanf(line, "fp=%47s", fp) == 1) continue;
     if (sscanf(line, "brush=%23s", brush) == 1) continue;
     if (sscanf(line, "menu=%7s", menu) == 1) continue;
+    if (sscanf(line, "act=%15s", act) == 1) continue;
+    if (sscanf(line, "hz=%d", &hz) == 1) continue;
+    if (sscanf(line, "map=%63s", mapname) == 1) continue;
+    if (sscanf(line, "label=%63s", label) == 1) continue;
+    if (!strncmp(line, "out=", 4)) {              /* 路径里可能有空格：取整行 */
+      char* q = line + 4;
+      size_t n2;
+      while (*q == ' ' || *q == '\t') q++;
+      n2 = strlen(q);
+      while (n2 && (q[n2 - 1] == '\n' || q[n2 - 1] == '\r' || q[n2 - 1] == ' ')) q[--n2] = 0;
+      strncpy(out, q, sizeof out - 1);
+      out[sizeof out - 1] = 0;
+      continue;
+    }
   }
   fclose(f);
   if (!have || seq == g_navCmdSeq) return;
@@ -5896,6 +6227,32 @@ static void nav_cmd_tick(P g) {
   if (!strcmp(cmd, "menu")) {
     if (menu[0] == '0' || !strcmp(menu, "off")) menu_close();
     else if (menu[0] == '1' || !strcmp(menu, "on")) menu_open();
+    return;
+  }
+  if (!strcmp(cmd, "rec")) {                      /* 路点录制：控制台「录制」页 */
+    if (!strcmp(act, "start")) rec_start(out, hz);
+    else if (!strcmp(act, "stop")) rec_stop("console");
+    else if (!strcmp(act, "pause")) {
+      g_recPaused = 1;
+      elog("rec: paused");
+    } else if (!strcmp(act, "resume")) {
+      g_recPaused = 0;
+      g_recNext = GetTickCount64();
+      elog("rec: resumed");
+    } else {
+      elog("navcmd: rec needs act=start|stop|pause|resume");
+    }
+    return;
+  }
+  if (!strcmp(cmd, "trace")) {                    /* 原始轨迹采集：控制台「录制」页 */
+    if (!strcmp(act, "start")) trace_start(out, hz, mapname, label, pack, fp);
+    else if (!strcmp(act, "stop")) trace_stop("console");
+    else elog("navcmd: trace needs act=start|stop");
+    return;
+  }
+  if (!strcmp(cmd, "stopall")) {                  /* 关控制台时一条命令收掉两个采样器 */
+    rec_stop("console");
+    trace_stop("console");
     return;
   }
   if (!strcmp(cmd, "off")) { nav_cmd_set_pack(g, "", ""); return; }
@@ -6899,6 +7256,8 @@ void editor_tick(void) {
   if (g_sceneAge >= VIS_SCENE_WAIT) g_sceneReadyOnce = 1;
   nm_auto_tick();
   menu_tick();                /* F2 / 长按 E 路点菜单 */
+  rec_tick();                 /* 路点录制：控制台开了才写文件（与可视化开关无关） */
+  trace_tick();               /* 原始轨迹采集：同样只看控制台命令，与可视化开关无关 */
   if (g_collectOnly) {
     if ((++ticks % 20) == 0) {   /* 每 5 s 一行心跳，崩溃时日志能指到具体地图 */
       char mn[80];
@@ -7068,6 +7427,8 @@ void editor_on_key_any(unsigned vk, int shift) {
 }
 
 void editor_on_quit(void) {
+  rec_stop("quit");           /* 游戏退出：把录制文件收尾，别留半截 */
+  trace_stop("quit");         /* 原始轨迹：同样写 end 行再关文件 */
   elog("quit: editor stop (markers=%d vis nodes=%d features=%d)", g_n, g_vnN, g_vfN);
   nav_conn_roots_release();
 }
