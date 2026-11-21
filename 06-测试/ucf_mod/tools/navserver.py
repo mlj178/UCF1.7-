@@ -7,9 +7,9 @@
   2) 把 geo/web/<关卡>.bin（geo2web.py 生成的灰模网格）发给浏览器做 3D 视图；
   3) 提供可走面、测试包文本、地图名等只读数据。
 
-所有 POST 写接口已移除，统一返回 405。部署 / 建测试包请用命令行：
-    python navdata.py publish
+所有 POST 写接口已移除，统一返回 405。建测试包 / 升成品请用命令行：
     python navdata.py pack new <包名> --level <关卡>
+    python navdata.py pack promote <包名>     # 编辑中 -> 成品
 
 只监听 127.0.0.1，仅本机可访问。
 """
@@ -30,65 +30,136 @@ from urllib.parse import urlparse, parse_qs, unquote
 ROOT = os.path.dirname(os.path.abspath(__file__))   # 工程端 tools/
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
+import ucf_paths as P  # noqa: E402   图文件夹 / 可走面 / 路线都从这取
 from ucf_paths import (DEPLOY, DEPLOY as UCF, GEO, VIS, NAV, MAPS, NATIVE, DEV, DATAVIS,  # noqa: E402
-                       TEST, PACKS_DIR, GAME_VIS, PROFILE, READONLY, doc,
-                       profile_info as _profile_info)
+                       PACKS_DIR, GAME_VIS, PROFILE, READONLY, doc)
 
 GEOWEB = os.path.join(GEO, "web")
-NAMES_FILE = os.path.join(NAV, "names.json")
+COMMON = P.common_dir(P.DATA)        # 公共文件（names / _index）：新布局 00_公共\，旧布局 nav\
+NAMES_FILE = P.names_path(P.DATA)
 
 # ---------------------------------------------------------------- 版本切换
-# 网页端只读，但可以在 ①备份 / ②开发 / ③部署 / ④测试 之间切换查看。
-# 切换只改本服务的内存状态（读哪套 maps/nav），不写任何文件。
-PROFILE_ORDER = ("native", "dev", "deploy", "test")
-PROFILE_LABEL = {"native": "① 备份版", "dev": "② 开发版",
-                 "deploy": "③ 部署版", "test": "④ 测试版"}
-PROFILE_CN_VIEW = {"native": "备份版（原生·只读）", "dev": "开发版",
-                   "deploy": "部署版", "test": "测试版"}
-PROFILE_ROOT = {"native": NATIVE, "dev": DEV, "deploy": DEPLOY, "test": TEST}
+# 网页端只读，但可以在 ①备份 / ②开发 / ③部署 之间切换查看。
+# 2026-11-21 起只有三区：旧的 ④ 测试版已并进 ②（ucf_paths.TEST 就是 DEV 的别名），
+# 编辑中在 ②\packs、收件箱在 ②\vis、成品在 ②\final。
+# 切换只改本服务的内存状态（读哪一套图文件夹），不写任何文件。
+PROFILE_ORDER = ("native", "dev", "deploy")
+PROFILE_LABEL = {"native": "① 备份版", "dev": "② 开发版", "deploy": "③ 部署版"}
+PROFILE_CN_VIEW = {"native": "备份版（原生·只读）",
+                   "dev": "开发版（成品 + 编辑中 + 收件箱）",
+                   "deploy": "部署版（游戏运行环境·不放数据）"}
+PROFILE_ROOT = {"native": NATIVE, "dev": DEV, "deploy": DEPLOY}
 PROFILE_ALIAS = {
     "native": "native", "backup": "native", "frozen": "native", "原生": "native", "备份": "native",
     "dev": "dev", "develop": "dev", "开发": "dev",
     "deploy": "deploy", "game": "deploy", "部署": "deploy",
-    "test": "test", "export": "test", "测试": "test",
+    # 旧深链接 ?profile=test / export 不报错，直接落到 ② 开发版
+    "test": "dev", "export": "dev", "测试": "dev",   # 旧 ④ 已并进 ②
 }
+FINAL = os.path.join(DEV, "final")      # ② 的成品版本集合（只有开发版有，③ 不放数据）
 VIEW_LOCK = threading.RLock()
 
 
 def profile_info():
-    """当前查看版本 + 四版路径（供 /api/workbench、/api/maps、navview 顶栏）。"""
+    """当前查看版本 + 三区路径（供 /api/workbench、/api/maps、navview 顶栏）。"""
     return {
         "profile": PROFILE,
         "cn": PROFILE_CN_VIEW.get(PROFILE, PROFILE),
         "label": PROFILE_LABEL.get(PROFILE, PROFILE),
         "readonly": READONLY,
         "data": DATA,
+        "common": COMMON,
         "maps": MAPS,
         "nav": NAV,
         "native": NATIVE,
         "dev": DEV,
         "deploy": DEPLOY,
-        "test": TEST,
-        "export": VIS,
         "packs": PACKS_DIR,
+        "final": FINAL,
+        "export": VIS,
         "gameVis": GAME_VIS,
         "profiles": [{"id": k, "label": PROFILE_LABEL[k], "cn": PROFILE_CN_VIEW[k]}
                      for k in PROFILE_ORDER],
     }
 
 
+def dev_nav_dir(data_root, key):
+    r"""② 开发版的成品目录：final\<当前版本>\（没有版本就退回旧的 nav\）。"""
+    if key != "dev":
+        return os.path.join(data_root, "nav")
+    root = os.path.join(data_root, "final")
+    cur = ""
+    try:
+        with open(os.path.join(root, "_current.txt"), "r", encoding="utf-8") as f:
+            cur = f.read().strip()
+    except OSError:
+        cur = ""
+    if not cur:
+        try:
+            import json as _json
+            with open(os.path.join(root, "_index.json"), "r", encoding="utf-8") as f:
+                cur = str((_json.load(f) or {}).get("current") or "")
+        except (OSError, ValueError):
+            cur = ""
+    d = os.path.join(root, cur) if cur else ""
+    return d if d and os.path.isdir(d) else os.path.join(data_root, "nav")
+
+
+def _final_index():
+    r"""② 成品台账 dev\final\_index.json（读不到就当空台账）。"""
+    try:
+        with open(os.path.join(FINAL, "_index.json"), "r", encoding="utf-8") as f:
+            idx = json.load(f) or {}
+    except (OSError, ValueError):
+        idx = {}
+    return idx if isinstance(idx, dict) else {}
+
+
+def _final_current_name(idx=None):
+    r"""成品当前版本名：_current.txt 优先 → 台账 current → 最后一版；没有返回空串。"""
+    idx = idx if idx is not None else _final_index()
+    names = [str(v.get("name") or "") for v in (idx.get("versions") or []) if isinstance(v, dict)]
+    try:
+        names += sorted(n for n in os.listdir(FINAL)
+                        if not n.startswith(("_", ".")) and os.path.isdir(os.path.join(FINAL, n)))
+    except OSError:
+        pass
+    names = [n for n in names if n]
+    cur = ""
+    try:
+        with open(os.path.join(FINAL, "_current.txt"), "r", encoding="utf-8") as f:
+            cur = f.read().strip()
+    except OSError:
+        cur = ""
+    cur = cur or str(idx.get("current") or "").strip()
+    if cur in names:
+        return cur
+    return names[-1] if names else ""
+
+
+def _final_dir():
+    r"""成品当前版本的目录（一版一整套 <指纹>.txt）；版本目录不存在就给空串。"""
+    name = _final_current_name()
+    d = os.path.join(FINAL, name) if name else ""
+    return d if d and os.path.isdir(d) else ""
+
+
 def set_profile(name):
     """切换“当前查看哪一版”；只改内存里的根目录，不动文件。"""
-    global PROFILE, READONLY, DATA, MAPS, NAV, NAMES_FILE, DATAVIS
+    global PROFILE, READONLY, DATA, MAPS, NAV, COMMON, NAMES_FILE, DATAVIS
     key = PROFILE_ALIAS.get(str(name or "").strip().lower(), "")
     if key:
         PROFILE = key
         DATA = PROFILE_ROOT[key]
-        MAPS = os.path.join(DATA, "maps")
-        NAV = os.path.join(DATA, "nav")
-        NAMES_FILE = os.path.join(NAV, "names.json")
+        # 地图数据的根：新布局就是数据根（图文件夹在它下面），旧布局才是 maps\
+        MAPS = DATA if P.is_folders(DATA) else os.path.join(DATA, "maps")
+        # 公共文件（names.json / _index.json）：新布局 00_公共\，旧布局 nav\
+        COMMON = P.common_dir(DATA)
+        # 成品搬进 final\<版本>\ 以后，dev 版块看的是「当前启动的那个版本」
+        NAV = dev_nav_dir(DATA, key)
+        NAMES_FILE = P.names_path(DATA)
         DATAVIS = os.path.join(DATA, "vis")
-        # ①/③/④ 是只读数据；②开发版在旧语义里可写（网页端仍然只读）
+        # ①/③ 是只读数据；② 开发版可写（网页端仍然只读，收件箱也在它下面的 vis\）
         READONLY = key != "dev"
     return profile_info()
 
@@ -97,7 +168,7 @@ set_profile(PROFILE)
 
 # 工作台（实际运行的前端）放在工程端 workbench/，由本服务托管给浏览器
 WORKBENCH = os.path.join(os.path.dirname(ROOT), "workbench")
-# ④ 测试包目录（ucf_paths.PACKS_DIR）：只对某一张图生效的路线改动
+# ② 测试包目录（ucf_paths.PACKS_DIR）：只对某一张图生效的路线改动
 
 # ---------------------------------------------------------------- 可走面（NavMeshGraph）
 # 原生 A* 顶点数（网格顶点去重后），逐张图实测，见 docs/地图对照表.md
@@ -117,13 +188,16 @@ def navmesh_for(level):
          例如小型工厂 840 -> navmesh_nm840-40749e0342e84cbd.bin。
     运输船/生化酒店/暴风本来就没有 NavMeshGraph，永远返回 None。
     """
+    # 0) 图文件夹里就有：<图>\navmesh.bin（当前版没有就回 ①/② 找，③ 已经不放数据）
+    for root in (DATA, NATIVE, DEV):
+        hit = P.navmesh_file(root, level)
+        if hit:
+            return hit
     # 1) 整理后的地图数据里带 navmesh.file
     try:
-        for name in sorted(os.listdir(MAPS)):
-            if not name.endswith(".json") or name.startswith("_"):
-                continue
+        for _rel, path in P.map_files(DATA):
             try:
-                with open(os.path.join(MAPS, name), "r", encoding="utf-8") as f:
+                with open(path, "r", encoding="utf-8") as f:
                     d = json.load(f)
             except (OSError, ValueError):
                 continue
@@ -450,22 +524,13 @@ def summarize(path):
 def list_snapshots():
     out = []
     names = load_names()
+    # 三区都只看自己图文件夹里的 map.json；② 的收件箱（vis）在 /api/workbench 里统计
     kinds = [("maps", MAPS), ("nav", NAV)]
-    # ④ 测试版的“地图”是 vis/raw 里的原始导出；①/②/③ 只看各自的 maps/nav
-    if PROFILE == "test":
-        kinds.append(("vis", VIS))
     for kind, folder in kinds:
         entries = []
-        if kind == "vis":
-            # 新结构：vis/raw/<级别_中文名>/<时间>_<指纹>.json；也兼容旧的平铺文件
-            for base, dirs, files in os.walk(folder):
-                dirs[:] = [d for d in dirs if d not in ("_state", "_noise", "navmesh")]
-                for fn in files:
-                    if not fn.lower().endswith(".json") or fn in ("names.json", "_index.json"):
-                        continue
-                    p = os.path.join(base, fn)
-                    if os.path.isfile(p):
-                        entries.append((os.path.relpath(p, folder).replace("\\", "/"), p))
+        if kind == "maps":
+            # 新布局：每张图一个文件夹 `<图>\map.json`；旧布局：maps\*.json
+            entries = P.map_files(DATA)
         else:
             try:
                 files = sorted(os.listdir(folder))
@@ -507,20 +572,13 @@ def list_snapshots():
                         label = names[k]["name"]
                         break
             entry["label"] = label
-            if kind == "vis" and "_未识别" in fn:
-                folder = os.path.basename(os.path.dirname(fn))
-                entry["label"] = folder.strip("_").replace("_", " ")
-                entry["suspect"] = True
             out.append(entry)
-    # vis/ 里的原始导出如果已经归档进 maps/（同一指纹），列表里就别重复出现
-    have_fp = set(x.get("fp") for x in out if x.get("dir") == "maps" and x.get("fp"))
-    out = [x for x in out if not (x.get("dir") == "vis" and x.get("fp") in have_fp)]
 
     def _sort_key(e):
         # maps/ 按文件名里的序号排（01_ 02_ …），其余按中文名排
         if e.get("dir") == "maps":
             return (0, e.get("file") or "", 0)
-        rank = 1 if e.get("dir") == "nav" else 2
+        rank = 1 if e.get("dir") == "nav" else 2      # maps 在前，路线/其它在后
         return (rank, e.get("label") or e.get("level") or e["file"], e.get("mtimeTs") or 0)
 
     out.sort(key=_sort_key)
@@ -555,16 +613,10 @@ def read_txt_head(path):
 
 def list_edits():
     out = []
-    try:
-        files = sorted(os.listdir(NAV))
-    except OSError:
-        return out
-    for fn in files:
-        # 只认插件真正会读的那种文件名：<指纹>.txt（nav 里还躺着 probe_*.txt 之类的日志）
+    # <图>\<指纹>.txt（旧布局 nav\<指纹>.txt）：route_files 已经按指纹筛过，不会有日志混进来
+    for _fp, p in P.route_files(DATA):
+        fn = os.path.basename(p)
         if not EDIT_FILE_RE.match(fn):
-            continue
-        p = os.path.join(NAV, fn)
-        if not os.path.isfile(p):
             continue
         head = read_txt_head(p)
         if not head:
@@ -637,15 +689,28 @@ def list_backups(fp):
     out = []
     if not fp:
         return out
-    try:
-        files = sorted(os.listdir(NAV))
-    except OSError:
-        return out
-    for fn in files:
-        if not fn.startswith(fp) or ".bak_" not in fn:
+    # 路线清单现在可能在：图文件夹 → ② 成品当前版本 → ② 编辑中的包 → 旧布局 nav\
+    dirs = [NAV] + [os.path.dirname(p) for _rel, p in P.map_files(DATA)]
+    cur = _final_dir()
+    if cur:
+        dirs.append(cur)
+    for pk in collect_packs():
+        dirs.append(os.path.join(PACKS_DIR, *str(pk.get("name") or "").split("/")))
+    seen = set()
+    for d in dirs:
+        if not os.path.isdir(d):
             continue
-        p = os.path.join(NAV, fn)
-        if os.path.isfile(p):
+        try:
+            files = sorted(os.listdir(d))
+        except OSError:
+            continue
+        for fn in files:
+            if not fn.startswith(fp) or ".bak" not in fn:   # .bak_ / .bak- 都算
+                continue
+            p = os.path.join(d, fn)
+            if not os.path.isfile(p) or os.path.abspath(p) in seen:
+                continue
+            seen.add(os.path.abspath(p))
             out.append({"file": fn, "size": os.path.getsize(p),
                         "mtime": time.strftime("%Y-%m-%d %H:%M", time.localtime(os.path.getmtime(p)))})
     out.sort(key=lambda e: e["file"], reverse=True)
@@ -689,6 +754,10 @@ def sha256(path):
 def find_navmesh(level, filename=""):
     """这张图的可走面（NavMeshGraph）导出文件；找不到返回 ("", False)。
     只找文件，不解析；运输船/生化酒店/暴风本来就没有 NavMeshGraph。"""
+    for root in (DATA, NATIVE, DEV):
+        p = P.navmesh_file(root, level)
+        if p:
+            return os.path.basename(p), True
     bases = (DATAVIS, VIS, os.path.join(VIS, "navmesh"),
              os.path.join(GAME_VIS, "navmesh"), os.path.join(NATIVE, "vis"),
              os.path.join(DEV, "vis"), os.path.join(UCF, "backup"), GEOWEB)
@@ -851,11 +920,36 @@ def _map_info(path):
     return dict(info)
 
 
+def _route_txt(root, fp):
+    r"""<指纹>.txt 在哪：<图>\<指纹>.txt（旧布局 nav\）→ ② 成品当前版本。
+
+    只认「成品」，**不认编辑中的包**：网页看 ② 开发版时看到的是成品数据；
+    某个包的改动由 /api/pack-txt 明确点名，不能让「随便一个包」被当成基准套上去
+    （2026-11-21：这里原来会退回 packs，结果运输船被 151954 那个 grow 包套成 982 点）。
+    """
+    if not fp:
+        return ""
+    for cand_fp, p in P.route_files(root):
+        if cand_fp == fp:
+            return p
+    if os.path.normpath(root) != os.path.normpath(DEV):
+        return ""                        # 只有 ② 开发版有 final\
+    cur = _final_dir()
+    p = os.path.join(cur, fp + ".txt") if cur else ""
+    return p if p and os.path.isfile(p) else ""
+
+
 def _edit_ops(root, fp):
-    """nav/<指纹>.txt 里插件真正会执行的 node/edge 指令数。"""
+    r"""编辑清单（<图>\<指纹>.txt，旧布局 nav\<指纹>.txt）里插件真正会执行的 node/edge 指令数。"""
     if not fp:
         return 0
-    p = os.path.join(root, "nav", fp + ".txt")
+    p = ""
+    for cand_fp, cand in P.route_files(root):
+        if cand_fp == fp:
+            p = cand
+            break
+    if not p:
+        p = os.path.join(root, "nav", fp + ".txt")
     if not os.path.isfile(p):
         return 0
     head = read_txt_head(p)
@@ -870,6 +964,53 @@ def _file_time(path):
     return time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(m)), m
 
 
+def _map_ctx():
+    r"""② 侧的附带状态：成品当前版本（final\<版本>\<指纹>.txt）、编辑中的包、图文件夹里的导出。
+
+    成品「当前版本」用 _final_dir() 解析（_current.txt → 台账 current → 最后一版）。
+    """
+    final = {}
+    cur = _final_dir()
+    if cur:
+        try:
+            names = sorted(os.listdir(cur))
+        except OSError:
+            names = []
+        for fn in names:
+            f = os.path.join(cur, fn)
+            if not EDIT_FILE_RE.match(fn) or not os.path.isfile(f):
+                continue
+            head = read_txt_head(f) or {}
+            final[fn[:-4]] = {"has": True, "sha": sha256(f), "ops": int(head.get("ops") or 0)}
+    # 编辑中：packs\<图文件夹>\<包名>\<指纹>.txt（collect_packs 已经把 ops 算好了）
+    packs = {}
+    for pk in collect_packs():
+        folder = str(pk.get("folder") or "")
+        if not folder:
+            continue
+        packs.setdefault(folder, []).append({
+            "name": str(pk.get("name") or "").split("/")[-1],
+            "ops": int(pk.get("ops") or 0),
+        })
+    # 这张图历史导出：<图文件夹>\导出\*.json（dev 才有这一层）
+    exports = {}
+    try:
+        names = sorted(os.listdir(DEV))
+    except OSError:
+        names = []
+    for name in names:
+        if name.startswith(("_", ".")):
+            continue
+        d = os.path.join(DEV, name, "导出")
+        if not os.path.isdir(d):
+            continue
+        n = 0
+        for _base, _dirs, files in os.walk(d):
+            n += len([f for f in files if f.lower().endswith(".json")])
+        exports[name] = n
+    return {"final": final, "packs": packs, "exports": exports}
+
+
 def _no_of(file_name, row):
     no = str((row or {}).get("no") or "")
     if no:
@@ -878,8 +1019,8 @@ def _no_of(file_name, row):
     return m.group(1) if m else ""
 
 
-def _map_entry(file_name, path, info, row):
-    """一条地图行：文件统计 + 索引行 + ③部署状态 + 自动铺设触发判断。"""
+def _map_entry(file_name, path, info, row, ctx=None):
+    """一条地图行：文件统计 + 索引行 + ②成品/编辑中/导出 + 自动铺设触发判断。"""
     info = info or {}
     row = row or {}
     level = str(info.get("level") or row.get("level") or "")
@@ -905,21 +1046,22 @@ def _map_entry(file_name, path, info, row):
     if not nm_ok and level:
         nm_file, nm_ok = find_navmesh(level)
 
-    dep_path = os.path.join(DEPLOY, "maps", file_name) if file_name else ""
-    dep_exists = bool(dep_path and os.path.isfile(dep_path))
-    dep = {"exists": dep_exists, "same": False, "mtime": "", "size": 0}
-    if dep_exists:
-        dep["same"] = bool(exists and sha256(dep_path) == sha256(path))
-        dep["mtime"] = _file_time(dep_path)[0]
-        try:
-            dep["size"] = os.path.getsize(dep_path)
-        except OSError:
-            pass
+    # ③ 2026-11-21 起不放导航数据：deployed 字段保留，但一律空着（前端不用改）
+    dep = {"exists": False, "same": False, "mtime": "", "size": 0}
+    # ② 侧：成品当前版本里有没有这张图、编辑中有哪些包、图文件夹里导出过几份
+    ctx = ctx or {}
+    folder = (file_name.split("/")[0] if "/" in (file_name or "")
+              else (P.map_folder(level) if level else ""))
+    fin = (ctx.get("final") or {}).get(fp) or {"has": False, "sha": "", "ops": 0}
+    packs = (ctx.get("packs") or {}).get(folder) or []
+    exports = int((ctx.get("exports") or {}).get(folder) or 0)
 
     return {
         "no": _no_of(file_name, row),
         "level": level,
         "label": label,
+        "folder": folder,
+        "dir": "maps",
         "mode": mode,
         "modeOrder": mode_order,
         "noPointGraph": level in NO_POINT_LEVELS,
@@ -949,9 +1091,13 @@ def _map_entry(file_name, path, info, row):
         "mtimeTs": info.get("mtimeTs") or 0,
         "size": int(info.get("size") or 0),
         "status": status,
-        "editsDev": _edit_ops(DEV, fp),
+        # 这张图当前生效的编辑 = 成品当前版本里的条数（没有就是 0）；packs 单独列
+        "editsDev": int(fin.get("ops") or 0),
         "editsNative": _edit_ops(NATIVE, fp),
-        "editsDeploy": _edit_ops(DEPLOY, fp),
+        "editsDeploy": 0,
+        "final": fin,
+        "packs": packs,
+        "exports": exports,
         "deployed": dep,
         "auto": {
             "waypoints": nodes == 0,
@@ -961,99 +1107,11 @@ def _map_entry(file_name, path, info, row):
     }
 
 
-def collect_test_maps():
-    """④ 测试版：vis/raw 里的每份导出算一条“地图”，按时间倒序。
-    测试版没有 maps/ 的固定图集，这样查看器也能打开同一批原始导出。"""
-    out = []
-    raw_root = os.path.join(VIS, "raw")
-    for base, dirs, files in os.walk(raw_root):
-        dirs[:] = [d for d in dirs if d not in ("_state", "_noise", "navmesh")]
-        for fn in files:
-            if not fn.lower().endswith(".json") or fn in ("names.json", "_index.json"):
-                continue
-            p = os.path.join(base, fn)
-            info = _map_info(p)
-            if not info or info.get("error"):
-                continue
-            rel = os.path.relpath(p, VIS).replace("\\", "/")
-            entry = _map_entry(rel, p, info, {})
-            entry["dir"] = "vis"
-            entry["file"] = rel
-            entry["no"] = ""
-            entry["deployed"] = {"exists": False, "same": False, "mtime": "", "size": 0}
-            entry["editsDev"] = 0
-            entry["editsDeploy"] = 0
-            folder = os.path.basename(base)
-            if not entry.get("level"):
-                mm = re.search(r"(level\d+)_", rel, re.I) or re.search(r"\b(level\d+)\b", rel, re.I)
-                if mm:
-                    entry["level"] = mm.group(1).lower()
-            if "_未识别" in rel:
-                entry["label"] = folder.strip("_").replace("_", " ")
-                entry["suspect"] = True
-            elif not entry.get("label"):
-                entry["label"] = default_names().get(entry.get("level") or "", "") or folder
-            elif entry.get("level"):
-                entry["label"] = default_names().get(entry.get("level"), entry.get("label"))
-            out.append(entry)
-    # ④ 测试包也当一条“地图”：同一份导出 + packs/<包名>/<指纹>.txt
-    # （空白底图的 blank 行 + node/edge add 在查看端套用，只读）
-    by_fp = {}
-    for e in out:
-        fp0 = e.get("fp") or ""
-        if fp0 and fp0 not in by_fp:
-            by_fp[fp0] = e
-    for pk in collect_packs():
-        name = str(pk.get("name") or "")
-        fp0 = str(pk.get("fp") or "")
-        base = by_fp.get(fp0)
-        if not name or not base:
-            continue
-        txt_path = os.path.join(PACKS_DIR, *name.split("/"), fp0 + ".txt")
-        if not os.path.isfile(txt_path):
-            continue
-        entry = dict(base)
-        mt, mts = _file_time(txt_path)
-        entry["pack"] = name
-        entry["packBlank"] = bool(pk.get("blank"))
-        entry["packOps"] = int(pk.get("ops") or 0)
-        entry["packNogen"] = bool(pk.get("nogen"))
-        entry["label"] = ((base.get("label") or pk.get("label") or fp0) + " · " +
-                          name.split("/")[-1] +
-                          ("（空白底图）" if pk.get("blank") else "（测试包）"))
-        entry["mtime"] = mt or entry.get("mtime") or ""
-        entry["mtimeTs"] = mts or entry.get("mtimeTs") or 0
-        entry["no"] = ""
-        if pk.get("blank"):
-            # 空白底图的结果点数 = 清单里的 node add / edge add（原生点全禁用）
-            n_add = e_add = 0
-            try:
-                with open(txt_path, "r", encoding="utf-8", errors="replace") as f:
-                    for ln in f:
-                        t = ln.strip().split()
-                        if len(t) >= 2 and t[0] == "node" and t[1] == "add":
-                            n_add += 1
-                        elif len(t) >= 2 and t[0] == "edge" and t[1] == "add":
-                            e_add += 1
-            except OSError:
-                pass
-            entry["nodes"] = n_add
-            entry["walkable"] = n_add
-            entry["edges"] = e_add
-            entry["status"] = "ok" if n_add else "empty"
-        out.append(entry)
-    out.sort(key=lambda e: e.get("mtimeTs") or 0, reverse=True)
-    for i, e in enumerate(out):
-        e["no"] = str(i + 1).zfill(2)
-    return out
-
-
 def collect_maps():
-    """当前版本的图集：①/②/③ 读 maps/*.json；④ 读 vis/raw 的导出。"""
-    if PROFILE == "test":
-        return collect_test_maps()
+    r"""当前版本的图集：三区都读每张图文件夹里的 map.json（旧布局回退 maps\*.json）。"""
+    ctx = _map_ctx()
     try:
-        with open(os.path.join(MAPS, "_index.json"), "r", encoding="utf-8") as f:
+        with open(P.index_path(DATA), "r", encoding="utf-8") as f:
             index = json.load(f)
     except (OSError, ValueError):
         index = {}
@@ -1067,20 +1125,11 @@ def collect_maps():
     out = []
     seen = set()
     seen_levels = set()
-    try:
-        files = sorted(os.listdir(MAPS))
-    except OSError:
-        files = []
-    for fn in files:
-        if not fn.lower().endswith(".json") or fn.startswith("_"):
-            continue
-        p = os.path.join(MAPS, fn)
-        if not os.path.isfile(p):
-            continue
+    for fn, p in P.map_files(DATA):
         info = _map_info(p)
         if not info or info.get("error"):
             continue
-        out.append(_map_entry(fn, p, info, idx_rows.get(fn)))
+        out.append(_map_entry(fn, p, info, idx_rows.get(fn), ctx))
         seen.add(fn)
         if info.get("level"):
             seen_levels.add(str(info["level"]))
@@ -1091,11 +1140,14 @@ def collect_maps():
         # 同一张图已经有文件了（索引里这条没写 file），别再加一行重复的
         if not fn and str(row.get("level") or "") in seen_levels:
             continue
-        p = os.path.join(MAPS, fn) if fn else ""
-        out.append(_map_entry(fn, p, _map_info(p) if p else None, row))
+        p = os.path.join(DATA, *fn.split("/")) if fn else ""
+        out.append(_map_entry(fn, p, _map_info(p) if p else None, row, ctx))
 
     # 这一版没有 _index.json（① 备份版就是），按权威对照表补齐缺的图，
     # 否则下拉里会跳过 04 胜利广场、07 死亡擂台这类原生没有点图、只有可走面的关卡。
+    # ③ 部署版不放数据（连图文件夹都没有）：别按对照表凭空补出 11 行
+    if not out and not os.path.isfile(P.index_path(DATA)):
+        return out
     have_levels = {str(e.get("level") or "") for e in out}
     have_nos = {str(e.get("no") or "") for e in out}
     for (t_no, t_lv, t_nm, t_sc, t_note) in load_map_table():
@@ -1104,7 +1156,7 @@ def collect_maps():
             continue
         out.append(_map_entry("", "", None, {
             "no": no, "level": t_lv, "name": t_nm, "scene": t_sc, "note": t_note,
-        }))
+        }, ctx))
 
     def _sort(e):
         no = str(e.get("no") or "")
@@ -1141,55 +1193,54 @@ def _scan_files(root, sub, exts):
     return count, total, latest
 
 
+def _data_files(root):
+    r"""{相对路径: 绝对路径} —— 图（<图>\map.json）+ 可走面 + 路线；统计 / 比对都按这个口径。"""
+    out = {}
+    for rel, path in list(P.map_files(root)) + list(P.navmesh_files(root)):
+        out[rel] = path
+    for fp, path in P.route_files(root):
+        out[fp + ".txt"] = path
+    return out
+
+
 def _dir_version(root):
-    """四版里的一版：地图数 / 编辑数 / 可走面数 / 体积 / 最近写入。"""
-    maps_n, maps_b, maps_t = _scan_files(root, "maps", (".json",))
-    # _index.json 不算地图
-    if os.path.isfile(os.path.join(root, "maps", "_index.json")):
-        maps_n = max(0, maps_n - 1)
-    nav_n, nav_b, nav_t = _scan_files(root, "nav", (".txt",))
-    nm1, nmb1, nmt1 = _scan_files(root, "vis", (".bin",))
-    nm2, nmb2, nmt2 = _scan_files(root, os.path.join("vis", "navmesh"), (".bin",))
-    latest = max(maps_t, nav_t, nmt1, nmt2)
-    out = {
+    """一版数据：图数 / 路线数 / 可走面数 / 体积 / 最近写入。"""
+    files = _data_files(root)
+    maps_n = len([k for k in files if k.endswith(".json")])
+    nav_n = len([k for k in files if k.endswith(".txt")])
+    bin_n = len([k for k in files if k.endswith(".bin")])
+    total = 0
+    latest = 0
+    for path in files.values():
+        try:
+            st = os.stat(path)
+        except OSError:
+            continue
+        total += st.st_size
+        latest = max(latest, st.st_mtime)
+    return {
         "path": root,
         "exists": os.path.isdir(root),
         "maps": maps_n,
         "nav": nav_n,
-        "navmesh": nm1 + nm2,
-        "bytes": maps_b + nav_b + nmb1 + nmb2,
+        "navmesh": bin_n,
+        "bytes": total,
         "latest": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(latest)) if latest else "",
         "latestTs": latest,
     }
-    return out
 
 
-def _compare_group(a_root, b_root, sub, exts):
-    """两版同一目录下的文件对比：同名同 SHA 算一致，其余列出文件名。"""
-    def _list(root):
-        d = os.path.join(root, sub)
-        try:
-            names = os.listdir(d)
-        except OSError:
-            return {}
-        out = {}
-        for name in names:
-            if not name.lower().endswith(exts) or name.startswith("_"):
-                continue
-            p = os.path.join(d, name)
-            if os.path.isfile(p):
-                out[name] = p
-        return out
-
-    fa = _list(a_root)
-    fb = _list(b_root)
+def _compare_data(a_root, b_root, suffix):
+    """两版同一类数据比：相对路径相同且 sha256 相同 = 一致，其余列出来。"""
+    fa = {k: v for k, v in _data_files(a_root).items() if k.endswith(suffix)}
+    fb = {k: v for k, v in _data_files(b_root).items() if k.endswith(suffix)}
     same = 0
     diff = []
-    for name in sorted(set(fa) & set(fb)):
-        if sha256(fa[name]) == sha256(fb[name]):
+    for k in sorted(set(fa) & set(fb)):
+        if sha256(fa[k]) == sha256(fb[k]):
             same += 1
         else:
-            diff.append(name)
+            diff.append(k)
     return {
         "same": same,
         "diff": diff,
@@ -1199,16 +1250,11 @@ def _compare_group(a_root, b_root, sub, exts):
 
 
 def _consistency():
-    return {
-        "nativeDev": {
-            "maps": _compare_group(NATIVE, DEV, "maps", (".json",)),
-            "nav": _compare_group(NATIVE, DEV, "nav", (".txt",)),
-        },
-        "devDeploy": {
-            "maps": _compare_group(DEV, DEPLOY, "maps", (".json",)),
-            "nav": _compare_group(DEV, DEPLOY, "nav", (".txt",)),
-        },
-    }
+    def pair(a, b):
+        return {"maps": _compare_data(a, b, ".json"),
+                "nav": _compare_data(a, b, ".txt")}
+    # ③ 已经没有地图数据，②vs③ 不再有意义；成品 / 编辑中的差别在 versions.dev 里
+    return {"nativeDev": pair(NATIVE, DEV)}
 
 
 def _is_pack_dir(path):
@@ -1221,7 +1267,7 @@ def _is_pack_dir(path):
 
 
 def collect_packs():
-    """④ 测试包：地图文件夹/包名、图、指纹、指令数、nogen、创建时间。"""
+    """② 测试包：地图文件夹/包名、图、指纹、指令数、nogen、创建时间。"""
     out = []
     try:
         entries = sorted(os.listdir(PACKS_DIR))
@@ -1323,68 +1369,154 @@ def collect_events(limit=24):
         roots = [("① 备份版", NATIVE)]
     elif PROFILE == "deploy":
         roots = [("③ 部署版", DEPLOY)]
-    elif PROFILE == "test":
-        roots = []
     else:
         roots = [("② 开发版", DEV), ("③ 部署版", DEPLOY)]
     for label, root in roots:
-        try:
-            for fn in sorted(os.listdir(os.path.join(root, "maps"))):
-                if fn.endswith(".json") and not fn.startswith("_"):
-                    _add("地图", label + " · " + fn, os.path.join(root, "maps", fn))
-        except OSError:
-            pass
-        try:
-            for fn in sorted(os.listdir(os.path.join(root, "nav"))):
-                if fn.endswith(".txt"):
-                    p = os.path.join(root, "nav", fn)
-                    head = read_txt_head(p)
-                    ops = int(head.get("ops") or 0) if head else 0
-                    _add("编辑", label + " 编辑清单 · %s · %d 条" % (fn, ops), p)
-        except OSError:
-            pass
-    if PROFILE == "test":
-        raw_root = os.path.join(VIS, "raw")
-        for base, dirs, files in os.walk(raw_root):
-            dirs[:] = [d for d in dirs if d not in ("_state", "_noise", "navmesh")]
-            for fn in files:
-                if not fn.lower().endswith(".json"):
-                    continue
-                p = os.path.join(base, fn)
-                rel = os.path.relpath(p, VIS).replace("\\", "/")
-                _add("导出", "④ 测试版 · " + rel, p)
+        # 新布局：<图>\map.json；旧布局回退 maps\*.json（P.map_files 两种都认）
+        for fn, p in P.map_files(root):
+            _add("地图", label + " · " + fn, p)
+        # 路线清单：<图>\<指纹>.txt；旧布局 nav\*.txt（② 的成品在 final\、编辑中在 packs\）
+        for _fp, p in P.route_files(root):
+            head = read_txt_head(p)
+            ops = int(head.get("ops") or 0) if head else 0
+            _add("编辑", label + " 编辑清单 · %s · %d 条" % (os.path.basename(p), ops), p)
+    if PROFILE == "dev":
+        # ② 的成品当前版本：final\<版本>\<指纹>.txt
+        cur = _final_dir()
+        if cur:
+            try:
+                names = sorted(os.listdir(cur))
+            except OSError:
+                names = []
+            for fn in names:
+                if EDIT_FILE_RE.match(fn):
+                    _add("成品", "② 成品 · %s · %s" % (os.path.basename(cur), fn),
+                         os.path.join(cur, fn))
     for pk in collect_packs():
         d = os.path.join(PACKS_DIR, *pk["name"].split("/"))
-        _add("测试包", "④ %s · %s · %d 条指令" % (pk["name"], pk["label"] or pk["level"], pk["ops"]),
+        _add("测试包", "② %s · %s · %d 条指令" % (pk["name"], pk["label"] or pk["level"], pk["ops"]),
              os.path.join(d, "manifest.json"))
     events.sort(key=lambda e: e["ts"], reverse=True)
     return events[:limit]
 
 
-def _raw_count():
-    """④ vis/raw 下的导出数量 + 最新时间（测试版当“图集”用）。"""
-    n = 0
-    latest = 0
-    root = os.path.join(VIS, "raw")
-    for base, dirs, files in os.walk(root):
-        dirs[:] = [d for d in dirs if d not in ("_state", "_noise", "navmesh")]
-        for fn in files:
-            if fn.lower().endswith(".json") and fn not in ("names.json", "_index.json"):
-                p = os.path.join(base, fn)
+def _final_stats():
+    r"""② 成品：版本数 / 当前版本 / 当前版本里的图数 / 体积 / 最近写入（dev\final）。
+
+    版本名以磁盘目录 + 台账 _index.json 的并集为准；目录在就扫目录，
+    目录被删了才退回台账里记的 maps（台账的 sha/size 比手算快，也更能反映「曾经有」）。
+    """
+    idx = _final_index()
+    ledger = {}
+    for v in (idx.get("versions") or []):
+        if isinstance(v, dict) and str(v.get("name") or ""):
+            ledger[str(v["name"])] = v
+    names = set(ledger)
+    try:
+        for name in os.listdir(FINAL):
+            if not name.startswith(("_", ".")) and os.path.isdir(os.path.join(FINAL, name)):
+                names.add(name)
+    except OSError:
+        pass
+    cur_name = _final_current_name(idx)
+    maps_n = total = latest = 0
+    for name in sorted(names):
+        d = os.path.join(FINAL, name)
+        found = 0
+        if os.path.isdir(d):
+            try:
+                files = sorted(os.listdir(d))
+            except OSError:
+                files = []
+            for fn in files:
+                if not EDIT_FILE_RE.match(fn):
+                    continue
+                f = os.path.join(d, fn)
                 try:
-                    st = os.stat(p)
+                    st = os.stat(f)
                 except OSError:
                     continue
-                n += 1
+                found += 1
+                total += st.st_size
                 latest = max(latest, st.st_mtime)
-    return n, latest
+        else:
+            for meta in (ledger.get(name, {}).get("maps") or {}).values():
+                if not isinstance(meta, dict):
+                    continue
+                found += 1
+                total += int(meta.get("bytes") or 0)
+        if name == cur_name:
+            maps_n = found
+    return {"versions": len(names), "current": cur_name, "maps": maps_n, "bytes": total,
+            "latest": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(latest)) if latest else ""}
+
+
+def _packs_stats():
+    r"""② 编辑中：包数 / 涉及的图数 / 体积 / 最近写入（packs\<图文件夹>\<包名>\<指纹>.txt）。"""
+    packs = collect_packs()
+    folders = set()
+    total = latest = 0
+    for pk in packs:
+        name = str(pk.get("name") or "")
+        if pk.get("folder"):
+            folders.add(str(pk["folder"]))
+        d = os.path.join(PACKS_DIR, *name.split("/"))
+        try:
+            files = sorted(os.listdir(d))
+        except OSError:
+            continue
+        for fn in files:
+            if not EDIT_FILE_RE.match(fn):       # 包里的 .bak-* 备份不算数据量
+                continue
+            f = os.path.join(d, fn)
+            try:
+                st = os.stat(f)
+            except OSError:
+                continue
+            total += st.st_size
+            latest = max(latest, st.st_mtime)
+    return {"n": len(packs), "maps": len(folders), "bytes": total,
+            "latest": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(latest)) if latest else ""}
+
+
+def _inbox():
+    r"""② 导出收件箱：vis\raw\**\*.json（导出）+ vis\**\navmesh*.bin（可走面）；_state / _noise 不算。"""
+    exports = navmesh = 0
+    total = 0
+    latest = 0
+    for base, dirs, files in os.walk(VIS):
+        dirs[:] = [d for d in dirs if d not in ("_state", "_noise")]
+        for fn in files:
+            low = fn.lower()
+            if low.endswith(".json") and fn not in ("names.json", "_index.json"):
+                exports += 1
+            elif low.startswith("navmesh") and low.endswith(".bin"):
+                navmesh += 1
+            else:
+                continue
+            p = os.path.join(base, fn)
+            try:
+                st = os.stat(p)
+            except OSError:
+                continue
+            total += st.st_size
+            latest = max(latest, st.st_mtime)
+    return {"exports": exports, "navmesh": navmesh, "bytes": total,
+            "latest": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(latest)) if latest else ""}
 
 
 def build_workbench():
-    test_ver = _dir_version(TEST)
-    raw_n, raw_t = _raw_count()
-    test_ver["raw"] = raw_n
-    test_ver["rawLatest"] = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(raw_t)) if raw_t else ""
+    dev = _dir_version(DEV)
+    # ② 开发版再拆三块：成品（final）/ 编辑中（packs）/ 收件箱（vis）
+    dev["final"] = _final_stats()
+    dev["packs"] = _packs_stats()
+    dev["inbox"] = _inbox()
+    dep = _dir_version(DEPLOY)
+    has_data = bool(P.map_files(DEPLOY))
+    dep["hasData"] = has_data
+    if not has_data:
+        # ③ 2026-11-21 起不放导航数据：vis\ 里的残留可走面也不再当数据算
+        dep.update({"maps": 0, "nav": 0, "navmesh": 0, "bytes": 0, "latest": "", "latestTs": 0})
     return {
         "ok": True,
         "server": "ucf-navserver/2 %s" % time.strftime("%Y-%m-%d %H:%M:%S"),
@@ -1395,9 +1527,8 @@ def build_workbench():
         "maps": collect_maps(),
         "versions": {
             "native": _dir_version(NATIVE),
-            "dev": _dir_version(DEV),
-            "deploy": _dir_version(DEPLOY),
-            "test": test_ver,
+            "dev": dev,
+            "deploy": dep,
         },
         "packs": collect_packs(),
         "consistency": _consistency(),
@@ -1500,7 +1631,7 @@ class Handler(SimpleHTTPRequestHandler):
             if path == "/api/maps":
                 index = {}
                 try:
-                    ip = os.path.join(MAPS, "_index.json")
+                    ip = P.index_path(DATA)
                     if os.path.isfile(ip):
                         with open(ip, "r", encoding="utf-8") as f:
                             index = json.load(f)
@@ -1530,7 +1661,7 @@ class Handler(SimpleHTTPRequestHandler):
                 # 工作台启动时一次性拿齐：版本 / 图列表 / 编辑清单 / 地形 / 日志
                 index = {}
                 try:
-                    ip = os.path.join(MAPS, "_index.json")
+                    ip = P.index_path(DATA)
                     if os.path.isfile(ip):
                         with open(ip, "r", encoding="utf-8") as f:
                             index = json.load(f)
@@ -1574,7 +1705,8 @@ class Handler(SimpleHTTPRequestHandler):
             if path == "/api/raw":
                 kind = (q.get("dir") or ["vis"])[0]
                 fn = safe_relpath((q.get("file") or [""])[0])
-                base = MAPS if kind == "maps" else (NAV if kind == "nav" else VIS)
+                # dir: maps（图集）/ nav（旧路线目录）/ packs（编辑中）/ vis（收件箱）
+                base = {"maps": MAPS, "nav": NAV, "packs": PACKS_DIR}.get(kind, VIS)
                 p = os.path.join(base, *[x for x in fn.split("/") if x])
                 if os.path.commonpath([os.path.abspath(base), os.path.abspath(p)]) != os.path.abspath(base):
                     return self.send_json({"ok": False, "error": "路径越界: " + fn}, 400)
@@ -1584,7 +1716,8 @@ class Handler(SimpleHTTPRequestHandler):
                     return self.send_bytes(f.read(), "application/json; charset=utf-8")
             if path == "/api/txt":
                 fp = safe_token((q.get("fp") or [""])[0])
-                p = os.path.join(NAV, fp + ".txt")
+                # 路线清单：图文件夹 → ② 成品当前版本 → ② 编辑中的包 → 旧布局 nav\
+                p = _route_txt(DATA, fp) or os.path.join(NAV, fp + ".txt")
                 if not os.path.isfile(p):
                     return self.send_json({"ok": True, "fp": fp, "text": "", "exists": False})
                 with open(p, "r", encoding="utf-8", errors="replace") as f:
@@ -1711,12 +1844,13 @@ def main():
     print("UCF 路点工作台 · 本地服务（只读查看）")
     print("  版本     : %s（UCF_PROFILE=%s）%s" % (
         profile_info()["cn"], PROFILE, "  [只读]" if READONLY else ""))
-    print("  版本切换 : /api/profile?set=native|dev|deploy|test（只读查看，不写文件）")
-    print("  数据目录 : %s" % NAV)
+    print("  版本切换 : /api/profile?set=native|dev|deploy（只读查看，不写文件）")
+    print("  数据目录 : %s（每张图一个文件夹）" % DATA)
     print("  原生备份 : %s" % NATIVE)
-    print("  游戏目录 : %s" % UCF)
-    print("  导出目录 : %s（④ 测试版）" % VIS)
-    print("  测试包   : %s" % PACKS_DIR)
+    print("  游戏目录 : %s（③ 不放导航数据）" % UCF)
+    print("  收件箱   : %s（② 的 vis\\：导出 / 可走面）" % VIS)
+    print("  成品     : %s（② 的 final\\：一版一整套）" % FINAL)
+    print("  测试包   : %s（② 的 packs\\：编辑中）" % PACKS_DIR)
     print("  打开地址 : %s" % url)
     print("  （关掉这个窗口就停止服务；本服务只读，不写任何路线数据）")
     for name in ("snapshots", "edits", "geo"):

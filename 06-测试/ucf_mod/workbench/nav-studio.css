@@ -1,6 +1,6 @@
 /* UCF 路点工作台 · 七页只读版
    视觉沿用 design/nav-studio-launcher.html 的深色控制台风格；数据全部来自
-   navdata 四版 + ucf_mod.log，不写任何文件。 */
+   navdata 三版（①备份 / ②开发 / ③部署）+ ucf_mod.log，不写任何文件。 */
 :root{
   --bg:#07090d; --win:#0c1016; --panel:#10151c; --panel2:#131922; --line:#1e2633; --line2:#28313f;
   --tx:#dfe6ef; --tx2:#96a2b4; --tx3:#6a7585; --acc:#4f8cff; --grn:#3ecf8e; --warn:#f5b942;
@@ -374,7 +374,7 @@ svg{display:block}
 .app.docked .grid > .col:last-child{display:none}
 .app.docked .wgrid{grid-template-columns:280px minmax(0,1fr)}
 .app.docked .wgrid > .card:last-child{display:none}
-/* 地图数据页本来只有「表格 + 四版数据」两列，收起四版后让表格占满 */
+/* 地图数据页本来只有「表格 + 三版数据」两列，收起三版后让表格占满 */
 .app.docked .page[data-page="maps"] .wgrid{grid-template-columns:minmax(0,1fr) !important}
 /* 侧栏里的 3D 开关：用青色区分「打开中」，不要和当前页的蓝色选中条混在一起 */
 #nav3d.on{background:linear-gradient(90deg,rgba(56,217,245,.13),rgba(56,217,245,.02));color:#dff6ff}

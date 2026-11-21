@@ -78,7 +78,7 @@
               </div>
             </div>
             <div class="card">
-              <div class="ch"><b>四版数据</b><span class="sub">①备份 → ②开发 → ③部署 · ④测试</span></div>
+              <div class="ch"><b>三版数据</b><span class="sub">①备份 → ②开发（成品 / 编辑中 / 收件箱）→ ③部署（游戏运行环境）</span></div>
               <div class="presetrow" id="ovVersions"></div>
               <div class="listnote" id="ovPaths">—</div>
             </div>
@@ -235,13 +235,13 @@
             <div class="card">
               <div class="ch"><b>地图数据</b><span class="sub" id="mapsSub">—</span><div class="right"><button class="btn sm" id="mapsReload">刷新列表</button></div></div>
               <div class="tablewrap"><table class="mtable" id="mapTable">
-                <thead><tr><th>#</th><th>地图</th><th>关卡</th><th>指纹</th><th>点 / 边</th><th>特征</th><th>可走面</th><th>编辑</th><th>状态</th></tr></thead>
+                <thead><tr><th>#</th><th>地图</th><th>关卡</th><th>指纹</th><th>点 / 边</th><th>特征</th><th>可走面</th><th title="成品当前版本里这张图的改动条数">成品</th><th title="编辑中（packs）里这张图的测试包个数">编辑中</th><th>状态</th></tr></thead>
                 <tbody id="mapTbody"></tbody>
               </table></div>
-              <div class="listnote" id="mapsNote">点一行把这张图载入工作台；③部署版状态按文件 SHA256 比对，不碰游戏。</div>
+              <div class="listnote" id="mapsNote">点一行把这张图载入工作台。一张图一个文件夹：<b>map.json</b> + <b>navmesh.bin</b>；「成品」= 已发布到成品版本里的改动条数，「编辑中」= packs 里这张图的测试包个数。网页只读，不碰任何文件。</div>
             </div>
             <div class="card">
-              <div class="ch"><b>四版数据</b><span class="sub">①→②→③ · ④测试</span><div class="right"><span class="chip" id="verChip">—</span></div></div>
+              <div class="ch"><b>三版数据</b><span class="sub">①备份 · ②开发 · ③部署</span><div class="right"><span class="chip" id="verChip">—</span></div></div>
               <div class="detailbody" id="verBody"></div>
             </div>
           </div>

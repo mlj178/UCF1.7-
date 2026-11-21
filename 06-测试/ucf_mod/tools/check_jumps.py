@@ -2,7 +2,7 @@
 """跳链体检：跳点必须「两端都是图上的路点 + 两点之间在图上连着」，否则人机永远不会用它。
 
 用法：
-    python tools/check_jumps.py                  # 体检 ④ 测试包里所有 *.txt
+    python tools/check_jumps.py                  # 体检 ② 测试包里所有 *.txt
     python tools/check_jumps.py <包目录或 .txt>   # 只体检一个包/一个文件
     python tools/check_jumps.py --native         # 顺带体检 navdata/native/maps/*.json 的原生跳链
 
@@ -20,8 +20,12 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
-PACKS = os.path.join(ROOT, "navdata", "test", "packs")
-NATIVE = os.path.join(ROOT, "navdata", "native", "maps")
+if HERE not in sys.path:
+    sys.path.insert(0, HERE)
+import ucf_paths as P                       # noqa: E402  图文件夹 / 测试包的唯一来源
+
+PACKS = P.PACKS_DIR                          # ② navdata\dev\packs\<图>\<包>
+NATIVE = P.NATIVE                            # ① 备份版：一张图一个文件夹
 
 SNAP = 1.0          # 端点吸附到路点的最大距离（对齐游戏 OnLatePostScan 的 GetNearest，别用 3 m 放宽）
 MIN_LEN = 1.5       # 短于这个距离的跳链没意义
@@ -135,10 +139,9 @@ def vec3(v):
 
 def check_native():
     total_ok = total = 0
-    for name in sorted(os.listdir(NATIVE)):
-        if not name.endswith(".json"):
-            continue
-        j = json.load(open(os.path.join(NATIVE, name), encoding="utf-8"))
+    for rel, path in P.map_files(NATIVE):
+        name = rel.replace("/map.json", "")
+        j = json.load(open(path, encoding="utf-8"))
         jumps = ((j.get("lines") or {}).get("jump") or [])
         if not jumps:
             continue
@@ -171,7 +174,7 @@ def check_native():
                 total_ok += 1
             else:
                 stat["noedge"] += 1
-        print("%-24s 跳链 %2d -> 有边 %2d · 同点 %2d · 缺路点 %2d · 无连线 %2d"
+        print("%-28s 跳链 %2d -> 有边 %2d · 同点 %2d · 缺路点 %2d · 无连线 %2d"
               % (name, len(jumps), stat["ok"], stat["same"], stat["miss"], stat["noedge"]))
     print("原生跳链合计: 有边 %d / %d" % (total_ok, total))
 
@@ -197,11 +200,11 @@ def iter_pack_files(arg):
 
 def main():
     ap = argparse.ArgumentParser(description="跳链体检：跳点两端要有路点、两点之间还要有边")
-    ap.add_argument("path", nargs="?", help="包目录或 nav 编辑文件（默认扫 navdata/test/packs）")
+    ap.add_argument("path", nargs="?", help="包目录或 nav 编辑文件（默认扫 navdata/dev/packs）")
     ap.add_argument("--native", action="store_true", help="顺带体检原生图导出的跳链")
     args = ap.parse_args()
     if args.native:
-        print("---- 原生图（navdata/native/maps）----")
+        print("---- 原生图（navdata/native/<图>/map.json）----")
         check_native()
     files = list(iter_pack_files(args.path))
     if not files:

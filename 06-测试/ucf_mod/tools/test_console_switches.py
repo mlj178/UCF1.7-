@@ -34,8 +34,11 @@ CUSTOM = {"wp_menu": "人机路点", "wp_autoground": "人机路点"}
 # 2026-11-19：可视化改成逐类开关（读+画同一颗），全部落在「可视化」页
 # 2026-11-20：加 vis_compass（方向罗盘，东南西北）——它不读游戏数据，但同样是
 #              「画不画」，所以和可走面一样归在「可视化」页并在 editor.c 里读。
+# 2026-11-21：玩家坐标记录搬出「可视化」，和原始轨迹采集一起进新页「开发者选项」；
+#              该页的开关不在 GROUPS 里，单独定义在控制台的 DEV_ITEMS。
 VIS_DATA = ("vis_nodes", "vis_crouch", "vis_guard", "vis_nano", "vis_born",
             "vis_supply", "vis_jump", "vis_tag", "navmesh_show", "vis_compass")
+DEV_PAGE = "开发者选项"
 
 
 def read(path):
@@ -69,15 +72,25 @@ def console_groups():
     return console_const("GROUPS")
 
 
+def console_dev_items():
+    """控制台.pyw 里的 DEV_ITEMS：单开的「开发者选项」页的开关，格式同 GROUPS 的 items。"""
+    return console_const("DEV_ITEMS")
+
+
 def main():
     defs = cfg_defs()
     groups = console_groups()
+    dev_items = console_dev_items()
 
     seen = {}
     for title, _hint, items in groups:
         for key, label, _desc, _default in items:
             assert key not in seen, "开关重复：%s（%s / %s）" % (key, seen[key], label)
             seen[key] = title
+    # 2026-11-21：开发者选项单独成页（页签排在最后），开关同样要「cfg.c 有 -> 面板能关」
+    for key, label, _desc, _default in dev_items:
+        assert key not in seen, "开关重复：%s（%s / %s）" % (key, seen[key], label)
+        seen[key] = DEV_PAGE
     for key, title in CUSTOM.items():
         assert key not in seen, "开关重复：%s（%s / %s）" % (key, seen[key], title)
         seen[key] = title
@@ -96,6 +109,7 @@ def main():
         if key == "enabled" or key in RETIRED or key in CUSTOM:
             continue
         got = [d for _t, _h, items in groups for k, _l, _desc, d in items if k == key]
+        got += [d for k, _l, _desc, d in dev_items if k == key]
         assert got and got[0] == bool(default), \
             "默认值不一致：%s cfg=%d console=%s" % (key, default, got)
 
@@ -108,10 +122,22 @@ def main():
     for key in VIS_DATA:
         assert seen.get(key) == "可视化", \
             "可视化开关 %s 必须在「可视化」页（2026-11-19 用户要求）" % key
+    # 2026-11-21 用户要求：玩家坐标记录 + 原始轨迹采集搬到「开发者选项」，不再在可视化 / 录制页
+    assert seen.get("vis_player_marks") == DEV_PAGE, \
+        "玩家坐标记录开关必须搬到「%s」页（2026-11-21 用户要求）" % DEV_PAGE
+    assert seen.get("vis_player_marks") != "可视化", "玩家坐标记录不能再留在「可视化」页"
 
     editor_c = read(os.path.join(PROJ, "src", "editor.c"))
     assert "editor_freecam_tick" in editor_c and "CinemachineBrain" in editor_c, \
         "车测自由视角（freecam）实现缺失：editor_freecam_tick / CinemachineBrain"
+
+    # 2026-11-21 用户要求：玩家坐标记录只在本次（当前场景）画金色方块，不连折线，
+    # 历史坐标只当日志 —— 旧代码会把文件里所有历史点和顺序折线一起画进场景。
+    assert "g_pmSesP[PM_MAX]" in editor_c and "g_pmSesN" in editor_c, \
+        "玩家坐标记录必须只画本次会话的点（g_pmSesP / g_pmSesN）"
+    assert "vis_pmark_line" not in editor_c, "玩家坐标记录不再连折线（vis_pmark_line 已删）"
+    assert "g_pmSesN = 0;" in editor_c, "换图时必须清空本次的玩家坐标记录"
+    assert "bs_solid(g_pmP[i]" not in editor_c, "vis_draw 不能再画 player_marks.txt 里的历史记录"
 
     # cfg.c 里加了键、editor.c 忘了读 -> 开关永远不生效，也不会报错
     for key in ("visualizer",) + VIS_DATA:
@@ -127,6 +153,23 @@ def main():
         "「人机路点」页应在「数据」页之前"
     assert 'text="打开文件夹"' in src and "def open_folder" in src, \
         "数据页的「打开文件夹」按钮 / open_folder 不见了"
+
+    # 2026-11-21 用户要求：新开一页「开发者选项」（页签排在最后），
+    # 玩家坐标记录从「可视化」、原始轨迹采集从「录制」搬进去。
+    assert 'add("开发者选项")' in src, "「开发者选项」必须是页签"
+    assert src.index('add("车测")') < src.index('add("开发者选项")'), \
+        "「开发者选项」页应在「车测」页之后（排在所有页签最后）"
+    dev_body = src[src.index("def build_dev_tab("):src.index("def build_pmark_card(")]
+    assert "self.build_pmark_card(body)" in dev_body, \
+        "「开发者选项」页少了玩家坐标记录卡片"
+    assert "self.build_trace_card(body)" in dev_body, \
+        "「开发者选项」页少了原始轨迹采集卡片"
+    rec_body = src[src.index("def build_record_tab("):src.index("def build_rec_ready(")]
+    assert "build_trace_card" not in rec_body, \
+        "「录制」页不该再放原始轨迹采集（2026-11-21 已搬到开发者选项）"
+    vis_body = src[src.index("def build_vis_tab("):src.index("def build_dev_tab(")]
+    assert "build_pmark_card" not in vis_body, \
+        "「可视化」页不该再放玩家坐标记录卡片（2026-11-21 已搬到开发者选项）"
 
     # 车测页（2026-11-18 用户要求：启动器里能直接跑车测，不用命令行 autotest.ps1）
     assert 'self.tabview.add("车测")' in src, "车测必须是页签"

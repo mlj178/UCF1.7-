@@ -5,8 +5,14 @@
 navedit 用的 npz 里带贴图与分块表，但贴图接得很乱；网页版只要「能看懂地形」的
 灰模 + 法线 + 分块颜色，所以这里做一次离线瘦身：
 
-  * 丢掉 shadow（阴影体）、blocker（碰撞壳）、card（巨幅装饰面）三类分块，
-    它们本来就不该被看见，留在场景里只会挡住视线；
+  * 丢掉 blocker（碰撞壳）、card（巨幅装饰面）两类分块：它们在游戏里看不见，
+    留着只会挡住视线；
+  * shadow 分块单独处理（2026-11-21 改）。这里说的 shadow 只是「材质 shader 名
+    以 Shadow 结尾」——同一块网格在游戏里常常被导出两遍（普通材质一份、Shadow
+    材质一份），两份大多重合。以前一律丢掉 Shadow 那份：运输船上被留下的那份
+    正好整体偏了 ~15 m，看起来就像「路点网和地图错位了」。
+    现在用这张图的路点（navdata/dev/<图>/map.json）当尺子：两份差得明显就只留
+    盖住路点的那一份；两份基本重合、或这张图还没有路点，就两套都画（z-buffer 去重）。
   * 顶点颜色（npz 的 c）是 navedit 用的随机染色，噪点很大，不用；
     改用材质色 x 法线光照，所以在 JSON 头里带上每块的颜色；
   * 法线量化成 int8（x127），位置 f32，索引 u32；
@@ -44,7 +50,7 @@ GEO = os.path.join(UCF, "geo")
 OUT = os.path.join(GEO, "web")
 MAGIC = b"UCFG"
 VERSION = 1
-SKIP_FLAGS = ("shadow", "blocker", "card")
+SKIP_FLAGS = ("blocker", "card")   # shadow 分块要留：里面是正常可见的船体/地面
 
 
 def _bool(x):
@@ -95,6 +101,88 @@ def vertex_normals(pos, tri):
     return (vn / ln[:, None]).astype(np.float32)
 
 
+
+NAVDATA = os.path.join(UCF, "navdata", "dev")   # ② 开发版的图文件夹（只读，用来校准分块）
+
+
+def _level_waypoints(level):
+    """这张图的路点（navdata/dev/<图文件夹>/map.json 的 nodes），没有就返回 None。
+
+    只用来判断「同一块网格被导出了两遍时，哪一遍的世界坐标是对的」，不改任何数据。
+    路点是游戏运行时 A* 图里的真实坐标（出生点、人机走的路都在上面），
+    比任何一次离线抓取都可信。"""
+    if not os.path.isdir(NAVDATA):
+        return None
+    for fn in sorted(os.listdir(NAVDATA)):
+        p = os.path.join(NAVDATA, fn, "map.json")
+        if not os.path.isfile(p):
+            continue
+        try:
+            with open(p, "r", encoding="utf-8") as f:
+                j = json.load(f)
+        except Exception:
+            continue
+        if ((j.get("map") or {}).get("level") or "") != level:
+            continue
+        pts = []
+        for n in (j.get("nodes") or []):
+            q = n.get("p")
+            if isinstance(q, (list, tuple)) and len(q) == 3:
+                try:
+                    pts.append([float(q[0]), float(q[1]), float(q[2])])
+                except (TypeError, ValueError):
+                    pass
+        if len(pts) >= 8:
+            return np.asarray(pts, dtype=np.float64)
+    return None
+
+
+def _pass_cover(pos, tri, sel, pts, band, res=1.0):
+    """这套分块在俯视图上盖住了多少比例的路点（只看高度带里的三角形）。
+
+    只做粗判：1 m 栅格 + 点是否落在三角形投影里。够用来区分「差 15 m」这种情况。"""
+    if pts is None or len(pts) == 0 or not sel.any():
+        return 0.0
+    P = pos[tri[sel]]
+    if len(P) == 0:
+        return 0.0
+    cy = (P[:, 0, 1] + P[:, 1, 1] + P[:, 2, 1]) / 3.0
+    P = P[(cy >= band[0]) & (cy <= band[1])]
+    if len(P) == 0:
+        return 0.0
+    lo = pts.min(axis=0) - 25.0
+    hi = pts.max(axis=0) + 25.0
+    nx = int((hi[0] - lo[0]) / res) + 2
+    nz = int((hi[2] - lo[2]) / res) + 2
+    mask = np.zeros((nx, nz), dtype=bool)
+    for t in range(len(P)):
+        ax, az = P[t, 0, 0], P[t, 0, 2]
+        bx, bz = P[t, 1, 0], P[t, 1, 2]
+        cx, cz = P[t, 2, 0], P[t, 2, 2]
+        d = (bz - cz) * (ax - cx) + (cx - bx) * (az - cz)
+        if abs(d) < 1e-9:
+            continue
+        i0 = max(0, int((min(ax, bx, cx) - lo[0]) / res))
+        i1 = min(nx - 1, int((max(ax, bx, cx) - lo[0]) / res) + 1)
+        j0 = max(0, int((min(az, bz, cz) - lo[2]) / res))
+        j1 = min(nz - 1, int((max(az, bz, cz) - lo[2]) / res) + 1)
+        if i1 < i0 or j1 < j0:
+            continue
+        X = lo[0] + np.arange(i0, i1 + 1) * res
+        Z = lo[2] + np.arange(j0, j1 + 1) * res
+        XX, ZZ = np.meshgrid(X, Z, indexing="ij")
+        w1 = ((bz - cz) * (XX - cx) + (cx - bx) * (ZZ - cz)) / d
+        w2 = ((cz - az) * (XX - cx) + (ax - cx) * (ZZ - cz)) / d
+        w3 = 1.0 - w1 - w2
+        mask[i0:i1 + 1, j0:j1 + 1] |= (w1 >= -0.002) & (w2 >= -0.002) & (w3 >= -0.002)
+    ii = np.round((pts[:, 0] - lo[0]) / res).astype(int)
+    jj = np.round((pts[:, 2] - lo[2]) / res).astype(int)
+    ok = (ii >= 0) & (ii < nx) & (jj >= 0) & (jj < nz)
+    hit = np.zeros(len(pts), dtype=bool)
+    hit[ok] = mask[ii[ok], jj[ok]]
+    return float(hit.mean())
+
+
 def convert(name, force=False):
     src = os.path.join(GEO, name + ".npz")
     dst = os.path.join(OUT, name + ".bin")
@@ -127,6 +215,36 @@ def convert(name, force=False):
     drop_group = set()
     for gi, ch in enumerate(chunks):
         if any(_bool(ch.get(k)) for k in SKIP_FLAGS):
+            drop_group.add(gi)
+
+    # 同一块网格常常被导出两遍：一遍普通材质、一遍 Shadow 材质，两份的世界坐标
+    # 大多重合，但在个别图（运输船）上差了 ~15 m —— 用这张图的路点当尺子，
+    # 哪一套盖住路点就用哪一套；没有路点可对照时，沿用原来的「只留普通材质」。
+    shadow_gi = [gi for gi in range(len(chunks))
+                 if gi not in drop_group and _bool(chunks[gi].get("shadow"))]
+    normal_gi = [gi for gi in range(len(chunks))
+                 if gi not in drop_group and not _bool(chunks[gi].get("shadow"))]
+    use_shadow = False
+    if shadow_gi and normal_gi:
+        pts = _level_waypoints(name)
+        if pts is not None:
+            ymed = float(np.median(pts[:, 1]))
+            band = (ymed - 6.0, ymed + 6.0)
+            sel_sh = np.isin(grp, shadow_gi)
+            sel_ns = np.isin(grp, normal_gi)
+            c_sh = _pass_cover(pos, tri, sel_sh, pts, band)
+            c_ns = _pass_cover(pos, tri, sel_ns, pts, band)
+            n_sh = int(sel_sh.sum())
+            n_ns = int(sel_ns.sum())
+            if c_sh > c_ns + 0.05 and n_sh >= 0.6 * max(1, n_ns):
+                use_shadow = True
+            print("  %s: 分块对照 路点覆盖 shadow %.2f (%d 三角) / 普通 %.2f (%d 三角) -> %s" % (
+                  name, c_sh, n_sh, c_ns, n_ns,
+                  "shadow 那套位置对，只留它" if use_shadow else "两套基本重合，都留"))
+    if use_shadow:
+        # 只有「普通那套明显错位」时才整批丢掉它；两套重合的图保持原样（都画），
+        # 重合的部分由 z-buffer 处理，不会互相遮挡。
+        for gi in normal_gi:
             drop_group.add(gi)
     keep = np.ones(len(tri), dtype=bool)
     if drop_group:

@@ -1,6 +1,6 @@
-﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿/* UCF 路点工作台 · 七页只读版（2026-11-18）
+/* UCF 路点工作台 · 七页只读版（2026-11-18）
  * 数据全部来自 tools/navserver.py 的 GET 接口：
- *   /api/workbench  地图统计 / 四版 / 测试包 / 配置 / 事件 / 日志
+ *   /api/workbench  地图统计 / 三版（成品·编辑中·收件箱）/ 测试包 / 配置 / 事件 / 日志
  *   /api/raw        地图 JSON（②开发版 maps/）
  *   /api/txt        编辑清单 nav/<指纹>.txt（有就套用）
  * 本文件不发 POST，不写任何文件。
@@ -44,7 +44,7 @@ var PAGE_TITLE = {
   overview: '总览', waypoints: '路点库', routes: '路线', zones: '区域',
   auto: '自动铺设', maps: '地图数据', logs: '日志'
 };
-var PROFILE_ORDER = ['native', 'dev', 'deploy', 'test'];
+var PROFILE_ORDER = ['native', 'dev', 'deploy'];
 var CORE_LAYERS = ['node_walk', 'node_block', 'edge'];
 /* 旧守卫：Bot_GuardArea 是空类、Bot_GuardPos 只当 Bot_CrouchPos 基类 —— 所有模式都不使用 */
 var LEGACY_LAYERS = { guard_area: 1, guard: 1 };
@@ -71,9 +71,11 @@ var MODE_NOTES = {
   '终结者模式': '守区/守点 + 补给箱 + 升级箱生效，蹲守不生效'
 };
 var SPAWN_LABEL = { 0: '幽灵出生（BL）', 1: '保卫者出生（GR）', 2: '中立出生', 3: '补给箱', 4: '红箱', 5: '蓝箱' };
-var PROFILE_LABELS = { native: '① 备份版', dev: '② 开发版', deploy: '③ 部署版', test: '④ 测试版' };
+var PROFILE_LABELS = { native: '① 备份版', dev: '② 开发版', deploy: '③ 部署版' };
 var PROFILE_FULL = {
-  native: '备份版（原生·只读）', dev: '开发版', deploy: '部署版（游戏读）', test: '测试版（导出）'
+  native: '备份版（原生·只读）',
+  dev: '开发版（成品 map.json/navmesh.bin + 编辑中 packs + 收件箱 vis）',
+  deploy: '部署版（游戏运行环境·不放导航数据）'
 };
 
 var ST = {
@@ -112,6 +114,7 @@ var ST = {
   profileInfo: null,
   dockUrl: '',
   dockOpen: false,
+  dockHover: false,
   dockW: 480,
   dockWantOpen: false,
   autoDock: false
@@ -130,6 +133,11 @@ function fmtBytes(n) {
   return n + ' B';
 }
 function fmtNum(n) { return String(Math.round(Number(n) || 0)).replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
+/* "2026-11-21 14:15:37" -> "11-21 14:15"；空串给 "—" */
+function shortTime(s) {
+  var m = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/.exec(String(s || ''));
+  return m ? (m[2] + '-' + m[3] + ' ' + m[4] + ':' + m[5]) : (s || '—');
+}
 function pct(n, d) { return d ? Math.round(n / d * 1000) / 10 : 0; }
 function hexA(hex, a) {
   var m = String(hex || '#888').replace('#', '');
@@ -1132,7 +1140,7 @@ function updateHeader() {
   if (ST.page === 'auto') {
     sub = m ? ('进图时按 PointGraph 节点数判断是否自动铺：当前 ' + m.nodes + ' 点') : sub;
   }
-  if (ST.page === 'maps') sub = (ST.maps.length) + (ST.profile === 'test' ? ' 个导出 · ' : ' 张图 · ') + profLabel();
+  if (ST.page === 'maps') sub = ST.maps.length + ' 张图 · ' + profLabel();
   if (ST.page === 'logs') sub = 'ucf_mod.log 尾部 · 只读';
   $('pageSub').textContent = sub;
 
@@ -1143,7 +1151,8 @@ function updateHeader() {
   if (m) {
     var kind = profLabel();
     if (m.status === 'missing') kind = m.navmesh ? '仅可走面' : '待采集';
-    else if (ST.profile === 'dev' && m.deployed && m.deployed.same) kind = '② 开发版 · ③ 已同步';
+    else if (m.final && m.final.has) kind = '② 开发版 · 成品里有这张图';
+    else if (ST.profile === 'dev') kind = '② 开发版 · 还没发布到成品';
     $('sideKind').textContent = kind;
     $('sideName').textContent = (m.label || m.level || '未命名');
     $('sideFp').textContent = (m.fp || '—') + (m.file ? ' · ' + m.file : (m.navmeshFile ? ' · ' + m.navmeshFile : ''));
@@ -1197,7 +1206,7 @@ function showPage(name) {
 function renderOverview() {
   var m = ST.cur, s = ST.stats, wb = ST.wb;
   if (!m || !s) return;
-  var sync = (ST.profile === 'dev' && m.deployed && m.deployed.same) ? ' · ③ 已同步' : '';
+  var sync = (ST.profile === 'dev' && m.final && m.final.has) ? ' · 成品已有这张图' : '';
   $('ovSub').textContent = (m.label || m.level) + ' · ' + (m.level || '') + ' · ' + profLabel() + sync;
   var k = s.kinds;
   $('ovTitle').innerHTML = (m.label || m.level) + ' <em>' + s.nodes + '</em> 点 / <em>' + s.edges + '</em> 边';
@@ -1219,22 +1228,27 @@ function renderOverview() {
   var dev = (wb && wb.versions && wb.versions.dev) || {};
   var dep = (wb && wb.versions && wb.versions.deploy) || {};
   var nat = (wb && wb.versions && wb.versions.native) || {};
-  var edits = ST.maps.reduce(function (a, x) { return a + (x.editsDev || 0); }, 0);
+  var dFinal = dev.final || {}, dPacks = dev.packs || {}, dInbox = dev.inbox || {};
+  var edits = ST.maps.reduce(function (a, x) { return a + ((x.final && x.final.ops) || 0); }, 0);
   $('ovFlow').innerHTML =
-    '<div class="fstep"><b><em>01</em>导出</b><span>' + (dev.maps || 0) + ' 张图 · ' + (dev.latest || '—') + '</span></div>' +
-    '<div class="fstep"><b><em>02</em>整理</b><span>' + (edits ? edits + ' 条编辑指令' : '没有编辑清单，点图=原样') + ' · ① ' + (nat.maps || 0) + ' 张</span></div>' +
-    '<div class="fstep"><b><em>03</em>部署</b><span>' + (dep.maps || 0) + ' 张图 · ' + (dep.latest || '—') + '</span></div>';
+    '<div class="fstep"><b><em>01</em>收件箱</b><span>' + fmtNum(dInbox.exports || 0) + ' 份导出 · ' + shortTime(dInbox.latest) + '</span></div>' +
+    '<div class="fstep"><b><em>02</em>成品</b><span>' + (dev.maps || 0) + ' 张图 · ' + (dev.navmesh || 0) + ' 可走面 · ' +
+      (edits ? edits + ' 条改动' : '点图=原样') + '</span></div>' +
+    '<div class="fstep"><b><em>03</em>编辑中</b><span>' + (dPacks.n || 0) + ' 个测试包 · 成品 ' + (dFinal.versions || 0) + ' 个版本</span></div>';
 
+  /* 三版：① 只读快照、② 唯一数据源（成品 / 编辑中 / 收件箱）、③ 游戏运行环境（不放数据） */
   var vers = [
     { key: 'native', n: '① 备份版', d: nat, c: '#8fa5c0' },
     { key: 'dev', n: '② 开发版', d: dev, c: '#4f8cff' },
-    { key: 'deploy', n: '③ 部署版', d: dep, c: '#3ecf8e' },
-    { key: 'test', n: '④ 测试版', d: (wb && wb.versions && wb.versions.test) || {}, c: '#f5b942' }
+    { key: 'deploy', n: '③ 部署版', d: dep, c: '#3ecf8e' }
   ];
   $('ovVersions').innerHTML = vers.map(function (v) {
-    var n = v.key === 'test' ? (v.d.raw || 0) : (v.d.maps || 0);
-    return '<span class="preset' + (v.key === ST.profile ? ' on' : '') + '" data-vprof="' + v.key + '" style="color:' + v.c + '">' + v.n +
-      '<b>' + n + (v.key === 'test' ? ' 导出' : ' 图') + ' / ' + (v.d.nav || 0) + ' 编辑</b></span>';
+    var txt;
+    if (v.key === 'native') txt = (v.d.maps || 0) + ' 图 / ' + (v.d.navmesh || 0) + ' 面';
+    else if (v.key === 'dev') txt = (v.d.maps || 0) + ' 图 / ' + (dFinal.versions || 0) + ' 版本 / ' + (dPacks.n || 0) + ' 包';
+    else txt = '运行时 · 不放数据';
+    return '<span class="preset' + (v.key === ST.profile ? ' on' : '') + '" data-vprof="' + v.key + '"' +
+      ' title="' + esc(v.d.path || '') + '" style="color:' + v.c + '">' + v.n + '<b>' + txt + '</b></span>';
   }).join('');
   var curPath = (wb && wb.profile && wb.profile.data) || '—';
   $('ovPaths').textContent = '当前查看：' + profLabel() + ' · ' + curPath;
@@ -1253,11 +1267,9 @@ function buildTips() {
   var m = ST.cur, s = ST.stats, wb = ST.wb, out = [];
   if (!m) return out;
   if (ST.profile === 'native') {
-    out.push({ c: '#8fa5c0', text: '当前是①备份版只读快照，不是游戏正在读的数据；要改点图请切到②开发版。' });
+    out.push({ c: '#8fa5c0', text: '当前是①备份版只读快照（原生数据），游戏不会读它；要改点图请切到②开发版。' });
   } else if (ST.profile === 'deploy') {
-    out.push({ c: '#3ecf8e', text: '当前是③部署版：游戏里的插件就读这一版；要改点图请切到②开发版再部署。' });
-  } else if (ST.profile === 'test') {
-    out.push({ c: '#f5b942', text: '当前是④测试版导出：这些是插件 Ctrl+E 落盘的原始文件，不影响游戏；游戏读③部署版。' });
+    out.push({ c: '#3ecf8e', text: '当前是③部署版（游戏运行环境）：2026-11-21 起这里不放导航数据，游戏读「成品」版本或「编辑中」的包；要改点图请切到②开发版。' });
   }
   if (m.status === 'missing') {
     out.push({ c: '#f5b942', text: '这张图还没有采集数据：进图导出一份，或用测试包从空白底图画。' });
@@ -1274,8 +1286,14 @@ function buildTips() {
   if (!(s.kinds.crouch)) out.push({ c: '#38d9f5', text: '蹲守点 0：进图时 auto_crouch 开就会自动补一批 Bot_CrouchPos。' });
   if (!(s.kinds.nano_area)) out.push({ c: '#a78bfa', text: '幽灵守区 0：ghost_areas 开时插件会按采样点凭空造守区；旧 guard_area 不算。' });
   var c = wb && wb.consistency;
-  if (c && c.devDeploy && c.devDeploy.maps && (c.devDeploy.maps.diff.length || c.devDeploy.maps.onlyA.length || c.devDeploy.maps.onlyB.length)) {
-    out.push({ c: '#3ecf8e', text: '②开发版与③部署版有文件不同：要进游戏生效，用控制台「部署到游戏」或 python navdata.py publish。' });
+  if (c && c.nativeDev && c.nativeDev.maps &&
+      ((c.nativeDev.maps.diff || []).length || (c.nativeDev.maps.onlyA || []).length || (c.nativeDev.maps.onlyB || []).length)) {
+    out.push({ c: '#3ecf8e', text: '②开发版的 map.json 和①备份版有文件不同：这些就是改过的成品数据，控制台「开始游戏 · 成品」按包读它。' });
+  }
+  if (m.final && m.final.has) {
+    out.push({ c: '#3ecf8e', text: '这张图在成品当前版本里有 ' + (m.final.ops || 0) + ' 条改动；要试新改法去控制台「编辑中」选包。' });
+  } else if (ST.profile === 'dev' && !(m.packs || []).length) {
+    out.push({ c: '#f5b942', text: '这张图还没有编辑中的包，也没有发布到成品：进游戏改完存包，再在控制台「发布到成品」。' });
   }
   if (!out.length) out.push({ c: '#3ecf8e', text: '当前地图数据没有明显缺口：点图、出生点、特征点都读到了。' });
   return out.slice(0, 5);
@@ -1385,15 +1403,17 @@ function renderMapInfo() {
   }
   $('mapSub2').textContent = m.level || m.file || '—';
   $('mapChip').textContent = m.status === 'missing' ? (m.navmesh ? '仅可走面' : '待采集') : profLabel();
-  var dep = m.deployed || {};
-  var depText;
-  if (ST.profile === 'dev') depText = dep.exists ? (dep.same ? '一致' : '内容不同') : '没有文件';
-  else if (ST.profile === 'deploy') depText = '当前就是③部署版';
-  else if (ST.profile === 'native') depText = '①备份版，不参与部署';
-  else depText = '④测试导出，不参与部署';
+  /* 三版之后没有「部署」这一步了：②开发版里分 成品（发布过的版本）/ 编辑中（packs）/ 收件箱（vis） */
+  var fin = m.final || {};
+  var finText = fin.has
+    ? ('已发布 · ' + (fin.ops || 0) + ' 条' + (fin.sha ? ' · ' + String(fin.sha).slice(0, 8) : ''))
+    : (ST.profile === 'native' ? '①备份版没有成品概念' : '没发布到成品');
+  var packs = m.packs || [];
+  var packsText = packs.length
+    ? (packs.length + ' 个：' + packs.map(function (p) { return p.name; }).join('、'))
+    : '没有测试包';
   var edits = ST.profile === 'native' ? (m.editsNative || 0)
-    : ST.profile === 'deploy' ? (m.editsDeploy || 0)
-    : ST.profile === 'test' ? 0 : (m.editsDev || 0);
+    : ST.profile === 'deploy' ? (m.editsDeploy || 0) : (m.editsDev || 0);
   var nmText = m.navmesh ? (m.navmeshFile || '有') : '没有导出';
   if (ST.nm) nmText += ' · ' + ST.nm.tri + ' 三角 / ' + ST.nm.nv + ' 顶点';
   var html = '' +
@@ -1402,10 +1422,12 @@ function renderMapInfo() {
     '<div class="kline"><span class="k">指纹</span><span class="v">' + esc(m.fp || '—') + '</span></div>' +
     '<div class="kline"><span class="k">大小 / 时间</span><span class="v">' + fmtBytes(m.size) + ' · ' + esc(m.mtime || '—') + '</span></div>' +
     '<div class="kline"><span class="k">可走面</span><span class="v">' + esc(nmText) + '</span></div>' +
-    '<div class="kline"><span class="k">部署状态</span><span class="v">' + depText + '</span></div>' +
-    '<div class="kline"><span class="k">编辑清单</span><span class="v">' + (ST.profile === 'test' ? '测试导出没有' : edits + ' 条') + '</span></div>' +
+    '<div class="kline"><span class="k">成品</span><span class="v">' + esc(finText) + '</span></div>' +
+    '<div class="kline"><span class="k">编辑中</span><span class="v">' + esc(packsText) + '</span></div>' +
+    '<div class="kline"><span class="k">导出（收件箱）</span><span class="v">' + (m.exports || 0) + ' 份</span></div>' +
+    '<div class="kline"><span class="k">成品改动</span><span class="v">' + edits + ' 条</span></div>' +
     '<div class="kline"><span class="k">连通 / 孤立</span><span class="v">' + s.components + ' 块 · ' + s.isolated + ' 个</span></div>' +
-    '<div class="note" style="margin-top:8px">网页只读。切换版本只改查看的数据源，不写文件。加点/连线/禁用点：游戏内 Ctrl+Shift+N / Ctrl+Shift+J / Ctrl+Shift+D。部署：控制台「数据」页或 python navdata.py publish。</div>';
+    '<div class="note" style="margin-top:8px">网页只读。切换版本只改查看的数据源，不写文件。加点/连线/禁用点：游戏内 Ctrl+Shift+N / Ctrl+Shift+J / Ctrl+Shift+D。升成品：控制台「发布到成品」或 python navdata.py pack promote。</div>';
   $('mapInfo').innerHTML = html;
 }
 
@@ -1846,8 +1868,8 @@ function renderAuto() {
     '<div class="kline"><span class="k">可走面</span><span class="v">' + (m.navmesh ? '有导出' : '没有导出') + '</span></div>' +
     '<div class="kline"><span class="k">结论</span><span class="v">' + (dis ? '插件关闭' : (co ? '只读采集，全部跳过' : (packNogen ? 'nogen.txt，铺点跳过' : '按上面三个开关跑'))) + '</span></div>' +
     '<div class="note" style="margin-top:8px">' + (ST.profile === 'deploy'
-      ? '当前查看的是③部署版，和游戏读的是同一份。'
-      : '当前查看的是' + profLabel() + '；游戏实际读③部署版，下面的触发判断按当前这版的点数估算。') + '</div>' +
+      ? '当前查看的是③部署版：2026-11-21 起这里不放导航数据，游戏读的是「成品」或「编辑中」的包。'
+      : '当前查看的是' + profLabel() + '；游戏实际读「成品」版本或「编辑中」的包，下面的触发判断按当前这版的点数估算。') + '</div>' +
     '<div class="note" style="margin-top:6px">自动铺设发生在<b>场景加载后</b>，由插件在主线程做；网页只读，不能点按钮触发。要立刻试：控制台改开关 → 开始游戏进图。</div>';
 
   $('autoPipe').innerHTML = [
@@ -1892,7 +1914,7 @@ function renderMaps() {
   var wb = ST.wb;
   if (!wb) return;
   var maps = wb.maps || [];
-  $('mapsSub').textContent = maps.length + (ST.profile === 'test' ? ' 个导出 · ' : ' 张图 · ') + profLabel();
+  $('mapsSub').textContent = maps.length + ' 张图 · ' + profLabel();
   $('mapTbody').innerHTML = maps.map(function (m) {
     var status = '—';
     var cls = 'no';
@@ -1903,18 +1925,25 @@ function renderMaps() {
     if (m.suspect) { status = '? 未识别'; cls = 'warn'; }
     var on = ST.cur && (ST.cur.file ? (ST.cur.file === m.file && (ST.cur.pack || '') === (m.pack || '')) : (!m.file && ST.cur.level === m.level));
     var key = m.pack ? ('pack:' + m.pack) : (m.file || ('level:' + (m.level || '')));
-    var edits = ST.profile === 'native' ? (m.editsNative || 0)
-      : ST.profile === 'deploy' ? (m.editsDeploy || 0)
-      : ST.profile === 'test' ? 0 : (m.editsDev || 0);
+    /* 三版之后：成品（final 当前版本里有没有这张图）+ 编辑中（packs 里几个包）+ 收件箱导出份数 */
+    var fin = m.final || {};
+    var packs = m.packs || [];
+    var packTitle = packs.length
+      ? packs.map(function (p) { return p.name + ' · ' + (p.ops || 0) + ' 条'; }).join('\n')
+      : '没有编辑中的包';
+    var mapCell = esc(m.label || '—') + (m.exports ? '<br><span style="color:#4f5d70">导出 ' + m.exports + ' 份</span>' : '');
     return '<tr' + (on ? ' class="on"' : '') + ' data-map="' + esc(key) + '">' +
       '<td class="mono">' + esc(m.no) + '</td>' +
-      '<td><span class="dot" style="--c:' + (m.status === 'missing' ? '#64748b' : '#4f8cff') + '"></span>' + esc(m.label || '—') + '</td>' +
+      '<td><span class="dot" style="--c:' + (m.status === 'missing' ? '#64748b' : '#4f8cff') + '"></span>' + mapCell + '</td>' +
       '<td class="mono">' + esc(m.level || '—') + '<br><span style="color:#4f5d70">' + esc(m.scene || '') + '</span></td>' +
       '<td class="mono">' + esc((m.fp || '—').slice(0, 18)) + '</td>' +
       '<td class="mono">' + m.nodes + ' / ' + m.edges + '</td>' +
       '<td class="mono">' + m.features + '</td>' +
       '<td class="' + (m.navmesh ? 'ok' : 'no') + '">' + (m.navmesh ? '有' : '—') + '</td>' +
-      '<td class="mono">' + edits + '</td>' +
+      '<td class="' + (fin.has ? 'ok' : 'no') + '" title="成品当前版本里这张图的改动条数">' +
+        (fin.has ? ('✓ ' + (fin.ops || 0)) : '—') + '</td>' +
+      '<td class="' + (packs.length ? 'ok' : 'no') + '" title="' + esc(packTitle) + '">' +
+        (packs.length ? (packs.length + ' 包') : '—') + '</td>' +
       '<td class="' + cls + '">' + status + '</td></tr>';
   }).join('');
 
@@ -1926,30 +1955,46 @@ function renderMaps() {
     return d ? (d + ' 个文件不同') : '一致';
   }
   $('verChip').textContent = profLabel() + ' · 只读';
-  $('verBody').innerHTML = '' +
-    ['native', 'dev', 'deploy', 'test'].map(function (key, i) {
-      var names = ['① 备份版（只读）', '② 开发版', '③ 部署版（游戏读）', '④ 测试版（导出 / 测试包）'];
-      var x = v[key] || {};
-      var count = key === 'test' ? (x.raw || 0) : (x.maps || 0);
-      var unit = key === 'test' ? ' 导出' : ' 图';
-      var latest = key === 'test' ? (x.rawLatest || x.latest || '—') : (x.latest || '—');
-      return '<div class="whitecard vercard' + (key === ST.profile ? ' cur' : '') + '" data-vprof="' + key + '">' +
-        '<div class="wt">' + names[i] + (key === ST.profile ? ' · 正在看' : '') + '</div><div class="wd">' +
-        esc(x.path || '—') + '<br>' + count + unit + ' · ' + (x.nav || 0) + ' 编辑 · ' +
-        (x.navmesh || 0) + ' 可走面 · ' + fmtBytes(x.bytes || 0) + '<br>最近写入 ' + esc(latest) + '</div></div>';
-    }).join('') +
+  /* 三版：① 只读快照 / ② 唯一数据源（成品 + 编辑中 + 收件箱）/ ③ 游戏运行环境（不放数据） */
+  var dV = v.dev || {}, dFin = dV.final || {}, dPk = dV.packs || {}, dIn = dV.inbox || {};
+  var cards = [
+    { key: 'native', t: '① 备份版（只读快照）', x: v.native || {}, sub: [
+        (v.native || {}).maps || 0, ' 图 · ' + ((v.native || {}).navmesh || 0) + ' 可走面 · ' + fmtBytes((v.native || {}).bytes || 0),
+        '最近写入 ' + shortTime((v.native || {}).latest)] },
+    { key: 'dev', t: '② 开发版（唯一数据源）', x: dV, sub: [
+        '成品：' + (dV.maps || 0) + ' 图 · ' + (dV.navmesh || 0) + ' 可走面',
+        '已发布 ' + (dFin.versions || 0) + ' 个版本' + (dFin.current ? ' · 当前 ' + dFin.current : '') + ' · ' + (dFin.maps || 0) + ' 张图',
+        '编辑中 ' + (dPk.n || 0) + ' 个包 · ' + fmtBytes(dPk.bytes || 0) + ' · 收件箱导出 ' + (dIn.exports || 0) + ' 份'] },
+    { key: 'deploy', t: '③ 部署版（游戏运行环境）', x: v.deploy || {}, sub: [
+        '2026-11-21 起不放导航数据（只剩 dll / ucf_mod.json / markers）',
+        '游戏读的是「成品」版本或「编辑中」的包'] }
+  ];
+  $('verBody').innerHTML = cards.map(function (o) {
+    var x = o.x || {};
+    return '<div class="whitecard vercard' + (o.key === ST.profile ? ' cur' : '') + '" data-vprof="' + o.key + '">' +
+      '<div class="wt">' + o.t + (o.key === ST.profile ? ' · 正在看' : '') + '</div><div class="wd">' +
+      esc(x.path || '—') + '<br>' + o.sub.map(function (s) { return esc(s); }).join('<br>') + '</div></div>';
+  }).join('') +
     '<div class="kline"><span class="k">① vs ② 地图</span><span class="v">' + cmp(c.nativeDev && c.nativeDev.maps) + '</span></div>' +
-    '<div class="kline"><span class="k">② vs ③ 地图</span><span class="v">' + cmp(c.devDeploy && c.devDeploy.maps) + '</span></div>' +
-    '<div class="kline"><span class="k">② vs ③ 编辑</span><span class="v">' + cmp(c.devDeploy && c.devDeploy.nav) + '</span></div>' +
-    '<div class="note" style="margin-top:6px">点上面的版本卡片可以直接切到那一版查看。</div>' +
-    '<div class="sect">测试包</div>' +
+    '<div class="note" style="margin-top:6px">点上面的版本卡片可以直接切到那一版查看；③ 部署版现在没有数据，切过去会是空的。</div>' +
+    '<div class="sect">编辑中（测试包）</div>' +
     ((wb.packs || []).map(function (p) {
-      return '<div class="whitecard"><div class="wt">' + esc(p.name) + (p.blank ? ' · 空白底图' : '') + '</div><div class="wd">' +
+      /* 包名可能带图文件夹前缀（01_TransportShip运输船/包名），列表里只显示包名 */
+      var pn = String(p.name || '').split('/').pop();
+      return '<div class="whitecard" title="' + esc(p.name || '') + '"><div class="wt">' + esc(pn) + (p.blank ? ' · 空白底图' : '') + '</div><div class="wd">' +
         esc(p.label || '') + ' · ' + esc(p.level || '') + ' · ' + p.ops + ' 条指令 · ' +
         (p.nogen ? 'nogen.txt 开' : '没有 nogen') + '<br>' + esc(p.note || '') + '</div></div>';
-    }).join('') || '<div class="note">④ 里没有测试包。</div>') +
+    }).join('') || '<div class="note">② 开发版的 packs\\ 里还没有测试包。</div>') +
+    '<div class="sect">成品（已发布的版本）</div>' +
+    (dFin.versions
+      ? '<div class="whitecard"><div class="wt">' + esc(dFin.current || '—') + '</div><div class="wd">' +
+        '共 ' + dFin.versions + ' 个版本 · ' + (dFin.maps || 0) + ' 张图 · ' + fmtBytes(dFin.bytes || 0) +
+        '<br>最近发布 ' + esc(shortTime(dFin.latest)) + '</div></div>'
+      : '<div class="note">成品里还没有版本：控制台「人机路点 → 编辑中 → 发布到成品」就有第一版。</div>') +
     '<div class="sect">命令行（网页不执行）</div>' +
-    '<div class="comp" style="white-space:normal;line-height:1.8">python tools/navdata.py publish<br>python tools/navdata.py pack new 包名 --level level1</div>';
+    '<div class="comp" style="white-space:normal;line-height:1.8">python tools/navdata.py pack list<br>' +
+    'python tools/navdata.py pack promote 包名 &nbsp;→ 新建一版成品<br>' +
+    'python tools/navdata.py final list / final use 版本名</div>';
 }
 
 function bindMapTable() {
@@ -2026,7 +2071,7 @@ function renderLogs() {
     if (ST.logFilter !== '全部' && l.cat !== ST.logFilter) return false;
     return true;
   }).slice(0, 300);
-  $('logSub').textContent = 'ucf_mod.log · ③部署版运行日志 · ' + rows.length + ' 行';
+  $('logSub').textContent = 'ucf_mod.log · 游戏目录（③）运行日志 · ' + rows.length + ' 行';
   $('logSub').title = (ST.wb && ST.wb.logFile) || 'ucf_mod.log';
   $('logList').innerHTML = rows.map(function (l) {
     var time = l.date ? (l.date + ' ' + l.time) : (l.time || '—');
@@ -2142,7 +2187,7 @@ function loadMap(entry) {
   api(q).then(function (doc) {
     if (!doc || !doc.nodes) throw new Error((doc && doc.error) || '文件不是导航数据');
     var fp = (doc.map && doc.map.fingerprint) || entry.fp || '';
-    /* 测试包条目：清单从 packs/<包名>/<指纹>.txt 读（④ 测试版） */
+    /* 测试包条目：清单从 packs/<图文件夹>/<包名>/<指纹>.txt 读（② 开发版 · 编辑中） */
     var txtP;
     if (entry.pack) {
       txtP = api('/api/pack-txt?name=' + encodeURIComponent(entry.pack) + '&fp=' + encodeURIComponent(fp));
@@ -2481,11 +2526,27 @@ function bindTop() {
   document.addEventListener('keydown', function (e) {
     if (e.key === 'Escape' && ST.dockOpen) { e.preventDefault(); closeDock(); }
   });
+  /* 3D 侧栏的 WASD：鼠标悬停在 iframe 上不会把键盘焦点给它，W/A/S/D 会落到本页。
+   * 所以由本页转发（capture 阶段，先于本页其它按键处理），键值见 dockFlyKey。 */
+  document.addEventListener('keydown', function (e) {
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    if (dockFlyKey(e, true)) e.preventDefault();
+  }, true);
+  document.addEventListener('keyup', function (e) {
+    if (dockFlyKey(e, false)) e.preventDefault();
+  }, true);
+  window.addEventListener('blur', function () { dockPostMsg({ ucf: 'fly-stop' }); });
   /* 3D 画面里按 Esc：iframe 里的 navview 发消息回来，一起收起侧栏 */
   window.addEventListener('message', function (e) {
     if (e.origin !== 'null' && e.origin !== location.origin) return;
     var d = e.data || {};
     if (d.ucf === 'dock-close' && ST.dockOpen) closeDock();
+    /* 3D 里的 navview 说「鼠标在/不在 3D 画面上」：只有鼠标在 3D 上时本页才转发 WASD */
+    if (d.ucf === 'fly-hover') {
+      ST.dockHover = !!d.on;
+      if (!ST.dockHover) dockPostMsg({ ucf: 'fly-stop' });
+      return;
+    }
     /* 3D 侧栏里点了「方向」：平面图跟着一起开 / 关，两边永远是同一个状态 */
     if (d.ucf === 'compass' && typeof d.on === 'boolean' && ST.show.compass !== d.on) {
       ST.show.compass = d.on;
@@ -2547,7 +2608,9 @@ function openDock(force) {
 }
 function closeDock() {
   var d = $('dock3d'), f = $('dockFrame');
+  dockPostMsg({ ucf: 'fly-stop' });
   ST.dockOpen = false;
+  ST.dockHover = false;
   if (d) { d.classList.remove('on'); d.setAttribute('aria-hidden', 'true'); }
   var app = document.querySelector('.app');
   if (app) app.classList.remove('docked');
@@ -2560,6 +2623,25 @@ function closeDock() {
   requestAnimationFrame(function () { drawAll(); });
 }
 function toggleDock() { if (ST.dockOpen) closeDock(); else openDock(); }
+
+/* 3D 侧栏的键盘：iframe 里的 navview 报「鼠标进了/离开了 3D 画面」（fly-hover），
+ * 本页据此把 W/A/S/D/Q/E/空格/Shift 的按下与抬起 postMessage 进去（fly-key）。
+ * 点过 3D 画面之后焦点就在 iframe 里，那一路由 navview 自己的 keydown 处理，两边不重复。 */
+var DOCK_FLY_KEYS = { w: 1, a: 1, s: 1, d: 1, q: 1, e: 1, ' ': 1, shift: 1 };
+function dockPostMsg(msg) {
+  var f = $('dockFrame');
+  if (!ST.dockOpen || !f || !f.contentWindow) return;
+  try { f.contentWindow.postMessage(msg, '*'); } catch (e) {}
+}
+function dockFlyKey(e, down) {
+  if (!ST.dockOpen || !ST.dockHover) return false;
+  var t = (e.target && e.target.tagName) || '';
+  if (t === 'INPUT' || t === 'TEXTAREA' || t === 'SELECT') return false;
+  var k = (e.key === ' ' || e.key === 'Spacebar') ? ' ' : String(e.key || '').toLowerCase();
+  if (!DOCK_FLY_KEYS[k]) return false;
+  dockPostMsg({ ucf: 'fly-key', k: k, down: !!down });
+  return true;
+}
 
 /* 3D 侧栏的罗盘和工作台「方向」开关是同一个状态：发消息，不重载 iframe */
 function syncCompassToDock() {
@@ -2778,6 +2860,8 @@ function boot() {
     setConn(true, '本地只读服务 · ' + (wb.profile ? wb.profile.cn : ''));
     ST.wb.log && parseLogs();
     pickDefaultMap();
+    /* 没带 ?map= 直接进「地图数据 / 日志 / 总览」时也要有内容（原来只 updateHeader，表格会空着） */
+    renderAll();
   }).catch(function (e) {
     setConn(false, 'navserver 未连接');
     splash(true, '先开控制台 → 路点工作台（查看）');

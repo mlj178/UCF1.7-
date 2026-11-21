@@ -32,6 +32,8 @@ navdata/*.tmp
 navdata/native/**/*.tmp
 tools/_*
 navdata/_logs/
+# 录制原始轨迹：临时文件，复盘后的增量只写进 packs，不进库
+navdata/dev/vis/rec/
 
 # 根 .gitignore 的 *.zip 规则例外：清理前的工作区备份入库
 !navdata/_before_cleanup_*.zip

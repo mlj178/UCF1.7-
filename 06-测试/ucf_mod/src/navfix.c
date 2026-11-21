@@ -915,8 +915,10 @@ static LRESULT CALLBACK NavProc(HWND h, UINT msg, WPARAM w, LPARAM l) {
   if (msg == WM_TIMER && w == 0xF3C1) {
     void editor_freecam_tick(void);
     void editor_compass_tick(void);
+    void editor_rec_tick(void);
     editor_freecam_tick();
     editor_compass_tick();      /* 方向罗盘跟着镜头转（函数内部节流到 ~30 Hz） */
+    editor_rec_tick();          /* 路点录制补到 ~20 Hz（editor_tick 车测里只有 4 Hz） */
     return 0;
   }
   if (msg == WM_CHAR || msg == WM_SYSCHAR) {

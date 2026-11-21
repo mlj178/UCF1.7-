@@ -159,6 +159,15 @@ body.vsplit #pane2{flex-basis:50%}
   position:absolute; right:9px; bottom:9px; z-index:5; text-align:right; font-size:10.5px; color:#6b7788;
   pointer-events:none; line-height:1.5; max-width:46%;
 }
+/* 内嵌在路点工作台的 3D 侧栏里：操作提示常驻（embed 把 .hint 藏了，这里补一条） */
+.flyhint{display:none}
+body.embed .flyhint{
+  display:block; position:absolute; right:8px; bottom:8px; z-index:5; text-align:right;
+  font-size:10.5px; color:#8ea6c0; line-height:1.45; pointer-events:none;
+  background:rgba(11,15,21,.82); border:1px solid #1e2836; border-radius:7px; padding:4px 7px;
+  max-width:calc(100% - 16px);
+}
+body.embed .flyhint b{color:#dce8f7; font-weight:600}
 #statusbar{
   flex:0 0 auto; display:flex; align-items:center; gap:12px; padding:4px 10px; font-size:11px;
   background:#101720; border-top:1px solid var(--line); color:var(--tx3); min-height:26px;
@@ -231,7 +240,7 @@ body.embed .hud{font-size:10px;padding:3px 6px;max-width:calc(100% - 12px)}
   <span class="chip" id="c-nodes">节点 <b>0</b></span>
   <span class="chip" id="c-edges">边 <b>0</b></span>
   <span class="chip" id="c-dirty">未改动</span>
-  <select id="profsel" class="sel" title="切换查看的数据版本：①备份 / ②开发 / ③部署 / ④测试（只改查看，不写文件）"></select>
+  <select id="profsel" class="sel" title="切换查看的数据：①备份 / ②开发 / ③部署（只改查看，不写文件）"></select>
   <span class="chip" id="c-srv">离线</span>
 </div>
 
@@ -385,6 +394,7 @@ body.embed .hud{font-size:10px;padding:3px 6px;max-width:calc(100% - 12px)}
         </div>
         <div class="hint">右键拖动转视角 · 鼠标停在这里就能 WASD 飞（Q/E 升降，Shift 加速）<br>中键平移 · 滚轮推拉 · 左键点选 / 拖动框选 · 双击对准</div>
         <div class="hud" id="hud3"></div>
+        <div class="flyhint" id="flyhint"><b>WASD</b> 移动 · <b>Q/E</b> 升降 · <b>Shift</b> 加速<br>右键拖动转视角 · 滚轮推拉 · F 全图</div>
       </div>
     </div>
     <div id="statusbar">
@@ -2380,6 +2390,19 @@ function flyTick(dt) {
   return true;
 }
 
+/* 内嵌在工作台 3D 侧栏里时，iframe 通常拿不到键盘焦点（鼠标悬停不会给焦点）。
+ * 所以：进出 3D 由这里把 hover 告诉外层，外层再把 WASD 转发回来（fly-key）。 */
+const FLY_KEYS = { w: 1, a: 1, s: 1, d: 1, q: 1, e: 1, " ": 1, shift: 1 };
+function applyFlyKey(k, down) {
+  if (!FLY_KEYS[k]) return;
+  if (down) { S.keys.add(k); S.v3.fly = true; } else { S.keys.delete(k); }
+  schedule();
+}
+function notifyParentFlyHover(on) {
+  if (!EMBED || window.parent === window) return;
+  try { window.parent.postMessage({ ucf: "fly-hover", on: !!on }, "*"); } catch (x) {}
+}
+
 let lastTs = 0;
 function frame(ts) {
   const dt = lastTs ? Math.min(0.1, (ts - lastTs) / 1000) : 0;
@@ -3056,10 +3079,10 @@ async function showBackups() {
 function showHelp() {
   const html =
     "<p><b>这是什么</b>：把游戏里 <code class='k'>Ctrl+E</code> 导出的<b>原生</b>导航数据" +
-    "（<code class='k'>ucf_mod/vis/*.json</code>）在浏览器里编辑；保存写两份到 <b>② 开发版</b>：" +
-    "<code class='k'>nav/&lt;指纹&gt;.txt</code>（游戏插件读的清单）和 <code class='k'>nav/&lt;地图名&gt;.json</code>（给人看的数据）。</p>" +
-    "<p><b>保存 → 生效</b>：保存只进开发版；点顶栏 <b>部署到游戏</b> 之后，游戏里的插件下次进图" +
-    "（或按 <code class='k'>Ctrl+Shift+R</code> 强制重套用）才会读 <code class='k'>nav/&lt;指纹&gt;.txt</code>。" +
+    "（<code class='k'>&lt;图文件夹&gt;/导出/*.json</code>，控制台从 <code class='k'>dev\\vis\\</code> 收件箱整理进来）在浏览器里编辑；" +
+    "保存写到 <b>② 开发版</b>的包里：<code class='k'>packs/&lt;图文件夹&gt;/&lt;包名&gt;/&lt;指纹&gt;.txt</code>。</p>" +
+    "<p><b>保存 → 生效</b>：保存只进「编辑中」的包，游戏读的成品不会变；在控制台「人机路点 → 发布到成品」发布之后，" +
+    "游戏下次进图（或按 <code class='k'>Ctrl+Shift+R</code> 强制重套用）才读成品里那份 <code class='k'>&lt;指纹&gt;.txt</code>。" +
     "指纹 = <code class='k'>n节点数-位置异或哈希</code>，所以只有同一张图、同一份扫描才会对上。" +
     "改坏了点 <b>还原原生</b> 就回到 ① 备份版。</p>" +
     "<p><b>能改的和不能改的</b>：插件只认四种指令 —— <code class='k'>node add/del</code>（加点 / 删点）、" +
@@ -3106,14 +3129,13 @@ function showHelp() {
     "<tr><td>① 备份版（只读）</td><td><code class='k'>navdata\\native\\</code></td>" +
     "<td>UCF 原版数据，冻结于此、永不编辑；<code class='k'>python tools/navdata.py verify</code> 可校验</td></tr>" +
     "<tr><td>② 开发版</td><td><code class='k'>navdata\\dev\\</code></td>" +
-    "<td>日常在这里编辑（编辑器默认打开这一版）</td></tr>" +
+    "<td>唯一数据源：一张图一个文件夹 <code class='k'>&lt;图&gt;\\map.json</code> + <code class='k'>navmesh.bin</code>；" +
+    "另有 <code class='k'>final\\</code>（成品版本）、<code class='k'>packs\\</code>（编辑中）、<code class='k'>vis\\</code>（收件箱）</td></tr>" +
     "<tr><td>③ 部署版</td><td><code class='k'>游戏目录\\ucf_mod\\</code></td>" +
-    "<td>游戏里的插件读这一版；点「部署到游戏」从开发版推过去</td></tr>" +
-    "<tr><td>④ 测试版</td><td><code class='k'>navdata\\test\\</code></td>" +
-    "<td>插件 Ctrl+E 导出的原始文件、测试包、归档；不影响游戏</td></tr>" +
+    "<td>只当运行环境（dll / 配置 / markers）；2026-11-21 起这里不放导航数据，游戏读「成品」版本或「编辑中」的包</td></tr>" +
     "</table>" +
-    "<p><b>版本切换</b>：顶栏右侧的版本下拉可以在 ①备份 / ②开发 / ③部署 / ④测试 之间切；" +
-    "只改查看的数据源，不写文件。</p>" +
+    "<p><b>版本切换</b>：顶栏右侧的版本下拉可以在 ①备份 / ②开发 / ③部署 之间切；" +
+    "只改查看的数据源，不写文件（③ 没有数据，切过去是空的）。</p>" +
     "<p><b>只保留原生</b>：列表里的图都是游戏原版给的（插件进图 <code class='k'>Ctrl+E</code> 扫出来的）；" +
     "我们手工铺的点、练习沙盒、编辑清单都不在这一版里。" +
     "想看图里到底有没有、多少点：<code class='k'>docs/地图对照表.md</code> 的「原生可通行空间」表。" +
@@ -3131,8 +3153,8 @@ function setProfileUI() {
   const pr = S.profile || {};
   const sel = $("profsel");
   if (sel) {
-    const order = ["native", "dev", "deploy", "test"];
-    const labels = { native: "① 备份版", dev: "② 开发版", deploy: "③ 部署版", test: "④ 测试版" };
+    const order = ["native", "dev", "deploy"];
+    const labels = { native: "① 备份版", dev: "② 开发版", deploy: "③ 部署版" };
     if (!sel.options.length) {
       sel.innerHTML = order.map(function (k) { return '<option value="' + k + '">' + labels[k] + '</option>'; }).join("");
     }
@@ -3378,11 +3400,18 @@ function bindPanes() {
   });
   window.addEventListener("message", function (e) {
     const d = e.data || {};
-    if (d.ucf !== "compass" || typeof d.on !== "boolean") return;
-    S.showCompass = d.on;
-    const cb = $("c3-comp");
-    if (cb) cb.checked = d.on;
-    schedule();
+    if (d.ucf === "compass" && typeof d.on === "boolean") {
+      S.showCompass = d.on;
+      const cb = $("c3-comp");
+      if (cb) cb.checked = d.on;
+      schedule();
+      return;
+    }
+    /* 内嵌在工作台 3D 侧栏里：鼠标在不在 3D 画面上，由这里告诉外层 */
+    if (d.ucf === "fly-hover") { S.over3 = !!d.on; return; }
+    /* 外层页转发进来的 WASD：鼠标在 3D 上但焦点还在外层页（iframe 拿不到键盘）时用 */
+    if (d.ucf === "fly-key") { applyFlyKey(String(d.k || "").toLowerCase(), !!d.down); return; }
+    if (d.ucf === "fly-stop") { S.keys.clear(); S.v3.fly = false; schedule(); return; }
   });
 
   /* ---- 分屏拖动 ---- */
@@ -3614,8 +3643,8 @@ function bindCanvas3() {
     return out;
   }
 
-  cv3.addEventListener("mouseenter", function () { S.over3 = true; });
-  cv3.addEventListener("mouseleave", function () { S.over3 = false; });
+  cv3.addEventListener("mouseenter", function () { S.over3 = true; notifyParentFlyHover(true); });
+  cv3.addEventListener("mouseleave", function () { S.over3 = false; notifyParentFlyHover(false); });
   cv3.addEventListener("contextmenu", function (e) { e.preventDefault(); });
   cv3.addEventListener("wheel", function (e) {
     e.preventDefault();
@@ -3781,6 +3810,15 @@ function bindKeys() {
     S.keys.clear();
     S.v3.fly = false;
   });
+  /* 鼠标离开整个 iframe：外层停止转发按键，别让键卡在按下状态 */
+  if (EMBED) {
+    document.documentElement.addEventListener("mouseleave", function () {
+      notifyParentFlyHover(false);
+      S.keys.clear();
+      S.v3.fly = false;
+      schedule();
+    });
+  }
   window.addEventListener("resize", function () { schedule(); });
 }
 
@@ -3982,8 +4020,8 @@ boot();</script>
     { t: "欢迎：90 分钟学会改路点", hl: [],
       b: "<p>这不是说明书，是<strong>跟着做</strong>的练习。你只要照着点，每步都告诉你：<em>做什么 → 会看到什么 → 为什么</em>。</p>" +
          "<p>三件事：① 路点是什么 ② 编辑器怎么用 ③ 改完怎么进游戏。</p>" +
-         "<p>这里能放心乱来：改动只写 <strong>② 开发版</strong>，游戏里那份（③ 部署版）不会动；" +
-         "点「部署到游戏」才推过去，点「还原原生」就回到 ① 备份版。</p>" },
+         "<p>这里能放心乱来：改动只写 <strong>② 开发版</strong>的包，游戏读的那份（成品版本）不会动；" +
+         "改完在控制台「人机路点 → 发布到成品」才进成品，点「还原原生」就回到 ① 备份版。</p>" },
     { t: "第 1 步：打开运输船", hl: ["#sec-files", "#filelist"],
       b: "<p>看左边「打开」里，点最上面那条 <span class='k'>运输船 level1</span>（786 点 / 1391 边，游戏原版数据）。</p>" +
          "<p>打开后中间会出现整张图的俯视图，右边出现 3D 场景。" +
@@ -4018,12 +4056,12 @@ boot();</script>
       b: "<p>选中一个点 → 点 <span class='k'>删点</span>（<span class='k'>Delete</span>）：点没了，连在它身上的边一起断。</p>" +
          "<p>再点 <span class='k'>撤销</span>（<span class='k'>Ctrl+Z</span>）就回来；<span class='k'>重做</span>是 <span class='k'>Ctrl+Y</span>。</p>" +
          "<p><span class='k'>可走</span>（<span class='k'>W</span>）<strong>不是删除</strong>：它把点标成红色 = 不可走，点和边都还在，只是机器人不把它当落脚点。</p>" +
-         "<p>放心乱来：这是开发版，游戏里那份没动；点「还原原生」就全回去。</p>" },
+         "<p>放心乱来：这是开发版里的包，游戏读的成品没动；点「还原原生」就全回去。</p>" },
     { t: "第 8 步：保存，看它写了什么", hl: ["#b-save", "#s-txt", "#s-target"],
       b: "<p>点 <span class='k'>保存并应用</span>（<span class='k'>Ctrl+S</span>）。它写的是<strong>改动清单</strong>，不是整张图：几行 <span class='k'>node add</span> / <span class='k'>edge add</span>。</p>" +
          "<p>清单文件按<strong>指纹</strong>命名：指纹 = 这张图所有点坐标的校验和，用来保证『编辑套到了对的那张图』。</p>" +
          "<p>运输船的指纹是 <span class='k'>n786-57a46e3465c847cb</span>，所以只有『786 个点』那张图能对上这份清单。</p>" +
-         "<p>保存只写开发版；要让游戏真的按它跑，再点顶栏的 <span class='k'>部署到游戏</span>。</p>" +
+         "<p>保存只写开发版里的这个包；要让游戏真的按它跑，去控制台「人机路点 → 编辑中 → 发布到成品」。</p>" +
          "<p class='warn'>第 6 课会进游戏验证：看《学习_路点入门.md》第 6 节。</p>" }
   ];
   var i = 0, open = false, lastHl = [];

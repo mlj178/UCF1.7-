@@ -50,7 +50,7 @@ def main():
         assert m.pack_target_fp("blank_a") == fp
 
         s = m.pack_summary("blank_a", fp)
-        assert s["blank"] and s["nadd"] == 2 and s["eadd"] == 1
+        assert s["grow"] and s["nadd"] == 2 and s["eadd"] == 1
         assert s["ndel"] == 1 and s["edel"] == 0
         assert s["path"].endswith(fp + ".txt")
 

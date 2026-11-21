@@ -22,7 +22,7 @@ import sys
 TOOLS = os.path.dirname(os.path.abspath(__file__))
 if TOOLS not in sys.path:
     sys.path.insert(0, TOOLS)
-from ucf_paths import GEO, MAPS  # noqa: E402
+from ucf_paths import GEO, DEV  # noqa: E402
 
 GEOWEB = os.path.join(GEO, "web")
 LEVEL = "practice"
@@ -168,7 +168,8 @@ def main():
     ap.add_argument("--check", action="store_true")
     a = ap.parse_args()
     binp = os.path.join(GEOWEB, LEVEL + ".bin")
-    jsonp = os.path.join(MAPS, "00_练习场.json")
+    # 练习场是自造的沙盒，不属于任何一张正式图；放 ② 00_公共，别塞进图文件夹
+    jsonp = os.path.join(DEV, "00_公共", "00_练习场.json")
     if a.check:
         print("bin  :", binp, os.path.getsize(binp) if os.path.exists(binp) else "缺失")
         print("json :", jsonp, os.path.getsize(jsonp) if os.path.exists(jsonp) else "缺失")
@@ -178,7 +179,7 @@ def main():
             print("指纹 :", d["map"]["fingerprint"], "节点", d["counts"]["nodes"])
         return
     os.makedirs(GEOWEB, exist_ok=True)
-    os.makedirs(MAPS, exist_ok=True)
+    os.makedirs(os.path.dirname(jsonp), exist_ok=True)
     build()
     hdr, nbytes = write_bin(binp)
     with open(jsonp, "w", encoding="utf-8") as f:

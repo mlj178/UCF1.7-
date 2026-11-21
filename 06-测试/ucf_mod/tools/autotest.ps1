@@ -40,10 +40,10 @@ if (Test-Path -LiteralPath $logPath) {
 }
 if (Test-Path -LiteralPath $atPath) { Remove-Item -LiteralPath $atPath -Force }
 
-# 四版：车测也把导出/测试包指到 ④ 测试版，正式版 nav\ 保持只读（和 UCF 控制台一致）
+# 三区：车测也把导出/测试包指到 ② 开发版，正式版 nav\ 保持只读（和 UCF 控制台一致）
 $root = Split-Path -Parent $tools
-$testVis = Join-Path $root 'navdata\test\vis'
-$testPacks = Join-Path $root 'navdata\test\packs'
+$testVis = Join-Path $root 'navdata\dev\vis'
+$testPacks = Join-Path $root 'navdata\dev\packs'
 
 $lines = @(
     '@echo off',
