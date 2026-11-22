@@ -86,21 +86,67 @@ _PROFILE_ALIAS = {
 PROFILE = _PROFILE_ALIAS.get((os.environ.get("UCF_PROFILE") or "dev").strip().lower(), "dev")
 
 
+# 用户级配置：用户在「首次设置」里选的游戏位置写这里，和开发机的 tools/deploy.json 分开。
+#   优先级：UCF_DEPLOY 环境变量 > 用户配置 > tools/deploy.json（开发机） > 工程根
+USER_CFG = os.path.join(
+    os.environ.get("LOCALAPPDATA") or os.path.expanduser(r"~\AppData\Local"),
+    "UCFMod", "deploy.json",
+)
+DEPLOY_SOURCE_CN = {
+    "env": "环境变量 UCF_DEPLOY",
+    "user": "用户设置（控制台选过游戏）",
+    "project": "工程内 tools/deploy.json（开发机）",
+    "default": "未配置，回退到工程根",
+}
+
+
+def _read_deploy_json(path):
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return ((json.load(f) or {}).get("deploy") or "").strip()
+    except (OSError, ValueError):
+        return ""
+
+
 def _resolve_deploy():
+    """返回 (部署根, 来源)。部署根 = <游戏目录>\\ucf_mod。"""
     p = os.environ.get("UCF_DEPLOY", "").strip()
     if p:
-        return os.path.abspath(p)
-    try:
-        with open(DEPLOY_JSON, "r", encoding="utf-8") as f:
-            p = (json.load(f) or {}).get("deploy", "")
-        if p:
-            return os.path.abspath(p)
-    except (OSError, ValueError):
-        pass
-    return PROJ
+        return os.path.abspath(p), "env"
+    p = _read_deploy_json(USER_CFG)
+    if p:
+        return os.path.abspath(p), "user"
+    p = _read_deploy_json(DEPLOY_JSON)
+    if p:
+        return os.path.abspath(p), "project"
+    return PROJ, "default"
 
 
-DEPLOY = _resolve_deploy()
+DEPLOY, DEPLOY_SOURCE = _resolve_deploy()
+
+
+def game_dir_of(deploy_root=None):
+    """部署根（<游戏>\\ucf_mod）→ 游戏目录。"""
+    return os.path.dirname(os.path.abspath(deploy_root or DEPLOY))
+
+
+def save_deploy(game_dir):
+    """把用户选的游戏目录写进用户配置，返回写入路径。
+
+    控制台选完 UnityCrossFire.exe 后调这里；写的是 %LOCALAPPDATA%\\UCFMod\\deploy.json，
+    不动工程里的 tools/deploy.json。下次启动 ucf_paths 会优先读它。
+    """
+    game_dir = os.path.abspath(game_dir)
+    data = {"deploy": os.path.join(game_dir, "ucf_mod"), "game_dir": game_dir}
+    d = os.path.dirname(USER_CFG)
+    os.makedirs(d, exist_ok=True)
+    tmp = USER_CFG + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(tmp, USER_CFG)
+    return USER_CFG
 
 
 def _resolve_env_dir(env_name, default):

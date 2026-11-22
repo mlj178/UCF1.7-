@@ -5035,12 +5035,35 @@ class App(ctk.CTk):
             self.set_status("打不开路点工作台：%s" % exc)
 
 
+def _restart_after_setup():
+    r"""向导会把游戏位置写进用户配置，但 ucf_paths 的 DEPLOY 是 import 时算好的常量，
+    本进程里已经改不动了 —— 直接重启自己最省事，也最不容易踩到 40 多个使用点。"""
+    try:
+        os.execv(sys.executable, [sys.executable] + sys.argv)
+    except Exception:
+        try:
+            subprocess.Popen([sys.executable] + sys.argv, cwd=HERE)
+        except Exception:
+            pass
+        sys.exit(0)
+
+
 def main():
     ctk.set_appearance_mode("dark")
     ctk.set_default_color_theme("blue")
-    if not os.path.isdir(DEPLOY):
-        print("部署端不存在：" + DEPLOY)
-        return 1
+    # 2026-11-22：不再一上来就 return 1。游戏位置没配好（或配的路径已经没了）先走首次设置向导：
+    # 选 UnityCrossFire.exe → 六道闸门 → 一键部署 → 写 %LOCALAPPDATA%\UCFMod\deploy.json。
+    if not os.path.isdir(DEPLOY) or not os.path.isfile(GAME_EXE):
+        try:
+            import first_run
+        except Exception as exc:
+            print("缺少 first_run.py，无法进入首次设置：%s" % exc)
+            return 1
+        if not first_run.ensure_ready(GAME_EXE, DEPLOY):
+            print("没有选择游戏位置，退出。")
+            return 1
+        _restart_after_setup()
+        return 0
     App().mainloop()
     return 0
 
