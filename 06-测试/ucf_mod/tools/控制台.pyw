@@ -1112,11 +1112,19 @@ class App(ctk.CTk):
         rec_tab = self.tabview.add("录制")                  # 走一遍就把路线录下来（只写 ② 编辑中）
         self.build_record_tab(rec_tab)
         self.build_data_tab(self.tabview.add("数据"))       # 三区路径/时间 + 部署/还原/校验
+        # 2026-11-22：部署页 —— 选游戏位置 + 一键把 dll 迁进游戏目录（原本是独立的 一键部署.cmd）
+        deploy_view = self.tabview.add("部署")
+        try:
+            import deploy_tab
+            deploy_tab.build_deploy_tab(self, deploy_view)
+        except Exception as exc:                     # 部署页坏了也别把整个控制台带崩
+            ctk.CTkLabel(deploy_view, text="部署页加载失败：%s" % exc,
+                         font=FONT_S, text_color="#c92a2a").pack(padx=12, pady=12)
         self.build_autotest_tab(self.tabview.add("车测"))   # 不用鼠标键盘：插件自己在进程内切图
         # 2026-11-21 用户要求：开发者选项单独成页，排在所有页签最后
         # （玩家坐标记录从「可视化」、原始轨迹采集从「录制」搬进来）
         self.build_dev_tab(self.tabview.add("开发者选项"))
-        self.tab_titles += ["人机路点", "录制", "数据", "车测", "开发者选项"]
+        self.tab_titles += ["人机路点", "录制", "数据", "部署", "车测", "开发者选项"]
 
         # 回到上次停留的页签；记住的页签已经不存在（改版删页）就落在默认第一页
         saved_tab = str(self.ui.get("tab") or "")
