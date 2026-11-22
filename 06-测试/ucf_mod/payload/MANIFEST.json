@@ -1,0 +1,55 @@
+{
+  "taken_at": "2026-11-22T02:56:38.784Z",
+  "project": "D:\\trae_project\\ucf1.7-modifier\\06-测试\\ucf_mod",
+  "note": "从部署端抢救回来的、工程端没有副本的文件",
+  "files": [
+    {
+      "path": "winhttp.dll",
+      "bytes": 51603,
+      "sha256": "345a9e8084c050d3f64fe03002ba6c7e0f4d9dfe60357401b8c61cfb38aee91b",
+      "md5": "c5c6fe25314532c010785e481d28507b",
+      "source": "D:\\ucf_test_level12\\game\\winhttp.dll",
+      "role": "代理加载器（游戏启动时被加载，负责拉起 ucf_mod.dll）"
+    },
+    {
+      "path": "ucf_mod/ucf_mod.dll",
+      "bytes": 370918,
+      "sha256": "f5ad2410ee61ed5f4109999896dd8134e21c5ab8ed7277a54233413dfd1e590a",
+      "md5": "fef0eb265b7da27378ba5060a568007b",
+      "source": "D:\\ucf_test_level12\\game\\ucf_mod\\ucf_mod.dll",
+      "role": "插件本体（= build\\ucf_mod.dll 定版）"
+    },
+    {
+      "path": "ucf_mod/uninstall.ps1",
+      "bytes": 2495,
+      "sha256": "15c9967116c8b33852427819147cca79ac23233169e49246242c7b59e3a03236",
+      "md5": "ac0da146ce29ebc7e96fde64a80b3e5d",
+      "source": "D:\\ucf_test_level12\\game\\ucf_mod\\uninstall.ps1",
+      "role": "卸载脚本（只有部署端有，工程端无源码）"
+    },
+    {
+      "path": "ucf_mod/README.txt",
+      "bytes": 6576,
+      "sha256": "7e2d82e45b1375034ada26fcb92b4d48502ffa12b53bb716b29a8ca02e86197e",
+      "md5": "ffe063303a32cc1a49f5efd81436b3bb",
+      "source": "D:\\ucf_test_level12\\game\\ucf_mod\\README.txt",
+      "role": "给用户的说明（只有部署端有）"
+    },
+    {
+      "path": "ucf_mod/_deploy_record_2026-11-16.json",
+      "bytes": 1189,
+      "sha256": "b416c00b1ca8357410d0063c09b11365816e1fd99b3fb5441fdcf69f26f9e667",
+      "md5": "d4d86e1a9af7ca754f7d3d0cfc31c844",
+      "source": "D:\\ucf_test_level12\\game\\ucf_mod\\manifest.json",
+      "role": "2026-11-16 的部署记录（已过期，仅存档）"
+    },
+    {
+      "path": "_rescue/level9.orig",
+      "bytes": 192140,
+      "sha256": "7d6785dcf51559e5ae76c8bb568eba94257d9c63f6c14044707ddb6278d5ad9d",
+      "md5": "89c56148f205eb630730dcf58ba4fa20",
+      "source": "D:\\ucf_test_level12\\game\\ucf_mod\\backup\\level9.orig",
+      "role": "唯一一份未打补丁的 level9 场景（回滚点，不参与部署）"
+    }
+  ]
+}

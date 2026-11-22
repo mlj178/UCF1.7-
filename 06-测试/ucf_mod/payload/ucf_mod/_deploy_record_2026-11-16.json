@@ -1,0 +1,38 @@
+{
+  "updated": "2026-11-16T17:35:00+08:00",
+  "game_version": "UnityCrossFire 1.7.1",
+  "note": "本目录只有部署物。源码/工具/文档在工程端（见 source 字段）。",
+  "plugin": {
+    "file": "ucf_mod/ucf_mod.dll",
+    "bytes": 240960,
+    "sha256": "BB2E91026AA3466B923ED06855EB053498340E1701FF7684C44FD29914053C29",
+    "built": "2026-11-16 16:53:15"
+  },
+  "loader": [
+    "winhttp.dll",
+    "winhttp_orig.dll"
+  ],
+  "modified": [
+    "UnityCrossFire_Data/level9 (deactivated: Canvas1, Canvas2, Canvas3, EventSystem, SniperCrosshariBG)"
+  ],
+  "backup": [
+    "ucf_mod/backup/level9.orig"
+  ],
+  "runtime": {
+    "config": "ucf_mod/ucf_mod.json",
+    "log": "ucf_mod/ucf_mod.log",
+    "data": [
+      "ucf_mod/nav/",
+      "ucf_mod/markers/",
+      "ucf_mod/maps/",
+      "ucf_mod/vis/"
+    ],
+    "flags": [
+      "ucf_mod/collect.flag（只读采集，存在=开）",
+      "ucf_mod/nav/nogen.txt（禁止自动铺路点）"
+    ]
+  },
+  "source": "D:\\trae_project\\ucf1.7-modifier\\06-测试\\ucf_mod (git: dev)",
+  "build": ".\\tools\\build.ps1 -Deploy",
+  "uninstall": "powershell -File ucf_mod\\uninstall.ps1   # -DryRun 预演，-Purge 连数据一起删"
+}

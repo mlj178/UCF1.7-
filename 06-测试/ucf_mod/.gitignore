@@ -37,3 +37,8 @@ navdata/dev/vis/rec/
 
 # 根 .gitignore 的 *.zip 规则例外：清理前的工作区备份入库
 !navdata/_before_cleanup_*.zip
+
+# 部署弹药库例外：payload 里的 dll 在工程端只有这一份（winhttp.dll 源码已丢失），
+# 必须入库，否则游戏目录一旦被清理，加载器和插件就永久没了
+!payload/*.dll
+!payload/**/*.dll
