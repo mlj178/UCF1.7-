@@ -1152,7 +1152,7 @@ class App(ctk.CTk):
         deploy_view = self.tabview.add("部署")
         try:
             import deploy_tab
-            deploy_tab.build_deploy_tab(self, deploy_view)
+            self.deploy_tab = deploy_tab.build_deploy_tab(self, deploy_view)
         except Exception as exc:                     # 部署页坏了也别把整个控制台带崩
             ctk.CTkLabel(deploy_view, text="部署页加载失败：%s" % exc,
                          font=FONT_S, text_color="#c92a2a").pack(padx=12, pady=12)
@@ -4832,9 +4832,18 @@ class App(ctk.CTk):
         self.strip_go.configure(text=info["go"])
         if hasattr(self, "strip_path"):
             exists = os.path.isfile(GAME_EXE)
-            self.strip_path.configure(
-                text="启动位置：" + compact_path(GAME_EXE, 96),
-                text_color="#7f8792" if exists else "#ff9d9d")
+            text = "启动位置：" + compact_path(GAME_EXE, 96)
+            color = "#7f8792" if exists else "#ff9d9d"
+            # 2026-11-22 用户踩过：部署页选了 A，这里启动的还是 B，眼睛看不出来。
+            # 只要"部署页选的位置"和"实际启动的位置"不一致，就用红字点破。
+            dt = getattr(self, "deploy_tab", None)
+            picked = getattr(dt, "game", None) if dt is not None else None
+            if picked and os.path.dirname(GAME_EXE).lower() != str(picked).lower():
+                text = "⚠ 部署页选的是 %s，但这次启动的仍是 %s" % (
+                    game_tag(os.path.join(str(picked), "UnityCrossFire.exe")),
+                    game_tag(GAME_EXE))
+                color = "#ff9d9d"
+            self.strip_path.configure(text=text, text_color=color)
         self.refresh_game_button(running)
 
     def on_strip_go(self):

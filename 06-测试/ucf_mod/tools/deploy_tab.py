@@ -80,6 +80,7 @@ class DeployTab:
         self.steps = None
         self.q = queue.Queue()
         self.busy = False
+        self._pending_switch = False      # 用户选了新位置并同意"部署完就切过去"
         self._build()
         self._load_current()
         self.console.after(150, self._pump)
@@ -271,6 +272,11 @@ class DeployTab:
         self.set_game(self.game, note="")
 
     def choose(self):
+        r"""选择游戏 = 选择"接下来从哪一份启动"。
+
+        2026-11-22 用户反馈：选完只是本页换了，底部「开始游戏」还在启动旧的那份，
+        完全看不出来。现在选完直接问一句 —— 同意就部署 + 切换 + 重启，一步到位。
+        """
         picked = filedialog.askopenfilename(
             title="选择 UnityCrossFire.exe",
             filetypes=[("UnityCrossFire", "UnityCrossFire.exe"), ("可执行文件", "*.exe")],
@@ -281,7 +287,16 @@ class DeployTab:
         if game is None:
             messagebox.showerror("选错了", "请选 UnityCrossFire.exe 本身，或者游戏目录。")
             return
-        self.set_game(game, note="已切换，记得点「重启控制台」让其它页签也跟着换")
+        self.set_game(game, note="")
+        if str(game).lower() == str(P.game_dir_of()).lower():
+            self.hint_lbl.configure(text="✓ 这就是控制台当前生效的位置", text_color="#7f8792")
+            return
+        if messagebox.askyesno(
+                "切换游戏位置",
+                "把控制台切到这一份？\n\n%s\n\n（会先部署，然后重启控制台；"
+                "底部「开始游戏」以后就从它启动）" % game):
+            self._pending_switch = True
+            self.run("deploy")
 
     def set_game(self, game, note=""):
         self.game = Path(game) if game else None
@@ -295,6 +310,13 @@ class DeployTab:
             return
         self.path_var.set(str(self.game / "UnityCrossFire.exe"))
         exe = self.game / "UnityCrossFire.exe"
+        cur = str(P.game_dir_of())
+        if str(self.game).lower() == cur.lower():
+            self.hint_lbl.configure(text="✓ 控制台当前生效的位置", text_color="#7f8792")
+        else:
+            self.hint_lbl.configure(
+                text="⚠ 仅查看：底部「开始游戏」现在启动的还是 %s" % _tag_of(cur),
+                text_color="#f7cd74")
         self.exe_path_lbl.configure(
             text="启动用这个 exe：" + str(exe),
             text_color="#7f8792" if exe.is_file() else "#c92a2a")
@@ -405,8 +427,11 @@ class DeployTab:
                 self._enable(bool(self.game))
                 if self.game:
                     self._render_rows(self._status())
-                if kind in ("deploy", "repair") and rc == 0 and self.game:
-                    self._after_deploy()
+                if kind in ("deploy", "repair"):
+                    if rc == 0 and self.game:
+                        self._after_deploy()
+                    else:
+                        self._pending_switch = False      # 部署失败就别惦记着重启了
         except queue.Empty:
             pass
         self.console.after(150, self._pump)
@@ -421,9 +446,14 @@ class DeployTab:
         self._refresh_history()
         same = str(P.game_dir_of()).lower() == str(self.game).lower()
         if same:
-            self.hint_lbl.configure(text="已部署，正在用这个位置")
+            self.hint_lbl.configure(text="✓ 已部署，控制台正在用这个位置", text_color="#7f8792")
+            self._pending_switch = False
             return
-        self.hint_lbl.configure(text="已部署并记住，重启后生效")
+        self.hint_lbl.configure(text="已部署并记住；重启后生效", text_color="#f7cd74")
+        if self._pending_switch:
+            self._pending_switch = False
+            restart_console()          # choose() 里已经问过了，这里直接重启
+            return
         if messagebox.askyesno("切换游戏位置",
                                "部署完成：\n%s\n\n现在重启控制台切到它吗？" % self.game):
             restart_console()
