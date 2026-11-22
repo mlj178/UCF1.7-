@@ -1112,7 +1112,7 @@ class App(ctk.CTk):
         rec_tab = self.tabview.add("录制")                  # 走一遍就把路线录下来（只写 ② 编辑中）
         self.build_record_tab(rec_tab)
         self.build_data_tab(self.tabview.add("数据"))       # 三区路径/时间 + 部署/还原/校验
-        # 2026-11-22：部署页 —— 选游戏位置 + 一键把 dll 迁进游戏目录（原本是独立的 一键部署.cmd）
+        # 2026-11-22：部署页 —— 选游戏位置 + 一键把 dll 迁进游戏目录（取代了原来的独立部署脚本）
         deploy_view = self.tabview.add("部署")
         try:
             import deploy_tab
