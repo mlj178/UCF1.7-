@@ -61,6 +61,7 @@ r"""工程端 / 部署端 / 三区数据 的路径解析 —— 全工具唯一�
 import json
 import os
 import re
+import time
 
 TOOLS = os.path.dirname(os.path.abspath(__file__))
 PROJ = os.path.dirname(TOOLS)
@@ -94,6 +95,7 @@ USER_CFG = os.path.join(
 )
 DEPLOY_SOURCE_CN = {
     "env": "环境变量 UCF_DEPLOY",
+    "switch": "本次运行内切换",
     "user": "用户设置（控制台选过游戏）",
     "project": "工程内 tools/deploy.json（开发机）",
     "default": "未配置，回退到工程根",
@@ -130,14 +132,57 @@ def game_dir_of(deploy_root=None):
     return os.path.dirname(os.path.abspath(deploy_root or DEPLOY))
 
 
+HISTORY_MAX = 6            # 最近用过的游戏位置，留几个够挑就行
+
+
+def load_user_cfg():
+    """读用户配置（deploy / game_dir / history）；读不到就返回空 dict。"""
+    try:
+        with open(USER_CFG, "r", encoding="utf-8") as f:
+            data = json.load(f) or {}
+        return data if isinstance(data, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def load_history():
+    r"""最近用过的游戏目录，最近的在前。[{"game_dir": ..., "exists": bool}]"""
+    out, seen = [], set()
+    for item in (load_user_cfg().get("history") or []):
+        g = (item.get("game_dir") if isinstance(item, dict) else item) or ""
+        g = os.path.abspath(g) if g else ""
+        if not g or g.lower() in seen:
+            continue
+        seen.add(g.lower())
+        out.append({"game_dir": g, "exists": os.path.isfile(os.path.join(g, "UnityCrossFire.exe"))})
+    return out[:HISTORY_MAX]
+
+
 def save_deploy(game_dir):
-    """把用户选的游戏目录写进用户配置，返回写入路径。
+    """把用户选的游戏目录写进用户配置（并记入历史），返回写入路径。
 
     控制台选完 UnityCrossFire.exe 后调这里；写的是 %LOCALAPPDATA%\\UCFMod\\deploy.json，
     不动工程里的 tools/deploy.json。下次启动 ucf_paths 会优先读它。
     """
-    game_dir = os.path.abspath(game_dir)
-    data = {"deploy": os.path.join(game_dir, "ucf_mod"), "game_dir": game_dir}
+    game_dir = os.path.abspath(str(game_dir))
+    old = load_user_cfg()
+    history = [game_dir]
+    for item in (old.get("history") or []):
+        g = (item.get("game_dir") if isinstance(item, dict) else item) or ""
+        if g and os.path.abspath(g).lower() != game_dir.lower():
+            history.append(os.path.abspath(g))
+        if len(history) >= HISTORY_MAX:
+            break
+    data = {
+        "deploy": os.path.join(game_dir, "ucf_mod"),
+        "game_dir": game_dir,
+        "history": history,
+        "updated": time.strftime("%Y-%m-%d %H:%M:%S"),
+    }
+    return _write_user_cfg(data)
+
+
+def _write_user_cfg(data):
     d = os.path.dirname(USER_CFG)
     os.makedirs(d, exist_ok=True)
     tmp = USER_CFG + ".tmp"
@@ -147,6 +192,39 @@ def save_deploy(game_dir):
         os.fsync(f.fileno())
     os.replace(tmp, USER_CFG)
     return USER_CFG
+
+
+def forget_history(game_dir):
+    """从历史里删掉一条记录（当前正在用的那条不给删）。"""
+    game_dir = os.path.abspath(str(game_dir))
+    cfg = load_user_cfg()
+    current = os.path.abspath(str(cfg.get("game_dir") or ""))
+    if game_dir.lower() == current.lower() or not current:
+        return False
+    cfg["history"] = [g for g in (cfg.get("history") or [])
+                      if os.path.abspath(str(g)).lower() != game_dir.lower()]
+    _write_user_cfg(cfg)
+    return True
+
+
+def rebind(game_dir):
+    """进程内换游戏位置：重算本模块所有跟 DEPLOY 有关的全局量。
+
+    注意：ucf_paths 的调用方大多在 import 时就把 DEPLOY 绑成局部名了，
+    所以换位置后仍建议重启进程；这个函数是给"不想重启"的实验路径留的。
+    """
+    global DEPLOY, DEPLOY_SOURCE, GAME_VIS, LEGACY_VIS, BACKUP, DATA, MAPS, NAV, NAMES_FILE
+    game_dir = os.path.abspath(str(game_dir))
+    DEPLOY = os.path.join(game_dir, "ucf_mod")
+    DEPLOY_SOURCE = "switch"
+    GAME_VIS = os.path.join(DEPLOY, "vis")
+    LEGACY_VIS = GAME_VIS
+    BACKUP = os.path.join(DEPLOY, "backup")
+    DATA = {"native": NATIVE, "dev": DEV, "deploy": DEPLOY}[PROFILE]
+    MAPS = os.path.join(DATA, "maps")
+    NAV = os.path.join(DATA, "nav")
+    NAMES_FILE = os.path.join(NAV, "names.json")
+    return DEPLOY
 
 
 def _resolve_env_dir(env_name, default):

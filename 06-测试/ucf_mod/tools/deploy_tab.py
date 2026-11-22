@@ -36,6 +36,29 @@ GREY = "#3a3f47"
 GREY_H = "#4a5058"
 
 
+def _tag_of(game_dir):
+    r"""短标签：从游戏目录往上跳过像游戏名的层级（…\\test-1\\UnityCrossFire1.7.1 -> test-1）。"""
+    parts = [p for p in str(game_dir).replace("/", "\\").split("\\") if p]
+    i = len(parts) - 1
+    while i >= 0 and parts[i].lower().startswith("unitycrossfire"):
+        i -= 1
+    if i >= 0:
+        return parts[i]
+    return os.path.basename(str(game_dir)) or str(game_dir)
+
+
+def _compact(path, limit=60):
+    r"""路径太长就省略：只留盘符 + 末尾若干层（区分信息通常在尾巴上）。"""
+    path = str(path or "")
+    if len(path) <= limit:
+        return path
+    drive, rest = os.path.splitdrive(path)
+    keep = limit - len(drive) - 2
+    if keep <= 8:
+        return path[: limit - 1] + "…"
+    return drive + "\\…" + rest[-keep:]
+
+
 def restart_console():
     r"""用户换游戏位置后，ucf_paths.DEPLOY 还是旧值 —— 重启一次最稳。"""
     try:
@@ -90,6 +113,27 @@ class DeployTab:
             side="left", fill="x", expand=True)
         ctk.CTkButton(prow, text="选择 UnityCrossFire.exe", width=170, height=26, font=FONT_S,
                       command=self.choose).pack(side="left", padx=(8, 0))
+
+        # 2026-11-22 用户要求：记住用过的几个游戏位置，能挑一个启动
+        hrow = ctk.CTkFrame(box, fg_color="transparent")
+        hrow.pack(fill="x", padx=12, pady=(0, 6))
+        ctk.CTkLabel(hrow, text="历史位置", font=FONT_S, text_color="#9aa0a6",
+                     width=56, anchor="w").pack(side="left")
+        self.hist_var = ctk.StringVar(value="（还没有记录）")
+        self.hist_menu = ctk.CTkOptionMenu(hrow, values=["（还没有记录）"], variable=self.hist_var,
+                                           width=390, height=26, font=FONT_C,
+                                           fg_color=GREY, button_color="#4a5058",
+                                           command=self._on_hist_pick)
+        self.hist_menu.pack(side="left", padx=(8, 6), fill="x", expand=True)
+        ctk.CTkButton(hrow, text="切换并重启", width=100, height=26, font=FONT_S,
+                      command=self.switch_selected).pack(side="left")
+        ctk.CTkButton(hrow, text="忘记", width=56, height=26, font=FONT_S,
+                      fg_color="#5a3434", hover_color="#6d3f3f",
+                      command=self.forget_selected).pack(side="left", padx=(6, 0))
+        # 下拉框里只放短标签（区分用的文件夹名），完整路径单独一行显示，不靠猜
+        self.hist_path_lbl = ctk.CTkLabel(box, text="", font=("Consolas", 11),
+                                          text_color="#7f8792", anchor="w")
+        self.hist_path_lbl.pack(fill="x", padx=12, pady=(0, 4))
 
         brow = ctk.CTkFrame(box, fg_color="transparent")
         brow.pack(fill="x", padx=12, pady=(0, 10))
@@ -148,6 +192,73 @@ class DeployTab:
         exe = cur.parent / "UnityCrossFire.exe"
         self.src_lbl.configure(text="来源：" + P.DEPLOY_SOURCE_CN.get(P.DEPLOY_SOURCE, P.DEPLOY_SOURCE))
         self.set_game(exe.parent if exe.is_file() else None, note="")
+        self._refresh_history()
+
+    def _refresh_history(self):
+        r"""把最近用过的游戏位置灌进下拉框。
+
+        下拉框只放短标签（区分用的文件夹名 + 盘符），完整路径单独一行显示——
+        路径一长，中间省略容易把 test-1 这种关键层级吃掉，光看下拉框会选错。
+        """
+        hist = P.load_history()
+        self._hist_map = {}
+        values = []
+        for item in hist:
+            g = item["game_dir"]
+            drive = os.path.splitdrive(g)[0] or "?"
+            base = "%s（%s）" % (_tag_of(g), drive)
+            if not item["exists"]:
+                base += " · 不存在"
+            label, n = base, 2
+            while label in self._hist_map:
+                label = "%s #%d" % (base, n)
+                n += 1
+            self._hist_map[label] = g
+            values.append(label)
+        if not values:
+            values = ["（还没有记录）"]
+        self.hist_menu.configure(values=values)
+        cur = str(P.game_dir_of()).lower()
+        for label, g in self._hist_map.items():
+            if g.lower() == cur:
+                self.hist_var.set(label)
+                self._on_hist_pick(label)
+                break
+        else:
+            self.hist_var.set(values[0])
+            self._on_hist_pick(values[0])
+
+    def _on_hist_pick(self, choice=None):
+        g = getattr(self, "_hist_map", {}).get(choice or self.hist_var.get(), "")
+        self.hist_path_lbl.configure(text=g or "（还没有记录）",
+                                     text_color="#7f8792" if os.path.isdir(g) else "#c92a2a")
+
+    def switch_selected(self):
+        g = getattr(self, "_hist_map", {}).get(self.hist_var.get())
+        if not g:
+            return
+        if not os.path.isfile(os.path.join(g, "UnityCrossFire.exe")):
+            messagebox.showerror("位置不存在", "这个目录里没有 UnityCrossFire.exe：\n" + g)
+            return
+        try:
+            P.save_deploy(g)
+        except OSError as exc:
+            messagebox.showerror("写配置失败", str(exc))
+            return
+        if messagebox.askyesno("切换游戏位置",
+                               "把控制台切到：\n%s\n\n现在重启控制台让它生效？" % g):
+            restart_console()
+        else:
+            self.hint_lbl.configure(text="已记住，下次启动生效")
+
+    def forget_selected(self):
+        g = getattr(self, "_hist_map", {}).get(self.hist_var.get())
+        if not g:
+            return
+        if not P.forget_history(g):
+            messagebox.showinfo("删不了", "这是当前正在用的位置；先切到别的，再回来忘掉它。")
+            return
+        self._refresh_history()
 
     def reload(self):
         self.set_game(self.game, note="")
@@ -270,20 +381,39 @@ class DeployTab:
         except Exception as exc:
             buf.write(f"\n[X] 执行异常：{exc}\n")
             rc = 3
-        self.q.put((buf.getvalue(), rc))
+        self.q.put((kind, buf.getvalue(), rc))
 
     def _pump(self):
         try:
             while True:
-                text, rc = self.q.get_nowait()
+                kind, text, rc = self.q.get_nowait()
                 self._write(text.replace("\n\n", "\n") + f"\n[退出码 {rc}]\n")
                 self.busy = False
                 self._enable(bool(self.game))
                 if self.game:
                     self._render_rows(self._status())
+                if kind in ("deploy", "repair") and rc == 0 and self.game:
+                    self._after_deploy()
         except queue.Empty:
             pass
         self.console.after(150, self._pump)
+
+    def _after_deploy(self):
+        r"""部署成功：把这个位置记进用户配置 + 历史，并问一句要不要马上切过去。"""
+        try:
+            P.save_deploy(self.game)
+        except OSError as exc:
+            self._write("\n[!!] 写用户配置失败：%s\n" % exc)
+            return
+        self._refresh_history()
+        same = str(P.game_dir_of()).lower() == str(self.game).lower()
+        if same:
+            self.hint_lbl.configure(text="已部署，正在用这个位置")
+            return
+        self.hint_lbl.configure(text="已部署并记住，重启后生效")
+        if messagebox.askyesno("切换游戏位置",
+                               "部署完成：\n%s\n\n现在重启控制台切到它吗？" % self.game):
+            restart_console()
 
 
 def build_deploy_tab(console, tab):

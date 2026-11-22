@@ -480,6 +480,38 @@ def migrate_flat_packs():
         moved.append((entry, "%s/%s" % (folder, entry)))
     return moved
 
+def compact_path(path, limit=52):
+    r"""路径太长就省略：只留盘符 + 末尾若干层（区分信息通常在尾巴上）。
+    D:\BaiduNetdiskDownload\test-1\UnityCrossFire1.7.1\UnityCrossFire.exe -> D:\…\test-1\UnityCrossFire1.7.1\UnityCrossFire.exe
+    """
+    path = str(path or "")
+    if len(path) <= limit:
+        return path
+    drive, rest = os.path.splitdrive(path)
+    keep = limit - len(drive) - 2
+    if keep <= 8:
+        return path[: limit - 1] + "…"
+    return drive + "\\…" + rest[-keep:]
+
+
+def game_tag(game_exe):
+    r"""底部按钮上「这是哪一份游戏」的短标签：从游戏目录往上，跳过像游戏名的层级。
+    ...\BaiduNetdiskDownload\test-1\UnityCrossFire1.7.1\...\UnityCrossFire.exe -> test-1
+    ...\BaiduNetdiskDownload\UnityCrossFire1.7.1\...\UnityCrossFire.exe          -> BaiduNetdiskDownload
+    """
+    try:
+        game_dir = os.path.dirname(os.path.abspath(game_exe))
+        parts = [p for p in game_dir.replace("/", "\\").split("\\") if p]
+        i = len(parts) - 1
+        while i >= 0 and parts[i].lower().startswith("unitycrossfire"):
+            i -= 1
+        if i >= 0:
+            return parts[i]
+        return os.path.basename(game_dir) or game_dir
+    except Exception:
+        return ""
+
+
 def _python():
     r"""跑 navdata.py 用的解释器：控制台是 .pyw，sys.executable 可能是 pythonw.exe，
     那样子进程没有控制台、输出不好收，优先换成同目录的 python.exe。"""
@@ -1079,6 +1111,10 @@ class App(ctk.CTk):
         self.strip_sub = ctk.CTkLabel(self.strip_main, text="", anchor="w", justify="left",
                                       font=FONT_S, text_color="#9aa0a6", wraplength=500)
         self.strip_sub.pack(fill="x")
+        # 2026-11-22：用户要求「看得见这次到底启动哪个 exe」——常驻显示完整路径
+        self.strip_path = ctk.CTkLabel(self.strip_main, text="", anchor="w", justify="left",
+                                       font=("Consolas", 11), text_color="#7f8792")
+        self.strip_path.pack(fill="x")
 
         self.stat = ctk.CTkFrame(self, corner_radius=10)
         self.stat.pack(side="bottom", fill="x", padx=14, pady=(0, 8))
@@ -4695,26 +4731,29 @@ class App(ctk.CTk):
             return
         if running is None:
             running = game_running()
+        # 2026-11-22 用户要求：按钮上要能看出「这次从哪一份游戏启动」——多副本共存时不会点错
+        tag = game_tag(GAME_EXE)
+        suffix = ("  ［%s］" % tag) if tag else ""
         if running:
-            self.btn_game.configure(text="游戏运行中", state="disabled",
+            self.btn_game.configure(text="游戏运行中" + suffix, state="disabled",
                                     fg_color="#3a3f47", hover_color="#49505a")
             return
         pk = self.pack_dict() if hasattr(self, "seg_mode") else {}
         if not bool(self.master_var.get()):
             # 总开关关 = 插件加载但待机（plugin.c: loaded but idle）
-            self.btn_game.configure(text="开始游戏 · 插件已关（原版）", state="normal",
+            self.btn_game.configure(text="开始游戏 · 插件已关（原版）" + suffix, state="normal",
                                     fg_color="#3a3f47", hover_color="#49505a")
         elif pk.get("on") and pk.get("name"):
-            self.btn_game.configure(text="开始游戏 · 编辑中 %s" % pk["name"].split("/")[-1],
+            self.btn_game.configure(text="开始游戏 · 编辑中 %s" % pk["name"].split("/")[-1] + suffix,
                                     state="normal",
                                     fg_color="#a86a12", hover_color="#bf7c17")
         else:
             ver = self.final_selected() if hasattr(self, "opt_final") else final_current_name()
             if not ver:
-                self.btn_game.configure(text="开始游戏 · 成品（还没有版本）", state="disabled",
+                self.btn_game.configure(text="开始游戏 · 成品（还没有版本）" + suffix, state="disabled",
                                         fg_color="#3a3f47", hover_color="#49505a")
             else:
-                self.btn_game.configure(text="开始游戏 · 成品 %s（只读）" % ver, state="normal",
+                self.btn_game.configure(text="开始游戏 · 成品 %s（只读）" % ver + suffix, state="normal",
                                         fg_color="#2f6fdb", hover_color="#255bb4")
 
     # ---- 启动条件条 / 测试包预检（2026-11-19 用户要求）---------------
@@ -4791,6 +4830,11 @@ class App(ctk.CTk):
                                    text_color="#f7cd74" if info["mode"] == "test" else "#f0f0f0")
         self.strip_sub.configure(text=info["sub"])
         self.strip_go.configure(text=info["go"])
+        if hasattr(self, "strip_path"):
+            exists = os.path.isfile(GAME_EXE)
+            self.strip_path.configure(
+                text="启动位置：" + compact_path(GAME_EXE, 96),
+                text_color="#7f8792" if exists else "#ff9d9d")
         self.refresh_game_button(running)
 
     def on_strip_go(self):
@@ -5023,7 +5067,7 @@ class App(ctk.CTk):
         try:
             subprocess.Popen([GAME_EXE], cwd=os.path.dirname(GAME_EXE), env=env)
             self._strip_run = self.launch_strip_info()   # 运行中显示启动瞬间的快照
-            self.set_status("游戏已启动（%s）" % note)
+            self.set_status("游戏已启动（%s · %s）" % (note, game_tag(GAME_EXE)))
         except OSError as exc:
             self.set_status("启动失败：%s" % exc)
         self.after(1500, self.refresh_status)
