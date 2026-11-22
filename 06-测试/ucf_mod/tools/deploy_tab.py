@@ -113,6 +113,11 @@ class DeployTab:
             side="left", fill="x", expand=True)
         ctk.CTkButton(prow, text="选择 UnityCrossFire.exe", width=170, height=26, font=FONT_S,
                       command=self.choose).pack(side="left", padx=(8, 0))
+        # 输入框宽度有限会把路径截断，这里单独一行把**完整 exe 路径**显示出来（自动换行）
+        self.exe_path_lbl = ctk.CTkLabel(box, text="", font=("Consolas", 11),
+                                         text_color="#7f8792", anchor="w", justify="left",
+                                         wraplength=660)
+        self.exe_path_lbl.pack(fill="x", padx=12, pady=(0, 2))
 
         # 2026-11-22 用户要求：记住用过的几个游戏位置，能挑一个启动
         hrow = ctk.CTkFrame(box, fg_color="transparent")
@@ -207,6 +212,8 @@ class DeployTab:
             g = item["game_dir"]
             drive = os.path.splitdrive(g)[0] or "?"
             base = "%s（%s）" % (_tag_of(g), drive)
+            if item.get("current"):
+                base += " · 在用"
             if not item["exists"]:
                 base += " · 不存在"
             label, n = base, 2
@@ -281,10 +288,16 @@ class DeployTab:
         self.hint_lbl.configure(text=note)
         if not self.game:
             self.path_var.set("（未配置）")
+            self.exe_path_lbl.configure(text="还没有选游戏：点右边按钮选 UnityCrossFire.exe",
+                                        text_color="#c92a2a")
             self._render_rows([("缺失", "UnityCrossFire.exe", "还没选游戏")])
             self._enable(False)
             return
         self.path_var.set(str(self.game / "UnityCrossFire.exe"))
+        exe = self.game / "UnityCrossFire.exe"
+        self.exe_path_lbl.configure(
+            text="启动用这个 exe：" + str(exe),
+            text_color="#7f8792" if exe.is_file() else "#c92a2a")
         self.steps = None
         try:
             self.steps = D.build_plan(self.game)

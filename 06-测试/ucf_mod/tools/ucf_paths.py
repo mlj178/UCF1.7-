@@ -146,15 +146,32 @@ def load_user_cfg():
 
 
 def load_history():
-    r"""最近用过的游戏目录，最近的在前。[{"game_dir": ..., "exists": bool}]"""
+    r"""游戏位置列表：**当前生效的那一个永远排第一**，后面是历史记录。
+
+    2026-11-22 用户要求：当前位置可能是程序逻辑解析出来的（环境变量 / 工程
+    tools/deploy.json），不一定是我们写进用户配置的，但它同样要出现在列表里 ——
+    否则第一次打开时下拉框空着，用户以为没配置。
+
+    返回 [{"game_dir": str, "exists": bool, "current": bool, "source": str}]
+    """
+    cur = os.path.abspath(game_dir_of())
     out, seen = [], set()
-    for item in (load_user_cfg().get("history") or []):
-        g = (item.get("game_dir") if isinstance(item, dict) else item) or ""
-        g = os.path.abspath(g) if g else ""
+
+    def add(path, source):
+        g = os.path.abspath(str(path)) if path else ""
         if not g or g.lower() in seen:
-            continue
+            return
         seen.add(g.lower())
-        out.append({"game_dir": g, "exists": os.path.isfile(os.path.join(g, "UnityCrossFire.exe"))})
+        out.append({
+            "game_dir": g,
+            "exists": os.path.isfile(os.path.join(g, "UnityCrossFire.exe")),
+            "current": g.lower() == cur.lower(),
+            "source": source,
+        })
+
+    add(cur, DEPLOY_SOURCE)
+    for item in (load_user_cfg().get("history") or []):
+        add(item.get("game_dir") if isinstance(item, dict) else item, "history")
     return out[:HISTORY_MAX]
 
 

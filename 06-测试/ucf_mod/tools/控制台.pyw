@@ -4937,7 +4937,11 @@ class App(ctk.CTk):
                      anchor="w").pack(fill="x", padx=18, pady=(16, 0))
         ctk.CTkLabel(top, text="成品 / 原版不会弹这一步；确认后才会带 UCF_PACK / UCF_FP 启动游戏。",
                      font=FONT_S, text_color="#9aa0a6", anchor="w",
-                     justify="left", wraplength=470).pack(fill="x", padx=18, pady=(4, 10))
+                     justify="left", wraplength=470).pack(fill="x", padx=18, pady=(4, 4))
+        # 2026-11-22：预检也把"这次到底启动哪个 exe"写出来，多副本时不会点错
+        ctk.CTkLabel(top, text="将启动：" + GAME_EXE, font=("Consolas", 11),
+                     text_color="#7f8792", anchor="w", justify="left",
+                     wraplength=470).pack(fill="x", padx=18, pady=(0, 8))
 
         grid = ctk.CTkFrame(top, fg_color="transparent")
         grid.pack(fill="x", padx=14)
