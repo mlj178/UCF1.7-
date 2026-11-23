@@ -39,32 +39,40 @@ GEOTEX = os.path.join(GEO, "tex")      # tools/fetch_tex.py 从 AssetRipper 拉�
 COMMON = P.common_dir(P.DATA)        # 公共文件（names / _index）：新布局 00_公共\，旧布局 nav\
 NAMES_FILE = P.names_path(P.DATA)
 
-# ---------------------------------------------------------------- 版本切换
-# 网页端只读，但可以在 ①备份 / ②开发 / ③部署 之间切换查看。
-# 2026-11-21 起只有三区：旧的 ④ 测试版已并进 ②（ucf_paths.TEST 就是 DEV 的别名），
-# 编辑中在 ②\packs、收件箱在 ②\vis、成品在 ②\final。
+# ---------------------------------------------------------------- 数据档切换
+# 网页端只读，但可以在 ① 备份版 / ② 成品 / ② 编辑中 之间切换查看。
+# ② 开发版是唯一数据源：成品在 ②\final\<当前版本>\，编辑中在 ②\packs\<图>\<包>\，
+# 收件箱在 ②\vis\。③ 部署版只是游戏运行环境（2026-11-21 起不放导航数据），
+# 不再作为“可查看的数据档”。
 # 切换只改本服务的内存状态（读哪一套图文件夹），不写任何文件。
-PROFILE_ORDER = ("native", "dev", "deploy")
-PROFILE_LABEL = {"native": "① 备份版", "dev": "② 开发版", "deploy": "③ 部署版"}
-PROFILE_CN_VIEW = {"native": "备份版（原生·只读）",
-                   "dev": "开发版（成品 + 编辑中 + 收件箱）",
-                   "deploy": "部署版（游戏运行环境·不放数据）"}
-PROFILE_ROOT = {"native": NATIVE, "dev": DEV, "deploy": DEPLOY}
+PROFILE_ORDER = ("native", "final", "pack")
+PROFILE_LABEL = {"native": "① 备份版", "final": "② 成品", "pack": "② 编辑中"}
+PROFILE_CN_VIEW = {
+    "native": "备份版（原生·只读对照）",
+    "final": "成品（final 当前版本·只读）",
+    "pack": "编辑中（packs 测试包·只读）",
+}
+PROFILE_ROOT = {"native": NATIVE, "final": DEV, "pack": DEV}
 PROFILE_ALIAS = {
     "native": "native", "backup": "native", "frozen": "native", "原生": "native", "备份": "native",
-    "dev": "dev", "develop": "dev", "开发": "dev",
-    "deploy": "deploy", "game": "deploy", "部署": "deploy",
-    # 旧深链接 ?profile=test / export 不报错，直接落到 ② 开发版
-    "test": "dev", "export": "dev", "测试": "dev",   # 旧 ④ 已并进 ②
+    "final": "final", "dev": "final", "develop": "final", "开发": "final",
+    "成品": "final", "current": "final",
+    "pack": "pack", "packs": "pack", "test": "pack", "export": "pack",
+    "测试": "pack", "编辑中": "pack",
+    # ③ 部署版已取消（不再放数据）：旧深链接落到 ② 成品，前端会提示一句
+    "deploy": "final", "game": "final", "部署": "final",
 }
-FINAL = os.path.join(DEV, "final")      # ② 的成品版本集合（只有开发版有，③ 不放数据）
+FINAL = os.path.join(DEV, "final")      # ② 的成品版本集合（③ 不放数据）
 VIEW_LOCK = threading.RLock()
+VIEW_NOTE = ""
 
 
 def profile_info():
-    """当前查看版本 + 三区路径（供 /api/workbench、/api/maps、navview 顶栏）。"""
+    """当前查看档 + 路径（供 /api/workbench、/api/maps、navview 顶栏）。"""
     return {
-        "profile": PROFILE,
+        "profile": PROFILE,          # 兼容旧前端/深链接：值现在是 native|final|pack
+        "mode": PROFILE,
+        "note": VIEW_NOTE,
         "cn": PROFILE_CN_VIEW.get(PROFILE, PROFILE),
         "label": PROFILE_LABEL.get(PROFILE, PROFILE),
         "readonly": READONLY,
@@ -74,7 +82,7 @@ def profile_info():
         "nav": NAV,
         "native": NATIVE,
         "dev": DEV,
-        "deploy": DEPLOY,
+        "deploy": DEPLOY,            # 仍是游戏运行目录（日志/配置用），不再参与查看档
         "packs": PACKS_DIR,
         "final": FINAL,
         "export": VIS,
@@ -85,8 +93,8 @@ def profile_info():
 
 
 def dev_nav_dir(data_root, key):
-    r"""② 开发版的成品目录：final\<当前版本>\（没有版本就退回旧的 nav\）。"""
-    if key != "dev":
+    r"""② 成品的当前版本目录：final\<当前版本>\（没有版本就退回旧的 nav\）。"""
+    if key != "final":
         return os.path.join(data_root, "nav")
     root = os.path.join(data_root, "final")
     cur = ""
@@ -145,10 +153,31 @@ def _final_dir():
     return d if d and os.path.isdir(d) else ""
 
 
+def _default_view():
+    """工作台启动时的默认档：成品有当前版看成品，否则有包看编辑中，再否则成品。"""
+    if _final_current_name():
+        return "final"
+    try:
+        if any(os.path.isdir(os.path.join(PACKS_DIR, n)) and not n.startswith(("_", "."))
+               for n in os.listdir(PACKS_DIR)):
+            return "pack"
+    except OSError:
+        pass
+    return "final"
+
+
 def set_profile(name):
-    """切换“当前查看哪一版”；只改内存里的根目录，不动文件。"""
-    global PROFILE, READONLY, DATA, MAPS, NAV, COMMON, NAMES_FILE, DATAVIS
-    key = PROFILE_ALIAS.get(str(name or "").strip().lower(), "")
+    """切换“当前查看哪一档”；只改内存里的根目录，不动文件。"""
+    global PROFILE, READONLY, DATA, MAPS, NAV, COMMON, NAMES_FILE, DATAVIS, VIEW_NOTE
+    raw = str(name or "").strip().lower()
+    key = PROFILE_ALIAS.get(raw, "")
+    VIEW_NOTE = ""
+    if raw in ("deploy", "game", "部署"):
+        VIEW_NOTE = "③ 部署版已取消（游戏目录不放导航数据），已切到 ② 成品"
+    elif raw in ("test", "export", "测试"):
+        VIEW_NOTE = "旧 ④ 测试版已并入 ② 编辑中"
+    elif raw in ("dev", "develop", "开发"):
+        VIEW_NOTE = "② 开发版已拆成「成品 / 编辑中」，这里默认看成品"
     if key:
         PROFILE = key
         DATA = PROFILE_ROOT[key]
@@ -156,16 +185,16 @@ def set_profile(name):
         MAPS = DATA if P.is_folders(DATA) else os.path.join(DATA, "maps")
         # 公共文件（names.json / _index.json）：新布局 00_公共\，旧布局 nav\
         COMMON = P.common_dir(DATA)
-        # 成品搬进 final\<版本>\ 以后，dev 版块看的是「当前启动的那个版本」
+        # 成品搬进 final\<版本>\ 以后，成品档看的是「当前启动的那个版本」
         NAV = dev_nav_dir(DATA, key)
         NAMES_FILE = P.names_path(DATA)
         DATAVIS = os.path.join(DATA, "vis")
-        # ①/③ 是只读数据；② 开发版可写（网页端仍然只读，收件箱也在它下面的 vis\）
-        READONLY = key != "dev"
+        # 网页端永久只读：三个档都不写文件
+        READONLY = True
     return profile_info()
 
 
-set_profile(PROFILE)
+set_profile(_default_view())
 
 # 工作台（实际运行的前端）放在工程端 workbench/，由本服务托管给浏览器
 WORKBENCH = os.path.join(os.path.dirname(ROOT), "workbench")
@@ -924,17 +953,19 @@ def _map_info(path):
 def _route_txt(root, fp):
     r"""<指纹>.txt 在哪：<图>\<指纹>.txt（旧布局 nav\）→ ② 成品当前版本。
 
-    只认「成品」，**不认编辑中的包**：网页看 ② 开发版时看到的是成品数据；
-    某个包的改动由 /api/pack-txt 明确点名，不能让「随便一个包」被当成基准套上去
+    只认「成品」，**不认编辑中的包**：某个包的改动由 /api/pack-txt 明确点名，
+    不能让「随便一个包」被当成基准套上去
     （2026-11-21：这里原来会退回 packs，结果运输船被 151954 那个 grow 包套成 982 点）。
     """
     if not fp:
         return ""
+    if PROFILE == "pack":
+        return ""                        # 编辑中档不猜包；要套包走 /api/pack-txt
     for cand_fp, p in P.route_files(root):
         if cand_fp == fp:
             return p
-    if os.path.normpath(root) != os.path.normpath(DEV):
-        return ""                        # 只有 ② 开发版有 final\
+    if PROFILE != "final" or os.path.normpath(root) != os.path.normpath(DEV):
+        return ""                        # 只有 ② 成品有 final\
     cur = _final_dir()
     p = os.path.join(cur, fp + ".txt") if cur else ""
     return p if p and os.path.isfile(p) else ""
@@ -991,7 +1022,13 @@ def _map_ctx():
             continue
         packs.setdefault(folder, []).append({
             "name": str(pk.get("name") or "").split("/")[-1],
+            "full": str(pk.get("name") or ""),
             "ops": int(pk.get("ops") or 0),
+            "fp": str(pk.get("fp") or ""),
+            "grow": bool(pk.get("grow")),
+            "keep": bool(pk.get("keep")),
+            "blank": bool(pk.get("blank")),
+            "created": str(pk.get("created") or ""),
         })
     # 这张图历史导出：<图文件夹>\导出\*.json（dev 才有这一层）
     exports = {}
@@ -1047,8 +1084,6 @@ def _map_entry(file_name, path, info, row, ctx=None):
     if not nm_ok and level:
         nm_file, nm_ok = find_navmesh(level)
 
-    # ③ 2026-11-21 起不放导航数据：deployed 字段保留，但一律空着（前端不用改）
-    dep = {"exists": False, "same": False, "mtime": "", "size": 0}
     # ② 侧：成品当前版本里有没有这张图、编辑中有哪些包、图文件夹里导出过几份
     ctx = ctx or {}
     folder = (file_name.split("/")[0] if "/" in (file_name or "")
@@ -1095,11 +1130,9 @@ def _map_entry(file_name, path, info, row, ctx=None):
         # 这张图当前生效的编辑 = 成品当前版本里的条数（没有就是 0）；packs 单独列
         "editsDev": int(fin.get("ops") or 0),
         "editsNative": _edit_ops(NATIVE, fp),
-        "editsDeploy": 0,
         "final": fin,
         "packs": packs,
         "exports": exports,
-        "deployed": dep,
         "auto": {
             "waypoints": nodes == 0,
             "crouch": sum(crouch_aux.values()) == 0,
@@ -1322,6 +1355,8 @@ def collect_packs():
             "level": str(manifest.get("level") or ""),
             "fp": str(manifest.get("fp") or ""),
             "blank": bool(manifest.get("blank")),
+            "grow": bool(manifest.get("grow")),
+            "keep": bool(manifest.get("keep")),
             "note": str(manifest.get("note") or ""),
             "created": str(manifest.get("created") or ""),
             "files": files,
@@ -1356,7 +1391,7 @@ def collect_config():
 
 
 def collect_events(limit=24):
-    """最近文件事件：地图导出、编辑清单、测试包、部署。"""
+    """最近文件事件：地图导出、编辑清单、成品、测试包。"""
     events = []
 
     def _add(kind, text, path):
@@ -1368,10 +1403,8 @@ def collect_events(limit=24):
     roots = []
     if PROFILE == "native":
         roots = [("① 备份版", NATIVE)]
-    elif PROFILE == "deploy":
-        roots = [("③ 部署版", DEPLOY)]
     else:
-        roots = [("② 开发版", DEV), ("③ 部署版", DEPLOY)]
+        roots = [("② 开发版", DEV)]
     for label, root in roots:
         # 新布局：<图>\map.json；旧布局回退 maps\*.json（P.map_files 两种都认）
         for fn, p in P.map_files(root):
@@ -1381,7 +1414,7 @@ def collect_events(limit=24):
             head = read_txt_head(p)
             ops = int(head.get("ops") or 0) if head else 0
             _add("编辑", label + " 编辑清单 · %s · %d 条" % (os.path.basename(p), ops), p)
-    if PROFILE == "dev":
+    if PROFILE == "final":
         # ② 的成品当前版本：final\<版本>\<指纹>.txt
         cur = _final_dir()
         if cur:
@@ -1393,6 +1426,18 @@ def collect_events(limit=24):
                 if EDIT_FILE_RE.match(fn):
                     _add("成品", "② 成品 · %s · %s" % (os.path.basename(cur), fn),
                          os.path.join(cur, fn))
+    elif PROFILE == "pack":
+        # ② 的编辑中：packs\<图>\<包>\<指纹>.txt
+        for pk in collect_packs():
+            d = os.path.join(PACKS_DIR, *pk["name"].split("/"))
+            try:
+                names = sorted(os.listdir(d))
+            except OSError:
+                names = []
+            for fn in names:
+                if EDIT_FILE_RE.match(fn):
+                    _add("编辑中", "② 编辑中 · %s · %s" % (pk["name"], fn),
+                         os.path.join(d, fn))
     for pk in collect_packs():
         d = os.path.join(PACKS_DIR, *pk["name"].split("/"))
         _add("测试包", "② %s · %s · %d 条指令" % (pk["name"], pk["label"] or pk["level"], pk["ops"]),
@@ -1449,6 +1494,7 @@ def _final_stats():
         if name == cur_name:
             maps_n = found
     return {"versions": len(names), "current": cur_name, "maps": maps_n, "bytes": total,
+            "path": os.path.join(FINAL, cur_name) if cur_name else FINAL,
             "latest": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(latest)) if latest else ""}
 
 
@@ -1512,12 +1558,6 @@ def build_workbench():
     dev["final"] = _final_stats()
     dev["packs"] = _packs_stats()
     dev["inbox"] = _inbox()
-    dep = _dir_version(DEPLOY)
-    has_data = bool(P.map_files(DEPLOY))
-    dep["hasData"] = has_data
-    if not has_data:
-        # ③ 2026-11-21 起不放导航数据：vis\ 里的残留可走面也不再当数据算
-        dep.update({"maps": 0, "nav": 0, "navmesh": 0, "bytes": 0, "latest": "", "latestTs": 0})
     return {
         "ok": True,
         "server": "ucf-navserver/2 %s" % time.strftime("%Y-%m-%d %H:%M:%S"),
@@ -1529,7 +1569,6 @@ def build_workbench():
         "versions": {
             "native": _dir_version(NATIVE),
             "dev": dev,
-            "deploy": dep,
         },
         "packs": collect_packs(),
         "consistency": _consistency(),
@@ -1656,7 +1695,7 @@ class Handler(SimpleHTTPRequestHandler):
                     return self.send_json({"ok": True, "profile": set_profile(want)})
                 return self.send_json({"ok": True, "profile": profile_info()})
             if path == "/api/workbench":
-                # 七页只读工作台：一次拿齐地图统计 / 四版 / 测试包 / 配置 / 事件 / 日志
+                # 七页只读工作台：一次拿齐地图统计 / 数据档 / 测试包 / 配置 / 事件 / 日志
                 return self.send_json(build_workbench())
             if path == "/api/studio":
                 # 工作台启动时一次性拿齐：版本 / 图列表 / 编辑清单 / 地形 / 日志
@@ -1863,9 +1902,9 @@ def main():
     srv = ThreadingHTTPServer(("127.0.0.1", port), Handler)
     srv.daemon_threads = True
     print("UCF 路点工作台 · 本地服务（只读查看）")
-    print("  版本     : %s（UCF_PROFILE=%s）%s" % (
+    print("  数据档   : %s（%s）%s" % (
         profile_info()["cn"], PROFILE, "  [只读]" if READONLY else ""))
-    print("  版本切换 : /api/profile?set=native|dev|deploy（只读查看，不写文件）")
+    print("  档位切换 : /api/profile?set=native|final|pack（旧 dev/deploy/test 仍兼容）")
     print("  数据目录 : %s（每张图一个文件夹）" % DATA)
     print("  原生备份 : %s" % NATIVE)
     print("  游戏目录 : %s（③ 不放导航数据）" % UCF)
