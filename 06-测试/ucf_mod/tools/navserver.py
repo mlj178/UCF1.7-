@@ -35,6 +35,7 @@ from ucf_paths import (DEPLOY, DEPLOY as UCF, GEO, VIS, NAV, MAPS, NATIVE, DEV, 
                        PACKS_DIR, GAME_VIS, PROFILE, READONLY, doc)
 
 GEOWEB = os.path.join(GEO, "web")
+GEOTEX = os.path.join(GEO, "tex")      # tools/fetch_tex.py 从 AssetRipper 拉下来的贴图
 COMMON = P.common_dir(P.DATA)        # 公共文件（names / _index）：新布局 00_公共\，旧布局 nav\
 NAMES_FILE = P.names_path(P.DATA)
 
@@ -1775,6 +1776,26 @@ class Handler(SimpleHTTPRequestHandler):
                 self.send_header("Content-Type", "application/octet-stream")
                 self.send_header("Content-Length", str(len(body)))
                 self.send_header("Cache-Control", "no-store")
+                self.end_headers()
+                try:
+                    self.wfile.write(body)
+                except (BrokenPipeError, ConnectionResetError):
+                    pass
+                return
+            if path == "/api/tex":
+                level = safe_token((q.get("level") or [""])[0])
+                name = os.path.basename((q.get("name") or [""])[0] or "")
+                if not level or not name or not name.lower().endswith(".png"):
+                    return self.send_json({"ok": False, "error": "缺少 level/name"}, 400)
+                p = os.path.join(GEOTEX, level, name)
+                if not os.path.isfile(p):
+                    return self.send_json({"ok": False, "error": "没有这张贴图：%s" % name}, 404)
+                with open(p, "rb") as f:
+                    body = f.read()
+                self.send_response(200)
+                self.send_header("Content-Type", "image/png")
+                self.send_header("Content-Length", str(len(body)))
+                self.send_header("Cache-Control", "max-age=600")
                 self.end_headers()
                 try:
                     self.wfile.write(body)

@@ -5,27 +5,33 @@
 navedit 用的 npz 里带贴图与分块表，但贴图接得很乱；网页版只要「能看懂地形」的
 灰模 + 法线 + 分块颜色，所以这里做一次离线瘦身：
 
-  * 丢掉 blocker（碰撞壳）、card（巨幅装饰面）两类分块：它们在游戏里看不见，
-    留着只会挡住视线；
-  * shadow 分块单独处理（2026-11-21 改）。这里说的 shadow 只是「材质 shader 名
-    以 Shadow 结尾」——同一块网格在游戏里常常被导出两遍（普通材质一份、Shadow
-    材质一份），两份大多重合。以前一律丢掉 Shadow 那份：运输船上被留下的那份
-    正好整体偏了 ~15 m，看起来就像「路点网和地图错位了」。
-    现在用这张图的路点（navdata/dev/<图>/map.json）当尺子：两份差得明显就只留
-    盖住路点的那一份；两份基本重合、或这张图还没有路点，就两套都画（z-buffer 去重）。
+  * 只丢 blocker（碰撞壳）—— 它们在游戏里本来就不画。card（巨幅装饰面）默认
+    保留：运输船的船体外壳/吊臂/桅杆/围栏都被标成了 card，丢掉后船就剩一块飘着
+    的平板（2026-11-23 用户反馈后改）；要老行为用 --drop-cards。
+  * 同一件道具在场景里有两个 MeshRenderer：`X (1)`（独立网格 + CrossFire/Shadow
+    材质，MeshCollider 用的也是这份网格）和 `X`（合并网格 "Combined Mesh" 的
+    子网格，带贴图的普通材质）。合并网格那套在我们这里每个子网格都被平移过、位置
+    对不上，所以用这张图的路点当尺子（navdata/dev/<图>/map.json）挑一份：运输船上
+    Shadow 那套 0.99、合并网格 0.86，只留 Shadow 那套。
+    代价：只在合并网格里出现的十几个小块（玻璃/灯/气罐等，约 3% 三角形）会缺。
   * 顶点颜色（npz 的 c）是 navedit 用的随机染色，噪点很大，不用；
     改用材质色 x 法线光照，所以在 JSON 头里带上每块的颜色；
   * 法线量化成 int8（x127），位置 f32，索引 u32；
-  * UV 不要（不贴图）。
+  * 贴图（2026-11-23 加）：带 UV + 每块的贴图名。贴图由 tools/fetch_tex.py
+    从 AssetRipper 取到 geo/tex/<关卡>/，和这里的文件名一一对应；没取到的
+    分块 tex=-1，navview 退回纯色，不会报错。
+  * 运输船的 Shadow 那套没有贴图（材质就叫 Shadow），按网格名找哑邻块的
+    贴图补上（同一块网格导出了两遍，UV 是同一份）。
 
-二进制布局（小端）：
+二进制布局（小端，version=2）：
     magic   'UCFG'
-    u32     version = 1
+    u32     version = 2
     u32     jsonLen
     json    utf-8（字段见下，后面补 0 到 4 字节对齐）
     f32[n*3]   positions
     i8 [n*3]   normals (-1..1 乘 127 取整)
-    u32[t*3]   indices
+    f32[n*2]   uv（version 1 没有这段）
+    u32[t*3]   indices（前面补 0 对齐到 4 字节）
 
 json = {"level":..,"nverts":..,"ntris":..,"bbox":[[..],[..]],
         "ambient":[r,g,b],"chunks":[{"name","start","count","color":[r,g,b]}]}
@@ -49,8 +55,12 @@ UCF = os.path.dirname(TOOLS)
 GEO = os.path.join(UCF, "geo")
 OUT = os.path.join(GEO, "web")
 MAGIC = b"UCFG"
-VERSION = 1
-SKIP_FLAGS = ("blocker", "card")   # shadow 分块要留：里面是正常可见的船体/地面
+VERSION = 2                          # v2 = 带 UV + 贴图表（v1 老文件仍能读）
+TEXROOT = os.path.join(GEO, "tex")   # tools/fetch_tex.py 落的 PNG：<关卡>/<贴图名>
+# 只丢 blocker（碰撞壳，游戏里本来就不画）。card 原来一律丢，但运输船的
+# 船体外壳/吊臂/桅杆/围栏都被标成了 card —— 丢完船就剩一块飘着的平板，
+# 2026-11-23 改成默认保留；确实想丢掉它们时用 --drop-cards。
+SKIP_FLAGS = ("blocker",)
 
 
 def _bool(x):
@@ -58,7 +68,7 @@ def _bool(x):
 
 
 def load_npz(path):
-    """统一成 (pos, tris, groups, normals, meta)。"""
+    """统一成 (pos, tris, groups, normals, meta, uv)。"""
     z = np.load(path, allow_pickle=True)
     keys = set(z.files)
     pos = z["p"] if "p" in keys else z["v"]
@@ -78,7 +88,12 @@ def load_npz(path):
         nrm = np.ascontiguousarray(nrm, dtype=np.float32)
     else:
         nrm = None
-    return pos, tri, grp, nrm, meta
+    uv = z["uv"] if "uv" in keys else None
+    if uv is not None and len(uv) == len(pos):
+        uv = np.ascontiguousarray(uv, dtype=np.float32)
+    else:
+        uv = None
+    return pos, tri, grp, nrm, meta, uv
 
 
 def face_normals(pos, tri):
@@ -183,7 +198,7 @@ def _pass_cover(pos, tri, sel, pts, band, res=1.0):
     return float(hit.mean())
 
 
-def convert(name, force=False):
+def convert(name, force=False, keep_cards=True):
     src = os.path.join(GEO, name + ".npz")
     dst = os.path.join(OUT, name + ".bin")
     if not os.path.isfile(src):
@@ -191,7 +206,7 @@ def convert(name, force=False):
     if not force and os.path.isfile(dst) and os.path.getmtime(dst) >= os.path.getmtime(src):
         return {"level": name, "cached": True, "bytes": os.path.getsize(dst)}
 
-    pos, tri, grp, nrm, meta = load_npz(src)
+    pos, tri, grp, nrm, meta, uv = load_npz(src)
     mats = meta.get("mats") or []
     chunks = meta.get("chunks") or []
     amb = ((meta.get("env") or {}).get("ambient") or {})
@@ -211,10 +226,12 @@ def convert(name, force=False):
                    "color": [1, 1, 1, 1], "mat": 0}]
         grp = np.zeros(len(tri), dtype=np.int64)
 
-    # 按分块标记过滤三角形
+    # 按分块标记过滤三角形。card（巨幅装饰面）默认保留 —— 见 SKIP_FLAGS 上面的说明；
+    # 老行为（丢 card）用 --drop-cards。
+    skip_flags = tuple(SKIP_FLAGS) + (() if keep_cards else ("card",))
     drop_group = set()
     for gi, ch in enumerate(chunks):
-        if any(_bool(ch.get(k)) for k in SKIP_FLAGS):
+        if any(_bool(ch.get(k)) for k in skip_flags):
             drop_group.add(gi)
 
     # 同一块网格常常被导出两遍：一遍普通材质、一遍 Shadow 材质，两份的世界坐标
@@ -273,6 +290,7 @@ def convert(name, force=False):
     remap[used] = np.arange(len(used))
     pos2 = pos[used]
     nrm2 = nrm[used] if nrm is not None else vertex_normals(pos, tri2)[used]
+    uv2 = uv[used] if uv is not None else None
     tri2 = remap[tri2]
 
     # 重组分块表（按原始顺序，只保留还有三角形的块）
@@ -282,15 +300,56 @@ def convert(name, force=False):
     counts = {}
     for g in grp2.tolist():
         counts[g] = counts.get(g, 0) + 1
+    # 贴图：先看这块自己的材质；运输船的 Shadow 那套材质没有贴图，
+    # 就借同名哑邻块（"X (1)" -> "X"）的 —— 同一块网格导出了两遍，UV 是同一份。
+    # 最后还要确认 geo/tex/<关卡>/ 里真有这个 png，没有就 tex=-1（退回纯色）。
+    by_name = {}
+    for ch in chunks:
+        nm = str(ch.get("name") or "")
+        if nm and nm not in by_name:
+            by_name[nm] = ch
+    mat_by_tex = {}
+    for m in mats:
+        fn = str(m.get("tex") or "").strip()
+        if fn and fn not in mat_by_tex:
+            mat_by_tex[fn] = m
+
+    def tex_of(ch):
+        want = str(ch.get("tex") or "").strip()
+        if want:
+            return want
+        nm = str(ch.get("name") or "")
+        if nm.endswith(" (1)"):
+            sib = by_name.get(nm[:-4])
+            if sib:
+                return str(sib.get("tex") or "").strip()
+        return ""
+
+    tex_files = []
+    tex_index = {}
     out_chunks = []
     cursor = 0
     for gi in sorted(counts):
         ch = chunks[gi] if gi < len(chunks) else {}
+        want = tex_of(ch)
+        ti = -1
+        if want and os.path.isfile(os.path.join(TEXROOT, name, want)):
+            if want not in tex_index:
+                mi = mat_by_tex.get(want) or {}
+                tex_index[want] = len(tex_files)
+                tex_files.append({
+                    "file": want,
+                    "w": int(mi.get("tex_w") or 0),
+                    "h": int(mi.get("tex_h") or 0),
+                })
+            ti = tex_index[want]
         out_chunks.append({
             "name": str(ch.get("name") or "")[:80],
             "start": int(cursor),
             "count": int(counts[gi]),
             "color": [round(v, 3) for v in rgb_of(ch)],
+            "tex": ti,
+            "alpha": 1 if _bool(ch.get("transparent")) else 0,
         })
         cursor += counts[gi]
 
@@ -304,10 +363,12 @@ def convert(name, force=False):
 
     header = {
         "level": name,
+        "ver": VERSION,
         "nverts": int(len(pos2)),
         "ntris": int(len(tri2)),
         "bbox": [[round(v, 3) for v in lo], [round(v, 3) for v in hi]],
         "ambient": ambient,
+        "tex": tex_files,
         "chunks": out_chunks,
     }
     js = json.dumps(header, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
@@ -317,10 +378,15 @@ def convert(name, force=False):
     tmp = dst + ".tmp"
     pos_bytes = np.ascontiguousarray(pos2, dtype="<f4").tobytes()
     nrm_bytes = np.ascontiguousarray(nrm_i8, dtype=np.int8).tobytes()
+    if uv2 is None:
+        uv2 = np.zeros((len(pos2), 2), dtype=np.float32)
+    uv_bytes = np.ascontiguousarray(uv2, dtype="<f4").tobytes()
     idx_bytes = np.ascontiguousarray(tri2, dtype="<u4").tobytes()
     pad_json = (4 - ((12 + len(js)) % 4)) % 4      # JSON 头之后也要对齐（Float32Array 要求）
     head_len = 12 + len(js) + pad_json + len(pos_bytes) + len(nrm_bytes)
-    pad = (4 - (head_len % 4)) % 4                 # 索引是 u32，同样要 4 字节对齐
+    pad_n = (4 - (head_len % 4)) % 4               # UV 是 f32，从 4 字节边界开始
+    head2 = head_len + pad_n + len(uv_bytes)
+    pad = (4 - (head2 % 4)) % 4                    # 索引是 u32，同样要 4 字节对齐
     with open(tmp, "wb") as f:
         f.write(MAGIC)
         f.write(struct.pack("<II", VERSION, len(js)))
@@ -329,6 +395,9 @@ def convert(name, force=False):
             f.write(b"\x00" * pad_json)
         f.write(pos_bytes)
         f.write(nrm_bytes)
+        if pad_n:
+            f.write(b"\x00" * pad_n)
+        f.write(uv_bytes)
         if pad:
             f.write(b"\x00" * pad)
         f.write(idx_bytes)
@@ -338,6 +407,7 @@ def convert(name, force=False):
         "nverts": int(len(pos2)),
         "ntris": int(len(tri2)),
         "chunks": len(out_chunks),
+        "tex": len(tex_files),
         "dropped_tris": int(len(tri) - len(tri2)),
         "bytes": os.path.getsize(dst),
     }
@@ -347,6 +417,8 @@ def main():
     ap = argparse.ArgumentParser(description="npz 关卡几何 -> 网页可读的 .bin")
     ap.add_argument("levels", nargs="*", help="只转这些关卡名（默认全部）")
     ap.add_argument("--force", action="store_true", help="源文件没变也重转")
+    ap.add_argument("--drop-cards", action="store_true",
+                    help="丢掉 card（巨幅装饰面）分块。默认保留：运输船的船体外壳/桅杆也被标成 card")
     args = ap.parse_args()
 
     if not os.path.isdir(GEO):
@@ -356,7 +428,7 @@ def main():
         sys.exit("geo 目录里没有 .npz（先跑 navedit 提取一次几何，或确认路径）")
     total = 0
     for name in names:
-        r = convert(name, force=args.force)
+        r = convert(name, force=args.force, keep_cards=not args.drop_cards)
         if not r:
             print("跳过 %s（源文件不存在或没有可用三角形）" % name)
             continue
@@ -364,8 +436,9 @@ def main():
             print("%-12s 已是最新  %6.2f MB" % (name, r["bytes"] / 1048576.0))
         else:
             total += r["bytes"]
-            print("%-12s 顶点 %7d  三角 %7d  分块 %3d  丢弃 %6d   %6.2f MB" % (
-                name, r["nverts"], r["ntris"], r["chunks"], r["dropped_tris"], r["bytes"] / 1048576.0))
+            print("%-12s 顶点 %7d  三角 %7d  分块 %3d  贴图 %3d  丢弃 %6d   %6.2f MB" % (
+                name, r["nverts"], r["ntris"], r["chunks"], r.get("tex", 0),
+                r["dropped_tris"], r["bytes"] / 1048576.0))
     print("完成，输出目录 %s" % OUT)
 
 

@@ -1,0 +1,112 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fdf87927815ebd687c63cc4089d70909, type: 3}
+  m_Name: EvilTerminator
+  m_EditorClassIdentifier:
+  wpnIndex: 2975
+  wpnClass: 6
+  weaponName: 地狱终结者
+  viewData:
+    position: {x: -0.00240002, y: -0.02469998, z: 0.00819996}
+    eulerAngle: {x: -9.568396, y: 1.7188734, z: 0}
+    position_W: {x: -0.00240002, y: -0.02469998, z: 0.00819996}
+    eulerAngle_W: {x: -9.568396, y: 1.7188734, z: 0}
+    FOV: 45
+  spriteAsset:
+    background: {fileID: 2800000, guid: 0d50d6500c2ef0b4ead08d7c0f390127, type: 3}
+    backgroundColor: {r: 1, g: 1, b: 1, a: 1}
+    effect: {fileID: 0}
+    line: {fileID: 2800000, guid: 3774c727881355b46bd9c36a83ecb0d7, type: 3}
+    select: {fileID: 2800000, guid: 52054b1b8c906a04991594cdd1651897, type: 3}
+    select2: {fileID: 0}
+    bagIcon: {fileID: 0}
+    killMsgIcon: {fileID: 21300000, guid: 38a50541e4d3f5c4e955db5ca1d041d8, type: 2}
+    killMsgIcon2: {fileID: 21300000, guid: 5bb73c3fd47a4df4fb11bf77c2865c0a, type: 2}
+  isVVIP: 0
+  changeWeaponAnimRatio: 1
+  selectAnimName_C:
+  rapidChange: 0
+  targetSlot: 2
+  slotType: 0
+  charWpnAnim:
+    upper: nano
+    upper_4side: 1
+    lower: Empty
+  moveSpeedPenalty: 0
+  nanoModeLimited: 0
+  hitEffectName:
+  qvMdlPrefab: {fileID: 0}
+  botControlData:
+    bigshotRate: 0.7
+  components:
+    list: []
+  knifeAttackAnimName: nano
+  knifeHitSoundName: EvilTerminator_Hit
+  knifeAttacks:
+  - damage: 90
+    range: 4.4
+    angle: 0.20533
+    hitStun: 0
+    damageTag: 0
+    decal: {fileID: 0}
+    decalSndName:
+  - damage: 90
+    range: 4.4
+    angle: 0.20533
+    hitStun: 0
+    damageTag: 0
+    decal: {fileID: 0}
+    decalSndName:
+  - damage: 180
+    range: 4.4
+    angle: 0.325
+    hitStun: 0
+    damageTag: 2
+    decal: {fileID: 0}
+    decalSndName:
+  - damage: 180
+    range: 4.4
+    angle: 0.325
+    hitStun: 0
+    damageTag: 2
+    decal: {fileID: 0}
+    decalSndName:
+  damageBodyRatio:
+    brainRatio: 1.2
+    headRatio: 1
+    neckRatio: 0.6
+    chestRatio: 0.5
+    abdomenRatio: 0.6
+    armRatio: 0.33
+    handRatio: 0.28
+    legRatio: 0.33
+    footRatio: 0.28
+  attackSpeed: {x: 1, y: 1, z: 1.5}
+  skillBtn: {fileID: 1709254077376921, guid: 83d2dea3fa7a66b498b78cb8116f917c, type: 2}
+  missileData:
+    clip: 0
+    ammo: 0
+    prefab: {fileID: 1709254077376921, guid: 4f4ee5ab5dc74ab4c941551c55d80ab7, type: 2}
+    damage: 3000
+    range: 1
+    damageFactorByDistance: 0.09833
+    velocity: 2
+    extraGravity: 0
+    throwAngle: 0
+    expTime: 30
+    ignoreWall: 0
+  gauge: {fileID: 1709254077376921, guid: aab7610175aa9714f9e450b6428c706d, type: 2}
+  FX_Power_3rd: {fileID: 1709254077376921, guid: 7fcaacf9037ad92488093f180d79836c, type: 2}
+  FX_Power_PV: {fileID: 1709254077376921, guid: 5a56e40a05b722247a0b3f51462c361b, type: 2}
+  references:
+    version: 1
+    RefIds: []

@@ -1,0 +1,24 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4a3b684a147e00d7a71c023b9fb33a8e, type: 3}
+  m_Name: DeathMatch
+  m_EditorClassIdentifier:
+  gameMode: 1
+  gameModePrefab: {fileID: 1709254077376921, guid: 7795e4555adca014589c16538a0cd47e, type: 2}
+  datas:
+  - sceneName: NY_TM
+    mapName: 胜利广场
+    mapIcon: {fileID: 21300000, guid: 778caa21cae675a4d8df2bd5ee8a3569, type: 2}
+    loadingTex_BL: {fileID: 2800000, guid: fc39fab6b17c2524cb2b21d9b11b0d7a, type: 3}
+    loadingTex_GR: {fileID: 2800000, guid: 36e67a00708377443a3e2977631a6095, type: 3}
+    gameModePrefabOverride: {fileID: 0}
+    weaponLimited: 0

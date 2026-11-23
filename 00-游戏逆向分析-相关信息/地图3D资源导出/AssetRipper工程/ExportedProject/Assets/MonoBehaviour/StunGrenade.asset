@@ -1,0 +1,66 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 950f4d950af1c76ff15a781e80e6cde6, type: 3}
+  m_Name: StunGrenade
+  m_EditorClassIdentifier:
+  wpnIndex: 1071
+  wpnClass: 7
+  weaponName: Stun Grenade
+  viewData:
+    position: {x: -0.00730002, y: 0.00379999, z: 0.02389997}
+    eulerAngle: {x: 4.182592, y: 2.864789, z: 0}
+    position_W: {x: -0.00730002, y: 0.00379999, z: 0.02389997}
+    eulerAngle_W: {x: 4.182592, y: 2.864789, z: 0}
+    FOV: 45
+  spriteAsset:
+    background: {fileID: 2800000, guid: 81133b6b9e7d7c34a955e6a5ce651897, type: 3}
+    backgroundColor: {r: 1, g: 1, b: 1, a: 1}
+    effect: {fileID: 2800000, guid: 920da664239fd3a49b682747ea5902e8, type: 3}
+    line: {fileID: 2800000, guid: 23a13f85ec582084c9baa2e190f06cdc, type: 3}
+    select: {fileID: 0}
+    select2: {fileID: 0}
+    bagIcon: {fileID: 0}
+    killMsgIcon: {fileID: 0}
+    killMsgIcon2: {fileID: 0}
+  isVVIP: 0
+  changeWeaponAnimRatio: 1
+  selectAnimName_C:
+  rapidChange: 0
+  targetSlot: 3
+  slotType: 0
+  charWpnAnim:
+    upper: grenade
+    upper_4side: 0
+    lower:
+  moveSpeedPenalty: 0
+  nanoModeLimited: 0
+  hitEffectName:
+  qvMdlPrefab: {fileID: 1709254077376921, guid: faf3e914a47ae4c4a8b44a346ae5a616, type: 2}
+  botControlData:
+    bigshotRate: 0.7
+  components:
+    list: []
+  missileData:
+    clip: 1
+    ammo: 0
+    prefab: {fileID: 1709254077376921, guid: 30c93b3d1c6d6a4469bdc0e9dc149c97, type: 2}
+    damage: 0
+    range: 0
+    damageFactorByDistance: 0
+    velocity: 26.5
+    extraGravity: 0.3
+    throwAngle: 16
+    expTime: 1.8
+    ignoreWall: 0
+  references:
+    version: 1
+    RefIds: []

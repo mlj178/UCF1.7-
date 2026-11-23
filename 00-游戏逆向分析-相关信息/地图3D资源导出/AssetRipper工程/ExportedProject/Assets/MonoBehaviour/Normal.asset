@@ -1,0 +1,41 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 56df94fcc8a003c3dd8c80dcffb94ed1, type: 3}
+  m_Name: Normal
+  m_EditorClassIdentifier:
+  headShot:
+  - {fileID: 2800000, guid: b25ba409557a7654d88f9b1be2d4a529, type: 3}
+  - {fileID: 2800000, guid: da0496cf10c1ed346a94bf7d33fa6c86, type: 3}
+  - {fileID: 2800000, guid: 414126625c165e74ebae64c2a2d3bad7, type: 3}
+  - {fileID: 2800000, guid: d8505908bd1e015449824d04cb977817, type: 3}
+  multilKill:
+  - {fileID: 2800000, guid: 5735c712bcca5654ebbb01731398b49e, type: 3}
+  - {fileID: 2800000, guid: d028d050a1a508b40889f630fd59ac35, type: 3}
+  - {fileID: 2800000, guid: a9002c2f1e6c7ab49b9bab17041394d0, type: 3}
+  - {fileID: 2800000, guid: ee5402707cfa39d4b83d2d6ce3b251c1, type: 3}
+  - {fileID: 2800000, guid: ac94a745febdb0e4886e859172fc1529, type: 3}
+  - {fileID: 2800000, guid: 56692eb504c8fcc40928fc690f588bd5, type: 3}
+  multilKillEffect:
+  - {fileID: 2800000, guid: 0209e0ce55f6b354ab6f332f30136767, type: 3}
+  - {fileID: 2800000, guid: 924419494df1f0a42b04e4a70ac28e2c, type: 3}
+  - {fileID: 2800000, guid: 9f42f7eb5fd07904d824a6928759057b, type: 3}
+  - {fileID: 2800000, guid: be935851d8d62444f8fcc6f5fac9993d, type: 3}
+  - {fileID: 2800000, guid: ee9379b7c19a9bc4e93a7e834c9edc47, type: 3}
+  grenade: {fileID: 2800000, guid: c89c4b76fa4f3aa43bd7b06e0fcb74da, type: 3}
+  wallThrough:
+  - {fileID: 2800000, guid: 47ad5f7e3c2fa914e8086e50de5afa9c, type: 3}
+  - {fileID: 2800000, guid: c282da4df09c20847ae4300c0a487bad, type: 3}
+  - {fileID: 2800000, guid: eed887911a68f294b912c54de3cf2de0, type: 3}
+  knife: {fileID: 2800000, guid: 9159308c53faee9498d156ec40639092, type: 3}
+  revenge: {fileID: 2800000, guid: 50827bb881636f249b023ee88c83a413, type: 3}
+  firstKill: {fileID: 2800000, guid: f07c25ed0c1f9ef459d29b9a3a1bba35, type: 3}
+  lastKill: {fileID: 2800000, guid: bc41163d3926e6c45ae94b33d74ccf2d, type: 3}

@@ -1,0 +1,94 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!72 &7200000
+ComputeShader:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_Name: '[Grenade_Exp] [System] Initialize Particle'
+  variants:
+  - serializedVersion: 2
+    targetRenderer: 2
+    targetLevel: 0
+    kernels:
+    - serializedVersion: 2
+      name: CSMain
+      variantMap:
+        :
+          serializedVersion: 2
+          cbVariantIndices: 00000000
+          cbs:
+          - name: initParams
+            generatedName:
+            bindPoint: 0
+            samplerBindPoint: -1
+            texDimension: -1
+          textures: []
+          builtinSamplers: []
+          inBuffers:
+          - name: deadListCount
+            generatedName:
+            bindPoint: 0
+            samplerBindPoint: -1
+            texDimension: -1
+          outBuffers:
+          - name: attributeBuffer
+            generatedName:
+            bindPoint: 0
+            samplerBindPoint: -1
+            texDimension: -1
+          - name: deadListIn
+            generatedName:
+            bindPoint: 1
+            samplerBindPoint: -1
+            texDimension: -1
+          code: 44584243d406b57d71de7385eb1380e9768728030100000070020000030000002c0000003c0000004c0000004953474e0800000000000000080000004f53474e080000000000000008000000534845581c02000050000500870000006a08000159000004468e20000000000001000000a100000300701000000000009d00000300e01100000000009e00800400e0110001000000040000005f000002321002005f0000021220020068000002010000009b0000044000000001000000010000002300000712001000000000000a10020001400000400000000a2002002600000800d0000022001000000000001a1002002a80200000000000000000002900000722001000000000001a0010000000000001400000060000001e00000712001000000000001a001000000000000a00100000000000a5000089c2020080839919002200100000000000014000000000000006701000000000005400000822001000000000001a001000000000000a80200000000000000000004f00000712001000000000000a001000000000001a001000000000001f0004030a00100000000000b3000005120010000000000000e0110001000000a700008b022300808399190012001000000000000a00100000000000014000000000000006e01100010000002900000a320010000000000006001000000000000240000002000000030000000000000000000000a600000712e01100000000000a00100000000000014000000000003f1e00000712001000000000001a001000000000000140000010000000a600000a32e01100000000000a001000000000000240000001000000000000000000000000000000150000013e000001
+          threadGroupSize: 400000000100000001000000
+          keywords: []
+          isCompiled: 0
+      globalKeywords: []
+      localKeywords: []
+    constantBuffers:
+    - name: initParams
+      byteSize: 16
+      params:
+      - name: nbSpawned
+        type: 5
+        offset: 0
+        arraySize: 0
+        rowCount: 1
+        colCount: 1
+      - name: dispatchWidth
+        type: 5
+        offset: 8
+        arraySize: 0
+        rowCount: 1
+        colCount: 1
+    resourcesResolved: 1
+    compilerPlatform: 0
+    platformKeywords:
+      Array:
+    needsReflectionData: 0
+  m_CompilationContext:
+    buildTarget:
+      platform: 0
+      subTarget: 0
+      extendedPlatform: 0
+      isEditor: 0
+    sourceFileName:
+    source:
+    sourceFile:
+    kernels: []
+    kernelMacros: []
+    compilationFlags: 0
+    apiMask: 0
+    supportedAPIs: 0
+    includeHash0: 0
+    includeHash1: 0
+    includeHash2: 0
+    includeHash3: 0
+    includeFiles: []
+  errors: []
+  m_PreprocessorOverride: 0
+  m_HasEditorOnlyVariant: 0

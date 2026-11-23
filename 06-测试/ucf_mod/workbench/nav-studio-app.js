@@ -1171,6 +1171,7 @@ function updateHeader() {
 
   var dir = (m && m.dir) || 'maps';
   ST.dockUrl = '/navview.html?view=1&embed=1&notour=1&profile=' + encodeURIComponent(ST.profile) +
+    (m && m.level ? '&level=' + encodeURIComponent(m.level) : '') +
     (m && m.file ? '&open=' + encodeURIComponent(dir + '/' + m.file) : '') +
     (m && m.pack ? '&pack=' + encodeURIComponent(m.pack) : '') +
     '&compass=' + (ST.show.compass ? 1 : 0);   /* 3D 侧栏的罗盘跟着工作台的「方向」开关 */

@@ -1,0 +1,264 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0026ac807b49da01fb7334bdb3e93a82, type: 3}
+  m_Name: Barret
+  m_EditorClassIdentifier:
+  wpnIndex: 69
+  wpnClass: 1
+  weaponName: Barrett M82A1
+  viewData:
+    position: {x: -0.01860001, y: -0.0095, z: 0.02549996}
+    eulerAngle: {x: -2.6929016, y: 3.4377468, z: 0}
+    position_W: {x: -0.01860001, y: -0.0095, z: 0.02549996}
+    eulerAngle_W: {x: -2.6929016, y: 3.4377468, z: 0}
+    FOV: 35
+  spriteAsset:
+    background: {fileID: 2800000, guid: 3ae4c7c551959b14a9dff936371dbe2a, type: 3}
+    backgroundColor: {r: 1, g: 1, b: 1, a: 1}
+    effect: {fileID: 2800000, guid: b12fd28d13330ac4b95ac4dc2fc62671, type: 3}
+    line: {fileID: 2800000, guid: a1e5bed7429e6434cbac1fb61de89576, type: 3}
+    select: {fileID: 2800000, guid: d60d13e494f3d0d48bbf18ead8665fa9, type: 3}
+    select2: {fileID: 0}
+    bagIcon: {fileID: 2800000, guid: 7efda76bf72d9df40952f972ba7df544, type: 3}
+    killMsgIcon: {fileID: 21300000, guid: 8697a4b3bc918934586e37c04f46ae38, type: 2}
+    killMsgIcon2: {fileID: 0}
+  isVVIP: 0
+  changeWeaponAnimRatio: 0.8
+  selectAnimName_C:
+  rapidChange: 0
+  targetSlot: 0
+  slotType: 0
+  charWpnAnim:
+    upper: M700
+    upper_4side: 0
+    lower:
+  moveSpeedPenalty: 0.38
+  nanoModeLimited: 0
+  hitEffectName:
+  qvMdlPrefab: {fileID: 1709254077376921, guid: c92d5fd99c3011c4c9a72b161ec0914d, type: 2}
+  botControlData:
+    bigshotRate: 0.7
+  components:
+    list: []
+  clip: 10
+  ammo: 2
+  clip_Nano: 10
+  ammo_Nano: 3
+  shotSoundName: ShootBarret
+  shotsPerMinute: 0
+  fireAnimMultiplier: 1.18
+  reloadAnimRatio: 0.8
+  reloadAnimName_C:
+  shootBullet: 0
+  bulletFxPos_L: {x: 0, y: 0, z: 0}
+  bulletFxPos_R: {x: -0.5, y: -0.3, z: 2}
+  perturbMin:
+  - standIdle: 0
+    crouchIdle: 0
+    standRun: 0.049
+    crouchRun: 0.001
+    floating: 0.098
+  - standIdle: 0
+    crouchIdle: 0
+    standRun: 0.049
+    crouchRun: 0.001
+    floating: 0.098
+  - standIdle: 0
+    crouchIdle: 0
+    standRun: 0.056
+    crouchRun: 0.002
+    floating: 0.1
+  perturbMax:
+  - standIdle: 0.185
+    crouchIdle: 0.185
+    standRun: 0.185
+    crouchRun: 0.185
+    floating: 0.185
+  - standIdle: 0.185
+    crouchIdle: 0.185
+    standRun: 0.185
+    crouchRun: 0.185
+    floating: 0.185
+  - standIdle: 0.185
+    crouchIdle: 0.185
+    standRun: 0.185
+    crouchRun: 0.185
+    floating: 0.185
+  changeMovingRealSize:
+    DecreaseSpeed: 0.75
+    Increase_Repeat: 0.0225
+    Increase_Oneshot: 0.0135
+    Increase_OneshotOver: 0.054
+    Min: 0.45
+  delayOneShootTime:
+    timeMin: 0
+    timeMax: 0
+    shotCount: 0
+  shotReactYaw:
+  - datas:
+    - ammo: 10
+      recover: 0.005
+      decay: 0.035
+  - datas:
+    - ammo: 10
+      recover: 0.005
+      decay: 0.035
+  - datas:
+    - ammo: 10
+      recover: 0.005
+      decay: 0.035
+  shotReactPitch:
+  - datas:
+    - ammo: 10
+      recover: 0.005
+      decay: 0.035
+  - datas:
+    - ammo: 10
+      recover: 0.005
+      decay: 0.035
+  - datas:
+    - ammo: 10
+      recover: 0.005
+      decay: 0.035
+  detailPerturbShot:
+  - standIdle: 0.1
+    crouchIdle: 0.15
+    standRun: 0.08
+    crouchRun: 0.09
+    floating: 0.05
+  - standIdle: 1
+    crouchIdle: 1
+    standRun: 0.25
+    crouchRun: 0.7
+    floating: 0.09
+  - standIdle: 1
+    crouchIdle: 1
+    standRun: 0.25
+    crouchRun: 0.7
+    floating: 0.09
+  detailReactPitchShot:
+  - standIdle: 0.1
+    crouchIdle: 0.1
+    standRun: 0.1
+    crouchRun: 0.1
+    floating: 0.1
+  - standIdle: 0.1
+    crouchIdle: 0.1
+    standRun: 0.1
+    crouchRun: 0.1
+    floating: 0.1
+  - standIdle: 0.1
+    crouchIdle: 0.1
+    standRun: 0.1
+    crouchRun: 0.1
+    floating: 0.1
+  detailReactYawShot:
+  - standIdle: 0.01
+    crouchIdle: 0.01
+    standRun: 0.01
+    crouchRun: 0.01
+    floating: 0.01
+  - standIdle: 0.01
+    crouchIdle: 0.01
+    standRun: 0.01
+    crouchRun: 0.01
+    floating: 0.01
+  - standIdle: 0.01
+    crouchIdle: 0.01
+    standRun: 0.01
+    crouchRun: 0.01
+    floating: 0.01
+  fullReactYaw:
+  - standIdle: -0.15
+    crouchIdle: -0.15
+    standRun: -0.15
+    crouchRun: -0.15
+    floating: -0.15
+  - standIdle: -0.15
+    crouchIdle: -0.15
+    standRun: -0.15
+    crouchRun: -0.15
+    floating: -0.15
+  - standIdle: -0.15
+    crouchIdle: -0.15
+    standRun: -0.15
+    crouchRun: -0.15
+    floating: -0.15
+  fullReactPitch:
+  - standIdle: -0.237
+    crouchIdle: -0.237
+    standRun: -0.237
+    crouchRun: -0.237
+    floating: -0.237
+  - standIdle: -0.237
+    crouchIdle: -0.237
+    standRun: -0.237
+    crouchRun: -0.237
+    floating: -0.237
+  - standIdle: -0.237
+    crouchIdle: -0.237
+    standRun: -0.237
+    crouchRun: -0.237
+    floating: -0.237
+  sideReactDirect:
+    mirrorProbability: 0
+    datas:
+    - ammo: 10
+      left: 0
+      center: 1
+      right: 0
+  cameraYawAndPitch: []
+  range: 1722
+  ammoDamage: 500
+  damageVariantionFactor: 0.11
+  damageFactorByDistance: 0.00057
+  wallShotDamageRatio: 1
+  damageBodyRatio:
+    brainRatio: 1
+    headRatio: 1
+    neckRatio: 0.9
+    chestRatio: 0.9
+    abdomenRatio: 1
+    armRatio: 0.7
+    handRatio: 0.7
+    legRatio: 0.7
+    footRatio: 0.7
+  knifeAttacks: []
+  knifeAnimName:
+  knifeHitSoundName:
+  knifeDamageBodyRatio:
+    brainRatio: 0
+    headRatio: 0
+    neckRatio: 0
+    chestRatio: 0
+    abdomenRatio: 0
+    armRatio: 0
+    handRatio: 0
+    legRatio: 0
+    footRatio: 0
+  zoomAcion:
+    openTime: 0.055
+    closeTime: 0.05
+    datas:
+    - type: 1
+      fovScale: 3.5
+      sprite: {fileID: 21300000, guid: fbce45708b88a2b49bc61b8c52e97277, type: 2}
+    - type: 1
+      fovScale: 17
+      sprite: {fileID: 21300000, guid: fbce45708b88a2b49bc61b8c52e97277, type: 2}
+    closeZoomWhenShoot: 1
+  zoomInMoveSpeedPenalty: 0.661
+  giveUpDisable: 0
+  deathDropDisable: 0
+  references:
+    version: 1
+    RefIds: []

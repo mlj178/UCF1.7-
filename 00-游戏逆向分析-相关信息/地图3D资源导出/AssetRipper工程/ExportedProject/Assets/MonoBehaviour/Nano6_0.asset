@@ -1,0 +1,31 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a3be0e83876c7a374585bce0ae40eaf7, type: 3}
+  m_Name: Nano6
+  m_EditorClassIdentifier:
+  gameMode: 5
+  gameModePrefab: {fileID: 1709254077376921, guid: 7a34d6a97f71b4641b8c25fd85685564, type: 2}
+  datas:
+  - sceneName: DesertFort
+    mapName: 沙漠要塞
+    mapIcon: {fileID: 21300000, guid: 50e965bf0b32279458da78363e71c7aa, type: 2}
+    loadingTex_BL: {fileID: 2800000, guid: dde5eeb71208fe84e9f3a51c2314c992, type: 3}
+    loadingTex_GR: {fileID: 2800000, guid: dde5eeb71208fe84e9f3a51c2314c992, type: 3}
+    gameModePrefabOverride: {fileID: 0}
+    weaponLimited: 0
+  - sceneName: NanoResort
+    mapName: 生化酒店
+    mapIcon: {fileID: 21300000, guid: 2a8a546bc8b14064dbe615f6968baa14, type: 2}
+    loadingTex_BL: {fileID: 2800000, guid: 4dad5980e7a2b534c82a4499e01c4828, type: 3}
+    loadingTex_GR: {fileID: 2800000, guid: 4dad5980e7a2b534c82a4499e01c4828, type: 3}
+    gameModePrefabOverride: {fileID: 0}
+    weaponLimited: 0

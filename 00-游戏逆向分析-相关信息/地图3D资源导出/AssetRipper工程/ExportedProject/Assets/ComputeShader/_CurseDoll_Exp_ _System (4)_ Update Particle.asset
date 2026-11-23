@@ -1,0 +1,108 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!72 &7200000
+ComputeShader:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_Name: '[CurseDoll_Exp] [System (4)] Update Particle'
+  variants:
+  - serializedVersion: 2
+    targetRenderer: 2
+    targetLevel: 0
+    kernels:
+    - serializedVersion: 2
+      name: CSMain
+      variantMap:
+        :
+          serializedVersion: 2
+          cbVariantIndices: 0000000001000000
+          cbs:
+          - name: parameters
+            generatedName:
+            bindPoint: 0
+            samplerBindPoint: -1
+            texDimension: -1
+          - name: updateParams
+            generatedName:
+            bindPoint: 1
+            samplerBindPoint: -1
+            texDimension: -1
+          textures: []
+          builtinSamplers: []
+          inBuffers: []
+          outBuffers:
+          - name: attributeBuffer
+            generatedName:
+            bindPoint: 0
+            samplerBindPoint: -1
+            texDimension: -1
+          - name: deadListOut
+            generatedName:
+            bindPoint: 1
+            samplerBindPoint: -1
+            texDimension: -1
+          - name: indirectBuffer
+            generatedName:
+            bindPoint: 2
+            samplerBindPoint: -1
+            texDimension: -1
+          code: 44584243b97971cfafffc38918fe71e0181201cc010000003c040000030000002c0000003c0000004c0000004953474e0800000000000000080000004f53474e08000000000000000800000053484558e803000050000500fa0000006a08000159000004468e2000000000000100000059000004468e200001000000010000009d00000300e01100000000009e00800400e0110001000000040000009e00800400e0110002000000040000005f000002321002005f0000021220020068000002030000009b0000044000000001000000010000002300000712001000000000000a10020001400000400000000a2002002600000800d0000022001000000000001a1002001a80200001000000000000002900000722001000000000001a0010000000000001400000060000001e00000712001000000000001a001000000000000a001000000000004f00000822001000000000000a001000000000000a80200001000000000000001f0004031a001000000000002900000722001000000000000a0010000000000001400000010000002900000742001000000000001a0010000000000001400000020000001e00000782001000000000002a0010000000000001400000002c0000a5000089c20200808399190012001000010000003a0010000000000006e01100000000001f0004030a001000010000002900000a320010000100000056051000000000000240000001000000030000000000000000000000a5000089c20200808399190072001000020000001a0010000100000046e21100000000001e00000a52001000010000000601100001000000024000000018000000000000001c000000000000a5000089c20200808399190022001000000000000a0010000100000006e0110000000000a5000089c202008083991900d2001000010000002a0010000100000006e91100000000001e00000742001000000000002a0010000000000001400000042c0000a5000089c20200808399190082001000020000002a0010000000000006e01100000000000000000882001000020000003a001000020000000a80200000000000000000003100000722001000000000001a001000000000003a001000020000001f0000031a001000000000003200000ad200100001000000060e1000010000000680200000000000000000000609100002000000a600000772e01100000000001a001000010000008603100001000000a600000712e01100000000002a001000000000003a00100002000000b2000005120010000100000000e0110002000000a800000912e01100020000000a0010000100000001400000000000000a0010000000000012000001a600000712e01100000000003a001000000000000140000000000000b2000005120010000100000000e0110001000000a800000912e01100010000000a0010000100000001400000000000000a001000000000001500000115000001150000013e000001
+          threadGroupSize: 400000000100000001000000
+          keywords: []
+          isCompiled: 0
+      globalKeywords: []
+      localKeywords: []
+    constantBuffers:
+    - name: parameters
+      byteSize: 16
+      params:
+      - name: deltaTime_a
+        type: 0
+        offset: 0
+        arraySize: 0
+        rowCount: 1
+        colCount: 1
+    - name: updateParams
+      byteSize: 16
+      params:
+      - name: nbMax
+        type: 5
+        offset: 0
+        arraySize: 0
+        rowCount: 1
+        colCount: 1
+      - name: dispatchWidth
+        type: 5
+        offset: 4
+        arraySize: 0
+        rowCount: 1
+        colCount: 1
+    resourcesResolved: 1
+    compilerPlatform: 0
+    platformKeywords:
+      Array:
+    needsReflectionData: 0
+  m_CompilationContext:
+    buildTarget:
+      platform: 0
+      subTarget: 0
+      extendedPlatform: 0
+      isEditor: 0
+    sourceFileName:
+    source:
+    sourceFile:
+    kernels: []
+    kernelMacros: []
+    compilationFlags: 0
+    apiMask: 0
+    supportedAPIs: 0
+    includeHash0: 0
+    includeHash1: 0
+    includeHash2: 0
+    includeHash3: 0
+    includeFiles: []
+  errors: []
+  m_PreprocessorOverride: 0
+  m_HasEditorOnlyVariant: 0

@@ -1,0 +1,40 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a94068c3ef25348d588a1106ce625576, type: 3}
+  m_Name: FoxHawl_Deneb_GR
+  m_EditorClassIdentifier:
+  headShot: {fileID: 8300000, guid: 3c71897afcc405048bff2f9a83876ca2, type: 3}
+  multilKill:
+  - {fileID: 8300000, guid: ca994f70bdfcf954b97726b77205aee2, type: 3}
+  - {fileID: 8300000, guid: 5a6f72b88554e174e8eff4c8ea8ec89f, type: 3}
+  - {fileID: 8300000, guid: a9db227782af0d4448ed66518d61cba8, type: 3}
+  - {fileID: 8300000, guid: d2b3b70adcd7ee24499a9ec76bc8089c, type: 3}
+  - {fileID: 8300000, guid: ea8487580b938f241951880dba91b800, type: 3}
+  - {fileID: 8300000, guid: 2f5d478dba3109149ad0b8fd4efd0193, type: 3}
+  - {fileID: 8300000, guid: e19bcd5e5d04fb64bbea49d15e083884, type: 3}
+  grenade: {fileID: 8300000, guid: 597b6c210c5c8824c954c75fc045d642, type: 3}
+  knife: {fileID: 8300000, guid: 20626413909f7ac44a19cf185b04d46d, type: 3}
+  die: {fileID: 8300000, guid: 0bfeafe11e321e44085c42b1d4ef3dc3, type: 3}
+  fireInTheHole:
+  - {fileID: 8300000, guid: 447c0efb58b74214eadd1a74c40cb565, type: 3}
+  - {fileID: 8300000, guid: 3d271c23e29ccc94595811cf0332f127, type: 3}
+  - {fileID: 8300000, guid: 2e11ea3d48eb22e4b8124f081ce0a183, type: 3}
+  fireInTheHole_C:
+  - {fileID: 8300000, guid: 4a5a387027bfe2845b9a8ddf8da38449, type: 3}
+  - {fileID: 8300000, guid: 1fda756709bdb104cbad0a9dded66241, type: 3}
+  - {fileID: 8300000, guid: a6dbc3dc50017024c9a575d73df30e06, type: 3}
+  gameStart_TD: {fileID: 8300000, guid: 0030aa715ad724b47b9a48107bc0e749, type: 3}
+  gameWin: {fileID: 8300000, guid: 56ac74aab0c0036459e46d528254ddb5, type: 3}
+  gameDraw: {fileID: 8300000, guid: 08576e8aba1875b48b54ddca5d345f69, type: 3}
+  gameLose: {fileID: 8300000, guid: 43da527ab88645c4f80e277b686098a6, type: 3}
+  gameStart_DM: {fileID: 8300000, guid: d79de890fa2202842b4c19b580a1ffe8, type: 3}
+  gameOver_DM: {fileID: 8300000, guid: 992bb8a16d787b848b39bb751bbdef96, type: 3}

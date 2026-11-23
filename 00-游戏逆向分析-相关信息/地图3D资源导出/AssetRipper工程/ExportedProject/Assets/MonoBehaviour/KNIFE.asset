@@ -1,0 +1,89 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 17366768750d0799a8c6625789ebad58, type: 3}
+  m_Name: KNIFE
+  m_EditorClassIdentifier:
+  wpnIndex: 5
+  wpnClass: 6
+  weaponName: KNIFE
+  viewData:
+    position: {x: 0.00259998, y: -0.03169997, z: 0.02519996}
+    eulerAngle: {x: -13.5791, y: -4.0107045, z: 0}
+    position_W: {x: 0.00259998, y: -0.03169997, z: 0.02519996}
+    eulerAngle_W: {x: -13.5791, y: -4.0107045, z: 0}
+    FOV: 40
+  spriteAsset:
+    background: {fileID: 2800000, guid: b77ae0db580f5d44dae926f3c505820c, type: 3}
+    backgroundColor: {r: 1, g: 1, b: 1, a: 0.5019608}
+    effect: {fileID: 0}
+    line: {fileID: 2800000, guid: 5be8b7fdb057a5a4f938f222ac65f93a, type: 3}
+    select: {fileID: 2800000, guid: 87852d6f017aecb41b26e5c33e4fcfe0, type: 3}
+    select2: {fileID: 0}
+    bagIcon: {fileID: 2800000, guid: 3072c1d088db0304b94df0fd47247067, type: 3}
+    killMsgIcon: {fileID: 21300000, guid: 905920d2ff398874f8c4fbb829452529, type: 2}
+    killMsgIcon2: {fileID: 0}
+  isVVIP: 0
+  changeWeaponAnimRatio: 1
+  selectAnimName_C:
+  rapidChange: 0
+  targetSlot: 2
+  slotType: 0
+  charWpnAnim:
+    upper: Knife
+    upper_4side: 0
+    lower:
+  moveSpeedPenalty: 0
+  nanoModeLimited: 0
+  hitEffectName:
+  qvMdlPrefab: {fileID: 1709254077376921, guid: 46a869ef6e08c4043bef9d6a4ca480c8, type: 2}
+  botControlData:
+    bigshotRate: 0.7
+  components:
+    list: []
+  knifeAttackAnimName: Knife
+  knifeHitSoundName: KnifeHit
+  knifeAttacks:
+  - damage: 90
+    range: 3
+    angle: 0.43633
+    hitStun: 0
+    damageTag: 0
+    decal: {fileID: 0}
+    decalSndName:
+  - damage: 90
+    range: 3
+    angle: 0.43633
+    hitStun: 0
+    damageTag: 0
+    decal: {fileID: 0}
+    decalSndName:
+  - damage: 180
+    range: 3
+    angle: 0.43633
+    hitStun: 0
+    damageTag: 2
+    decal: {fileID: 0}
+    decalSndName:
+  damageBodyRatio:
+    brainRatio: 1.2
+    headRatio: 1
+    neckRatio: 0.6
+    chestRatio: 0.5
+    abdomenRatio: 0.6
+    armRatio: 0.33
+    handRatio: 0.28
+    legRatio: 0.33
+    footRatio: 0.28
+  attackSpeed: {x: 1, y: 1, z: 1}
+  references:
+    version: 1
+    RefIds: []

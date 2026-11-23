@@ -1,0 +1,31 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5c0bdc42cf4d61e003ab371398303b7b, type: 3}
+  m_Name: ThermalVision
+  m_EditorClassIdentifier:
+  active: 1
+  m_AdvancedMode: 0
+  Duration:
+    m_OverrideState: 1
+    m_Value: 0
+  MainColor:
+    m_OverrideState: 1
+    m_Value: {r: 0.9411765, g: 1, b: 0.8627451, a: 1}
+    hdr: 0
+    showAlpha: 1
+    showEyeDropper: 1
+  NoiseScale:
+    m_OverrideState: 1
+    m_Value: 200
+  NoisePower:
+    m_OverrideState: 1
+    m_Value: 0.02

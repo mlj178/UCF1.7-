@@ -1,0 +1,138 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2b72f0c43606af3b3e20ebd7a45f0409, type: 3}
+  m_Name: NanoModeBasicAsset
+  m_EditorClassIdentifier:
+  SND_Timer:
+  - {fileID: 8300000, guid: 00ed99b2d110ee84f810ba87377bbe52, type: 3}
+  - {fileID: 8300000, guid: 4b445ab2cc5360b4a9b82ca3227a3057, type: 3}
+  - {fileID: 8300000, guid: ce6cdc5dbd6cf544082311f8c512a921, type: 3}
+  - {fileID: 8300000, guid: 8977635b635218347a904a8a7187abdc, type: 3}
+  - {fileID: 8300000, guid: b378dfdc3328dc64c91ccec1c91ec9a7, type: 3}
+  - {fileID: 8300000, guid: 075b6af2da76fe5438ec5218b5d4e37c, type: 3}
+  - {fileID: 8300000, guid: 9e514f7983c5fc24dbc30b72bf163bda, type: 3}
+  - {fileID: 8300000, guid: 0e49e33d9665ab6468eeed9e78a9f430, type: 3}
+  - {fileID: 8300000, guid: 2ee78962ec4bd7c42b6ed2186f5dd655, type: 3}
+  - {fileID: 8300000, guid: 2df8efa632ff6184eb34384948abb148, type: 3}
+  SND_RoundResult:
+  - {fileID: 8300000, guid: c65962bcf15e79d45abfe1cf353cecf9, type: 3}
+  - {fileID: 8300000, guid: 595d601842af35841a8518a596922a4c, type: 3}
+  SND_SupplyBoxArrive: {fileID: 8300000, guid: 63cf1271bb0154a43a2bb148983a86bf, type: 3}
+  SND_HpRecover:
+  - {fileID: 8300000, guid: d9480bed315d6ac4190c6aeae7ed6bc2, type: 3}
+  - {fileID: 8300000, guid: ba7bc6b04c074624bae81fe8cf835c37, type: 3}
+  wpnList:
+  - name: NanoGhost
+    datas: 7800000078000000b6000000c3000000c3000000c3000000
+  - name: Hulk
+    datas: b0000000b1000000b2000000c5000000c5000000c5000000
+  - name: GrandTerminator
+    datas: a0020000
+  - name: WomanHumanBoss
+    datas: a1020000
+  - name: ArmoredTerminator
+    datas: 2e040000
+  - name: GhostBlade
+    datas: 2d040000
+  - name: HumanBoss
+    datas: 1d020000
+  - name: Terminator
+    datas: 1c020000
+  - name: MasterHumanHero
+    datas: a00b0000
+  - name: EvilTerminator
+    datas: 9f0b0000
+  - name: DemonTerminator
+    datas: a80d0000
+  - name: AsceticHero
+    datas: f70e0000
+  - name: MechanicHero
+    datas: f2120000f3120000
+  - name: MasterHunter
+    datas: a70d0000
+  - name: Nurse
+    datas: df000000e0000000e1000000e2000000e3000000e3000000
+  - name: Psycho
+    datas: df000000e0000000e1000000e2000000e3000000e3000000
+  - name: VoidTerminator
+    datas: f80e0000
+  - name: OutlawTerminator
+    datas: f6120000
+  mark_Absorb: {fileID: 2800000, guid: f34c9c46b7a732947a6ad942d0d1dca1, type: 3}
+  mark_DefenseNano: {fileID: 2800000, guid: 25b5907c7e061ee47951e0073302bf12, type: 3}
+  mark_InfectFailed: {fileID: 2800000, guid: 80cda61d96b656f43aed91ff3c40343f, type: 3}
+  Mark_NanoMultiKill:
+  - {fileID: 2800000, guid: cf016d10188aae643bd63f5a7302a1d9, type: 3}
+  - {fileID: 2800000, guid: a2070be7778acb34193a32ef2c375e18, type: 3}
+  - {fileID: 2800000, guid: 8e25e381702cc20449905de47ebbfc18, type: 3}
+  - {fileID: 2800000, guid: 45f96028cefdc904f9b1b1385ec39397, type: 3}
+  fx_shield:
+  - {fileID: 1709254077376921, guid: 48aae246004b2554cab3ec2f0ca97e8a, type: 2}
+  - {fileID: 1709254077376921, guid: 04a04a67b1924d64b91f1df802717dbc, type: 2}
+  - {fileID: 1709254077376921, guid: a2868a8373c94654db1e3a6751562cc0, type: 2}
+  Gauge_Absorb: {fileID: 1709254077376921, guid: 374975e0fff9feb4294d0433c7f2cce9, type: 2}
+  nanoRoleChangeFxDic:
+    reorderableList: {}
+    reqReferences: {fileID: 0}
+    isExpanded: 0
+    _keyValues: []
+    _keys: []
+    _values: []
+  RadarIcon_Hero: {fileID: 1709254077376921, guid: 0cd015d6c60243d4f94ce49dc963f4a0, type: 2}
+  NanoRoleSign: {fileID: 1709254077376921, guid: e39244aeed9097240bb921950f253391, type: 2}
+  roleSignDic:
+    reorderableList: {}
+    reqReferences: {fileID: 0}
+    isExpanded: 1
+    _keyValues:
+    - Soldier
+    - Terminator
+    - GrandTerminator
+    - MasterHumanHero
+    - EvilTerminator
+    - DemonTerminator
+    - AsceticHero
+    - MechanicHero
+    - MasterHunter
+    - VoidTerminator
+    - OutlawTerminator
+    _keys:
+    - Soldier
+    - Terminator
+    - GrandTerminator
+    - MasterHumanHero
+    - EvilTerminator
+    - DemonTerminator
+    - AsceticHero
+    - MechanicHero
+    - MasterHunter
+    - VoidTerminator
+    - OutlawTerminator
+    _values:
+    - {fileID: 21300000, guid: a75c74dedfa8d4e4f97726fb1b3871df, type: 2}
+    - {fileID: 21300000, guid: eeafbda612bf67a4d905f13f0f439b1a, type: 2}
+    - {fileID: 21300000, guid: b636571661773f2419a7f106d76d97eb, type: 2}
+    - {fileID: 21300000, guid: 6320d3fea8c1f0a42811a2f32b8d1f8e, type: 2}
+    - {fileID: 21300000, guid: 357552675061b1842bfc747cdd527bad, type: 2}
+    - {fileID: 21300000, guid: d50e6ea7d4b8e954cb697088e6d3d8b7, type: 2}
+    - {fileID: 21300000, guid: 143d28f989022ac45a23060e0dda27c5, type: 2}
+    - {fileID: 21300000, guid: d9121560ccffc6d4ba6dd604909111a4, type: 2}
+    - {fileID: 21300000, guid: f17aad11ba23fb44e9fda7f0e60afc8d, type: 2}
+    - {fileID: 21300000, guid: 3d4124b7d2377f24ea48e5119e82d817, type: 2}
+    - {fileID: 21300000, guid: b0909e83e1601ee4abc939a8652e7de0, type: 2}
+  skillBtns:
+  - {fileID: 1709254077376921, guid: 9d6d51f8dff11304787c55b60c4edce2, type: 2}
+  - {fileID: 1709254077376921, guid: 10d3948ea870c7b4fac08a1fd2921594, type: 2}
+  - {fileID: 1709254077376921, guid: e101d76f441d6424c950b54e6ae64fff, type: 2}
+  screenEffects:
+  - {fileID: 1709254077376921, guid: 8227fac7058280b43aa9e43dc783cae5, type: 2}
+  - {fileID: 1709254077376921, guid: 98ad83592f3eb644a8ded62d19da6f44, type: 2}

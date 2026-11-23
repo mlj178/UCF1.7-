@@ -1,0 +1,62 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4a7e8ce8352a5275dbd2bcc322036770, type: 3}
+  m_Name: MechanicSentryGun
+  m_EditorClassIdentifier:
+  wpnIndex: 4853
+  wpnClass: 7
+  weaponName: 机枪守卫
+  viewData:
+    position: {x: -0.00660001, y: 0.0085, z: 0.03749994}
+    eulerAngle: {x: -6.1306486, y: 2.864789, z: 0.5729578}
+    position_W: {x: -0.00660001, y: 0.0085, z: 0.03749994}
+    eulerAngle_W: {x: -6.1306486, y: 2.864789, z: 0.5729578}
+    FOV: 40
+  spriteAsset:
+    background: {fileID: 2800000, guid: 5aa42e5e8b4b6f9458a4286c6041b7d0, type: 3}
+    backgroundColor: {r: 1, g: 1, b: 1, a: 0}
+    effect: {fileID: 2800000, guid: a7df6c4ff2065914b8a6cffad85404dc, type: 3}
+    line: {fileID: 2800000, guid: aeb009569388202438cc3563d6c0bb57, type: 3}
+    select: {fileID: 2800000, guid: 0955f7d2a5d172c4788c41fbda5a02be, type: 3}
+    select2: {fileID: 0}
+    bagIcon: {fileID: 0}
+    killMsgIcon: {fileID: 21300000, guid: 4e8ee079f06c0b548b4230781750e596, type: 2}
+    killMsgIcon2: {fileID: 0}
+  isVVIP: 0
+  changeWeaponAnimRatio: 1
+  selectAnimName_C:
+  rapidChange: 0
+  targetSlot: 3
+  slotType: 0
+  charWpnAnim:
+    upper: CM
+    upper_4side: 0
+    lower:
+  moveSpeedPenalty: 0
+  nanoModeLimited: 0
+  hitEffectName:
+  qvMdlPrefab: {fileID: 1709254077376921, guid: 92ef27968ddff964d83b3a65a79963ec, type: 2}
+  botControlData:
+    bigshotRate: 0.7
+  components:
+    list: []
+  sentryGunPrefab: {fileID: 1709254077376921, guid: 55e1cf21bba7aa545944d693e2adabce, type: 2}
+  SND_Exp: {fileID: 8300000, guid: 194693f8e3f1fd0468b0ad74fcb4c840, type: 3}
+  SND_Fire: {fileID: 8300000, guid: c03e9eadaddc65249ba58ac868c4e4e1, type: 3}
+  SND_PostFire: {fileID: 8300000, guid: a00925b3ec0a3ac4ebaa710818bd7410, type: 3}
+  SND_Idle: {fileID: 8300000, guid: c82b16b6bfa72ec43bdf29f16dd1ba9b, type: 3}
+  SND_Hit: {fileID: 8300000, guid: 248a498f4af44f949a48f389746cddcb, type: 3}
+  GVshotAnimName: MechanicSentry
+  HealthBar: {fileID: 1709254077376921, guid: 9b8ab5e947b26f947ba03003f64b680f, type: 2}
+  references:
+    version: 1
+    RefIds: []

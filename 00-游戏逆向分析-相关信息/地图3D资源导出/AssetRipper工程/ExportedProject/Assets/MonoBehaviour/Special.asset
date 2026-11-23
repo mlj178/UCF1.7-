@@ -1,0 +1,38 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b7be5e0b99294fb81e90a8b85d4919ff, type: 3}
+  m_Name: Special
+  m_EditorClassIdentifier:
+  gameMode: 2
+  gameModePrefab: {fileID: 1709254077376921, guid: 8e958d64eb765764697d9cbaf2dcfa1c, type: 2}
+  datas:
+  - sceneName: Arena
+    mapName: 竞技场
+    mapIcon: {fileID: 21300000, guid: 4f89696cfa348d14c89ae3c0dc0fcbc1, type: 2}
+    loadingTex_BL: {fileID: 2800000, guid: 46ad273784121734f992710afdb42e33, type: 3}
+    loadingTex_GR: {fileID: 2800000, guid: f240d7e4a776d56408c6ced05cf4a752, type: 3}
+    gameModePrefabOverride: {fileID: 0}
+    weaponLimited: 1
+  - sceneName: GrimReaperKM
+    mapName: 刀锋寨
+    mapIcon: {fileID: 21300000, guid: 6294cd968b937954ea312fc26985e9b3, type: 2}
+    loadingTex_BL: {fileID: 2800000, guid: 6969906b663559a4db3bb6bfadcddd40, type: 3}
+    loadingTex_GR: {fileID: 2800000, guid: 221a33fb60a71444d9e6cf0019a0aa7f, type: 3}
+    gameModePrefabOverride: {fileID: 0}
+    weaponLimited: 1
+  - sceneName: DeathRing
+    mapName: 死亡擂台
+    mapIcon: {fileID: 21300000, guid: 367476614f999f54b9b84ccadfec25f5, type: 2}
+    loadingTex_BL: {fileID: 2800000, guid: 265a3e59180cfb14e8c701bb5eb34c48, type: 3}
+    loadingTex_GR: {fileID: 2800000, guid: cd7ff4bfc5c2d58489173be9dcd4bac0, type: 3}
+    gameModePrefabOverride: {fileID: 0}
+    weaponLimited: 1

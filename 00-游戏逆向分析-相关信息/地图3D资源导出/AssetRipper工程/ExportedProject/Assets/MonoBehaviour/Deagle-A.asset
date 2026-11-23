@@ -1,0 +1,172 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0026ac807b49da01fb7334bdb3e93a82, type: 3}
+  m_Name: Deagle-A
+  m_EditorClassIdentifier:
+  wpnIndex: 53
+  wpnClass: 5
+  weaponName: Desert Eagle-A
+  viewData:
+    position: {x: -0.01060001, y: -0.0159, z: 0.0425}
+    eulerAngle: {x: -4.411775, y: 3.437747, z: 0}
+    position_W: {x: -0.01060001, y: -0.02, z: 0.0425}
+    eulerAngle_W: {x: -4.411775, y: 3.437747, z: 0}
+    FOV: 45
+  spriteAsset:
+    background: {fileID: 2800000, guid: 177fb975895df43489775013e5c6651d, type: 3}
+    backgroundColor: {r: 1, g: 1, b: 1, a: 0.5019608}
+    effect: {fileID: 2800000, guid: fd4029083f023d44abfacbbe15eea8f1, type: 3}
+    line: {fileID: 2800000, guid: 6e4ca19802ed426418c33e7d7844c5fd, type: 3}
+    select: {fileID: 2800000, guid: d521bdfe66d96c746bfd97e4b6c2cf34, type: 3}
+    select2: {fileID: 0}
+    bagIcon: {fileID: 2800000, guid: 4f6b4e0e5eb86a4459d33d95a863d7d2, type: 3}
+    killMsgIcon: {fileID: 21300000, guid: 70121408feea6524da0b28ee1da66ceb, type: 2}
+    killMsgIcon2: {fileID: 0}
+  isVVIP: 0
+  changeWeaponAnimRatio: 1.45
+  selectAnimName_C:
+  rapidChange: 0
+  targetSlot: 1
+  slotType: 0
+  charWpnAnim:
+    upper: handguns
+    upper_4side: 0
+    lower:
+  moveSpeedPenalty: 0.052
+  nanoModeLimited: 0
+  hitEffectName:
+  qvMdlPrefab: {fileID: 1709254077376921, guid: 7a397b6bd0b40b549a0b6df042561db6, type: 2}
+  botControlData:
+    bigshotRate: 0.7
+  components:
+    list: []
+  clip: 9
+  ammo: 4
+  clip_Nano: 9
+  ammo_Nano: 5
+  shotSoundName: ShootDEagle
+  shotsPerMinute: 0
+  fireAnimMultiplier: 6
+  reloadAnimRatio: 1.45
+  reloadAnimName_C:
+  shootBullet: 0
+  bulletFxPos_L: {x: 0, y: 0, z: 0}
+  bulletFxPos_R: {x: 0, y: 0, z: 0}
+  perturbMin:
+  - standIdle: 0.0047
+    crouchIdle: 0.0047
+    standRun: 0.0073
+    crouchRun: 0.0055
+    floating: 0.013
+  perturbMax:
+  - standIdle: 0.155
+    crouchIdle: 0.15
+    standRun: 0.165
+    crouchRun: 0.145
+    floating: 0.165
+  changeMovingRealSize:
+    DecreaseSpeed: 0.275
+    Increase_Repeat: 0.06
+    Increase_Oneshot: 0.036
+    Increase_OneshotOver: 0.144
+    Min: 0.13
+  delayOneShootTime:
+    timeMin: 0.15
+    timeMax: 0.2
+    shotCount: 1
+  shotReactYaw:
+  - datas:
+    - ammo: 7
+      recover: 0.0025
+      decay: 0.015
+  shotReactPitch:
+  - datas:
+    - ammo: 7
+      recover: 0.0028
+      decay: 0.014
+  detailPerturbShot:
+  - standIdle: 0.975
+    crouchIdle: 0.975
+    standRun: 0.93
+    crouchRun: 0.97
+    floating: 0.89
+  detailReactPitchShot:
+  - standIdle: 0.3
+    crouchIdle: 0.3
+    standRun: 0.3
+    crouchRun: 0.3
+    floating: 0.3
+  detailReactYawShot:
+  - standIdle: 0.3
+    crouchIdle: 0.3
+    standRun: 0.3
+    crouchRun: 0.3
+    floating: 0.3
+  fullReactYaw:
+  - standIdle: -0.09
+    crouchIdle: -0.09
+    standRun: -0.09
+    crouchRun: -0.09
+    floating: -0.09
+  fullReactPitch:
+  - standIdle: -0.075
+    crouchIdle: -0.074
+    standRun: -0.1
+    crouchRun: -0.078
+    floating: -0.11
+  sideReactDirect:
+    mirrorProbability: 0.5
+    datas:
+    - ammo: 7
+      left: 0
+      center: 1
+      right: 0
+  cameraYawAndPitch: []
+  range: 100
+  ammoDamage: 180
+  damageVariantionFactor: 0.01
+  damageFactorByDistance: 0.01
+  wallShotDamageRatio: 0.33
+  damageBodyRatio:
+    brainRatio: 1.05
+    headRatio: 1
+    neckRatio: 0.3
+    chestRatio: 0.3
+    abdomenRatio: 0.36
+    armRatio: 0.3
+    handRatio: 0.3
+    legRatio: 0.21
+    footRatio: 0.21
+  knifeAttacks: []
+  knifeAnimName:
+  knifeHitSoundName:
+  knifeDamageBodyRatio:
+    brainRatio: 0
+    headRatio: 0
+    neckRatio: 0
+    chestRatio: 0
+    abdomenRatio: 0
+    armRatio: 0
+    handRatio: 0
+    legRatio: 0
+    footRatio: 0
+  zoomAcion:
+    openTime: 0
+    closeTime: 0
+    datas: []
+    closeZoomWhenShoot: 0
+  zoomInMoveSpeedPenalty: 0
+  giveUpDisable: 0
+  deathDropDisable: 0
+  references:
+    version: 1
+    RefIds: []

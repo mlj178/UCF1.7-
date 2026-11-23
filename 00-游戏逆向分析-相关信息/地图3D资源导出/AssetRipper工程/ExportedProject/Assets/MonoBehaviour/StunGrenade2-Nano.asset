@@ -1,0 +1,66 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 950f4d950af1c76ff15a781e80e6cde6, type: 3}
+  m_Name: StunGrenade2-Nano
+  m_EditorClassIdentifier:
+  wpnIndex: 2977
+  wpnClass: 7
+  weaponName: 震撼弹
+  viewData:
+    position: {x: -0.00730002, y: 0.00379999, z: 0.02389997}
+    eulerAngle: {x: 4.182592, y: 2.864789, z: 0}
+    position_W: {x: -0.00730002, y: 0.00379999, z: 0.02389997}
+    eulerAngle_W: {x: 4.182592, y: 2.864789, z: 0}
+    FOV: 45
+  spriteAsset:
+    background: {fileID: 2800000, guid: 9f9d37c4494ade346911703011e1d8ba, type: 3}
+    backgroundColor: {r: 1, g: 1, b: 1, a: 1}
+    effect: {fileID: 2800000, guid: 97dd193f71499f3419518dce5f0e8a48, type: 3}
+    line: {fileID: 2800000, guid: 48bed3f72bb44764abda0015533496de, type: 3}
+    select: {fileID: 2800000, guid: 4119cc32c367d3e479b26bfc38643177, type: 3}
+    select2: {fileID: 0}
+    bagIcon: {fileID: 0}
+    killMsgIcon: {fileID: 21300000, guid: d7a28a25a9cbc6a40a6e3b6386b6dc2b, type: 2}
+    killMsgIcon2: {fileID: 0}
+  isVVIP: 0
+  changeWeaponAnimRatio: 1
+  selectAnimName_C:
+  rapidChange: 0
+  targetSlot: 3
+  slotType: 0
+  charWpnAnim:
+    upper: grenade
+    upper_4side: 0
+    lower:
+  moveSpeedPenalty: 0
+  nanoModeLimited: 0
+  hitEffectName:
+  qvMdlPrefab: {fileID: 1709254077376921, guid: edc865e1405e93847a48f38f92d32bd8, type: 2}
+  botControlData:
+    bigshotRate: 0.7
+  components:
+    list: []
+  missileData:
+    clip: 1
+    ammo: 0
+    prefab: {fileID: 1709254077376921, guid: ca111f724e1b2624eb5a30f4641fcc5b, type: 2}
+    damage: 100
+    range: 14
+    damageFactorByDistance: 0.09833
+    velocity: 26.5
+    extraGravity: 0.3
+    throwAngle: 16
+    expTime: 1.8
+    ignoreWall: 0
+  references:
+    version: 1
+    RefIds: []

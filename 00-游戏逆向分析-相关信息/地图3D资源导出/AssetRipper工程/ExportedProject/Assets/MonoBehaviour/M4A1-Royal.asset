@@ -1,0 +1,208 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0026ac807b49da01fb7334bdb3e93a82, type: 3}
+  m_Name: M4A1-Royal
+  m_EditorClassIdentifier:
+  wpnIndex: 585
+  wpnClass: 0
+  weaponName: M4A1-战龙
+  viewData:
+    position: {x: -0.01860001, y: -0.01309999, z: 0.02269997}
+    eulerAngle: {x: -3.838817, y: 6.302536, z: 0}
+    position_W: {x: -0.01860001, y: -0.01309999, z: 0.02269997}
+    eulerAngle_W: {x: -3.838817, y: 6.302536, z: 0}
+    FOV: 45
+  spriteAsset:
+    background: {fileID: 2800000, guid: 503d8ba65bc49d24a8601f37f77777bb, type: 3}
+    backgroundColor: {r: 1, g: 1, b: 1, a: 0.5019608}
+    effect: {fileID: 2800000, guid: fd7767fc97c384c47bf0887f0f27084d, type: 3}
+    line: {fileID: 2800000, guid: a6ef262b28be2694a8aee90e50b33556, type: 3}
+    select: {fileID: 0}
+    select2: {fileID: 0}
+    bagIcon: {fileID: 2800000, guid: ef81c7fab8b88e34ea46463babce2518, type: 3}
+    killMsgIcon: {fileID: 21300000, guid: 914aa759662c3954689aa025bcf5a173, type: 2}
+    killMsgIcon2: {fileID: 0}
+  isVVIP: 0
+  changeWeaponAnimRatio: 1.56
+  selectAnimName_C:
+  rapidChange: 0
+  targetSlot: 0
+  slotType: 0
+  charWpnAnim:
+    upper: M4A1
+    upper_4side: 0
+    lower:
+  moveSpeedPenalty: 0.125
+  nanoModeLimited: 0
+  hitEffectName:
+  qvMdlPrefab: {fileID: 1709254077376921, guid: 7542903c9766d9d41871da18c103f7c9, type: 2}
+  botControlData:
+    bigshotRate: 0.7
+  components:
+    list: []
+  clip: 35
+  ammo: 2
+  clip_Nano: 35
+  ammo_Nano: 3
+  shotSoundName: ShootM4A1Silencer
+  shotsPerMinute: 638
+  fireAnimMultiplier: 1
+  reloadAnimRatio: 1.3
+  reloadAnimName_C:
+  shootBullet: 1
+  bulletFxPos_L: {x: 0, y: 0, z: 0}
+  bulletFxPos_R: {x: -0.75, y: -0.3, z: 2}
+  perturbMin:
+  - standIdle: 0.0043
+    crouchIdle: 0.004
+    standRun: 0.0053
+    crouchRun: 0.0048
+    floating: 0.0063
+  perturbMax:
+  - standIdle: 0.155
+    crouchIdle: 0.15
+    standRun: 0.185
+    crouchRun: 0.158
+    floating: 0.19
+  changeMovingRealSize:
+    DecreaseSpeed: 0.274
+    Increase_Repeat: 0.00065
+    Increase_Oneshot: 0.0118
+    Increase_OneshotOver: 0.00305
+    Min: 0.14
+  delayOneShootTime:
+    timeMin: 0.05
+    timeMax: 0.5
+    shotCount: 5
+  shotReactYaw:
+  - datas:
+    - ammo: 10
+      recover: 0.0015
+      decay: 0.0063
+    - ammo: 30
+      recover: 0.0008
+      decay: 0.015
+  shotReactPitch:
+  - datas:
+    - ammo: 1
+      recover: 0.0026
+      decay: 0.0263
+    - ammo: 3
+      recover: 0.0016
+      decay: 0.0543
+    - ammo: 8
+      recover: 0.0022
+      decay: 0.0743
+    - ammo: 30
+      recover: 0
+      decay: 0.03
+  detailPerturbShot:
+  - standIdle: 0.968
+    crouchIdle: 0.97
+    standRun: 0.93
+    crouchRun: 0.94
+    floating: 0.9
+  detailReactPitchShot:
+  - standIdle: 0.13
+    crouchIdle: 0.117
+    standRun: 0.22
+    crouchRun: 0.16
+    floating: 0.35
+  detailReactYawShot:
+  - standIdle: 0.0723
+    crouchIdle: 0.072
+    standRun: 0.13
+    crouchRun: 0.073
+    floating: 0.2
+  fullReactYaw:
+  - standIdle: -0.038
+    crouchIdle: -0.036
+    standRun: -0.068
+    crouchRun: -0.039
+    floating: -0.068
+  fullReactPitch:
+  - standIdle: -0.071
+    crouchIdle: -0.07
+    standRun: -0.105
+    crouchRun: -0.095
+    floating: -0.115
+  sideReactDirect:
+    mirrorProbability: 0.25
+    datas:
+    - ammo: 2
+      left: 0
+      center: 1
+      right: 0
+    - ammo: 3
+      left: 0
+      center: 0.9
+      right: 0.1
+    - ammo: 4
+      left: 0
+      center: 0.7
+      right: 0.3
+    - ammo: 7
+      left: 0
+      center: 0.25
+      right: 0.75
+    - ammo: 14
+      left: 0
+      center: 0
+      right: 1
+    - ammo: 22
+      left: 0.8
+      center: 0
+      right: 0.2
+    - ammo: 35
+      left: 0.55
+      center: 0
+      right: 0.45
+  cameraYawAndPitch: []
+  range: 300
+  ammoDamage: 103
+  damageVariantionFactor: 0.01
+  damageFactorByDistance: 0.0014
+  wallShotDamageRatio: 1
+  damageBodyRatio:
+    brainRatio: 1.25
+    headRatio: 1.2
+    neckRatio: 0.3
+    chestRatio: 0.3
+    abdomenRatio: 0.36
+    armRatio: 0.21
+    handRatio: 0.21
+    legRatio: 0.21
+    footRatio: 0.21
+  knifeAttacks: []
+  knifeAnimName:
+  knifeHitSoundName:
+  knifeDamageBodyRatio:
+    brainRatio: 0
+    headRatio: 0
+    neckRatio: 0
+    chestRatio: 0
+    abdomenRatio: 0
+    armRatio: 0
+    handRatio: 0
+    legRatio: 0
+    footRatio: 0
+  zoomAcion:
+    openTime: 0
+    closeTime: 0
+    datas: []
+    closeZoomWhenShoot: 0
+  zoomInMoveSpeedPenalty: 0
+  giveUpDisable: 0
+  deathDropDisable: 0
+  references:
+    version: 1
+    RefIds: []

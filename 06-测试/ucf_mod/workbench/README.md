@@ -56,6 +56,27 @@ navdata\dev\
 鼠标悬停在 3D 上时 iframe 拿不到键盘焦点，所以按键由工作台这一页转发（`fly-hover` / `fly-key` 两条 postMessage）；
 点过 3D 画面之后焦点就在 iframe 里，navview 自己处理，两条路不会重复。
 
+### 3D 贴图（2026-11-23 加，全部地图）
+
+3D 工具条多了 **「贴图」**（默认勾上）：地形按游戏原贴图渲染，取消勾选就是原来的灰模。
+
+贴图直接从 **AssetRipper 导出的 Unity 工程**转，不再从原始 assets 猜：
+
+```bash
+python "docs/guide/地图3D资源导出/代码/scene_export2web.py" --scene level1 --level level1
+# 批量：level2..level11 各跑一次，--scene/--level 用同一个 levelN
+```
+
+- 默认工程：`00-游戏逆向分析-相关信息/地图3D资源导出/AssetRipper工程/ExportedProject`
+- 输出 `geo/web/<level>.bin`（UCFG v2，世界坐标）和 `geo/tex/<level>/*.png`
+- 现在 **level1..level11 都已接入贴图**，其它图不再是灰模；旧版 v1 备份已按要求清理
+- 资源库、代码、文档和完整执行记录见
+  [../docs/guide/地图3D资源导出/需求与执行记录.md](../docs/guide/地图3D资源导出/需求与执行记录.md)
+- 跳过的是 `CrossFire/Shadow` 影子代理、`Lit` 灯片、水面；绳网/铁栅栏按 `_AlphaClip` 镂空，不透明帆布/油布保持实体
+- 没有 map.json、只有可走面的地图（04 胜利广场、07 死亡擂台）由工作台带 `&level=levelN`
+  直接指定 3D 关卡，navview 不会再回退到上一张图（2026-11-23 修复）
+- 原理和注意事项见根目录 [README.md](../README.md)「3D 贴图」一节。
+
 ### 方向（东南西北）
 
 | 在哪 | 长什么样 | 开关 |

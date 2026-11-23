@@ -1,0 +1,66 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 950f4d950af1c76ff15a781e80e6cde6, type: 3}
+  m_Name: Grenade
+  m_EditorClassIdentifier:
+  wpnIndex: 6
+  wpnClass: 7
+  weaponName: GRENADE
+  viewData:
+    position: {x: -0.00730002, y: 0.00379999, z: 0.02389997}
+    eulerAngle: {x: 4.182592, y: 2.864789, z: 0}
+    position_W: {x: -0.00730002, y: 0.00379999, z: 0.02389997}
+    eulerAngle_W: {x: 4.182592, y: 2.864789, z: 0}
+    FOV: 45
+  spriteAsset:
+    background: {fileID: 2800000, guid: 6d8c0752f33560d42ae129ee0850c568, type: 3}
+    backgroundColor: {r: 1, g: 1, b: 1, a: 0.5019608}
+    effect: {fileID: 2800000, guid: bfd258d247109504ea534095761856a4, type: 3}
+    line: {fileID: 2800000, guid: e78bb60e824fd0f4d93de8b9a130483f, type: 3}
+    select: {fileID: 2800000, guid: 02f073bd39f694d46ae33988cd7e265a, type: 3}
+    select2: {fileID: 0}
+    bagIcon: {fileID: 2800000, guid: 30c01e0b5dbf12e40b0c1226ec7bbbca, type: 3}
+    killMsgIcon: {fileID: 21300000, guid: 822d94a0f7ae95c4c958d930f980a6da, type: 2}
+    killMsgIcon2: {fileID: 0}
+  isVVIP: 0
+  changeWeaponAnimRatio: 1
+  selectAnimName_C:
+  rapidChange: 0
+  targetSlot: 3
+  slotType: 0
+  charWpnAnim:
+    upper: grenade
+    upper_4side: 0
+    lower:
+  moveSpeedPenalty: 0
+  nanoModeLimited: 0
+  hitEffectName:
+  qvMdlPrefab: {fileID: 1709254077376921, guid: b678405e8adbd5f418883f295d2cedb7, type: 2}
+  botControlData:
+    bigshotRate: 0.7
+  components:
+    list: []
+  missileData:
+    clip: 1
+    ammo: 0
+    prefab: {fileID: 1709254077376921, guid: 49cfed41697e2544ebdef9d554a5fcc2, type: 2}
+    damage: 118
+    range: 13
+    damageFactorByDistance: 0.09833
+    velocity: 26.5
+    extraGravity: 0.3
+    throwAngle: 16
+    expTime: 1.8
+    ignoreWall: 0
+  references:
+    version: 1
+    RefIds: []

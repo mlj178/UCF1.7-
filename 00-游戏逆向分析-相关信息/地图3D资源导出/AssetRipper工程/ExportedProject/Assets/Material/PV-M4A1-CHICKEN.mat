@@ -1,0 +1,67 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!21 &2100000
+Material:
+  serializedVersion: 6
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_Name: PV-M4A1-CHICKEN
+  m_Shader: {fileID: 4800000, guid: f2402bada70983349b78e55249c58387, type: 3}
+  m_ShaderKeywords:
+  m_LightmapFlags: 4
+  m_EnableInstancingVariants: 0
+  m_DoubleSidedGI: 0
+  m_CustomRenderQueue: -1
+  stringTagMap: {}
+  disabledShaderPasses: []
+  m_SavedProperties:
+    serializedVersion: 3
+    m_TexEnvs:
+      _AlphaMap:
+        m_Texture: {fileID: 2800000, guid: 5038d46bd78f1b14c9f40dbde2ae6319, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+      _CubeMap:
+        m_Texture: {fileID: 2700000, guid: 0000000deadbeef15deadf00d0000000, type: 2}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+      _MainTex:
+        m_Texture: {fileID: 2800000, guid: 0a2b499e0438b5c4eb2cd80e2072181f, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+      _NormalMap:
+        m_Texture: {fileID: 2800000, guid: 0ffd9f95aeeedcd48b65d49a3b09a0ce, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+      _SpecularMap:
+        m_Texture: {fileID: 2800000, guid: 5ac7cbc175fa12b4cb665621cb2168bd, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+      _texcoord:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    m_Floats:
+      _Alpha: 1
+      _AlphaCutoff: 0.5
+      _AlphaDst: 0
+      _AlphaSrc: 1
+      _CubeMapBrightness: 10
+      _DisableNormalMap: 0
+      _DisabledAlphaR: 0
+      _Gloss: 1
+      _MainBrightness: 1
+      _MinAlpha: 0
+      _MinDiffuse: 0.5
+      _MinShadow: 0.6
+      _MinSpecular: 0
+      _NormalScale: 1
+      _RGBDst: 0
+      _RGBSrc: 1
+      _SpecularBrightness: 1
+    m_Colors:
+      _BaseColor: {r: 1, g: 1, b: 1, a: 1}
+      _EmissionColor: {r: 1, g: 1, b: 1, a: 1}
+  m_BuildTextureStacks: []

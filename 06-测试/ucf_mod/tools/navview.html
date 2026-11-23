@@ -299,7 +299,8 @@ body.embed .hud{font-size:10px;padding:3px 6px;max-width:calc(100% - 12px)}
       <div class="sec" id="sec-view" style="display:none">
         <div class="h">显示</div>
         <div class="card">
-          <label class="chk"><input type="checkbox" id="c-geo" checked><span class="dot" style="background:#6b7f96"></span>地形（灰模，无贴图）</label>
+          <label class="chk"><input type="checkbox" id="c-geo" checked><span class="dot" style="background:#6b7f96"></span>地形</label>
+          <label class="chk"><input type="checkbox" id="c-tex" checked><span class="dot" style="background:#d9a066"></span>贴图<b id="tex-cnt" style="margin-left:6px;font-weight:400;color:var(--tx3)">-</b></label>
           <label class="chk"><input type="checkbox" id="c-navmesh" checked><span class="dot" style="background:#26e08e"></span>可走面（A* NavMesh）<b id="navm-cnt" style="margin-left:6px;font-weight:400;color:var(--tx3)">-</b></label>
           <label class="chk"><input type="checkbox" id="c-edges" checked><span class="dot" style="background:var(--edge)"></span>连接边</label>
           <label class="chk"><input type="checkbox" id="c-blocked" checked><span class="dot" style="background:var(--blocked)"></span>不可走路点</label>
@@ -387,6 +388,7 @@ body.embed .hud{font-size:10px;padding:3px 6px;max-width:calc(100% - 12px)}
           <button class="btn" id="b3-side" title="平视">平视</button>
           <button class="btn" id="b3-focus" title="F：跑到选中点">看选中</button>
           <span class="sep"></span>
+          <label class="chk" style="padding:0 4px" title="按游戏原贴图渲染；取消就是原来的灰模"><input type="checkbox" id="c3-tex" checked>贴图</label>
           <label class="chk" style="padding:0 4px" title="按楼层带剖切，看室内"><input type="checkbox" id="c3-cut">切层</label>
           <label class="chk" style="padding:0 4px" title="只在选中点附近 ±25 m 画地形"><input type="checkbox" id="c3-near">近处</label>
           <label class="chk" style="padding:0 4px" title="路点穿透墙壁也能看见（半透明叠加）"><input type="checkbox" id="c3-xray" checked>穿透</label>
@@ -510,7 +512,7 @@ const S = {
   navm: null, navmLevel: "", navmBusy: false, showNavm: true,
   band: { on: false, lo: -50, hi: 50 },
   plan: null, planKey: "",
-  showGeo: true, showEdges: true, showBlocked: true, showTagged: true,
+  showGeo: true, showTex: true, showEdges: true, showBlocked: true, showTagged: true,
   showFeats: true, showIso: true, cut3: false, near3: false, xray3: true,
   showCompass: true,          /* 方向罗盘（东南西北）：与路点工作台的「方向」开关同一个状态 */
   follow: true
@@ -1101,7 +1103,7 @@ function parseGeo(buf, level) {
   const dv = new DataView(buf);
   if (dv.getUint32(0, true) !== 0x47464355) throw new Error("网格文件头不对");   /* 'UCFG' 小端 */
   const ver = dv.getUint32(4, true);
-  if (ver !== 1) throw new Error("网格版本不支持：" + ver);
+  if (ver < 1 || ver > 2) throw new Error("网格版本不支持：" + ver);
   const jl = dv.getUint32(8, true);
   const hdr = JSON.parse(new TextDecoder("utf-8").decode(new Uint8Array(buf, 12, jl)));
   let off = 12 + jl;
@@ -1110,8 +1112,15 @@ function parseGeo(buf, level) {
   const pos = new Float32Array(buf, off, n * 3); off += n * 12;
   const nrm = new Int8Array(buf, off, n * 3); off += n * 3;
   off += (4 - (off % 4)) % 4;
+  /* v2：位置/法线之后是 UV（每顶点 2 个 f32），再对齐 4 字节才是指引 */
+  let uv = null;
+  if (ver >= 2) {
+    uv = new Float32Array(buf, off, n * 2);
+    off += n * 8;
+    off += (4 - (off % 4)) % 4;
+  }
   const idx = new Uint32Array(buf, off, t * 3);
-  return { hdr: hdr, level: level, pos: pos, nrm: nrm, tris: idx, nv: n, nt: t };
+  return { hdr: hdr, level: level, pos: pos, nrm: nrm, uv: uv, tris: idx, nv: n, nt: t };
 }
 
 /* ---- 可走面（A* NavMeshGraph）：插件导出的 UCFNM3 ----------------------
@@ -1184,6 +1193,15 @@ function setNavmCount() {
   const el = $("navm-cnt");
   if (!el) return;
   el.textContent = S.navm ? (S.navm.tri + " 三角 / " + S.navm.nv + " 顶点") : "无数据";
+}
+
+/* 贴图开关旁边的小字：这张图有几张贴图、已经载入几张 */
+function updateTexCount() {
+  const el = $("tex-cnt");
+  if (!el) return;
+  const list = (S.geo && S.geo.hdr && S.geo.hdr.tex) || [];
+  if (!list.length) { el.textContent = "无"; return; }
+  el.textContent = S.showTex ? (gl3.texCount + "/" + list.length) : "灰模";
 }
 
 function updateBandFromNodes() {
@@ -1903,19 +1921,21 @@ const gl3 = {
   ready: false, gl: null, lost: false,
   progMesh: null, progPoint: null, progDraw: null,
   geoBuf: null, geoIdxType: 0, geoN: 0, geoChunks: [],
+  tex: {}, texLevel: "", texCount: 0,
   navPos: null, navCol: null, navCount: 0, navDirty: true,
   rzPos: null, rzCol: null, rzCount: 0, rzDirty: true
 };
 
 const VS_MESH = [
-  "attribute vec3 aPos;", "attribute vec3 aNrm;",
-  "uniform mat4 uVP;", "varying vec3 vN;", "varying vec3 vW;", "varying float vY;",
-  "void main(){ vN=aNrm; vW=aPos; vY=aPos.y; gl_Position = uVP*vec4(aPos,1.0); }"
+  "attribute vec3 aPos;", "attribute vec3 aNrm;", "attribute vec2 aUV;",
+  "uniform mat4 uVP;", "varying vec3 vN; varying vec3 vW; varying vec2 vUV; varying float vY;",
+  "void main(){ vN=aNrm; vW=aPos; vUV=aUV; vY=aPos.y; gl_Position = uVP*vec4(aPos,1.0); }"
 ].join("\n");
 const FS_MESH = [
   "precision mediump float;",
   "uniform vec3 uColor; uniform vec4 uCut; uniform vec4 uNear;", "uniform float uBright;",
-  "varying vec3 vN; varying vec3 vW; varying float vY;",
+  "uniform sampler2D uTex; uniform float uUseTex; uniform float uAlphaTest;",
+  "varying vec3 vN; varying vec3 vW; varying vec2 vUV; varying float vY;",
   "void main(){",
   "  if (uCut.x > 0.5 && (vY < uCut.y || vY > uCut.z)) discard;",
   "  if (uNear.x > 0.5 && distance(vW, uNear.yzw) > 26.0) discard;",
@@ -1924,7 +1944,12 @@ const FS_MESH = [
   "  vec3 L = normalize(vec3(-0.42, 0.82, -0.38));",
   "  float lam = max(dot(n, L), 0.0);",
   "  float hemi = 0.5 + 0.5 * n.y;",
-  "  vec3 c = uColor * (0.17 + 0.52 * lam + 0.20 * hemi) * uBright;",
+  "  vec4 texel = (uUseTex > 0.5) ? texture2D(uTex, vUV) : vec4(1.0);",
+  "  if (uUseTex > 0.5 && uAlphaTest > 0.5 && texel.a < 0.5) discard;",   /* 只有材质标了 alpha clip 的分块才镂空；不透明帆布/油布不能按 alpha 抠 */
+  "  vec3 base = uColor * (uUseTex > 0.5 ? pow(max(texel.rgb, vec3(0.0)), vec3(0.82)) : texel.rgb);",
+  "  vec3 lf = (uUseTex > 0.5) ? vec3(0.86 + 0.20 * lam + 0.06 * hemi)",
+  "                            : vec3(0.17 + 0.52 * lam + 0.20 * hemi);",
+  "  vec3 c = base * lf * uBright;",
   "  gl_FragColor = vec4(c, 1.0);",
   "}"
 ].join("\n");
@@ -2072,6 +2097,7 @@ function uploadGeo() {
   if (!gl3.ready || !S.geo) return;
   if (gl3.geoBuf) {
     try { gl.deleteBuffer(gl3.geoBuf.aPos); gl.deleteBuffer(gl3.geoBuf.aNrm); gl.deleteBuffer(gl3.geoBuf.idx); } catch (e) {}
+    if (gl3.geoBuf.aUV) { try { gl.deleteBuffer(gl3.geoBuf.aUV); } catch (e) {} }
   }
   const G = S.geo;
   const aPos = gl.createBuffer();
@@ -2088,11 +2114,58 @@ function uploadGeo() {
     else { gl3.geoBuf = null; return; }
   }
   gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, data, gl.STATIC_DRAW);
-  gl3.geoBuf = { aPos: aPos, aNrm: aNrm, idx: idx };
+  let aUV = null;
+  if (G.uv) {
+    aUV = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, aUV);
+    gl.bufferData(gl.ARRAY_BUFFER, G.uv, gl.STATIC_DRAW);
+  }
+  gl3.geoBuf = { aPos: aPos, aNrm: aNrm, aUV: aUV, idx: idx };
   gl3.geoIdxType = type;
   gl3.geoIdxBytes = type === gl.UNSIGNED_SHORT ? 2 : 4;
   gl3.geoChunks = (G.hdr.chunks || []).slice();
   gl3.geoN = G.nt;
+  loadGeoTextures();
+}
+
+/* 贴图：geo2web v2 在 bin 里带了 UV 和贴图清单；PNG 由 /api/tex 逐张给。
+ * 一张都没取到也不影响 —— 每块 tex<0 就按老样子用纯色渲染。 */
+function loadGeoTextures() {
+  const G = S.geo;
+  const list = (G && G.hdr && G.hdr.tex) || [];
+  if (!G || !G.uv || !list.length || !gl3.ready) return;
+  if (gl3.texLevel === S.geoLevel && gl3.texCount) return;
+  /* 换图时把上一张图的贴图从显存里删掉，否则来回切图会一直涨 */
+  Object.keys(gl3.tex).forEach(function (k) {
+    if (gl3.tex[k]) { try { gl3.gl.deleteTexture(gl3.tex[k]); } catch (e) {} }
+  });
+  gl3.texLevel = S.geoLevel;
+  gl3.tex = {};
+  gl3.texCount = 0;
+  const lvl = S.geoLevel;
+  list.forEach(function (t) {
+    fetch("/api/tex?level=" + encodeURIComponent(lvl) + "&name=" + encodeURIComponent(t.file),
+          { cache: "force-cache" })
+      .then(function (r) { if (!r.ok) throw new Error("HTTP " + r.status); return r.blob(); })
+      .then(function (b) { return createImageBitmap(b); })
+      .then(function (img) {
+        const gl = gl3.gl;
+        const tx = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D, tx);
+        gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);   /* Unity 的 UV 原点在左下 */
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
+        gl.generateMipmap(gl.TEXTURE_2D);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
+        gl3.tex[t.file] = tx;
+        gl3.texCount++;
+        updateTexCount();
+        schedule();
+      })
+      .catch(function () { gl3.tex[t.file] = null; });
+  });
 }
 
 function uploadNavm() {
@@ -2227,21 +2300,48 @@ function render3() {
       if (n0) gl.uniform4f(nearU, 1, n0.p[0], n0.p[1], n0.p[2]); else gl.uniform4f(nearU, 0, 0, 0, 0);
     } else gl.uniform4f(nearU, 0, 0, 0, 0);
     gl.uniform1f(gl.getUniformLocation(p, "uBright"), 0.92);
-    const aPos = gl.getAttribLocation(p, "aPos"), aNrm = gl.getAttribLocation(p, "aNrm");
+    const aPos = gl.getAttribLocation(p, "aPos"), aNrm = gl.getAttribLocation(p, "aNrm"),
+          aUV = gl.getAttribLocation(p, "aUV");
     gl.bindBuffer(gl.ARRAY_BUFFER, gl3.geoBuf.aPos);
     gl.enableVertexAttribArray(aPos);
     gl.vertexAttribPointer(aPos, 3, gl.FLOAT, false, 0, 0);
     gl.bindBuffer(gl.ARRAY_BUFFER, gl3.geoBuf.aNrm);
     gl.enableVertexAttribArray(aNrm);
     gl.vertexAttribPointer(aNrm, 3, gl.BYTE, true, 0, 0);
+    const hasUV = !!gl3.geoBuf.aUV && aUV >= 0;
+    if (hasUV) {
+      gl.bindBuffer(gl.ARRAY_BUFFER, gl3.geoBuf.aUV);
+      gl.enableVertexAttribArray(aUV);
+      gl.vertexAttribPointer(aUV, 2, gl.FLOAT, false, 0, 0);
+    } else if (aUV >= 0) {
+      gl.disableVertexAttribArray(aUV);
+    }
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, gl3.geoBuf.idx);
     const colU = gl.getUniformLocation(p, "uColor");
+    const useTexU = gl.getUniformLocation(p, "uUseTex");
+    const alphaU = gl.getUniformLocation(p, "uAlphaTest");
+    const texU = gl.getUniformLocation(p, "uTex");
+    if (texU) gl.uniform1i(texU, 0);
+    const texList = (S.geo.hdr && S.geo.hdr.tex) || [];
+    const wantTex = !!(S.showTex && hasUV && texList.length && gl3.texCount);
     const chunks = gl3.geoChunks;
     for (let i = 0; i < chunks.length; i++) {
       const ch = chunks[i];
       const cc = ch.color || [1, 1, 1];
-      const k = 0.62 + 0.30 * (i % 3) / 2;
-      gl.uniform3f(colU, cc[0] * k, cc[1] * k, cc[2] * k);
+      let tx = null;
+      if (wantTex && ch.tex >= 0 && texList[ch.tex]) tx = gl3.tex[texList[ch.tex].file] || null;
+      if (tx) {
+        gl.activeTexture(gl.TEXTURE0);
+        gl.bindTexture(gl.TEXTURE_2D, tx);
+        gl.uniform1f(useTexU, 1);
+        gl.uniform1f(alphaU, ch.alpha ? 1 : 0);
+        gl.uniform3f(colU, cc[0], cc[1], cc[2]);
+      } else {
+        const k = 0.62 + 0.30 * (i % 3) / 2;
+        gl.uniform1f(useTexU, 0);
+        gl.uniform1f(alphaU, 0);
+        gl.uniform3f(colU, cc[0] * k, cc[1] * k, cc[2] * k);
+      }
       gl.drawElements(gl.TRIANGLES, ch.count * 3, gl3.geoIdxType, ch.start * 3 * gl3.geoIdxBytes);
     }
   }
@@ -2295,7 +2395,7 @@ function render3() {
   }
 
   const ninfo = S.navm ? (" · 可走面 <b>" + S.navm.tri + "</b> 三角") : "";
-  const tinfo = S.geo ? (S.geo.nt + " 三角形") : "无地形";
+  const tinfo = S.geo ? (S.geo.nt + " 三角形" + (gl3.texCount ? " · 贴图 " + gl3.texCount : "")) : "无地形";
   $("hud3").innerHTML = "距离 <b>" + S.v3.dist.toFixed(0) + "</b> m · 偏航 <b>" +
     (S.v3.yaw * 180 / Math.PI).toFixed(0) + "°</b> · 俯仰 <b>" + (S.v3.pitch * 180 / Math.PI).toFixed(0) +
     "°</b> · " + tinfo + ninfo +
@@ -2351,6 +2451,57 @@ function pick3(mx, my) {
     else if (Math.abs(d - bd) < 1 && cw < bz) { best = i; bz = cw; }
   }
   return best < 0 ? -1 : S.nodes[best].uid;
+}
+
+window.__pickChunk = pickChunk;
+
+/* 点中哪一块地形：从相机往屏幕点发一条射线，遍历三角形取最近命中。
+ * 回答「这块黑的是什么」用 —— 返回 {chunk, name, tex, dist}；没命中返回 null。 */
+function pickChunk(mx, my) {
+  const G = S.geo;
+  if (!G || !G.tris || !G.nt) return null;
+  const v = S.v3;
+  const cp = Math.cos(v.pitch), sp = Math.sin(v.pitch);
+  const dir = [cp * Math.sin(v.yaw), sp, cp * Math.cos(v.yaw)];
+  const eye = [v.tx + v.dist * dir[0], v.ty + v.dist * dir[1], v.tz + v.dist * dir[2]];
+  const f = [-dir[0], -dir[1], -dir[2]];
+  const r = [Math.cos(v.yaw), 0, -Math.sin(v.yaw)];
+  const u = [-sp * Math.sin(v.yaw), cp, -sp * Math.cos(v.yaw)];
+  const ty = Math.tan(26 * Math.PI / 180), tx = ty * (W3 / Math.max(1, H3));
+  const nx = mx / Math.max(1, W3) * 2 - 1, ny = 1 - my / Math.max(1, H3) * 2;
+  let dx = f[0] + r[0] * nx * tx + u[0] * ny * ty;
+  let dy = f[1] + r[1] * nx * tx + u[1] * ny * ty;
+  let dz = f[2] + r[2] * nx * tx + u[2] * ny * ty;
+  const dl = Math.hypot(dx, dy, dz) || 1; dx /= dl; dy /= dl; dz /= dl;
+  const P = G.pos, T = G.tris;
+  let best = 1e18, bi = -1;
+  for (let i = 0, n = G.nt; i < n; i++) {
+    const a = T[i * 3] * 3, b = T[i * 3 + 1] * 3, c = T[i * 3 + 2] * 3;
+    const e1x = P[b] - P[a], e1y = P[b + 1] - P[a + 1], e1z = P[b + 2] - P[a + 2];
+    const e2x = P[c] - P[a], e2y = P[c + 1] - P[a + 1], e2z = P[c + 2] - P[a + 2];
+    const px = dy * e2z - dz * e2y, py = dz * e2x - dx * e2z, pz = dx * e2y - dy * e2x;
+    const det = e1x * px + e1y * py + e1z * pz;
+    if (det > -1e-9 && det < 1e-9) continue;
+    const inv = 1 / det;
+    const ox = eye[0] - P[a], oy = eye[1] - P[a + 1], oz = eye[2] - P[a + 2];
+    const bu = (ox * px + oy * py + oz * pz) * inv;
+    if (bu < 0 || bu > 1) continue;
+    const qx = oy * e1z - oz * e1y, qy = oz * e1x - ox * e1z, qz = ox * e1y - oy * e1x;
+    const bv = (dx * qx + dy * qy + dz * qz) * inv;
+    if (bv < 0 || bu + bv > 1) continue;
+    const t = (e2x * qx + e2y * qy + e2z * qz) * inv;
+    if (t > 0.05 && t < best) { best = t; bi = i; }
+  }
+  if (bi < 0) return null;
+  const chs = G.hdr.chunks || [];
+  let ci = -1;
+  for (let k = 0; k < chs.length; k++) {
+    if (bi >= chs[k].start && bi < chs[k].start + chs[k].count) { ci = k; break; }
+  }
+  if (ci < 0) return null;
+  const ch = chs[ci];
+  const tex = (ch.tex >= 0 && G.hdr.tex && G.hdr.tex[ch.tex]) ? G.hdr.tex[ch.tex].file : "";
+  return { chunk: ci, name: ch.name, tex: tex, dist: best };
 }
 
 function focus3(p) {
@@ -3318,6 +3469,18 @@ function bindSide() {
     if (miss) msg += "；" + miss + " 个落不了（附近也没路点）";
     setMsg(msg, (miss || ref) ? "warn" : "ok");
   };
+  $("c-tex").addEventListener("change", function () {
+    S.showTex = this.checked;
+    $("c3-tex").checked = S.showTex;      /* 3D 工具条和侧栏两个开关同步 */
+    updateTexCount();
+    schedule();
+  });
+  $("c3-tex").addEventListener("change", function () {
+    S.showTex = this.checked;
+    $("c-tex").checked = S.showTex;
+    updateTexCount();
+    schedule();
+  });
   $("c-navmesh").addEventListener("change", function () {
     S.showNavm = this.checked;
     if (S.showNavm && !S.navm && S.level) loadNavm(S.level);
@@ -3326,6 +3489,7 @@ function bindSide() {
   ["c-geo", "c-edges", "c-blocked", "c-tagged", "c-feats", "c-iso"].forEach(function (id) {
     $(id).addEventListener("change", function () {
       S.showGeo = $("c-geo").checked;
+      updateTexCount();
       S.showEdges = $("c-edges").checked;
       S.showBlocked = $("c-blocked").checked;
       S.showTagged = $("c-tagged").checked;
@@ -3677,6 +3841,12 @@ function bindCanvas3() {
     /* 左键：点中就选中；按住拖动就是框选 */
     const uid = pick3(p[0], p[1]);
     if (uid >= 0) { select(uid, e.shiftKey); setMsg("选中 " + uid, "ok"); }
+    else {
+      /* 没点到路点就看点到的是哪块地形 —— 用来回答「这块黑的是什么」 */
+      const ch = pickChunk(p[0], p[1]);
+      if (ch) setMsg("点中地形：" + ch.name + (ch.tex ? "（贴图 " + ch.tex + "）" : "（无贴图）"), "ok");
+      else setMsg("这里是空的：没有地形", "warn");
+    }
     drag = { mode: "box", x: p[0], y: p[1], moved: false, hit: uid >= 0 };
     e.preventDefault();
   });
@@ -3846,6 +4016,10 @@ function emptyState() {
 }
 
 async function autoOpen() {
+  /* ?level=levelN：工作台地图没有 map.json（只有可走面）时，直接指定 3D 关卡，
+   * 避免 autoOpen 去挑上一张快照（例如 04 胜利广场/07 死亡擂台被加载成新寂静村）。 */
+  const lm = /[?&]level=([^&]+)/.exec(location.search);
+  const forceLevel = lm ? decodeURIComponent(lm[1]) : "";
   const m = /[?&](?:open|file)=([^&]+)/.exec(location.search);
   if (m) {
     const u = decodeURIComponent(m[1]).replace(/\\/g, "/");
@@ -3858,6 +4032,21 @@ async function autoOpen() {
     if (pk) {
       try { await loadPack(decodeURIComponent(pk[1]), false); } catch (e) {}
     }
+    if (forceLevel) {
+      S.level = forceLevel;
+      renderLevelSelect();
+      try { $("lvsel").value = forceLevel; } catch (e) {}
+      try { await loadGeo(forceLevel); } catch (e) {}
+      try { await loadNavm(forceLevel); } catch (e) {}
+    }
+    return;
+  }
+  if (forceLevel) {
+    S.level = forceLevel;
+    renderLevelSelect();
+    try { $("lvsel").value = forceLevel; } catch (e) {}
+    try { await loadGeo(forceLevel); } catch (e) {}
+    try { await loadNavm(forceLevel); } catch (e) {}
     return;
   }
   if (!S.snapshots.length) {

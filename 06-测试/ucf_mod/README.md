@@ -55,7 +55,8 @@ ucf_mod/
 │   ├── ucf_paths.py     工程端/部署端路径解析（唯一真相）
 │   ├── navserver.py     路点工作台本地只读服务
 │   ├── navview.html     只读查看前端（俯视 + 3D + 可走面）
-│   ├── geo2web.py       geo/*.npz → geo/web/*.bin（3D 地形）
+│   ├── geo2web.py       geo/*.npz → geo/web/*.bin（3D 地形；v2 带 UV + 贴图表）
+│   ├── fetch_tex.py     从 AssetRipper 拉贴图 → geo/tex/<关卡>/（3D 贴图源）
 │   ├── 控制台.pyw        开关面板（CustomTkinter，双击 启动控制台.bat）
 │   ├── test_console_switches.py  cfg.c ↔ 控制台开关表一致性自检
 │   ├── extract_geo.py   从游戏资源抽几何 → geo/*.npz
@@ -98,12 +99,42 @@ ucf_mod/
 建测试包 / 升成品仍用控制台「人机路点」「数据」页，或 `python tools/navdata.py pack new|promote`。
 `geo/web` 缺失时会自动用 `geo2web.py` 重建。
 
-**3D 灰模和路点错位（2026-11-21）**：同一块网格在游戏里常被导出两遍（普通材质一份、
-`Shadow` 材质一份）。以前一律丢掉 `Shadow` 那份，运输船上留下的那份整体偏了约 15 m，
-3D 里就是「路点网挂在船外面、船头空一截」。现在 `geo2web.py` 用这张图自己的路点当尺子
-（`navdata/dev/<图>/map.json`）算两份各自盖住多少路点：差得明显就只留对的那份，
-差不多就两份都画。运输船：shadow 0.99 / 普通 0.86 → 只留 shadow 那套，
-路点落在船上的比例 0.86 → 0.995。重建：`python tools/geo2web.py --force`（只重跑某张图就加关卡名）。
+**3D 灰模和路点错位（2026-11-21，2026-11-23 复核）**：场景里每件道具都有两个
+MeshRenderer：`X (1)`（独立网格 + `CrossFire/Shadow` 材质，`MeshCollider` 用的也是
+这份网格）和 `X`（合并网格 `Combined Mesh (root: scene)` 的子网格，带贴图的普通材质）。
+合并网格那套在我们这里每个子网格都被平移过、位置对不上（拿 786 个路点当尺子：
+Shadow 那套 0.99，合并网格 0.86），所以 `geo2web.py` 只在两套之间挑一套，运输船留
+Shadow 那套——它就是碰撞体用的那份，位置是对的。代价：只在合并网格里出现的十几个
+小块（玻璃/灯/气罐等，约 3% 三角形）会缺。
+重建：`python tools/geo2web.py --force`（只重跑某张图就加关卡名）。
+
+**3D 船体/桅杆缺失（2026-11-23 用户反馈）**：`card`（巨幅装饰面）分块原来一律丢，
+而运输船的船体外壳、吊臂、桅杆、围栏恰好都被标成了 card —— 3D 里船就剩一块飘着的
+平板。现在默认**保留 card**（只丢 blocker 碰撞壳）；要老行为用 `--drop-cards`。
+重建后运输船 19,253 三角 / 67 分块（原来 19,014 / 60）。
+
+**3D 贴图（2026-11-23，全部地图）**：3D 里原来是纯灰模，进图分不清哪是哪。现在
+3D 侧栏多一个「贴图」开关（默认开），地形按游戏原贴图渲染，认块、认箱子、认船体都靠它。
+
+数据链（全部离线、只读）：
+
+1. **AssetRipper 导出 Unity 工程**到
+   `00-游戏逆向分析-相关信息\地图3D资源导出\AssetRipper工程\ExportedProject`
+   （GUI「Export Unity Project」，或 `POST /Export/UnityProject`）；
+2. `python "docs\guide\地图3D资源导出\代码\scene_export2web.py" --scene levelN --level levelN`
+   解析 `Assets/Scenes/levelN.unity`：合批物体按 `m_StaticBatchInfo` 取世界坐标子网格，
+   单体物体按 Transform 父链取世界矩阵；UV 同时支持 Float32/Float16，个别未初始化的
+   垃圾 UV 用 XZ 平面投影兜底；材质 `_MainTex` 的贴图复制到 `geo/tex/levelN/`；
+3. 输出 **UCFG v2**：位置 + 法线 + **UV** + 每块的贴图号；
+4. `navserver` 的 `/api/tex?level=&name=` 提供 PNG，`navview.html` 逐块绑纹理。
+
+- **level1 ~ level11 全部已接入贴图**；旧版 v1 bin 已按要求清理，不再保留。
+- 资源库、代码、文档和完整执行记录见
+  [docs/guide/地图3D资源导出/需求与执行记录.md](docs/guide/地图3D资源导出/需求与执行记录.md)。
+- 跳过的是 `CrossFire/Shadow` 影子代理、`Lit` 灯片、水面（这些是影子/灯效，不是主几何）。
+- **alpha 按材质**：只有 `_AlphaClip=1` 的绳网/铁栅栏才镂空；不透明帆布/油布
+  （`SBOX_01/SBOX_02/TSHIP_012` 等）保持实体，不会再被抠成碎片。
+- 贴图开关：3D 工具条的「贴图」，旁边小字是「已载入/总数」；关掉就是原来的灰模。
 
 ## 控制台「人机路点」+ 游戏内菜单（2026-11-18）
 

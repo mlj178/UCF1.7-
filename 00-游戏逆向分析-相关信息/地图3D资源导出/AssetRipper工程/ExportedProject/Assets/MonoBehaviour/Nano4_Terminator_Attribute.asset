@@ -1,0 +1,173 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 708388d779313dea16b81a8e67fb90b3, type: 3}
+  m_Name: Nano4_Terminator_Attribute
+  m_EditorClassIdentifier:
+  normalRound:
+    nano:
+      items:
+      - name: 0
+        count: 1
+      - name: 1
+        count: 1
+      - name: 2
+        count: 1
+      - name: 3
+        count: 1
+      - name: 4
+        count: 1
+      - name: 5
+        count: 1
+      - name: 6
+        count: 1
+      - name: 7
+        count: 1
+      - name: 8
+        count: 1
+      - name: 9
+        count: 1
+    human:
+      items:
+      - name: 10
+        count: 20
+      - name: 11
+        count: 15
+      - name: 12
+        count: 3
+      - name: 13
+        count: 5
+      - name: 14
+        count: 2
+      - name: 15
+        count: 2
+      - name: 16
+        count: 10
+      - name: 17
+        count: 3
+      - name: 18
+        count: 20
+      - name: 19
+        count: 20
+  battleRound:
+    nano:
+      items:
+      - name: 0
+        count: 2
+      - name: 5
+        count: 3
+      - name: 6
+        count: 3
+      - name: 3
+        count: 3
+      - name: 4
+        count: 3
+      - name: 7
+        count: 2
+      - name: 9
+        count: 4
+    human:
+      items:
+      - name: 11
+        count: 5
+      - name: 13
+        count: 5
+      - name: 16
+        count: 2
+      - name: 19
+        count: 8
+  attributes:
+  - attributeName: 基因变异
+    id: 0
+    image: {fileID: 21300000, guid: a484e86613ac2294790fc808d9cc7eb4, type: 2}
+    description: 缩短技能冷却时间。
+  - attributeName: 末日降临
+    id: 1
+    image: {fileID: 21300000, guid: f3b1c9328070df34d9d01f4b84f3d504, type: 2}
+    description: 首波生化全部作为终结者登场。
+  - attributeName: 过度增长
+    id: 2
+    image: {fileID: 21300000, guid: 0fd1f932d80d8e24789b963e8c901ff9, type: 2}
+    description: 进化时，获得额外HP。
+  - attributeName: 硬化
+    id: 3
+    image: {fileID: 21300000, guid: 5310541c2ff3f334092056a09291f80d, type: 2}
+    description: 减少受到的所有伤害。
+  - attributeName: 补给防御
+    id: 4
+    image: {fileID: 21300000, guid: 8eebbcd253c49184d835115229602852, type: 2}
+    description: 获取补给箱时增加防御力。
+  - attributeName: 钢铁利爪
+    id: 5
+    image: {fileID: 21300000, guid: 1e9eb8e49dd0d5541a164612c80f42ed, type: 2}
+    description: 生化幽灵的攻击力与\n攻击范围增加
+  - attributeName: 感染经验值
+    id: 6
+    image: {fileID: 21300000, guid: 723533efd378f744f9c36d9afb0ea662, type: 2}
+    description: 成功感染后，自身攻击力与\nHP都会增加。
+  - attributeName: 沸血
+    id: 7
+    image: {fileID: 21300000, guid: 758df47d366ec984d9314bdc0ab92d6b, type: 2}
+    description: 获取补给箱时，获得\n移速和攻速加成。
+  - attributeName: 终结者出现
+    id: 8
+    image: {fileID: 21300000, guid: 0dafec76899613d4491a2c75f09b1fc8, type: 2}
+    description: 额外提供红色补给箱。
+  - attributeName: 不死契约
+    id: 9
+    image: {fileID: 21300000, guid: 622087b2419519f4c8bb9e1c0eafdc08, type: 2}
+    description: 死亡时出现墓碑，\n一段时间后复活。
+  - attributeName: 救世主
+    id: 10
+    image: {fileID: 21300000, guid: 5e0726a84a9ca884287ebfe636d1ae02, type: 2}
+    description: 回合开始时，救世主英雄登场。
+  - attributeName: 致命一击
+    id: 11
+    image: {fileID: 21300000, guid: 473dcbd5e21b44845a77a8d61b6fffdb, type: 2}
+    description: 击杀生化幽灵后，攻击力会增加。
+  - attributeName: 连发手雷
+    id: 12
+    image: {fileID: 21300000, guid: 0f4a14694cd5e0846befbd8a161ff882, type: 2}
+    description: 提高手雷携带数量和攻击力。
+  - attributeName: 强力补给
+    id: 13
+    image: {fileID: 21300000, guid: 171f6e433755ca940adefffb5275e430, type: 2}
+    description: 获取补给箱时增加攻击力\n可叠加
+  - attributeName: 无限弹药
+    id: 14
+    image: {fileID: 21300000, guid: a126c5a22903f3040aac26034e4a12c3, type: 2}
+    description: 无限弹药。
+  - attributeName: 快速装弹
+    id: 15
+    image: {fileID: 21300000, guid: a78ab536749005e40b96e9948d0c51bc, type: 2}
+    description: 加快佣兵装弹速度。
+  - attributeName: 绝命生还
+    id: 16
+    image: {fileID: 21300000, guid: 0c02708e68ccb1744918ca5a609ebdb9, type: 2}
+    description: 所有佣兵均可使用特殊技能。
+  - attributeName: 特工
+    id: 17
+    image: {fileID: 21300000, guid: b16e926b1b1de4d49b70165701d3fdd9, type: 2}
+    description: 所有佣兵均可使用特殊技能。
+  - attributeName: 英雄出现
+    id: 18
+    image: {fileID: 21300000, guid: 2b7ac44de28f2434ca223b9eac4f5504, type: 2}
+    description: 额外提供蓝色补给箱。
+  - attributeName: 致命攻击
+    id: 19
+    image: {fileID: 21300000, guid: 205b68e5b3acd9e4596b7d78bc31d471, type: 2}
+    description: 适用暴击伤害。
+  SkillBtn_GoldShield: {fileID: 1709254077376921, guid: c621c19631c987648b3e5017f9d61251, type: 2}
+  SFX_GoldShield: {fileID: 1709254077376921, guid: c9fc2d003fb7cb949aff502c67104854, type: 2}
+  FX_GoldShield: {fileID: 1709254077376921, guid: a637acc6f4d0cd34fa6b5be82bfa3869, type: 2}
+  SkillBtn_SPAgent: {fileID: 1709254077376921, guid: 9bca2acfbb2ea4f4dae17a2f4d77bf56, type: 2}
+  FX_SPAgent: {fileID: 1709254077376921, guid: d917f530a5edc364e84b8c65977d7750, type: 2}
+  TombStone: {fileID: 1709254077376921, guid: 43d3368dd016917498e2dd9b6d36f4e2, type: 2}

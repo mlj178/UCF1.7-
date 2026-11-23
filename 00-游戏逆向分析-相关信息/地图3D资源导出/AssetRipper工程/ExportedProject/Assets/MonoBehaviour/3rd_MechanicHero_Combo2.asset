@@ -1,0 +1,22 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ab3c07f6b9b302dbfcec949aabed909e, type: 3}
+  m_Name: 3rd_MechanicHero_Combo2
+  m_EditorClassIdentifier:
+  attachType: 0
+  setNodeAsParent: 0
+  allFx:
+  - fxPrefab: {fileID: 1709254077376921, guid: 70ba1ea5ea6f20c44a1a600414335cdf, type: 2}
+    fxSize: 0.16
+    attachName: spine
+    offset: {x: -0.25, y: 0, z: 0}
+    euler: {x: -30, y: 185, z: 90}

@@ -1,0 +1,117 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!21 &2100000
+Material:
+  serializedVersion: 6
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_Name: PV-M4A1_S_Jewelry00
+  m_Shader: {fileID: 4800000, guid: f2402bada70983349b78e55249c58387, type: 3}
+  m_ShaderKeywords:
+  m_LightmapFlags: 4
+  m_EnableInstancingVariants: 1
+  m_DoubleSidedGI: 0
+  m_CustomRenderQueue: -1
+  stringTagMap: {}
+  disabledShaderPasses: []
+  m_SavedProperties:
+    serializedVersion: 3
+    m_TexEnvs:
+      _AlphaMap:
+        m_Texture: {fileID: 2800000, guid: 707228ba94d632e40a3350f3d59eb2c9, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+      _CubeMap:
+        m_Texture: {fileID: 2700000, guid: 0000000deadbeef15deadf00d0000000, type: 2}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+      _MainTex:
+        m_Texture: {fileID: 2800000, guid: 203f9b602a394794f8bae94d4ed5997e, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+      _NormalMap:
+        m_Texture: {fileID: 2800000, guid: b5c6e597a6d121e40966b4ad5109c660, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+      _SpecularMap:
+        m_Texture: {fileID: 2800000, guid: e4e2444ba2b7d424f8e64353c49fb7b3, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+      _texcoord:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    m_Floats:
+      Vector1_2a240781cf94482e8a0bf86ff7d5811c: 0.75
+      Vector1_34d2af2aa3884ef88c87dcc643492e4b: 1
+      Vector1_3fbbe04b6e6c4a1196b3111a0a1205a1: 2
+      Vector1_4c7d46c4d233432db4e807fc13e74974: 0
+      Vector1_5113c25d251944e4974c427ce4c8ed58: 1
+      Vector1_73d9caa7d9144c11a336f68e30faa840: 0
+      Vector1_818944c6123d466991247e802d026d59: 1
+      Vector1_9743cae286994e7e854d512ed8fda4f1: 0.5
+      Vector1_c946b8f594b04700b77a49e920469e78: 0.5
+      _Alpha: 1
+      _AlphaClip: 0
+      _AlphaCutoff: 0.5
+      _AlphaDst: 0
+      _AlphaSrc: 1
+      _BasicSpecular: 1
+      _Blend: 0
+      _BumpScale: 1
+      _ClearCoatMask: 0
+      _ClearCoatSmoothness: 0
+      _CubeMapAlpha: 1
+      _CubeMapBrightness: 6
+      _Cull: 2
+      _Cutoff: 0.5
+      _DetailAlbedoMapScale: 1
+      _DetailNormalMapScale: 1
+      _DisableNormalMap: 0
+      _DisabledAlphaR: 0
+      _DstBlend: 0
+      _EnvironmentReflections: 1
+      _Gloss: 1.5
+      _Gloss2: 1
+      _GlossMapScale: 0
+      _Glossiness: 0
+      _GlossinessSource: 0
+      _GlossyReflections: 0
+      _MainBrightness: 0.6
+      _MainTexBrightness: 0.5
+      _Metallic: 0.6
+      _MinAlpha: 1
+      _MinAmbient: 0.75
+      _MinDiffuse: 0.5
+      _MinShadow: 0.7
+      _MinSpecular: 0.25
+      _NormalScale: 1.5
+      _NormalStrength: 1.5
+      _OcclusionStrength: 1
+      _Parallax: 0.005
+      _QueueOffset: 0
+      _RGBDst: 0
+      _RGBSrc: 1
+      _ReceiveShadows: 1
+      _Shininess: 0
+      _Smoothness: 0.3
+      _SmoothnessSource: 0
+      _SmoothnessTextureChannel: 0
+      _SpecSource: 0
+      _SpecularBrightness: 2.5
+      _SpecularBrightness2: 7.5
+      _SpecularHighlights: 1
+      _SpecularMin: 0.1
+      _SpecularMin2: 0
+      _SrcBlend: 1
+      _Surface: 0
+      _WorkflowMode: 1
+      _ZWrite: 1
+    m_Colors:
+      _BaseColor: {r: 1, g: 1, b: 1, a: 1}
+      _Color: {r: 1, g: 1, b: 1, a: 1}
+      _EmissionColor: {r: 0, g: 0, b: 0, a: 1}
+      _SpecColor: {r: 0.19999996, g: 0.19999996, b: 0.19999996, a: 1}
+  m_BuildTextureStacks: []

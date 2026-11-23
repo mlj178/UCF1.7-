@@ -1,0 +1,38 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0e85cb50e045b99614da8ee9d41966d9, type: 3}
+  m_Name: TeamDeath
+  m_EditorClassIdentifier:
+  gameMode: 0
+  gameModePrefab: {fileID: 1709254077376921, guid: 8e958d64eb765764697d9cbaf2dcfa1c, type: 2}
+  datas:
+  - sceneName: TransportShip
+    mapName: 运输船
+    mapIcon: {fileID: 21300000, guid: a1004465eb7d8724ca2e236064d6890c, type: 2}
+    loadingTex_BL: {fileID: 2800000, guid: a36a39c44d892c54781d948453f02aed, type: 3}
+    loadingTex_GR: {fileID: 2800000, guid: cb9e1d014e3c5694dab6b50f6739ec50, type: 3}
+    gameModePrefabOverride: {fileID: 0}
+    weaponLimited: 0
+  - sceneName: Factory
+    mapName: 小型工厂
+    mapIcon: {fileID: 21300000, guid: 730b32c5083fe8444b6a561eb8690cac, type: 2}
+    loadingTex_BL: {fileID: 2800000, guid: 7101247c1dee390469a52a88d3005c31, type: 3}
+    loadingTex_GR: {fileID: 2800000, guid: 0804d82638721574f84ab83dd645a85c, type: 3}
+    gameModePrefabOverride: {fileID: 0}
+    weaponLimited: 0
+  - sceneName: Cebu_City
+    mapName: 椰岛之巅
+    mapIcon: {fileID: 21300000, guid: 74d464bad65fd164c91eb6407c4f5715, type: 2}
+    loadingTex_BL: {fileID: 2800000, guid: 555eee66274ca2049b6313493dd61fec, type: 3}
+    loadingTex_GR: {fileID: 2800000, guid: 626d63d091cd9df4f85b7bca7429df12, type: 3}
+    gameModePrefabOverride: {fileID: 0}
+    weaponLimited: 0
