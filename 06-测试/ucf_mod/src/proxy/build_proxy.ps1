@@ -23,7 +23,11 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $here = $PSScriptRoot
-$proj = Split-Path -Parent (Split-Path -Parent $here)      # 06-测试\ucf_mod
+# 项目根：向上找 .ucfroot（和 core/ucf_paths.py 同一套约定）
+$proj = $here
+while (-not (Test-Path -LiteralPath (Join-Path $proj '.ucfroot')) -and (Split-Path -Parent $proj) -ne $proj) {
+    $proj = Split-Path -Parent $proj
+}
 
 if (-not $Ref)    { $Ref = Join-Path $proj 'payload\winhttp.dll' }
 if (-not $OutDir) { $OutDir = Join-Path $proj 'build\proxy' }

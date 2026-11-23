@@ -210,7 +210,20 @@ BOOL APIENTRY DllMain(HMODULE h, DWORD reason, LPVOID reserved) {
     char path[MAX_PATH]; GetModuleFileNameA(h, path, MAX_PATH);
     char* p = strrchr(path, '\\'); if (p) *p = 0;
     strcpy(gDir, path);
-    sprintf(gLog, "%s\\ucf_mod.log", gDir);
+    /* 2026-11-23：日志主位置在工程端（控制台注入 UCF_LOG_DIR）；没注入就落
+     * <modDir>\log\；再不行退回 <modDir> —— 三步都不许静默丢日志。 */
+    ucf_log_file(gLog, sizeof gLog, gDir, "ucf_mod.log");
+    ucf_log_rotate(gLog);
+    {
+      /* 排查先看这一行：日志在哪、走的哪一级、这次是哪个部署 */
+      char _ld[MAX_PATH];
+      char _ldu[MAX_PATH * 4], _gdu[MAX_PATH * 4];
+      int _kind = ucf_log_dir(_ld, sizeof _ld, gDir);
+      ucf_path_to_utf8(_ld, _ldu, sizeof _ldu);
+      ucf_path_to_utf8(gDir, _gdu, sizeof _gdu);
+      logf_("log: dir=%s env=%d fallback=%d mod=%s", _ldu,
+            _kind == 2 ? 1 : 0, _kind == 0 ? 1 : 0, _gdu);
+    }
     DisableThreadLibraryCalls(h);
 
     /* 配置必须最先读：三个子系统启动时都要看开关 */

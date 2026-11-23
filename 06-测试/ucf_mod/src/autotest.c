@@ -18,11 +18,14 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdarg.h>
+#include "cfg.h"          /* ucf_log_file()：日志 / autotest.txt 统一进 log\ */
 
 typedef void* P;
 
 #define AT_MAX_TARGETS 8
 
+static char g_atLog[MAX_PATH];   /* <modDir>\log\ucf_mod.log（autotest_start 里算一次） */
+static char g_atTxt[MAX_PATH];   /* <modDir>\log\autotest.txt */
 static int g_on;
 static int g_phase;          /* 0=查场景表 1=预热 2=逐图切换 3=结束 */
 static int g_sub;            /* phase 2 的子状态：0=该切图了 1=等稳定 */
@@ -65,16 +68,14 @@ static int g_loadDumped2;
 
 static void alog(const char* fmt, ...) {
   char line[512];
-  char path[MAX_PATH];
   FILE* f;
   SYSTEMTIME st;
   va_list ap;
-  if (!g_dir[0]) return;
+  if (!g_atLog[0]) return;
   va_start(ap, fmt);
   vsnprintf(line, sizeof line, fmt, ap);
   va_end(ap);
-  sprintf(path, "%s\\ucf_mod.log", g_dir);
-  f = fopen(path, "a");
+  f = fopen(g_atLog, "a");
   if (!f) return;
   GetLocalTime(&st);
   fprintf(f, "%04d-%02d-%02d %02d:%02d:%02d [at] %s\n",
@@ -308,11 +309,9 @@ static P at_invoke2(P m, void* a0, void* a1, int* excOut) {
 static P at_invoke(P m, void* arg, int* excOut) { return at_invoke2(m, arg, 0, excOut); }
 
 static void at_result(const char* text) {
-  char path[MAX_PATH];
   FILE* f;
-  if (!g_dir[0]) return;
-  sprintf(path, "%s\\autotest.txt", g_dir);
-  f = fopen(path, "a");
+  if (!g_atTxt[0]) return;
+  f = fopen(g_atTxt, "a");
   if (!f) return;
   fprintf(f, "%s\n", text);
   fclose(f);
@@ -421,6 +420,9 @@ void autotest_start(const char* modDir) {
   if (!modDir || !modDir[0]) return;
   strncpy(g_dir, modDir, sizeof(g_dir) - 1);
   g_dir[sizeof(g_dir) - 1] = 0;
+  /* 日志和结果都跟主日志同目录：<modDir>\log\（建不出来自动退回根目录） */
+  ucf_log_file(g_atLog, sizeof g_atLog, g_dir, "ucf_mod.log");
+  ucf_log_file(g_atTxt, sizeof g_atTxt, g_dir, "autotest.txt");
   n = GetEnvironmentVariableA("UCF_AUTOTEST", v, sizeof v);
   if (n == 0 || !v[0]) return;
   {
@@ -448,10 +450,7 @@ void autotest_start(const char* modDir) {
   if (g_warmLen < 0) g_warmLen = 0;
   if (g_settleLen < 4) g_settleLen = 4;
   {
-    char path[MAX_PATH];
-    FILE* f;
-    sprintf(path, "%s\\autotest.txt", g_dir);
-    f = fopen(path, "w");
+    FILE* f = g_atTxt[0] ? fopen(g_atTxt, "w") : 0;
     if (f) { fprintf(f, "autotest start targets=%d\n", g_nTargets); fclose(f); }
   }
   g_on = 1;

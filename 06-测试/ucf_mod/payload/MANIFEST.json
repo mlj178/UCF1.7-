@@ -2,6 +2,22 @@
   "taken_at": "2026-11-22T02:56:38.784Z",
   "project": "D:\\trae_project\\ucf1.7-modifier\\06-测试\\ucf_mod",
   "note": "从部署端抢救回来的、工程端没有副本的文件",
+  "edited_after_rescue": [
+    {
+      "path": "ucf_mod/README.txt",
+      "date": "2026-11-23",
+      "why": "目录整理：控制台从 tools/ 移到 console/，改掉两处路径、一条已删的 启动导航编辑器.bat 指引，并把「网页编辑器」改成只读工作台；下面 files[] 里的 sha256 是 2026-11-22 抢救时刻的快照，不是这一版的。",
+      "bytes": 6563,
+      "sha256": "5AA1F6BDCC6C5400A20E8C025E65003B0D4AC834A5D4128B024DB0E86001710E"
+    },
+    {
+      "path": "ucf_mod/ucf_mod.dll",
+      "date": "2026-11-23",
+      "why": "重新编译：日志由 UCF_LOG_DIR 指到工程端 log\\（游戏目录不再生成日志）；没注入时落 <部署端>\\log\\，再退回部署端根；16 MB 轮转；启动首行的路径转成 UTF-8，避免中文工程路径乱码。",
+      "bytes": 374528,
+      "sha256": "72CCE6D98AA8044D98ABE6C1519ACE16F984DF99CD363E4F6D9622BFA017F3BE"
+    }
+  ],
   "files": [
     {
       "path": "winhttp.dll",

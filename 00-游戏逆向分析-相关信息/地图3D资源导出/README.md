@@ -5,6 +5,8 @@
 
 这个目录集中存放路点工作台 3D 用到的**原始导出工程**和**最终产出**，供后续复用、对比和重新生成。
 
+> 来源：`AssetRipper.GUI` 读取游戏目录 `UnityCrossFire1.7.1（内含 UnityCrossFire_Data）` 后导出；不是 Unity Editor 生成。
+
 ## 目录
 
 | 目录 | 内容 |

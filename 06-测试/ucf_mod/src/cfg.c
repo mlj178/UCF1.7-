@@ -51,6 +51,104 @@ static const CFG_DEF g_defs[] = {
 
 const CFG_DEF* cfg_table(void) { return g_defs; }
 
+/* ---------------------------------------------------------------- 日志目录 */
+#define UCF_LOG_MAX_BYTES (16L * 1024 * 1024)      /* 超了轮转，保 1 代 */
+
+/* 逐级建目录（D:\a\b\c 这种一次建好）。跨盘 / 多层都行；失败就当没建。 */
+void ucf_mkdir_p(const char* path) {
+  char buf[MAX_PATH];
+  int i;
+  if (!path || !path[0]) return;
+  strncpy(buf, path, sizeof buf - 1);
+  buf[sizeof buf - 1] = 0;
+  for (i = 3; buf[i]; i++) {                     /* 跳过 "D:\" */
+    if (buf[i] == '\\' || buf[i] == '/') {
+      char c = buf[i];
+      buf[i] = 0;
+      CreateDirectoryA(buf, 0);
+      buf[i] = c;
+    }
+  }
+  CreateDirectoryA(buf, 0);
+}
+
+/* ANSI 路径 -> UTF-8（只给日志用；文件 IO 仍然走 ANSI 的 fopen）。 */
+void ucf_path_to_utf8(const char* ansi, char* out, int n) {
+  WCHAR w[MAX_PATH];
+  int wl;
+  if (!out || n <= 1) return;
+  out[0] = 0;
+  if (!ansi || !ansi[0]) return;
+  wl = MultiByteToWideChar(CP_ACP, 0, ansi, -1, w, (int)(sizeof w / sizeof w[0]));
+  if (wl <= 0) { snprintf(out, (size_t)n, "%s", ansi); return; }
+  if (WideCharToMultiByte(CP_UTF8, 0, w, -1, out, n, 0, 0) <= 0)
+    snprintf(out, (size_t)n, "%s", ansi);
+  out[n - 1] = 0;
+}
+
+int ucf_log_dir(char* out, int n, const char* modDir) {
+  char dir[MAX_PATH];
+  DWORD attrs;
+  if (!out || n <= 1) return 0;
+  out[0] = 0;
+  /* 1) 控制台注入的 UCF_LOG_DIR —— 日常都走这条，游戏目录因此不生成日志 */
+  if (GetEnvironmentVariableA("UCF_LOG_DIR", dir, (DWORD)sizeof dir) > 0 && dir[0]) {
+    ucf_mkdir_p(dir);
+    attrs = GetFileAttributesA(dir);
+    if (attrs != INVALID_FILE_ATTRIBUTES && (attrs & FILE_ATTRIBUTE_DIRECTORY)) {
+      snprintf(out, (size_t)n, "%s", dir);
+      return 2;
+    }
+  }
+  if (!modDir || !modDir[0]) return 0;
+  /* 2) <modDir>\log */
+  snprintf(dir, sizeof dir, "%s\\log", modDir);
+  attrs = GetFileAttributesA(dir);
+  if (attrs == INVALID_FILE_ATTRIBUTES) {
+    CreateDirectoryA(dir, 0);                    /* 已存在也会返回 0，下面重新问一次 */
+    attrs = GetFileAttributesA(dir);
+  }
+  if (attrs != INVALID_FILE_ATTRIBUTES && (attrs & FILE_ATTRIBUTE_DIRECTORY)) {
+    snprintf(out, (size_t)n, "%s", dir);
+    return 1;
+  }
+  snprintf(out, (size_t)n, "%s", modDir);        /* 3) 兜底：退回 modDir */
+  return 0;
+}
+
+int ucf_log_file(char* out, int n, const char* modDir, const char* name) {
+  char dir[MAX_PATH];
+  int inLog = ucf_log_dir(dir, sizeof dir, modDir);
+  if (!out || n <= 1) return inLog;
+  snprintf(out, (size_t)n, "%s\\%s", dir, name ? name : "");
+  return inLog;
+}
+
+void ucf_log_rotate(const char* logPath) {
+  FILE* f;
+  long size = 0;
+  char prev[MAX_PATH];
+  size_t n, i;
+  if (!logPath || !logPath[0]) return;
+  f = fopen(logPath, "rb");
+  if (!f) return;                                /* 还没日志：没事可做 */
+  if (fseek(f, 0, SEEK_END) == 0) size = ftell(f);
+  fclose(f);
+  if (size < UCF_LOG_MAX_BYTES) return;
+  n = strlen(logPath);
+  if (n < 5 || n + 10 > sizeof prev) return;
+  memcpy(prev, logPath, n + 1);
+  for (i = 0; i < 4; i++) {                      /* 确认是 .log 结尾（大小写都认） */
+    char c = prev[n - 4 + i];
+    if (c >= 'A' && c <= 'Z') c = (char)(c - 'A' + 'a');
+    if (c != ".log"[i]) return;
+  }
+  prev[n - 4] = 0;
+  strcat(prev, ".prev.log");                     /* ucf_mod.log -> ucf_mod.prev.log */
+  DeleteFileA(prev);                             /* 只保 1 代 */
+  MoveFileA(logPath, prev);                      /* 失败就继续写原文件 */
+}
+
 static void cflog(const char* fmt, ...) {
   FILE* f;
   va_list ap;
@@ -73,7 +171,7 @@ void cfg_init(const char* modDir) {
   size_t n;
   if (!modDir || !modDir[0]) return;
   sprintf(g_path, "%s\\ucf_mod.json", modDir);
-  sprintf(g_log,  "%s\\ucf_mod.log",  modDir);
+  ucf_log_file(g_log, sizeof g_log, modDir, "ucf_mod.log");
   g_ok = 0;
   g_buf[0] = 0;
   f = fopen(g_path, "rb");

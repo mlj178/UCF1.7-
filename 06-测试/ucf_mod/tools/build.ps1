@@ -13,7 +13,11 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $tools = $PSScriptRoot
-$root  = Split-Path -Parent $tools
+# 项目根：向上找 .ucfroot（和 core/ucf_paths.py 同一套约定），不靠目录层级猜
+$root = $tools
+while (-not (Test-Path -LiteralPath (Join-Path $root '.ucfroot')) -and (Split-Path -Parent $root) -ne $root) {
+    $root = Split-Path -Parent $root
+}
 $src   = Join-Path $root 'src'
 $build = Join-Path $root 'build'
 $sources = @('cfg.c', 'plugin.c', 'navfix.c', 'editor.c', 'autotest.c')

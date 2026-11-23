@@ -9,6 +9,13 @@
 __pycache__/
 *.pyc
 
+# 会话临时产物（截图 / 取色 / 一次性复现脚本）：不进库
+.dsh-tmp-shots/
+screenshots/
+
+# 运行日志（2026-11-23 起插件直接写工程端 log/）：ucf_mod.log / autotest.txt / player_marks.txt
+log/
+
 # 构建产物
 build/
 *.dll
@@ -30,7 +37,9 @@ tools/deploy.json
 # 数据四版：原生备份（冻结只读）/ 开发版 / 测试版统一进库备份
 navdata/*.tmp
 navdata/native/**/*.tmp
-tools/_*
+# tools/ 下的一次性脚本（_oneoff/ 除外：那是归档的一次性迁移工具，要进库）
+tools/_scratch/
+tools/_tmp*
 navdata/_logs/
 # 录制原始轨迹：临时文件，复盘后的增量只写进 packs，不进库
 navdata/dev/vis/rec/

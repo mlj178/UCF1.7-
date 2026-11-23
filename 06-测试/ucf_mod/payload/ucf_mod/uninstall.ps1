@@ -1,4 +1,4 @@
-﻿# UCF 插件卸载 —— 默认只移除「部署物」，不动导航数据与工程源码
+# UCF 插件卸载 —— 默认只移除「部署物」，不动导航数据与工程源码
 #
 #   默认：还原 level9 → 删加载器 → 删 dll/配置/日志/vis
 #   保留：markers\ backup\（蹲守点 + level9 还原点；nav\ maps\ 已于 2026-11-21 清空）
@@ -15,8 +15,10 @@ $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 $game = Split-Path -Parent $root
 
 $loaders     = @('winhttp.dll', 'winhttp_orig.dll')                 # 游戏根
-$deployFiles = @('ucf_mod.dll', 'ucf_mod.json', 'ucf_mod.log', 'collect.flag')
-$deployDirs  = @('vis')
+$deployFiles = @('ucf_mod.dll', 'ucf_mod.json', 'ucf_navcmd.txt', 'collect.flag')
+$deployDirs  = @('vis', 'log')          # vis：旧采集输出；log：2026-11-23 起的日志目录
+# 旧部署（2026-11-23 之前）把日志写在 ucf_mod\ 根目录，卸载时一并清掉
+$legacyLogs  = @('ucf_mod.log', 'autotest.txt', 'player_marks.txt')
 $dataDirs    = @('markers', 'backup')                                # 仅 -Purge 才删
 
 function Remove-Checked($path, $what) {
@@ -44,9 +46,11 @@ foreach ($f in $loaders) { Remove-Checked (Join-Path $game $f) '加载器' }
 
 # 3) 删部署物
 foreach ($f in $deployFiles) { Remove-Checked (Join-Path $root $f) '部署文件' }
-Get-ChildItem -LiteralPath $root -File -Force | Where-Object { $_.Name -like 'ucf_mod.log.prev*' } |
-    ForEach-Object { Remove-Checked $_.FullName '日志轮转' }
-foreach ($d in $deployDirs) { Remove-Checked (Join-Path $root $d) '采集输出' }
+foreach ($d in $deployDirs) { Remove-Checked (Join-Path $root $d) '日志/采集输出' }
+foreach ($f in $legacyLogs) { Remove-Checked (Join-Path $root $f) '旧日志（兼容）' }
+Get-ChildItem -LiteralPath $root -File -Force |
+    Where-Object { $_.Name -like 'ucf_mod.log.prev*' -or $_.Name -like 'ucf_mod.prev_*.log' } |
+    ForEach-Object { Remove-Checked $_.FullName '旧日志轮转（兼容）' }
 
 # 4) 可选：删数据
 if ($Purge) {

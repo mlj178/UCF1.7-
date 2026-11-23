@@ -6024,24 +6024,6 @@ static void pack_norm_id(char* s) {
   for (i = 0; s[i]; i++) if (s[i] == '/') s[i] = '\\';
 }
 
-/* 逐级建目录：④ 可能在工程端，路径跨盘且多层目录不一定存在。 */
-static void mkdir_p(const char* path) {
-  char buf[MAX_PATH];
-  int i;
-  if (!path || !path[0]) return;
-  strncpy(buf, path, sizeof buf - 1);
-  buf[sizeof buf - 1] = 0;
-  for (i = 3; buf[i]; i++) {          /* 跳过 "D:\" */
-    if (buf[i] == '\\' || buf[i] == '/') {
-      char c = buf[i];
-      buf[i] = 0;
-      CreateDirectoryA(buf, 0);
-      buf[i] = c;
-    }
-  }
-  CreateDirectoryA(buf, 0);
-}
-
 /* 环境变量优先，其次 ucf_mod.json，最后退回插件目录（旧行为）。 */
 static void dir_choice(const char* envName, const char* cfgKey, const char* def,
                        char* out, int cap) {
@@ -6075,9 +6057,9 @@ static void pack_init(void) {
     } else {
       strcpy(g_packName, buf);
       pack_norm_id(g_packName);
-      mkdir_p(g_packRoot);
+      ucf_mkdir_p(g_packRoot);
       sprintf(g_navDir, "%s\\%s", g_packRoot, g_packName);
-      mkdir_p(g_navDir);          /* 地图文件夹 + 包目录一起建 */
+      ucf_mkdir_p(g_navDir);          /* 地图文件夹 + 包目录一起建 */
     }
   }
   if (GetEnvironmentVariableA("UCF_FP", buf, sizeof buf) > 0 && buf[0]) {
@@ -6128,9 +6110,9 @@ static int nav_cmd_set_pack(P g, const char* pack, const char* fp) {
   if (pack && pack[0]) {
     strcpy(g_packName, pack);
     pack_norm_id(g_packName);
-    mkdir_p(g_packRoot);
+    ucf_mkdir_p(g_packRoot);
     sprintf(g_navDir, "%s\\%s", g_packRoot, g_packName);
-    mkdir_p(g_navDir);          /* 地图文件夹 + 包目录一起建 */
+    ucf_mkdir_p(g_navDir);          /* 地图文件夹 + 包目录一起建 */
     if (fp && fp[0]) strcpy(g_packFp, fp);
     else g_packFp[0] = 0;
   } else {
@@ -7708,7 +7690,7 @@ void editor_freecam_tick(void) {
 void editor_start(const char* modDir) {
   if (!modDir) return;
   strncpy(g_dir, modDir, sizeof(g_dir) - 1);
-  sprintf(g_log, "%s\\ucf_mod.log", g_dir);
+  ucf_log_file(g_log, sizeof g_log, g_dir, "ucf_mod.log");
   sprintf(g_file, "%s\\markers\\markers.txt", g_dir);
   /* 四版路径先定下来：pack_init 要用 g_packRoot，导出要用 g_expDir。
    * 控制台启动游戏时会带 UCF_EXPORT_DIR / UCF_PACK_DIR / UCF_NAV_READONLY。 */
@@ -7718,14 +7700,14 @@ void editor_start(const char* modDir) {
     dir_choice("UCF_EXPORT_DIR", "export_dir", def, g_expDir, sizeof g_expDir);
     sprintf(def, "%s\\packs", g_dir);
     dir_choice("UCF_PACK_DIR", "pack_dir", def, g_packRoot, sizeof g_packRoot);
-    mkdir_p(g_expDir);
-    mkdir_p(g_packRoot);
+    ucf_mkdir_p(g_expDir);
+    ucf_mkdir_p(g_packRoot);
     g_navReadOnly = (GetEnvironmentVariableA("UCF_NAV_READONLY", ro, sizeof ro) > 0 &&
                      ro[0] == '1') ? 1 : 0;
   }
   pack_init();   /* UCF_PACK / UCF_FP：这次读哪个目录、只对哪张图生效 */
-  /* 玩家坐标记录的数据文件：和 ucf_mod.json 同目录，控制台读同一份 */
-  snprintf(g_pmPath, sizeof g_pmPath, "%s\\player_marks.txt", g_dir);
+  /* 玩家坐标记录：和日志一起放 log\（控制台读同一份；旧部署的根目录那份仍兼容） */
+  ucf_log_file(g_pmPath, sizeof g_pmPath, g_dir, "player_marks.txt");
   pm_load(0);
   /* 开关全部来自 ucf_mod.json（cfg.c）：这里各取一次，日志里写清楚，
    * 关掉哪个在日志里都看得见，不用猜。 */

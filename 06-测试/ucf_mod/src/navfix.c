@@ -1088,6 +1088,6 @@ P navfix_add_guard_area(float x, float y, float z) {
 }
 
 void navfix_start(const char* modDir) {
-  sprintf(g_log, "%s\\ucf_mod.log", modDir);
+  ucf_log_file(g_log, sizeof g_log, modDir, "ucf_mod.log");
   CreateThread(0, 0, nav_worker, 0, 0, 0);
 }

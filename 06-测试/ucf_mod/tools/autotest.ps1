@@ -27,16 +27,28 @@ $cfg = Join-Path $tools 'deploy.json'
 if (-not (Test-Path -LiteralPath $cfg)) { throw "missing tools/deploy.json" }
 $modDir = (Get-Content -LiteralPath $cfg -Raw | ConvertFrom-Json).deploy
 $gameDir = Split-Path -Parent $modDir
-$logPath = Join-Path $modDir 'ucf_mod.log'
-$atPath  = Join-Path $modDir 'autotest.txt'
+# 2026-11-23 起日志主位置在**工程端** log\（和控制台一致：启动时注入 UCF_LOG_DIR），
+# 没走控制台时插件落 <部署端>\log\，更老的部署还在部署端根目录 —— 三级都认。
+$projRoot = Split-Path -Parent $tools
+$logDir   = Join-Path $projRoot 'log'          # 工程端（主）
+$gameLog  = Join-Path $modDir 'log'            # 部署端（没走控制台时）
+$logPath  = Join-Path $logDir 'ucf_mod.log'
+$atPath   = Join-Path $logDir 'autotest.txt'
+foreach ($cand in @(($gameLog + '\ucf_mod.log'), ($modDir + '\ucf_mod.log'))) {
+    if (-not (Test-Path -LiteralPath $logPath) -and (Test-Path -LiteralPath $cand)) { $logPath = $cand }
+}
+foreach ($cand in @(($gameLog + '\autotest.txt'), ($modDir + '\autotest.txt'))) {
+    if (-not (Test-Path -LiteralPath $atPath) -and (Test-Path -LiteralPath $cand)) { $atPath = $cand }
+}
 $cmdPath = Join-Path $modDir '_autotest.cmd'
 
 if (-not $NoKill) {
     Get-Process UnityCrossFire -ErrorAction SilentlyContinue | Stop-Process -Force
     Start-Sleep -Seconds 1
 }
+New-Item -ItemType Directory -Force -Path $logDir | Out-Null      # 工程端 log\
 if (Test-Path -LiteralPath $logPath) {
-    Move-Item -LiteralPath $logPath -Destination (Join-Path $modDir ('ucf_mod.prev_' + (Get-Date -Format 'HHmmss') + '.log')) -Force
+    Move-Item -LiteralPath $logPath -Destination (Join-Path $logDir ('ucf_mod.prev_' + (Get-Date -Format 'HHmmss') + '.log')) -Force
 }
 if (Test-Path -LiteralPath $atPath) { Remove-Item -LiteralPath $atPath -Force }
 
@@ -50,6 +62,7 @@ $lines = @(
     'set UCF_MOD=1',
     ('set "UCF_EXPORT_DIR=' + $testVis + '"'),
     ('set "UCF_PACK_DIR=' + $testPacks + '"'),
+    ('set "UCF_LOG_DIR=' + $logDir + '"'),
     'set UCF_NAV_READONLY=1',
     ('set UCF_AUTOTEST=' + $Targets),
     ('set UCF_AT_WARM=' + $Warm),

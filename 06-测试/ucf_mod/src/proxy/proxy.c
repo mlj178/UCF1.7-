@@ -38,7 +38,8 @@ static void join_path(char *out, unsigned cap, const char *dir_part, const char 
 }
 
 /* 原函数名就是 loader（stdcall，1 个参数），被 CreateThread 起来。
- * 失败时往 <游戏目录>\ucf_mod\ucf_mod.log 追加一行，成功则什么都不写。 */
+ * 失败时往 <游戏目录>\ucf_mod\log\ucf_mod.log 追加一行（目录建不出来就退回
+ * ucf_mod\ 根目录），成功则什么都不写。 */
 static DWORD WINAPI loader(LPVOID unused) {
     char dll[MAX_PATH * 2];
     char log[MAX_PATH * 2];
@@ -53,7 +54,21 @@ static DWORD WINAPI loader(LPVOID unused) {
     join_path(dll, sizeof dll, g_dir, MOD_DIR MOD_DLL);
     if (LoadLibraryA(dll)) return 0;   /* 载入成功：插件自己会打日志，这里不重复写 */
 
-    join_path(log, sizeof log, g_dir, MOD_DIR MOD_LOG);
+    /* 2026-11-23：日志统一在 ucf_mod\log\；目录建不出来就退回 ucf_mod\ 根 */
+    {
+        char logDir[MAX_PATH * 2];
+        DWORD attrs;
+        join_path(logDir, sizeof logDir, g_dir, MOD_DIR "log");
+        attrs = GetFileAttributesA(logDir);
+        if (attrs == INVALID_FILE_ATTRIBUTES) {
+            CreateDirectoryA(logDir, 0);
+            attrs = GetFileAttributesA(logDir);
+        }
+        if (attrs != INVALID_FILE_ATTRIBUTES && (attrs & FILE_ATTRIBUTE_DIRECTORY))
+            join_path(log, sizeof log, g_dir, MOD_DIR "log\\" MOD_LOG);
+        else
+            join_path(log, sizeof log, g_dir, MOD_DIR MOD_LOG);
+    }
     h = CreateFileA(log, FILE_APPEND_DATA, FILE_SHARE_READ | FILE_SHARE_WRITE,
                     NULL, OPEN_ALWAYS, 0, NULL);
     if (h == INVALID_HANDLE_VALUE) return 0;
