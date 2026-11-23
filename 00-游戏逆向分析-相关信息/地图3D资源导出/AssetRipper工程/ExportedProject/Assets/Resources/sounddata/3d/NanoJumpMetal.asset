@@ -1,0 +1,20 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8d33ad595d72f1265b2b8744c2ea929d, type: 3}
+  m_Name: NanoJumpMetal
+  m_EditorClassIdentifier:
+  clips:
+  - {fileID: 8300000, guid: 33a453f9c14f1204f8098cad6adaec62, type: 3}
+  - {fileID: 8300000, guid: de8313471bf09184dad468a74741ce6f, type: 3}
+  minDistance: 1
+  maxDistance: 32
+  priority: 200

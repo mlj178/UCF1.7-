@@ -1,0 +1,24 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8d33ad595d72f1265b2b8744c2ea929d, type: 3}
+  m_Name: RightFootStepCushion
+  m_EditorClassIdentifier:
+  clips:
+  - {fileID: 8300000, guid: 393861d713589fc4fbdd20a4d0591706, type: 3}
+  - {fileID: 8300000, guid: f6a2367bf367ebc4896c2574892f3d6a, type: 3}
+  - {fileID: 8300000, guid: 291ac14c50ad1ed4697e806f12063a3e, type: 3}
+  - {fileID: 8300000, guid: 9acf8e99e2c399a419dc72a62ca20e54, type: 3}
+  - {fileID: 8300000, guid: 81064148c5ddf764a8298b17da486c4c, type: 3}
+  - {fileID: 8300000, guid: a75f3809f9df73d4c9f288fc42f0ab62, type: 3}
+  minDistance: 1
+  maxDistance: 26
+  priority: 200

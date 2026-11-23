@@ -1424,7 +1424,7 @@ def collect_events(limit=24):
                 names = []
             for fn in names:
                 if EDIT_FILE_RE.match(fn):
-                    _add("成品", "② 成品 · %s · %s" % (os.path.basename(cur), fn),
+                    _add("成品", "%s · %s" % (os.path.basename(cur), fn),
                          os.path.join(cur, fn))
     elif PROFILE == "pack":
         # ② 的编辑中：packs\<图>\<包>\<指纹>.txt
@@ -1436,11 +1436,11 @@ def collect_events(limit=24):
                 names = []
             for fn in names:
                 if EDIT_FILE_RE.match(fn):
-                    _add("编辑中", "② 编辑中 · %s · %s" % (pk["name"], fn),
+                    _add("编辑中", "%s · %s" % (pk["name"], fn),
                          os.path.join(d, fn))
     for pk in collect_packs():
         d = os.path.join(PACKS_DIR, *pk["name"].split("/"))
-        _add("测试包", "② %s · %s · %d 条指令" % (pk["name"], pk["label"] or pk["level"], pk["ops"]),
+        _add("测试包", "%s · %s · %d 条指令" % (pk["name"], pk["label"] or pk["level"], pk["ops"]),
              os.path.join(d, "manifest.json"))
     events.sort(key=lambda e: e["ts"], reverse=True)
     return events[:limit]
@@ -1907,7 +1907,7 @@ def main():
     print("  档位切换 : /api/profile?set=native|final|pack（旧 dev/deploy/test 仍兼容）")
     print("  数据目录 : %s（每张图一个文件夹）" % DATA)
     print("  原生备份 : %s" % NATIVE)
-    print("  游戏目录 : %s（③ 不放导航数据）" % UCF)
+    print("  游戏目录 : %s（运行目录，不放导航数据）" % UCF)
     print("  收件箱   : %s（② 的 vis\\：导出 / 可走面）" % VIS)
     print("  成品     : %s（② 的 final\\：一版一整套）" % FINAL)
     print("  测试包   : %s（② 的 packs\\：编辑中）" % PACKS_DIR)

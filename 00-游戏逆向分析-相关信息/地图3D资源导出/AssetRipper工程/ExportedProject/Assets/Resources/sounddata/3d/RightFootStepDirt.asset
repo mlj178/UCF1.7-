@@ -1,0 +1,24 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8d33ad595d72f1265b2b8744c2ea929d, type: 3}
+  m_Name: RightFootStepDirt
+  m_EditorClassIdentifier:
+  clips:
+  - {fileID: 8300000, guid: dabc4080d2ace9b41bede0796ce93a49, type: 3}
+  - {fileID: 8300000, guid: b4e97f757f871f742b6763f20b66e9f9, type: 3}
+  - {fileID: 8300000, guid: 89cb59e66a694214f9a9e362094665bf, type: 3}
+  - {fileID: 8300000, guid: e32dcb5a41f113145939063893909d92, type: 3}
+  - {fileID: 8300000, guid: 6a940362c594ae1468b173e03c90af9a, type: 3}
+  - {fileID: 8300000, guid: 57c39d073f0f2dd448055f43ecd88afb, type: 3}
+  minDistance: 1
+  maxDistance: 32
+  priority: 200

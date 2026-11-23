@@ -1,0 +1,24 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8d33ad595d72f1265b2b8744c2ea929d, type: 3}
+  m_Name: NanoLeftFootStepCushion
+  m_EditorClassIdentifier:
+  clips:
+  - {fileID: 8300000, guid: b7a5b931303617244abccbc49f37f62b, type: 3}
+  - {fileID: 8300000, guid: 49204c55676161e4a9c1758688866866, type: 3}
+  - {fileID: 8300000, guid: 8374d9e6c91f08647aecff6249a19f4d, type: 3}
+  - {fileID: 8300000, guid: c91f169ac7e32264eabbdfad11ab7641, type: 3}
+  - {fileID: 8300000, guid: 151b80465024e554bb760e894051157b, type: 3}
+  - {fileID: 8300000, guid: 672358282a499454fb12798eed55603b, type: 3}
+  minDistance: 1
+  maxDistance: 26
+  priority: 200

@@ -1,0 +1,24 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8d33ad595d72f1265b2b8744c2ea929d, type: 3}
+  m_Name: HeroKukri
+  m_EditorClassIdentifier:
+  clips:
+  - {fileID: 8300000, guid: 2b94ba522a107bf45a8b28efe561aa38, type: 3}
+  - {fileID: 8300000, guid: 17b9e1212aa3f2641aebbf2247e6487b, type: 3}
+  - {fileID: 8300000, guid: 61dca4a199cfe8b4aa055a1a77b260a0, type: 3}
+  - {fileID: 8300000, guid: 75fd0c8b9aa89bd4595723872deaad8b, type: 3}
+  - {fileID: 8300000, guid: cb5e1201dd243de4fb17b889484e15f7, type: 3}
+  - {fileID: 8300000, guid: a314ca2b2b089fb45a774cdb70692233, type: 3}
+  minDistance: 1
+  maxDistance: 15
+  priority: 128

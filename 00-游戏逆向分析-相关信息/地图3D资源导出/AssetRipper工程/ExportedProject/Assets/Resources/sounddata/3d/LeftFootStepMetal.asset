@@ -1,0 +1,24 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8d33ad595d72f1265b2b8744c2ea929d, type: 3}
+  m_Name: LeftFootStepMetal
+  m_EditorClassIdentifier:
+  clips:
+  - {fileID: 8300000, guid: 7da719a5d3b3ffd4a8c37c41eac6d556, type: 3}
+  - {fileID: 8300000, guid: 7ada48bd203764f4a8a30bf872dba3a1, type: 3}
+  - {fileID: 8300000, guid: 1176420ed2b66b044a7d615b5f8bd61b, type: 3}
+  - {fileID: 8300000, guid: bfe2d21e597113e4f937ccf04fd6996f, type: 3}
+  - {fileID: 8300000, guid: 661a97121a4e2674789ef96c723d2161, type: 3}
+  - {fileID: 8300000, guid: a795a1be187f2154fadd2a23be122e14, type: 3}
+  minDistance: 1
+  maxDistance: 32
+  priority: 200

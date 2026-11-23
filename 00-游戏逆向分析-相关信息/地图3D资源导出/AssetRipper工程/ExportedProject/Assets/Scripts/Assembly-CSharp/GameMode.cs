@@ -1,0 +1,13 @@
+using System;
+
+[Serializable]
+public enum GameMode
+{
+	TeamDeath = 0,
+	DeathMatch = 1,
+	Special = 2,
+	Nano3 = 3,
+	Nano4 = 4,
+	Nano6 = 5,
+	Nano4_Terminator = 6
+}

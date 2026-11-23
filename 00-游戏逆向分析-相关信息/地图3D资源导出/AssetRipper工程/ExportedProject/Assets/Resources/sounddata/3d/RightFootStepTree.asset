@@ -1,0 +1,24 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8d33ad595d72f1265b2b8744c2ea929d, type: 3}
+  m_Name: RightFootStepTree
+  m_EditorClassIdentifier:
+  clips:
+  - {fileID: 8300000, guid: 39df183fcbe6cb34b85bab7776319fed, type: 3}
+  - {fileID: 8300000, guid: 72a3298af7cce4840ba970902da22200, type: 3}
+  - {fileID: 8300000, guid: 8ed2c580876f320458f05e2c1d354f3a, type: 3}
+  - {fileID: 8300000, guid: dec18306cf7bd124c970cae5ce5236e0, type: 3}
+  - {fileID: 8300000, guid: d9ae5ccf2443d0048858a919b6eb4d2f, type: 3}
+  - {fileID: 8300000, guid: f8327742d74cc8544af22ef68471f69d, type: 3}
+  minDistance: 1
+  maxDistance: 32
+  priority: 200

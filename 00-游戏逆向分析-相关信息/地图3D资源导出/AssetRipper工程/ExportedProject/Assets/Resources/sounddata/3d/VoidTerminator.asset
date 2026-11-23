@@ -1,0 +1,25 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8d33ad595d72f1265b2b8744c2ea929d, type: 3}
+  m_Name: VoidTerminator
+  m_EditorClassIdentifier:
+  clips:
+  - {fileID: 8300000, guid: 9b46f5ebc3deb5f478b75605a0ce607f, type: 3}
+  - {fileID: 8300000, guid: 390155d540a4ee444aad547754a78d8c, type: 3}
+  - {fileID: 8300000, guid: 0f48935393e930b4da1b1f11cfc1c31a, type: 3}
+  - {fileID: 8300000, guid: 222cba8b627b53f49b5317cac9453497, type: 3}
+  - {fileID: 8300000, guid: 7bf5fecf2322947439912b61239209f3, type: 3}
+  - {fileID: 8300000, guid: 22dbae8568f63c640bb392210a36e8fa, type: 3}
+  - {fileID: 8300000, guid: 860b955c6271e81428780b80054e8341, type: 3}
+  minDistance: 1
+  maxDistance: 20
+  priority: 128

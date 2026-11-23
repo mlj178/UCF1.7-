@@ -1,0 +1,22 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8d33ad595d72f1265b2b8744c2ea929d, type: 3}
+  m_Name: TMP-Anren
+  m_EditorClassIdentifier:
+  clips:
+  - {fileID: 8300000, guid: 727744f811f85734490d4ad0c5dd0de6, type: 3}
+  - {fileID: 8300000, guid: 66d9b4ca79c18cd4484661c76d09cda3, type: 3}
+  - {fileID: 8300000, guid: 29a8a6cc738304445aa0509b64476eb2, type: 3}
+  - {fileID: 8300000, guid: c44c5649b6508b74f8dc39bb0342fc30, type: 3}
+  minDistance: 1
+  maxDistance: 20
+  priority: 128

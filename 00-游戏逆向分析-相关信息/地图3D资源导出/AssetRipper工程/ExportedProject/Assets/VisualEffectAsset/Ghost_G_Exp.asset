@@ -1,0 +1,1806 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!2058629509 &2058629509
+VisualEffectAsset:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_Name: Ghost_G_Exp
+  m_Infos:
+    m_RendererSettings:
+      motionVectorGenerationMode: 0
+      shadowCastingMode: 0
+      receiveShadows: 0
+      reflectionProbeUsage: 0
+      lightProbeUsage: 0
+    m_CullingFlags: 0
+    m_UpdateMode: 0
+    m_PreWarmDeltaTime: 0.05
+    m_PreWarmStepCount: 0
+    m_InitialEventName: OnPlay
+    m_Expressions:
+      m_Expressions:
+      - op: 1
+        valueIndex: 0
+        data[0]: -1
+        data[1]: -1
+        data[2]: -1
+        data[3]: 3
+      - op: 9
+        valueIndex: 3
+        data[0]: -1
+        data[1]: -1
+        data[2]: -1
+        data[3]: -1
+      - op: 53
+        valueIndex: 19
+        data[0]: 1
+        data[1]: 0
+        data[2]: -1
+        data[3]: -1
+      - op: 1
+        valueIndex: 22
+        data[0]: -1
+        data[1]: -1
+        data[2]: -1
+        data[3]: 3
+      - op: 1
+        valueIndex: 25
+        data[0]: -1
+        data[1]: -1
+        data[2]: -1
+        data[3]: 6
+      - op: 8
+        valueIndex: 26
+        data[0]: -1
+        data[1]: -1
+        data[2]: -1
+        data[3]: -1
+      - op: 74
+        valueIndex: 27
+        data[0]: 4
+        data[1]: 5
+        data[2]: -1
+        data[3]: 6
+      - op: 1
+        valueIndex: 28
+        data[0]: -1
+        data[1]: -1
+        data[2]: -1
+        data[3]: 1
+      - op: 1
+        valueIndex: 29
+        data[0]: -1
+        data[1]: -1
+        data[2]: -1
+        data[3]: 1
+      - op: 1
+        valueIndex: 30
+        data[0]: -1
+        data[1]: -1
+        data[2]: -1
+        data[3]: 1
+      - op: 1
+        valueIndex: 31
+        data[0]: -1
+        data[1]: -1
+        data[2]: -1
+        data[3]: 13
+      - op: 1
+        valueIndex: 32
+        data[0]: -1
+        data[1]: -1
+        data[2]: -1
+        data[3]: 14
+      - op: 1
+        valueIndex: 33
+        data[0]: -1
+        data[1]: -1
+        data[2]: -1
+        data[3]: 13
+      - op: 1
+        valueIndex: 34
+        data[0]: -1
+        data[1]: -1
+        data[2]: -1
+        data[3]: 13
+      - op: 1
+        valueIndex: 35
+        data[0]: -1
+        data[1]: -1
+        data[2]: -1
+        data[3]: 14
+      - op: 1
+        valueIndex: 36
+        data[0]: -1
+        data[1]: -1
+        data[2]: -1
+        data[3]: 3
+      - op: 1
+        valueIndex: 39
+        data[0]: -1
+        data[1]: -1
+        data[2]: -1
+        data[3]: 14
+      - op: 1
+        valueIndex: 40
+        data[0]: -1
+        data[1]: -1
+        data[2]: -1
+        data[3]: 13
+      - op: 1
+        valueIndex: 41
+        data[0]: -1
+        data[1]: -1
+        data[2]: -1
+        data[3]: 3
+      - op: 1
+        valueIndex: 44
+        data[0]: -1
+        data[1]: -1
+        data[2]: -1
+        data[3]: 14
+      - op: 1
+        valueIndex: 45
+        data[0]: -1
+        data[1]: -1
+        data[2]: -1
+        data[3]: 13
+      - op: 1
+        valueIndex: 46
+        data[0]: -1
+        data[1]: -1
+        data[2]: -1
+        data[3]: 14
+      - op: 1
+        valueIndex: 47
+        data[0]: -1
+        data[1]: -1
+        data[2]: -1
+        data[3]: 13
+      - op: 1
+        valueIndex: 48
+        data[0]: -1
+        data[1]: -1
+        data[2]: -1
+        data[3]: 2
+      - op: 1
+        valueIndex: 50
+        data[0]: -1
+        data[1]: -1
+        data[2]: -1
+        data[3]: 2
+      - op: 1
+        valueIndex: 52
+        data[0]: -1
+        data[1]: -1
+        data[2]: -1
+        data[3]: 2
+      - op: 1
+        valueIndex: 54
+        data[0]: -1
+        data[1]: -1
+        data[2]: -1
+        data[3]: 2
+      - op: 1
+        valueIndex: 56
+        data[0]: -1
+        data[1]: -1
+        data[2]: -1
+        data[3]: 5
+      - op: 1
+        valueIndex: 57
+        data[0]: -1
+        data[1]: -1
+        data[2]: -1
+        data[3]: 1
+      - op: 1
+        valueIndex: 58
+        data[0]: -1
+        data[1]: -1
+        data[2]: -1
+        data[3]: 1
+      - op: 1
+        valueIndex: 59
+        data[0]: -1
+        data[1]: -1
+        data[2]: -1
+        data[3]: 2
+      - op: 1
+        valueIndex: 61
+        data[0]: -1
+        data[1]: -1
+        data[2]: -1
+        data[3]: 2
+      - op: 1
+        valueIndex: 63
+        data[0]: -1
+        data[1]: -1
+        data[2]: -1
+        data[3]: 1
+      - op: 1
+        valueIndex: 64
+        data[0]: -1
+        data[1]: -1
+        data[2]: -1
+        data[3]: 1
+      - op: 1
+        valueIndex: 65
+        data[0]: -1
+        data[1]: -1
+        data[2]: -1
+        data[3]: 1
+      - op: 1
+        valueIndex: 66
+        data[0]: -1
+        data[1]: -1
+        data[2]: -1
+        data[3]: 3
+      - op: 1
+        valueIndex: 69
+        data[0]: -1
+        data[1]: -1
+        data[2]: -1
+        data[3]: 3
+      - op: 1
+        valueIndex: 72
+        data[0]: -1
+        data[1]: -1
+        data[2]: -1
+        data[3]: 1
+      - op: 6
+        valueIndex: 73
+        data[0]: -1
+        data[1]: -1
+        data[2]: -1
+        data[3]: -1
+      - op: 68
+        valueIndex: 74
+        data[0]: 10
+        data[1]: -1
+        data[2]: -1
+        data[3]: 0
+      - op: 69
+        valueIndex: 78
+        data[0]: 11
+        data[1]: -1
+        data[2]: -1
+        data[3]: 0
+      - op: 68
+        valueIndex: 79
+        data[0]: 12
+        data[1]: -1
+        data[2]: -1
+        data[3]: 1
+      - op: 1
+        valueIndex: 83
+        data[0]: -1
+        data[1]: -1
+        data[2]: -1
+        data[3]: 7
+      - op: 1
+        valueIndex: 84
+        data[0]: -1
+        data[1]: -1
+        data[2]: -1
+        data[3]: 1
+      - op: 1
+        valueIndex: 85
+        data[0]: -1
+        data[1]: -1
+        data[2]: -1
+        data[3]: 1
+      - op: 68
+        valueIndex: 86
+        data[0]: 13
+        data[1]: -1
+        data[2]: -1
+        data[3]: 2
+      - op: 69
+        valueIndex: 90
+        data[0]: 14
+        data[1]: -1
+        data[2]: -1
+        data[3]: 1
+      - op: 1
+        valueIndex: 91
+        data[0]: -1
+        data[1]: -1
+        data[2]: -1
+        data[3]: 7
+      - op: 53
+        valueIndex: 92
+        data[0]: 1
+        data[1]: 15
+        data[2]: -1
+        data[3]: -1
+      - op: 1
+        valueIndex: 95
+        data[0]: -1
+        data[1]: -1
+        data[2]: -1
+        data[3]: 1
+      - op: 69
+        valueIndex: 96
+        data[0]: 16
+        data[1]: -1
+        data[2]: -1
+        data[3]: 2
+      - op: 68
+        valueIndex: 97
+        data[0]: 17
+        data[1]: -1
+        data[2]: -1
+        data[3]: 3
+      - op: 1
+        valueIndex: 101
+        data[0]: -1
+        data[1]: -1
+        data[2]: -1
+        data[3]: 2
+      - op: 1
+        valueIndex: 103
+        data[0]: -1
+        data[1]: -1
+        data[2]: -1
+        data[3]: 7
+      - op: 53
+        valueIndex: 104
+        data[0]: 1
+        data[1]: 18
+        data[2]: -1
+        data[3]: -1
+      - op: 1
+        valueIndex: 107
+        data[0]: -1
+        data[1]: -1
+        data[2]: -1
+        data[3]: 1
+      - op: 69
+        valueIndex: 108
+        data[0]: 19
+        data[1]: -1
+        data[2]: -1
+        data[3]: 3
+      - op: 68
+        valueIndex: 109
+        data[0]: 20
+        data[1]: -1
+        data[2]: -1
+        data[3]: 4
+      - op: 1
+        valueIndex: 113
+        data[0]: -1
+        data[1]: -1
+        data[2]: -1
+        data[3]: 7
+      - op: 1
+        valueIndex: 114
+        data[0]: -1
+        data[1]: -1
+        data[2]: -1
+        data[3]: 1
+      - op: 1
+        valueIndex: 115
+        data[0]: -1
+        data[1]: -1
+        data[2]: -1
+        data[3]: 1
+      - op: 1
+        valueIndex: 116
+        data[0]: -1
+        data[1]: -1
+        data[2]: -1
+        data[3]: 1
+      - op: 1
+        valueIndex: 117
+        data[0]: -1
+        data[1]: -1
+        data[2]: -1
+        data[3]: 1
+      - op: 1
+        valueIndex: 118
+        data[0]: -1
+        data[1]: -1
+        data[2]: -1
+        data[3]: 1
+      - op: 69
+        valueIndex: 119
+        data[0]: 21
+        data[1]: -1
+        data[2]: -1
+        data[3]: 4
+      - op: 68
+        valueIndex: 120
+        data[0]: 22
+        data[1]: -1
+        data[2]: -1
+        data[3]: 5
+      - op: 1
+        valueIndex: 124
+        data[0]: -1
+        data[1]: -1
+        data[2]: -1
+        data[3]: 7
+      m_MaxCommonExpressionsIndex: 67
+      m_NeedsLocalToWorld: 1
+      m_NeedsWorldToLocal: 0
+      m_NeededMainCameraBuffers: 0
+    m_PropertySheet:
+      m_Float:
+        m_Array:
+        - m_ExpressionIndex: 7
+          m_Value: 0.08
+        - m_ExpressionIndex: 8
+          m_Value: -0.04
+        - m_ExpressionIndex: 9
+          m_Value: 0
+        - m_ExpressionIndex: 28
+          m_Value: 0.51
+        - m_ExpressionIndex: 29
+          m_Value: 1
+        - m_ExpressionIndex: 32
+          m_Value: 15
+        - m_ExpressionIndex: 33
+          m_Value: 2
+        - m_ExpressionIndex: 34
+          m_Value: 0.35
+        - m_ExpressionIndex: 37
+          m_Value: 0.5
+        - m_ExpressionIndex: 43
+          m_Value: -360
+        - m_ExpressionIndex: 44
+          m_Value: 360
+        - m_ExpressionIndex: 49
+          m_Value: 24
+        - m_ExpressionIndex: 55
+          m_Value: 6.28
+        - m_ExpressionIndex: 59
+          m_Value: 3
+        - m_ExpressionIndex: 60
+          m_Value: 6.2831855
+        - m_ExpressionIndex: 61
+          m_Value: 1.5
+        - m_ExpressionIndex: 62
+          m_Value: 4
+        - m_ExpressionIndex: 63
+          m_Value: 10
+      m_Vector2f:
+        m_Array:
+        - m_ExpressionIndex: 23
+          m_Value: {x: 1, y: 1}
+        - m_ExpressionIndex: 24
+          m_Value: {x: 0, y: 0}
+        - m_ExpressionIndex: 25
+          m_Value: {x: 2, y: 2}
+        - m_ExpressionIndex: 26
+          m_Value: {x: 0.35, y: 0.35}
+        - m_ExpressionIndex: 30
+          m_Value: {x: 3, y: 3}
+        - m_ExpressionIndex: 31
+          m_Value: {x: 0.25, y: 0.25}
+        - m_ExpressionIndex: 52
+          m_Value: {x: 4, y: 4}
+      m_Vector3f:
+        m_Array:
+        - m_ExpressionIndex: 0
+          m_Value: {x: 0, y: 0, z: 0}
+        - m_ExpressionIndex: 3
+          m_Value: {x: 0, y: 1, z: 0}
+        - m_ExpressionIndex: 15
+          m_Value: {x: 0, y: 1.5, z: 0}
+        - m_ExpressionIndex: 18
+          m_Value: {x: 0, y: 2, z: 0}
+        - m_ExpressionIndex: 35
+          m_Value: {x: 5, y: 5, z: 5}
+        - m_ExpressionIndex: 36
+          m_Value: {x: 1, y: 1, z: 1}
+      m_Vector4f:
+        m_Array: []
+      m_Uint:
+        m_Array:
+        - m_ExpressionIndex: 4
+          m_Value: 0
+      m_Int:
+        m_Array:
+        - m_ExpressionIndex: 27
+          m_Value: 1
+      m_Matrix4x4f:
+        m_Array: []
+      m_AnimationCurve:
+        m_Array:
+        - m_ExpressionIndex: 10
+          m_Value:
+            serializedVersion: 2
+            m_Curve:
+            - serializedVersion: 3
+              time: 0
+              value: 3
+              inSlope: 22.5
+              outSlope: 22.5
+              tangentMode: 0
+              weightedMode: 0
+              inWeight: 0
+              outWeight: 0
+            - serializedVersion: 3
+              time: 0.2
+              value: 7.5
+              inSlope: 1.7018641
+              outSlope: 1.7018641
+              tangentMode: 0
+              weightedMode: 0
+              inWeight: 0
+              outWeight: 0
+            - serializedVersion: 3
+              time: 1
+              value: 10
+              inSlope: 3.125
+              outSlope: 3.125
+              tangentMode: 0
+              weightedMode: 0
+              inWeight: 0
+              outWeight: 0
+            m_PreInfinity: 2
+            m_PostInfinity: 2
+            m_RotationOrder: 4
+        - m_ExpressionIndex: 12
+          m_Value:
+            serializedVersion: 2
+            m_Curve:
+            - serializedVersion: 3
+              time: 0
+              value: 0
+              inSlope: 0.075298876
+              outSlope: 0.075298876
+              tangentMode: 0
+              weightedMode: 0
+              inWeight: 0
+              outWeight: 0
+            - serializedVersion: 3
+              time: 0.75
+              value: 2
+              inSlope: 7.4310555
+              outSlope: 7.4310555
+              tangentMode: 0
+              weightedMode: 0
+              inWeight: 0
+              outWeight: 0
+            - serializedVersion: 3
+              time: 1
+              value: 5
+              inSlope: 12
+              outSlope: 12
+              tangentMode: 0
+              weightedMode: 0
+              inWeight: 0
+              outWeight: 0
+            m_PreInfinity: 2
+            m_PostInfinity: 2
+            m_RotationOrder: 4
+        - m_ExpressionIndex: 13
+          m_Value:
+            serializedVersion: 2
+            m_Curve:
+            - serializedVersion: 3
+              time: 0
+              value: 2
+              inSlope: 28.571428
+              outSlope: 28.571428
+              tangentMode: 0
+              weightedMode: 0
+              inWeight: 0
+              outWeight: 0
+            - serializedVersion: 3
+              time: 0.35
+              value: 12
+              inSlope: 5.754305
+              outSlope: 5.754305
+              tangentMode: 0
+              weightedMode: 0
+              inWeight: 0
+              outWeight: 0
+            - serializedVersion: 3
+              time: 1
+              value: 15
+              inSlope: 4.6153846
+              outSlope: 4.6153846
+              tangentMode: 0
+              weightedMode: 0
+              inWeight: 0
+              outWeight: 0
+            m_PreInfinity: 2
+            m_PostInfinity: 2
+            m_RotationOrder: 4
+        - m_ExpressionIndex: 17
+          m_Value:
+            serializedVersion: 2
+            m_Curve:
+            - serializedVersion: 3
+              time: 0
+              value: 3
+              inSlope: 12.641501
+              outSlope: 12.641501
+              tangentMode: 0
+              weightedMode: 0
+              inWeight: 0
+              outWeight: 0
+            - serializedVersion: 3
+              time: 0.4
+              value: 5
+              inSlope: 2.830192
+              outSlope: 3.3333333
+              tangentMode: 0
+              weightedMode: 0
+              inWeight: 0
+              outWeight: 0
+            - serializedVersion: 3
+              time: 1
+              value: 7
+              inSlope: 3.3333333
+              outSlope: 1.1197746
+              tangentMode: 0
+              weightedMode: 0
+              inWeight: 0
+              outWeight: 0
+            m_PreInfinity: 2
+            m_PostInfinity: 2
+            m_RotationOrder: 4
+        - m_ExpressionIndex: 20
+          m_Value:
+            serializedVersion: 2
+            m_Curve:
+            - serializedVersion: 3
+              time: 0
+              value: 1
+              inSlope: 1.6120924
+              outSlope: 1.6120924
+              tangentMode: 0
+              weightedMode: 0
+              inWeight: 0
+              outWeight: 0
+            - serializedVersion: 3
+              time: 1
+              value: 1.5
+              inSlope: 0.5
+              outSlope: 1.1197746
+              tangentMode: 0
+              weightedMode: 0
+              inWeight: 0
+              outWeight: 0
+            m_PreInfinity: 2
+            m_PostInfinity: 2
+            m_RotationOrder: 4
+        - m_ExpressionIndex: 22
+          m_Value:
+            serializedVersion: 2
+            m_Curve:
+            - serializedVersion: 3
+              time: 0
+              value: 0
+              inSlope: 3
+              outSlope: 3
+              tangentMode: 0
+              weightedMode: 0
+              inWeight: 0
+              outWeight: 0
+            - serializedVersion: 3
+              time: 1
+              value: 3
+              inSlope: 3
+              outSlope: 3
+              tangentMode: 0
+              weightedMode: 0
+              inWeight: 0
+              outWeight: 0
+            m_PreInfinity: 2
+            m_PostInfinity: 2
+            m_RotationOrder: 4
+      m_Gradient:
+        m_Array:
+        - m_ExpressionIndex: 11
+          m_Value:
+            serializedVersion: 2
+            key0: {r: 1, g: 1, b: 1, a: 0.5882353}
+            key1: {r: 1, g: 1, b: 1, a: 0}
+            key2: {r: 0, g: 0, b: 0, a: 0}
+            key3: {r: 0, g: 0, b: 0, a: 0}
+            key4: {r: 0, g: 0, b: 0, a: 0}
+            key5: {r: 0, g: 0, b: 0, a: 0}
+            key6: {r: 0, g: 0, b: 0, a: 0}
+            key7: {r: 0, g: 0, b: 0, a: 0}
+            ctime0: 0
+            ctime1: 65535
+            ctime2: 0
+            ctime3: 0
+            ctime4: 0
+            ctime5: 0
+            ctime6: 0
+            ctime7: 0
+            atime0: 0
+            atime1: 65535
+            atime2: 0
+            atime3: 0
+            atime4: 0
+            atime5: 0
+            atime6: 0
+            atime7: 0
+            m_Mode: 0
+            m_NumColorKeys: 2
+            m_NumAlphaKeys: 2
+        - m_ExpressionIndex: 14
+          m_Value:
+            serializedVersion: 2
+            key0: {r: 1, g: 1, b: 1, a: 0.5882353}
+            key1: {r: 1, g: 1, b: 1, a: 1}
+            key2: {r: 0, g: 0, b: 0, a: 0}
+            key3: {r: 0, g: 0, b: 0, a: 0}
+            key4: {r: 0, g: 0, b: 0, a: 0}
+            key5: {r: 0, g: 0, b: 0, a: 0}
+            key6: {r: 0, g: 0, b: 0, a: 0}
+            key7: {r: 0, g: 0, b: 0, a: 0}
+            ctime0: 0
+            ctime1: 65535
+            ctime2: 0
+            ctime3: 0
+            ctime4: 0
+            ctime5: 0
+            ctime6: 0
+            ctime7: 0
+            atime0: 0
+            atime1: 19661
+            atime2: 65535
+            atime3: 0
+            atime4: 0
+            atime5: 0
+            atime6: 0
+            atime7: 0
+            m_Mode: 0
+            m_NumColorKeys: 2
+            m_NumAlphaKeys: 3
+        - m_ExpressionIndex: 16
+          m_Value:
+            serializedVersion: 2
+            key0: {r: 1, g: 1, b: 1, a: 0}
+            key1: {r: 0.5, g: 0.5, b: 0.5, a: 1}
+            key2: {r: 0, g: 0, b: 0, a: 0.8}
+            key3: {r: 0, g: 0, b: 0, a: 0}
+            key4: {r: 0, g: 0, b: 0, a: 0}
+            key5: {r: 0, g: 0, b: 0, a: 0}
+            key6: {r: 0, g: 0, b: 0, a: 0}
+            key7: {r: 0, g: 0, b: 0, a: 0}
+            ctime0: 0
+            ctime1: 65535
+            ctime2: 0
+            ctime3: 0
+            ctime4: 0
+            ctime5: 0
+            ctime6: 0
+            ctime7: 0
+            atime0: 0
+            atime1: 6554
+            atime2: 52428
+            atime3: 65535
+            atime4: 0
+            atime5: 0
+            atime6: 0
+            atime7: 0
+            m_Mode: 0
+            m_NumColorKeys: 2
+            m_NumAlphaKeys: 4
+        - m_ExpressionIndex: 19
+          m_Value:
+            serializedVersion: 2
+            key0: {r: 1, g: 1, b: 1, a: 0}
+            key1: {r: 0.5, g: 0.5, b: 0.5, a: 1}
+            key2: {r: 0, g: 0, b: 0, a: 0.8}
+            key3: {r: 0, g: 0, b: 0, a: 0}
+            key4: {r: 0, g: 0, b: 0, a: 0}
+            key5: {r: 0, g: 0, b: 0, a: 0}
+            key6: {r: 0, g: 0, b: 0, a: 0}
+            key7: {r: 0, g: 0, b: 0, a: 0}
+            ctime0: 0
+            ctime1: 65535
+            ctime2: 0
+            ctime3: 0
+            ctime4: 0
+            ctime5: 0
+            ctime6: 0
+            ctime7: 0
+            atime0: 0
+            atime1: 6554
+            atime2: 52428
+            atime3: 65535
+            atime4: 0
+            atime5: 0
+            atime6: 0
+            atime7: 0
+            m_Mode: 0
+            m_NumColorKeys: 2
+            m_NumAlphaKeys: 4
+        - m_ExpressionIndex: 21
+          m_Value:
+            serializedVersion: 2
+            key0: {r: 0.5882353, g: 0.78431374, b: 1, a: 0}
+            key1: {r: 0.5882353, g: 0.78431374, b: 1, a: 0.19607843}
+            key2: {r: 0, g: 0, b: 0, a: 0}
+            key3: {r: 0, g: 0, b: 0, a: 0}
+            key4: {r: 0, g: 0, b: 0, a: 0}
+            key5: {r: 0, g: 0, b: 0, a: 0}
+            key6: {r: 0, g: 0, b: 0, a: 0}
+            key7: {r: 0, g: 0, b: 0, a: 0}
+            ctime0: 0
+            ctime1: 65535
+            ctime2: 0
+            ctime3: 0
+            ctime4: 0
+            ctime5: 0
+            ctime6: 0
+            ctime7: 0
+            atime0: 0
+            atime1: 32768
+            atime2: 65535
+            atime3: 0
+            atime4: 0
+            atime5: 0
+            atime6: 0
+            atime7: 0
+            m_Mode: 0
+            m_NumColorKeys: 2
+            m_NumAlphaKeys: 3
+      m_NamedObject:
+        m_Array:
+        - m_ExpressionIndex: 42
+          m_Value: {fileID: 2800000, guid: 3a7d6115a2e5e7e4cbf26243b575237c, type: 3}
+        - m_ExpressionIndex: 47
+          m_Value: {fileID: 2800000, guid: 4aaf166c1a15c0343a73755383bc5bac, type: 3}
+        - m_ExpressionIndex: 53
+          m_Value: {fileID: 2800000, guid: d76e360f978900b45a3af0ebda4bc428, type: 3}
+        - m_ExpressionIndex: 58
+          m_Value: {fileID: 2800000, guid: d76e360f978900b45a3af0ebda4bc428, type: 3}
+        - m_ExpressionIndex: 66
+          m_Value: {fileID: 2800000, guid: ba203d9f7210f8c489ba300b2317f47e, type: 3}
+      m_Bool:
+        m_Array: []
+    m_ExposedExpressions: []
+    m_Buffers:
+    - type: 1
+      size: 12
+      layout:
+      - name: lifetime
+        type: 1
+        offset:
+          bucket: 0
+          structure: 1
+          element: 0
+      - name: alive
+        type: 17
+        offset:
+          bucket: 4
+          structure: 2
+          element: 0
+      - name: age
+        type: 1
+        offset:
+          bucket: 4
+          structure: 2
+          element: 1
+      capacity: 4
+      stride: 4
+    - type: 1
+      size: 16
+      layout:
+      - name: lifetime
+        type: 1
+        offset:
+          bucket: 0
+          structure: 1
+          element: 0
+      - name: angleZ
+        type: 1
+        offset:
+          bucket: 4
+          structure: 1
+          element: 0
+      - name: alive
+        type: 17
+        offset:
+          bucket: 8
+          structure: 2
+          element: 0
+      - name: age
+        type: 1
+        offset:
+          bucket: 8
+          structure: 2
+          element: 1
+      capacity: 4
+      stride: 4
+    - type: 1
+      size: 32
+      layout:
+      - name: lifetime
+        type: 1
+        offset:
+          bucket: 0
+          structure: 1
+          element: 0
+      - name: position
+        type: 3
+        offset:
+          bucket: 4
+          structure: 4
+          element: 0
+      - name: texIndex
+        type: 1
+        offset:
+          bucket: 20
+          structure: 3
+          element: 0
+      - name: alive
+        type: 17
+        offset:
+          bucket: 20
+          structure: 3
+          element: 1
+      - name: age
+        type: 1
+        offset:
+          bucket: 20
+          structure: 3
+          element: 2
+      capacity: 4
+      stride: 4
+    - type: 1
+      size: 120
+      layout:
+      - name: lifetime
+        type: 1
+        offset:
+          bucket: 0
+          structure: 1
+          element: 0
+      - name: position
+        type: 3
+        offset:
+          bucket: 12
+          structure: 8
+          element: 0
+      - name: texIndex
+        type: 1
+        offset:
+          bucket: 12
+          structure: 8
+          element: 3
+      - name: alive
+        type: 17
+        offset:
+          bucket: 12
+          structure: 8
+          element: 4
+      - name: age
+        type: 1
+        offset:
+          bucket: 12
+          structure: 8
+          element: 5
+      - name: particleId
+        type: 6
+        offset:
+          bucket: 108
+          structure: 1
+          element: 0
+      capacity: 12
+      stride: 4
+    - type: 1
+      size: 1280
+      layout:
+      - name: position
+        type: 3
+        offset:
+          bucket: 0
+          structure: 4
+          element: 0
+      - name: lifetime
+        type: 1
+        offset:
+          bucket: 512
+          structure: 1
+          element: 0
+      - name: size
+        type: 1
+        offset:
+          bucket: 640
+          structure: 1
+          element: 0
+      - name: angleZ
+        type: 1
+        offset:
+          bucket: 768
+          structure: 3
+          element: 0
+      - name: alive
+        type: 17
+        offset:
+          bucket: 768
+          structure: 3
+          element: 1
+      - name: age
+        type: 1
+        offset:
+          bucket: 768
+          structure: 3
+          element: 2
+      - name: angularVelocityZ
+        type: 1
+        offset:
+          bucket: 1152
+          structure: 1
+          element: 0
+      capacity: 128
+      stride: 4
+    - type: 1
+      size: 1
+      layout:
+      - name: spawnCount
+        type: 1
+        offset:
+          bucket: 0
+          structure: 1
+          element: 0
+      capacity: 1
+      stride: 4
+    - type: 4
+      size: 1
+      layout: []
+      capacity: 0
+      stride: 4
+    - type: 1
+      size: 1
+      layout: []
+      capacity: 0
+      stride: 4
+    - type: 4
+      size: 1
+      layout: []
+      capacity: 0
+      stride: 4
+    - type: 0
+      size: 1
+      layout: []
+      capacity: 0
+      stride: 8
+    - type: 0
+      size: 1
+      layout: []
+      capacity: 0
+      stride: 8
+    - type: 1
+      size: 1
+      layout:
+      - name: spawnCount
+        type: 1
+        offset:
+          bucket: 0
+          structure: 1
+          element: 0
+      capacity: 1
+      stride: 4
+    - type: 4
+      size: 2
+      layout: []
+      capacity: 0
+      stride: 4
+    - type: 1
+      size: 1
+      layout: []
+      capacity: 0
+      stride: 4
+    - type: 1
+      size: 1
+      layout:
+      - name: spawnCount
+        type: 1
+        offset:
+          bucket: 0
+          structure: 1
+          element: 0
+      capacity: 1
+      stride: 4
+    - type: 4
+      size: 1
+      layout: []
+      capacity: 0
+      stride: 4
+    - type: 1
+      size: 1
+      layout: []
+      capacity: 0
+      stride: 4
+    - type: 1
+      size: 1
+      layout:
+      - name: spawnCount
+        type: 1
+        offset:
+          bucket: 0
+          structure: 1
+          element: 0
+      capacity: 1
+      stride: 4
+    - type: 4
+      size: 10
+      layout: []
+      capacity: 0
+      stride: 4
+    - type: 1
+      size: 1
+      layout: []
+      capacity: 0
+      stride: 4
+    - type: 1
+      size: 1
+      layout:
+      - name: spawnCount
+        type: 1
+        offset:
+          bucket: 0
+          structure: 1
+          element: 0
+      capacity: 1
+      stride: 4
+    - type: 4
+      size: 128
+      layout: []
+      capacity: 0
+      stride: 4
+    - type: 1
+      size: 1
+      layout: []
+      capacity: 0
+      stride: 4
+    - type: 4
+      size: 128
+      layout: []
+      capacity: 0
+      stride: 4
+    - type: 0
+      size: 128
+      layout: []
+      capacity: 0
+      stride: 8
+    - type: 0
+      size: 128
+      layout: []
+      capacity: 0
+      stride: 8
+    m_TemporaryBuffers: []
+    m_CPUBuffers:
+    - capacity: 1
+      stride: 1
+      layout:
+      - name: spawnCount
+        type: 1
+        offset:
+          bucket: 0
+          structure: 1
+          element: 0
+      initialData:
+        data: 00000000
+    - capacity: 1
+      stride: 1
+      layout:
+      - name: spawnCount
+        type: 1
+        offset:
+          bucket: 0
+          structure: 1
+          element: 0
+      initialData:
+        data: 00000000
+    - capacity: 1
+      stride: 1
+      layout:
+      - name: spawnCount
+        type: 1
+        offset:
+          bucket: 0
+          structure: 1
+          element: 0
+      initialData:
+        data: 00000000
+    - capacity: 1
+      stride: 1
+      layout:
+      - name: spawnCount
+        type: 1
+        offset:
+          bucket: 0
+          structure: 1
+          element: 0
+      initialData:
+        data: 00000000
+    - capacity: 1
+      stride: 1
+      layout:
+      - name: spawnCount
+        type: 1
+        offset:
+          bucket: 0
+          structure: 1
+          element: 0
+      initialData:
+        data: 00000000
+    - capacity: 1
+      stride: 1
+      layout:
+      - name: spawnCount
+        type: 1
+        offset:
+          bucket: 0
+          structure: 1
+          element: 0
+      initialData:
+        data: 00000000
+    m_Events:
+    - name: OnPlay
+      playSystems: 0000000001000000020000000300000004000000
+      stopSystems:
+    - name: OnStop
+      playSystems:
+      stopSystems: 0000000001000000020000000300000004000000
+    m_RuntimeVersion: 12
+  m_Systems:
+  - type: 0
+    flags: 0
+    capacity: 0
+    layer: 4294967295
+    name: System (5)
+    buffers:
+    - nameId: spawner_output
+      index: 1
+    values: []
+    tasks:
+    - type: 268435456
+      buffers: []
+      temporaryBuffers: []
+      values:
+      - nameId: Rate
+        index: 32
+      params: []
+      processor: {fileID: 0}
+    - type: 268435460
+      buffers: []
+      temporaryBuffers: []
+      values:
+      - nameId: LoopCount
+        index: 27
+      - nameId: LoopDuration
+        index: 33
+      - nameId: Delay
+        index: 34
+      params: []
+      processor: {fileID: -1137993553, guid: 8b25d78d443c80b6b3b8c89d3a3cdab7, type: 3}
+  - type: 0
+    flags: 0
+    capacity: 0
+    layer: 4294967295
+    name: System (4)
+    buffers:
+    - nameId: spawner_output
+      index: 2
+    values: []
+    tasks:
+    - type: 268435457
+      buffers: []
+      temporaryBuffers: []
+      values:
+      - nameId: Count
+        index: 24
+      - nameId: Delay
+        index: 26
+      params: []
+      processor: {fileID: 0}
+    - type: 268435460
+      buffers: []
+      temporaryBuffers: []
+      values:
+      - nameId: LoopCount
+        index: 27
+      - nameId: LoopDuration
+        index: 28
+      - nameId: Delay
+        index: 29
+      params: []
+      processor: {fileID: -1137993553, guid: 8b25d78d443c80b6b3b8c89d3a3cdab7, type: 3}
+    - type: 268435458
+      buffers: []
+      temporaryBuffers: []
+      values:
+      - nameId: nb
+        index: 30
+      - nameId: period
+        index: 31
+      params: []
+      processor: {fileID: 0}
+  - type: 0
+    flags: 0
+    capacity: 0
+    layer: 4294967295
+    name: System (3)
+    buffers:
+    - nameId: spawner_output
+      index: 3
+    values: []
+    tasks:
+    - type: 268435457
+      buffers: []
+      temporaryBuffers: []
+      values:
+      - nameId: Count
+        index: 23
+      - nameId: Delay
+        index: 26
+      params: []
+      processor: {fileID: 0}
+  - type: 0
+    flags: 0
+    capacity: 0
+    layer: 4294967295
+    name: System (1)
+    buffers:
+    - nameId: spawner_output
+      index: 4
+    values: []
+    tasks:
+    - type: 268435457
+      buffers: []
+      temporaryBuffers: []
+      values:
+      - nameId: Count
+        index: 25
+      - nameId: Delay
+        index: 24
+      params: []
+      processor: {fileID: 0}
+  - type: 0
+    flags: 0
+    capacity: 0
+    layer: 4294967295
+    name: Spawn system
+    buffers:
+    - nameId: spawner_output
+      index: 5
+    values: []
+    tasks:
+    - type: 268435457
+      buffers: []
+      temporaryBuffers: []
+      values:
+      - nameId: Count
+        index: 23
+      - nameId: Delay
+        index: 24
+      params: []
+      processor: {fileID: 0}
+  - type: 1
+    flags: 3
+    capacity: 1
+    layer: 4294967295
+    name: System
+    buffers:
+    - nameId: attributeBuffer
+      index: 0
+    - nameId: sourceAttributeBuffer
+      index: 5
+    - nameId: deadList
+      index: 6
+    - nameId: deadListCount
+      index: 7
+    - nameId: spawner_input
+      index: 5
+    - nameId: indirectBuffer0
+      index: 8
+    - nameId: sortBufferA
+      index: 9
+    - nameId: sortBufferB
+      index: 10
+    values:
+    - nameId: bounds_center
+      index: 3
+    - nameId: bounds_size
+      index: 35
+    tasks:
+    - type: 536870912
+      buffers:
+      - nameId: attributeBuffer
+        index: 0
+      - nameId: deadListIn
+        index: 6
+      - nameId: deadListCount
+        index: 7
+      - nameId: sourceAttributeBuffer
+        index: 5
+      temporaryBuffers: []
+      values: []
+      params:
+      - nameId: bounds_center
+        index: 3
+      - nameId: bounds_size
+        index: 35
+      processor: {fileID: 7200000, guid: 7f944c675c3e0014881b8a04af97701b, type: 2}
+    - type: 805306368
+      buffers:
+      - nameId: attributeBuffer
+        index: 0
+      - nameId: deadListOut
+        index: 6
+      - nameId: indirectBuffer
+        index: 8
+      temporaryBuffers: []
+      values:
+      - nameId: deltaTime_a
+        index: 38
+      params: []
+      processor: {fileID: 7200000, guid: 4bba467747737ee48a63fce40efe73c5, type: 2}
+    - type: 805306369
+      buffers:
+      - nameId: attributeBuffer
+        index: 0
+      - nameId: inputBuffer
+        index: 8
+      - nameId: outputBuffer
+        index: 9
+      - nameId: deadListCount
+        index: 7
+      temporaryBuffers: []
+      values:
+      - nameId: localToWorld
+        index: 1
+      params: []
+      processor: {fileID: 7200000, guid: 6b91c836cbdd82d4ca472e5eaa959aed, type: 2}
+    - type: 1073741826
+      buffers:
+      - nameId: attributeBuffer
+        index: 0
+      - nameId: indirectBuffer
+        index: 8
+      - nameId: deadListCount
+        index: 7
+      temporaryBuffers: []
+      values:
+      - nameId: Size_b
+        index: 39
+      - nameId: Color_c
+        index: 40
+      - nameId: Angle_d
+        index: 41
+      - nameId: mainTexture
+        index: 42
+      params:
+      - nameId: sortPriority
+        index: 0
+      - nameId: indirectDraw
+        index: 1
+      - nameId: indirectIndex
+        index: 8
+      processor: {fileID: 4800000, guid: 2022b6de4b0900e4f966d6b738c48fd3, type: 3}
+  - type: 1
+    flags: 1
+    capacity: 2
+    layer: 4294967295
+    name: System (2)
+    buffers:
+    - nameId: attributeBuffer
+      index: 1
+    - nameId: sourceAttributeBuffer
+      index: 11
+    - nameId: deadList
+      index: 12
+    - nameId: deadListCount
+      index: 13
+    - nameId: spawner_input
+      index: 4
+    values:
+    - nameId: bounds_center
+      index: 0
+    - nameId: bounds_size
+      index: 35
+    tasks:
+    - type: 536870912
+      buffers:
+      - nameId: attributeBuffer
+        index: 1
+      - nameId: deadListIn
+        index: 12
+      - nameId: deadListCount
+        index: 13
+      - nameId: sourceAttributeBuffer
+        index: 11
+      temporaryBuffers: []
+      values: []
+      params:
+      - nameId: bounds_center
+        index: 0
+      - nameId: bounds_size
+        index: 35
+      processor: {fileID: 7200000, guid: 1757f7e6343a6644582de79f206d716d, type: 2}
+    - type: 805306368
+      buffers:
+      - nameId: attributeBuffer
+        index: 1
+      - nameId: deadListOut
+        index: 12
+      temporaryBuffers: []
+      values:
+      - nameId: deltaTime_a
+        index: 38
+      params: []
+      processor: {fileID: 7200000, guid: c20647d039f437d4b954a433eb891d70, type: 2}
+    - type: 1073741826
+      buffers:
+      - nameId: attributeBuffer
+        index: 1
+      temporaryBuffers: []
+      values:
+      - nameId: Size_b
+        index: 45
+      - nameId: Color_c
+        index: 46
+      - nameId: mainTexture
+        index: 47
+      params:
+      - nameId: sortPriority
+        index: 0
+      processor: {fileID: 4800000, guid: eb1b1f2d123b7f840886affeb3cab96f, type: 3}
+  - type: 1
+    flags: 1
+    capacity: 1
+    layer: 4294967295
+    name: BigGhost
+    buffers:
+    - nameId: attributeBuffer
+      index: 2
+    - nameId: sourceAttributeBuffer
+      index: 14
+    - nameId: deadList
+      index: 15
+    - nameId: deadListCount
+      index: 16
+    - nameId: spawner_input
+      index: 3
+    values:
+    - nameId: bounds_center
+      index: 0
+    - nameId: bounds_size
+      index: 36
+    tasks:
+    - type: 536870912
+      buffers:
+      - nameId: attributeBuffer
+        index: 2
+      - nameId: deadListIn
+        index: 15
+      - nameId: deadListCount
+        index: 16
+      - nameId: sourceAttributeBuffer
+        index: 14
+      temporaryBuffers: []
+      values:
+      - nameId: Position_b
+        index: 48
+      params:
+      - nameId: bounds_center
+        index: 0
+      - nameId: bounds_size
+        index: 36
+      processor: {fileID: 7200000, guid: 7cd1c6f48c75792438d24cc3e58a2fa4, type: 2}
+    - type: 805306368
+      buffers:
+      - nameId: attributeBuffer
+        index: 2
+      - nameId: deadListOut
+        index: 15
+      temporaryBuffers: []
+      values:
+      - nameId: deltaTime_a
+        index: 38
+      params: []
+      processor: {fileID: 7200000, guid: 07bbf30c61b67374c94546bee0e1125e, type: 2}
+    - type: 1073741826
+      buffers:
+      - nameId: attributeBuffer
+        index: 2
+      temporaryBuffers: []
+      values:
+      - nameId: Color_b
+        index: 50
+      - nameId: Size_c
+        index: 51
+      - nameId: mainTexture
+        index: 53
+      params:
+      - nameId: sortPriority
+        index: 0
+      processor: {fileID: 4800000, guid: f4151341628bb5f4c8cb19b24f1524ab, type: 3}
+  - type: 1
+    flags: 1
+    capacity: 10
+    layer: 4294967295
+    name: SmallGhost
+    buffers:
+    - nameId: attributeBuffer
+      index: 3
+    - nameId: sourceAttributeBuffer
+      index: 17
+    - nameId: deadList
+      index: 18
+    - nameId: deadListCount
+      index: 19
+    - nameId: spawner_input
+      index: 2
+    values:
+    - nameId: bounds_center
+      index: 0
+    - nameId: bounds_size
+      index: 36
+    tasks:
+    - type: 536870912
+      buffers:
+      - nameId: attributeBuffer
+        index: 3
+      - nameId: deadListIn
+        index: 18
+      - nameId: deadListCount
+        index: 19
+      - nameId: sourceAttributeBuffer
+        index: 17
+      temporaryBuffers: []
+      values:
+      - nameId: ArcSphere_sphere_center_b
+        index: 54
+      params:
+      - nameId: bounds_center
+        index: 0
+      - nameId: bounds_size
+        index: 36
+      processor: {fileID: 7200000, guid: 0cc502c84a101a44f90cd0302dba1659, type: 2}
+    - type: 805306368
+      buffers:
+      - nameId: attributeBuffer
+        index: 3
+      - nameId: deadListOut
+        index: 18
+      temporaryBuffers: []
+      values:
+      - nameId: deltaTime_a
+        index: 38
+      - nameId: uniform_a
+        index: 2
+      - nameId: uniform_b
+        index: 6
+      params: []
+      processor: {fileID: 7200000, guid: 551214cd25622bf4eb52672ce935cb76, type: 2}
+    - type: 1073741826
+      buffers:
+      - nameId: attributeBuffer
+        index: 3
+      temporaryBuffers: []
+      values:
+      - nameId: Color_b
+        index: 56
+      - nameId: Size_c
+        index: 57
+      - nameId: mainTexture
+        index: 58
+      params:
+      - nameId: sortPriority
+        index: 0
+      processor: {fileID: 4800000, guid: 527d83d2a5fb0b348bd93a3d68897788, type: 3}
+  - type: 1
+    flags: 3
+    capacity: 128
+    layer: 4294967295
+    name: Smoke
+    buffers:
+    - nameId: attributeBuffer
+      index: 4
+    - nameId: sourceAttributeBuffer
+      index: 20
+    - nameId: deadList
+      index: 21
+    - nameId: deadListCount
+      index: 22
+    - nameId: spawner_input
+      index: 1
+    - nameId: indirectBuffer0
+      index: 23
+    - nameId: sortBufferA
+      index: 24
+    - nameId: sortBufferB
+      index: 25
+    values:
+    - nameId: bounds_center
+      index: 0
+    - nameId: bounds_size
+      index: 36
+    tasks:
+    - type: 536870912
+      buffers:
+      - nameId: attributeBuffer
+        index: 4
+      - nameId: deadListIn
+        index: 21
+      - nameId: deadListCount
+        index: 22
+      - nameId: sourceAttributeBuffer
+        index: 20
+      temporaryBuffers: []
+      values: []
+      params:
+      - nameId: bounds_center
+        index: 0
+      - nameId: bounds_size
+        index: 36
+      processor: {fileID: 7200000, guid: 52927cf835c37584b8806208ae2451f2, type: 2}
+    - type: 805306368
+      buffers:
+      - nameId: attributeBuffer
+        index: 4
+      - nameId: deadListOut
+        index: 21
+      - nameId: indirectBuffer
+        index: 23
+      temporaryBuffers: []
+      values:
+      - nameId: deltaTime_a
+        index: 38
+      params: []
+      processor: {fileID: 7200000, guid: 593ca40ed460e534e9270e237cb3c948, type: 2}
+    - type: 805306369
+      buffers:
+      - nameId: attributeBuffer
+        index: 4
+      - nameId: inputBuffer
+        index: 23
+      - nameId: outputBuffer
+        index: 24
+      - nameId: deadListCount
+        index: 22
+      temporaryBuffers: []
+      values:
+      - nameId: localToWorld
+        index: 1
+      params: []
+      processor: {fileID: 7200000, guid: e99dab6d9c1884c43a775921197cf727, type: 2}
+    - type: 1073741826
+      buffers:
+      - nameId: attributeBuffer
+        index: 4
+      - nameId: indirectBuffer
+        index: 23
+      - nameId: deadListCount
+        index: 22
+      temporaryBuffers: []
+      values:
+      - nameId: Color_b
+        index: 64
+      - nameId: Size_c
+        index: 65
+      - nameId: mainTexture
+        index: 66
+      params:
+      - nameId: sortPriority
+        index: 0
+      - nameId: indirectDraw
+        index: 1
+      - nameId: indirectIndex
+        index: 23
+      processor: {fileID: 4800000, guid: 03d2d9b355c1a984f8de9a45d19abece, type: 3}
+  m_RendererSettings:
+    motionVectorGenerationMode: 0
+    shadowCastingMode: 0
+    receiveShadows: 0
+    reflectionProbeUsage: 0
+    lightProbeUsage: 0
+  m_CullingFlags: 0

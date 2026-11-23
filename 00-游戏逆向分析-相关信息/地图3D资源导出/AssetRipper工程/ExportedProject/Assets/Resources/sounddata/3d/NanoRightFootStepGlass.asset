@@ -1,0 +1,24 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8d33ad595d72f1265b2b8744c2ea929d, type: 3}
+  m_Name: NanoRightFootStepGlass
+  m_EditorClassIdentifier:
+  clips:
+  - {fileID: 8300000, guid: bbac9119e0a6909479b8b521c6522b19, type: 3}
+  - {fileID: 8300000, guid: b1857047d08ea25469a2c01fd7d8fe0e, type: 3}
+  - {fileID: 8300000, guid: cec44c2e83e2a6945b3a0e2f05448d7e, type: 3}
+  - {fileID: 8300000, guid: c6fe4e7be38ee26428419838fa096e1f, type: 3}
+  - {fileID: 8300000, guid: 08fdee5a5de839d4ba5898a4cd16ef97, type: 3}
+  - {fileID: 8300000, guid: d42c073a87629f74792b84628ac5393b, type: 3}
+  minDistance: 1
+  maxDistance: 26
+  priority: 200

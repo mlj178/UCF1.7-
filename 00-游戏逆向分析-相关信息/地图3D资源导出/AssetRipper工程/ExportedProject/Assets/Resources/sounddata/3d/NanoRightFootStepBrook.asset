@@ -1,0 +1,24 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8d33ad595d72f1265b2b8744c2ea929d, type: 3}
+  m_Name: NanoRightFootStepBrook
+  m_EditorClassIdentifier:
+  clips:
+  - {fileID: 8300000, guid: b669fc7d27746d14a8be0524fd36bac3, type: 3}
+  - {fileID: 8300000, guid: 05e21337d996e92418e5be7ab41f6993, type: 3}
+  - {fileID: 8300000, guid: d5da24a4a4bee5146992e32720cd89c9, type: 3}
+  - {fileID: 8300000, guid: bf97c399e02e9074eb5eaa76eea3e80d, type: 3}
+  - {fileID: 8300000, guid: c77012024e1fee44088e0bea5c4ecb6c, type: 3}
+  - {fileID: 8300000, guid: ca95f8f1efd6ad548aa99b6e95b29aad, type: 3}
+  minDistance: 1
+  maxDistance: 32
+  priority: 200

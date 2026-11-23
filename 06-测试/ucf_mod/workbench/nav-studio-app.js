@@ -44,7 +44,15 @@ var PAGE_TITLE = {
   overview: '总览', waypoints: '路点库', routes: '路线', zones: '区域',
   auto: '自动铺设', maps: '地图数据', logs: '日志'
 };
-var PROFILE_ORDER = ['native', 'dev', 'deploy'];
+var VIEW_ORDER = ['native', 'final', 'pack'];
+var VIEW_LABELS = { native: '① 备份版', final: '② 成品', pack: '② 编辑中' };
+var VIEW_FULL = {
+  native: '备份版（原生快照·只读对照）',
+  final: '成品（final 当前版本·只读）',
+  pack: '编辑中（packs 测试包·只读）'
+};
+var STORAGE_VIEW = 'ucf.wb.view';
+var STORAGE_PACKS = 'ucf.wb.packs';
 var CORE_LAYERS = ['node_walk', 'node_block', 'edge'];
 /* 旧守卫：Bot_GuardArea 是空类、Bot_GuardPos 只当 Bot_CrouchPos 基类 —— 所有模式都不使用 */
 var LEGACY_LAYERS = { guard_area: 1, guard: 1 };
@@ -71,12 +79,9 @@ var MODE_NOTES = {
   '终结者模式': '守区/守点 + 补给箱 + 升级箱生效，蹲守不生效'
 };
 var SPAWN_LABEL = { 0: '幽灵出生（BL）', 1: '保卫者出生（GR）', 2: '中立出生', 3: '补给箱', 4: '红箱', 5: '蓝箱' };
-var PROFILE_LABELS = { native: '① 备份版', dev: '② 开发版', deploy: '③ 部署版' };
-var PROFILE_FULL = {
-  native: '备份版（原生·只读）',
-  dev: '开发版（成品 map.json/navmesh.bin + 编辑中 packs + 收件箱 vis）',
-  deploy: '部署版（游戏运行环境·不放导航数据）'
-};
+/* 数据档：① 备份版 / ② 成品 / ② 编辑中。
+ * 成品 = dev\final\<当前版本>；编辑中 = dev\packs\<图>\<包>；备份 = navdata\native。
+ * ③ 部署版只是游戏运行目录（日志/配置用），不再作为可查看的数据档。 */
 
 var ST = {
   wb: null,
@@ -109,9 +114,14 @@ var ST = {
   busy: false,
   startPage: 'waypoints',
   startMap: '',
-  startProfile: '',
-  profile: 'dev',
+  startView: '',
+  startPack: '',
+  view: 'final',
   profileInfo: null,
+  pack: '',
+  packByFolder: {},
+  pendingPack: '',
+  pendingMap: '',
   dockUrl: '',
   dockOpen: false,
   dockHover: false,
@@ -133,6 +143,7 @@ function fmtBytes(n) {
   return n + ' B';
 }
 function fmtNum(n) { return String(Math.round(Number(n) || 0)).replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
+function int(v) { return Math.round(Number(v) || 0); }
 /* "2026-11-21 14:15:37" -> "11-21 14:15"；空串给 "—" */
 function shortTime(s) {
   var m = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/.exec(String(s || ''));
@@ -248,9 +259,8 @@ function buildModel(doc, txt) {
     };
   });
 
-  if (txt && txt.exists && txt.text) applyTxt(txt.text);
-
-  /* 跳跃链路：lines.jump 是插件真正导出的成对端点 */
+  /* 跳跃链路：lines.jump 是插件真正导出的成对端点；先建好，
+   * applyTxt 里的 jump add（测试包/成品清单里的手工跳链）再追加到同一个数组。 */
   var lines = doc.lines || {};
   var jumpLines = (lines.jump || []).filter(function (p) {
     return p && p.length >= 2 && p[0] && p[1];
@@ -264,18 +274,26 @@ function buildModel(doc, txt) {
   });
   ST.jumpOrphans = ST.feats.filter(function (f) { return f.kind === 'jump'; });
 
+  if (txt && txt.exists && txt.text) applyTxt(txt.text);
+
   rebuild();
   ST.stats = modelStats();
   ST.bounds = modelBounds();
 }
 
 function applyTxt(text) {
-  var isBlank = false;
-  String(text).split('\n').forEach(function (line) {
-    if (line.trim() === 'blank') isBlank = true;
+  var rows = String(text || '').split(/\r?\n/);
+  var replaceBase = false, keepNative = false;
+  rows.forEach(function (line) {
+    var s = line.trim();
+    if (s === 'blank' || s === 'grow') replaceBase = true;
+    else if (s === 'keep') keepNative = true;
   });
-  /* 空白底图：先把原生点全禁用、原生边全断，再按清单重新加点/连边 */
-  if (isBlank) {
+  /* C 侧：keep 与 blank/grow 互斥（keep 不被残留的 blank/grow 降级）。 */
+  if (keepNative) replaceBase = false;
+  /* grow / blank：原生点全禁、原生边全断，文件里的 node/edge add 就是全部路线。
+   * keep：原生点保留，只把 add 加到图上（可视化结果 = 原生 + 增量）。 */
+  if (replaceBase) {
     ST.nodes.forEach(function (n) { n.alive = false; });
     ST.edges = [];
   }
@@ -296,7 +314,8 @@ function applyTxt(text) {
     return best;
   }
   var extraEdges = [];
-  String(text).split('\n').forEach(function (line) {
+  var extraJumps = [];
+  rows.forEach(function (line) {
     var s = line.trim();
     if (!s || s.charAt(0) === '#') return;
     var t = s.split(/\s+/);
@@ -315,11 +334,21 @@ function applyTxt(text) {
       } else if (u >= 0) {
         ST.nodes[u].alive = false;
       }
-    } else if (t[0] === 'edge' && (t[1] === 'add' || t[1] === 'del')) {
+    } else if (t[0] === 'edge') {
+      var op = String(t[1] || '');
+      var add = op === 'add' || op === 'addout' || op === 'addin' || op === 'out' || op === 'in';
+      var del = op === 'del' || op === 'delout' || op === 'delin';
+      if (!add && !del) return;
       var a = find([+t[2], +t[3], +t[4]]);
       var b = find([+t[5], +t[6], +t[7]]);
       if (a < 0 || b < 0 || a === b) return;
-      extraEdges.push([a, b, t[1] === 'add']);
+      /* 2D 图不画方向：out/in 也按一条边显示；删边同理按无向删 */
+      extraEdges.push([a, b, add]);
+    } else if (t[0] === 'jump' && (t[1] === 'add' || t[1] === 'jumpadd')) {
+      var a3 = [+t[2], +t[3], +t[4]], b3 = [+t[5], +t[6], +t[7]];
+      if (!isFinite(a3[0]) || !isFinite(a3[1]) || !isFinite(a3[2]) ||
+          !isFinite(b3[0]) || !isFinite(b3[1]) || !isFinite(b3[2])) return;
+      extraJumps.push({ type: 'jump', a: a3, b: b3, fromTxt: true });
     }
   });
   if (extraEdges.length) {
@@ -335,6 +364,10 @@ function applyTxt(text) {
       }
     });
   }
+  extraJumps.forEach(function (j) {
+    j.id = 'J' + (ST.jumpLinks.length + 1);
+    ST.jumpLinks.push(j);
+  });
 }
 
 function rebuild() {
@@ -1076,34 +1109,167 @@ function drawZoneGroups(c, v) {
 /* =====================================================================
  * 4. 顶栏 / 侧栏 / 导航
  * ===================================================================*/
-function profLabel() { return PROFILE_LABELS[ST.profile] || ST.profile || '—'; }
-function profFull() { return PROFILE_FULL[ST.profile] || profLabel(); }
+function viewLabel() { return VIEW_LABELS[ST.view] || ST.view || '—'; }
+function viewFull() { return VIEW_FULL[ST.view] || viewLabel(); }
+function shortPack(name) { return String(name || '').split('/').pop(); }
+function winPath(p) { return String(p || '').replace(/\//g, String.fromCharCode(92)); }
 
-function applyProfile(wb) {
-  if (wb && wb.profile && wb.profile.profile) {
-    ST.profile = wb.profile.profile;
-    ST.profileInfo = wb.profile;
-  }
-  var sel = $('profSel');
-  if (sel) {
-    if (!sel.options.length) {
-      sel.innerHTML = PROFILE_ORDER.map(function (k) {
-        return '<option value="' + k + '">' + PROFILE_LABELS[k] + '</option>';
-      }).join('');
+function lsGet(k, d) {
+  try { var v = localStorage.getItem(k); return v == null ? d : v; } catch (e) { return d; }
+}
+function lsSet(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
+function lsJSON(k, d) {
+  try {
+    var v = JSON.parse(localStorage.getItem(k) || 'null');
+    return v && typeof v === 'object' ? v : d;
+  } catch (e) { return d; }
+}
+
+/* 这张图能套的包：wb.packs 是全部包的完整清单（folder/name/fp/grow/keep/created/ops）。
+ * 指纹和当前地图对不上的旧包标 stale —— 插件按 <指纹>.txt 找文件，对不上就是不会读。 */
+function packsForMap(m) {
+  if (!m) return [];
+  var all = (ST.wb && ST.wb.packs) || [];
+  return all.filter(function (p) {
+    if (p.folder) return p.folder === m.folder;
+    return p.level && p.level === m.level;
+  }).map(function (p) {
+    return {
+      name: String(p.name || ''), label: String(p.label || ''),
+      level: String(p.level || ''), fp: String(p.fp || ''),
+      grow: !!p.grow, keep: !!p.keep, blank: !!p.blank,
+      created: String(p.created || ''), ops: int(p.ops) || 0,
+      nogen: !!p.nogen,
+      stale: !!(p.fp && m.fp && p.fp !== m.fp)
+    };
+  }).sort(function (a, b) {
+    return String(b.created || '').localeCompare(String(a.created || '')) ||
+           String(b.name || '').localeCompare(String(a.name || ''));
+  });
+}
+
+function choosePackForMap(m) {
+  var valid = packsForMap(m).filter(function (p) { return !p.stale; });
+  if (!valid.length) return '';
+  var wants = [ST.pendingPack, ST.packByFolder[m.folder], ST.pack];
+  for (var i = 0; i < wants.length; i++) {
+    if (!wants[i]) continue;
+    for (var j = 0; j < valid.length; j++) {
+      if (valid[j].name === wants[i]) return valid[j].name;
     }
-    sel.value = ST.profile;
-    sel.title = '当前查看：' + profFull() + '（切换只改查看，不写文件）';
   }
-  var top = $('topVer');
-  if (top) top.textContent = profLabel() + ' · 只读';
-  document.title = 'UCF 路点工作台 · ' + profLabel();
-  var chip = $('ovVerChip');
-  if (chip) chip.textContent = '只读 · ' + profLabel();
+  return valid[0].name;
+}
+
+function updatePackSel() {
+  var sel = $('packSel');
+  if (!sel) return;
+  if (ST.view !== 'pack') { sel.style.display = 'none'; return; }
+  sel.style.display = '';
+  var m = ST.cur;
+  if (!m) {
+    sel.innerHTML = '<option value="">先选地图</option>';
+    sel.value = '';
+    sel.disabled = true;
+    sel.title = '先在上面的「选择地图」里挑一张，再选它的测试包';
+    return;
+  }
+  var packs = packsForMap(m);
+  var valid = packs.filter(function (p) { return !p.stale; });
+  var stale = packs.filter(function (p) { return p.stale; });
+  if (!valid.length) {
+    sel.innerHTML = '<option value="">' +
+      (packs.length ? '包都指纹失效了' : '这张图还没有包') + '</option>';
+    sel.value = '';
+    sel.disabled = true;
+    sel.title = packs.length
+      ? '这张图重新扫过，旧包的指纹对不上，插件不会读它们'
+      : '进游戏 F2 改完存包，或控制台「编辑中」新建包';
+    ST.pack = '';
+    return;
+  }
+  var html = valid.map(function (p) {
+    return '<option value="' + esc(p.name) + '">' + esc(shortPack(p.name)) +
+      (p.created ? ' · ' + esc(shortTime(p.created)) : '') + '</option>';
+  }).join('');
+  html += stale.map(function (p) {
+    return '<option value="" disabled>✖ 指纹失效 · ' + esc(shortPack(p.name)) + '</option>';
+  }).join('');
+  sel.innerHTML = html;
+  sel.disabled = false;
+  if (!ST.pack || !valid.some(function (p) { return p.name === ST.pack; })) {
+    ST.pack = choosePackForMap(m);
+  }
+  sel.value = ST.pack;
+  var cur = valid.filter(function (p) { return p.name === ST.pack; })[0];
+  sel.title = '当前图的测试包：' + (cur ? shortPack(cur.name) : '—') +
+    '（只读；切包只改查看，不写文件）';
+}
+
+function updateFinalChip() {
+  var chip = $('finalChip');
+  if (!chip) return;
+  if (ST.view !== 'final') { chip.style.display = 'none'; return; }
+  chip.style.display = '';
+  var f = (ST.wb && ST.wb.versions && ST.wb.versions.dev && ST.wb.versions.dev.final) || {};
+  var cur = f.current || '';
+  chip.className = 'vchip' + (cur ? ' ok' : '');
+  chip.innerHTML = cur
+    ? '当前版 <b>' + esc(cur) + '</b>' +
+      (f.latest ? ' · ' + esc(shortTime(f.latest)) : '') +
+      (f.maps ? ' · ' + int(f.maps) + ' 张图' : '')
+    : '成品 · <b>还没有版本</b>（启动 = 原版）';
+  chip.title = cur
+    ? ('成品当前版本：' + (f.path || cur) + '（只读；历史版本在控制台成品页）')
+    : '成品里还没有版本：发布到成品后这里显示当前版。游戏启动 = 原版。';
+}
+
+function updateViewControls() {
+  var sel = $('viewSel');
+  if (sel) sel.value = ST.view;
+  updatePackSel();
+  updateFinalChip();
+}
+
+function syncURL() {
   try {
     var u = new URL(location.href);
-    u.searchParams.set('profile', ST.profile);
+    u.searchParams.set('view', ST.view);
+    u.searchParams.delete('profile');
+    if (ST.view === 'pack' && ST.pack) u.searchParams.set('pack', ST.pack);
+    else u.searchParams.delete('pack');
+    if (ST.cur && ST.cur.file) u.searchParams.set('map', ST.cur.file);
+    else if (ST.cur && ST.cur.level) u.searchParams.set('map', 'level:' + ST.cur.level);
+    else u.searchParams.delete('map');
     history.replaceState(null, '', u);
   } catch (e) {}
+}
+
+function applyView(wb) {
+  if (wb && wb.profile) {
+    var mode0 = wb.profile.mode || wb.profile.profile || ST.view;
+    if (mode0 === 'dev' || mode0 === 'deploy') mode0 = 'final';   /* 旧服务的兼容 */
+    ST.view = mode0;
+    ST.profileInfo = wb.profile;
+  }
+  var sel = $('viewSel');
+  if (sel) {
+    if (!sel.options.length) {
+      sel.innerHTML = VIEW_ORDER.map(function (k) {
+        return '<option value="' + k + '">' + VIEW_LABELS[k] + '</option>';
+      }).join('');
+    }
+    sel.value = ST.view;
+    sel.title = '当前查看：' + viewFull() + '（切换只改查看，不写文件）';
+  }
+  updateViewControls();
+  var top = $('topVer');
+  if (top) top.textContent = viewLabel() + ' · 只读';
+  document.title = 'UCF 路点工作台 · ' + viewLabel();
+  var chip = $('ovVerChip');
+  if (chip) chip.textContent = '只读 · ' + viewLabel();
+  lsSet(STORAGE_VIEW, ST.view);
+  syncURL();
 }
 
 function updateHeader() {
@@ -1140,7 +1306,8 @@ function updateHeader() {
   if (ST.page === 'auto') {
     sub = m ? ('进图时按 PointGraph 节点数判断是否自动铺：当前 ' + m.nodes + ' 点') : sub;
   }
-  if (ST.page === 'maps') sub = ST.maps.length + ' 张图 · ' + profLabel();
+  if (ST.page === 'maps') sub = ST.maps.length + ' 张图 · ' + viewLabel() +
+    (ST.view === 'pack' && ST.pack ? ' · ' + shortPack(ST.pack) : '');
   if (ST.page === 'logs') sub = 'ucf_mod.log 尾部 · 只读';
   $('pageSub').textContent = sub;
 
@@ -1149,10 +1316,15 @@ function updateHeader() {
   $('badgeZones').textContent = s ? ((s.kinds.nano_area || 0) + (s.kinds.guard_area || 0) + (s.kinds.tag_region || 0)) : '0';
 
   if (m) {
-    var kind = profLabel();
+    var kind = viewLabel();
     if (m.status === 'missing') kind = m.navmesh ? '仅可走面' : '待采集';
-    else if (m.final && m.final.has) kind = '② 开发版 · 成品里有这张图';
-    else if (ST.profile === 'dev') kind = '② 开发版 · 还没发布到成品';
+    else if (ST.view === 'pack') kind = ST.pack ? '② 编辑中 · 包' : '② 编辑中 · 无包';
+    else if (ST.view === 'final') {
+      var fcur0 = (ST.wb && ST.wb.versions && ST.wb.versions.dev && ST.wb.versions.dev.final || {}).current;
+      kind = !fcur0 ? '② 成品 · 无版本'
+        : ((m.final && m.final.has) ? '② 成品 · 当前版' : '② 成品 · 本图无');
+    }
+    else if (ST.view === 'native') kind = '① 备份版';
     $('sideKind').textContent = kind;
     $('sideName').textContent = (m.label || m.level || '未命名');
     $('sideFp').textContent = (m.fp || '—') + (m.file ? ' · ' + m.file : (m.navmeshFile ? ' · ' + m.navmeshFile : ''));
@@ -1165,15 +1337,15 @@ function updateHeader() {
     $('sideSrc').innerHTML = '<i></i><span>等待选择</span>';
   }
   $('stMap').textContent = m ? ((m.label || m.level) + ' · ' + (m.fp || '无指纹')) : '未加载地图';
-  $('stData').textContent = profLabel() + ' · 只读';
+  $('stData').textContent = viewLabel() + ' · 只读';
   if (ST.wb && ST.wb.server) $('stServer').textContent = ST.wb.server;
-  $('stProfile').textContent = 'UCF_PROFILE ' + ST.profile + ' · ' + profLabel();
+  $('stProfile').textContent = '查看 ' + viewLabel();
 
   var dir = (m && m.dir) || 'maps';
-  ST.dockUrl = '/navview.html?view=1&embed=1&notour=1&profile=' + encodeURIComponent(ST.profile) +
+  ST.dockUrl = '/navview.html?view=1&embed=1&notour=1&profile=' + encodeURIComponent(ST.view) +
     (m && m.level ? '&level=' + encodeURIComponent(m.level) : '') +
     (m && m.file ? '&open=' + encodeURIComponent(dir + '/' + m.file) : '') +
-    (m && m.pack ? '&pack=' + encodeURIComponent(m.pack) : '') +
+    (ST.view === 'pack' && ST.pack ? '&pack=' + encodeURIComponent(ST.pack) : '') +
     '&compass=' + (ST.show.compass ? 1 : 0);   /* 3D 侧栏的罗盘跟着工作台的「方向」开关 */
   var dm = $('dockMap');
   if (dm) dm.textContent = m && m.file ? ((m.label || m.level) + ' · ' + m.file) : '未载入地图';
@@ -1207,8 +1379,12 @@ function showPage(name) {
 function renderOverview() {
   var m = ST.cur, s = ST.stats, wb = ST.wb;
   if (!m || !s) return;
-  var sync = (ST.profile === 'dev' && m.final && m.final.has) ? ' · 成品已有这张图' : '';
-  $('ovSub').textContent = (m.label || m.level) + ' · ' + (m.level || '') + ' · ' + profLabel() + sync;
+  var sync = '';
+  var curFin = (wb && wb.versions && wb.versions.dev && wb.versions.dev.final) || {};
+  if (ST.view === 'pack' && ST.pack) sync = ' · ' + shortPack(ST.pack);
+  else if (ST.view === 'final') sync = curFin.current ? (' · 当前版 ' + curFin.current) : ' · 成品还没有版本';
+  else if (ST.view === 'native') sync = ' · 原生无编辑';
+  $('ovSub').textContent = (m.label || m.level) + ' · ' + (m.level || '') + ' · ' + viewLabel() + sync;
   var k = s.kinds;
   $('ovTitle').innerHTML = (m.label || m.level) + ' <em>' + s.nodes + '</em> 点 / <em>' + s.edges + '</em> 边';
   $('ovDesc').textContent = '这张图的可走面' + (m.navmesh ? '有导出' : '没有导出') + '；' +
@@ -1227,32 +1403,39 @@ function renderOverview() {
   }).join('');
 
   var dev = (wb && wb.versions && wb.versions.dev) || {};
-  var dep = (wb && wb.versions && wb.versions.deploy) || {};
   var nat = (wb && wb.versions && wb.versions.native) || {};
   var dFinal = dev.final || {}, dPacks = dev.packs || {}, dInbox = dev.inbox || {};
   var edits = ST.maps.reduce(function (a, x) { return a + ((x.final && x.final.ops) || 0); }, 0);
+  /* 数据流：收件箱 → 编辑中（packs）→ 成品（final）。 */
   $('ovFlow').innerHTML =
     '<div class="fstep"><b><em>01</em>收件箱</b><span>' + fmtNum(dInbox.exports || 0) + ' 份导出 · ' + shortTime(dInbox.latest) + '</span></div>' +
-    '<div class="fstep"><b><em>02</em>成品</b><span>' + (dev.maps || 0) + ' 张图 · ' + (dev.navmesh || 0) + ' 可走面 · ' +
-      (edits ? edits + ' 条改动' : '点图=原样') + '</span></div>' +
-    '<div class="fstep"><b><em>03</em>编辑中</b><span>' + (dPacks.n || 0) + ' 个测试包 · 成品 ' + (dFinal.versions || 0) + ' 个版本</span></div>';
+    '<div class="fstep"><b><em>02</em>编辑中</b><span>' + (dPacks.n || 0) + ' 个测试包 · ' + (dPacks.maps || 0) + ' 张图 · ' + fmtBytes(dPacks.bytes || 0) + '</span></div>' +
+    '<div class="fstep"><b><em>03</em>成品</b><span>' + (dFinal.versions || 0) + ' 个版本 · ' +
+      (dFinal.current ? ('当前 ' + dFinal.current) : '还没有版本') + (edits ? ' · ' + edits + ' 条改动' : '') + '</span></div>';
 
-  /* 三版：① 只读快照、② 唯一数据源（成品 / 编辑中 / 收件箱）、③ 游戏运行环境（不放数据） */
+  /* 数据档：① 备份版（对照）/ ② 成品 / ② 编辑中。③ 部署版不是数据档。 */
   var vers = [
-    { key: 'native', n: '① 备份版', d: nat, c: '#8fa5c0' },
-    { key: 'dev', n: '② 开发版', d: dev, c: '#4f8cff' },
-    { key: 'deploy', n: '③ 部署版', d: dep, c: '#3ecf8e' }
+    { key: 'native', n: '① 备份版', d: nat, c: '#8fa5c0',
+      txt: (nat.maps || 0) + ' 图 / ' + (nat.navmesh || 0) + ' 面' },
+    { key: 'final', n: '② 成品', d: { path: dFinal.path || '' }, c: '#d6b676',
+      txt: (dFinal.versions || 0) + ' 版' + (dFinal.current ? (' · 当前 ' + dFinal.current) : ' · 还没有版本') },
+    { key: 'pack', n: '② 编辑中', d: { path: (wb.profile && wb.profile.packs) || '' }, c: '#8fb7d9',
+      txt: (dPacks.n || 0) + ' 包 / ' + (dPacks.maps || 0) + ' 图' }
   ];
   $('ovVersions').innerHTML = vers.map(function (v) {
-    var txt;
-    if (v.key === 'native') txt = (v.d.maps || 0) + ' 图 / ' + (v.d.navmesh || 0) + ' 面';
-    else if (v.key === 'dev') txt = (v.d.maps || 0) + ' 图 / ' + (dFinal.versions || 0) + ' 版本 / ' + (dPacks.n || 0) + ' 包';
-    else txt = '运行时 · 不放数据';
-    return '<span class="preset' + (v.key === ST.profile ? ' on' : '') + '" data-vprof="' + v.key + '"' +
-      ' title="' + esc(v.d.path || '') + '" style="color:' + v.c + '">' + v.n + '<b>' + txt + '</b></span>';
+    return '<span class="preset' + (v.key === ST.view ? ' on' : '') + '" data-view="' + v.key + '"' +
+      ' title="' + esc(v.d.path || '') + '" style="color:' + v.c + '">' + v.n + '<b>' + esc(v.txt) + '</b></span>';
   }).join('');
-  var curPath = (wb && wb.profile && wb.profile.data) || '—';
-  $('ovPaths').textContent = '当前查看：' + profLabel() + ' · ' + curPath;
+  var curPath = '';
+  if (ST.view === 'native') curPath = (wb.profile && wb.profile.native) || '';
+  else if (ST.view === 'pack') {
+    var pkBase = (wb.profile && wb.profile.packs) || '';
+    curPath = ST.pack ? winPath(pkBase + '/' + ST.pack) : pkBase;
+  } else {
+    curPath = dFinal.path || (wb.profile && wb.profile.data) || '';
+  }
+  $('ovPaths').textContent = '当前查看：' + viewLabel() +
+    (ST.view === 'pack' && ST.pack ? (' · ' + shortPack(ST.pack)) : '') + ' · ' + curPath;
 
   var events = (wb && wb.events) || [];
   $('ovActions').innerHTML = events.slice(0, 8).map(function (e) {
@@ -1267,10 +1450,23 @@ function renderOverview() {
 function buildTips() {
   var m = ST.cur, s = ST.stats, wb = ST.wb, out = [];
   if (!m) return out;
-  if (ST.profile === 'native') {
-    out.push({ c: '#8fa5c0', text: '当前是①备份版只读快照（原生数据），游戏不会读它；要改点图请切到②开发版。' });
-  } else if (ST.profile === 'deploy') {
-    out.push({ c: '#3ecf8e', text: '当前是③部署版（游戏运行环境）：2026-11-21 起这里不放导航数据，游戏读「成品」版本或「编辑中」的包；要改点图请切到②开发版。' });
+  if (ST.view === 'native') {
+    out.push({ c: '#8fa5c0', text: '当前是①备份版的只读快照（原生数据），游戏不读它；对照用，看游戏实际读哪份请切「② 成品」或「② 编辑中」。' });
+  } else if (ST.view === 'final') {
+    var fin0 = (wb && wb.versions && wb.versions.dev && wb.versions.dev.final) || {};
+    if (!fin0.current) {
+      out.push({ c: '#f5b942', text: '成品里还没有版本：游戏启动 = 原版；现在看到的是 ② 的基准点图。要试改法去「② 编辑中」选包。' });
+    } else if (!(m.final && m.final.has)) {
+      out.push({ c: '#f5b942', text: '这张图不在成品当前版「' + fin0.current + '」里：游戏会用原版 / 没有编辑。' });
+    }
+  } else if (ST.view === 'pack') {
+    var allPk = (wb && wb.packs ? wb.packs : []).filter(function (p) { return p.folder === m.folder; });
+    var stalePk = allPk.filter(function (p) { return p.fp && m.fp && p.fp !== m.fp; });
+    if (!ST.pack) {
+      out.push({ c: '#f5b942', text: allPk.length && stalePk.length === allPk.length
+        ? '这张图的包都指纹失效了（图重新扫过），插件不会读；去控制台「编辑中」新建一个包。'
+        : '这张图还没有包：进游戏 F2 改完存包，或控制台「编辑中」新建包；现在看到的是基准点图。' });
+    }
   }
   if (m.status === 'missing') {
     out.push({ c: '#f5b942', text: '这张图还没有采集数据：进图导出一份，或用测试包从空白底图画。' });
@@ -1292,9 +1488,12 @@ function buildTips() {
     out.push({ c: '#3ecf8e', text: '②开发版的 map.json 和①备份版有文件不同：这些就是改过的成品数据，控制台「开始游戏 · 成品」按包读它。' });
   }
   if (m.final && m.final.has) {
-    out.push({ c: '#3ecf8e', text: '这张图在成品当前版本里有 ' + (m.final.ops || 0) + ' 条改动；要试新改法去控制台「编辑中」选包。' });
-  } else if (ST.profile === 'dev' && !(m.packs || []).length) {
-    out.push({ c: '#f5b942', text: '这张图还没有编辑中的包，也没有发布到成品：进游戏改完存包，再在控制台「发布到成品」。' });
+    out.push({ c: '#3ecf8e', text: '这张图在成品当前版里有 ' + (m.final.ops || 0) + ' 条改动；要试新改法去控制台「编辑中」选包。' });
+  }
+  if (ST.view === 'pack' && ST.pack) {
+    var curPk = packsForMap(m).filter(function (p) { return p.name === ST.pack; })[0];
+    out.unshift({ c: '#3ecf8e', text: '当前查看的是包 ' + shortPack(ST.pack) +
+      (curPk ? ('（' + curPk.ops + ' 条）') : '') + '；网页只读，游戏里要在控制台「编辑中」选这个包才生效。' });
   }
   if (!out.length) out.push({ c: '#3ecf8e', text: '当前地图数据没有明显缺口：点图、出生点、特征点都读到了。' });
   return out.slice(0, 5);
@@ -1403,22 +1602,28 @@ function renderMapInfo() {
     return;
   }
   $('mapSub2').textContent = m.level || m.file || '—';
-  $('mapChip').textContent = m.status === 'missing' ? (m.navmesh ? '仅可走面' : '待采集') : profLabel();
-  /* 三版之后没有「部署」这一步了：②开发版里分 成品（发布过的版本）/ 编辑中（packs）/ 收件箱（vis） */
+  $('mapChip').textContent = m.status === 'missing' ? (m.navmesh ? '仅可走面' : '待采集') : viewLabel();
+  /* ② 开发版里分 成品（final 当前版）/ 编辑中（packs）/ 收件箱（vis）；① 备份版是对照 */
   var fin = m.final || {};
+  var finVer = (ST.wb && ST.wb.versions && ST.wb.versions.dev && ST.wb.versions.dev.final || {}).current || '';
   var finText = fin.has
-    ? ('已发布 · ' + (fin.ops || 0) + ' 条' + (fin.sha ? ' · ' + String(fin.sha).slice(0, 8) : ''))
-    : (ST.profile === 'native' ? '①备份版没有成品概念' : '没发布到成品');
+    ? ('当前版已发布 · ' + (fin.ops || 0) + ' 条' + (fin.sha ? ' · ' + String(fin.sha).slice(0, 8) : ''))
+    : (ST.view === 'native' ? '① 备份版没有成品概念'
+      : (!finVer ? '成品还没有版本' : '当前版没有这张图'));
   var packs = m.packs || [];
   var packsText = packs.length
-    ? (packs.length + ' 个：' + packs.map(function (p) { return p.name; }).join('、'))
+    ? (packs.length + ' 个：' + packs.map(function (p) {
+        var stale = p.fp && m.fp && p.fp !== m.fp;
+        var cur = (p.full || p.name) === ST.pack;
+        return (cur ? '● ' : '') + p.name + (stale ? '（✖ 失效）' : '');
+      }).join('、'))
     : '没有测试包';
-  var edits = ST.profile === 'native' ? (m.editsNative || 0)
-    : ST.profile === 'deploy' ? (m.editsDeploy || 0) : (m.editsDev || 0);
+  var edits = ST.view === 'native' ? (m.editsNative || 0) : (m.editsDev || 0);
+  var viewText = viewLabel() + (ST.view === 'pack' && ST.pack ? (' · ' + shortPack(ST.pack)) : '');
   var nmText = m.navmesh ? (m.navmeshFile || '有') : '没有导出';
   if (ST.nm) nmText += ' · ' + ST.nm.tri + ' 三角 / ' + ST.nm.nv + ' 顶点';
   var html = '' +
-    '<div class="kline"><span class="k">查看版本</span><span class="v c" style="--c:#4f8cff">' + esc(profLabel()) + '</span></div>' +
+    '<div class="kline"><span class="k">查看档</span><span class="v c" style="--c:#4f8cff">' + esc(viewText) + '</span></div>' +
     '<div class="kline"><span class="k">文件</span><span class="v">' + esc(m.file || '—（只有可走面）') + '</span></div>' +
     '<div class="kline"><span class="k">指纹</span><span class="v">' + esc(m.fp || '—') + '</span></div>' +
     '<div class="kline"><span class="k">大小 / 时间</span><span class="v">' + fmtBytes(m.size) + ' · ' + esc(m.mtime || '—') + '</span></div>' +
@@ -1428,7 +1633,7 @@ function renderMapInfo() {
     '<div class="kline"><span class="k">导出（收件箱）</span><span class="v">' + (m.exports || 0) + ' 份</span></div>' +
     '<div class="kline"><span class="k">成品改动</span><span class="v">' + edits + ' 条</span></div>' +
     '<div class="kline"><span class="k">连通 / 孤立</span><span class="v">' + s.components + ' 块 · ' + s.isolated + ' 个</span></div>' +
-    '<div class="note" style="margin-top:8px">网页只读。切换版本只改查看的数据源，不写文件。加点/连线/禁用点：游戏内 Ctrl+Shift+N / Ctrl+Shift+J / Ctrl+Shift+D。升成品：控制台「发布到成品」或 python navdata.py pack promote。</div>';
+    '<div class="note" style="margin-top:8px">网页只读。切换数据档/包只改查看的数据源，不写文件。加点/连线/禁用点：游戏内 Ctrl+Shift+N / Ctrl+Shift+J / Ctrl+Shift+D。升成品：控制台「发布到成品」或 python navdata.py pack promote。</div>';
   $('mapInfo').innerHTML = html;
 }
 
@@ -1616,6 +1821,7 @@ function renderRouteDetail() {
     $('routeKk').textContent = j.id;
     $('routeDetail').innerHTML = '' +
       '<div class="kline"><span class="k">类型</span><span class="v c" style="--c:#38d9f5">Bot_JumpLink</span></div>' +
+      '<div class="kline"><span class="k">来源</span><span class="v">' + (j.fromTxt ? '清单 jump add（测试包 / 成品）' : 'map.json · lines.jump') + '</span></div>' +
       '<div class="kline"><span class="k">起点</span><span class="v">' + j.a.map(function (v) { return v.toFixed(2); }).join(', ') + '</span></div>' +
       '<div class="kline"><span class="k">终点</span><span class="v">' + j.b.map(function (v) { return v.toFixed(2); }).join(', ') + '</span></div>' +
       '<div class="kline"><span class="k">水平距离</span><span class="v">' + d2.toFixed(2) + ' m</span></div>' +
@@ -1868,9 +2074,9 @@ function renderAuto() {
     '<div class="kline"><span class="k">旧守卫区</span><span class="v">' + ((k.guard_area) || 0) + ' · 不参与判断</span></div>' +
     '<div class="kline"><span class="k">可走面</span><span class="v">' + (m.navmesh ? '有导出' : '没有导出') + '</span></div>' +
     '<div class="kline"><span class="k">结论</span><span class="v">' + (dis ? '插件关闭' : (co ? '只读采集，全部跳过' : (packNogen ? 'nogen.txt，铺点跳过' : '按上面三个开关跑'))) + '</span></div>' +
-    '<div class="note" style="margin-top:8px">' + (ST.profile === 'deploy'
-      ? '当前查看的是③部署版：2026-11-21 起这里不放导航数据，游戏读的是「成品」或「编辑中」的包。'
-      : '当前查看的是' + profLabel() + '；游戏实际读「成品」版本或「编辑中」的包，下面的触发判断按当前这版的点数估算。') + '</div>' +
+    '<div class="note" style="margin-top:8px">当前查看的是' + viewLabel() +
+      (ST.view === 'pack' && ST.pack ? (' · ' + shortPack(ST.pack)) : '') +
+      '；游戏实际读「② 成品」的当前版本或「② 编辑中」选中的包，下面的触发判断按当前这版的点数估算。</div>' +
     '<div class="note" style="margin-top:6px">自动铺设发生在<b>场景加载后</b>，由插件在主线程做；网页只读，不能点按钮触发。要立刻试：控制台改开关 → 开始游戏进图。</div>';
 
   $('autoPipe').innerHTML = [
@@ -1915,7 +2121,8 @@ function renderMaps() {
   var wb = ST.wb;
   if (!wb) return;
   var maps = wb.maps || [];
-  $('mapsSub').textContent = maps.length + ' 张图 · ' + profLabel();
+  $('mapsSub').textContent = maps.length + ' 张图 · ' + viewLabel() +
+    (ST.view === 'pack' && ST.pack ? (' · ' + shortPack(ST.pack)) : '');
   $('mapTbody').innerHTML = maps.map(function (m) {
     var status = '—';
     var cls = 'no';
@@ -1930,7 +2137,11 @@ function renderMaps() {
     var fin = m.final || {};
     var packs = m.packs || [];
     var packTitle = packs.length
-      ? packs.map(function (p) { return p.name + ' · ' + (p.ops || 0) + ' 条'; }).join('\n')
+      ? packs.map(function (p) {
+          var stale = p.fp && m.fp && p.fp !== m.fp;
+          return p.name + ' · ' + (p.ops || 0) + ' 条' + (stale ? ' · ✖ 指纹失效' : '') +
+            ((p.full || p.name) === ST.pack ? ' · ← 正在看' : '');
+        }).join('\n')
       : '没有编辑中的包';
     var mapCell = esc(m.label || '—') + (m.exports ? '<br><span style="color:#4f5d70">导出 ' + m.exports + ' 份</span>' : '');
     return '<tr' + (on ? ' class="on"' : '') + ' data-map="' + esc(key) + '">' +
@@ -1955,42 +2166,55 @@ function renderMaps() {
     var d = (g.diff || []).length + (g.onlyA || []).length + (g.onlyB || []).length;
     return d ? (d + ' 个文件不同') : '一致';
   }
-  $('verChip').textContent = profLabel() + ' · 只读';
-  /* 三版：① 只读快照 / ② 唯一数据源（成品 + 编辑中 + 收件箱）/ ③ 游戏运行环境（不放数据） */
+  $('verChip').textContent = viewLabel() + ' · 只读';
+  /* 数据档：① 只读对照 / ② 成品（final 当前版）/ ② 编辑中（packs）。③ 部署版不是数据档。 */
   var dV = v.dev || {}, dFin = dV.final || {}, dPk = dV.packs || {}, dIn = dV.inbox || {};
   var cards = [
-    { key: 'native', t: '① 备份版（只读快照）', x: v.native || {}, sub: [
-        (v.native || {}).maps || 0, ' 图 · ' + ((v.native || {}).navmesh || 0) + ' 可走面 · ' + fmtBytes((v.native || {}).bytes || 0),
-        '最近写入 ' + shortTime((v.native || {}).latest)] },
-    { key: 'dev', t: '② 开发版（唯一数据源）', x: dV, sub: [
-        '成品：' + (dV.maps || 0) + ' 图 · ' + (dV.navmesh || 0) + ' 可走面',
-        '已发布 ' + (dFin.versions || 0) + ' 个版本' + (dFin.current ? ' · 当前 ' + dFin.current : '') + ' · ' + (dFin.maps || 0) + ' 张图',
-        '编辑中 ' + (dPk.n || 0) + ' 个包 · ' + fmtBytes(dPk.bytes || 0) + ' · 收件箱导出 ' + (dIn.exports || 0) + ' 份'] },
-    { key: 'deploy', t: '③ 部署版（游戏运行环境）', x: v.deploy || {}, sub: [
-        '2026-11-21 起不放导航数据（只剩 dll / ucf_mod.json / markers）',
-        '游戏读的是「成品」版本或「编辑中」的包'] }
+    { key: 'native', t: '① 备份版（只读对照）', x: v.native || {}, sub: [
+        ((v.native || {}).maps || 0) + ' 图 · ' + ((v.native || {}).navmesh || 0) + ' 可走面 · ' + fmtBytes((v.native || {}).bytes || 0),
+        '最近写入 ' + shortTime((v.native || {}).latest),
+        '原生快照，游戏不读它'] },
+    { key: 'final', t: '② 成品（游戏启动用）', x: { path: dFin.path || '' }, sub: [
+        dFin.versions ? ('当前版 ' + (dFin.current || '—') + ' · ' + dFin.versions + ' 个版本') : '成品还没有版本（启动 = 原版）',
+        (dFin.maps || 0) + ' 张图 · ' + fmtBytes(dFin.bytes || 0),
+        '只读；历史版本在控制台成品页'] },
+    { key: 'pack', t: '② 编辑中（packs）', x: { path: (wb.profile && wb.profile.packs) || '' }, sub: [
+        (dPk.n || 0) + ' 个测试包 · ' + (dPk.maps || 0) + ' 张图 · ' + fmtBytes(dPk.bytes || 0),
+        '最近写入 ' + shortTime(dPk.latest),
+        '可写沙盒；网页只读'] }
   ];
   $('verBody').innerHTML = cards.map(function (o) {
     var x = o.x || {};
-    return '<div class="whitecard vercard' + (o.key === ST.profile ? ' cur' : '') + '" data-vprof="' + o.key + '">' +
-      '<div class="wt">' + o.t + (o.key === ST.profile ? ' · 正在看' : '') + '</div><div class="wd">' +
+    return '<div class="whitecard vercard' + (o.key === ST.view ? ' cur' : '') + '" data-view="' + o.key + '">' +
+      '<div class="wt">' + o.t + (o.key === ST.view ? ' · 正在看' : '') + '</div><div class="wd">' +
       esc(x.path || '—') + '<br>' + o.sub.map(function (s) { return esc(s); }).join('<br>') + '</div></div>';
   }).join('') +
     '<div class="kline"><span class="k">① vs ② 地图</span><span class="v">' + cmp(c.nativeDev && c.nativeDev.maps) + '</span></div>' +
-    '<div class="note" style="margin-top:6px">点上面的版本卡片可以直接切到那一版查看；③ 部署版现在没有数据，切过去会是空的。</div>' +
+    '<div class="note" style="margin-top:6px">点上面的卡片切数据档；游戏目录（运行时）只供日志 / 配置，不在这里。</div>' +
+    '<div class="kline"><span class="k">收件箱（vis）</span><span class="v">' + (dIn.exports || 0) + ' 份导出 · ' + fmtBytes(dIn.bytes || 0) + '</span></div>' +
     '<div class="sect">编辑中（测试包）</div>' +
     ((wb.packs || []).map(function (p) {
-      /* 包名可能带图文件夹前缀（01_TransportShip运输船/包名），列表里只显示包名 */
-      var pn = String(p.name || '').split('/').pop();
-      return '<div class="whitecard" title="' + esc(p.name || '') + '"><div class="wt">' + esc(pn) + (p.blank ? ' · 空白底图' : '') + '</div><div class="wd">' +
-        esc(p.label || '') + ' · ' + esc(p.level || '') + ' · ' + p.ops + ' 条指令 · ' +
-        (p.nogen ? 'nogen.txt 开' : '没有 nogen') + '<br>' + esc(p.note || '') + '</div></div>';
+      var pn = shortPack(p.name);
+      var mf = maps.filter(function (m) { return m.folder === p.folder; })[0] || {};
+      var stale = !!(p.fp && mf.fp && p.fp !== mf.fp);
+      var kind = p.grow ? 'grow' : (p.keep ? 'keep' : (p.blank ? '空白底图' : '增量'));
+      return '<div class="whitecard vercard' + (p.name === ST.pack ? ' cur' : '') + (stale ? ' stale' : '') +
+        '" title="' + esc(p.name || '') + '" data-pack-view="' + esc(p.name) + '">' +
+        '<div class="wt">' + esc(pn) + ' · ' + esc(kind) +
+        (stale ? ' · <span style="color:#ff7b7b">✖ 指纹失效</span>' : '') +
+        (p.name === ST.pack ? ' · 正在看' : '') + '</div><div class="wd">' +
+        esc(p.label || '') + ' · ' + esc(p.level || '') + ' · ' + (p.ops || 0) + ' 条 · ' +
+        esc(shortTime(p.created)) + (p.nogen ? ' · nogen' : '') +
+        '<br>' + (stale ? '旧包，插件不会读；去控制台「编辑中」新建包' : '点这张卡片查看这个包') +
+        '</div></div>';
     }).join('') || '<div class="note">② 开发版的 packs\\ 里还没有测试包。</div>') +
-    '<div class="sect">成品（已发布的版本）</div>' +
+    '<div class="sect">成品（当前启动版）</div>' +
     (dFin.versions
-      ? '<div class="whitecard"><div class="wt">' + esc(dFin.current || '—') + '</div><div class="wd">' +
-        '共 ' + dFin.versions + ' 个版本 · ' + (dFin.maps || 0) + ' 张图 · ' + fmtBytes(dFin.bytes || 0) +
-        '<br>最近发布 ' + esc(shortTime(dFin.latest)) + '</div></div>'
+      ? '<div class="whitecard vercard' + (ST.view === 'final' ? ' cur' : '') + '" data-view="final">' +
+        '<div class="wt">' + esc(dFin.current || '—') + (ST.view === 'final' ? ' · 正在看' : '') + '</div><div class="wd">' +
+        '共 ' + dFin.versions + ' 个版本 · 当前版 ' + (dFin.maps || 0) + ' 张图 · ' + fmtBytes(dFin.bytes || 0) +
+        '<br>最近发布 ' + esc(shortTime(dFin.latest)) + ' · 历史版本在控制台成品页' +
+        '</div></div>'
       : '<div class="note">成品里还没有版本：控制台「人机路点 → 编辑中 → 发布到成品」就有第一版。</div>') +
     '<div class="sect">命令行（网页不执行）</div>' +
     '<div class="comp" style="white-space:normal;line-height:1.8">python tools/navdata.py pack list<br>' +
@@ -2012,11 +2236,6 @@ function bindMapTable() {
       return;
     }
     loadMap(m);
-  });
-  $('verBody').addEventListener('click', function (e) {
-    var card = e.target.closest('[data-vprof]');
-    if (!card) return;
-    switchProfile(card.dataset.vprof);
   });
 }
 
@@ -2072,7 +2291,7 @@ function renderLogs() {
     if (ST.logFilter !== '全部' && l.cat !== ST.logFilter) return false;
     return true;
   }).slice(0, 300);
-  $('logSub').textContent = 'ucf_mod.log · 游戏目录（③）运行日志 · ' + rows.length + ' 行';
+  $('logSub').textContent = 'ucf_mod.log · 游戏目录运行日志 · ' + rows.length + ' 行';
   $('logSub').title = (ST.wb && ST.wb.logFile) || 'ucf_mod.log';
   $('logList').innerHTML = rows.map(function (l) {
     var time = l.date ? (l.date + ' ' + l.time) : (l.time || '—');
@@ -2141,6 +2360,14 @@ function loadMap(entry) {
     return;
   }
   ST.cur = entry;
+  if (ST.view === 'pack') {
+    ST.pack = choosePackForMap(entry);
+    ST.pendingPack = '';
+  } else {
+    ST.pack = '';
+  }
+  updatePackSel();
+  syncURL();
   /* 只有可走面的图（胜利广场 / 死亡擂台）：没有点图 JSON，直接读 navmesh */
   if (!entry.file) {
     if (!entry.navmesh) {
@@ -2188,16 +2415,21 @@ function loadMap(entry) {
   api(q).then(function (doc) {
     if (!doc || !doc.nodes) throw new Error((doc && doc.error) || '文件不是导航数据');
     var fp = (doc.map && doc.map.fingerprint) || entry.fp || '';
-    /* 测试包条目：清单从 packs/<图文件夹>/<包名>/<指纹>.txt 读（② 开发版 · 编辑中） */
+    /* 成品档读 final\<当前版本>\<指纹>.txt；编辑中档读 packs\<图>\<包>\<指纹>.txt。 */
     var txtP;
-    if (entry.pack) {
-      txtP = api('/api/pack-txt?name=' + encodeURIComponent(entry.pack) + '&fp=' + encodeURIComponent(fp));
-    } else if (dir === 'maps' && fp) {
+    if (ST.view === 'pack') {
+      txtP = ST.pack
+        ? api('/api/pack-txt?name=' + encodeURIComponent(ST.pack) + '&fp=' + encodeURIComponent(fp))
+        : Promise.resolve({ text: '', exists: false });
+    } else if (ST.view === 'final' && dir === 'maps' && fp) {
       txtP = api('/api/txt?fp=' + encodeURIComponent(fp));
     } else {
       txtP = Promise.resolve({ text: '', exists: false });
     }
     return txtP.then(function (txt) {
+      if (ST.view === 'pack' && ST.pack && txt && txt.exists === false) {
+        toast('这个包里没有当前指纹的清单：显示的是基准点图', 'err');
+      }
       buildModel(doc, txt);
       ST.cur = entry;
       fitCam();
@@ -2320,31 +2552,37 @@ function refreshData(quiet) {
   ST.busy = true;
   api('/api/workbench').then(function (wb) {
     if (!wb || !wb.ok) throw new Error((wb && wb.error) || '接口失败');
-    var newP = (wb.profile && wb.profile.profile) || ST.profile;
-    var changed = newP !== ST.profile;
+    var newMode = (wb.profile && (wb.profile.mode || wb.profile.profile)) || ST.view;
+    var changed = newMode !== ST.view;
     ST.wb = wb;
     ST.maps = wb.maps || [];
     ST.busy = false;
-    applyProfile(wb);
+    applyView(wb);
     setConn(true, '本地只读服务 · ' + (wb.profile ? wb.profile.cn : ''));
     if (changed) {
-      /* 版本切了：3D 侧栏不关，等新版本的地图载入后再重载 */
-      toast('版本已切换：' + profLabel(), 'ok');
-      pickDefaultMap();
+      /* 数据档被别处改了：保留当前地图，按新档重载；新档里没有这张图就清空 */
+      toast('数据档已切换：' + viewLabel(), 'ok');
+      var old0 = ST.cur;
+      var pick0 = findMapLike(old0);
+      if (!pick0) { showEmptyMap(); renderAll(); showPage(ST.page); return; }
+      ST.cur = pick0;
+      if (ST.view === 'pack') ST.pack = choosePackForMap(pick0);
+      updateHeader(); updatePackSel(); renderMaps();
+      loadMap(pick0);
       return;
     }
     if (!ST.cur) {
       updateHeader();
+      updatePackSel();
       renderMaps();
       if (ST.page === 'overview') renderOverview();
       return;
     }
-    var cur = ST.maps.filter(function (m) {
-      if (ST.cur.file) return m.file === ST.cur.file && (m.dir || 'maps') === (ST.cur.dir || 'maps');
-      return !m.file && m.level === ST.cur.level;
-    })[0] || ST.cur;
+    var cur = findMapLike(ST.cur) || ST.cur;
     ST.cur = cur;
+    if (ST.view === 'pack') ST.pack = choosePackForMap(cur);
     updateHeader();
+    updatePackSel();
     renderMaps();
     if (ST.page === 'logs') renderLogs();
     if (ST.page === 'overview') renderOverview();
@@ -2357,52 +2595,124 @@ function refreshData(quiet) {
   });
 }
 
-function switchProfile(p) {
-  if (!p || p === ST.profile || ST.busy) return;
-  /* 版本切了：3D 侧栏留着，新地图载入后按新 profile 重载 */
+function findMapLike(old) {
+  if (!old) return null;
+  if (old.file) {
+    return ST.maps.filter(function (m) {
+      return m.file === old.file && (m.dir || 'maps') === (old.dir || 'maps');
+    })[0] || null;
+  }
+  return ST.maps.filter(function (m) { return !m.file && m.level === old.level; })[0] || null;
+}
+
+function savePackPrefs() {
+  lsSet(STORAGE_PACKS, JSON.stringify(ST.packByFolder || {}));
+}
+
+function switchView(v, opts) {
+  opts = opts || {};
+  if (!v || (v === ST.view && !opts.force) || ST.busy) return;
   ST.busy = true;
-  var oldFile = ST.cur && ST.cur.file;
-  var oldLevel = ST.cur && ST.cur.level;
-  var oldDir = (ST.cur && ST.cur.dir) || 'maps';
-  var oldPack = (ST.cur && ST.cur.pack) || '';
-  api('/api/profile?set=' + encodeURIComponent(p)).then(function (j) {
-    if (!j || !j.ok) throw new Error((j && j.error) || '切换版本失败');
+  var old = ST.cur;
+  api('/api/profile?set=' + encodeURIComponent(v)).then(function (j) {
+    if (!j || !j.ok) throw new Error((j && j.error) || '切换数据档失败');
+    ST.viewNote = (j.profile && j.profile.note) || '';
     return api('/api/workbench');
   }).then(function (wb) {
-    if (!wb || !wb.ok) throw new Error((wb && wb.error) || '读取新版本失败');
-    ST.busy = false;
-    applyProfile(wb);
+    if (!wb || !wb.ok) throw new Error((wb && wb.error) || '读取新数据档失败');
     ST.wb = wb;
     ST.maps = wb.maps || [];
+    applyView(wb);                 /* applyView 里按 server 的 mode 校正 ST.view */
     setConn(true, '本地只读服务 · ' + (wb.profile ? wb.profile.cn : ''));
+
     var pick = null;
-    if (oldFile) {
-      var cands = ST.maps.filter(function (m) {
-        return m.file === oldFile && (m.dir || 'maps') === oldDir;
-      });
-      pick = (oldPack ? cands.filter(function (m) { return m.pack === oldPack; })[0] : null) || cands[0];
-    } else if (oldLevel) {
-      pick = ST.maps.filter(function (m) { return !m.file && m.level === oldLevel; })[0];
+    if (opts.packName) {
+      var pk = (wb.packs || []).filter(function (p) { return p.name === opts.packName; })[0];
+      if (pk) {
+        ST.pendingPack = pk.name;
+        ST.packByFolder[pk.folder] = pk.name;
+        savePackPrefs();
+        pick = ST.maps.filter(function (m) { return m.folder === pk.folder; })[0] || null;
+      }
     }
-    toast('已切到 ' + profLabel() + (pick ? ' · ' + (pick.label || pick.level) : ''), 'ok');
+    if (!pick && opts.mapFile) {
+      pick = ST.maps.filter(function (m) { return m.file === opts.mapFile; })[0] || null;
+    }
+    if (!pick) pick = findMapLike(old);
+
+    if (ST.view === 'pack') {
+      ST.pack = pick ? choosePackForMap(pick) : '';
+    } else {
+      ST.pack = '';
+    }
+    syncURL();
+    ST.busy = false;
+    var note = ST.viewNote ? ('（' + ST.viewNote + '）') : '';
+    toast('已切到 ' + viewLabel() + (pick ? (' · ' + (pick.label || pick.level)) : '') + note, 'ok');
     if (pick) {
       ST.cam.zoom = 1;
       loadMap(pick);
     } else {
-      /* 新版本里没有当前这张图：整个模型清空，别让旧图的点留在画布上 */
+      /* 新档里没有当前这张图：整个模型清空，别让旧图的点留在画布上 */
       showEmptyMap();
       renderAll();
       showPage(ST.page);
-      if (ST.dockOpen) openDock(true);   /* 没有对应地图也把 3D 换到新版本 */
+      if (ST.dockOpen) openDock(true);   /* 没有对应地图也把 3D 换到新档 */
     }
   }).catch(function (e) {
     ST.busy = false;
-    applyProfile(ST.wb);
-    toast('切换版本失败：' + e.message, 'err');
+    applyView(ST.wb);
+    toast('切换数据档失败：' + e.message, 'err');
   });
 }
 
+function switchPack(name) {
+  if (!name || name === ST.pack || ST.busy || !ST.cur) return;
+  var valid = packsForMap(ST.cur).filter(function (p) { return !p.stale; });
+  if (!valid.some(function (p) { return p.name === name; })) return;
+  ST.pack = name;
+  ST.packByFolder[ST.cur.folder] = name;
+  savePackPrefs();
+  syncURL();
+  ST.cam.zoom = 1;
+  updateHeader();
+  loadMap(ST.cur);
+}
+
+/* 地图数据页点某个包：切到编辑中，并把那张图 + 那个包一起打开 */
+function openPackView(name) {
+  var pk = ((ST.wb && ST.wb.packs) || []).filter(function (p) { return p.name === name; })[0];
+  if (!pk) return;
+  var mf = ST.maps.filter(function (m) { return m.folder === pk.folder; })[0];
+  if (!mf) { toast('没找到这个包对应的地图', 'err'); return; }
+  if (pk.fp && mf.fp && pk.fp !== mf.fp) {
+    toast('这个包的指纹和当前地图对不上，插件不会读它', 'err');
+    return;
+  }
+  ST.pendingPack = pk.name;
+  ST.packByFolder[pk.folder] = pk.name;
+  savePackPrefs();
+  if (ST.view !== 'pack') {
+    switchView('pack', { packName: pk.name });
+    return;
+  }
+  ST.pack = pk.name;
+  ST.cam.zoom = 1;
+  loadMap(mf);
+}
+
 function pickDefaultMap() {
+  if (ST.startPack && ST.view === 'pack') {
+    var pk0 = ((ST.wb && ST.wb.packs) || []).filter(function (p) { return p.name === ST.startPack; })[0];
+    var mf0 = pk0 ? ST.maps.filter(function (m) { return m.folder === pk0.folder; })[0] : null;
+    if (mf0) {
+      ST.pendingPack = pk0.name;
+      ST.packByFolder[pk0.folder] = pk0.name;
+      savePackPrefs();
+      loadMap(mf0);
+      return;
+    }
+  }
   var want = ST.startMap || '';
   var pick = null;
   if (want) {
@@ -2420,11 +2730,14 @@ function showEmptyMap() {
   ST.cur = null;
   ST.doc = null;
   ST.nm = null;
+  ST.pack = '';
   ST.nodes = []; ST.edges = []; ST.feats = []; ST.routes = []; ST.zones = [];
   ST.jumpLinks = []; ST.jumpOrphans = [];
   ST.stats = null;
   ST.bounds = { lo: [-10, -10], hi: [10, 10] };
   updateHeader();
+  updatePackSel();
+  syncURL();
   drawAll();
 }
 
@@ -2447,6 +2760,7 @@ function buildMapPicker() {
       var mt = m.pack ? ((m.packBlank ? '空白底图' : '测试包') + ' · ' + m.nodes + ' 点')
         : (m.dir === 'vis') ? (m.mtime || '').slice(5, 16) : (m.nodes + ' 点');
       if (off) mt = m.navmesh ? '仅可走面' : '待采集';
+      else if (ST.view === 'pack') mt += ' · ' + ((m.packs || []).length) + ' 包';
       var pickKey = m.pack ? ('pack:' + m.pack) : (m.file || '');
       return '<div class="pickrow' + (on ? ' on' : '') + (off && !m.navmesh ? ' off' : '') + '" data-pick="' + esc(pickKey) + '" data-level="' + esc(m.level || '') + '">' +
         '<span class="no">' + esc(m.no) + '</span><span class="nm">' + esc(m.label || m.level || '未命名') + '</span>' +
@@ -2457,10 +2771,17 @@ function buildMapPicker() {
 }
 
 function bindTop() {
-  $('profSel').addEventListener('change', function () { switchProfile(this.value); });
+  $('viewSel').addEventListener('change', function () { switchView(this.value); });
+  $('packSel').addEventListener('change', function () { switchPack(this.value); });
   $('ovVersions').addEventListener('click', function (e) {
-    var card = e.target.closest('[data-vprof]');
-    if (card) switchProfile(card.dataset.vprof);
+    var card = e.target.closest('[data-view]');
+    if (card) switchView(card.dataset.view);
+  });
+  $('verBody').addEventListener('click', function (e) {
+    var pk = e.target.closest('[data-pack-view]');
+    if (pk) { openPackView(pk.dataset.packView); return; }
+    var card = e.target.closest('[data-view]');
+    if (card) switchView(card.dataset.view);
   });
   $('btnPickMap').addEventListener('click', function (e) {
     e.stopPropagation();
@@ -2588,7 +2909,8 @@ function openDock(force) {
   var d = $('dock3d'), f = $('dockFrame'), sp = $('dockSplash');
   if (!d || !f) return;
   if (!ST.dockUrl) updateHeader();
-  var url = ST.dockUrl || ('/navview.html?view=1&embed=1&notour=1&profile=' + encodeURIComponent(ST.profile));
+  var url = ST.dockUrl || ('/navview.html?view=1&embed=1&notour=1&profile=' + encodeURIComponent(ST.view) +
+    (ST.view === 'pack' && ST.pack ? '&pack=' + encodeURIComponent(ST.pack) : ''));
   d.classList.add('on');
   d.setAttribute('aria-hidden', 'false');
   var app = document.querySelector('.app');
@@ -2831,8 +3153,15 @@ function boot() {
     var pg = sp.get('page');
     if (pg && PAGE_TITLE[pg]) ST.startPage = pg;
     ST.startMap = sp.get('map') || '';
+    ST.startPack = sp.get('pack') || '';
     ST.autoDock = sp.get('viewer') === '1';
-    ST.startProfile = sp.get('profile') || '';
+    /* 新参数 ?view=final|pack|native；旧的 ?profile=dev|deploy|test 交给 server 别名兼容 */
+    ST.startView = sp.get('view') || sp.get('profile') || '';
+    ST.packByFolder = lsJSON(STORAGE_PACKS, {});
+    if (!ST.startView) {
+      var savedView = lsGet(STORAGE_VIEW, '');
+      if (savedView) ST.startView = savedView;
+    }
   } catch (e) {}
   initDockPrefs();
   bindTop();
@@ -2849,18 +3178,27 @@ function boot() {
     requestAnimationFrame(function () { drawAll(); });
   });
   showPage(ST.startPage);
-  if (ST.dockWantOpen) openDock();
-  var pre = (ST.startProfile && PROFILE_LABELS[ST.startProfile])
-    ? api('/api/profile?set=' + encodeURIComponent(ST.startProfile)).catch(function () { return null; })
+  var pre = ST.startView
+    ? api('/api/profile?set=' + encodeURIComponent(ST.startView)).then(function (j) {
+        if (j && j.profile && j.profile.note) ST.bootNote = j.profile.note;
+        return j;
+      }).catch(function () { return null; })
     : Promise.resolve(null);
   pre.then(function () { return api('/api/workbench'); }).then(function (wb) {
     if (!wb || !wb.ok) throw new Error((wb && wb.error) || '接口失败');
     ST.wb = wb;
     ST.maps = wb.maps || [];
-    applyProfile(wb);
+    applyView(wb);
     setConn(true, '本地只读服务 · ' + (wb.profile ? wb.profile.cn : ''));
     ST.wb.log && parseLogs();
     pickDefaultMap();
+    if (ST.dockWantOpen) { openDock(); ST.dockWantOpen = false; }
+    if (ST.bootNote) {
+      var note = ST.bootNote;
+      ST.bootNote = '';
+      /* 等地图载入的 toast 先说完，再把旧链接的迁移提示补上，别被盖掉 */
+      setTimeout(function () { toast(note, 'ok'); }, 1400);
+    }
     /* 没带 ?map= 直接进「地图数据 / 日志 / 总览」时也要有内容（原来只 updateHeader，表格会空着） */
     renderAll();
   }).catch(function (e) {

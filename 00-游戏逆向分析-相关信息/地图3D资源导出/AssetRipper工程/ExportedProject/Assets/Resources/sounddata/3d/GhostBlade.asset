@@ -1,0 +1,29 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8d33ad595d72f1265b2b8744c2ea929d, type: 3}
+  m_Name: GhostBlade
+  m_EditorClassIdentifier:
+  clips:
+  - {fileID: 8300000, guid: 3c41e7d16b8458243910efc9c275d770, type: 3}
+  - {fileID: 8300000, guid: 447df5c8ee1a9fa46abd04e79e3850cf, type: 3}
+  - {fileID: 8300000, guid: a9b62b5d1e6344749bdeb4d7c2a7625b, type: 3}
+  - {fileID: 8300000, guid: 7b0f646cd47a25f4898a998912827ff4, type: 3}
+  - {fileID: 8300000, guid: 31d0bfb2ef260494db1ad8e1c19c0d6a, type: 3}
+  - {fileID: 8300000, guid: a9833af64a1b7be478f435b2e8137e9b, type: 3}
+  - {fileID: 8300000, guid: a2ecb2c318369b44e84231f553d843bc, type: 3}
+  - {fileID: 8300000, guid: ebf59e16b7f098548ae2b36b50df5f93, type: 3}
+  - {fileID: 8300000, guid: 8fb87a86473b5b5419bda133ca1be8d9, type: 3}
+  - {fileID: 8300000, guid: 4554238762d86b4499285097544795c4, type: 3}
+  - {fileID: 8300000, guid: e1f19124ce5d20f489b80cd1411d5d4d, type: 3}
+  minDistance: 1
+  maxDistance: 20
+  priority: 128

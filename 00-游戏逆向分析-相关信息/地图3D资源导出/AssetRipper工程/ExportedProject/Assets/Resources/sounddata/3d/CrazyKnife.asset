@@ -1,0 +1,23 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8d33ad595d72f1265b2b8744c2ea929d, type: 3}
+  m_Name: CrazyKnife
+  m_EditorClassIdentifier:
+  clips:
+  - {fileID: 8300000, guid: 2f8804fc899b1864298c93ee7fd38015, type: 3}
+  - {fileID: 8300000, guid: b540dd812c279f2479da39a93ecca24c, type: 3}
+  - {fileID: 8300000, guid: 349fe25fd17e0a64d80a4c2650c171b1, type: 3}
+  - {fileID: 8300000, guid: 7ef41d87155e7794185ea3486de9ec70, type: 3}
+  - {fileID: 8300000, guid: a3a94d3f7ac2d974c84b417782a5ebe6, type: 3}
+  minDistance: 5
+  maxDistance: 20
+  priority: 128

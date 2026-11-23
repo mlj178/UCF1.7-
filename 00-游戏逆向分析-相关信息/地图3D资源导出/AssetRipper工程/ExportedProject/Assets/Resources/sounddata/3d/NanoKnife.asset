@@ -1,0 +1,22 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8d33ad595d72f1265b2b8744c2ea929d, type: 3}
+  m_Name: NanoKnife
+  m_EditorClassIdentifier:
+  clips:
+  - {fileID: 8300000, guid: 2e3e76f343e2af6428529b10addda64c, type: 3}
+  - {fileID: 8300000, guid: e90627f2c2edd4c4e83037d8268d54cb, type: 3}
+  - {fileID: 8300000, guid: 90a5978adf9f63e47a4b4d2528ede0e9, type: 3}
+  - {fileID: 8300000, guid: 9de01f0d277958448ba1929fa114dee1, type: 3}
+  minDistance: 1
+  maxDistance: 15
+  priority: 128

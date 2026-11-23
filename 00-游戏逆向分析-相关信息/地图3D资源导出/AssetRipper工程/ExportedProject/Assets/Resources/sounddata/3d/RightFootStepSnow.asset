@@ -1,0 +1,24 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8d33ad595d72f1265b2b8744c2ea929d, type: 3}
+  m_Name: RightFootStepSnow
+  m_EditorClassIdentifier:
+  clips:
+  - {fileID: 8300000, guid: db545a90fb2e819499ea41dcda95afaf, type: 3}
+  - {fileID: 8300000, guid: a71cd7ce50d9a94428fec74968892aad, type: 3}
+  - {fileID: 8300000, guid: a673bd52f34eef24cbfe36494938edce, type: 3}
+  - {fileID: 8300000, guid: 3498d92ad0214bc47a3d2d686bc0ec62, type: 3}
+  - {fileID: 8300000, guid: 852c390125bd5604f8101745119636c4, type: 3}
+  - {fileID: 8300000, guid: 00d2a3b5edc0562419b536689874cec9, type: 3}
+  minDistance: 1
+  maxDistance: 32
+  priority: 200

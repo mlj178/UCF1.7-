@@ -1,0 +1,24 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8d33ad595d72f1265b2b8744c2ea929d, type: 3}
+  m_Name: RightFootStepStone
+  m_EditorClassIdentifier:
+  clips:
+  - {fileID: 8300000, guid: d5254ad576c04f94ca5e9733421c17d7, type: 3}
+  - {fileID: 8300000, guid: 60908b89afcaf5849866ea4504167320, type: 3}
+  - {fileID: 8300000, guid: c2ab3ce79fc95fe4b82545166a9d7681, type: 3}
+  - {fileID: 8300000, guid: 9a91c380b8ae0974495b530f17a1a728, type: 3}
+  - {fileID: 8300000, guid: a31dc7242480fae4a8e0dd64ea19cc02, type: 3}
+  - {fileID: 8300000, guid: a07b4a3157513d44aa6c43e4526ae7a9, type: 3}
+  minDistance: 1
+  maxDistance: 32
+  priority: 200

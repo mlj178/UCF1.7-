@@ -1,0 +1,21 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8d33ad595d72f1265b2b8744c2ea929d, type: 3}
+  m_Name: AsceticHero
+  m_EditorClassIdentifier:
+  clips:
+  - {fileID: 8300000, guid: 99df75970ba8cf54595cbb9120e57359, type: 3}
+  - {fileID: 8300000, guid: 91d0e97f33005a84785e071da070cc51, type: 3}
+  - {fileID: 8300000, guid: 8b71d6384279c40489b0433d5ec30932, type: 3}
+  minDistance: 1
+  maxDistance: 20
+  priority: 128

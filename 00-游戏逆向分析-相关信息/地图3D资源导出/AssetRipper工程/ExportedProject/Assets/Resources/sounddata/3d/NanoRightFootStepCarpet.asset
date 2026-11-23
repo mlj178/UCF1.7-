@@ -1,0 +1,24 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8d33ad595d72f1265b2b8744c2ea929d, type: 3}
+  m_Name: NanoRightFootStepCarpet
+  m_EditorClassIdentifier:
+  clips:
+  - {fileID: 8300000, guid: b2c4e86bd6f1c6a46ba6d24df33ed6d2, type: 3}
+  - {fileID: 8300000, guid: b75ee9ac19f81994b878f34e9f4b6b66, type: 3}
+  - {fileID: 8300000, guid: 313e88837a123c940b72c2d0ebac0bca, type: 3}
+  - {fileID: 8300000, guid: c3b53746c6d6739459e6cb8d6f889fd5, type: 3}
+  - {fileID: 8300000, guid: b373fea66f0f0d44298866af973020c1, type: 3}
+  - {fileID: 8300000, guid: 63fe2ec0bb0dc57418a9c02ba8e7e07f, type: 3}
+  minDistance: 1
+  maxDistance: 26
+  priority: 200

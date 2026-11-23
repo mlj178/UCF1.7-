@@ -1,0 +1,22 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8d33ad595d72f1265b2b8744c2ea929d, type: 3}
+  m_Name: M14EBR
+  m_EditorClassIdentifier:
+  clips:
+  - {fileID: 8300000, guid: a64da56ab48f5784996332797139e9e5, type: 3}
+  - {fileID: 8300000, guid: 08ee45e699a047946bec07d043fad807, type: 3}
+  - {fileID: 8300000, guid: 64145f7b2dccde446a25a1290111d3e9, type: 3}
+  - {fileID: 8300000, guid: 39fc9d25e3531784da2e74bc523fd7ea, type: 3}
+  minDistance: 1
+  maxDistance: 20
+  priority: 128

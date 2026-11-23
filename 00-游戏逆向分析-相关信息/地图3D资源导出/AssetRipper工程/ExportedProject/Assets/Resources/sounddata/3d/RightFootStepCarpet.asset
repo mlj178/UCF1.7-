@@ -1,0 +1,24 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8d33ad595d72f1265b2b8744c2ea929d, type: 3}
+  m_Name: RightFootStepCarpet
+  m_EditorClassIdentifier:
+  clips:
+  - {fileID: 8300000, guid: bff3366011ff8c34fa6d11796225f2da, type: 3}
+  - {fileID: 8300000, guid: dfc3e0a78b74cb442a2d0e3a10cde07b, type: 3}
+  - {fileID: 8300000, guid: 1c6526ceaa8e449488926451cfc16185, type: 3}
+  - {fileID: 8300000, guid: 41b468e450a6de04fb2a65a97c6fcfae, type: 3}
+  - {fileID: 8300000, guid: e02c39ee3f11bca4f96b17a62aaf1dec, type: 3}
+  - {fileID: 8300000, guid: 9874eb13f5fc4bc49ad2e50e3344dd41, type: 3}
+  minDistance: 1
+  maxDistance: 26
+  priority: 200

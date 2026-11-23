@@ -1,0 +1,25 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8d33ad595d72f1265b2b8744c2ea929d, type: 3}
+  m_Name: OutlawTerminator
+  m_EditorClassIdentifier:
+  clips:
+  - {fileID: 8300000, guid: 554c0deb26eb89c41a1d8863ab4e9b1a, type: 3}
+  - {fileID: 8300000, guid: db2313d1566e1cb498e14fe7fe8dc677, type: 3}
+  - {fileID: 8300000, guid: d9f7d733818752b49a64f65d3cb767e8, type: 3}
+  - {fileID: 8300000, guid: 280d2ed8f59c3be4d8bb1de73995fc04, type: 3}
+  - {fileID: 8300000, guid: 5eefee87a3c548f45b1cb3a8fd36a713, type: 3}
+  - {fileID: 8300000, guid: 26e9bdfeaf67c084fa90d36942f589c0, type: 3}
+  - {fileID: 8300000, guid: d32a8fe40ba1b8147b8fc6488616bcc1, type: 3}
+  minDistance: 1
+  maxDistance: 15
+  priority: 128

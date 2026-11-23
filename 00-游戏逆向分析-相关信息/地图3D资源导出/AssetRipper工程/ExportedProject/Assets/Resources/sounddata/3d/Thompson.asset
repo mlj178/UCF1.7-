@@ -1,0 +1,23 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8d33ad595d72f1265b2b8744c2ea929d, type: 3}
+  m_Name: Thompson
+  m_EditorClassIdentifier:
+  clips:
+  - {fileID: 8300000, guid: 5c4a2396134693147b812adb8b3d7bf1, type: 3}
+  - {fileID: 8300000, guid: ec5195a6a72f38b449de1e7b77b132a9, type: 3}
+  - {fileID: 8300000, guid: 800baf4bbc9c694408a74ba2bebf14ec, type: 3}
+  - {fileID: 8300000, guid: 948028482ba1644458bc28db383ec915, type: 3}
+  - {fileID: 8300000, guid: 66e035aaf995b4444ae57d16bc0441eb, type: 3}
+  minDistance: 1
+  maxDistance: 20
+  priority: 128

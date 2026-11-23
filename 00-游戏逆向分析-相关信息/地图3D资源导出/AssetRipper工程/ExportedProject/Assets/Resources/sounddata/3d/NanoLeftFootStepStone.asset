@@ -1,0 +1,24 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8d33ad595d72f1265b2b8744c2ea929d, type: 3}
+  m_Name: NanoLeftFootStepStone
+  m_EditorClassIdentifier:
+  clips:
+  - {fileID: 8300000, guid: e963aad35434ef041a4b28fac4df9e8c, type: 3}
+  - {fileID: 8300000, guid: db8d4ebcc50264e449fb60edea121c60, type: 3}
+  - {fileID: 8300000, guid: af3f67a93f3cbcd43a8f34dd4f2f237b, type: 3}
+  - {fileID: 8300000, guid: 9cfebb8ffcaa0574f95860d0ce0d399b, type: 3}
+  - {fileID: 8300000, guid: 324fb92b9b8ea5b4b9e047e252977ac8, type: 3}
+  - {fileID: 8300000, guid: c40a23eb9694cfb44a536d5491645080, type: 3}
+  minDistance: 1
+  maxDistance: 32
+  priority: 200

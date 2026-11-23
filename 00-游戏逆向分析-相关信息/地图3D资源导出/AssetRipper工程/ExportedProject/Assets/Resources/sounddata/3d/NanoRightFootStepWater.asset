@@ -1,0 +1,24 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8d33ad595d72f1265b2b8744c2ea929d, type: 3}
+  m_Name: NanoRightFootStepWater
+  m_EditorClassIdentifier:
+  clips:
+  - {fileID: 8300000, guid: 43bc19072c437c3418360166eb314661, type: 3}
+  - {fileID: 8300000, guid: 43409a949942d964a86b1d566540e502, type: 3}
+  - {fileID: 8300000, guid: 88216476055b32946b0088d439b21426, type: 3}
+  - {fileID: 8300000, guid: b14c2983f716d73498fcc64c84f47f89, type: 3}
+  - {fileID: 8300000, guid: 0402b6c3c24f92c4792f65f9eae21163, type: 3}
+  - {fileID: 8300000, guid: 03ddb5891c70c5a40b56dd02211773be, type: 3}
+  minDistance: 1
+  maxDistance: 28
+  priority: 200

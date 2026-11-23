@@ -229,7 +229,7 @@ body.embed .hud{font-size:10px;padding:3px 6px;max-width:calc(100% - 12px)}
   <button class="btn mini" id="b-namesave" title="把中文名/关卡写进 nav/names.json">存名</button>
   <span class="sep"></span>
   <button class="btn primary" id="b-save" disabled title="Ctrl+S：写 nav/&lt;地图&gt;.json + nav/&lt;指纹&gt;.txt（写进开发版）">保存并应用</button>
-  <button class="btn" id="b-publish" disabled title="把开发版的 maps/ nav/ 推到游戏目录（③ 部署版），游戏下次进图生效">部署到游戏</button>
+  <button class="btn" id="b-publish" disabled title="发布到成品在控制台「人机路点 → 编辑中 → 发布到成品」；网页只读">部署到游戏</button>
   <button class="btn" id="b-pack" disabled title="把当前这张图的改动另存为「测试包」：只对这张图生效，不动正式版 nav/。控制台里选它再进游戏">存为测试包</button>
   <button class="btn mini" id="b-restore" disabled title="用 ① 原生备份覆盖 ② 开发版（丢掉开发版的改动）">还原原生</button>
   <button class="btn" id="b-undo" disabled title="Ctrl+Z">撤销</button>
@@ -240,7 +240,7 @@ body.embed .hud{font-size:10px;padding:3px 6px;max-width:calc(100% - 12px)}
   <span class="chip" id="c-nodes">节点 <b>0</b></span>
   <span class="chip" id="c-edges">边 <b>0</b></span>
   <span class="chip" id="c-dirty">未改动</span>
-  <select id="profsel" class="sel" title="切换查看的数据：①备份 / ②开发 / ③部署（只改查看，不写文件）"></select>
+  <select id="profsel" class="sel" title="切换查看的数据档：① 备份版 / ② 成品 / ② 编辑中（只改查看，不写文件）"></select>
   <span class="chip" id="c-srv">离线</span>
 </div>
 
@@ -698,16 +698,30 @@ function parseOps(text) {
     if (!s || s.charAt(0) === "#") return;
     let m = /^node\s+(add|del)\s+(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)$/.exec(s);
     if (m) { out.push({ k: m[1] === "add" ? "na" : "nd", a: [+m[2], +m[3], +m[4]] }); return; }
-    m = /^edge\s+(add|del)\s+(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)$/.exec(s);
-    if (m) out.push({ k: m[1] === "add" ? "ea" : "ed",
+    m = /^edge\s+(add|addout|addin|del|delout|delin)\s+(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)$/.exec(s);
+    if (m) out.push({ k: (m[1].indexOf("add") === 0 ? "ea" : "ed"),
                       a: [+m[2], +m[3], +m[4]], b: [+m[5], +m[6], +m[7]] });
   });
   return out;
 }
 
-/* 测试包空白底图：文件里有单独一行 blank */
+/* 测试包空白底图：C 侧 blank 与 grow 等价（grow = 原生点全禁 + AddNode 新建）。
+ * keep 不是空白底图（原生点保留 + 增量），所以这里只认 blank / grow。 */
 function hasBlank(text) {
-  return String(text || "").split(/\r?\n/).some(function (s) { return s.trim() === "blank"; });
+  return String(text || "").split(/\r?\n/).some(function (s) {
+    const t = s.trim();
+    return t === "blank" || t === "grow";
+  });
+}
+
+/* 清单里的 jump add：测试包 / 成品可以手工加跳链，插件会读；3D 也要画出来 */
+function parseJumpAdds(text) {
+  const out = [];
+  String(text || "").split(/\r?\n/).forEach(function (raw) {
+    const m = /^jump\s+add\s+(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)$/.exec(raw.trim());
+    if (m) out.push([ [+m[1], +m[2], +m[3]], [+m[4], +m[5], +m[6]] ]);
+  });
+  return out;
 }
 
 /* 套用清单，同时把“这次真的改了什么”记下来（之后据此反推基础图） */
@@ -990,6 +1004,7 @@ async function applyCurrentTarget() {
   /* 重新从快照的节点表起算，再套目标 txt —— 切换目标指纹时也能回到干净状态 */
   const doc = S.doc;
   S.txtText = ""; S.txtOps = 0; S.txtLoaded = false;
+  S.blankBase = false;
   let txt = "";
   if (S.editPack) {
     /* 测试包：读 packs\<包名>\<指纹>.txt，不是正式版 nav */
@@ -1008,8 +1023,11 @@ async function applyCurrentTarget() {
       const r = await apiGet("/api/txt?fp=" + encodeURIComponent(S.targetFp));
       txt = r.text || "";
     } catch (e) { txt = ""; }
+    S.blankBase = hasBlank(txt);
   }
   modelFromDoc(doc);
+  const extraJumps = parseJumpAdds(txt);
+  if (extraJumps.length) S.lines.jump = (S.lines.jump || []).concat(extraJumps);
   if (S.blankBase) {
     /* 空白底图 = 0 点 0 边起步；文件里的 node add / edge add 就是全部路线。
        不反推原生图，也不产生 node del —— A* 那边由插件的 blank 先全禁掉。 */
@@ -3275,18 +3293,17 @@ function showHelp() {
     "<tr><td>Ctrl+S</td><td>保存并应用</td></tr>" +
     "<tr><td>Ctrl+R</td><td>丢掉未保存改动，重新读文件</td></tr>" +
     "</table>" +
-    "<p><b>数据三版</b>（顶栏右上角的徽标显示你现在编辑的是哪一版）：</p><table class='tbl'>" +
-    "<tr><th>版本</th><th>位置</th><th>作用</th></tr>" +
-    "<tr><td>① 备份版（只读）</td><td><code class='k'>navdata\\native\\</code></td>" +
-    "<td>UCF 原版数据，冻结于此、永不编辑；<code class='k'>python tools/navdata.py verify</code> 可校验</td></tr>" +
-    "<tr><td>② 开发版</td><td><code class='k'>navdata\\dev\\</code></td>" +
-    "<td>唯一数据源：一张图一个文件夹 <code class='k'>&lt;图&gt;\\map.json</code> + <code class='k'>navmesh.bin</code>；" +
-    "另有 <code class='k'>final\\</code>（成品版本）、<code class='k'>packs\\</code>（编辑中）、<code class='k'>vis\\</code>（收件箱）</td></tr>" +
-    "<tr><td>③ 部署版</td><td><code class='k'>游戏目录\\ucf_mod\\</code></td>" +
-    "<td>只当运行环境（dll / 配置 / markers）；2026-11-21 起这里不放导航数据，游戏读「成品」版本或「编辑中」的包</td></tr>" +
+    "<p><b>数据档</b>（顶栏右侧的下拉显示你正在看哪一档）：</p><table class='tbl'>" +
+    "<tr><th>档位</th><th>位置</th><th>作用</th></tr>" +
+    "<tr><td>① 备份版（只读对照）</td><td><code class='k'>navdata\\native\\</code></td>" +
+    "<td>UCF 原版冻结快照，游戏不读它；<code class='k'>python tools/navdata.py verify</code> 可校验</td></tr>" +
+    "<tr><td>② 成品</td><td><code class='k'>navdata\\dev\\final\\&lt;当前版本&gt;\\</code></td>" +
+    "<td>游戏「成品」档启动读的那一版（一版 = 一整套数据）；只读，历史版本在控制台成品页</td></tr>" +
+    "<tr><td>② 编辑中</td><td><code class='k'>navdata\\dev\\packs\\&lt;图&gt;\\&lt;包&gt;\\</code></td>" +
+    "<td>每张图一个测试包；游戏「编辑中」档选中的包读它。可写沙盒，网页只读</td></tr>" +
     "</table>" +
-    "<p><b>版本切换</b>：顶栏右侧的版本下拉可以在 ①备份 / ②开发 / ③部署 之间切；" +
-    "只改查看的数据源，不写文件（③ 没有数据，切过去是空的）。</p>" +
+    "<p><b>档位切换</b>：顶栏右侧下拉在 ① 备份版 / ② 成品 / ② 编辑中 之间切；只改查看的数据源，不写文件。" +
+    "游戏目录（运行时）只放 dll / 配置 / 日志，2026-11-21 起不再放导航数据，也不作为数据档。</p>" +
     "<p><b>只保留原生</b>：列表里的图都是游戏原版给的（插件进图 <code class='k'>Ctrl+E</code> 扫出来的）；" +
     "我们手工铺的点、练习沙盒、编辑清单都不在这一版里。" +
     "想看图里到底有没有、多少点：<code class='k'>docs/地图对照表.md</code> 的「原生可通行空间」表。" +
@@ -3304,18 +3321,18 @@ function setProfileUI() {
   const pr = S.profile || {};
   const sel = $("profsel");
   if (sel) {
-    const order = ["native", "dev", "deploy"];
-    const labels = { native: "① 备份版", dev: "② 开发版", deploy: "③ 部署版" };
+    const order = ["native", "final", "pack"];
+    const labels = { native: "① 备份版", final: "② 成品", pack: "② 编辑中" };
     if (!sel.options.length) {
       sel.innerHTML = order.map(function (k) { return '<option value="' + k + '">' + labels[k] + '</option>'; }).join("");
     }
-    sel.value = pr.profile || "dev";
+    sel.value = pr.mode || pr.profile || "pack";
     sel.title = "当前查看：" + (pr.cn || "?") + " · " + (pr.data || "?") +
       "（切换只改查看，不写文件）";
   }
   const ro = !!pr.readonly;
   const pub = $("b-publish"), res = $("b-restore");
-  if (pub) { pub.disabled = ro || !S.canServer; pub.title = "把开发版的 maps/ nav/ 推到游戏目录（③ 部署版），游戏下次进图生效"; }
+  if (pub) { pub.disabled = ro || !S.canServer; pub.title = "发布到成品在控制台「人机路点 → 编辑中 → 发布到成品」；网页只读，不写文件"; }
   if (res) { res.disabled = ro || !S.canServer; res.title = "用 ① 原生备份覆盖 ② 开发版（丢掉开发版的改动）"; }
   const bp = $("b-pack");
   if (bp) { bp.disabled = ro || !S.canServer; }
@@ -4089,10 +4106,14 @@ function applyViewOnly() {
 async function boot() {
   if (EMBED) { document.body.classList.add("embed"); S.vertical = false; }
   if (VIEWONLY) applyViewOnly();
-  /* ?profile=native|dev|deploy|test：工作台/链接带过来的查看版本 */
-  const pm = /[?&]profile=([^&]+)/.exec(location.search);
-  if (pm) {
-    try { await apiGet("/api/profile?set=" + encodeURIComponent(decodeURIComponent(pm[1]))); } catch (e) {}
+  /* ?profile=native|final|pack：工作台/链接带过来的查看档（旧 dev/deploy/test 由 server 别名兼容）。
+   * 内嵌（embed=1）时**不要**改服务端的全局查看档：父页面已经设好了，
+   * 3D 侧栏重新加载时再 set 一次会跟父页面的切档打架（旧 iframe 把 pack 顶回 final）。 */
+  if (!EMBED) {
+    const pm = /[?&]profile=([^&]+)/.exec(location.search);
+    if (pm) {
+      try { await apiGet("/api/profile?set=" + encodeURIComponent(decodeURIComponent(pm[1]))); } catch (e) {}
+    }
   }
   /* 深链接：?navm=0 打开时就关掉可走面（截图/对比用），默认开 */
   if (/[?&]navm=0/.test(location.search)) {

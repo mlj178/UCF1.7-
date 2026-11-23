@@ -1,0 +1,24 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8d33ad595d72f1265b2b8744c2ea929d, type: 3}
+  m_Name: RightFootStepWater
+  m_EditorClassIdentifier:
+  clips:
+  - {fileID: 8300000, guid: a22ccb6e11969d64fa39fb3e9691132b, type: 3}
+  - {fileID: 8300000, guid: 1c553d45621593347a46db69ec4bfa63, type: 3}
+  - {fileID: 8300000, guid: 2200330fcf9ecb8468019fca60746943, type: 3}
+  - {fileID: 8300000, guid: c073a383aa98c0348b039ed0108080d2, type: 3}
+  - {fileID: 8300000, guid: 5f10693b21546a04ca13d823dbe6cf59, type: 3}
+  - {fileID: 8300000, guid: 74f8f6cc467077440acd00c649384971, type: 3}
+  minDistance: 1
+  maxDistance: 28
+  priority: 200

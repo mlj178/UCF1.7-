@@ -11,7 +11,7 @@
   <div class="titlebar">
     <div class="logo"><svg viewBox="0 0 24 24" fill="none" stroke="#07131f" stroke-width="2.4"><path d="M4 17l5-6 4 3 7-8"/><circle cx="4" cy="17" r="1.6" fill="#07131f"/><circle cx="20" cy="6" r="1.6" fill="#07131f"/></svg></div>
     <div class="tname">UCF 路点工作台</div>
-    <div class="tchip" id="topVer">② 开发版 · 只读</div>
+    <div class="tchip" id="topVer">② 编辑中 · 只读</div>
     <div class="tspace"></div>
     <div class="gstatus" id="conn"><i></i><span>连接 navserver…</span></div>
     <div class="wbtns"><button class="wbtn" id="btnReload" title="刷新数据">⟳</button></div>
@@ -50,7 +50,9 @@
             <div id="mapPick"></div>
           </div>
           <div class="acts">
-            <select id="profSel" class="vsel" title="切换查看的数据版本"></select>
+            <select id="viewSel" class="vsel" title="切换查看的数据档（只读）"></select>
+            <select id="packSel" class="vsel packsel" title="当前地图的测试包（只读）" style="display:none"></select>
+            <span id="finalChip" class="vchip" style="display:none"></span>
             <button class="btn" id="btnRefresh">刷新</button>
             <button class="btn" id="btnOpen3d" type="button" title="在右侧停靠 3D，不离开当前页">3D 侧栏</button>
           </div>
@@ -62,7 +64,7 @@
         <section class="page" data-page="overview">
           <div class="dash">
             <div class="card hero">
-              <div class="ch"><b>路点工作台</b><span class="sub" id="ovSub">—</span><div class="right"><span class="chip" id="ovVerChip">只读 · ② 开发版</span></div></div>
+              <div class="ch"><b>路点工作台</b><span class="sub" id="ovSub">—</span><div class="right"><span class="chip" id="ovVerChip">只读 · ② 编辑中</span></div></div>
               <div class="herobody">
                 <div class="heroh" id="ovTitle">—</div>
                 <p class="herop" id="ovDesc">—</p>
@@ -78,7 +80,7 @@
               </div>
             </div>
             <div class="card">
-              <div class="ch"><b>三版数据</b><span class="sub">①备份 → ②开发（成品 / 编辑中 / 收件箱）→ ③部署（游戏运行环境）</span></div>
+              <div class="ch"><b>数据档</b><span class="sub">① 备份版（对照） · ② 成品（游戏启动） · ② 编辑中（packs）</span></div>
               <div class="presetrow" id="ovVersions"></div>
               <div class="listnote" id="ovPaths">—</div>
             </div>
@@ -122,7 +124,7 @@
                   <div class="zoom"><button id="zoomOut">−</button><span id="zoomVal">100%</span><button id="zoomIn">+</button><button id="zoomFit" style="width:34px;font-size:8.5px">适配</button></div>
                   <div class="maphint"><span class="bar"></span><span id="scaleTxt">10 m</span></div>
                   <div class="tip" id="mapTip" style="display:none"></div>
-                  <div class="splash" id="mapSplash"><div class="spin"></div><h2>正在载入地图数据…</h2><p id="splashMsg">从 navdata\dev\maps 读取</p></div>
+                  <div class="splash" id="mapSplash"><div class="spin"></div><h2>正在载入地图数据…</h2><p id="splashMsg">从 ② 开发版的图文件夹读取</p></div>
                 </div>
                 <div class="stats" id="statRow"></div>
                 <div class="legend" id="legend"></div>
@@ -238,10 +240,10 @@
                 <thead><tr><th>#</th><th>地图</th><th>关卡</th><th>指纹</th><th>点 / 边</th><th>特征</th><th>可走面</th><th title="成品当前版本里这张图的改动条数">成品</th><th title="编辑中（packs）里这张图的测试包个数">编辑中</th><th>状态</th></tr></thead>
                 <tbody id="mapTbody"></tbody>
               </table></div>
-              <div class="listnote" id="mapsNote">点一行把这张图载入工作台。一张图一个文件夹：<b>map.json</b> + <b>navmesh.bin</b>；「成品」= 已发布到成品版本里的改动条数，「编辑中」= packs 里这张图的测试包个数。网页只读，不碰任何文件。</div>
+              <div class="listnote" id="mapsNote">点一行把这张图载入工作台。一张图一个文件夹：<b>map.json</b> + <b>navmesh.bin</b>；「成品」= 成品当前版里这张图的改动条数，「编辑中」= packs 里这张图的测试包个数。网页只读，不碰任何文件。</div>
             </div>
             <div class="card">
-              <div class="ch"><b>三版数据</b><span class="sub">①备份 · ②开发 · ③部署</span><div class="right"><span class="chip" id="verChip">—</span></div></div>
+              <div class="ch"><b>数据档</b><span class="sub">① 备份版 · ② 成品 · ② 编辑中</span><div class="right"><span class="chip" id="verChip">—</span></div></div>
               <div class="detailbody" id="verBody"></div>
             </div>
           </div>
@@ -259,9 +261,9 @@
       </div>
 
       <div class="status">
-        <span id="stProfile">UCF_PROFILE —</span><span class="sep"></span>
+        <span id="stProfile">查看 —</span><span class="sep"></span>
         <span id="stMap">未加载地图</span><span class="sep"></span>
-        <span id="stData">② 开发版</span>
+        <span id="stData">② 编辑中</span>
         <span class="right"><span class="ok" id="stServer">—</span> · 只读</span>
       </div>
     </main>

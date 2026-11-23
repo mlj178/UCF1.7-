@@ -1,0 +1,24 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8d33ad595d72f1265b2b8744c2ea929d, type: 3}
+  m_Name: LeftFootStepBrook
+  m_EditorClassIdentifier:
+  clips:
+  - {fileID: 8300000, guid: 5f073d6bf91d4df479dcc76a97f858ef, type: 3}
+  - {fileID: 8300000, guid: 2914aef8b3743dc4d885d245d5f2fea9, type: 3}
+  - {fileID: 8300000, guid: df36e9bbd9bbfe648a34f4df5f78d753, type: 3}
+  - {fileID: 8300000, guid: 667e46a28d5a1654b8c231f80442d897, type: 3}
+  - {fileID: 8300000, guid: 49407b8f08cf3304c81046eec9e598bf, type: 3}
+  - {fileID: 8300000, guid: 57401d68cf665eb4c8efab4ef1d9cc61, type: 3}
+  minDistance: 1
+  maxDistance: 32
+  priority: 200
