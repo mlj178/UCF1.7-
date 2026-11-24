@@ -23,7 +23,7 @@ while not os.path.isfile(os.path.join(UCF_ROOT, ".ucfroot")) and os.path.dirname
     UCF_ROOT = os.path.dirname(UCF_ROOT)      # 项目根：靠 .ucfroot 标记，本文件搬到哪都对
 PROJ = UCF_ROOT
 CFG_C = os.path.join(PROJ, "src", "cfg.c")
-CONSOLE = os.path.join(PROJ, "console", "控制台.pyw")
+CONSOLE = os.path.join(PROJ, "app", "控制台.pyw")
 
 # 2026-11-17：控制台删掉「建图」页（自动铺路点 / 自动补蹲守点 / 幽灵守卫区）。
 # 2026-11-18：用户要求自动铺设回控制台，落在「手动」页（不再是 RETIRED）。

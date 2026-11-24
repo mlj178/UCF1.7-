@@ -22,7 +22,8 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 UCF_ROOT = HERE
 while not os.path.isfile(os.path.join(UCF_ROOT, ".ucfroot")) and os.path.dirname(UCF_ROOT) != UCF_ROOT:
     UCF_ROOT = os.path.dirname(UCF_ROOT)      # 项目根：靠 .ucfroot 标记，本文件搬到哪都对
-for _p in (os.path.join(UCF_ROOT, "core"), os.path.join(UCF_ROOT, "console"), HERE):
+for _p in (os.path.join(UCF_ROOT, "app", "core"), os.path.join(UCF_ROOT, "app"),
+           os.path.join(UCF_ROOT, "app", "workbench"), HERE):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
@@ -98,7 +99,7 @@ def main():
     n_maps = len(P.map_files(P.DEV))
     n_bins = len(P.navmesh_files(P.DEV))
 
-    spec = importlib.util.spec_from_file_location("ucf_console_test", os.path.join(P.PROJ, "console", "控制台.pyw"))
+    spec = importlib.util.spec_from_file_location("ucf_console_test", os.path.join(P.PROJ, "app", "控制台.pyw"))
     con = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(con)
     con_counts = con.data_counts(con.DEV)

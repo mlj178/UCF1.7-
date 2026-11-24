@@ -24,7 +24,8 @@ UCF_ROOT = HERE
 while not os.path.isfile(os.path.join(UCF_ROOT, ".ucfroot")) and os.path.dirname(UCF_ROOT) != UCF_ROOT:
     UCF_ROOT = os.path.dirname(UCF_ROOT)      # 项目根：靠 .ucfroot 标记
 PROJ = UCF_ROOT
-for _p in (os.path.join(PROJ, "core"), os.path.join(PROJ, "console"), HERE):
+for _p in (os.path.join(PROJ, "app", "core"), os.path.join(PROJ, "app"),
+           os.path.join(PROJ, "app", "workbench"), HERE):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
@@ -46,7 +47,7 @@ def read(rel):
 
 def load_console():
     spec = importlib.util.spec_from_file_location(
-        "ucf_console_logpaths", os.path.join(PROJ, "console", "控制台.pyw"))
+        "ucf_console_logpaths", os.path.join(PROJ, "app", "控制台.pyw"))
     m = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(m)
     return m
@@ -117,9 +118,9 @@ def main():
         check(S.log_file() == p1, "有工程端 log\\ -> 优先它")
 
         print("== 4) 启动通道都注入了 UCF_LOG_DIR ==")
-        con_src = read(os.path.join("console", "控制台.pyw"))
+        con_src = read(os.path.join("app", "控制台.pyw"))
         check('env["UCF_LOG_DIR"] = LOG_DIR' in con_src, "控制台启动游戏时注入 UCF_LOG_DIR")
-        pw = read(os.path.join("tools", "autotest.ps1"))
+        pw = read(os.path.join("app", "tools", "autotest.ps1"))
         check("UCF_LOG_DIR" in pw, "命令行 autotest.ps1 也注入（否则车测日志会落回游戏端）")
         gi = read(".gitignore")
         check("log/" in gi, ".gitignore 忽略 log/")

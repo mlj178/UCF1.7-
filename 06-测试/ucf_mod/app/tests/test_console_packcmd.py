@@ -16,7 +16,7 @@ import sys
 import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-CONSOLE = os.path.join(os.path.dirname(HERE), "console", "控制台.pyw")
+CONSOLE = os.path.join(os.path.dirname(HERE), "控制台.pyw")
 
 
 def load_console():

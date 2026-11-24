@@ -30,7 +30,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 UCF_ROOT = HERE
 while not os.path.isfile(os.path.join(UCF_ROOT, ".ucfroot")) and os.path.dirname(UCF_ROOT) != UCF_ROOT:
     UCF_ROOT = os.path.dirname(UCF_ROOT)      # 项目根：靠 .ucfroot 标记，本文件搬到哪都对
-for _p in (os.path.join(UCF_ROOT, "core"), HERE):
+for _p in (os.path.join(UCF_ROOT, "app", "core"), HERE):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
@@ -52,7 +52,7 @@ LOG_PATH = os.path.join(LOG_DIR, "ucf_mod.log")
 AUTOTEST_TXT = os.path.join(LOG_DIR, "autotest.txt")   # 车测：每张图 OK + 最后 RESULT 写这里
 MAP_MD = doc("地图对照表.md")
 GAME_EXE = os.path.join(os.path.dirname(DEPLOY), "UnityCrossFire.exe")
-NAVSERVER = os.path.join(HERE, "navserver.py")
+NAVSERVER = os.path.join(HERE, "workbench", "navserver.py")
 NAVDATA = os.path.join(P.CORE, "navdata.py")   # 数据版本命令（部署/还原/校验/状态），库在 core/
 TIDY = P.tool("tidy_vis.py")                   # 整理 ② vis：raw/<地图>/ + navmesh/ + _state/
 PACKS = PACKS_DIR                              # ② 测试包：<包名>\<指纹>.txt + manifest.json

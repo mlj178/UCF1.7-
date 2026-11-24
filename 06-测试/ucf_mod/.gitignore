@@ -27,8 +27,7 @@ run/_tmp*
 data/geo/web/
 data/geo/tex/
 
-# 本机路径配置（搬目录期间两条都在，P2 之后只留 app/tools/deploy.json）
-tools/deploy.json
+# 本机路径配置
 app/tools/deploy.json
 
 # 部署端数据：只存在于游戏目录，不在工程端（锚定 ucf_mod 根目录）

@@ -25,10 +25,10 @@ def read(rel):
 
 
 def main():
-    html = read(os.path.join("console", "web", "nav-studio.html"))
-    js = read(os.path.join("console", "web", "nav-studio-app.js"))
-    server = read(os.path.join("console", "navserver.py"))
-    navview = read(os.path.join("console", "web", "navview.html"))
+    html = read(os.path.join("app", "workbench", "web", "nav-studio.html"))
+    js = read(os.path.join("app", "workbench", "web", "nav-studio-app.js"))
+    server = read(os.path.join("app", "workbench", "navserver.py"))
+    navview = read(os.path.join("app", "workbench", "web", "navview.html"))
 
     # 顶栏：三档 + 包选择器；旧的 profSel / data-vprof 不能再回来
     for key in ('id="viewSel"', 'id="packSel"', 'id="finalChip"'):

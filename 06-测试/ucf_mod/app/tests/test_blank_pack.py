@@ -53,7 +53,7 @@ def main():
     assert "ucf_navcmd.txt" in editor and "nav_cmd_tick" in editor, \
         "editor.c 丢了控制台运行中命令（ucf_navcmd.txt / nav_cmd_tick）"
 
-    navdata = read(os.path.join("core", "navdata.py"))
+    navdata = read(os.path.join("app", "core", "navdata.py"))
     assert '"--grow"' in navdata, "navdata.py pack new 丢了 --grow"
     assert '"--keep"' in navdata, "navdata.py pack new 丢了 --keep"
     assert '"--blank"' not in navdata, "navdata.py 又加回了 --blank（已并入 --grow）"
@@ -62,17 +62,17 @@ def main():
     assert "def cmd_pack_seed" not in navdata, "navdata.py 又加回了 pack seed（已删）"
     assert "def seed_pack_lines" not in navdata, "navdata.py 又加回了 seed_pack_lines（已删）"
 
-    server = read(os.path.join("console", "navserver.py"))
+    server = read(os.path.join("app", "workbench", "navserver.py"))
     assert "/api/pack-txt" in server, "navserver.py 丢了 /api/pack-txt（只读看包）"
     assert "只读服务，不提供写入接口" in server, "navserver.py 不再拒绝网页写入"
 
-    view = read(os.path.join("console", "web", "navview.html"))
+    view = read(os.path.join("app", "workbench", "web", "navview.html"))
     assert "function hasBlank" in view, "navview.html 丢了 hasBlank"
     assert "async function loadPack" in view, "navview.html 丢了 loadPack"
     assert '"blank"' in view and "blankBase" in view, \
         "navview.html 不再兼容旧包里的 blank 行"
 
-    console = read(os.path.join("console", "控制台.pyw"))
+    console = read(os.path.join("app", "控制台.pyw"))
     assert "def create_pack" in console, "控制台丢了「新建测试包」"
     assert "空白地图（新建节点）" in console, "控制台新建弹窗丢了「空白地图（新建节点）」"
     assert "原版基础 + 新增" in console, "控制台新建弹窗丢了「原版基础 + 新增」"
@@ -94,7 +94,7 @@ def main():
         "控制台不再用 map_table 取序号"
     assert "def folder_alias" in console, "控制台丢了「旧文件夹改名合并」（folder_alias）"
     assert "map_table.folder_name" in navdata, "navdata.py 建包不再用 map_table 的序号"
-    for _p in (os.path.join(PROJ, "core"), HERE):
+    for _p in (os.path.join(PROJ, "app", "core"), HERE):
         if _p not in sys.path:
             sys.path.insert(0, _p)
     import map_table

@@ -21,14 +21,14 @@ UCF_ROOT = HERE
 while not os.path.isfile(os.path.join(UCF_ROOT, ".ucfroot")) and os.path.dirname(UCF_ROOT) != UCF_ROOT:
     UCF_ROOT = os.path.dirname(UCF_ROOT)      # 项目根：靠 .ucfroot 标记，本文件搬到哪都对
 PROJ = UCF_ROOT
-for _p in (os.path.join(UCF_ROOT, "core"), os.path.join(UCF_ROOT, "console"), HERE):
+for _p in (os.path.join(UCF_ROOT, "app", "core"), os.path.join(UCF_ROOT, "app"), HERE):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
 import ucf_trace  # noqa: E402
 
 EDITOR = os.path.join(PROJ, "src", "editor.c")
-CONSOLE = os.path.join(PROJ, "console", "控制台.pyw")
+CONSOLE = os.path.join(PROJ, "app", "控制台.pyw")
 
 
 def read(path):

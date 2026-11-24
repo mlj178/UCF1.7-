@@ -13,7 +13,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 UCF_ROOT = HERE
 while not os.path.isfile(os.path.join(UCF_ROOT, ".ucfroot")) and os.path.dirname(UCF_ROOT) != UCF_ROOT:
     UCF_ROOT = os.path.dirname(UCF_ROOT)      # 项目根：靠 .ucfroot 标记，本文件搬到哪都对
-for _p in (HERE, os.path.join(UCF_ROOT, "core"), os.path.join(UCF_ROOT, "console")):
+for _p in (HERE, os.path.join(UCF_ROOT, "app", "core"), os.path.join(UCF_ROOT, "app")):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 import ucf_rec

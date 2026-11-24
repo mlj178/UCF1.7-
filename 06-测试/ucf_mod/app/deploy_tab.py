@@ -23,7 +23,7 @@ HERE = Path(__file__).resolve().parent
 UCF_ROOT = HERE
 while not (UCF_ROOT / ".ucfroot").is_file() and UCF_ROOT.parent != UCF_ROOT:
     UCF_ROOT = UCF_ROOT.parent          # 项目根：靠 .ucfroot 标记，本文件搬到哪都对
-for _p in (UCF_ROOT / "core", HERE):
+for _p in (UCF_ROOT / "app" / "core", HERE):
     if str(_p) not in sys.path:
         sys.path.insert(0, str(_p))
 
