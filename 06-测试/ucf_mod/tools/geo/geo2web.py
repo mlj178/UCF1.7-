@@ -120,7 +120,7 @@ def vertex_normals(pos, tri):
 
 
 
-NAVDATA = os.path.join(UCF, "navdata", "dev")   # ② 开发版的图文件夹（只读，用来校准分块）
+NAVDATA = os.path.join(UCF, "data", "navdata", "dev")   # ② 开发版的图文件夹（只读，用来校准分块）
 
 
 def _level_waypoints(level):

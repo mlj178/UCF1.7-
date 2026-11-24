@@ -80,7 +80,8 @@ CONSOLE = os.path.join(PROJ, "console")
 WEB = os.path.join(CONSOLE, "web")
 LOG_DIR = os.path.join(PROJ, "log")       # 日志主位置（控制台用 UCF_LOG_DIR 指给插件）
 DOCS = os.path.join(PROJ, "docs")
-GEO = os.path.join(PROJ, "geo")
+DATA_ROOT = os.path.join(PROJ, "data")    # 2026-11-24：数据统一进 data（geo + navdata）
+GEO = os.path.join(DATA_ROOT, "geo")
 DEPLOY_JSON = os.path.join(TOOLS, "deploy.json")
 if CORE not in sys.path:
     sys.path.insert(0, CORE)          # map_table 和本文件同目录（下面延迟 import 它）
@@ -89,8 +90,8 @@ if CORE not in sys.path:
 # ① 备份版 navdata\native   冻结、只读
 # ② 开发版 navdata\dev      唯一数据源：maps\nav 成品，vis 收件箱，packs 编辑中
 # ③ 游戏目录 <ucf_mod>      运行时：dll / 配置 / markers（2026-11-21 起不放数据）
-NATIVE = os.path.join(PROJ, "navdata", "native")   # ① 原生备份（只读）
-DEV = os.path.join(PROJ, "navdata", "dev")         # ② 开发版（正式数据 + 收件箱 + 测试包）
+NATIVE = os.path.join(DATA_ROOT, "navdata", "native")   # ① 原生备份（只读）
+DEV = os.path.join(DATA_ROOT, "navdata", "dev")         # ② 开发版（正式数据 + 收件箱 + 测试包）
 # 2026-11-21 四区改三区：原 navdata\test 已改名为 dev（内容原样保留），
 # TEST 只剩别名作用——老的调用点（EXPORT / PACKS_DIR / ARCHIVE）不用改指向。
 TEST = DEV

@@ -120,7 +120,7 @@ def main():
           "navdata.py summary (%s)" % s["sub"])
 
     print("== 6) 迁移日志在")
-    logs = [f for f in os.listdir(os.path.join(P.PROJ, "navdata"))
+    logs = [f for f in os.listdir(os.path.join(P.DATA_ROOT, "navdata"))
             if f.startswith("_migrate_mapfolders_") and f.endswith(".json")]
     check(bool(logs), "有迁移日志 %d 个（可 --undo）" % len(logs))
 

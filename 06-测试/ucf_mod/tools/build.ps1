@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     编译 ucf_mod.dll（可选部署到游戏目录）
 
@@ -19,7 +19,7 @@ while (-not (Test-Path -LiteralPath (Join-Path $root '.ucfroot')) -and (Split-Pa
     $root = Split-Path -Parent $root
 }
 $src   = Join-Path $root 'src'
-$build = Join-Path $root 'build'
+$build = Join-Path $root 'run\build'
 $sources = @('cfg.c', 'plugin.c', 'navfix.c', 'editor.c', 'autotest.c')
 
 # ---- gcc ----

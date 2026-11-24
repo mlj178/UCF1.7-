@@ -65,7 +65,7 @@ def _setup_console():
     except Exception:
         pass
     try:
-        logdir = os.path.join(P.PROJ, "navdata", "_logs")
+        logdir = os.path.join(P.DATA_ROOT, "navdata", "_logs")
         os.makedirs(logdir, exist_ok=True)
         sys.stdout = _Tee(out, os.path.join(logdir, "navdata.log"))
     except Exception:

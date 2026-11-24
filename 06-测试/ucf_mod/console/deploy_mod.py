@@ -35,7 +35,7 @@ HERE = Path(__file__).resolve().parent
 PROJ = HERE
 while not (PROJ / ".ucfroot").is_file() and PROJ.parent != PROJ:
     PROJ = PROJ.parent                  # 项目根：靠 .ucfroot 标记，本文件搬到哪都对
-PAYLOAD = PROJ / "payload"
+PAYLOAD = PROJ / "run" / "payload"
 
 GAME_EXE_NAME = "unitycrossfire.exe"
 GAME_DATA_DIR = "UnityCrossFire_Data"

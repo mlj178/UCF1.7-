@@ -125,7 +125,7 @@ def main():
         check("log/" in gi, ".gitignore 忽略 log/")
 
         print("== 5) 卸载照旧清理三个位置 ==")
-        un = read(os.path.join("payload", "ucf_mod", "uninstall.ps1"))
+        un = read(os.path.join("run", "payload", "ucf_mod", "uninstall.ps1"))
         check("'log'" in un, "uninstall.ps1 会删 log 目录")
         check("ucf_mod.prev_*.log" in un, "uninstall.ps1 认得车测的 prev_*.log")
     finally:

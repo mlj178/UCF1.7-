@@ -23,13 +23,17 @@ param(
 
 $ErrorActionPreference = 'Continue'
 $tools = $PSScriptRoot
+# 项目根：向上找 .ucfroot（和 core/ucf_paths.py 同一套约定）
+$projRoot = $tools
+while (-not (Test-Path -LiteralPath (Join-Path $projRoot '.ucfroot')) -and (Split-Path -Parent $projRoot) -ne $projRoot) {
+    $projRoot = Split-Path -Parent $projRoot
+}
 $cfg = Join-Path $tools 'deploy.json'
 if (-not (Test-Path -LiteralPath $cfg)) { throw "missing tools/deploy.json" }
 $modDir = (Get-Content -LiteralPath $cfg -Raw | ConvertFrom-Json).deploy
 $gameDir = Split-Path -Parent $modDir
 # 2026-11-23 起日志主位置在**工程端** log\（和控制台一致：启动时注入 UCF_LOG_DIR），
 # 没走控制台时插件落 <部署端>\log\，更老的部署还在部署端根目录 —— 三级都认。
-$projRoot = Split-Path -Parent $tools
 $logDir   = Join-Path $projRoot 'log'          # 工程端（主）
 $gameLog  = Join-Path $modDir 'log'            # 部署端（没走控制台时）
 $logPath  = Join-Path $logDir 'ucf_mod.log'
@@ -53,9 +57,8 @@ if (Test-Path -LiteralPath $logPath) {
 if (Test-Path -LiteralPath $atPath) { Remove-Item -LiteralPath $atPath -Force }
 
 # 三区：车测也把导出/测试包指到 ② 开发版，正式版 nav\ 保持只读（和 UCF 控制台一致）
-$root = Split-Path -Parent $tools
-$testVis = Join-Path $root 'navdata\dev\vis'
-$testPacks = Join-Path $root 'navdata\dev\packs'
+$testVis = Join-Path $projRoot 'data\navdata\dev\vis'
+$testPacks = Join-Path $projRoot 'data\navdata\dev\packs'
 
 $lines = @(
     '@echo off',
