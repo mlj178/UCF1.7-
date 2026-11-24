@@ -16,15 +16,16 @@ import sys
 import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-CONSOLE = os.path.join(os.path.dirname(HERE), "控制台.pyw")
+APP = os.path.dirname(HERE)
 
 
 def load_console():
-    sys.path.insert(0, HERE)
-    spec = importlib.util.spec_from_file_location("ucf_console_packcmd", CONSOLE)
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
+    r"""2026-11-24 目录重构：包的台账与命令文件在 app/ui/packs.py（原来的 控制台.pyw）。"""
+    for _p in (os.path.join(APP, "core"), APP):
+        if _p not in sys.path:
+            sys.path.insert(0, _p)
+    import ui.packs as packs
+    return packs
 
 
 def main():

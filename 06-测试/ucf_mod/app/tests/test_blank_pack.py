@@ -72,7 +72,13 @@ def main():
     assert '"blank"' in view and "blankBase" in view, \
         "navview.html 不再兼容旧包里的 blank 行"
 
-    console = read(os.path.join("app", "控制台.pyw"))
+    # 2026-11-24 目录重构：控制台按页签拆开，建包 / 命令文件在 ui/packs.py，
+    # 图文件夹别名在 ui/maps.py，map_table 导入在 ui/env.py —— 三份合起来看。
+    console = chr(10).join([
+        read(os.path.join("app", "ui", "packs.py")),
+        read(os.path.join("app", "ui", "maps.py")),
+        read(os.path.join("app", "ui", "env.py")),
+    ])
     assert "def create_pack" in console, "控制台丢了「新建测试包」"
     assert "空白地图（新建节点）" in console, "控制台新建弹窗丢了「空白地图（新建节点）」"
     assert "原版基础 + 新增" in console, "控制台新建弹窗丢了「原版基础 + 新增」"

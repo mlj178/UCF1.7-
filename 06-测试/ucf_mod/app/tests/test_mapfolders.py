@@ -99,13 +99,14 @@ def main():
     n_maps = len(P.map_files(P.DEV))
     n_bins = len(P.navmesh_files(P.DEV))
 
-    spec = importlib.util.spec_from_file_location("ucf_console_test", os.path.join(P.PROJ, "app", "控制台.pyw"))
-    con = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(con)
-    con_counts = con.data_counts(con.DEV)
+    # 2026-11-24 目录重构：控制台的统计/地图函数拆进 app/ui/stats.py、app/ui/maps.py
+    import ui.env as CEnv
+    import ui.stats as CStats
+    import ui.maps as CMaps
+    con_counts = CStats.data_counts(CEnv.DEV)
     check(con_counts[0] == n_maps and con_counts[3] == n_bins,
           "控制台 data_counts=(%d 图, %d 面)" % (con_counts[0], con_counts[3]))
-    check(len(con.load_maps()) == 9, "控制台 load_maps 9 张能测的图")
+    check(len(CMaps.load_maps()) == 9, "控制台 load_maps 9 张能测的图")
 
     import navserver as S
     rows = S.collect_maps()

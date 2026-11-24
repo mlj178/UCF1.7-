@@ -80,34 +80,36 @@ def main():
         check('MOD_DIR "log' in proxy, "加载器失败日志也进日志目录")
 
         print("== 2) 控制台：三级查找 ==")
-        con = load_console()
-        check(os.path.dirname(con.PMARK_TXT) == con.LOG_DIR, "PMARK_TXT 在日志目录里")
-        check(os.path.dirname(con.AUTOTEST_TXT) == con.LOG_DIR, "AUTOTEST_TXT 在日志目录里")
-        check(os.path.normcase(con.LOG_DIR) == os.path.normcase(os.path.join(PROJ, "log")),
+        # 2026-11-24 目录重构：常量在 app/ui/env.py，find_log 在 app/ui/util.py
+        import ui.env as E
+        import ui.util as U
+        check(os.path.dirname(E.PMARK_TXT) == E.LOG_DIR, "PMARK_TXT 在日志目录里")
+        check(os.path.dirname(E.AUTOTEST_TXT) == E.LOG_DIR, "AUTOTEST_TXT 在日志目录里")
+        check(os.path.normcase(E.LOG_DIR) == os.path.normcase(os.path.join(PROJ, "log")),
               "日志主目录 = 工程端 log")
 
         game = os.path.join(tmp, "game")            # 假装是部署端
-        con.DEPLOY = game
-        con.LOG_DIR = os.path.join(tmp, "proj", "log")
-        con.GAME_LOG_DIR = os.path.join(game, "log")
-        p1 = os.path.join(con.LOG_DIR, "ucf_mod.log")
-        p2 = os.path.join(con.GAME_LOG_DIR, "ucf_mod.log")
+        U.DEPLOY = game
+        U.LOG_DIR = os.path.join(tmp, "proj", "log")
+        U.GAME_LOG_DIR = os.path.join(game, "log")
+        p1 = os.path.join(U.LOG_DIR, "ucf_mod.log")
+        p2 = os.path.join(U.GAME_LOG_DIR, "ucf_mod.log")
         p3 = os.path.join(game, "ucf_mod.log")
 
         touch(p3)
-        check(con.find_log("ucf_mod.log") == p3, "只有部署端根目录 -> 读那份（最老）")
+        check(U.find_log("ucf_mod.log") == p3, "只有部署端根目录 -> 读那份（最老）")
         touch(p2)
-        check(con.find_log("ucf_mod.log") == p2, "有部署端 log\\ -> 优先它")
+        check(U.find_log("ucf_mod.log") == p2, "有部署端 log\\ -> 优先它")
         touch(p1)
-        check(con.find_log("ucf_mod.log") == p1, "有工程端 log\\ -> 优先它（日常）")
+        check(U.find_log("ucf_mod.log") == p1, "有工程端 log\\ -> 优先它（日常）")
         for f in (p1, p2, p3):
             os.remove(f)
-        check(con.find_log("ucf_mod.log") == p1, "都没有 -> 指向工程端 log（写时自建）")
+        check(U.find_log("ucf_mod.log") == p1, "都没有 -> 指向工程端 log（写时自建）")
 
         print("== 3) navserver：同样三级 ==")
         import navserver as S
         S.LOG_FILE = p1
-        S.GAME_LOG_DIR = con.GAME_LOG_DIR
+        S.GAME_LOG_DIR = U.GAME_LOG_DIR
         S.UCF = game
         check(S.log_file() == p1, "都没有 -> 工程端 log")
         touch(p3)

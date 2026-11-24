@@ -24,6 +24,14 @@ while not os.path.isfile(os.path.join(UCF_ROOT, ".ucfroot")) and os.path.dirname
 PROJ = UCF_ROOT
 CFG_C = os.path.join(PROJ, "src", "cfg.c")
 CONSOLE = os.path.join(PROJ, "app", "控制台.pyw")
+# 2026-11-24 目录重构：页签常量在 app/ui/consts.py，页签装配在 app/控制台.pyw
+CONSTS = os.path.join(PROJ, "app", "ui", "consts.py")
+DEV_TAB = os.path.join(PROJ, "app", "tabs", "dev", "tab.py")
+REC_TAB = os.path.join(PROJ, "app", "tabs", "record", "tab.py")
+VIS_TAB = os.path.join(PROJ, "app", "tabs", "vis.py")
+DATA_TAB = os.path.join(PROJ, "app", "tabs", "data.py")
+AUTOTEST_TAB = os.path.join(PROJ, "app", "tabs", "autotest.py")
+KIT = os.path.join(PROJ, "app", "ui", "kit.py")
 
 # 2026-11-17：控制台删掉「建图」页（自动铺路点 / 自动补蹲守点 / 幽灵守卫区）。
 # 2026-11-18：用户要求自动铺设回控制台，落在「手动」页（不再是 RETIRED）。
@@ -62,7 +70,7 @@ def cfg_defs():
 
 def console_const(name):
     """控制台.pyw 里的模块级字符串常量（GROUPS / HUD_KEYS …）。"""
-    tree = ast.parse(read(CONSOLE))
+    tree = ast.parse(read(CONSTS))
     for node in tree.body:
         if isinstance(node, ast.Assign) and any(
                 isinstance(t, ast.Name) and t.id == name for t in node.targets):
@@ -154,7 +162,7 @@ def main():
     assert "build_pack_panel" not in src, "build_pack_panel 旧入口应已删除"
     assert src.index('add("人机路点")') < src.index('add("数据")'), \
         "「人机路点」页应在「数据」页之前"
-    assert 'text="打开文件夹"' in src and "def open_folder" in src, \
+    assert 'text="打开文件夹"' in read(DATA_TAB) and "def open_folder" in read(KIT), \
         "数据页的「打开文件夹」按钮 / open_folder 不见了"
 
     # 2026-11-21 用户要求：新开一页「开发者选项」（页签排在最后），
@@ -162,15 +170,18 @@ def main():
     assert 'add("开发者选项")' in src, "「开发者选项」必须是页签"
     assert src.index('add("车测")') < src.index('add("开发者选项")'), \
         "「开发者选项」页应在「车测」页之后（排在所有页签最后）"
-    dev_body = src[src.index("def build_dev_tab("):src.index("def build_pmark_card(")]
+    dev_src = read(DEV_TAB)
+    dev_body = dev_src[dev_src.index("def build_dev_tab("):dev_src.index("def build_pmark_card(")]
     assert "self.build_pmark_card(body)" in dev_body, \
         "「开发者选项」页少了玩家坐标记录卡片"
     assert "self.build_trace_card(body)" in dev_body, \
         "「开发者选项」页少了原始轨迹采集卡片"
-    rec_body = src[src.index("def build_record_tab("):src.index("def build_rec_ready(")]
+    rec_src = read(REC_TAB)
+    rec_body = rec_src[rec_src.index("def build_record_tab("):rec_src.index("def build_rec_ready(")]
     assert "build_trace_card" not in rec_body, \
         "「录制」页不该再放原始轨迹采集（2026-11-21 已搬到开发者选项）"
-    vis_body = src[src.index("def build_vis_tab("):src.index("def build_dev_tab(")]
+    vis_src = read(VIS_TAB)
+    vis_body = vis_src[vis_src.index("def build_vis_tab("):]
     assert "build_pmark_card" not in vis_body, \
         "「可视化」页不该再放玩家坐标记录卡片（2026-11-21 已搬到开发者选项）"
 
@@ -178,11 +189,12 @@ def main():
     assert 'self.tabview.add("车测")' in src, "车测必须是页签"
     assert src.index('add("数据")') < src.index('add("车测")'), \
         "「车测」页应在「数据」页之后"
-    assert "UCF_AUTOTEST" in src and "def run_autotest" in src, \
+    at_src = read(AUTOTEST_TAB)
+    assert "UCF_AUTOTEST" in at_src and "def run_autotest" in at_src, \
         "车测页缺少 UCF_AUTOTEST / run_autotest"
-    assert "UCF_FREECAM" in src and 'text="自由视角' in src, \
+    assert "UCF_FREECAM" in at_src and 'text="自由视角' in at_src, \
         "车测页缺少「自由视角」（UCF_FREECAM）"
-    assert 'os.remove(find_log("autotest.txt"))' in src, \
+    assert 'os.remove(find_log("autotest.txt"))' in at_src, \
         "车测开跑前必须删旧 autotest.txt，否则上一次的 PASS 会被当成这次的结果"
     can = console_const("AT_CAN")
     cannot = console_const("AT_CANNOT")

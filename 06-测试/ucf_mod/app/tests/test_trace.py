@@ -21,7 +21,8 @@ UCF_ROOT = HERE
 while not os.path.isfile(os.path.join(UCF_ROOT, ".ucfroot")) and os.path.dirname(UCF_ROOT) != UCF_ROOT:
     UCF_ROOT = os.path.dirname(UCF_ROOT)      # 项目根：靠 .ucfroot 标记，本文件搬到哪都对
 PROJ = UCF_ROOT
-for _p in (os.path.join(UCF_ROOT, "app", "core"), os.path.join(UCF_ROOT, "app"), HERE):
+for _p in (os.path.join(UCF_ROOT, "app", "core"), os.path.join(UCF_ROOT, "app"),
+           os.path.join(UCF_ROOT, "app", "tabs", "dev"), HERE):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
@@ -29,6 +30,9 @@ import ucf_trace  # noqa: E402
 
 EDITOR = os.path.join(PROJ, "src", "editor.c")
 CONSOLE = os.path.join(PROJ, "app", "控制台.pyw")
+# 2026-11-24 目录重构：轨迹卡片在 tabs/dev/tab.py，ucf_trace 的导入在 ui/env.py
+DEV_TAB = os.path.join(PROJ, "app", "tabs", "dev", "tab.py")
+UI_ENV = os.path.join(PROJ, "app", "ui", "env.py")
 
 
 def read(path):
@@ -243,7 +247,7 @@ def main():
     editor = read(EDITOR)
     check_c(editor)
     check_c_format(editor)
-    check_console(read(CONSOLE))
+    check_console(chr(10).join([read(CONSOLE), read(DEV_TAB), read(UI_ENV)]))
     check_unit()
     print("OK: trace 字段表 / navcmd / 控制台入口 / 增量读取 / 摘要 全部通过")
     return 0
