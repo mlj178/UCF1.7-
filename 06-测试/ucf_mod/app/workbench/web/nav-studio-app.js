@@ -48,7 +48,7 @@ var VIEW_ORDER = ['native', 'final', 'pack'];
 var VIEW_LABELS = { native: '① 备份版', final: '② 成品', pack: '② 编辑中' };
 var VIEW_FULL = {
   native: '备份版（原生快照·只读对照）',
-  final: '成品（final 当前版本·只读）',
+  final: '成品（final 每图一份·只读）',
   pack: '编辑中（packs 测试包·只读）'
 };
 var STORAGE_VIEW = 'ucf.wb.view';
@@ -1164,7 +1164,9 @@ function choosePackForMap(m) {
 function updatePackSel() {
   var sel = $('packSel');
   if (!sel) return;
-  if (ST.view !== 'pack') { sel.style.display = 'none'; return; }
+  // 2026-11-24：一张图只有一个草稿，界面不再提供“选包”下拉。
+  sel.style.display = 'none';
+  if (ST.view !== 'pack') return;
   sel.style.display = '';
   var m = ST.cur;
   if (!m) {
@@ -1212,16 +1214,15 @@ function updateFinalChip() {
   if (ST.view !== 'final') { chip.style.display = 'none'; return; }
   chip.style.display = '';
   var f = (ST.wb && ST.wb.versions && ST.wb.versions.dev && ST.wb.versions.dev.final) || {};
-  var cur = f.current || '';
-  chip.className = 'vchip' + (cur ? ' ok' : '');
-  chip.innerHTML = cur
-    ? '当前版 <b>' + esc(cur) + '</b>' +
-      (f.latest ? ' · ' + esc(shortTime(f.latest)) : '') +
-      (f.maps ? ' · ' + int(f.maps) + ' 张图' : '')
-    : '成品 · <b>还没有版本</b>（启动 = 原版）';
-  chip.title = cur
-    ? ('成品当前版本：' + (f.path || cur) + '（只读；历史版本在控制台成品页）')
-    : '成品里还没有版本：发布到成品后这里显示当前版。游戏启动 = 原版。';
+  var n = int(f.maps) || 0;
+  chip.className = 'vchip' + (n ? ' ok' : '');
+  chip.innerHTML = n
+    ? '成品 · <b>' + n + ' 张图</b>' +
+      (f.latest ? ' · ' + esc(shortTime(f.latest)) : '')
+    : '成品 · <b>还没有发布</b>（启动 = 全原生）';
+  chip.title = n
+    ? ('成品目录：' + (f.path || '') + '（每张图一份，只读）')
+    : '成品里还没有发布任何图：发布后这里显示张数。游戏启动 = 全原生。';
 }
 
 function updateViewControls() {
@@ -1321,8 +1322,8 @@ function updateHeader() {
     else if (ST.view === 'pack') kind = ST.pack ? '② 编辑中 · 包' : '② 编辑中 · 无包';
     else if (ST.view === 'final') {
       var fcur0 = (ST.wb && ST.wb.versions && ST.wb.versions.dev && ST.wb.versions.dev.final || {}).current;
-      kind = !fcur0 ? '② 成品 · 无版本'
-        : ((m.final && m.final.has) ? '② 成品 · 当前版' : '② 成品 · 本图无');
+      kind = !fcur0 ? '② 成品 · 没发布'
+        : ((m.final && m.final.has) ? '② 成品 · 已发布' : '② 成品 · 本图无');
     }
     else if (ST.view === 'native') kind = '① 备份版';
     $('sideKind').textContent = kind;
@@ -1382,7 +1383,7 @@ function renderOverview() {
   var sync = '';
   var curFin = (wb && wb.versions && wb.versions.dev && wb.versions.dev.final) || {};
   if (ST.view === 'pack' && ST.pack) sync = ' · ' + shortPack(ST.pack);
-  else if (ST.view === 'final') sync = curFin.current ? (' · 当前版 ' + curFin.current) : ' · 成品还没有版本';
+  else if (ST.view === 'final') sync = curFin.maps ? (' · ' + curFin.maps + ' 张图') : ' · 成品还没有发布';
   else if (ST.view === 'native') sync = ' · 原生无编辑';
   $('ovSub').textContent = (m.label || m.level) + ' · ' + (m.level || '') + ' · ' + viewLabel() + sync;
   var k = s.kinds;
@@ -1409,16 +1410,16 @@ function renderOverview() {
   /* 数据流：收件箱 → 编辑中（packs）→ 成品（final）。 */
   $('ovFlow').innerHTML =
     '<div class="fstep"><b><em>01</em>收件箱</b><span>' + fmtNum(dInbox.exports || 0) + ' 份导出 · ' + shortTime(dInbox.latest) + '</span></div>' +
-    '<div class="fstep"><b><em>02</em>编辑中</b><span>' + (dPacks.n || 0) + ' 个测试包 · ' + (dPacks.maps || 0) + ' 张图 · ' + fmtBytes(dPacks.bytes || 0) + '</span></div>' +
-    '<div class="fstep"><b><em>03</em>成品</b><span>' + (dFinal.versions || 0) + ' 个版本 · ' +
-      (dFinal.current ? ('当前 ' + dFinal.current) : '还没有版本') + (edits ? ' · ' + edits + ' 条改动' : '') + '</span></div>';
+    '<div class="fstep"><b><em>02</em>编辑中</b><span>' + (dPacks.n || 0) + ' 张图有草稿 · ' + fmtBytes(dPacks.bytes || 0) + '</span></div>' +
+    '<div class="fstep"><b><em>03</em>成品</b><span>' + (dFinal.maps || 0) + ' 张图' +
+      (edits ? ' · ' + edits + ' 条改动' : '') + '</span></div>';
 
   /* 数据档：① 备份版（对照）/ ② 成品 / ② 编辑中。③ 部署版不是数据档。 */
   var vers = [
     { key: 'native', n: '① 备份版', d: nat, c: '#8fa5c0',
       txt: (nat.maps || 0) + ' 图 / ' + (nat.navmesh || 0) + ' 面' },
     { key: 'final', n: '② 成品', d: { path: dFinal.path || '' }, c: '#d6b676',
-      txt: (dFinal.versions || 0) + ' 版' + (dFinal.current ? (' · 当前 ' + dFinal.current) : ' · 还没有版本') },
+      txt: (dFinal.maps || 0) + ' 张图' + (dFinal.latest ? (' · 最近 ' + shortTime(dFinal.latest)) : ' · 还没有发布') },
     { key: 'pack', n: '② 编辑中', d: { path: (wb.profile && wb.profile.packs) || '' }, c: '#8fb7d9',
       txt: (dPacks.n || 0) + ' 包 / ' + (dPacks.maps || 0) + ' 图' }
   ];
@@ -1455,9 +1456,9 @@ function buildTips() {
   } else if (ST.view === 'final') {
     var fin0 = (wb && wb.versions && wb.versions.dev && wb.versions.dev.final) || {};
     if (!fin0.current) {
-      out.push({ c: '#f5b942', text: '成品里还没有版本：游戏启动 = 原版；现在看到的是 ② 的基准点图。要试改法去「② 编辑中」选包。' });
+      out.push({ c: '#f5b942', text: '成品里还没有发布任何图：游戏启动 = 全原生；现在看到的是 ② 的基准点图。要试改法去「② 编辑中」改草稿。' });
     } else if (!(m.final && m.final.has)) {
-      out.push({ c: '#f5b942', text: '这张图不在成品当前版「' + fin0.current + '」里：游戏会用原版 / 没有编辑。' });
+      out.push({ c: '#f5b942', text: '这张图还没发布到成品：游戏会用原版 / 没有编辑。' });
     }
   } else if (ST.view === 'pack') {
     var allPk = (wb && wb.packs ? wb.packs : []).filter(function (p) { return p.folder === m.folder; });
@@ -1488,7 +1489,7 @@ function buildTips() {
     out.push({ c: '#3ecf8e', text: '②开发版的 map.json 和①备份版有文件不同：这些就是改过的成品数据，控制台「开始游戏 · 成品」按包读它。' });
   }
   if (m.final && m.final.has) {
-    out.push({ c: '#3ecf8e', text: '这张图在成品当前版里有 ' + (m.final.ops || 0) + ' 条改动；要试新改法去控制台「编辑中」选包。' });
+    out.push({ c: '#3ecf8e', text: '这张图已发布，成品里有 ' + (m.final.ops || 0) + ' 条改动；要试新改法去控制台「编辑中」改草稿。' });
   }
   if (ST.view === 'pack' && ST.pack) {
     var curPk = packsForMap(m).filter(function (p) { return p.name === ST.pack; })[0];
@@ -1605,19 +1606,14 @@ function renderMapInfo() {
   $('mapChip').textContent = m.status === 'missing' ? (m.navmesh ? '仅可走面' : '待采集') : viewLabel();
   /* ② 开发版里分 成品（final 当前版）/ 编辑中（packs）/ 收件箱（vis）；① 备份版是对照 */
   var fin = m.final || {};
-  var finVer = (ST.wb && ST.wb.versions && ST.wb.versions.dev && ST.wb.versions.dev.final || {}).current || '';
   var finText = fin.has
-    ? ('当前版已发布 · ' + (fin.ops || 0) + ' 条' + (fin.sha ? ' · ' + String(fin.sha).slice(0, 8) : ''))
+    ? ('已发布 · ' + (fin.ops || 0) + ' 条' + (fin.sha ? ' · ' + String(fin.sha).slice(0, 8) : ''))
     : (ST.view === 'native' ? '① 备份版没有成品概念'
-      : (!finVer ? '成品还没有版本' : '当前版没有这张图'));
+      : '这张图还没发布到成品');
   var packs = m.packs || [];
   var packsText = packs.length
-    ? (packs.length + ' 个：' + packs.map(function (p) {
-        var stale = p.fp && m.fp && p.fp !== m.fp;
-        var cur = (p.full || p.name) === ST.pack;
-        return (cur ? '● ' : '') + p.name + (stale ? '（✖ 失效）' : '');
-      }).join('、'))
-    : '没有测试包';
+    ? ('有草稿 · ' + packs.reduce(function (a, p) { return a + (p.ops || 0); }, 0) + ' 条改动')
+    : '没有草稿';
   var edits = ST.view === 'native' ? (m.editsNative || 0) : (m.editsDev || 0);
   var viewText = viewLabel() + (ST.view === 'pack' && ST.pack ? (' · ' + shortPack(ST.pack)) : '');
   var nmText = m.navmesh ? (m.navmeshFile || '有') : '没有导出';
@@ -2060,7 +2056,7 @@ function renderAuto() {
 
   $('autoCfgNote').innerHTML = cfg.exists
     ? ('配置：<b>' + esc(cfg.path) + '</b><br>插件总开关 <b>' + (cfg.enabled ? '开' : '关') + '</b> · 场景 <b>' + esc(cfg.scene || '—') +
-       '</b> · 测试包 <b>' + (cfg.pack && cfg.pack.on ? esc(cfg.pack.name) : '不启用') + '</b> · 只读采集 <b>' + (co ? '开' : '关') +
+       '</b> · 草稿 <b>' + (cfg.pack && cfg.pack.on ? esc(cfg.pack.name) : '不启用') + '</b> · 只读采集 <b>' + (co ? '开' : '关') +
        '</b><br>开关改完写进 ucf_mod.json，<b>下次进图生效</b>；网页端不能触发。')
     : '没有找到部署端的 ucf_mod.json；自动铺设开关状态未知。';
 
@@ -2076,7 +2072,7 @@ function renderAuto() {
     '<div class="kline"><span class="k">结论</span><span class="v">' + (dis ? '插件关闭' : (co ? '只读采集，全部跳过' : (packNogen ? 'nogen.txt，铺点跳过' : '按上面三个开关跑'))) + '</span></div>' +
     '<div class="note" style="margin-top:8px">当前查看的是' + viewLabel() +
       (ST.view === 'pack' && ST.pack ? (' · ' + shortPack(ST.pack)) : '') +
-      '；游戏实际读「② 成品」的当前版本或「② 编辑中」选中的包，下面的触发判断按当前这版的点数估算。</div>' +
+      '；游戏实际读「② 成品」已发布的图，或「② 编辑中」当前草稿；下面的触发判断按当前这份的点数估算。</div>' +
     '<div class="note" style="margin-top:6px">自动铺设发生在<b>场景加载后</b>，由插件在主线程做；网页只读，不能点按钮触发。要立刻试：控制台改开关 → 开始游戏进图。</div>';
 
   $('autoPipe').innerHTML = [
@@ -2152,7 +2148,7 @@ function renderMaps() {
       '<td class="mono">' + m.nodes + ' / ' + m.edges + '</td>' +
       '<td class="mono">' + m.features + '</td>' +
       '<td class="' + (m.navmesh ? 'ok' : 'no') + '">' + (m.navmesh ? '有' : '—') + '</td>' +
-      '<td class="' + (fin.has ? 'ok' : 'no') + '" title="成品当前版本里这张图的改动条数">' +
+      '<td class="' + (fin.has ? 'ok' : 'no') + '" title="成品里这张图的改动条数">' +
         (fin.has ? ('✓ ' + (fin.ops || 0)) : '—') + '</td>' +
       '<td class="' + (packs.length ? 'ok' : 'no') + '" title="' + esc(packTitle) + '">' +
         (packs.length ? (packs.length + ' 包') : '—') + '</td>' +
@@ -2175,11 +2171,11 @@ function renderMaps() {
         '最近写入 ' + shortTime((v.native || {}).latest),
         '原生快照，游戏不读它'] },
     { key: 'final', t: '② 成品（游戏启动用）', x: { path: dFin.path || '' }, sub: [
-        dFin.versions ? ('当前版 ' + (dFin.current || '—') + ' · ' + dFin.versions + ' 个版本') : '成品还没有版本（启动 = 原版）',
-        (dFin.maps || 0) + ' 张图 · ' + fmtBytes(dFin.bytes || 0),
-        '只读；历史版本在控制台成品页'] },
+        dFin.maps ? ('已发布 ' + dFin.maps + ' 张图') : '成品还没有发布（启动 = 全原生）',
+        '每张图一份 · ' + fmtBytes(dFin.bytes || 0),
+        '只读；没有版本下拉'] },
     { key: 'pack', t: '② 编辑中（packs）', x: { path: (wb.profile && wb.profile.packs) || '' }, sub: [
-        (dPk.n || 0) + ' 个测试包 · ' + (dPk.maps || 0) + ' 张图 · ' + fmtBytes(dPk.bytes || 0),
+        (dPk.n || 0) + ' 张图有草稿 · ' + fmtBytes(dPk.bytes || 0),
         '最近写入 ' + shortTime(dPk.latest),
         '可写沙盒；网页只读'] }
   ];
@@ -2192,7 +2188,7 @@ function renderMaps() {
     '<div class="kline"><span class="k">① vs ② 地图</span><span class="v">' + cmp(c.nativeDev && c.nativeDev.maps) + '</span></div>' +
     '<div class="note" style="margin-top:6px">点上面的卡片切数据档；游戏目录（运行时）只供日志 / 配置，不在这里。</div>' +
     '<div class="kline"><span class="k">收件箱（vis）</span><span class="v">' + (dIn.exports || 0) + ' 份导出 · ' + fmtBytes(dIn.bytes || 0) + '</span></div>' +
-    '<div class="sect">编辑中（测试包）</div>' +
+    '<div class="sect">编辑中（草稿）</div>' +
     ((wb.packs || []).map(function (p) {
       var pn = shortPack(p.name);
       var mf = maps.filter(function (m) { return m.folder === p.folder; })[0] || {};
@@ -2205,21 +2201,21 @@ function renderMaps() {
         (p.name === ST.pack ? ' · 正在看' : '') + '</div><div class="wd">' +
         esc(p.label || '') + ' · ' + esc(p.level || '') + ' · ' + (p.ops || 0) + ' 条 · ' +
         esc(shortTime(p.created)) + (p.nogen ? ' · nogen' : '') +
-        '<br>' + (stale ? '旧包，插件不会读；去控制台「编辑中」新建包' : '点这张卡片查看这个包') +
+        '<br>' + (stale ? '旧草稿，插件不会读；去控制台「编辑中」重建' : '点这张卡片查看这个草稿') +
         '</div></div>';
-    }).join('') || '<div class="note">② 开发版的 packs\\ 里还没有测试包。</div>') +
-    '<div class="sect">成品（当前启动版）</div>' +
-    (dFin.versions
+    }).join('') || '<div class="note">② 开发版的 packs\\ 里还没有草稿。</div>') +
+    '<div class="sect">成品（每图一份）</div>' +
+    (dFin.maps
       ? '<div class="whitecard vercard' + (ST.view === 'final' ? ' cur' : '') + '" data-view="final">' +
-        '<div class="wt">' + esc(dFin.current || '—') + (ST.view === 'final' ? ' · 正在看' : '') + '</div><div class="wd">' +
-        '共 ' + dFin.versions + ' 个版本 · 当前版 ' + (dFin.maps || 0) + ' 张图 · ' + fmtBytes(dFin.bytes || 0) +
-        '<br>最近发布 ' + esc(shortTime(dFin.latest)) + ' · 历史版本在控制台成品页' +
+        '<div class="wt">' + esc(dFin.maps + ' 张图') + (ST.view === 'final' ? ' · 正在看' : '') + '</div><div class="wd">' +
+        '共 ' + (dFin.maps || 0) + ' 张图 · ' + fmtBytes(dFin.bytes || 0) +
+        '<br>最近发布 ' + esc(shortTime(dFin.latest)) + ' · 每张图一份，没有版本' +
         '</div></div>'
-      : '<div class="note">成品里还没有版本：控制台「人机路点 → 编辑中 → 发布到成品」就有第一版。</div>') +
+      : '<div class="note">成品里还没有发布：控制台「人机路点 → 编辑中 → 发布这张图到成品」。</div>') +
     '<div class="sect">命令行（网页不执行）</div>' +
     '<div class="comp" style="white-space:normal;line-height:1.8">python core/navdata.py pack list<br>' +
-    'python core/navdata.py pack promote 包名 &nbsp;→ 新建一版成品<br>' +
-    'python core/navdata.py final list / final use 版本名</div>';
+    'python core/navdata.py pack promote 地图文件夹 &nbsp;→ 覆盖同图那份成品<br>' +
+    'python core/navdata.py final list（撤销发布：final rm &lt;指纹&gt;）</div>';
 }
 
 function bindMapTable() {

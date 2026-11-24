@@ -57,8 +57,8 @@ def main():
     assert '"--grow"' in navdata, "navdata.py pack new 丢了 --grow"
     assert '"--keep"' in navdata, "navdata.py pack new 丢了 --keep"
     assert '"--blank"' not in navdata, "navdata.py 又加回了 --blank（已并入 --grow）"
-    assert "grow, keep = pack_flags(src)" in navdata, \
-        "navdata.py promote 不再读 grow/keep（grow 包照样能发，但没了标记判断）"
+    assert "def final_store_publish" in navdata and "pack_flags" in navdata, \
+        "navdata.py promote 不再写单份成品 / 不再读 grow/keep"
     assert "def cmd_pack_seed" not in navdata, "navdata.py 又加回了 pack seed（已删）"
     assert "def seed_pack_lines" not in navdata, "navdata.py 又加回了 seed_pack_lines（已删）"
 
@@ -85,7 +85,7 @@ def main():
     assert "真·新建节点（grow）" not in console, "控制台又出现了四个选项里的 grow 老标签"
     assert "复制原版路点（seed）" not in console, "控制台又加回了 seed 选项（已删）"
     assert "def seed_lines" not in console, "控制台又加回了 seed_lines（已删）"
-    assert 'out["keep"]' in console and 'summ["keep"]' in console, \
+    assert 'summ["keep"]' in console and '"keep": bool(keep or summ["keep"])' in console, \
         "控制台不再解析/传递 keep"
     assert "keep_native" in console, "控制台「清空当前图」不再保留 keep 模式"
     assert 'if s in ("grow", "blank")' in console, "控制台不再兼容旧包里的 blank 行"
@@ -108,7 +108,8 @@ def main():
     want = ["01_TransportShip运输船", "02_Factory小型工厂", "03_Cebu_City椰岛之巅",
             "04_NY_TM胜利广场", "05_Arena竞技场", "06_GrimReaperKM刀锋寨",
             "07_DeathRing死亡擂台", "08_DesertFort沙漠要塞", "09_NanoResort生化酒店",
-            "10_Nano30_Storm飓风危城", "11_Nano_DawnVillage新寂静村"]
+            "10_Nano30_Storm飓风危城", "11_Nano_DawnVillage新寂静村",
+            "12_TestMap12龙城"]          # 2026-11-24 新增地图（借 level11 骨架）
     assert got == want, got
     for name in want:
         assert re.match(r"^[^\\/:*?\"<>|]{1,30}$", name), name   # 控制台的包 id 规则

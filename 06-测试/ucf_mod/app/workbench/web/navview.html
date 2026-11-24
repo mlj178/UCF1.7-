@@ -3297,10 +3297,10 @@ function showHelp() {
     "<tr><th>档位</th><th>位置</th><th>作用</th></tr>" +
     "<tr><td>① 备份版（只读对照）</td><td><code class='k'>navdata\\native\\</code></td>" +
     "<td>UCF 原版冻结快照，游戏不读它；<code class='k'>python core/navdata.py verify</code> 可校验</td></tr>" +
-    "<tr><td>② 成品</td><td><code class='k'>navdata\\dev\\final\\&lt;当前版本&gt;\\</code></td>" +
-    "<td>游戏「成品」档启动读的那一版（一版 = 一整套数据）；只读，历史版本在控制台成品页</td></tr>" +
+    "<tr><td>② 成品</td><td><code class='k'>navdata\\dev\\final\\&lt;指纹&gt;.txt</code></td>" +
+    "<td>游戏「成品」档读的每图一份；只读，没有版本</td></tr>" +
     "<tr><td>② 编辑中</td><td><code class='k'>navdata\\dev\\packs\\&lt;图&gt;\\&lt;包&gt;\\</code></td>" +
-    "<td>每张图一个测试包；游戏「编辑中」档选中的包读它。可写沙盒，网页只读</td></tr>" +
+    "<td>每张图一个草稿；游戏「编辑中」档读它。可写沙盒，网页只读</td></tr>" +
     "</table>" +
     "<p><b>档位切换</b>：顶栏右侧下拉在 ① 备份版 / ② 成品 / ② 编辑中 之间切；只改查看的数据源，不写文件。" +
     "游戏目录（运行时）只放 dll / 配置 / 日志，2026-11-21 起不再放导航数据，也不作为数据档。</p>" +

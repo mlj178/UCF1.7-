@@ -5,9 +5,9 @@ r"""工程端 / 部署端 / 三区数据 的路径解析 —— 全工具唯一�
 三区（2026-11-21 起；此前是"四版"，④ 测试版已并入 ② 开发版）：
 
   三档启动（控制台底部按钮决定，都从 ② 读，游戏目录不再存数据）：
-      成品    UCF_PACK_DIR=②\final + UCF_PACK=<版本>  一版一整套数据（v1/v2…），启动时选；
+      成品    UCF_PACK_DIR=② + UCF_PACK=final        每张图一份 final\<指纹>.txt，只读；
                                                         和编辑中同一套加载逻辑（grow/keep 也生效）
-      编辑中  UCF_PACK=②\packs\<图>\<包>              可写，调图 / 试路线
+      编辑中  UCF_PACK=②\packs\<图>                   一张图一个草稿，可写，调图 / 试路线
       原版    插件总开关关                             插件待机，什么都不读
 
   ---------------------------------------------------------------------------
@@ -26,12 +26,12 @@ r"""工程端 / 部署端 / 三区数据 的路径解析 —— 全工具唯一�
    ---------------------------------------------------------------------------
   ① 备份版（原生，只读，永不编辑）
        工程端 navdata\native\   <图>\{map.json, navmesh.bin} + 00_公共\
-  ② 开发版（唯一数据源：成品 + 收件箱 + 测试包）
+  ② 开发版（唯一数据源：成品 + 收件箱 + 草稿）
        工程端 navdata\dev\      <图>\{map.json, navmesh.bin, 导出\} + 00_公共\
-           packs\<图>\<包名>\       编辑中（可写沙盒）；做完用 pack promote 升进成品
-           final\<版本>\<指纹>.txt  成品（一版一整套）
+           packs\<图>\              草稿（可写沙盒，一张图一个）；做完用 pack promote 发布
+           final\<指纹>.txt         成品（一张图一份，平铺，只读）
            vis\                     导出收件箱（插件临时落点，整理后进 <图>\导出\）
-           archive\                 处理过的导出 / 只读还原点
+           archive\                 处理过的导出 / 发布前快照
   ③ 游戏目录（运行时，不放数据）
        游戏目录 ucf_mod\
            ucf_mod.dll  ucf_mod.json  markers\    （nav\ maps\ 2026-11-21 清空）
@@ -162,6 +162,26 @@ def load_user_cfg():
         return {}
 
 
+def _norm_history(raw):
+    r"""把 history 统一成 [{"game_dir", "name", "note"}]。
+
+    2026-11-24 用户要求：每个位置可以起名字、写备注。老配置里 history 是
+    纯字符串，读的时候按「没名字」兼容，写回去时统一成 dict。
+    """
+    out = []
+    for item in (raw or []):
+        if isinstance(item, dict):
+            g = str(item.get("game_dir") or "").strip()
+            name = str(item.get("name") or "").strip()
+            note = str(item.get("note") or "").strip()
+        else:
+            g, name, note = str(item or "").strip(), "", ""
+        if not g:
+            continue
+        out.append({"game_dir": os.path.abspath(g), "name": name, "note": note})
+    return out
+
+
 def load_history():
     r"""游戏位置列表：**当前生效的那一个永远排第一**，后面是历史记录。
 
@@ -169,9 +189,11 @@ def load_history():
     tools/deploy.json），不一定是我们写进用户配置的，但它同样要出现在列表里 ——
     否则第一次打开时下拉框空着，用户以为没配置。
 
-    返回 [{"game_dir": str, "exists": bool, "current": bool, "source": str}]
+    返回 [{"game_dir", "exists", "current", "source", "name", "note"}]
     """
     cur = os.path.abspath(game_dir_of())
+    label = {it["game_dir"].lower(): (it["name"], it["note"])
+             for it in _norm_history(load_user_cfg().get("history"))}
     out, seen = [], set()
 
     def add(path, source):
@@ -179,16 +201,19 @@ def load_history():
         if not g or g.lower() in seen:
             return
         seen.add(g.lower())
+        name, note = label.get(g.lower(), ("", ""))
         out.append({
             "game_dir": g,
             "exists": os.path.isfile(os.path.join(g, "UnityCrossFire.exe")),
             "current": g.lower() == cur.lower(),
             "source": source,
+            "name": name,
+            "note": note,
         })
 
     add(cur, DEPLOY_SOURCE)
-    for item in (load_user_cfg().get("history") or []):
-        add(item.get("game_dir") if isinstance(item, dict) else item, "history")
+    for item in _norm_history(load_user_cfg().get("history")):
+        add(item["game_dir"], "history")
     return out[:HISTORY_MAX]
 
 
@@ -197,23 +222,42 @@ def save_deploy(game_dir):
 
     控制台选完 UnityCrossFire.exe 后调这里；写的是 %LOCALAPPDATA%\\UCFMod\\deploy.json，
     不动工程里的 tools/deploy.json。下次启动 ucf_paths 会优先读它。
+
+    历史里的名字 / 备注按路径带过去 —— 换一次位置就把名字清掉的话，
+    用户等于每切一次都要重新命名。
     """
     game_dir = os.path.abspath(str(game_dir))
     old = load_user_cfg()
-    history = [game_dir]
-    for item in (old.get("history") or []):
-        g = (item.get("game_dir") if isinstance(item, dict) else item) or ""
-        if g and os.path.abspath(g).lower() != game_dir.lower():
-            history.append(os.path.abspath(g))
-        if len(history) >= HISTORY_MAX:
-            break
+    keep = {"name": "", "note": ""}
+    history = []
+    for item in _norm_history(old.get("history")):
+        if item["game_dir"].lower() == game_dir.lower():
+            keep["name"], keep["note"] = item["name"], item["note"]
+        else:
+            history.append(item)
+    history.insert(0, {"game_dir": game_dir, "name": keep["name"], "note": keep["note"]})
     data = {
         "deploy": os.path.join(game_dir, "ucf_mod"),
         "game_dir": game_dir,
-        "history": history,
+        "history": history[:HISTORY_MAX],
         "updated": time.strftime("%Y-%m-%d %H:%M:%S"),
     }
     return _write_user_cfg(data)
+
+
+def rename_history(game_dir, name, note=""):
+    r"""给某个位置起名字 / 写备注；它不在历史里（比如当前这份是解析出来的）也照样记一条。"""
+    game_dir = os.path.abspath(str(game_dir))
+    cfg = load_user_cfg()
+    hist = _norm_history(cfg.get("history"))
+    for item in hist:
+        if item["game_dir"].lower() == game_dir.lower():
+            item["name"], item["note"] = name, note
+            break
+    else:
+        hist.insert(0, {"game_dir": game_dir, "name": name, "note": note})
+    cfg["history"] = hist[:HISTORY_MAX]
+    return _write_user_cfg(cfg)
 
 
 def _write_user_cfg(data):
@@ -235,8 +279,8 @@ def forget_history(game_dir):
     current = os.path.abspath(str(cfg.get("game_dir") or ""))
     if game_dir.lower() == current.lower() or not current:
         return False
-    cfg["history"] = [g for g in (cfg.get("history") or [])
-                      if os.path.abspath(str(g)).lower() != game_dir.lower()]
+    cfg["history"] = [it for it in _norm_history(cfg.get("history"))
+                      if it["game_dir"].lower() != game_dir.lower()]
     _write_user_cfg(cfg)
     return True
 
@@ -252,8 +296,11 @@ def _resolve_env_dir(env_name, default):
 # ② 开发版里的草稿区：导出收件箱 / 测试包 / 已处理导出的归档（都不会进 ③）
 EXPORT = _resolve_env_dir("UCF_EXPORT_DIR", os.path.join(DEV, "vis"))
 PACKS_DIR = _resolve_env_dir("UCF_PACK_DIR", os.path.join(DEV, "packs"))
+#: 编辑标记（蹲守点/守点/守区/tag）根目录：按地图分子文件夹，一张图一份
+#: 2026-11-24 用户要求放工程端（游戏目录不再存数据），控制台启动时用 UCF_MARKERS_DIR 指给插件
+MARKERS = _resolve_env_dir("UCF_MARKERS_DIR", os.path.join(DEV, "markers"))
 ARCHIVE = os.path.join(DEV, "archive")
-FINAL = os.path.join(DEV, "final")          # ② 成品版本集合：<FINAL>\<版本名>\<指纹>.txt（一版一整套）
+FINAL = os.path.join(DEV, "final")          # ② 成品：<FINAL>\<指纹>.txt（每图一份，没有版本）
 
 # 当前生效的数据根（maps/nav 读写这里）
 DATA = {"native": NATIVE, "dev": DEV, "deploy": DEPLOY}[PROFILE]
@@ -477,8 +524,9 @@ def navmesh_files(root):
         names = sorted(os.listdir(root))
     except OSError:
         return out
+    skip = {"vis", "packs", "final", "archive", "nav"}
     for name in names:
-        if name.startswith((".", "_")):
+        if name.startswith((".", "_")) or name in skip or name.startswith("00_"):
             continue
         d = os.path.join(root, name)
         if not os.path.isdir(d):

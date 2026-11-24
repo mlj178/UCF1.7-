@@ -1,0 +1,37 @@
+{
+  "schema": 1,
+  "id": "10_Nano30_Storm飓风危城",
+  "no": 10,
+  "level": "level9",
+  "scene": "Nano30_Storm",
+  "label": "飓风危城",
+  "kind": "game-body",
+  "switch": "hidden_map",
+  "inject": {
+    "game_mode": 6,
+    "game_mode_name": "Nano4_Terminator",
+    "label": "飓风危城",
+    "position": "append"
+  },
+  "requires": {
+    "game": "UnityCrossFire 1.7.1",
+    "gameassembly_md5": "fab04426db6a014c0129ef2001530908"
+  },
+  "files": [
+    {
+      "path": "UnityCrossFire_Data/level9",
+      "bytes": 192144,
+      "sha256": "a0eeebc74301f96a2bd9d8bdfcc571a90240698338f097bb729ad54fcdefda55",
+      "orig": {
+        "bytes": 192140,
+        "sha256": "7d6785dcf51559e5ae76c8bb568eba94257d9c63f6c14044707ddb6278d5ad9d"
+      },
+      "role": "打过补丁的场景：5 个 UI 对象 m_IsActive 1→0，文件头 size 0x2EE8C→0x2EE90（文件 +4 字节）"
+    }
+  ],
+  "notes": [
+    "方案 A（部署期改文件）：效果跟着文件走，可静态校验；不做运行时 SetActive",
+    "整份文件替换而不是 6 字节原地补丁：补丁后的文件比原版多 4 字节，无法等长替换",
+    "原版哈希不匹配时部署器必须拒绝（用户可能装过别人的 storm 补丁）"
+  ]
+}

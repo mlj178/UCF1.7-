@@ -86,12 +86,53 @@ void ucf_path_to_utf8(const char* ansi, char* out, int n) {
   out[n - 1] = 0;
 }
 
+/* 在 ucf_mod.json 里手工找 "log_dir":"..." —— 这一步发生在 cfg_init 之前，
+ * 不能走 cfg_str()。只认第一个出现的键，够用就行。 */
+static int ucf_cfg_log_dir(char* out, int n, const char* modDir) {
+  char path[MAX_PATH], buf[8192];
+  FILE* f;
+  size_t got, i;
+  char* p;
+  char* q;
+  int j = 0;
+  if (!out || n <= 1 || !modDir || !modDir[0]) return 0;
+  snprintf(path, sizeof path, "%s\\ucf_mod.json", modDir);
+  f = fopen(path, "rb");
+  if (!f) return 0;
+  got = fread(buf, 1, sizeof buf - 1, f);
+  fclose(f);
+  buf[got] = 0;
+  p = strstr(buf, "\"log_dir\"");
+  if (!p) return 0;
+  p = strchr(p, ':');
+  if (!p) return 0;
+  p = strchr(p, '"');
+  if (!p) return 0;
+  p++;
+  q = strchr(p, '"');
+  if (!q || q <= p) return 0;
+  for (i = 0; p + i < q && j < n - 1; i++) {
+    char c = p[i];
+    if (c == '\\' && p + i + 1 < q) {          /* JSON 里的 \\ 转义 */
+      char e = p[++i];
+      c = (e == 'n') ? '\n' : (e == 't') ? '\t' : e;
+    }
+    out[j++] = c;
+  }
+  out[j] = 0;
+  return out[0] ? 1 : 0;
+}
+
+/* 日志目录：**永远不写游戏目录**（2026-11-24 用户要求）。
+ *   1) UCF_LOG_DIR        控制台启动时注入 = 工程端 log\（日常走这条）
+ *   2) ucf_mod.json 的 log_dir（手工配置，双击启动也能指回工程端）
+ *   3) %LOCALAPPDATA%\UCFMod\log   双击启动的兜底
+ *   4) %TEMP%\ucf_mod\log          连 LOCALAPPDATA 都没有时 */
 int ucf_log_dir(char* out, int n, const char* modDir) {
   char dir[MAX_PATH];
   DWORD attrs;
   if (!out || n <= 1) return 0;
   out[0] = 0;
-  /* 1) 控制台注入的 UCF_LOG_DIR —— 日常都走这条，游戏目录因此不生成日志 */
   if (GetEnvironmentVariableA("UCF_LOG_DIR", dir, (DWORD)sizeof dir) > 0 && dir[0]) {
     ucf_mkdir_p(dir);
     attrs = GetFileAttributesA(dir);
@@ -100,19 +141,38 @@ int ucf_log_dir(char* out, int n, const char* modDir) {
       return 2;
     }
   }
-  if (!modDir || !modDir[0]) return 0;
-  /* 2) <modDir>\log */
-  snprintf(dir, sizeof dir, "%s\\log", modDir);
-  attrs = GetFileAttributesA(dir);
-  if (attrs == INVALID_FILE_ATTRIBUTES) {
-    CreateDirectoryA(dir, 0);                    /* 已存在也会返回 0，下面重新问一次 */
+  if (ucf_cfg_log_dir(dir, sizeof dir, modDir)) {
+    ucf_mkdir_p(dir);
     attrs = GetFileAttributesA(dir);
+    if (attrs != INVALID_FILE_ATTRIBUTES && (attrs & FILE_ATTRIBUTE_DIRECTORY)) {
+      snprintf(out, (size_t)n, "%s", dir);
+      return 3;
+    }
   }
-  if (attrs != INVALID_FILE_ATTRIBUTES && (attrs & FILE_ATTRIBUTE_DIRECTORY)) {
-    snprintf(out, (size_t)n, "%s", dir);
-    return 1;
+  if (GetEnvironmentVariableA("LOCALAPPDATA", dir, (DWORD)sizeof dir) > 0 && dir[0]) {
+    char tmp[MAX_PATH];
+    snprintf(tmp, sizeof tmp, "%s\\UCFMod", dir);
+    ucf_mkdir_p(tmp);
+    snprintf(tmp, sizeof tmp, "%s\\UCFMod\\log", dir);
+    ucf_mkdir_p(tmp);
+    attrs = GetFileAttributesA(tmp);
+    if (attrs != INVALID_FILE_ATTRIBUTES && (attrs & FILE_ATTRIBUTE_DIRECTORY)) {
+      snprintf(out, (size_t)n, "%s", tmp);
+      return 4;
+    }
   }
-  snprintf(out, (size_t)n, "%s", modDir);        /* 3) 兜底：退回 modDir */
+  if (GetEnvironmentVariableA("TEMP", dir, (DWORD)sizeof dir) > 0 && dir[0]) {
+    char tmp[MAX_PATH];
+    snprintf(tmp, sizeof tmp, "%s\\ucf_mod", dir);
+    ucf_mkdir_p(tmp);
+    attrs = GetFileAttributesA(tmp);
+    if (attrs != INVALID_FILE_ATTRIBUTES && (attrs & FILE_ATTRIBUTE_DIRECTORY)) {
+      snprintf(out, (size_t)n, "%s", tmp);
+      return 5;
+    }
+  }
+  snprintf(out, (size_t)n, "C:\\UCFMod_log");   /* 最后的兜底，也不落游戏目录 */
+  ucf_mkdir_p(out);
   return 0;
 }
 

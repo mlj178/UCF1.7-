@@ -20,25 +20,26 @@ from tabs.dev.tab import DevTab
 from tabs.export import ExportTab
 from tabs.hotkey import HotkeyTab
 from tabs.map import MapTab
+from tabs.overview import OverviewTab
 from tabs.record.tab import RecordTab
 from tabs.vis import VisTab
 from tabs.waypoint import WaypointTab
 from ui.consts import FONT, FONT_B, FONT_S, GROUPS, TAB_GROUPS, TAB_OLD_MAP, USER_PAGES
-from ui.env import CFG_PATH, DEPLOY, FINAL_ROOT, GAME_EXE, HERE, LOG_DIR, NAVSERVER, PACKS, TEST_VIS
+from ui.env import CFG_PATH, DEPLOY, DEV, FINAL_ROOT, GAME_EXE, HERE, LOG_DIR, MARKERS, NAVSERVER, PACKS, TEST_VIS
 from ui.kit import Kit
 from ui.role import ROLE_DEV, ROLE_LABEL, ROLE_USER, ask_role, env_role, normalize_role, role_from_cfg, save_role
 from ui.packs import (
-    PackMixin, final_current_name, pack_manifest, pack_summary, pack_target_fp,
-    prepare_final_dir, write_nav_cmd,
+    PackMixin, final_stats, pack_manifest, pack_summary, pack_target_fp,
+    prepare_final_root, write_nav_cmd,
 )
 from ui.util import _python, compact_path, game_running, game_tag, load_cfg, save_cfg, tail_log
 
 
-class App(Kit, PackMixin, MapTab, VisTab, ExportTab, HotkeyTab, WaypointTab, RecordTab,
-          DataTab, AutotestTab, DevTab, ctk.CTk):
+class App(Kit, PackMixin, MapTab, VisTab, ExportTab, HotkeyTab, WaypointTab, OverviewTab,
+          RecordTab, DataTab, AutotestTab, DevTab, ctk.CTk):
     def __init__(self, role=None):
         super().__init__()
-        # 2026-11-24 用户要求：身份决定建哪些页（用户=地图/部署，开发者=全部 10 页）
+        # 2026-11-24 用户要求：身份决定建哪些页（用户=地图/部署，开发者=全部 11 页）
         self.role = normalize_role(role) or ROLE_DEV
         self.title("UCF 控制台")
         # 高分屏 125% 缩放时 900 逻辑高会把底部按钮顶到任务栏外：
@@ -97,9 +98,13 @@ class App(Kit, PackMixin, MapTab, VisTab, ExportTab, HotkeyTab, WaypointTab, Rec
                                       command=self.toggle_fold)
         self.btn_fold.pack(side="right", padx=(10, 0))
         self.master_var = tk.BooleanVar(value=bool(self.cfg.get("enabled", True)))
-        ctk.CTkSwitch(self.head, text="插件总开关", variable=self.master_var,
-                      font=FONT, progress_color="#2f9e44",
-                      command=self.on_master).pack(side="right")
+        # 2026-11-24：总开关只给开发者。用户身份关掉它 = 静默变原版（界面上只改按钮文案），
+        # 是坑；用户要原版直接双击 exe，介绍第二行已经写了。master_var 照样从配置初始化，
+        # persist() / 启动条 / 预检 / 车测都不用改。
+        if self.role == ROLE_DEV:
+            ctk.CTkSwitch(self.head, text="插件总开关", variable=self.master_var,
+                          font=FONT, progress_color="#2f9e44",
+                          command=self.on_master).pack(side="right")
         self.topmost_var = tk.BooleanVar(value=bool(self.ui.get("topmost", False)))
         ctk.CTkCheckBox(self.head, text="窗口置顶", variable=self.topmost_var, font=FONT_S,
                         checkbox_width=20, checkbox_height=20,
@@ -260,6 +265,8 @@ class App(Kit, PackMixin, MapTab, VisTab, ExportTab, HotkeyTab, WaypointTab, Rec
         elif page == "地图":
             hint, items = hint_items["地图"]
             self.build_group_tab(frame, hint, items)
+        elif page == "地图总览":
+            self.build_overview_tab(frame)              # 11 张图的状态总览（只读）
         elif page == "人机路点":
             self.build_waypoint_tab(frame)              # SyPB 式现场编辑入口
         elif page == "录制":
@@ -328,6 +335,8 @@ class App(Kit, PackMixin, MapTab, VisTab, ExportTab, HotkeyTab, WaypointTab, Rec
             self.refresh_rec_ready()
         elif name == "开发者选项":
             self.pmark_refresh()         # 文件可能被编辑器 / 手改过，进来重读
+        elif name == "地图总览":
+            self.refresh_overview()
         elif name == "人机路点":
             if hasattr(self, "opt_pack"):
                 cur = self.selected_pack()
@@ -526,6 +535,8 @@ class App(Kit, PackMixin, MapTab, VisTab, ExportTab, HotkeyTab, WaypointTab, Rec
         if not self.dot.cget("text"):
             self.set_status("配置：%s" % ("已读取" if os.path.isfile(CFG_PATH) else "未找到，用默认值"))
         self.refresh_export_info()
+        if hasattr(self, "refresh_at_ready"):
+            self.refresh_at_ready()      # 车测：总开关关着就别让「开跑」能点
         if hasattr(self, "wp_meta"):
             self.refresh_wp_status()
         self.refresh_launch_strip(running)
@@ -550,16 +561,18 @@ class App(Kit, PackMixin, MapTab, VisTab, ExportTab, HotkeyTab, WaypointTab, Rec
             self.btn_game.configure(text="开始游戏 · 插件已关（原版）" + suffix, state="normal",
                                     fg_color="#3a3f47", hover_color="#49505a")
         elif pk.get("on") and pk.get("name"):
-            self.btn_game.configure(text="开始游戏 · 编辑中 %s" % pk["name"].split("/")[-1] + suffix,
+            label = self.folder_label(pk["name"]) if hasattr(self, "folder_label") else pk["name"]
+            self.btn_game.configure(text="开始游戏 · 编辑中 %s" % label + suffix,
                                     state="normal",
                                     fg_color="#a86a12", hover_color="#bf7c17")
         else:
-            ver = self.final_selected() if hasattr(self, "opt_final") else final_current_name()
-            if not ver:
-                self.btn_game.configure(text="开始游戏 · 成品（还没有版本）" + suffix, state="disabled",
+            st = final_stats()
+            if not st.get("n"):
+                self.btn_game.configure(text="开始游戏 · 成品（还没有发布）" + suffix, state="disabled",
                                         fg_color="#3a3f47", hover_color="#49505a")
             else:
-                self.btn_game.configure(text="开始游戏 · 成品 %s（只读）" % ver + suffix, state="normal",
+                self.btn_game.configure(text="开始游戏 · 成品（%d 张图）" % st["n"] + suffix,
+                                        state="normal",
                                         fg_color="#2f6fdb", hover_color="#255bb4")
 
     # ---- 启动条件条 / 测试包预检（2026-11-19 用户要求）---------------
@@ -574,35 +587,34 @@ class App(Kit, PackMixin, MapTab, VisTab, ExportTab, HotkeyTab, WaypointTab, Rec
                     "sub": "总开关关闭：插件加载但不动作，不读 nav、不出 F2 菜单",
                     "go": "去打开"}
         if not (pk.get("on") and pk.get("name")):
-            ver = self.final_selected() if hasattr(self, "opt_final") else final_current_name()
+            st = final_stats()
             if self.role == ROLE_USER:      # 用户身份不提示「切到编辑中」——那是开发页
-                sub = "只读：这一版是发布好的数据，游戏内改动不落盘。"
+                sub = "只读：这些是发布好的数据，游戏内改动不落盘。"
             else:
-                sub = "只读：游戏内改动不落盘；要改就切到「编辑中（packs）」"
+                sub = "只读：游戏内改动不落盘；要改就切到「编辑中（可写）」"
             return {"mode": "final", "badge": "成品",
-                    "title": ("本次启动加载 成品 %s（只读整版）" % ver) if ver
-                             else "本次启动加载 成品（还没有版本 = 原版）",
+                    "title": ("本次启动加载 成品（%d 张图，只读）" % st["n"]) if st.get("n")
+                             else "本次启动加载 成品（还没有发布 = 全原生）",
                     "sub": sub,
                     "go": "去人机路点改"}
         name = pk["name"]
-        short = name.split("/")[-1]
+        short = self.folder_label(name) if hasattr(self, "folder_label") else name
         man = pack_manifest(name)
         summ = pack_summary(name, pack_target_fp(name))
         ops = summ["nadd"] + summ["ndel"] + summ["eadd"] + summ["edel"]
         grow = bool(man.get("grow") or man.get("blank") or summ["grow"])
         keepn = bool(man.get("keep") or summ["keep"])
         kind = "原版 + 新增" if keepn else ("空白地图" if grow else "增量")
-        label = str(man.get("label") or pk.get("label") or pk.get("map") or "")
-        scope = ("只对 %s 生效" % label) if (pk.get("only_map") and label) else "全部地图生效"
-        title = "%s · %s · %s" % (self.disp_of(name) or short, kind, scope)
+        label = str(man.get("label") or pk.get("label") or pk.get("map") or short)
+        title = "%s · %s · 只对这张图生效" % (short, kind)
         if keepn:
-            sub = "包内 %d 处改动；原生点原样保留，原版路线照常走，只按 AddNode 追加新点" % ops
+            sub = "草稿内 %d 处改动；原生点原样保留，原版路线照常走，只按 AddNode 追加新点" % ops
         elif grow and ops == 0:
-            sub = "包内 0 处改动：原生点全禁用又没新建节点，人机没有可走路点"
+            sub = "草稿内 0 处改动：原生点全禁用又没新建节点，人机没有可走路点"
         elif grow:
-            sub = "包内 %d 处改动；原生点全禁用，节点按 AddNode 新建（不受原生点数限制）" % ops
+            sub = "草稿内 %d 处改动；原生点全禁用，节点按 AddNode 新建（不受原生点数限制）" % ops
         else:
-            sub = "包内 %d 处改动，套在原生点上执行" % ops
+            sub = "草稿内 %d 处改动，套在原生点上执行" % ops
         return {"mode": "test", "badge": "编辑中", "title": title, "sub": sub,
                 "go": "去人机路点改"}
 
@@ -617,12 +629,12 @@ class App(Kit, PackMixin, MapTab, VisTab, ExportTab, HotkeyTab, WaypointTab, Rec
                 # 外部双击 exe 起的进程：没有 mod，更谈不上版本；单独说清楚
                 info = {"mode": "off", "badge": "外部启动",
                         "title": "游戏在运行，但不是从本窗口启动的",
-                        "sub": "直接双击 UnityCrossFire.exe 是原版（无 mod）；要加载版本请关掉游戏再点底部按钮",
+                        "sub": "直接双击 UnityCrossFire.exe 是原版（无 mod）；要加载成品请关掉游戏再点底部按钮",
                         "go": "去人机路点"}
             else:
                 info = dict(self._strip_run)
                 info["badge"] = "运行中 · " + info["badge"]
-                info["sub"] += " · 改版本只影响下次启动"
+                info["sub"] += " · 改启动档只影响下次启动"
         else:
             self._strip_run = None
             info = self.launch_strip_info()
@@ -640,6 +652,14 @@ class App(Kit, PackMixin, MapTab, VisTab, ExportTab, HotkeyTab, WaypointTab, Rec
                                    text_color="#f7cd74" if info["mode"] == "test" else "#f0f0f0")
         self.strip_sub.configure(text=info["sub"])
         self.strip_go.configure(text=info["go"])
+        # 2026-11-24：用户身份平时没有这个按钮（跳转是开发页），只有「插件关着」时露出一个
+        # 「去打开」——否则用户身份的启动条是死路：按钮灰、没有任何恢复入口。
+        if self.role == ROLE_USER:
+            if info["mode"] == "off":
+                if not self.strip_go.winfo_manager():
+                    self.strip_go.pack(side="right", padx=(8, 10), pady=8)
+            elif self.strip_go.winfo_manager():
+                self.strip_go.pack_forget()
         if hasattr(self, "strip_path"):
             exists = os.path.isfile(GAME_EXE)
             text = "启动位置：" + compact_path(GAME_EXE, 96)
@@ -658,16 +678,16 @@ class App(Kit, PackMixin, MapTab, VisTab, ExportTab, HotkeyTab, WaypointTab, Rec
 
     def on_strip_go(self):
         r"""启动条右侧按钮：插件关着就先打开；否则跳到人机路点 ① 卡。"""
-        if self.role == ROLE_USER:
-            return
-        if not bool(self.master_var.get()):
+        if not bool(self.master_var.get()):      # 用户身份也能从这里打开（开关不显示）
             self.master_var.set(True)
             self.on_master()
+            return
+        if self.role == ROLE_USER:
             return
         self.jump_to_pick()
 
     def jump_to_pick(self):
-        r"""跳到「路点数据 → 人机路点」→「编辑中」页 →「选包与地图」，并闪一下边框。"""
+        r"""跳到「路点数据 → 人机路点」→「编辑中」页 →「本图草稿」，并闪一下边框。"""
         if self.role == ROLE_USER:      # 用户身份没有这一页 / 这个按钮
             return
         try:
@@ -677,11 +697,11 @@ class App(Kit, PackMixin, MapTab, VisTab, ExportTab, HotkeyTab, WaypointTab, Rec
             pass
         try:
             if not self.seg_mode.get().startswith("编辑中"):
-                self.seg_mode.set("编辑中（packs·可写）")
+                self.seg_mode.set("编辑中（可写）")
                 self.on_pack_change()
             self.show_page("编辑中")
             if hasattr(self, "page_edit_tabs"):
-                self.page_edit_tabs("选包与地图")
+                self.page_edit_tabs("本图草稿")
         except Exception:                # noqa: BLE001  页面还没建好就算了
             pass
         body = getattr(self, "wp_body", None)
@@ -723,21 +743,21 @@ class App(Kit, PackMixin, MapTab, VisTab, ExportTab, HotkeyTab, WaypointTab, Rec
         label = str(man.get("label") or pk.get("label") or pk.get("map") or "")
         level = str(man.get("level") or pk.get("map") or "")
         where = ("%s（%s）" % (label, level)) if (label and level) else (label or level or "（未知）")
-        scope = "只对这张图生效" if pk.get("only_map") else "全部地图生效"
+        scope = "只对这张图生效"
         if keepn:
             alert = ("原版基础 + 新增（keep）：原生点一个都不动，原版路线照常能走；"
-                     "包内 %d 处改动只按 AddNode 追加新点，数量不限。" % ops)
+                     "草稿内 %d 处改动只按 AddNode 追加新点，数量不限。" % ops)
         elif grow and ops == 0:
-            alert = ("注意：空白地图（grow）+ 包内 0 处改动。进图后原生点全部禁用、"
+            alert = ("注意：空白地图（grow）+ 草稿内 0 处改动。进图后原生点全部禁用、"
                      "又不会新建节点，人机没有可走路点，不会移动。")
         elif grow:
             alert = ("空白地图（grow）：原生点全部禁用，节点按 AddNode 新建，"
-                     "包内 %d 处改动不受原生点数限制。" % ops)
+                     "草稿内 %d 处改动不受原生点数限制。" % ops)
         else:
-            alert = "增量改动：包内 %d 处改动，套在原生点上执行。" % ops
+            alert = "增量改动：草稿内 %d 处改动，套在原生点上执行。" % ops
 
         top = ctk.CTkToplevel(self)
-        top.title("启动预检 · 测试包模式")
+        top.title("启动预检 · 编辑中")
         top.resizable(False, False)
         top.transient(self)
         if bool(self.topmost_var.get()):
@@ -769,8 +789,8 @@ class App(Kit, PackMixin, MapTab, VisTab, ExportTab, HotkeyTab, WaypointTab, Rec
 
         grid = ctk.CTkFrame(top, fg_color="transparent")
         grid.pack(fill="x", padx=14)
-        cells = [("数据版本", "② 测试包（packs）"),
-                 ("测试包", self.disp_of(name) or name.split("/")[-1]),
+        cells = [("数据版本", "② 编辑中（packs）"),
+                 ("本图草稿", self.folder_label(name) if hasattr(self, "folder_label") else name),
                  ("生效地图", where), ("生效范围", scope)]
         for i, (k, v) in enumerate(cells):
             cell = ctk.CTkFrame(grid, corner_radius=7, fg_color="#262626",
@@ -835,8 +855,8 @@ class App(Kit, PackMixin, MapTab, VisTab, ExportTab, HotkeyTab, WaypointTab, Rec
         UCF_MOD=1 是通行证。三档启动的路径也在这里定（数据全在 ②，③ 只当运行环境）：
           UCF_EXPORT_DIR     -> ② 开发版 vis（Ctrl+E 导出、navmesh、_seen_ 都写这里）
           UCF_PACK_DIR       -> ② 开发版 packs（编辑中）
-          成品：UCF_PACK_DIR=②\final + UCF_PACK=<版本名> —— 一版一目录，和编辑中同一套逻辑
-          编辑中：UCF_PACK=<包>（可写，游戏内存回包里）
+          成品：UCF_PACK_DIR=② + UCF_PACK=final —— 读 final\<指纹>.txt，和编辑中同一套逻辑
+          编辑中：UCF_PACK=②\packs\<图>（可写，游戏内存回草稿）
           原版：总开关关，插件待机
         """
         env = dict(os.environ)
@@ -845,10 +865,13 @@ class App(Kit, PackMixin, MapTab, VisTab, ExportTab, HotkeyTab, WaypointTab, Rec
         env["UCF_PACK_DIR"] = PACKS
         # 2026-11-23：日志写到工程端 log\，游戏目录不再生成；插件建不出目录才落回游戏端
         env["UCF_LOG_DIR"] = LOG_DIR
-        try:
-            os.makedirs(LOG_DIR, exist_ok=True)
-        except OSError:
-            pass
+        # 2026-11-24：编辑标记（蹲守点/守点/守区/tag）也放工程端，按地图分子文件夹
+        env["UCF_MARKERS_DIR"] = MARKERS
+        for _d in (LOG_DIR, MARKERS):
+            try:
+                os.makedirs(_d, exist_ok=True)
+            except OSError:
+                pass
         pk = self.pack_dict() if hasattr(self, "seg_mode") else {}
         enabled = bool(self.master_var.get()) if hasattr(self, "master_var") else True
         note = "mod 已启用"
@@ -856,33 +879,32 @@ class App(Kit, PackMixin, MapTab, VisTab, ExportTab, HotkeyTab, WaypointTab, Rec
             # 总开关关 = 插件加载但待机（plugin.c）；状态行别再写「mod + 测试包」
             note = "插件总开关关闭：插件待机（不读 nav、不出菜单）"
         elif pk.get("on") and pk.get("name"):
-            env["UCF_PACK"] = pk["name"]           # 地图文件夹/包名，插件按子目录读
-            env.pop("UCF_NAV_READONLY", None)      # 测试包允许游戏内保存
-            note = "mod + 编辑中 %s" % pk["name"].split("/")[-1]
-            if pk.get("only_map") and pk.get("fp"):
-                env["UCF_FP"] = pk["fp"]
+            env["UCF_PACK"] = pk["name"]           # 只有一层：packs\\<地图文件夹>
+            env.pop("UCF_NAV_READONLY", None)      # 草稿允许游戏内保存
+            label = self.folder_label(pk["name"]) if hasattr(self, "folder_label") else pk["name"]
+            note = "mod + 编辑中 %s" % label
+            if pk.get("fp"):
+                env["UCF_FP"] = pk["fp"]           # 永远只套这一张图，别的图跳过
                 env["UCF_FPLABEL"] = pk.get("label") or pk["map"]
                 note += "（只对 %s）" % (pk.get("label") or pk["map"])
         else:
-            # 成品：读 ②\final\<版本>\，而且**按「包」启动** —— UCF_PACK_DIR=final +
-            # UCF_PACK=<版本名>，插件走和编辑中完全相同的加载路径（grow/keep 建点、
-            # 0 点图都照常），所以在成品档里玩起来和编辑中一模一样。
-            # 只读靠文件属性（prepare_final_dir 每次启动前设好），游戏内保存会失败。
-            ver = self.final_selected() if hasattr(self, "opt_final") else final_current_name()
-            d = prepare_final_dir(ver)
+            # 成品：UCF_PACK_DIR=dev + UCF_PACK=final，插件读 dev\\final\\<指纹>.txt。
+            # 和编辑中完全同一套加载逻辑（grow/keep/0 点图都照常），只是文件带只读属性。
+            st = final_stats()
+            d = prepare_final_root() if st.get("n") else ""
             if d:
-                env["UCF_PACK_DIR"] = FINAL_ROOT
-                env["UCF_PACK"] = ver
+                env["UCF_PACK_DIR"] = DEV
+                env["UCF_PACK"] = "final"
                 env["UCF_NAV_DIR"] = d             # 万一包名被挡：退回同一个目录
                 env["UCF_NAV_READONLY"] = "1"
                 for k in ("UCF_FP", "UCF_FPLABEL"):
                     env.pop(k, None)
-                note = "mod + 成品 %s（只读）" % ver
+                note = "mod + 成品（%d 张图，只读）" % st["n"]
             else:
-                # 成品里还没有版本：不读任何路线数据（等于原版）
+                # 成品里还没有任何图：不读任何路线数据（等于原版）
                 for k in ("UCF_PACK", "UCF_FP", "UCF_FPLABEL", "UCF_NAV_DIR"):
                     env.pop(k, None)
-                note = "mod + 成品（还没有版本，等于原版）"
+                note = "mod + 成品（还没有发布，等于原版）"
         return env, note
 
     def launch_game(self):
@@ -894,7 +916,7 @@ class App(Kit, PackMixin, MapTab, VisTab, ExportTab, HotkeyTab, WaypointTab, Rec
         if (bool(self.master_var.get()) and pk.get("on") and pk.get("name")
                 and not self._mute_preflight):
             if not self.preflight_start():
-                self.set_status("已取消启动（测试包 %s）" % pk.get("name"))
+                self.set_status("已取消启动（草稿 %s）" % pk.get("name"))
                 return
         # 通行证：只有这里启动才会带上 UCF_MOD=1，插件据此决定是否工作
         env, note = self.game_env()

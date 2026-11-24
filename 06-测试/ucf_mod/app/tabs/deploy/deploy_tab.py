@@ -125,25 +125,15 @@ class DeployTab:
         self.exe_path_lbl.pack(fill="x", padx=12, pady=(0, 2))
 
         # 2026-11-22 用户要求：记住用过的几个游戏位置，能挑一个启动
-        hrow = ctk.CTkFrame(box, fg_color="transparent")
-        hrow.pack(fill="x", padx=12, pady=(0, 6))
-        ctk.CTkLabel(hrow, text="历史位置", font=FONT_S, text_color="#9aa0a6",
-                     width=56, anchor="w").pack(side="left")
-        self.hist_var = ctk.StringVar(value="（还没有记录）")
-        self.hist_menu = ctk.CTkOptionMenu(hrow, values=["（还没有记录）"], variable=self.hist_var,
-                                           width=390, height=26, font=FONT_C,
-                                           fg_color=GREY, button_color="#4a5058",
-                                           command=self._on_hist_pick)
-        self.hist_menu.pack(side="left", padx=(8, 6), fill="x", expand=True)
-        ctk.CTkButton(hrow, text="切换并重启", width=100, height=26, font=FONT_S,
-                      command=self.switch_selected).pack(side="left")
-        ctk.CTkButton(hrow, text="忘记", width=56, height=26, font=FONT_S,
-                      fg_color="#5a3434", hover_color="#6d3f3f",
-                      command=self.forget_selected).pack(side="left", padx=(6, 0))
-        # 下拉框里只放短标签（区分用的文件夹名），完整路径单独一行显示，不靠猜
-        self.hist_path_lbl = ctk.CTkLabel(box, text="", font=("Consolas", 11),
-                                          text_color="#7f8792", anchor="w")
-        self.hist_path_lbl.pack(fill="x", padx=12, pady=(0, 4))
+        # 2026-11-24 用户反馈：下拉框要「先选再点按钮」，选中的那条还藏在弹层里，
+        # 换成一列列表行 —— 每行自带「切换 / 忘记」，点一下就换，不用先选中。
+        hhead = ctk.CTkFrame(box, fg_color="transparent")
+        hhead.pack(fill="x", padx=12, pady=(0, 2))
+        ctk.CTkLabel(hhead, text="历史位置", font=FONT_S, text_color="#9aa0a6").pack(side="left")
+        ctk.CTkLabel(hhead, text="「编辑」可起名字、写备注", font=FONT_S,
+                     text_color="#6b7280").pack(side="right")
+        self.hist_box = ctk.CTkFrame(box, fg_color="transparent")
+        self.hist_box.pack(fill="x", padx=12, pady=(0, 6))
 
         brow = ctk.CTkFrame(box, fg_color="transparent")
         brow.pack(fill="x", padx=12, pady=(0, 10))
@@ -205,52 +195,136 @@ class DeployTab:
         self._refresh_history()
 
     def _refresh_history(self):
-        r"""把最近用过的游戏位置灌进下拉框。
+        r"""重建历史位置列表：一行一个位置，动作就在这一行上。
 
-        下拉框只放短标签（区分用的文件夹名 + 盘符），完整路径单独一行显示——
-        路径一长，中间省略容易把 test-1 这种关键层级吃掉，光看下拉框会选错。
+        2026-11-24 用户反馈：下拉框只承载「选中」、按钮另挂在右边，等于两次操作，
+        选中的那条还折在弹层里看不见。改成一列行后切换点一次就完，当前项靠
+        边框 + 「在用」标出来，目录不存在的直接标红并禁用切换。
         """
+        for w in self.hist_box.winfo_children():
+            w.destroy()
         hist = P.load_history()
-        self._hist_map = {}
-        values = []
-        for item in hist:
-            g = item["game_dir"]
-            drive = os.path.splitdrive(g)[0] or "?"
-            base = "%s（%s）" % (_tag_of(g), drive)
-            if item.get("current"):
-                base += " · 在用"
-            if not item["exists"]:
-                base += " · 不存在"
-            label, n = base, 2
-            while label in self._hist_map:
-                label = "%s #%d" % (base, n)
-                n += 1
-            self._hist_map[label] = g
-            values.append(label)
-        if not values:
-            values = ["（还没有记录）"]
-        self.hist_menu.configure(values=values)
-        cur = str(P.game_dir_of()).lower()
-        for label, g in self._hist_map.items():
-            if g.lower() == cur:
-                self.hist_var.set(label)
-                self._on_hist_pick(label)
-                break
-        else:
-            self.hist_var.set(values[0])
-            self._on_hist_pick(values[0])
-
-    def _on_hist_pick(self, choice=None):
-        g = getattr(self, "_hist_map", {}).get(choice or self.hist_var.get(), "")
-        self.hist_path_lbl.configure(text=g or "（还没有记录）",
-                                     text_color="#7f8792" if os.path.isdir(g) else "#c92a2a")
-
-    def switch_selected(self):
-        g = getattr(self, "_hist_map", {}).get(self.hist_var.get())
-        if not g:
+        if not hist:
+            ctk.CTkLabel(self.hist_box, text="（还没有记录，选一次游戏位置就会记下来）",
+                         font=FONT_S, text_color="#6b7280", anchor="w").pack(fill="x", pady=2)
             return
+        for item in hist:
+            self._hist_row(item["game_dir"], bool(item.get("current")), bool(item["exists"]),
+                           item.get("name") or "", item.get("note") or "")
+
+    def _hist_row(self, game_dir, is_current, exists, name, note):
+        r"""一行 = 两行信息：上面是名字 + 备注 + 动作，下面是路径。
+
+        2026-11-24 用户要求：备注跟在名字后面同一行（一眼就能对上「这份是干嘛的」），
+        路径单独放第二行，不再被备注挤掉。
+        """
+        r = ctk.CTkFrame(self.hist_box, corner_radius=6,
+                         fg_color="#2b3038" if is_current else "#22262c")
+        r.pack(fill="x", pady=2)
+
+        l1 = ctk.CTkFrame(r, fg_color="transparent")
+        l1.pack(fill="x", padx=(8, 6), pady=(4, 0))
+        ctk.CTkLabel(l1, text="●", font=("Segoe UI", 9), width=12, height=18,
+                     text_color="#2f9e44" if is_current else "#5b626b").pack(
+            side="left", padx=(0, 6))
+        title = name or _tag_of(game_dir)
+        if len(title) > 16:                       # 太长的名字会把整行撑开
+            title = title[:15] + "…"
+        ctk.CTkLabel(l1, text=title, font=FONT, height=20, anchor="w",
+                     text_color="#e6edf3" if name else "#9aa0a6").pack(side="left")
+
+        if is_current:
+            ctk.CTkLabel(l1, text="在用", font=FONT_S, text_color="#2f9e44").pack(
+                side="right")
+            if not exists:
+                ctk.CTkLabel(l1, text="目录不存在", font=FONT_S,
+                             text_color="#c92a2a").pack(side="right", padx=(0, 8))
+            ctk.CTkButton(l1, text="编辑", width=48, height=22, font=FONT_S,
+                          fg_color=GREY, hover_color=GREY_H,
+                          command=lambda: self.edit_entry(game_dir, name, note)).pack(
+                side="right", padx=(0, 8))
+        else:
+            ctk.CTkButton(l1, text="忘记", width=48, height=22, font=FONT_S,
+                          fg_color="#5a3434", hover_color="#6d3f3f",
+                          command=lambda: self.forget(game_dir)).pack(
+                side="right")
+            ctk.CTkButton(l1, text="切换", width=52, height=22, font=FONT_S,
+                          fg_color="#2f9e44" if exists else GREY,
+                          hover_color="#37b24d" if exists else GREY,
+                          state="normal" if exists else "disabled",
+                          command=lambda: self.switch_to(game_dir)).pack(
+                side="right", padx=(6, 0))
+            if not exists:
+                ctk.CTkLabel(l1, text="目录不存在", font=FONT_S,
+                             text_color="#c92a2a").pack(side="right", padx=(0, 8))
+            ctk.CTkButton(l1, text="编辑", width=48, height=22, font=FONT_S,
+                          fg_color=GREY, hover_color=GREY_H,
+                          command=lambda: self.edit_entry(game_dir, name, note)).pack(
+                side="right", padx=(0, 6))
+
+        # 备注放在最后 pack：先让右边的按钮占好位，剩下的中间空档正好给它
+        if note:
+            ctk.CTkLabel(l1, text=note if len(note) <= 40 else note[:39] + "…",
+                         font=FONT_S, height=18, anchor="w", text_color="#9aa0a6").pack(
+                side="left", padx=(8, 0), fill="x", expand=True)
+
+        l2 = ctk.CTkFrame(r, fg_color="transparent")
+        l2.pack(fill="x", padx=(26, 10), pady=(0, 4))
+        ctk.CTkLabel(l2, text=_compact(game_dir, 80), font=FONT_C, height=18, anchor="w",
+                     text_color="#c92a2a" if not exists else "#7f8792").pack(
+            side="left", fill="x", expand=True)
+
+    def edit_entry(self, game_dir, name, note):
+        r"""给这份位置起名字、写备注（只改显示，不动实际路径）。"""
+        dlg = ctk.CTkToplevel(self.console)
+        dlg.title("名字与备注")
+        dlg.geometry("440x266")
+        dlg.resizable(False, False)
+        dlg.transient(self.console)
+
+        ctk.CTkLabel(dlg, text="名字（留空就显示文件夹名）", font=FONT_S,
+                     text_color="#9aa0a6").pack(anchor="w", padx=16, pady=(14, 2))
+        name_var = ctk.StringVar(value=name)
+        name_entry = ctk.CTkEntry(dlg, textvariable=name_var, font=FONT, height=30)
+        name_entry.pack(fill="x", padx=16)
+
+        ctk.CTkLabel(dlg, text="备注（比如：打了运输船测试包）", font=FONT_S,
+                     text_color="#9aa0a6").pack(anchor="w", padx=16, pady=(10, 2))
+        note_var = ctk.StringVar(value=note)
+        ctk.CTkEntry(dlg, textvariable=note_var, font=FONT, height=30).pack(
+            fill="x", padx=16)
+
+        ctk.CTkLabel(dlg, text=_compact(game_dir, 58), font=FONT_C, text_color="#7f8792",
+                     anchor="w", justify="left", wraplength=396).pack(
+            fill="x", padx=16, pady=(10, 0))
+
+        def save():
+            try:
+                P.rename_history(game_dir, name_var.get().strip(), note_var.get().strip())
+            except OSError as exc:
+                messagebox.showerror("写配置失败", str(exc), parent=dlg)
+                return
+            dlg.destroy()
+            self._refresh_history()
+
+        bar = ctk.CTkFrame(dlg, fg_color="transparent")
+        bar.pack(fill="x", padx=16, pady=(14, 0))
+        ctk.CTkButton(bar, text="保存", width=80, height=28, font=FONT_S,
+                      fg_color="#2f9e44", hover_color="#37b24d",
+                      command=save).pack(side="right")
+        ctk.CTkButton(bar, text="取消", width=70, height=28, font=FONT_S,
+                      fg_color=GREY, hover_color=GREY_H,
+                      command=dlg.destroy).pack(side="right", padx=(0, 8))
+        dlg.bind("<Return>", lambda e: save())
+        dlg.bind("<Escape>", lambda e: dlg.destroy())
+        dlg.grab_set()
+        name_entry.focus_set()
+
+    def switch_to(self, game_dir):
+        g = game_dir
         if not os.path.isfile(os.path.join(g, "UnityCrossFire.exe")):
             messagebox.showerror("位置不存在", "这个目录里没有 UnityCrossFire.exe：\n" + g)
+            self._refresh_history()
             return
         try:
             P.save_deploy(g)
@@ -258,16 +332,21 @@ class DeployTab:
             messagebox.showerror("写配置失败", str(exc))
             return
         if messagebox.askyesno("切换游戏位置",
-                               "把控制台切到：\n%s\n\n现在重启控制台让它生效？" % g):
+                               "把控制台切到「%s」？\n\n%s\n\n现在重启控制台让它生效？"
+                               % (self._label_of(g), g)):
             restart_console()
         else:
             self.hint_lbl.configure(text="已记住，下次启动生效")
 
-    def forget_selected(self):
-        g = getattr(self, "_hist_map", {}).get(self.hist_var.get())
-        if not g:
-            return
-        if not P.forget_history(g):
+    def _label_of(self, game_dir):
+        """弹窗里用用户起的名字，没起名字就退回文件夹名。"""
+        for item in P.load_history():
+            if item["game_dir"].lower() == str(game_dir).lower() and item.get("name"):
+                return item["name"]
+        return _tag_of(game_dir)
+
+    def forget(self, game_dir):
+        if not P.forget_history(game_dir):
             messagebox.showinfo("删不了", "这是当前正在用的位置；先切到别的，再回来忘掉它。")
             return
         self._refresh_history()

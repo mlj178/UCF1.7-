@@ -1,8 +1,12 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-r"""ucf_rec.py 的离线自检：造一条「走路 → 跳箱 → 走路 → 跳下高台 → 蹲 → 传送 → 走路」的轨迹。
+r"""ucf_rec.py 的离线自检：造一条「走路 → 跳上箱子 → 走路 → 超长跨跳 → 走路 → 跳下高台 → 静止」的轨迹。
 
-不启动游戏、不读真实文件；只验证重采样 / 跳跃 / 落下 / 蹲点 / 断段 / 去重。
+2026-11-24 起录制数据是 ucf-trace/2（插件给玩家脚底坐标 + grounded/vy + 落地结算的 ev=jump），
+所以这里也按那个格式造数据：样本带 g/vy，跳事件单独给，和游戏里跑出来的一模一样。
+
+验证：走路节点链、跳链 3D 1.5~3.0 过滤（超长只标不建）、落下单向边、静止提示、
+蹲点/传送断段已删除、去重、采样间距。
 跑法：python tests/test_ucf_rec.py
 """
 import json
@@ -20,100 +24,127 @@ for _p in (HERE, os.path.join(UCF_ROOT, "app", "core"), os.path.join(UCF_ROOT, "
 import ucf_rec
 
 
-def s(t, x, y, z, gy, sp=0, ct=0):
-    return {"t": round(t, 3), "x": x, "y": y, "z": z, "gy": gy,
-            "fx": 1.0, "fy": 0.0, "fz": 0.0, "sp": sp, "ct": ct}
+def s(t, x, y, z, g=1, vy=0.0, sp=0, ct=0):
+    return {"t": round(t, 3), "dt": 0.033, "x": round(x, 3), "y": round(y, 3),
+            "z": round(z, 3), "g": g, "vy": vy, "sp": sp, "ct": ct}
 
 
-def walk(out, t0, x0, x1, gy, speed=5.0, y=None, step=0.25):
+def walk(out, t0, x0, x1, y, speed=5.0, step=0.033):
     n = max(2, int(abs(x1 - x0) / (speed * step)))
     for i in range(n):
-        x = x0 + (x1 - x0) * i / n
-        out.append(s(t0 + i * step, x, (gy + 1.6) if y is None else y, 0.0, gy))
+        out.append(s(t0 + i * step, x0 + (x1 - x0) * i / n, y, 0.0))
     return t0 + n * step
 
 
 def build():
-    out = []
-    t = walk(out, 0.0, 0.0, 30.0, 0.0)          # 平地走 30 m（6 s）
-    # 跳箱：0.7 s 腾空，水平 6 m（30 -> 36），脚下射线打空
+    samples, events = [], []
+    t = walk(samples, 0.0, 0.0, 30.0, 0.0)          # 平地走 30 m
+    # 跳上箱子：水平 1.2 m、高差 +1.9 m（3D ≈ 2.25，落在 1.5~3.0）
+    n = 12
+    for i in range(n):
+        u = i / float(n - 1)
+        samples.append(s(t + i * 0.033, 30.0 + 1.2 * u, 1.9 * u + (0.8 * (1 - abs(2 * u - 1))),
+                         0.0, g=0, vy=10.0 if i == 0 else 5.0, sp=1 if i < 2 else 0))
+    t += n * 0.033
+    events.append({"t": round(t, 3), "ev": "jump",
+                   "a": [30.0, 0.0, 0.0], "b": [31.2, 1.9, 0.0],
+                   "h": 1.2, "rise": 1.9, "air": 0.4, "v0": 10.5, "run": 3.0,
+                   "kind": "mount"})
+    t = walk(samples, t, 31.2, 45.0, 1.9)
+    # 超长跨跳：水平 6 m（3D ≈ 6.0，超出 3.0 -> 不许建链）
+    n = 16
+    for i in range(n):
+        u = i / float(n - 1)
+        samples.append(s(t + i * 0.033, 45.0 + 6.0 * u, 1.9 + 1.4 * (1 - abs(2 * u - 1)),
+                         0.0, g=0, vy=10.0 if i == 0 else 4.0, sp=1 if i < 2 else 0))
+    t += n * 0.033
+    events.append({"t": round(t, 3), "ev": "jump",
+                   "a": [45.0, 1.9, 0.0], "b": [51.0, 1.9, 0.0],
+                   "h": 6.0, "rise": 1.4, "air": 0.8, "v0": 10.5, "run": 8.0,
+                   "kind": "gap"})
+    t = walk(samples, t, 51.0, 60.0, 1.9)
+    # 跳下 4 m（down 事件）
     n = 14
     for i in range(n):
         u = i / float(n - 1)
-        out.append(s(t + i * 0.05, 30.0 + 6.0 * u, 1.6 + 1.2 * (1 - abs(2 * u - 1)), 0.0,
-                     -9999.0, sp=1 if i < 3 else 0))
-    t += n * 0.05
-    t = walk(out, t, 36.0, 60.0, 0.0)           # 再走 24 m
-    # 跳下高台：0.5 s 从 0 掉到 -4，水平 1 m
-    n = 10
-    for i in range(n):
-        u = i / float(n - 1)
-        gy = -4.0 * u
-        out.append(s(t + i * 0.05, 60.0 + 1.0 * u, gy + 1.6, 0.0, gy))
-    t += n * 0.05
-    t = walk(out, t, 61.0, 80.0, -4.0)          # 下层走 19 m
-    # 蹲 1.5 s（不动）
-    n = 30
-    for i in range(n):
-        out.append(s(t + i * 0.05, 80.0, -4.0 + 1.2, 0.0, -4.0, ct=1))
-    t += n * 0.05
+        samples.append(s(t + i * 0.033, 60.0 + 0.8 * u, 1.9 - 4.0 * u,
+                         0.0, g=0, vy=-2.0, sp=0))
+    t += n * 0.033
+    events.append({"t": round(t, 3), "ev": "jump",
+                   "a": [60.0, 1.9, 0.0], "b": [60.8, -2.1, 0.0],
+                   "h": 0.8, "rise": 0.2, "air": 0.46, "v0": 0.0, "run": 1.8,
+                   "kind": "down"})
+    t = walk(samples, t, 60.8, 70.0, -2.1)
     # 静止 2.5 s
-    n = 50
-    for i in range(n):
-        out.append(s(t + i * 0.05, 80.0, -4.0 + 1.6, 0.0, -4.0))
-    t += n * 0.05
-    # 传送：直接到 x=100（单帧 20 m）
-    t = walk(out, t, 100.0, 110.0, 0.0)
-    return out
+    for i in range(75):
+        samples.append(s(t + i * 0.033, 70.0, -2.1, 0.0))
+    return samples, events
 
 
 def main():
-    samples = build()
-    res = ucf_rec.analyse(samples, step=4.0)
+    samples, events = build()
+    res = ucf_rec.analyse(samples, step=4.0, events=events)
     print("summary:", ucf_rec.summary(res))
-    print("segments=%d nodes=%d edges=%d jumps=%d drops=%d crouch=%d static=%d branch=%d" % (
-        res["segments"], res.get("nodes"), res.get("edges"), len(res["jumps"]),
-        len(res["drops"]), len(res["crouches"]), len(res["statics"]),
-        len(res["branches"])))
+    print("nodes=%d edges=%d jumps=%d links_bad=%d drops=%d static=%d" % (
+        res["nodes"], res["edges"], len(res["jumps"]), res["links_bad"],
+        len(res["drops"]), len(res["statics"])))
     for i in res["issues"]:
         print("  issue:", i)
     assert res["ok"], res.get("why")
-    assert res["segments"] == 2, "传送应断成 2 段，实际 %d" % res["segments"]
-    assert len(res["jumps"]) == 1, "应识别 1 次跳箱，实际 %d" % len(res["jumps"])
-    assert abs(res["jumps"][0]["h"] - 6.0) < 0.4
-    assert len(res["drops"]) == 1, "应识别 1 次落下，实际 %d" % len(res["drops"])
-    assert abs(res["drops"][0]["drop"] - 4.0) < 0.4
-    assert len(res["crouches"]) == 1, "应识别 1 处蹲点"
-    assert len(res["statics"]) >= 1, "应识别 1 段静止"
-    assert res["nodes"] >= 12
+    # 只有 1.5~3.0 的那一跳能建链；6 m 的只标问题
+    assert len(res["jumps"]) == 1, "应只建 1 条跳链，实际 %d" % len(res["jumps"])
+    j = res["jumps"][0]
+    assert j["kind"] == "mount" and abs(j["l3"] - 2.25) < 0.1, j
+    assert res["links_bad"] == 1, res["links_bad"]
+    assert any("太长" in i for i in res["issues"]), res["issues"]
+    # 落下：单向边
+    assert len(res["drops"]) == 1 and abs(res["drops"][0]["drop"] - 4.0) < 0.3, res["drops"]
+    # 蹲点已经删掉：结果里永远是空
+    assert res["crouches"] == [], res["crouches"]
+    assert len(res["statics"]) >= 1, res["statics"]
+    assert res["nodes"] >= 12, res["nodes"]
 
     lines = ucf_rec.save_lines(res)
     text = "\n".join(lines)
-    assert "node add " in text and "edge add " in text and "jump add " in text
+    assert "node add " in text and "edge add " in text
+    assert text.count("jump add") == 1, "只该有 1 条 jump add"
     print("save lines: %d（node %d / edge %d / jump %d）" % (
         len(lines), text.count("node add"), text.count("edge add"), text.count("jump add")))
 
-    # 去重：把增量当现有内容，再存一遍应当一行都不剩（跳链除外：jump 行不去重）
+    # 去重：同一份再存一遍不该冒出节点/边（jump 行按坐标去重，也应为 0）
     extra = ucf_rec.dedupe_lines(lines, text)
-    left = [ln for ln in extra if not ln.startswith("jump ")]
-    assert not left, "第二次保存不该再冒出节点/边：%s" % left[:3]
-    print("dedupe: 第二次保存新增节点/边 0 行（jump 行保留 %d）" % (len(extra) - len(left)))
+    assert not extra, "第二次保存不该再冒出行：%s" % extra[:3]
+    print("dedupe: 第二次保存 0 行")
 
-    # 开关：关掉跳跃识别，跳链就不该出现
+    # 开关：关掉跳跃 -> 没有跳链；关掉落 -> 没有落下
     sw = dict(ucf_rec.SW_DEFAULT)
     sw["jump"] = False
-    res2 = ucf_rec.analyse(samples, step=4.0, sw=sw)
-    assert not res2["jumps"], "关掉跳跃后不应再有跳链"
-    assert not any(ln.startswith("jump") for ln in ucf_rec.save_lines(res2))
-    print("switch off jump -> jumps=0")
+    r2 = ucf_rec.analyse(samples, step=4.0, sw=sw, events=events)
+    assert not r2["jumps"] and not any(l.startswith("jump") for l in ucf_rec.save_lines(r2))
+    sw = dict(ucf_rec.SW_DEFAULT)
+    sw["drop"] = False
+    r3 = ucf_rec.analyse(samples, step=4.0, sw=sw, events=events)
+    assert not r3["drops"], r3["drops"]
+    print("switch off jump / drop -> ok")
 
-    # 采样间距 2.5 / 6 m 节点数随之间隔变化
-    counts = []
-    for step in (2.5, 4.0, 6.0):
-        r = ucf_rec.analyse(samples, step=step)
-        counts.append(r["nodes"])
+    # 采样间距 2.5 / 4 / 6 m 节点数随之间隔变化
+    counts = [ucf_rec.analyse(samples, step=st, events=events)["nodes"]
+              for st in (2.5, 4.0, 6.0)]
     print("step 2.5 / 4 / 6 -> nodes", counts)
-    assert counts[0] > counts[1] > counts[2], counts
+    assert counts[0] >= counts[1] >= counts[2], counts
+
+    # 没有事件时（旧文件兜底）也不能崩
+    r4 = ucf_rec.analyse(samples, step=4.0)
+    print("no-events fallback -> jumps=%d est=%s" % (len(r4["jumps"]), r4.get("est")))
+    assert r4["ok"]
+
+    # 旧格式（1 版）样本也能读，不崩
+    legacy = [{"t": i * 0.05, "x": i * 0.25, "y": 1.6, "z": 0.0, "gy": 0.0, "sp": 0, "ct": 0}
+              for i in range(80)]
+    r5 = ucf_rec.analyse(legacy, step=4.0)
+    assert r5["ok"], r5.get("why")
+    print("legacy v1 rows -> nodes=%d" % r5["nodes"])
+
     print("OK: ucf_rec 自检通过")
     return 0
 

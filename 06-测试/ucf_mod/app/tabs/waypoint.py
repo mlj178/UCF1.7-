@@ -14,8 +14,7 @@ import customtkinter as ctk
 from ui.consts import CMP_COLOR, CMP_SHORT, CMP_TEXT, FONT_S
 from ui.maps import _navmesh_name, find_map_doc, load_maps, load_scene_counts, maps_not_listed
 from ui.packs import (
-    final_current_name, final_versions, load_packs, migrate_flat_packs, pack_summary,
-    pack_target_fp, pack_txt,
+    final_stats, load_packs, pack_summary, pack_target_fp, pack_txt,
 )
 from ui.util import _cut, file_sha256
 
@@ -55,37 +54,48 @@ class WaypointTab:
         只负责选图/包、写 ucf_mod.json 开关、给运行中的插件发 ucf_navcmd，
         并显示当前图的指纹与原生点/边数。
         """
-        # 测试包 / 地图选择的状态由本页持有（2026-11-19 「测试数据」页删除后并入这里）；
-        # 数据页、车测页仍然读 opt_pack / opt_map / seg_mode。
+        # 地图 / 启动档由本页持有；一张图只有一个草稿，不再有包/版本下拉。
         self.maps = load_maps()                 # [(level, 中文名, 指纹)]
         self.map_disp = {("%s（%s）" % (lab, lv)): (lv, lab, fp) for lv, lab, fp in self.maps}
         pk = self.cfg.get("pack") if isinstance(self.cfg.get("pack"), dict) else {}
         self.pack_on = tk.BooleanVar(value=bool(pk.get("on", False)))
-        self.pack_only = tk.BooleanVar(value=bool(pk.get("only_map", True)))
-        self.pack_name = str(pk.get("name") or "")
         self.pack_map = str(pk.get("map") or (self.maps[0][0] if self.maps else ""))
         self.wp_scene = load_scene_counts()
-        self.pack_disp = {}                     # 下拉框显示文字 → 包 id（地图文件夹/包名）
-        self.ensure_pack_folders()              # 按地图自动建 packs\<场景名>\
-        migrate_flat_packs()                    # 根目录的老包挪进地图文件夹
         body = ctk.CTkScrollableFrame(tab, corner_radius=0, fg_color="transparent")
         body.pack(fill="both", expand=True, padx=2, pady=2)
         self.wp_body = body        # 「去人机路点改」跳过来时滚回 ① 卡
-        # ① 启动档：编辑中 / 成品 两页（2026-11-21 用户要求：两档内容分开成两页，
-        #    页内再用标签切换；不再把两档挤在同一张卡里只换个下拉）
-        box = self.wp_card(body, "启动档", "两页各管一档；底部「开始游戏」跟着当前页走")
+        # ① 启动档 + 当前地图（编辑和成品共用一个地图选择）
+        box = self.wp_card(body, "启动档", "地图只用于编辑 / 查看")
         self.card_mode = box
         srow = ctk.CTkFrame(box, fg_color="transparent")
         srow.pack(fill="x", padx=12, pady=(6, 0))
         self.seg_mode = ctk.CTkSegmentedButton(
-            srow, values=["编辑中（packs·可写）", "成品（只读）"],
+            srow, values=["编辑中（可写）", "成品（只读）"],
             width=470, height=36, dynamic_resizing=False,
             font=("Microsoft YaHei UI", 13, "bold"),
             selected_color="#2f6fdb", selected_hover_color="#255bb4",
             unselected_color="#2a2f36", unselected_hover_color="#343a42",
             command=lambda _v: self.on_page_change())
         self.seg_mode.pack(side="left")
-        self.seg_mode.set("编辑中（packs·可写）" if self.pack_on.get() else "成品（只读）")
+        self.seg_mode.set("编辑中（可写）" if self.pack_on.get() else "成品（只读）")
+
+        mrow = ctk.CTkFrame(box, fg_color="transparent")
+        mrow.pack(fill="x", padx=12, pady=(6, 0))
+        ctk.CTkLabel(mrow, text="当前地图", font=FONT_S, text_color="#9aa0a6",
+                     width=64, anchor="w").pack(side="left", padx=(0, 6))
+        self.opt_map = ctk.CTkOptionMenu(
+            mrow, values=list(self.map_disp) or ["（没有可测的路点图）"],
+            font=FONT_S, width=250,
+            command=lambda _v: self.on_pack_change())
+        self.opt_map.pack(side="left", padx=(0, 8))
+        if self.pack_map:
+            for mdisp, (lv, _lab, _fp) in self.map_disp.items():
+                if lv == self.pack_map:
+                    self.opt_map.set(mdisp)
+                    break
+        ctk.CTkLabel(mrow, text="草稿和成品都只对这张图", font=FONT_S,
+                     text_color="#8a8f96").pack(side="left")
+
         self.lbl_mode = ctk.CTkLabel(box, text="", font=FONT_S, text_color="#9aa0a6",
                                      anchor="w", justify="left", wraplength=620)
         self.lbl_mode.pack(fill="x", padx=12, pady=(6, 8))
@@ -139,32 +149,41 @@ class WaypointTab:
         self.update_mode_hint()
         # 对比表：回到成品页时如果它正开着又脏着，当场补上（否则要等用户点标签）
         if (not self.page_is_edit and getattr(self, "_cmp_dirty", False)
-                and getattr(self, "_final_tab", "") == "版本对比"):
+                and str(getattr(self, "_final_tab", "")).startswith("草稿")):
             self.refresh_compare(force=True)
 
     def update_mode_hint(self):
         r"""启动档下面那行话：这一页在做什么、启动会用哪一档。"""
         if not hasattr(self, "lbl_mode"):
             return
+        lv, lab, fp = self.current_map() if hasattr(self, "opt_map") else ("", "", "")
+        where = lab or lv or "这张图"
         if getattr(self, "page_is_edit", True):
-            txt = "编辑中（packs·可写）：选包 + 地图 → 游戏内 F2 加点/连线 → 存回包 → 发布到成品。"
-            name = self.selected_pack() if hasattr(self, "opt_pack") else ""
-            if name:
-                txt += "  当前包：" + (self.disp_of(name) or name)
-        else:
-            ver = self.final_selected() if hasattr(self, "opt_final") else final_current_name()
-            if ver:
-                # 版本名就是测试包名（可能有 20+ 字符），这行只讲这一页在做什么，名字看下面下拉框
-                txt = ("成品（只读）：整版加载，和编辑中是同一个文件，玩起来一样。"
-                       "想做新版本去「编辑中」页改。")
+            if self.draft_exists():
+                man = self.draft_manifest()
+                mode = ("空白地图" if (man.get("grow") or man.get("blank")) else
+                        "原版 + 新增" if man.get("keep") else "增量")
+                nd, ed = self.draft_counts()
+                txt = ("编辑中：%s · %s · 创建 %s · %d 点 / %d 边；"
+                       "进游戏 F2 改完点「发布这张图到成品」。" % (
+                           man.get("name") or where, mode,
+                           (man.get("created") or "-")[:10], nd, ed))
             else:
-                txt = "成品：还没有版本。先去「编辑中」页做好，再点「发布到成品」。"
+                txt = ("编辑中（可写）：%s 还没有草稿。点「开始编辑这张图」，"
+                       "从成品继续 / 空白地图 / 原版+新增 三选一。" % where)
+        else:
+            st = final_stats() if "final_stats" in globals() else {"n": 0}
+            if st.get("n"):
+                txt = ("成品（只读）：当前已发布 %d 张图（每图一份，没有版本）。"
+                       "启动成品 = 这些图一起加载，其余图走原生。" % st["n"])
+            else:
+                txt = "成品：还没有发布任何图。先去「编辑中」做好，再点「发布这张图到成品」。"
         self.lbl_mode.configure(text=txt)
 
     def on_page_change(self):
         r"""启动档切换：整页换掉，并记住这次启动用哪一档（写进 ucf_mod.json）。"""
         self.show_page(self.seg_mode.get())
-        self.on_pack_change(persist=False)      # 只刷新，别在状态行写「已保存 测试包」
+        self.on_pack_change(persist=False)
         self.persist("启动档")
 
     def missing_maps_hint(self):
@@ -189,51 +208,31 @@ class WaypointTab:
         return ("下拉里只有 %d 张有路点图的图；" % len(self.maps)) + "；".join(bits) + "。"
 
     def build_edit_page(self, page):
-        r"""「编辑中」页：「选包与地图」+「发布到成品」两个标签。"""
-        frames, show = self.build_sub_tabs(page, ["选包与地图", "发布到成品"])
+        r"""「编辑中」页：本图草稿 + 发布到成品（一张图只有一个草稿）。"""
+        frames, show = self.build_sub_tabs(page, ["本图草稿", "发布到成品"])
         self.page_edit_tabs = show
 
-        box = self.wp_card(frames["选包与地图"], "测试包", "只对一张图生效")
+        box = self.wp_card(frames["本图草稿"], "本图草稿", "一张图只有一个；可写")
         self.card_pick = box
+        self.lbl_draft = ctk.CTkLabel(box, text="", font=("Microsoft YaHei UI", 12, "bold"),
+                                      anchor="w", justify="left", wraplength=620)
         row = ctk.CTkFrame(box, fg_color="transparent")
-        row.pack(fill="x", padx=12, pady=(6, 0))
-        ctk.CTkLabel(row, text="测试包", font=FONT_S, text_color="#9aa0a6",
-                     width=48, anchor="w").pack(side="left", padx=(0, 6))
-        self.opt_pack = ctk.CTkOptionMenu(
-            row, values=self._pack_values(), font=FONT_S, width=262,
-            command=lambda _v: self.on_pack_change())
-        self.opt_pack.pack(side="left", padx=(0, 6))
-        want = self.resolve_pack_id(self.pack_name)   # 上次选的包重启后接着选中
-        if want and self.disp_of(want):
-            self.opt_pack.set(self.disp_of(want))
-        ctk.CTkButton(row, text="新建测试包", width=96, height=28, font=FONT_S,
-                      fg_color="#2f6fdb", hover_color="#255bb4",
-                      command=self.create_pack).pack(side="left", padx=(0, 6))
-        ctk.CTkButton(row, text="打开目录", width=76, height=28, font=FONT_S,
-                      fg_color="#3a3f47", hover_color="#4a5058",
-                      command=self.open_packs_dir).pack(side="left", padx=(0, 6))
-        ctk.CTkButton(row, text="清空本图", width=80, height=28, font=FONT_S,
-                      fg_color="#8a4b1e", hover_color="#a55d26",
-                      command=self.clear_pack_map).pack(side="left")
+        row.pack(fill="x", padx=12, pady=(2, 0))
+        self.btn_start_draft = ctk.CTkButton(
+            row, text="开始编辑这张图", width=120, height=28, font=FONT_S,
+            fg_color="#2f6fdb", hover_color="#255bb4",
+            command=self.start_or_open_draft)
+        self.btn_start_draft.pack(side="left", padx=(0, 6))
+        self.btn_open_draft = ctk.CTkButton(
+            row, text="打开草稿目录", width=96, height=28, font=FONT_S,
+            fg_color="#3a3f47", hover_color="#4a5058", command=self.open_packs_dir)
+        self.btn_open_draft.pack(side="left", padx=(0, 6))
+        self.btn_reset_draft = ctk.CTkButton(
+            row, text="重置本图草稿", width=96, height=28, font=FONT_S,
+            fg_color="#8a4b1e", hover_color="#a55d26", command=self.clear_pack_map)
+        self.btn_reset_draft.pack(side="left")
+        # 详细状态在顶部「编辑中：…」那行；卡片里只留按钮，窗口矮时不会把按钮挤到下面。
 
-        row = ctk.CTkFrame(box, fg_color="transparent")
-        row.pack(fill="x", padx=12, pady=(6, 0))
-        ctk.CTkLabel(row, text="地图", font=FONT_S, text_color="#9aa0a6",
-                     width=48, anchor="w").pack(side="left", padx=(0, 6))
-        self.opt_map = ctk.CTkOptionMenu(
-            row, values=list(self.map_disp) or ["（没有可测的路点图）"],
-            font=FONT_S, width=250,
-            command=lambda _v: self.on_pack_change())
-        self.opt_map.pack(side="left", padx=(0, 8))
-        if self.pack_map:
-            for disp, (lv, _lab, _fp) in self.map_disp.items():
-                if lv == self.pack_map:
-                    self.opt_map.set(disp)
-                    break
-        ctk.CTkCheckBox(row, text="只对这张图生效", variable=self.pack_only,
-                        font=FONT_S, checkbox_width=18, checkbox_height=18,
-                        command=self.on_pack_change).pack(side="left")
-        # 少的那几张图在这里说清楚：纯面图没有 PointGraph，永远进不了下拉
         hint = self.missing_maps_hint()
         if hint:
             ctk.CTkLabel(box, text=hint, font=FONT_S, text_color="#8a8f96",
@@ -246,9 +245,9 @@ class WaypointTab:
         self.wp_meta.pack(fill="x", padx=12, pady=(6, 0))
         ctk.CTkLabel(
             box,
-            text="测试包按地图归类：packs\\<序号_场景名中文名>\\<包名>\\，序号按《地图对照表》（01 运输船 … 11 新寂静村）。\n"
-                 "两种建法：空白地图（grow，原生点全禁用、从 0 画）/ 原版基础 + 新增（keep，原版路线照常走，只加你的点）。\n"
-                 "两种都不限点数；飓风危城原生 0 点用「空白地图」。测试包只影响选中的图。",
+            text="草稿目录：packs\\<序号_场景名中文名>\\，一张图一个，不再有包名/版本号。\n"
+                 "两种底图：空白地图（grow，原生点全禁用、从 0 画）/ 原版基础 + 新增（keep，原版路线照常走，只加你的点）。\n"
+                 "成品里已有这张图时，默认「从成品继续改」；两种建法都不限点数，飓风危城原生 0 点用「空白地图」。",
             font=FONT_S, text_color="#9aa0a6", anchor="w", justify="left",
             wraplength=620).pack(fill="x", padx=12, pady=(2, 6))
         ctk.CTkLabel(
@@ -256,76 +255,71 @@ class WaypointTab:
             text=("进游戏现场编辑：F2 打开路点菜单（长按 E 备用）；1-9 直选，小键盘 8/2 上下、5 确认、0 返回。\n"
                   "菜单打开时 W/A/S/D/空格仍可移动；选完 A 可走到 B 再按小键盘 5 连边。\n"
                   "按 F2 / 小键盘前先点一下游戏画面，让游戏窗口拿到焦点（控制台在前台时游戏收不到键）。\n"
-                  "空白包=原生点全禁用；必须整图连通：孤立点、出生点、蹲守标记都可能让 Bot 取不到路。"),
+                  "空白底图=原生点全禁用；必须整图连通：孤立点、出生点、蹲守标记都可能让 Bot 取不到路。"),
             font=("Consolas", 11), text_color="#8a8f96", anchor="w",
             justify="left", wraplength=620).pack(fill="x", padx=12, pady=(0, 10))
 
-        box = self.wp_card(frames["发布到成品"], "发布到成品", "编辑中 → 成品（只读）")
+        box = self.wp_card(frames["发布到成品"], "发布这张图", "编辑中 → 成品（只读）")
         ctk.CTkLabel(
             box,
-            text="发布 = 把当前测试包的 <指纹>.txt 原样复制进成品，字节一样 → 玩起来一样。\n"
-                 "默认「新建一版」：以当前版为底整套复制再替换这张图，版本名沿用测试包的名字，老版本全留着；\n"
-                 "也可以只更新当前版。成品里的文件自动设成只读；发完切到上面的「成品」页就能选它启动。",
+            text="发布 = 把本图草稿的 <指纹>.txt 覆盖到 final\\<指纹>.txt，字节一样 → 玩起来一样。\n"
+                 "成品里同图那份会被覆盖；覆盖前旧文件自动进 archive\\final_prev\\（每图最近 5 份，界面不出现）。\n"
+                 "成品文件自动只读；发完切到「成品」页，开始游戏就是它。",
             font=FONT_S, text_color="#9aa0a6", anchor="w", justify="left",
             wraplength=620).pack(fill="x", padx=12, pady=(6, 4))
+        self.lbl_publish = ctk.CTkLabel(box, text="", font=FONT_S, text_color="#8a8f96",
+                                        anchor="w", justify="left", wraplength=620)
+        self.lbl_publish.pack(fill="x", padx=12, pady=(0, 4))
         prow = ctk.CTkFrame(box, fg_color="transparent")
         prow.pack(fill="x", padx=12, pady=(2, 10))
         self.btn_promote = ctk.CTkButton(
-            prow, text="发布到成品（编辑中 → 成品）", font=FONT_S, height=30,
+            prow, text="发布这张图到成品", font=FONT_S, height=30,
             fg_color="#2f9e44", hover_color="#37b24d", command=self.do_promote)
         self.btn_promote.pack(side="left")
-        ctk.CTkLabel(prow, text="默认新建一版、版本名跟包名（老版本全留着）；成品目录 final\\",
+        ctk.CTkLabel(prow, text="成品目录 final\\（每张图一份）",
                      font=FONT_S, text_color="#9aa0a6").pack(side="left", padx=(10, 0))
 
     def build_final_page(self, page):
-        r"""「成品」页：「版本」+「版本对比」两个标签（成品只读，按版本整套启动）。"""
-        frames, show = self.build_sub_tabs(page, ["版本", "版本对比"])
-        self._final_tab = "版本"
+        r"""「成品」页：当前图已发布状态 + 草稿↔成品对比（没有版本下拉）。"""
+        frames, show = self.build_sub_tabs(page, ["成品", "草稿 ↔ 成品"])
+        self._final_tab = "成品"
 
         def final_tabs(name):
-            r"""切成品页标签；切到「版本对比」时把之前攒下的刷新补上。"""
+            r"""切成品页标签；切到对比时把之前攒下的刷新补上。"""
             self._final_tab = name
             show(name)
-            if name == "版本对比" and getattr(self, "_cmp_dirty", False):
+            if name.startswith("草稿") and getattr(self, "_cmp_dirty", False):
                 self.refresh_compare(force=True)
 
         self.page_final_tabs = final_tabs
 
-        box = self.wp_card(frames["版本"], "成品版本", "一版 = 一整套数据（所有图一起）")
-        row = ctk.CTkFrame(box, fg_color="transparent")
-        row.pack(fill="x", padx=12, pady=(6, 0))
-        ctk.CTkLabel(row, text="启动版本", font=FONT_S, text_color="#9aa0a6",
-                     width=64, anchor="w").pack(side="left", padx=(0, 6))
-        self.opt_final = ctk.CTkOptionMenu(
-            row, values=["（还没有版本）"], font=FONT_S, width=262,
-            command=lambda _v: self.on_final_change())
-        self.opt_final.pack(side="left", padx=(0, 6))
-        self.btn_rename_final = ctk.CTkButton(
-            row, text="改名", width=56, height=28, font=FONT_S,
-            fg_color="#3a3f47", hover_color="#4a5058", command=self.rename_final)
-        self.btn_rename_final.pack(side="left", padx=(0, 6))
-        ctk.CTkButton(row, text="打开目录", width=76, height=28, font=FONT_S,
-                      fg_color="#3a3f47", hover_color="#4a5058",
-                      command=self.open_final_dir).pack(side="left", padx=(0, 6))
-        self.btn_delete_final = ctk.CTkButton(
-            row, text="删除", width=56, height=28, font=FONT_S,
-            fg_color="#8a1c1c", hover_color="#a32424", command=self.delete_final)
-        self.btn_delete_final.pack(side="left")
+        box = self.wp_card(frames["成品"], "成品（已发布）", "每张图一份，只读")
         self.lbl_final = ctk.CTkLabel(box, text="", font=("Consolas", 11),
                                       text_color="#9aa0a6", anchor="w",
                                       justify="left", wraplength=620)
-        self.lbl_final.pack(fill="x", padx=12, pady=(4, 0))
+        self.lbl_final.pack(fill="x", padx=12, pady=(6, 4))
+        self.lbl_final_all = ctk.CTkLabel(box, text="", font=FONT_S, text_color="#8a8f96",
+                                          anchor="w", justify="left", wraplength=620)
+        self.lbl_final_all.pack(fill="x", padx=12, pady=(0, 4))
+        row = ctk.CTkFrame(box, fg_color="transparent")
+        row.pack(fill="x", padx=12, pady=(2, 4))
+        ctk.CTkButton(row, text="打开成品目录", width=110, height=28, font=FONT_S,
+                      fg_color="#3a3f47", hover_color="#4a5058",
+                      command=self.open_final_dir).pack(side="left", padx=(0, 6))
+        self.btn_revoke_final = ctk.CTkButton(
+            row, text="撤销这张图的发布", width=130, height=28, font=FONT_S,
+            fg_color="#8a1c1c", hover_color="#a32424", command=self.revoke_final)
+        self.btn_revoke_final.pack(side="left")
         ctk.CTkLabel(
             box,
             text="成品只读：游戏里改得动，但存不进去（文件带只读属性）。\n"
-                 "想做新东西去「编辑中」页改，再点「发布到成品」；版本名跟包名，老版本都留着。\n"
-                 "启动成品 = 整版加载（UCF_PACK_DIR=②\\final + UCF_PACK=<版本>），和编辑中同一套加载逻辑。",
+                 "一张图只有一份成品；发布新草稿会覆盖同图那份，旧文件自动进 archive\\final_prev\\（最近 5 份）。\n"
+                 "启动成品 = 所有已发布图一起加载（UCF_PACK_DIR=② + UCF_PACK=final），其余图走原生。",
             font=FONT_S, text_color="#9aa0a6", anchor="w", justify="left",
             wraplength=620).pack(fill="x", padx=12, pady=(2, 8))
-        self.final_disp = {}
         self.refresh_final_combo()
 
-        self.build_compare_card(frames["版本对比"])
+        self.build_compare_card(frames["草稿 ↔ 成品"])
 
     def refresh_wp_tab(self):
         if not hasattr(self, "wp_meta"):
@@ -336,7 +330,7 @@ class WaypointTab:
     # ---- 版本对比表：编辑中 ↔ 成品 左右并排，最后一列给结论（2026-11-21 改成表格）
     def build_compare_card(self, parent):
         r"""成品页「版本对比」：一张表，左边编辑中、右边成品，最后一列结论。"""
-        box = self.wp_card(parent, "版本对比 · 编辑中 ↔ 成品",
+        box = self.wp_card(parent, "草稿 ↔ 成品",
                            "sha256 相同 = 同一个文件，玩起来一样")
         head = ctk.CTkFrame(box, fg_color="transparent")
         head.pack(fill="x", padx=12, pady=(4, 0))
@@ -357,10 +351,8 @@ class WaypointTab:
         self.refresh_compare(force=True)
 
     def compare_groups(self):
-        r"""[(fp, 左=编辑中, 右=成品条目, 状态)]：每个包一组，外加成品里没有包对应的图。"""
-        ver = self.final_selected()
-        vmeta = next((v for v in final_versions() if v["name"] == ver), None) or {}
-        fmaps = dict(vmeta.get("maps") or {})
+        r"""[(fp, 左=编辑中, 右=成品条目, 状态)]：每张有草稿的图一组，外加只在成品的图。"""
+        fmaps = dict(final_stats().get("maps") or {})
         known = {fp: (lv, lab) for lv, lab, fp in self.maps}
         rows, used = [], set()
         for pid in load_packs():
@@ -372,8 +364,7 @@ class WaypointTab:
             mtime = "-"
             if summ.get("mtime"):
                 mtime = time.strftime("%Y-%m-%d %H:%M", time.localtime(summ["mtime"]))
-            # 表格里只要包名本身：去掉「运输船 · 」前缀，不然两行截断后长得一样
-            raw_name = str(self.disp_of(pid) or pid).split(" · ")[-1].split("/")[-1]
+            raw_name = self.folder_label(pid) if hasattr(self, "folder_label") else pid
             left = {"name": raw_name, "fp": fp,
                     "mtime": mtime, "node": summ.get("nadd", 0) + summ.get("ndel", 0),
                     "edge": summ.get("eadd", 0) + summ.get("edel", 0),
@@ -443,14 +434,13 @@ class WaypointTab:
         except Exception as exc:                     # noqa: BLE001
             self.lbl_cmp.configure(text="对比读不了：%s" % exc, text_color="#e03131")
             return
-        ver = self.final_selected()
-        if not ver:
-            self.lbl_cmp.configure(text="成品里还没有版本：先发布一版，才能比。",
+        cnt = {}
+        for _fp, _l, _r, st in rows:
+            cnt[st] = cnt.get(st, 0) + 1
+        if not rows:
+            self.lbl_cmp.configure(text="还没有草稿，成品里也没有图 —— 没得比。",
                                    text_color="#f59f00")
         else:
-            cnt = {}
-            for _fp, _l, _r, st in rows:
-                cnt[st] = cnt.get(st, 0) + 1
             self.lbl_cmp.configure(
                 text="%d 组：%s" % (
                     len(rows),
@@ -459,7 +449,7 @@ class WaypointTab:
                                if cnt.get(k))),
                 text_color="#9aa0a6")
         if not rows:
-            ctk.CTkLabel(self.cmp_body, text="编辑中还没有包，成品里也没有图 —— 没得比。",
+            ctk.CTkLabel(self.cmp_body, text="还没有草稿，成品里也没有图 —— 没得比。",
                          font=FONT_S, text_color="#868e96", anchor="w").grid(
                 row=0, column=0, columnspan=4, sticky="w", padx=10, pady=8)
             return
@@ -473,10 +463,7 @@ class WaypointTab:
             ctk.CTkLabel(cell, text=text, font=("Microsoft YaHei UI", 11, "bold"),
                          text_color="#c9cdd2", anchor="w").pack(
                 fill="x", padx=8, pady=(6, 0) if col == 2 else 6)
-            if col == 2:           # 版本名太长不进表头，单起一行小字
-                ctk.CTkLabel(cell, text=_cut(ver or "—", 30), font=("Consolas", 10),
-                             text_color="#868e96", anchor="w").pack(
-                    fill="x", padx=8, pady=(0, 4))
+
         for idx, (fp, left, right, st) in enumerate(rows[:14]):
             bg = "#262626" if idx % 2 == 0 else "#1f1f1f"
             lv, lab = known.get(fp, ("", ""))
@@ -489,35 +476,80 @@ class WaypointTab:
                          text_color="#e6e6e6", anchor="w").pack(fill="x", padx=8, pady=(4, 0))
             ctk.CTkLabel(cell, text=lv or "-", font=("Consolas", 10),
                          text_color="#868e96", anchor="w").pack(fill="x", padx=8, pady=(0, 4))
-            self._cmp_side(idx + 1, 1, bg, left, "没有这个包")
+            self._cmp_side(idx + 1, 1, bg, left, "没有这个草稿")
             self._cmp_side(idx + 1, 2, bg, right,
-                           "包作废，没发布过" if st == "fp_bad" else "这一版里没有这张图")
+                           "草稿作废，没发布过" if st == "fp_bad" else "还没发布")
             cell = self._cmp_cell(idx + 1, 3, bg)
             ctk.CTkLabel(cell, text=CMP_SHORT.get(st, st),
                          font=("Microsoft YaHei UI", 11, "bold"),
                          text_color=CMP_COLOR.get(st, "#868e96"),
                          anchor="w").pack(fill="x", padx=8, pady=(12, 0))
         if len(rows) > 14:
-            ctk.CTkLabel(self.cmp_body, text="…还有 %d 组没显示（先归档几个包）"
-                         % (len(rows) - 14), font=FONT_S, text_color="#868e96",
+            ctk.CTkLabel(self.cmp_body, text="…还有 %d 组没显示" % (len(rows) - 14),
+                         font=FONT_S, text_color="#868e96",
                          anchor="w").grid(row=15, column=0, columnspan=4,
                                           sticky="w", padx=10, pady=6)
 
     def refresh_wp_status(self):
         if not hasattr(self, "wp_meta"):
             return
-        pk = self.pack_dict() if hasattr(self, "opt_pack") else {}
-        fp = self.selected_fp() if hasattr(self, "opt_map") else ""
-        name = self.selected_pack() if hasattr(self, "opt_pack") else ""
+        lv, lab, fp = self.current_map() if hasattr(self, "opt_map") else ("", "", "")
         doc, _path = find_map_doc(fp)
         counts = (doc or {}).get("counts") or {}
         nodes = int(counts.get("nodes") or 0)
         edges = int(counts.get("edges") or 0)
-        pack_on = bool(pk.get("on"))
-        if pack_on and name:
-            which = "编辑中 " + (self.disp_of(name) or name)
-        else:
-            ver = self.final_selected() if hasattr(self, "opt_final") else final_current_name()
-            which = ("成品 %s（只读）" % ver) if ver else "成品（还没有版本）"
+        has_draft = self.draft_exists()
+        fmap = (final_stats().get("maps") or {}).get(fp) or {}
         self.wp_meta.configure(
-            text="指纹 %s · 原生 %d 点 / %d 边 · %s" % (fp or "—", nodes, edges, which))
+            text="指纹 %s · 原生 %d 点 / %d 边 · %s · %s" % (
+                fp or "—", nodes, edges,
+                "草稿有" if has_draft else "草稿无",
+                ("成品已发布 %s" % (fmap.get("published") or "")[:16]) if fmap else "成品未发布"))
+        self.refresh_draft_panel()
+
+    def refresh_draft_panel(self):
+        r"""本图草稿状态：名称/建法/改动数/创建日期，按钮跟着有/无草稿变。"""
+        if not hasattr(self, "lbl_draft"):
+            return
+        lv, lab, fp = self.current_map() if hasattr(self, "opt_map") else ("", "", "")
+        exists = self.draft_exists()
+        if exists:
+            man = self.draft_manifest()
+            mode = ("空白地图" if (man.get("grow") or man.get("blank")) else
+                    "原版 + 新增" if man.get("keep") else "增量")
+            nd, ed = self.draft_counts()
+            self.lbl_draft.configure(
+                text="%s · %s · %d 点 / %d 边 · 创建于 %s" % (
+                    man.get("name") or (lab or lv), mode, nd, ed,
+                    (man.get("created") or "-")[:16]),
+                text_color="#c9d1d9")
+            try:
+                self.btn_start_draft.configure(text="打开草稿目录")
+                self.btn_reset_draft.configure(state="normal")
+            except Exception:                 # noqa: BLE001
+                pass
+        else:
+            self.lbl_draft.configure(
+                text="%s 还没有草稿。点「开始编辑这张图」，从成品继续 / 空白地图 / 原版+新增 三选一。" % (lab or lv),
+                text_color="#f7cd74")
+            try:
+                self.btn_start_draft.configure(text="开始编辑这张图")
+                self.btn_reset_draft.configure(state="disabled")
+            except Exception:                 # noqa: BLE001
+                pass
+        fmap = (final_stats().get("maps") or {}).get(fp) or {}
+        try:
+            self.btn_promote.configure(state="normal" if exists else "disabled",
+                                       fg_color="#2f9e44" if exists else "#3a3f47")
+        except Exception:                     # noqa: BLE001
+            pass
+        if hasattr(self, "lbl_publish"):
+            if fmap:
+                self.lbl_publish.configure(
+                    text="成品里已有这张图（%d 点 / %d 边，%s 发布）；发布会覆盖，旧文件自动留快照。" % (
+                        fmap.get("node", 0), fmap.get("edge", 0),
+                        (fmap.get("published") or fmap.get("mtime") or "-")[:16]),
+                    text_color="#f7cd74")
+            else:
+                self.lbl_publish.configure(text="成品里还没有这张图，发布是第一次。",
+                                           text_color="#8a8f96")

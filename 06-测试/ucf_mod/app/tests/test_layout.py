@@ -8,7 +8,7 @@ r"""自检：2026-11-24 目录重构后的树没被放乱。
   1) 根目录 = 7 个文件夹（app data docs log run src archive），旧的 console/core/tools/
      tests/geo/navdata/payload/build 不能回来
   2) app/ 下有 ui / tabs / core / workbench / tools / tests，入口 app/控制台.pyw 在
-  3) 10 个页签各有一个文件；ui 的 7 个共用件都在
+  3) 11 个页签各有一个文件；ui 的 8 个共用件都在
   4) data/geo、data/navdata/{native,dev}、run/payload、log/ 在
   5) 各入口脚本还带着 .ucfroot 上溯那 4 行（否则搬目录就找不到项目根）
   6) README 里写的入口路径与实际一致（抽查 app/ui、app/tabs）
@@ -44,7 +44,9 @@ def read(rel):
 def main():
     print("== 1) 根目录")
     dirs = {d for d in os.listdir(UCF_ROOT) if os.path.isdir(j(d))}
-    want = {"app", "data", "docs", "log", "run", "src", "archive"}
+    # 2026-11-24 新增 unity-map-project/：地图工程（Unity 源码 + 构建/补丁脚本）。
+    # 它属于"生产侧"，进 git 但不进分发包；和 app/src/data/docs/log/run/archive 并列。
+    want = {"app", "data", "docs", "log", "run", "src", "archive", "unity-map-project"}
     check(dirs == want, "根目录文件夹 = %s（实际 %s）" % ("/".join(sorted(want)), "/".join(sorted(dirs))))
     for legacy in ("console", "core", "tools", "tests", "geo", "navdata", "payload", "build"):
         check(not os.path.exists(j(legacy)), "旧目录 %s/ 没有回来" % legacy)
@@ -59,12 +61,14 @@ def main():
     check(os.path.isfile(j("app", "core", "ucf_paths.py")), "路径真相 app/core/ucf_paths.py 在")
 
     print("== 3) 页签与共用件")
-    for t in ("map.py", "vis.py", "export.py", "hotkey.py", "waypoint.py", "data.py", "autotest.py"):
+    for t in ("map.py", "vis.py", "export.py", "hotkey.py", "waypoint.py", "overview.py",
+              "data.py", "autotest.py"):
         check(os.path.isfile(j("app", "tabs", t)), "页签 app/tabs/%s 在" % t)
     for d, f, name in (("record", "tab.py", "录制"), ("deploy", "deploy_tab.py", "部署"),
                        ("dev", "tab.py", "开发者选项")):
         check(os.path.isfile(j("app", "tabs", d, f)), "页签 %s（app/tabs/%s/%s）在" % (name, d, f))
-    for u in ("env.py", "consts.py", "util.py", "maps.py", "stats.py", "packs.py", "kit.py"):
+    for u in ("env.py", "consts.py", "util.py", "maps.py", "stats.py", "packs.py", "kit.py",
+              "overview.py"):
         check(os.path.isfile(j("app", "ui", u)), "共用件 app/ui/%s 在" % u)
 
     print("== 4) 数据与产物")
@@ -97,7 +101,7 @@ def main():
     if FAIL:
         print("\n!! %d 项没过" % len(FAIL))
         return 1
-    print("\nOK: 目录树与 README 一致（根目录 7 个文件夹，页签 10 个，共用件 7 个）")
+    print("\nOK: 目录树与 README 一致（根目录 8 个文件夹，页签 11 个，共用件 8 个）")
     return 0
 
 

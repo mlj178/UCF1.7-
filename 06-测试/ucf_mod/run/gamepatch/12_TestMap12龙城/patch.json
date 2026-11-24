@@ -1,0 +1,58 @@
+{
+  "schema": 1,
+  "id": "12_TestMap12龙城",
+  "no": 12,
+  "level": "level12",
+  "scene": "TestMap12",
+  "label": "龙城",
+  "kind": "game-body",
+  "switch": "map_longcheng",
+  "inject": {
+    "game_mode": 0,
+    "game_mode_name": "TeamDeath",
+    "label": "龙城",
+    "position": "append"
+  },
+  "requires": {
+    "game": "UnityCrossFire 1.7.1",
+    "gameassembly_md5": "fab04426db6a014c0129ef2001530908"
+  },
+  "files": [
+    {
+      "path": "UnityCrossFire_Data/level12",
+      "bytes": 61960,
+      "sha256": "0975b8dcfe366e8679c87b7b093b45b0bf593f42d1e5edcb016d552e27bf3127",
+      "orig": null,
+      "role": "新地图场景（借 level11 骨架，换几何）"
+    },
+    {
+      "path": "UnityCrossFire_Data/sharedassets12.assets",
+      "bytes": 1956352,
+      "sha256": "beebd29bd32c07d43e0ee947474b21c14dea156355c1d768afd3b88a5ea77475",
+      "orig": null,
+      "role": "新地图资源（56 网格 + 56 材质 + 52 贴图引用）"
+    },
+    {
+      "path": "UnityCrossFire_Data/sharedassets12.assets.resS",
+      "bytes": 2518856,
+      "sha256": "8de5a36b9232354f232fa333c63ef2d25ab017db8d7a156d33cb5bd62bc90549",
+      "orig": null,
+      "role": "新地图纹理/顶点数据"
+    },
+    {
+      "path": "UnityCrossFire_Data/globalgamemanagers",
+      "bytes": 1614512,
+      "sha256": "e36b6efb79d2e4275befc392512aed2aeb3f8a73aa2d83505151df8e80de3be1",
+      "orig": {
+        "bytes": 1617300,
+        "sha256": "afe371a188561d1c0ba1feea6bdd8d680d854690a29c61e5bd48b1882ddaf676"
+      },
+      "role": "场景名册 12 → 13 条（追加 Assets/Scenes/TestMap12.unity）"
+    }
+  ],
+  "registry": "不改 sharedassets0.assets（70 MB）：下拉第 4 项由插件注入，见 src/plugin.c",
+  "notes": [
+    "老做法在 sharedassets0.assets 里把第 3 项 Cebu_City 换成 TestMap12（19 字节），会顶掉椰岛之巅，已弃用",
+    "globalgamemanagers 必须是原版 1,617,300 字节才能打；不是原版就拒绝"
+  ]
+}

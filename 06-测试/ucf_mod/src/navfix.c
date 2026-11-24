@@ -844,6 +844,7 @@ static void nav_tick(void) {
     g_zeroStreak = 0;
   }
   { void editor_tick(void); editor_tick(); }
+  { void navfix_hires_kick(void); navfix_hires_kick(); }   /* 采样定时器没起来就再补一次 */
   if (g_collectOnly) {
     static int diagTick;
     if ((++diagTick % 40) == 0) navfix_diag_graphs();   /* 每 ~10 s 再打一次，看会不会后来长出来 */
@@ -855,6 +856,76 @@ static HWND g_hwnd;
 static volatile LONG g_buildCount;
 
 HWND navfix_hwnd(void) { return g_hwnd; }
+
+/* 录制 / 轨迹采集用的采样定时器（WM_TIMER 0xF3C1）。
+ *
+ * 采样入口只有两个：nav_tick() 的 4 Hz WM_UCF_TICK（editor_tick 里调
+ * rec_tick/trace_tick）和这个 WM_TIMER。以前只有 UCF_FREECAM=1 才 SetTimer，
+ * 所以控制台选 10/20/30/60 Hz 全都退化成 4 Hz（2026-11-24 的 trace 实测 4.0 Hz）。
+ * 现在按需启停：rec/trace 开始时 +1 引用，最后一个停了 -1；车测自由视角共用。
+ *
+ * 周期用 10 ms（USER_TIMER_MINIMUM，再小 Windows 也只按 10 ms 给）而不是 1/hz：
+ * WM_TIMER 只负责「给机会」，具体按 hz 取样本由 editor.c 的 QPC 闸门（g_trNextT）
+ * 决定。机会给得比样本密，闸门才能把样本落在正确时刻；反过来（周期 ≥ 样本间隔）
+ * 会变成「定时器多快就采多快」，档位就没意义了。
+ *
+ * WM_TIMER 只在游戏主循环泵消息时才会派发，所以实际上限 = 游戏帧率：
+ * 60 fps 的机器 60 Hz 档能跑满，30 fps 的机器顶到 ~30 Hz（日志会喊没跑满）。 */
+#define UCF_HI_TIMER_ID  0xF3C1
+#define UCF_HI_PERIOD_MS 10
+
+static int g_hiRefs;        /* rec/trace 正在用这个定时器的数量 */
+static int g_hiTimer;       /* 定时器当前是否已启动 */
+static int g_hiFreecam;     /* UCF_FREECAM=1：车测要求常驻 */
+static volatile LONG g_hiTicks;   /* 0xF3C1 真的到过多少次：设了定时器 ≠ 它会来 */
+static int g_hiRes;         /* timeBeginPeriod(1) 是否已生效 */
+
+/* editor.c 用它算「这次采集到底有几个样本是定时器给的」 */
+long navfix_hires_ticks(void) { return g_hiTicks; }
+
+/* winmm 的 timeBeginPeriod(1)：把系统定时器精度提到 1 ms。不调的话默认 15.6 ms
+ * 量子，SetTimer(10 ms) 实际 ~15.6 ms 一跳，60 Hz 档会一帧采一次、一帧漏一次。
+ * 动态取地址：不用给 build.ps1 加 -lwinmm，DLL 的依赖面不变。 */
+static void hi_timer_res(int on) {
+  static HMODULE mm;
+  UINT (WINAPI *fn)(UINT);
+  if (on == g_hiRes) return;
+  if (!mm) { mm = GetModuleHandleA("winmm.dll"); if (!mm) mm = LoadLibraryA("winmm.dll"); }
+  if (!mm) return;
+  fn = (UINT (WINAPI*)(UINT))GetProcAddress(mm, on ? "timeBeginPeriod" : "timeEndPeriod");
+  if (!fn) return;
+  fn(1);
+  g_hiRes = on;
+}
+
+static void hi_timer_sync(void) {
+  int want = (g_hiRefs > 0) || g_hiFreecam;
+  if (!g_hwnd) return;              /* 窗口还没钩上：nav_tick 每 250 ms 会再试一次 */
+  if (want && !g_hiTimer) {
+    hi_timer_res(1);
+    if (SetTimer(g_hwnd, UCF_HI_TIMER_ID, UCF_HI_PERIOD_MS, 0)) {
+      g_hiTimer = 1;
+      nlog("hires: on id=0x%X period=%dms timer_res=%d refs=%d freecam=%d",
+           UCF_HI_TIMER_ID, UCF_HI_PERIOD_MS, g_hiRes, g_hiRefs, g_hiFreecam);
+    } else {
+      nlog("hires: SetTimer FAILED err=%lu (refs=%d freecam=%d) - 采样只能回落到 4 Hz",
+           GetLastError(), g_hiRefs, g_hiFreecam);
+    }
+  } else if (!want && g_hiTimer) {
+    KillTimer(g_hwnd, UCF_HI_TIMER_ID);
+    g_hiTimer = 0;
+    hi_timer_res(0);
+    nlog("hires: off (ticks=%ld)", g_hiTicks);
+  }
+}
+
+void navfix_hires_acquire(void) { g_hiRefs++; hi_timer_sync(); }
+void navfix_hires_release(void) { if (g_hiRefs > 0) g_hiRefs--; hi_timer_sync(); }
+
+/* 4 Hz 心跳顺带自愈：有的时序里 acquire() 比窗口钩子先到（g_hwnd 还是 0），
+ * 那时 hi_timer_sync() 只能空转；这里每 250 ms 补一次，别让一次错过的时序
+ * 变成整场 4 Hz。 */
+void navfix_hires_kick(void) { if (!g_hiTimer) hi_timer_sync(); }
 
 #define WM_UCF_TICK   (WM_APP + 0x50)
 #define WM_UCF_BUILD  (WM_APP + 0x51)
@@ -912,13 +983,14 @@ static LRESULT CALLBACK NavProc(HWND h, UINT msg, WPARAM w, LPARAM l) {
     editor_on_key_any((unsigned)w, (int)l);
     return 0;
   }
-  if (msg == WM_TIMER && w == 0xF3C1) {
+  if (msg == WM_TIMER && w == UCF_HI_TIMER_ID) {
     void editor_freecam_tick(void);
     void editor_compass_tick(void);
     void editor_rec_tick(void);
+    InterlockedIncrement(&g_hiTicks);   /* 诊断：这个定时器到底有没有在派发 */
     editor_freecam_tick();
     editor_compass_tick();      /* 方向罗盘跟着镜头转（函数内部节流到 ~30 Hz） */
-    editor_rec_tick();          /* 路点录制补到 ~20 Hz（editor_tick 车测里只有 4 Hz） */
+    editor_rec_tick();          /* rec/trace 在这里按各自 hz 取样本（QPC 闸门） */
     return 0;
   }
   if (msg == WM_CHAR || msg == WM_SYSCHAR) {
@@ -1053,12 +1125,11 @@ static DWORD WINAPI nav_worker(LPVOID x) {
   if (!g_hwnd) { nlog("game window not found"); return 0; }
   g_oldProc = (WNDPROC)SetWindowLongPtrA(g_hwnd, GWLP_WNDPROC, (LONG_PTR)NavProc);
   nlog("window hooked %p old=%p", g_hwnd, g_oldProc);
-  {  /* 车测自由视角：只有 UCF_FREECAM=1 才起 16 ms 定时器，正常游戏没有这条消息 */
+  {  /* 车测自由视角也共用这个采样定时器（10 ms）；录制/轨迹采集开启时由 navfix_hires_acquire() 启动 */
     char v[8];
-    if (GetEnvironmentVariableA("UCF_FREECAM", v, sizeof v) > 0 && v[0] == '1') {
-      SetTimer(g_hwnd, 0xF3C1, 16, 0);
-      nlog("freecam: 16 ms timer started");
-    }
+    g_hiFreecam = (GetEnvironmentVariableA("UCF_FREECAM", v, sizeof v) > 0 && v[0] == '1');
+    if (g_hiFreecam) nlog("freecam: hires timer requested");
+    hi_timer_sync();
   }
   g_ready = 1;
 

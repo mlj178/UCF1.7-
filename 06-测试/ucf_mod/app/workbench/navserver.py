@@ -54,7 +54,7 @@ PROFILE_ORDER = ("native", "final", "pack")
 PROFILE_LABEL = {"native": "① 备份版", "final": "② 成品", "pack": "② 编辑中"}
 PROFILE_CN_VIEW = {
     "native": "备份版（原生·只读对照）",
-    "final": "成品（final 当前版本·只读）",
+    "final": "成品（final 每图一份·只读）",
     "pack": "编辑中（packs 测试包·只读）",
 }
 PROFILE_ROOT = {"native": NATIVE, "final": DEV, "pack": DEV}
@@ -98,25 +98,10 @@ def profile_info():
 
 
 def dev_nav_dir(data_root, key):
-    r"""② 成品的当前版本目录：final\<当前版本>\（没有版本就退回旧的 nav\）。"""
+    r"""② 成品目录：final\（平铺，一张图一份；不再有版本子目录）。"""
     if key != "final":
         return os.path.join(data_root, "nav")
-    root = os.path.join(data_root, "final")
-    cur = ""
-    try:
-        with open(os.path.join(root, "_current.txt"), "r", encoding="utf-8") as f:
-            cur = f.read().strip()
-    except OSError:
-        cur = ""
-    if not cur:
-        try:
-            import json as _json
-            with open(os.path.join(root, "_index.json"), "r", encoding="utf-8") as f:
-                cur = str((_json.load(f) or {}).get("current") or "")
-        except (OSError, ValueError):
-            cur = ""
-    d = os.path.join(root, cur) if cur else ""
-    return d if d and os.path.isdir(d) else os.path.join(data_root, "nav")
+    return os.path.join(data_root, "final")
 
 
 def _final_index():
@@ -130,32 +115,20 @@ def _final_index():
 
 
 def _final_current_name(idx=None):
-    r"""成品当前版本名：_current.txt 优先 → 台账 current → 最后一版；没有返回空串。"""
-    idx = idx if idx is not None else _final_index()
-    names = [str(v.get("name") or "") for v in (idx.get("versions") or []) if isinstance(v, dict)]
+    r"""兼容旧调用：成品有 <指纹>.txt 就返回固定名 final，否则空串。"""
+    return "final" if _final_has_any() else ""
+
+
+def _final_has_any():
     try:
-        names += sorted(n for n in os.listdir(FINAL)
-                        if not n.startswith(("_", ".")) and os.path.isdir(os.path.join(FINAL, n)))
+        return any(re.match(r"^n\d+-[0-9a-fA-F]{16}\.txt$", n) for n in os.listdir(FINAL))
     except OSError:
-        pass
-    names = [n for n in names if n]
-    cur = ""
-    try:
-        with open(os.path.join(FINAL, "_current.txt"), "r", encoding="utf-8") as f:
-            cur = f.read().strip()
-    except OSError:
-        cur = ""
-    cur = cur or str(idx.get("current") or "").strip()
-    if cur in names:
-        return cur
-    return names[-1] if names else ""
+        return False
 
 
 def _final_dir():
-    r"""成品当前版本的目录（一版一整套 <指纹>.txt）；版本目录不存在就给空串。"""
-    name = _final_current_name()
-    d = os.path.join(FINAL, name) if name else ""
-    return d if d and os.path.isdir(d) else ""
+    r"""成品目录（平铺 <指纹>.txt）；一张图都没有就给空串。"""
+    return FINAL if _final_has_any() else ""
 
 
 def _default_view():
@@ -1328,7 +1301,7 @@ def collect_packs():
         latest = 0
         try:
             for fn in os.listdir(d):
-                if not fn.lower().endswith(".txt"):
+                if not fn.lower().endswith(".txt") or fn.lower() == "nogen.txt" or ".bak" in fn:
                     continue
                 p = os.path.join(d, fn)
                 if not os.path.isfile(p):
@@ -1343,7 +1316,8 @@ def collect_packs():
         nogen = os.path.isfile(os.path.join(d, "nogen.txt"))
         out.append({
             "name": name,
-            "folder": name.split("/")[0] if "/" in name else "",
+            "folder": name.split("/")[0] if "/" in name else name,
+            "full": name,
             "label": str(manifest.get("label") or ""),
             "level": str(manifest.get("level") or ""),
             "fp": str(manifest.get("fp") or ""),
@@ -1440,54 +1414,29 @@ def collect_events(limit=24):
 
 
 def _final_stats():
-    r"""② 成品：版本数 / 当前版本 / 当前版本里的图数 / 体积 / 最近写入（dev\final）。
+    r"""② 成品：几张图 / 体积 / 最近写入（dev\final，一张图一份）。
 
-    版本名以磁盘目录 + 台账 _index.json 的并集为准；目录在就扫目录，
-    目录被删了才退回台账里记的 maps（台账的 sha/size 比手算快，也更能反映「曾经有」）。
+    兼容旧前端字段：versions 固定 0/1，current 固定 "final"；
+    新前端应该直接看 maps（图数）。
     """
-    idx = _final_index()
-    ledger = {}
-    for v in (idx.get("versions") or []):
-        if isinstance(v, dict) and str(v.get("name") or ""):
-            ledger[str(v["name"])] = v
-    names = set(ledger)
-    try:
-        for name in os.listdir(FINAL):
-            if not name.startswith(("_", ".")) and os.path.isdir(os.path.join(FINAL, name)):
-                names.add(name)
-    except OSError:
-        pass
-    cur_name = _final_current_name(idx)
     maps_n = total = latest = 0
-    for name in sorted(names):
-        d = os.path.join(FINAL, name)
-        found = 0
-        if os.path.isdir(d):
-            try:
-                files = sorted(os.listdir(d))
-            except OSError:
-                files = []
-            for fn in files:
-                if not EDIT_FILE_RE.match(fn):
-                    continue
-                f = os.path.join(d, fn)
-                try:
-                    st = os.stat(f)
-                except OSError:
-                    continue
-                found += 1
-                total += st.st_size
-                latest = max(latest, st.st_mtime)
-        else:
-            for meta in (ledger.get(name, {}).get("maps") or {}).values():
-                if not isinstance(meta, dict):
-                    continue
-                found += 1
-                total += int(meta.get("bytes") or 0)
-        if name == cur_name:
-            maps_n = found
-    return {"versions": len(names), "current": cur_name, "maps": maps_n, "bytes": total,
-            "path": os.path.join(FINAL, cur_name) if cur_name else FINAL,
+    try:
+        names = sorted(os.listdir(FINAL))
+    except OSError:
+        names = []
+    for fn in names:
+        if not EDIT_FILE_RE.match(fn):
+            continue
+        f = os.path.join(FINAL, fn)
+        try:
+            st = os.stat(f)
+        except OSError:
+            continue
+        maps_n += 1
+        total += st.st_size
+        latest = max(latest, st.st_mtime)
+    return {"versions": 1 if maps_n else 0, "current": "final" if maps_n else "",
+            "maps": maps_n, "bytes": total, "path": FINAL,
             "latest": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(latest)) if latest else ""}
 
 
@@ -1759,7 +1708,9 @@ class Handler(SimpleHTTPRequestHandler):
                 # 包 id = 地图文件夹(可中文)/包名(英文)；只给包名时按尾名找
                 ok = (1 <= len(parts) <= 2 and FP_RE.match(fp or ""))
                 if ok and len(parts) == 1:
-                    ok = bool(PACK_NAME_RE.match(parts[0]))
+                    # 一张图一个草稿：一级就是地图文件夹（允许中文）
+                    ok = (bool(SAFE_FOLDER_RE.match(parts[0])) and
+                          parts[0] not in (".", ".."))
                 elif ok:
                     ok = (bool(PACK_NAME_RE.match(parts[1])) and
                           bool(SAFE_FOLDER_RE.match(parts[0])) and
@@ -1900,7 +1851,7 @@ def main():
     print("  原生备份 : %s" % NATIVE)
     print("  游戏目录 : %s（运行目录，不放导航数据）" % UCF)
     print("  收件箱   : %s（② 的 vis\\：导出 / 可走面）" % VIS)
-    print("  成品     : %s（② 的 final\\：一版一整套）" % FINAL)
+    print("  成品     : %s（② 的 final\\：一张图一份）" % FINAL)
     print("  测试包   : %s（② 的 packs\\：编辑中）" % PACKS_DIR)
     print("  打开地址 : %s" % url)
     print("  （关掉这个窗口就停止服务；本服务只读，不写任何路线数据）")

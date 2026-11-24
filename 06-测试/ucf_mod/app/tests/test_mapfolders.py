@@ -110,7 +110,8 @@ def main():
 
     import navserver as S
     rows = S.collect_maps()
-    check(len(rows) == 11, "网页编辑器 11 行（对照表补全 04/07）")
+    # 2026-11-24：对照表加了 level12 龙城（新增地图），网页编辑器的补齐行数 11 → 12
+    check(len(rows) == 12, "网页编辑器 12 行（对照表补全 04/07/12）")
     check(len([r for r in rows if r.get("file")]) == 9, "网页编辑器 9 行有文件")
     dev_ver = S._dir_version(S.DEV)
     check(dev_ver["maps"] == n_maps and dev_ver["navmesh"] == n_bins,
@@ -121,17 +122,14 @@ def main():
     check(s["sub"].get("图") == n_maps and s["sub"].get("可走面") == n_bins,
           "navdata.py summary (%s)" % s["sub"])
 
-    print("== 6) 迁移日志在")
-    logs = [f for f in os.listdir(os.path.join(P.DATA_ROOT, "navdata"))
-            if f.startswith("_migrate_mapfolders_") and f.endswith(".json")]
-    check(bool(logs), "有迁移日志 %d 个（可 --undo）" % len(logs))
-
-    print("== 7) packs / final / archive 没被碰过")
+    print("== 6) 单草稿 / 单成品目录")
     check(os.path.isdir(P.PACKS_DIR), "packs\\ 还在")
-    # 迁移时 packs 里是 3 个包；2026-11-21 起还会边玩边建新包（TransportShip_20261121_140112），
-    # 所以这里只要求「迁移没把包删掉」，不再钉死 3。
-    check(len(N.pack_ids()) >= 3, "packs 里至少有迁移时的 3 个包（实际 %d）" % len(N.pack_ids()))
+    ids = N.pack_ids()
+    check(all("/" not in x for x in ids),
+          "packs 下只有平铺草稿（没有旧的 图/包 两层；实际 %s）" % (ids or "空"))
     check(os.path.isdir(os.path.join(P.DEV, "final")), "final\\ 还在")
+    check(not os.path.isfile(os.path.join(P.DEV, "final", "_current.txt")),
+          "final\\ 不再有 _current.txt（没有版本概念）")
     check(os.path.isdir(os.path.join(P.DEV, "archive")), "archive\\ 还在")
 
     print("")

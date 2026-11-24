@@ -31,6 +31,8 @@ data/geo/tex/
 app/tools/deploy.json
 
 # 部署端数据：只存在于游戏目录，不在工程端（锚定 ucf_mod 根目录）
+# ⚠ /maps/ 是 2026-11-21 之前部署端的点图目录，**已经不用了**。
+#    新的地图工程叫 unity-map-project/ —— 别在根目录建 maps/，会被这条规则静默忽略。
 /nav/
 /maps/
 /vis/
@@ -54,3 +56,25 @@ data/navdata/dev/vis/rec/
 # 必须入库，否则游戏目录一旦被清理，加载器和插件就永久没了
 !run/payload/*.dll
 !run/payload/**/*.dll
+
+# ---------------------------------------------------------------------------
+# 地图工程（unity-map-project/）：Unity 生成物不进库，源码/元数据/补丁脚本进库
+# ---------------------------------------------------------------------------
+unity-map-project/**/Library/
+unity-map-project/**/Temp/
+unity-map-project/**/Logs/
+unity-map-project/**/obj/
+unity-map-project/**/UserSettings/
+unity-map-project/**/*.csproj
+unity-map-project/**/*.sln
+
+# ---------------------------------------------------------------------------
+# 地图本体补丁包（run/gamepatch/）：**必须进库**
+# 这是"游戏目录里那些改动"的工程端唯一副本（level9 / level12 / globalgamemanagers）。
+# 游戏目录一被清理、覆盖、重装，这里是最后的找回点 —— 不要给它加任何排除规则。
+# ---------------------------------------------------------------------------
+!run/gamepatch/**
+!run/gamepatch/**/*
+
+# 台账运行态：每次 scan 的副本矩阵 + 快照（机器相关，不是源码）
+run/ledger/

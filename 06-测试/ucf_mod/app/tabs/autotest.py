@@ -50,6 +50,9 @@ class AutotestTab:
         self.lbl_at = ctk.CTkLabel(body, text="", font=FONT, anchor="w", justify="left",
                                    wraplength=620, text_color="#9aa0a6")
         self.lbl_at.pack(fill="x", padx=14, pady=(8, 0))
+        # 2026-11-24：总开关关着时的红条（要说了才 pack，不占空档）
+        self.lbl_at_warn = ctk.CTkLabel(body, text="", font=FONT_S, anchor="w", justify="left",
+                                        wraplength=620, text_color="#ffb59d")
 
         self.section_title(body, "地图（勾几张跑几张；数字 = buildIndex，不是 maps 里的序号）")
         box = ctk.CTkFrame(body, corner_radius=8)
@@ -153,6 +156,7 @@ class AutotestTab:
 
     def refresh_at(self):
         r"""autotest.txt 最后一条 RESULT → 「上一次车测」；没有 RESULT 说明中途被杀/崩了。"""
+        self.refresh_at_ready()          # 先把「能不能开跑」刷了，再贴上一次的结果
         if not hasattr(self, "lbl_at") or self.at_busy:
             return
         try:
@@ -173,6 +177,30 @@ class AutotestTab:
             self.lbl_at.configure(text="上一次车测：没跑到 RESULT（中途关游戏 / 崩溃）",
                                   text_color="#e8c15a")
 
+    def refresh_at_ready(self):
+        r"""「开跑」跟着插件总开关走。
+
+        总开关关着 = plugin.c 里 loaded but idle：车测启动的游戏不读 nav、不写 autotest.txt，
+        代理只能一直等到 timeout。所以关着时禁用按钮 + 红条说清楚，别让人白等。
+        """
+        if not hasattr(self, "btn_at_run") or getattr(self, "at_busy", False):
+            return
+        off = not bool(self.master_var.get())
+        self.btn_at_run.configure(state="disabled" if off else "normal")
+        self.set_at_warn("插件总开关关着：车测启动的插件会待机（不读 nav、不出菜单），跑不出结果。"
+                         "先在右上角打开「插件总开关」再开跑。" if off else "")
+
+    def set_at_warn(self, text=""):
+        r"""车测页的红条；没话可说就收起来，不留一条空白。"""
+        if not hasattr(self, "lbl_at_warn"):
+            return
+        if text:
+            self.lbl_at_warn.configure(text=text)
+            if not self.lbl_at_warn.winfo_manager():
+                self.lbl_at_warn.pack(fill="x", padx=14, pady=(4, 0), before=self.lbl_at)
+        elif self.lbl_at_warn.winfo_manager():
+            self.lbl_at_warn.pack_forget()
+
     def _at_int(self, var, default):
         try:
             return max(0, int(str(var.get()).strip()))
@@ -181,6 +209,11 @@ class AutotestTab:
 
     def run_autotest(self):
         if self.at_busy:
+            return
+        # 2026-11-24：总开关关着 = 插件待机，车测只会白等到 timeout，先拦住
+        if not bool(self.master_var.get()):
+            self.set_status("车测：插件总开关关着（先在右上角打开再开跑）")
+            self.refresh_at_ready()
             return
         picked = [lv for lv, var in self.at_maps.items() if var.get()]
         if not picked:

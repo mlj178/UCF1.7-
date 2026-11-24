@@ -921,26 +921,99 @@ static int cam_point(V3* out) {
  * 射线取脚下地面，追加一行 JSON。插件不推断路点 —— 怎么走、哪里跳、哪里
  * 跳下高台，全由玩家决定；重采样和事件识别在控制台（tools/ucf_rec.py）。
  */
+/* 采样定时器（navfix.c 的 WM_TIMER 0xF3C1）：以前只在车测自由视角启动，所以
+ * 正常游戏里只有 250 ms 心跳那 4 Hz。开始录制/采集时借一次，停止时还掉
+ * （rec 和 trace 可同时开，navfix 内部引用计数；没人在用时定时器关掉，不白耗 CPU）。
+ * 借还只是「有机会采样」，真正的采样时刻由下面 trace_tick/rec_tick 的 QPC 闸门
+ * 按 hz 定 —— 定时器快了不会被多记，游戏卡了也不会把样本挤成一串。 */
+void navfix_hires_acquire(void);
+void navfix_hires_release(void);
+long navfix_hires_ticks(void);       /* WM_TIMER 到过的累计次数（自检用） */
+
+/* 采样率自检：实测明显低于档位就大声喊一句。
+ * 2026-11-24 的教训是「档位 60 Hz、实际 4 Hz」只在控制台状态条上显示，日志里
+ * 一点痕迹都没有，三方（用户 / 控制台 / AI）谁都没看出是采样没跑满。 */
+static void hz_warn(const char* who, unsigned n, double dur, int hz, long ticks) {
+  double got;
+  if (dur <= 2.0) return;                        /* 太短不算数 */
+  got = (double)n / dur;
+  if (got + 0.5 >= (double)hz * 0.75) return;
+  elog("%s: !!! 采样没跑满：档位 %d Hz，实测 %.1f Hz（定时器派发 %ld 次 = %.1f/s）"
+       " —— 多半是 ①游戏帧率不足 ②WM_TIMER 被主循环卡住 ③跑的还不是新 DLL",
+       who, hz, got, ticks, dur > 0.2 ? (double)ticks / dur : 0.0);
+}
+
+/* ---- 玩家状态 + 跳跃结算：trace（原始轨迹）和 rec（录制）共用 --------------
+ * 定义在下面的 trace 辅助段里；这里先声明，rec_* 才好在前面用同一套判据。 */
+typedef struct { V3 pos; int grounded; double vy; } PlSt;
+
+typedef struct {
+  FILE*  fp;
+  int    air;                 /* 1 = 已起跳、等落地结算 */
+  V3     prev;                /* 上一帧脚底（起跳点要从这里取） */
+  int    hasPrev, grounded;   /* 上一帧有没有样本 / 在不在地面 */
+  V3     a;                   /* 起跳点 */
+  double t0, apex, v0, run, lastT;
+  int    n, mount, gap, down, hop;
+} JumpRec;
+
+static int  tr_read_state(PlSt* st, P* objOut);
+static void jr_reset(JumpRec* j, FILE* fp);
+static void jr_step(JumpRec* j, const PlSt* st, double t, double run);
+static JumpRec g_trJump;              /* trace 的跳跃结算 */
+static JumpRec g_recJump;             /* rec（录制）的跳跃结算 */
+
 static FILE*  g_recFp;
 static char   g_recPath[MAX_PATH];
 static int    g_recOn;            /* 正在录 */
 static int    g_recPaused;
 static int    g_recHz = 20;
 static unsigned long long g_recT0, g_recNext;
+static long   g_recTick0;         /* 开始录制时的定时器计数（算这次采到多少机会） */
 static unsigned g_recN;
 static double g_recDist;
 static V3     g_recPrev;
 static int    g_recHasPrev;
+static int    g_recHdr, g_recSrcMode;   /* header 写没写 / 坐标来源（1=player 2=camera） */
+static double g_recPrevT;               /* 上一帧的时间（算 dt / 速度） */
+
+/* 录制文件的 header：和轨迹同一套字段，方便复盘工具直接读（第一帧才写） */
+static void rec_header(void) {
+  SYSTEMTIME st;
+  const char* srcName = (g_recSrcMode == 1) ? "player" : "camera";
+  GetLocalTime(&st);
+  fprintf(g_recFp,
+          "{\"kind\":\"rec\",\"schema\":\"ucf-trace/2\",\"hz\":%d,"
+          "\"t0\":\"%04d-%02d-%02d %02d:%02d:%02d\",\"src\":\"%s\","
+          "\"fields\":[\"t\",\"dt\",\"x\",\"y\",\"z\",\"g\",\"vy\",\"sp\",\"ct\"],"
+          "\"notes\":\"t/dt s; xyz = player feet; g = grounded 1/0; vy = vertical speed; "
+          "jump event: {t,ev:jump,a:[takeoff],b:[landing],h,rise,air,v0,run,kind}\"}\n",
+          g_recHz, st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond, srcName);
+  g_recHdr = 1;
+}
 
 static void rec_stop(const char* why) {
+  double dur;
+  long ticks;
   if (!g_recFp) return;
-  fprintf(g_recFp, "{\"end\":1,\"t\":%.3f,\"n\":%u,\"dist\":%.2f}\n",
-          (GetTickCount64() - g_recT0) / 1000.0, g_recN, g_recDist);
+  dur = (double)(GetTickCount64() - g_recT0) / 1000.0;
+  ticks = navfix_hires_ticks() - g_recTick0;
+  fprintf(g_recFp, "{\"end\":1,\"t\":%.3f,\"n\":%u,\"dist\":%.2f,\"ticks\":%ld,"
+                   "\"jumps\":%d}\n",
+          dur, g_recN, g_recDist, ticks, g_recJump.n);
   fflush(g_recFp);
   fclose(g_recFp);
   g_recFp = 0;
   g_recOn = g_recPaused = 0;
-  elog("rec: stop (%s) samples=%u dist=%.1fm -> %s", why, g_recN, g_recDist, g_recPath);
+  g_recJump.air = 0;
+  g_recJump.fp = 0;
+  navfix_hires_release();
+  elog("rec: stop (%s) samples=%u dist=%.1fm dur=%.1fs avg=%.1fHz ticks=%ld jumps=%d "
+       "(gap=%d mount=%d down=%d hop=%d) src=%s -> %s",
+       why, g_recN, g_recDist, dur, dur > 0.2 ? (double)g_recN / dur : 0.0, ticks,
+       g_recJump.n, g_recJump.gap, g_recJump.mount, g_recJump.down, g_recJump.hop,
+       g_recSrcMode == 1 ? "player" : "camera", g_recPath);
+  hz_warn("rec", g_recN, dur, g_recHz, ticks);
 }
 
 static int rec_start(const char* path, int hz) {
@@ -950,59 +1023,84 @@ static int rec_start(const char* path, int hz) {
   strcpy(g_recPath, path);
   g_recFp = fopen(g_recPath, "wb");
   if (!g_recFp) { elog("rec: cannot create %s", g_recPath); return 0; }
-  g_recHz = (hz >= 5 && hz <= 60) ? hz : 20;
+  navfix_hires_acquire();
+  g_recTick0 = navfix_hires_ticks();
+  g_recHz = (hz >= 5 && hz <= 60) ? hz : 30;
   g_recOn = 1; g_recPaused = 0; g_recN = 0; g_recDist = 0.0; g_recHasPrev = 0;
+  g_recHdr = 0; g_recSrcMode = 0; g_recPrevT = 0.0;
   g_recT0 = g_recNext = GetTickCount64();
+  jr_reset(&g_recJump, g_recFp);
   elog("rec: start %d Hz -> %s", g_recHz, g_recPath);
   return 1;
 }
 
+/* 和 trace 同一套样本格式（2026-11-24 起）：x/y/z 是玩家脚底、g 是否在地面、
+ * vy 竖直速度；落地那一帧多写一行 ev=jump。录制页的复盘直接读这些事件，
+ * 不再靠"离地 0.3 m + 相机射线"去猜。 */
 static void rec_tick(void) {
-  V3 pos, fwd, hit;
+  PlSt st;
+  P obj;
   unsigned long long now, dt;
-  double gap;
-  char hitbuf[128];
+  double t, gap;
+  int sp, ct, src;
+
   if (!g_recOn || g_recPaused || !g_recFp) return;
   now = GetTickCount64();
   dt = now - g_recNext;
-  if ((long long)dt < 0) return;                 /* 还没到采样点 */
+  /* 和 trace_tick 同一套：差 25% 以内也算到点 */
+  if ((long long)dt < -((long long)(1000 / g_recHz) / 4)) return;   /* 还没到采样点 */
   g_recNext += (unsigned long long)(1000 / g_recHz);
   if (g_recNext < now) g_recNext = now + 1000 / g_recHz;   /* 落后太多就重新对齐 */
-  if (!cam_ray(&pos, &fwd)) return;
-  gap = -9999.0;
-  {
-    V3 down;
-    down.x = 0.0f; down.y = -1.0f; down.z = 0.0f;
-    if (((raycast_t)RVA(R_RAYCAST))(pos, down, hitbuf, 120.0f, 1, 0)) {
-      hit = *(V3*)hitbuf;
-      gap = hit.y;
-    }
+
+  t = (double)(now - g_recT0) / 1000.0;
+  src = tr_read_state(&st, &obj);
+  if (!src) return;
+  if (!g_recHdr) {
+    g_recSrcMode = (src == 1) ? 1 : 2;
+    rec_header();
+    /* 时间原点挪到第一个样本：大厅里等的那几分钟不该算进录制 */
+    g_recT0 = now;
+    t = 0.0;
   }
-  if (g_recHasPrev)
-    g_recDist += sqrt((pos.x - g_recPrev.x) * (pos.x - g_recPrev.x) +
-                      (pos.z - g_recPrev.z) * (pos.z - g_recPrev.z));
-  g_recPrev = pos;
+  gap = (src == 2 && g_recHasPrev && t > g_recPrevT + 0.0005)
+          ? ((double)st.pos.y - (double)g_recPrev.y) / (t - g_recPrevT)
+          : 0.0;
+  if (src == 2) st.vy = gap;                  /* 相机模式：速度靠差分 */
+  if (g_recHasPrev) {
+    double dx = (double)st.pos.x - g_recPrev.x, dz = (double)st.pos.z - g_recPrev.z;
+    double dd = sqrt(dx * dx + dz * dz);
+    if (dd < 20.0) g_recDist += dd;           /* 换图 / 传送不计进里程 */
+  }
+  {
+    double run = (g_recHasPrev && t > g_recPrevT + 0.0005)
+                   ? sqrt(((double)st.pos.x - g_recPrev.x) * ((double)st.pos.x - g_recPrev.x) +
+                          ((double)st.pos.z - g_recPrev.z) * ((double)st.pos.z - g_recPrev.z)) /
+                       (t - g_recPrevT)
+                   : 0.0;
+    jr_step(&g_recJump, &st, t, run);
+  }
+  sp = (GetAsyncKeyState(VK_SPACE) & 0x8000) ? 1 : 0;
+  ct = (GetAsyncKeyState(VK_CONTROL) & 0x8000) ? 1 : 0;
+  fprintf(g_recFp, "{\"t\":%.3f,\"dt\":%.3f,\"x\":%.3f,\"y\":%.3f,\"z\":%.3f,"
+                   "\"g\":%d,\"vy\":%.2f,\"sp\":%d,\"ct\":%d}\n",
+          t, g_recHasPrev ? t - g_recPrevT : 0.0,
+          st.pos.x, st.pos.y, st.pos.z, st.grounded ? 1 : 0, st.vy, sp, ct);
+  g_recPrev = st.pos;
+  g_recPrevT = t;
   g_recHasPrev = 1;
-  fprintf(g_recFp, "{\"t\":%.3f,\"x\":%.3f,\"y\":%.3f,\"z\":%.3f,\"gy\":%.3f,"
-                   "\"fx\":%.4f,\"fy\":%.4f,\"fz\":%.4f,\"sp\":%d,\"ct\":%d}\n",
-          (now - g_recT0) / 1000.0, pos.x, pos.y, pos.z, gap,
-          fwd.x, fwd.y, fwd.z,
-          (GetAsyncKeyState(VK_SPACE) & 0x8000) ? 1 : 0,
-          (GetAsyncKeyState(VK_CONTROL) & 0x8000) ? 1 : 0);
   g_recN++;
-  if ((g_recN % 20) == 0) fflush(g_recFp);       /* 控制台每 0.25 s 读一次 */
-  if ((g_recN % 100) == 0)
-    elog("rec: %u samples, %.1f m, %.1f s", g_recN, g_recDist,
-         (now - g_recT0) / 1000.0);
+  if ((g_recN % 32) == 0) fflush(g_recFp);      /* 控制台 0.5 s 读一次 */
+  if ((g_recN % 300) == 0)
+    elog("rec: %u samples, %.1f m, %.1f s, jumps=%d", g_recN, g_recDist, t, g_recJump.n);
 }
 
-/* ---- 原始轨迹采集：给离线分析（AI / 阈值调参）用的逐帧样本（2026-11-21）----
- * 控制台「录制」页 -> ucf_navcmd.txt:
+/* ---- 原始轨迹采集：给离线分析（跳跃取证）用的逐帧样本（2026-11-21，2026-11-24 升 v2）----
+ * 控制台「开发者选项」页 -> ucf_navcmd.txt:
  *   cmd=trace act=start|stop out=<绝对路径> hz=<10|20|30|60>
  *   map=<场景名> label=<中文图名> pack=<包 id> fp=<图指纹>
  * 和 rec 的分工：rec 是「走完一条路线」的原料，控制台要重采样成路点；
- * trace 不推断任何东西，只把相机 / 朝向 / 脚下地面 / 按键原样写下来，
- * 用来回答「这一段到底该识别成跳跃、跳下、蹲行还是传送」。
+ * trace 不推断任何东西，只把**玩家脚底坐标 / 是否在地面 / 竖直速度 / 按键**原样写下来，
+ * 落地那一帧由插件直接结算一行 ev=jump（跳距 / 跳高 / 滞空 / 起跳速度 / 类型）。
  * 第一行 header（字段表自描述），每个样本一行，结束一行 end。
  * 时间用 QueryPerformanceCounter：60 Hz 下 GetTickCount64 的 1 ms 粒度太粗。 */
 static FILE*  g_trFp;
@@ -1012,10 +1110,24 @@ static int    g_trOn, g_trHz = 20, g_trHdr, g_trMissed;
 static LARGE_INTEGER g_trT0q, g_trFreq;
 static double g_trNextT, g_trPrevT, g_trDist, g_trSceneT;
 static unsigned g_trN;
+static long   g_trTick0;              /* 开始采集时的定时器计数（算这次采到多少机会） */
 static V3     g_trPrev;
 static int    g_trHasPrev;
-static P      g_trCam;
+static P      g_trObj;                /* 上一帧的玩家对象（换图/重生会变，写一行 ev=cam 断段） */
 static char   g_trScene[64];
+
+/* 跳跃结算状态机见下面的 JumpRec：trace（原始轨迹）和 rec（录制）各持一个实例，
+ * 判据完全一样 —— 起跳看竖直速度，落地看游戏自己的 isGrounded。 */
+
+/* ---- 玩家状态读数（拿不到就退回相机 + 眼高估算）---- */
+#define R_PL_ISMY     0xB55FD0        /* Player.get_isMyPlayer() -> bool          */
+#define PL_CHAR_CONT  0x58            /* Transform characterContainer             */
+#define PL_GROUNDED   0x70            /* bool isGrounded                          */
+#define PL_VELDATA    0x90            /* PlayerVelocity* velData                  */
+#define PV_VELOCITY   0x0C            /* Vector3 velocity（每小时 1 个 Vector3）   */
+static P      g_plCls, g_plType, g_trPlayer;
+static double g_trEye = 2.29;         /* 相机 − 脚底；只在退回相机时用 */
+static int    g_trSrcMode;            /* 0 = 未知 1 = 玩家对象 2 = 相机估算 */
 
 static void map_name_from_minimap(char* out, int cap);   /* 定义在后面 */
 
@@ -1050,9 +1162,165 @@ static void tr_json(const char* s, char* out, int cap) {
   out[j] = 0;
 }
 
+/* ---- 本地玩家 ----------------------------------------------------------
+ * 2026-11-24 采样改造：坐标改成"玩家脚底"，不再用相机（相机比脚底高 2.3 m，
+ * 蹲下还会变，用它算跳高/落点会系统性偏）。
+ * 拿玩家靠 find_objs(Player) + get_isMyPlayer（RVA 见 dump.cs 234492），
+ * 每 2 s 最多找一次，指针靠 m_CachedPtr 判活；拿不到就退回相机估算并在
+ * header 里写 "src":"camera"，分析端能一眼看出这份数据能不能当准。 */
+static void tr_player_lookup(void) {
+  P arr;
+  int n, i;
+  if (!g_plType) {
+    if (!g_plCls) g_plCls = find_cls("", "Player");
+    if (g_plCls && x_class_get_type && x_type_get_object)
+      g_plType = x_type_get_object(x_class_get_type(g_plCls));
+    if (!g_plType) return;
+  }
+  arr = ((find_objs_t)RVA(R_FINDOBJS))(g_plType, 1, 0);
+  if (!arr) return;
+  n = *(int*)((char*)arr + 0xC);
+  if (n <= 0 || n > 256) return;
+  for (i = 0; i < n; i++) {
+    P pl = *(P*)((char*)arr + 0x10 + i * 4);
+    if (!pl || !uobj_live(pl)) continue;
+    /* 返回值是 il2cpp 的 bool（只有 AL 有效），按 int 收会把高位垃圾当成 true，
+     * 可能挑到一个人机的 Player —— 必须用 unsigned char。 */
+    if (((unsigned char(*)(P))RVA(R_PL_ISMY))(pl)) { g_trPlayer = pl; return; }
+  }
+}
+
+static P tr_player(void) {
+  static unsigned long long lastTry;
+  unsigned long long now;
+  if (g_trPlayer && uobj_live(g_trPlayer)) return g_trPlayer;
+  g_trPlayer = 0;
+  now = GetTickCount64();
+  if (lastTry && now - lastTry < 2000) return 0;   /* 找不到别每帧扫全场景 */
+  lastTry = now;
+  tr_player_lookup();
+  return g_trPlayer;
+}
+
+static int tr_read_player(P pl, PlSt* st) {
+  P tr, vel;
+  if (!pl || !uobj_live(pl)) return 0;
+  tr = *(P*)((char*)pl + PL_CHAR_CONT);
+  if (!tr || !mem_ok(tr, 0x20)) return 0;
+  ((get_pos_t)RVA(R_GET_POS_INJ))(tr, &st->pos, 0);
+  if (!isfinite(st->pos.x) || !isfinite(st->pos.y) || !isfinite(st->pos.z)) return 0;
+  if (fabsf(st->pos.x) > 100000.0f || fabsf(st->pos.z) > 100000.0f) return 0;
+  st->grounded = (*(unsigned char*)((char*)pl + PL_GROUNDED) != 0);
+  st->vy = 0.0;
+  vel = *(P*)((char*)pl + PL_VELDATA);
+  if (vel && mem_ok(vel, PV_VELOCITY + 12)) st->vy = *(float*)((char*)vel + PV_VELOCITY + 4);
+  return 1;
+}
+
+/* ---- 跳跃结算（trace 和 rec 共用）------------------------------------
+ * 2026-11-24：起跳判据从"离地 0.3 m"换成**竖直速度**（游戏 JumpPower = 10.5，
+ * 玩家实测 9.5~10.5），落地用游戏自己的 isGrounded。落地那一帧直接结算一行事件：
+ *   {"t":32.490,"ev":"jump","a":[起跳点],"b":[落点],"h":水平跳距,"rise":跳高,
+ *    "air":滞空,"v0":起跳竖直速度,"run":起跳水平速度,"kind":"gap|mount|down|hop"}
+ * kind：h < 0.5 = hop（原地小跳）；落点比起点高 0.5 m 以上 = mount（跳上高台/箱子）；
+ *       低 0.5 m 以上 = down（跳下）；否则 gap（同高度跨缺口）。 */
+static void jr_reset(JumpRec* j, FILE* fp) {
+  memset(j, 0, sizeof *j);
+  j->fp = fp;
+}
+
+static void jr_line(JumpRec* j, const PlSt* st, double t) {
+  double h, dy, rise, air;
+  const char* kind;
+  V3 a = j->a, b = st->pos;
+  if (!j->fp) return;
+  air = t - j->t0;
+  if (air < 0.06 || air > 3.0) return;
+  h = sqrt((double)(b.x - a.x) * (b.x - a.x) + (double)(b.z - a.z) * (b.z - a.z));
+  dy = (double)b.y - (double)a.y;
+  rise = j->apex - (double)a.y;
+  if (h < 0.5) kind = "hop";
+  else if (dy > 0.5) kind = "mount";
+  else if (dy < -0.5) kind = "down";
+  else kind = "gap";
+  if (!strcmp(kind, "gap")) j->gap++;
+  else if (!strcmp(kind, "mount")) j->mount++;
+  else if (!strcmp(kind, "down")) j->down++;
+  else j->hop++;
+  j->n++;
+  fprintf(j->fp, "{\"t\":%.3f,\"ev\":\"jump\",\"a\":[%.3f,%.3f,%.3f],"
+                 "\"b\":[%.3f,%.3f,%.3f],\"h\":%.3f,\"rise\":%.3f,"
+                 "\"air\":%.3f,\"v0\":%.1f,\"run\":%.1f,\"kind\":\"%s\"}\n",
+          t, a.x, a.y, a.z, b.x, b.y, b.z, h, rise, air, j->v0, j->run, kind);
+}
+
+static void jr_step(JumpRec* j, const PlSt* st, double t, double run) {
+  if (!j->air) {
+    if (st->vy > 6.0 && j->hasPrev && j->grounded) {
+      j->air = 1;
+      j->a = j->prev;                 /* 离地前最后一个接地样本 = 起跳点 */
+      j->t0 = j->lastT;
+      j->v0 = st->vy;
+      j->run = run;
+      j->apex = j->prev.y;            /* 跳高基准 = 起跳脚底 */
+    }
+  } else {
+    if ((double)st->pos.y > j->apex) j->apex = st->pos.y;
+    if (st->grounded && (t - j->t0) > 0.06) {
+      jr_line(j, st, t);
+      j->air = 0;
+    } else if (t - j->t0 > 3.0) {
+      j->air = 0;                     /* 卡住 / 掉进虚空：这一跳作废 */
+    }
+  }
+  j->prev = st->pos;
+  j->hasPrev = 1;
+  j->grounded = st->grounded;
+  j->lastT = t;
+}
+
+/* 读一帧玩家状态：1 = 从玩家对象读到，2 = 退回相机 + 眼高估算，0 = 这一帧拿不到。
+ * 相机模式的射线只用来判"是否在地面"和跟住眼高，绝不再当成坐标高度
+ * （它会被楼层/平台骗，2026-11-24 实测一帧能跳 9.5 m）。 */
+static int tr_read_state(PlSt* st, P* objOut) {
+  V3 camPos, dir;
+  char hb[128];
+  P cam, go, tr;
+  double gap = 0.0;
+  int hit = 0;
+  P obj = tr_player();
+  if (obj && tr_read_player(obj, st)) {
+    if (objOut) *objOut = obj;
+    return 1;
+  }
+  cam = ((cam_main_t)RVA(R_CAM_MAIN))(0);
+  if (!cam) return 0;
+  go = ((get_go_t)RVA(R_GETGO))(cam, 0);
+  tr = get_tr(go);
+  if (!tr) return 0;
+  ((get_pos_t)RVA(R_GET_POS_INJ))(tr, &camPos, 0);
+  dir.x = 0.0f; dir.y = -1.0f; dir.z = 0.0f;
+  if (((raycast_t)RVA(R_RAYCAST))(camPos, dir, hb, 120.0f, 1, 0)) {
+    gap = (double)camPos.y - (double)((V3*)hb)->y;
+    hit = 1;
+  }
+  st->grounded = 0;
+  if (hit && fabs(gap - g_trEye) < 0.35) {
+    st->grounded = 1;
+    g_trEye += (gap - g_trEye) * 0.02;
+  }
+  st->pos.x = camPos.x;
+  st->pos.y = (float)((double)camPos.y - g_trEye);
+  st->pos.z = camPos.z;
+  st->vy = 0.0;      /* 相机模式没有真实竖直速度：调用方用相邻两帧的位移补 */
+  if (objOut) *objOut = cam;
+  return 2;
+}
+
 static void tr_header(void) {
   SYSTEMTIME st;
   char sc[72], map[384], lab[384], pk[384], fp[128];
+  const char* srcName = (g_trSrcMode == 1) ? "player" : "camera";
   GetLocalTime(&st);
   map_name_from_minimap(sc, sizeof sc);
   if (sc[0]) strcpy(g_trScene, sc);
@@ -1061,31 +1329,43 @@ static void tr_header(void) {
   tr_json(g_trMeta[2], pk, sizeof pk);
   tr_json(g_trMeta[3], fp, sizeof fp);
   fprintf(g_trFp,
-          "{\"kind\":\"trace\",\"schema\":\"ucf-trace/1\",\"hz\":%d,"
+          "{\"kind\":\"trace\",\"schema\":\"ucf-trace/2\",\"hz\":%d,"
           "\"t0\":\"%04d-%02d-%02d %02d:%02d:%02d\",\"scene\":\"%s\","
           "\"map\":\"%s\",\"label\":\"%s\",\"pack\":\"%s\",\"fp\":\"%s\","
-          "\"fields\":[\"t\",\"dt\",\"x\",\"y\",\"z\",\"gy\",\"fx\",\"fy\","
-          "\"fz\",\"sp\",\"ct\",\"sh\",\"w\",\"a\",\"s\",\"d\"],"
-          "\"notes\":\"t/dt seconds; xyz camera; gy ground under camera (null = no hit); "
-          "f* camera forward; keys 1/0\"}\n",
+          "\"src\":\"%s\","
+          "\"fields\":[\"t\",\"dt\",\"x\",\"y\",\"z\",\"g\",\"vy\",\"sp\",\"ct\"],"
+          "\"notes\":\"t/dt s; xyz = player feet in world; g = grounded 1/0; "
+          "vy = vertical speed m/s; sp/ct = space/ctrl; "
+          "jump event line: {t,ev:jump,a:[x,y,z] takeoff,b:[x,y,z] landing,h,rise,air,v0,run,kind}\","
+          "\"kind_note\":\"gap = 同高度跨缺口, mount = 跳上高台, down = 跳下, hop = 原地小跳\"}\n",
           g_trHz, st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond,
-          g_trScene, map, lab, pk, fp);
+          g_trScene, map, lab, pk, fp, srcName);
   g_trHdr = 1;
 }
 
 static void trace_stop(const char* why) {
   double dur;
+  long ticks;
   if (!g_trFp) return;
   dur = tr_now();
+  ticks = navfix_hires_ticks() - g_trTick0;
   if (g_trHdr)
-    fprintf(g_trFp, "{\"end\":1,\"t\":%.3f,\"n\":%u,\"dist\":%.2f,\"missed\":%d}\n",
-            dur, g_trN, g_trDist, g_trMissed);
+    fprintf(g_trFp, "{\"end\":1,\"t\":%.3f,\"n\":%u,\"dist\":%.2f,\"missed\":%d,"
+                    "\"ticks\":%ld}\n",
+            dur, g_trN, g_trDist, g_trMissed, ticks);
   fflush(g_trFp);
   fclose(g_trFp);
   g_trFp = 0;
   g_trOn = 0;
-  elog("trace: stop (%s) samples=%u dur=%.1fs avg=%.1fHz missed=%d -> %s",
-       why, g_trN, dur, dur > 0.2 ? (double)g_trN / dur : 0.0, g_trMissed, g_trPath);
+  g_trJump.air = 0;                  /* 半空停止：这一跳不结算（样本还在，离线可算） */
+  g_trJump.fp = 0;
+  navfix_hires_release();
+  elog("trace: stop (%s) samples=%u dur=%.1fs avg=%.1fHz missed=%d ticks=%ld jumps=%d "
+       "(gap=%d mount=%d down=%d hop=%d) src=%s -> %s",
+       why, g_trN, dur, dur > 0.2 ? (double)g_trN / dur : 0.0, g_trMissed, ticks,
+       g_trJump.n, g_trJump.gap, g_trJump.mount, g_trJump.down, g_trJump.hop,
+       g_trSrcMode == 1 ? "player" : "camera", g_trPath);
+  hz_warn("trace", g_trN, dur, g_trHz, ticks);
 }
 
 static int trace_start(const char* path, int hz, const char* map, const char* label,
@@ -1096,10 +1376,39 @@ static int trace_start(const char* path, int hz, const char* map, const char* la
   strcpy(g_trPath, path);
   g_trFp = fopen(g_trPath, "wb");
   if (!g_trFp) { elog("trace: cannot create %s", g_trPath); return 0; }
+  navfix_hires_acquire();
+  g_trTick0 = navfix_hires_ticks();
   g_trHz = (hz >= 5 && hz <= 120) ? hz : 20;
   g_trOn = 1; g_trHdr = 0; g_trN = 0; g_trMissed = 0;
   g_trDist = 0.0; g_trPrevT = 0.0; g_trNextT = 0.0; g_trSceneT = 0.0;
-  g_trHasPrev = 0; g_trCam = 0; g_trScene[0] = 0;
+  g_trHasPrev = 0; g_trObj = 0; g_trScene[0] = 0;
+  jr_reset(&g_trJump, g_trFp);
+  g_trSrcMode = 0;
+  {  /* 先试玩家对象：拿到就能写脚底坐标 + 真实 grounded / vy */
+    PlSt st;
+    g_trPlayer = 0;
+    if (tr_player() && tr_read_player(g_trPlayer, &st)) {
+      V3 camPos;
+      P cam = ((cam_main_t)RVA(R_CAM_MAIN))(0);
+      g_trSrcMode = 1;
+      camPos.x = camPos.y = camPos.z = 0.0f;
+      if (cam) {
+        P go = ((get_go_t)RVA(R_GETGO))(cam, 0);
+        P ctr = get_tr(go);
+        if (ctr) ((get_pos_t)RVA(R_GET_POS_INJ))(ctr, &camPos, 0);
+      }
+      /* 一行标定：玩家容器 vs 相机，差多少就是"眼睛比脚底高多少" —— 第一次跑完看这行
+       * 就知道 characterContainer 是不是脚底；就算它是模型胸口，也是常量偏移，
+       * 跳高/高差都是差值，不受影响。 */
+      elog("trace: player=%p feet=(%.2f %.2f %.2f) grounded=%d vy=%.2f cam=(%.2f %.2f %.2f) dy=%.2f",
+           (void*)g_trPlayer, st.pos.x, st.pos.y, st.pos.z, st.grounded, st.vy,
+           camPos.x, camPos.y, camPos.z,
+           cam ? (double)camPos.y - (double)st.pos.y : 0.0);
+    } else {
+      g_trSrcMode = 2;
+      elog("trace: player object NOT found - 退回相机坐标 + 眼高估算（header src=camera）");
+    }
+  }
   strncpy(g_trMeta[0], map ? map : "", sizeof g_trMeta[0] - 1);
   g_trMeta[0][sizeof g_trMeta[0] - 1] = 0;
   strncpy(g_trMeta[1], label ? label : "", sizeof g_trMeta[1] - 1);
@@ -1110,38 +1419,39 @@ static int trace_start(const char* path, int hz, const char* map, const char* la
   g_trMeta[3][sizeof g_trMeta[3] - 1] = 0;
   QueryPerformanceFrequency(&g_trFreq);
   QueryPerformanceCounter(&g_trT0q);
-  elog("trace: start %d Hz -> %s", g_trHz, g_trPath);
+  elog("trace: start %d Hz (timer ticks=%ld) -> %s", g_trHz, g_trTick0, g_trPath);
   return 1;
 }
 
 static void trace_sample(void) {
-  V3 pos, fwd, dir, hit;
-  char hb[128], gyb[40];
-  P cam, go, tr;
-  double t, dt;
-  int sp, ct, sh, w, a, s, d;
-  cam = ((cam_main_t)RVA(R_CAM_MAIN))(0);
-  if (!cam) return;
-  go = ((get_go_t)RVA(R_GETGO))(cam, 0);
-  tr = get_tr(go);
-  if (!tr) return;
-  ((get_pos_t)RVA(R_GET_POS_INJ))(tr, &pos, 0);
-  dir.x = 0.0f; dir.y = 0.0f; dir.z = 1.0f;
-  ((tdir_t)RVA(R_TDIR_INJ))(tr, &dir, &fwd, 0);
+  PlSt st;
+  P obj;
+  double t, dt, run;
+  int sp, ct, src;
+
   t = tr_now();
+  src = tr_read_state(&st, &obj);
+  if (!src) return;
+  if (!g_trHdr) g_trSrcMode = (src == 1) ? 1 : 2;
+  if (src == 2 && g_trHasPrev && t > g_trPrevT + 0.0005)   /* 相机模式：速度靠差分 */
+    st.vy = ((double)st.pos.y - (double)g_trPrev.y) / (t - g_trPrevT);
+
   if (!g_trHdr) {
-    /* 第一个样本才写 header：这时才知道图名。同时把时间原点挪到这里 ——
-     * 在大厅等的那几分钟不该算进轨迹（否则第一条样本的 t 就是 132.6 s）。 */
+    /* 第一个样本才写 header：这时才知道图名、也才知道坐标来源。
+     * 同时把时间原点挪到这里 —— 在大厅等的那几分钟不该算进轨迹。 */
     QueryPerformanceCounter(&g_trT0q);
     g_trNextT = 1.0 / (double)g_trHz;        /* 下一条按正常间隔来 */
     g_trSceneT = 0.0;
     t = 0.0;
     tr_header();
   }
-  /* 换图 / 重新载入会换相机对象：写一行 ev=cam，断段由离线分析决定 */
-  if (cam != g_trCam) {
-    if (g_trCam) fprintf(g_trFp, "{\"t\":%.3f,\"ev\":\"cam\"}\n", t);
-    g_trCam = cam;
+  /* 换玩家对象（换图 / 重生）/ 相机对象变了：写一行 ev=cam 断段 */
+  if (obj != g_trObj) {
+    if (g_trObj) {
+      fprintf(g_trFp, "{\"t\":%.3f,\"ev\":\"cam\"}\n", t);
+      g_trJump.air = 0;                      /* 换图时半空的跳不结算 */
+    }
+    g_trObj = obj;
     g_trHasPrev = 0;
   }
   /* 场景名（小地图贴图名）变了也留一行；每秒最多查一次 */
@@ -1156,61 +1466,56 @@ static void trace_sample(void) {
       fprintf(g_trFp, "{\"t\":%.3f,\"ev\":\"scene\",\"n\":\"%s\"}\n", t, esc);
     }
   }
-  {
-    V3 down;
-    down.x = 0.0f; down.y = -1.0f; down.z = 0.0f;
-    if (((raycast_t)RVA(R_RAYCAST))(pos, down, hb, 120.0f, 1, 0)) {
-      hit = *(V3*)hb;
-      sprintf(gyb, "%.3f", hit.y);
-    } else strcpy(gyb, "null");
-  }
-  dt = g_trN ? t - g_trPrevT : 0.0;
+  dt = g_trHasPrev ? t - g_trPrevT : 0.0;
   if (dt < 0.0) dt = 0.0;
+  run = (g_trHasPrev && dt > 0.0005)
+          ? sqrt(((double)st.pos.x - g_trPrev.x) * ((double)st.pos.x - g_trPrev.x) +
+                 ((double)st.pos.z - g_trPrev.z) * ((double)st.pos.z - g_trPrev.z)) / dt
+          : 0.0;
   if (g_trHasPrev) {
-    double dx = pos.x - g_trPrev.x, dz = pos.z - g_trPrev.z;
+    double dx = (double)st.pos.x - g_trPrev.x, dz = (double)st.pos.z - g_trPrev.z;
     double dd = sqrt(dx * dx + dz * dz);
     if (dd < 20.0) g_trDist += dd;           /* 传送 / 换图不计进里程 */
   }
-  g_trPrev = pos;
-  g_trHasPrev = 1;
-  g_trPrevT = t;
+  jr_step(&g_trJump, &st, t, run);           /* 起跳/落地结算（和录制共用一套） */
   sp = (GetAsyncKeyState(VK_SPACE) & 0x8000) ? 1 : 0;
   ct = (GetAsyncKeyState(VK_CONTROL) & 0x8000) ? 1 : 0;
-  sh = (GetAsyncKeyState(VK_SHIFT) & 0x8000) ? 1 : 0;
-  w = (GetAsyncKeyState('W') & 0x8000) ? 1 : 0;
-  a = (GetAsyncKeyState('A') & 0x8000) ? 1 : 0;
-  s = (GetAsyncKeyState('S') & 0x8000) ? 1 : 0;
-  d = (GetAsyncKeyState('D') & 0x8000) ? 1 : 0;
   fprintf(g_trFp, "{\"t\":%.3f,\"dt\":%.3f,\"x\":%.3f,\"y\":%.3f,\"z\":%.3f,"
-                  "\"gy\":%s,\"fx\":%.4f,\"fy\":%.4f,\"fz\":%.4f,"
-                  "\"sp\":%d,\"ct\":%d,\"sh\":%d,\"w\":%d,\"a\":%d,\"s\":%d,"
-                  "\"d\":%d}\n",
-          t, dt, pos.x, pos.y, pos.z, gyb, fwd.x, fwd.y, fwd.z,
-          sp, ct, sh, w, a, s, d);
+                  "\"g\":%d,\"vy\":%.2f,\"sp\":%d,\"ct\":%d}\n",
+          t, dt, st.pos.x, st.pos.y, st.pos.z, st.grounded ? 1 : 0, st.vy, sp, ct);
+  g_trPrev = st.pos;
+  g_trHasPrev = 1;
+  g_trPrevT = t;
   g_trN++;
-  if ((g_trN % 16) == 0) fflush(g_trFp);      /* 控制台 0.5 s 读一次 */
-  if ((g_trN % 200) == 0)
-    elog("trace: %u samples, %.1f s, avg %.1f Hz", g_trN, t,
-         t > 0.1 ? (double)g_trN / t : 0.0);
+  if ((g_trN % 32) == 0) fflush(g_trFp);      /* 控制台 0.5 s 读一次 */
+  if ((g_trN % 300) == 0)
+    elog("trace: %u samples, %.1f s, avg %.1f Hz, jumps=%d", g_trN, t,
+         t > 0.1 ? (double)g_trN / t : 0.0, g_trJump.n);
 }
 
 static void trace_tick(void) {
-  double now;
+  double now, iv;
   if (!g_trOn || !g_trFp) return;
   now = tr_now();
-  if (now + 0.0001 < g_trNextT) return;
+  iv = 1.0 / (double)g_trHz;
+  /* 提前量 25%：WM_TIMER 只在游戏主循环泵消息时派发，档位接近帧率时（60 Hz 配
+   * 60 fps）严格「到点才采」会因为±1 帧抖动隔三差五丢一帧，实测只有 ~50 Hz。
+   * 让「差 25% 以内」也算到点，时间表仍是绝对的（g_trNextT += iv），
+   * 所以平均频率不会跑偏。2026-11-24 用 60/75/120 fps 的主循环对比过：
+   * 60 Hz 档从 51 Hz 提到 55~60 Hz，30 Hz 档从 29.3 提到 30.3。 */
+  if (now + iv * 0.25 < g_trNextT) return;
   if (now - g_trNextT > 0.5) {
     g_trNextT = now;                          /* 卡顿超过 0.5 s：重新对齐，记一次 missed */
     g_trMissed++;
   } else {
-    g_trNextT += 1.0 / (double)g_trHz;
+    g_trNextT += iv;
   }
-  if (g_trNextT < now) g_trNextT = now + 1.0 / (double)g_trHz;
+  if (g_trNextT < now) g_trNextT = now + iv;
   trace_sample();
 }
 
-/* navfix 的 16 ms 定时器也调一次：editor_tick 在车测/某些路径里只有 4 Hz，
- * 只靠它会录成 4 Hz；这里补到 ~60 Hz（rec/trace 自己按 hz 节流，重复调用没事）。 */
+/* navfix 的采样定时器（10 ms）也调一次：editor_tick 只跟着 4 Hz 心跳走，
+ * 只靠它会录成 4 Hz；这里补到 ~100 次/秒的机会（rec/trace 自己按 hz 闸门采，重复调用没事）。 */
 void editor_rec_tick(void) { rec_tick(); trace_tick(); }
 
 /* ---- per-type colour ---------------------------------------------------- */
@@ -3195,7 +3500,7 @@ static P find_cjk_font(void) {
  *   · 最靠近正上方的那一格点亮成金色（其余灰蓝），圈心写八向朝向（不转）
  *   · 圈外正上方一个金色三角 = 指针
  * 每帧只改「容器一个 eulerAngles + 四个字的 anchoredPosition」，不重建文字网格，
- * 16 ms 定时器里节流到 ~30 Hz 也几乎不花 CPU。
+ * 10 ms 采样定时器里节流到 ~30 Hz 也几乎不花 CPU。
  * 开关：ucf_mod.json 的 vis_compass（默认开），游戏内 Ctrl+Shift+7 随时切。
  * 与可视化总开关无关：visualizer 关着也照样显示。 */
 #define COMPASS_CY      112.0f  /* 圈心离屏幕下沿的像素 */
@@ -3484,7 +3789,7 @@ static void compass_tick(void) {
   compass_update();
 }
 
-/* 转镜头时用的快 tick（navfix 的 16 ms 定时器，节流到 ~30 Hz）：
+/* 转镜头时用的快 tick（navfix 的 10 ms 采样定时器，节流到 ~30 Hz）：
  * 只做「容器转几度 + 换字/换色」，对象没建好时立刻返回。 */
 void editor_compass_tick(void) {
   static int spin;
@@ -3900,6 +4205,29 @@ static void toggle_visuals(void) {
 }
 
 static void make_tag(V3 p, int tag, float radius);
+
+/* 编辑标记（蹲守点 / 守点 / 守区 / tag）按**地图**分文件夹存（2026-11-24 用户要求）：
+ *   <插件目录>\markers\<包名>\markers.txt
+ *   例：markers\01_TransportShip运输船\markers.txt
+ * 以前是一个 markers\markers.txt 全图共用 —— 换一张图，别的图的蹲守点也会被加载进来
+ * （现场就见过 y=+27 的悬空蹲守点，人机选中后原地"到达"不动）。包名 = 中英文地图名。 */
+static void mk_set_path(void) {
+  char base[MAX_PATH], dir[MAX_PATH], cfg[MAX_PATH];
+  const char* name = g_packName[0] ? g_packName : "_未分类";
+  base[0] = 0;
+  /* 根目录优先级：UCF_MARKERS_DIR（控制台注入 = 工程端 data\navdata\dev\markers）
+   *              > ucf_mod.json 的 markers_dir > <插件目录>\markers（兜底） */
+  if (GetEnvironmentVariableA("UCF_MARKERS_DIR", base, sizeof base) <= 0 || !base[0]) {
+    cfg[0] = 0;
+    cfg_str("markers_dir", "", cfg, sizeof cfg);
+    if (cfg[0]) snprintf(base, sizeof base, "%s", cfg);
+    else snprintf(base, sizeof base, "%s\\markers", g_dir);
+  }
+  ucf_mkdir_p(base);
+  snprintf(dir, sizeof dir, "%s\\%s", base, name);
+  ucf_mkdir_p(dir);
+  snprintf(g_file, sizeof g_file, "%s\\markers.txt", dir);
+}
 
 static int save_file(void) {
   FILE* f;
@@ -5836,6 +6164,48 @@ static int make_jump_link(V3 a, V3 b) {
     if (!startNode || !endNode)
       elog("wpmenu: jump link NOT hooked (startNode=%p endNode=%p); 起点要落在已有路点附近",
            startNode, endNode);
+    /* ---- 注册校验 / 自愈（2026-11-24 现场：路径下一个节点确实是 endNode，人机仍不跳）----
+     * 人机在 OnPathComplete 里用的是 static Bot_JumpLink.GetLink(startNode, out link)，
+     * 它查的是静态字典 linkDic；OnLatePostScan 只把 startNode/endNode 填上，
+     * 字典里有没有这一条是另一回事。这里直接查一次，没有就手工登记。 */
+    if (startNode) {
+      P gm = x_class_get_method_from_name ? x_class_get_method_from_name(g_jumpCls, "GetLink", 2) : 0;
+      if (gm && x_runtime_invoke) {
+        void* args[2];
+        P outLink = 0;
+        args[0] = startNode;
+        args[1] = &outLink;
+        x_runtime_invoke(gm, 0, args, 0);
+        elog("wpmenu: GetLink(startNode=%p) -> %s", startNode, outLink ? "YES" : "NO");
+        if (!outLink) {
+          P fld = x_class_get_field_from_name ? x_class_get_field_from_name(g_jumpCls, "linkDic") : 0;
+          P ftype = (fld && x_field_get_type) ? x_field_get_type(fld) : 0;
+          P dcls = (ftype && x_class_from_il2cpp_type) ? x_class_from_il2cpp_type(ftype) : 0;
+          P dic = 0;
+          P setItem = 0;
+          if (fld && x_field_static_get_value) x_field_static_get_value(fld, &dic);
+          if (dcls && x_class_get_method_from_name) setItem = x_class_get_method_from_name(dcls, "set_Item", 2);
+          if (dic && setItem) {
+            void* a2[2];
+            a2[0] = startNode;
+            a2[1] = comp;
+            x_runtime_invoke(setItem, dic, a2, 0);
+            outLink = 0;
+            a2[0] = 0;
+            args[0] = startNode;
+            args[1] = &outLink;
+            x_runtime_invoke(gm, 0, args, 0);
+            elog("wpmenu: linkDic 手工登记 -> %s (dic=%p)",
+                 outLink ? "OK（跳链现在能被 GetLink 查到）" : "FAILED", (void*)dic);
+          } else {
+            elog("wpmenu: linkDic 登记失败 (dic=%p cls=%p set_Item=%p)",
+                 (void*)dic, (void*)dcls, (void*)setItem);
+          }
+        }
+      } else {
+        elog("wpmenu: GetLink 方法没找到 (%p)，没法校验注册", (void*)gm);
+      }
+    }
   } else {
     elog("wpmenu: jump component created but OnLatePostScan missing; link inactive");
   }
@@ -6135,6 +6505,12 @@ static int nav_cmd_set_pack(P g, const char* pack, const char* fp) {
   g_nedPath[0] = 0;
   g_nedExpect = 0;
   g_nedGraph = g;
+  /* 换包 = 换地图：编辑标记换成这张图自己的那份（markers\<包名>\markers.txt），
+   * 顺手把场景里的旧标记重放一遍，别让上一张图的蹲守点留在这一张图里。 */
+  mk_set_path();
+  reset_markers();
+  load_file();
+  elog("markers: map file -> %s", g_file);
   pack_stat();
   elog("navcmd: pack -> %s (fp %s)", g_packName[0] ? g_packName : "(official nav)",
        g_packFp[0] ? g_packFp : "(any map)");
@@ -7096,9 +7472,21 @@ static void bot_probe(void) {
           g_bp[k2].p = p; g_bp[k2].t = GetTickCount();
         }
       }
-      elog("beh: bot=%p p=(%.1f,%.1f,%.1f) spd=%.2f acts=[%s] isS=%d tgt=(%.1f,%.1f,%.1f) over=%d reach=%d path=%p pts=%d enemy=%p enemyD=%.1f nearN=%p nearD=%.1f nextN=%p",
-           b, p.x, p.y, p.z, spd, names, isS, tp.x, tp.y, tp.z, over, reach,
-           path, pts, enemy, enemyD, gnear, d, gnext);
+      {
+        /* 2026-11-24：给 beh 行补「是否在地面 / 竖直速度」——判断人机到底有没有起跳
+         * 就靠这两个：起跳瞬间 vy 会到 10 左右、g 变 0；光看 5 s 一次的坐标会漏掉 0.7 s 的跳。 */
+        P bpl = pr_readable((char*)b + 0x24, 0x10) ? *(P*)((char*)b + 0x24) : 0;
+        int bg = -1;
+        double bvy = 0.0;
+        if (bpl && pr_readable(bpl, 0x100)) {
+          P vel = *(P*)((char*)bpl + 0x90);
+          bg = *(unsigned char*)((char*)bpl + 0x70) ? 1 : 0;
+          if (vel && pr_readable(vel, 0x18)) bvy = *(float*)((char*)vel + 0x10);
+        }
+        elog("beh: bot=%p p=(%.1f,%.1f,%.1f) spd=%.2f acts=[%s] isS=%d tgt=(%.1f,%.1f,%.1f) over=%d reach=%d path=%p pts=%d enemy=%p enemyD=%.1f nearN=%p nearD=%.1f nextN=%p g=%d vy=%.1f",
+             b, p.x, p.y, p.z, spd, names, isS, tp.x, tp.y, tp.z, over, reach,
+             path, pts, enemy, enemyD, gnear, d, gnext, bg, bvy);
+      }
     }
     shown++;
   }
@@ -7420,7 +7808,7 @@ void editor_on_quit(void) {
  * 视角没人管。地图场景自带 Main Camera + CM FreeLook（Cinemachine 虚拟相机），
  * 所以不新建相机，只做两件事：
  *   1) 关掉 CM FreeLook，否则 CinemachineBrain 每帧把相机拽回它的机位；
- *   2) 每 16 ms（navfix 的 WM_TIMER）写一次 position / eulerAngles。
+ *   2) 每 10 ms（navfix 的 WM_TIMER）写一次 position / eulerAngles。
  * 操作：WASD 平移 · Space/Ctrl 升降 · Shift 加速 · 按住右键转头 · F7 开关。
  * 只在 UCF_FREECAM=1（控制台车测页的勾选）时启动，正常游戏一行都不执行。 */
 
@@ -7691,7 +8079,6 @@ void editor_start(const char* modDir) {
   if (!modDir) return;
   strncpy(g_dir, modDir, sizeof(g_dir) - 1);
   ucf_log_file(g_log, sizeof g_log, g_dir, "ucf_mod.log");
-  sprintf(g_file, "%s\\markers\\markers.txt", g_dir);
   /* 四版路径先定下来：pack_init 要用 g_packRoot，导出要用 g_expDir。
    * 控制台启动游戏时会带 UCF_EXPORT_DIR / UCF_PACK_DIR / UCF_NAV_READONLY。 */
   {
@@ -7706,6 +8093,7 @@ void editor_start(const char* modDir) {
                      ro[0] == '1') ? 1 : 0;
   }
   pack_init();   /* UCF_PACK / UCF_FP：这次读哪个目录、只对哪张图生效 */
+  mk_set_path(); /* 编辑标记按地图分文件夹：markers\<包名>\markers.txt（pack_init 之后才知道包名） */
   /* 玩家坐标记录：和日志一起放 log\（控制台读同一份；旧部署的根目录那份仍兼容） */
   ucf_log_file(g_pmPath, sizeof g_pmPath, g_dir, "player_marks.txt");
   pm_load(0);

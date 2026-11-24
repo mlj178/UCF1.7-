@@ -30,25 +30,23 @@ _FINAL_FP_RE = re.compile(r"^n\d+-[0-9a-f]{16}\.txt$", re.I)   # 成品版本里
 _CMD_SEQ = 0
 
 
-def prepare_final_dir(version):
-    r"""成品某个版本开跑前补齐两件事（幂等，每次启动游戏前调一次）：
+def prepare_final_root():
+    r"""成品开跑前补齐两件事（幂等，每次启动游戏前调一次）：
 
-      1) nogen.txt —— 编辑中的 grow/keep 包都带这个文件（空图不自动铺点），成品要一致；
+      1) nogen.txt —— 编辑中的 grow/keep 草稿都带这个文件（空图不自动铺点），成品要一致；
       2) *.txt 设只读 —— 成品不允许游戏内保存（DLL 的 fopen("w") 会失败）。
 
-    成品档「按包」读 ②\final\<版本>\（UCF_PACK_DIR=final、UCF_PACK=<版本名>），
-    和编辑中同一套加载逻辑。返回该版本目录；版本不存在就返回空串。
+    成品不再有版本：final\<指纹>.txt 平铺，一张图一份。
     """
-    d = os.path.join(FINAL_ROOT, version) if version else ""
-    if not d or not os.path.isdir(d):
-        return ""
+    d = FINAL_ROOT
     try:
+        os.makedirs(d, exist_ok=True)
         ng = os.path.join(d, "nogen.txt")
         if not os.path.isfile(ng):
             with open(ng, "w", encoding="utf-8", newline="\n") as f:
                 f.write("")
         for fn in os.listdir(d):
-            if fn.lower().endswith(".txt"):
+            if _FINAL_FP_RE.match(fn):
                 try:
                     os.chmod(os.path.join(d, fn), 0o444)
                 except OSError:
@@ -58,25 +56,30 @@ def prepare_final_dir(version):
     return d
 
 
-_FINAL_BOOTED = {"ok": False}
+def final_stats():
+    r"""成品统计：{n, maps:{指纹:...}, latest}；读不了当空。"""
+    try:
+        return ND.final_store_stats()
+    except Exception:                 # noqa: BLE001
+        return {"n": 0, "maps": {}, "latest": ""}
 
 
 def final_versions():
-    r"""成品所有版本（读 navdata.py 的台账）；读不了当没有。
-    第一次调用顺手做一次迁移：老成品目录 ②\nav\ 有数据就搬成 v1。"""
-    try:
-        if not _FINAL_BOOTED["ok"]:
-            _FINAL_BOOTED["ok"] = True
-            ND.final_ensure_root()
-        return ND.final_versions()
-    except Exception:                 # noqa: BLE001
+    r"""兼容旧调用：成品最多只有一个“当前”，有图就返回一条，没有就空列表。
+
+    2026-11-24 起界面不再用版本下拉；这个函数只留给还没改完的旧代码/自检。
+    """
+    st = final_stats()
+    if not st.get("n"):
         return []
+    return [{"name": "final", "exists": True, "maps": st.get("maps") or {},
+             "created": st.get("latest") or "", "updated": st.get("latest") or ""}]
 
 
 def final_current_name():
-    r"""台账里当前该启动的版本名；没有就空串。"""
+    r"""成品有图就返回固定名 final；没有就空串（启动成品 = 全原生）。"""
     try:
-        return ND.final_current()
+        return "final" if final_stats().get("n") else ""
     except Exception:                 # noqa: BLE001
         return ""
 
@@ -331,108 +334,40 @@ class PackMixin:
                                           "要现在继续吗？（想让它这次生效就先关游戏）", parent=self)
 
     def ask_publish(self):
-        r"""发布到成品：选「新建一版」还是「更新当前版」，可填备注。取消返回 None。"""
-        vers = final_versions()
-        cur = self.final_selected() or final_current_name()
-        pack = self.selected_pack() if hasattr(self, "opt_pack") else ""
-        try:
-            want = ND.final_name_from_pack(pack) or ""
-        except Exception:                 # noqa: BLE001
-            want = ""
-        out = {"into": "", "note": "", "go": False}
-        top = ctk.CTkToplevel(self)
-        top.title("发布到成品")
-        top.resizable(False, False)
-        top.transient(self)
-        if bool(self.topmost_var.get()):
-            top.attributes("-topmost", True)
-        try:
-            top.grab_set()
-        except tk.TclError:
-            top.after(150, lambda: top.winfo_exists() and top.grab_set())
-        top.bind("<Escape>", lambda _e: top.destroy())
-
-        ctk.CTkLabel(top, text="发布到成品", font=("Microsoft YaHei UI", 17, "bold"),
-                     anchor="w").pack(fill="x", padx=18, pady=(16, 0))
-        if not vers:
-            tip = ("成品里还没有版本：这次会建第一版 %s（版本名跟测试包同名），"
-                   "以后每次发布默认再加一版，老版本都留着。" % (want or "v1"))
+        r"""发布确认：只发布当前地图，成品里同图那份会被覆盖。取消返回 False。"""
+        lv, lab, fp = self.current_map() if hasattr(self, "opt_map") else ("", "", "")
+        folder = self.current_folder() if hasattr(self, "opt_map") else ""
+        if not folder or not fp:
+            return False
+        if self.draft_exists():
+            nd, ed = self.draft_counts()
+            head = "把「%s」的草稿发布到成品？\n\n草稿：%d 点 / %d 边" % (lab or lv, nd, ed)
         else:
-            tip = ("成品现在 %d 个版本，当前启动 %s。\n"
-                   "「新建一版」= 以当前版为底整套复制，再用这个包替换它那张图，"
-                   "新版本名叫 %s，老版本全留着；\n"
-                   "「更新当前版」= 只改 %s 里那张图，版本名不变。"
-                   % (len(vers), cur or "无", want or "v1", cur or "它"))
-        ctk.CTkLabel(top, text=tip, font=FONT_S, text_color="#9aa0a6", anchor="w",
-                     justify="left", wraplength=470).pack(fill="x", padx=18, pady=(4, 10))
-
-        mode = {"into": ""}
-        if vers:
-            ctk.CTkLabel(top, text="发布方式", font=FONT_S, text_color="#9aa0a6",
-                         anchor="w").pack(fill="x", padx=20, pady=(0, 4))
-            seg = ctk.CTkSegmentedButton(top, values=["新建一版（推荐）", "更新当前版"],
-                                         font=FONT_S, height=32)
-            seg.set("新建一版（推荐）")
-            seg.pack(fill="x", padx=18)
-            try:
-                one = ND.final_unique_name(want) if want else "v1"
-            except Exception:             # noqa: BLE001
-                one = want or "v1"
-            ctk.CTkLabel(top, text="新建一版的版本名 = %s（跟测试包同名；重名自动加 -2）。"
-                                   "两种方式都不会删掉已有的成品版本。" % one,
-                         font=("Consolas", 11), text_color="#8a8f96",
-                         anchor="w", justify="left", wraplength=470).pack(
-                fill="x", padx=20, pady=(4, 8))
+            return False
+        if ND.final_store_has(fp):
+            head += "\n成品里已有这张图的一份，会被覆盖；旧文件自动留 1 份快照。"
         else:
-            seg = None
-
-        ctk.CTkLabel(top, text="备注（可选，记进版本台账，例：运输船全长路线）",
-                     font=FONT_S, text_color="#9aa0a6", anchor="w").pack(fill="x", padx=20, pady=(2, 4))
-        ent = ctk.CTkEntry(top, font=FONT, width=420, placeholder_text="这一版改了什么")
-        ent.pack(fill="x", padx=18)
-
-        bar = ctk.CTkFrame(top, fg_color="transparent")
-        bar.pack(fill="x", padx=18, pady=(14, 16))
-
-        def go(_e=None):
-            out["go"] = True
-            if seg is not None and str(seg.get()).startswith("更新"):
-                out["into"] = cur
-            out["note"] = ent.get().strip()
-            top.destroy()
-
-        ent.bind("<Return>", go)
-        ctk.CTkButton(bar, text="取消", width=90, height=32, font=FONT_S,
-                      fg_color="#3a3f47", hover_color="#4a5058",
-                      command=top.destroy).pack(side="right")
-        ctk.CTkButton(bar, text="发布", width=110, height=32, font=FONT,
-                      fg_color="#2f9e44", hover_color="#37b24d",
-                      command=go).pack(side="right", padx=(0, 8))
-        self.wait_window(top)
-        return out if out["go"] else None
+            head += "\n成品里还没有这张图，这是第一次发布。"
+        head += "\n\n发布后，启动「成品」就会加载它。继续？"
+        return messagebox.askyesno("发布这张图到成品", head, parent=self)
 
     def do_promote(self):
-        r"""编辑中 -> 成品：把当前包的 <指纹>.txt 发布进成品的一个版本。
+        r"""编辑中 -> 成品：覆盖 final\<指纹>.txt（和编辑中同一套加载逻辑）。
 
-        默认「新建一版」：以当前版本为底整套复制，再用这个包替换对应那张图，老版本全留着；
-        也可以只更新当前版。成品档「按包启动」，和编辑中同一套加载逻辑，所以
-        grow / keep / 普通增量发过去效果一模一样。写完由 navdata.py 加只读属性。
+        不再新建版本、不再整套复制；旧成品由 navdata.py 自动留快照。
         """
-        name = self.selected_pack() if hasattr(self, "opt_pack") else ""
-        if not name:
-            self.set_status("先在「编辑中」页选一个测试包")
+        folder = self.current_folder() if hasattr(self, "opt_map") else ""
+        if not folder:
+            self.set_status("先在「编辑中」页选一张图")
+            return
+        if not self.draft_exists():
+            self.set_status("这张图还没有草稿：先点「开始编辑这张图」")
             return
         if not self._guard_game("发布到成品"):
             return
-        got = self.ask_publish()
-        if not got:
+        if not self.ask_publish():
             return
-        args = ["pack", "promote", name]
-        if got.get("into"):
-            args += ["--into", got["into"]]
-        if got.get("note"):
-            args += ["--note", got["note"]]
-        self.run_navdata(args, "发布到成品")
+        self.run_navdata(["pack", "promote", folder], "发布到成品")
 
     def do_restore(self):
         if not self._guard_game("从备份还原"):
@@ -506,6 +441,47 @@ class PackMixin:
                 return str(row.get("name") or folder)
         return folder
 
+    # ---- 单草稿模型：当前地图 -> 唯一草稿目录 ----------------------------
+    def current_map(self):
+        r"""下拉框当前地图 -> (level, 中文名, 指纹)；没选返回空三元组。"""
+        disp = self.opt_map.get() if hasattr(self, "opt_map") else ""
+        return self.map_disp.get(disp, ("", "", ""))
+
+    def current_folder(self):
+        r"""当前地图对应的 packs\ 一级目录名（01_TransportShip运输船）。"""
+        lv, _lab, fp = self.current_map()
+        return map_folder(lv, fp) if lv else ""
+
+    def draft_dir(self):
+        folder = self.current_folder()
+        return pack_dir(folder) if folder else ""
+
+    def draft_exists(self):
+        d = self.draft_dir()
+        if not d or not os.path.isdir(d):
+            return False
+        if os.path.isfile(os.path.join(d, "manifest.json")):
+            return True
+        try:
+            return any(_FINAL_FP_RE.match(fn) for fn in os.listdir(d))
+        except OSError:
+            return False
+
+    def draft_manifest(self):
+        return pack_manifest(self.current_folder()) if self.current_folder() else {}
+
+    def draft_counts(self):
+        r"""当前草稿的 (node add 数, edge add 数)；没有草稿就是 (0, 0)。"""
+        folder = self.current_folder()
+        if not folder or not self.draft_exists():
+            return 0, 0
+        fp = pack_target_fp(folder)
+        p = pack_txt(folder, fp)
+        if not p:
+            return 0, 0
+        summ = pack_summary(folder, fp)
+        return summ.get("nadd", 0) + summ.get("ndel", 0), summ.get("eadd", 0) + summ.get("edel", 0)
+
     def resolve_pack_id(self, pid):
         r"""老配置里存的是平铺包名：按尾名找回分类后的 id（地图文件夹/包名）。"""
         pid = str(pid or "").replace("\\", "/").strip("/")
@@ -548,14 +524,14 @@ class PackMixin:
 
     def pack_dict(self):
         """当前选择 → 写回 ucf_mod.json 的 pack 段（只给控制台自己用，插件不读它）。"""
-        disp = self.opt_map.get() if hasattr(self, "opt_map") else ""
-        lv, lab, fp = self.map_disp.get(disp, ("", "", ""))
-        name = self.selected_pack() if hasattr(self, "opt_pack") else ""
+        lv, lab, fp = self.current_map() if hasattr(self, "opt_map") else ("", "", "")
+        folder = self.current_folder() if hasattr(self, "opt_map") else ""
+        name = folder if (folder and self.draft_exists()) else ""
         return {
-            "on": bool(self.pack_on.get()),
+            "on": bool(self.pack_on.get()) if hasattr(self, "pack_on") else False,
             "name": name,
             "map": lv, "label": lab, "fp": fp,
-            "only_map": bool(self.pack_only.get()),
+            "only_map": True,
         }
 
     def pack_manifest_map(self, pid):
@@ -570,56 +546,49 @@ class PackMixin:
         return ""
 
     def on_pack_change(self, persist=True):
-        on = self.seg_mode.get().startswith("编辑中")
-        self.pack_on.set(on)
-        disp = self.opt_pack.get()
-        name = "" if disp.startswith("（") else getattr(self, "pack_disp", {}).get(disp, "")
-        if not name and not disp.startswith("（"):
-            name = self.resolve_pack_id(disp)
-        if not name:
-            packs = self._pack_values()
-            self.opt_pack.configure(values=packs)
-            if packs and not packs[0].startswith("（"):
-                self.opt_pack.set(packs[0])
-                name = self.pack_disp.get(packs[0], "")
-        # 换包时自动把地图切到包对应的那张图（包只对它生效，选错图等于空跑）
-        if on and name and name != getattr(self, "_last_pack", ""):
-            lv = self.pack_manifest_map(name)
-            for mdisp, (lvl, _lab, _fp) in self.map_disp.items():
-                if lv and lvl == lv:
-                    self.opt_map.set(mdisp)
-                    break
-        self._last_pack = name
-        self.pack_name = name
-        state = "normal" if on else "disabled"
+        r"""地图 / 启动档变了：只刷新状态，不再有“选哪个包”这一步。"""
+        on = self.seg_mode.get().startswith("编辑中") if hasattr(self, "seg_mode") else False
+        if hasattr(self, "pack_on"):
+            self.pack_on.set(on)
+        folder = self.current_folder() if hasattr(self, "opt_map") else ""
+        self._last_pack = folder
+        self.pack_name = folder if (on and self.draft_exists()) else ""
         try:
-            self.opt_pack.configure(state=state)
-            self.opt_map.configure(state=state)
-        except Exception:
+            if hasattr(self, "opt_map"):
+                self.opt_map.configure(state="normal")
+        except Exception:                 # noqa: BLE001
             pass
         if persist:
-            self.persist("测试包")
+            self.persist("编辑状态")
         self.refresh_launch_strip()
         self.refresh_wp_status()
+        if hasattr(self, "lbl_final"):
+            self.refresh_final_combo()
         self.update_mode_hint()
         self.refresh_compare()
         if hasattr(self, "rec_pre"):
             self.refresh_rec_ready()
 
+    def start_or_open_draft(self):
+        r"""有草稿就打开目录；没有就弹「开始编辑这张图」。"""
+        if self.draft_exists():
+            self.open_packs_dir()
+        else:
+            self.create_pack()
+
     def open_packs_dir(self):
         try:
-            os.makedirs(PACKS, exist_ok=True)
-            os.startfile(PACKS)      # noqa: SLF001  Windows 资源管理器
+            d = self.draft_dir() if self.draft_exists() else PACKS
+            os.makedirs(d, exist_ok=True)
+            os.startfile(d)          # noqa: SLF001  Windows 资源管理器
         except OSError as exc:
-            self.set_status("打不开 packs 目录：%s" % exc)
+            self.set_status("打不开草稿目录：%s" % exc)
 
     # ---- 控制台 → 运行中插件：载入 / 重读 / 保存 / 回正式版 ----
     def selected_pack(self):
-        r"""当前选中的包 id（地图文件夹/包名）；没选返回空串。"""
-        disp = self.opt_pack.get() if hasattr(self, "opt_pack") else ""
-        if not disp or disp.startswith("（"):
-            return ""
-        return getattr(self, "pack_disp", {}).get(disp) or self.resolve_pack_id(disp)
+        r"""当前地图的草稿目录名（01_TransportShip运输船）；没有草稿返回空串。"""
+        folder = self.current_folder() if hasattr(self, "opt_map") else ""
+        return folder if (folder and self.draft_exists()) else ""
 
     def selected_fp(self):
         disp = self.opt_map.get() if hasattr(self, "opt_map") else ""
@@ -634,9 +603,7 @@ class PackMixin:
         if not pack_id_ok(name):
             self.set_status("包名只能用英文字母、数字、下划线（_）和短横线（-）：%s" % name)
             return
-        fp = pack_target_fp(name) if self.pack_only.get() else ""
-        if self.pack_only.get() and not fp:
-            fp = self.selected_fp()
+        fp = pack_target_fp(name) or self.selected_fp()
         try:
             seq = write_nav_cmd(cmd, name, fp)
         except OSError as exc:
@@ -645,26 +612,26 @@ class PackMixin:
         self.persist("测试包")
         running = game_running()
         act = {"apply": "载入", "reload": "重新应用", "save": "保存"}.get(cmd, cmd)
-        short = name.split("/")[-1]
+        short = self.folder_label(name) if hasattr(self, "folder_label") else name
         if running:
-            self.set_status("已发送 #%d：%s %s；游戏日志看 navcmd / naved" % (seq, act, name))
+            self.set_status("已发送 #%d：%s %s；游戏日志看 navcmd / naved" % (seq, act, short))
         else:
             self.set_status("游戏没开：已选中 %s，点「开始游戏」生效" % short)
 
     def clear_pack_map(self):
-        name = self.selected_pack()
-        if not name:
-            self.set_status("先选一个测试包")
+        name = self.current_folder() if hasattr(self, "opt_map") else ""
+        if not name or not self.draft_exists():
+            self.set_status("这张图还没有草稿")
             return
         fp = pack_target_fp(name) or self.selected_fp()
         if not fp:
-            self.set_status("不知道这张图的指纹：先在右侧选一张地图")
+            self.set_status("不知道这张图的指纹：先选一张地图")
             return
         if not messagebox.askyesno(
-                "清空当前图",
-                "把测试包 %s 里 %s 的路线清成%s？\n"
-                "只重写 packs\\%s\\%s.txt，不动成品 nav\\。"
-                % (name.split("/")[-1], fp,
+                "重置本图草稿",
+                "把 %s 的草稿清成%s？\n"
+                "只重写 packs\\%s\\%s.txt，成品不动。"
+                % (self.folder_label(name) if hasattr(self, "folder_label") else name, fp,
                    "「原版基础 + 新增」（原生点原样保留，只清掉你加的点）"
                    if (pack_manifest(name).get("keep")
                        or pack_summary(name, fp)["keep"]) else "「空白地图」",
@@ -686,8 +653,9 @@ class PackMixin:
             with open(os.path.join(pdir, "nogen.txt"), "w", encoding="utf-8") as f:
                 f.write("")
             man = pack_manifest(name)
-            man.setdefault("name", name.split("/")[-1])
-            man.setdefault("folder", name.replace("\\", "/").split("/")[0])
+            man.setdefault("name", "%s_%s" % (map_scene(self.current_map()[0], fp),
+                                              time.strftime("%Y%m%d")))
+            man.setdefault("folder", name)
             man.setdefault("fp", fp)
             if "level" not in man:
                 man["level"] = self.map_disp.get(self.opt_map.get(), ("", "", ""))[0]
@@ -865,179 +833,220 @@ class PackMixin:
         return dict(out)
 
     def create_pack(self):
-        r"""给当前选中的地图建一份测试包：空白地图（grow）或原版基础 + 新增（keep）。
+        r"""给当前地图建唯一草稿：从成品继续 / 空白地图（grow）/ 原版基础 + 新增（keep）。
 
-        空白地图写 `grow`：插件进图先把原生路点全部禁用，再把包里自己画的
-        node add / edge add 按 PointGraph.AddNode 新建，数量不受原生点数限制；
-        `nogen.txt` 同时关掉插件的自动铺点。原版基础 + 新增写 `keep`：原生路点
-        一个都不动，只把新点加到原图上。
+        一张图只有一个草稿；已有草稿就直接打开目录，不再建第二个。
         """
-        disp = self.opt_map.get()
-        if disp not in self.map_disp:
-            self.set_status("先选一张有指纹的图，再建测试包")
+        lv, lab, fp = self.current_map() if hasattr(self, "opt_map") else ("", "", "")
+        if not lv or not fp:
+            self.set_status("先选一张有指纹的图，再点「开始编辑这张图」")
             return
-        lv, lab, fp = self.map_disp[disp]
-        got = self.ask_pack_name(lab, lv, fp)
-        if not got or not got.get("name"):
-            return
-        name = got["name"]
-        keep = bool(got.get("keep"))
         folder = map_folder(lv, fp)
-        pid = "%s/%s" % (folder, name)
-        pdir = pack_dir(pid)
-        tpath = os.path.join(pdir, fp + ".txt")
-        if os.path.isfile(tpath) and not messagebox.askyesno(
-                "覆盖测试包", "测试包 %s 里已经有 %s.txt，覆盖成%s？" % (
-                    name, fp, "「原版基础 + 新增」" if keep else "「空白地图」"),
-                parent=self):
+        if self.draft_exists():
+            self.set_status("这张图已经有草稿：%s" % folder)
+            self.open_packs_dir()
             return
+        has_final = ND.final_store_has(fp)
+        choices = (["从成品继续改（推荐）"] if has_final else []) + [
+            "空白地图（新建节点）", "原版基础 + 新增"]
+        out = {"mode": choices[0] if choices else "", "go": False}
+        top = ctk.CTkToplevel(self)
+        top.title("开始编辑这张图")
+        top.resizable(False, False)
+        top.transient(self)
+        if bool(self.topmost_var.get()):
+            top.attributes("-topmost", True)
+        try:
+            top.grab_set()
+        except tk.TclError:
+            top.after(150, lambda: top.winfo_exists() and top.grab_set())
+        top.bind("<Escape>", lambda _e: top.destroy())
+
+        ctk.CTkLabel(top, text="开始编辑  %s" % (lab or lv),
+                     font=("Microsoft YaHei UI", 17, "bold"),
+                     anchor="w").pack(fill="x", padx=18, pady=(16, 0))
+        ctk.CTkLabel(top, text=("成品里已有这张图（%d 点），推荐复制过来接着改；"
+                                "也可以从空白地图或原版基础重画。" % (
+                                    ND.final_store_meta().get(fp, {}).get("node", 0)))
+                 if has_final else
+                 "成品里还没有这张图：选一种底图开始画，做完再发布。",
+                 font=FONT_S, text_color="#9aa0a6", anchor="w", justify="left",
+                 wraplength=470).pack(fill="x", padx=18, pady=(4, 10))
+
+        seg = ctk.CTkSegmentedButton(top, values=choices, font=FONT_S, height=32)
+        seg.set(choices[0])
+        seg.pack(fill="x", padx=18)
+        hint = ctk.CTkLabel(top, text="", font=FONT_S, text_color="#9aa0a6",
+                            anchor="w", justify="left", wraplength=460)
+        hint.pack(fill="x", padx=20, pady=(4, 10))
+
+        def on_mode(_v=None):
+            now = str(seg.get())
+            if now.startswith("从成品"):
+                text = "成品那一份原样复制成草稿；改完发布就是覆盖回成品。"
+            elif now.startswith("空白"):
+                text = ("空白地图：原生点全部禁用、自动铺点关闭，只走你画的路线；"
+                        "新点按 AddNode 新建，数量不限。")
+            else:
+                text = ("原版基础 + 新增：原生点一个都不动，原版路线照常走；"
+                        "只把新点按 AddNode 追加到原图上。")
+            hint.configure(text=text)
+            out["mode"] = now
+
+        seg.configure(command=on_mode)
+        on_mode()
+
+        bar = ctk.CTkFrame(top, fg_color="transparent")
+        bar.pack(fill="x", padx=18, pady=(12, 16))
+        ctk.CTkButton(bar, text="取消", width=76, height=34, font=FONT_S,
+                      fg_color="transparent", border_width=1, border_color="#4a4a4a",
+                      hover_color="#2e2e2e", command=top.destroy).pack(side="right")
+        def go():
+            out["go"] = True
+            top.destroy()
+
+        ctk.CTkButton(bar, text="开始编辑", width=110, height=34, font=FONT,
+                      fg_color="#2f6fdb", hover_color="#255bb4",
+                      command=go).pack(side="right", padx=(0, 8))
+        top.update_idletasks()
+        w = max(520, top.winfo_reqwidth())
+        h = top.winfo_reqheight()
+        x = self.winfo_rootx() + (self.winfo_width() - w) // 2
+        y = self.winfo_rooty() + (self.winfo_height() - h) // 2
+        top.geometry("%dx%d+%d+%d" % (w, h, max(x, 0), max(y, 0)))
+        self.wait_window(top)
+
+        if not out["go"]:
+            return
+        mode = out["mode"]
+        if not mode:
+            return
+        pdir = pack_dir(folder)
+        tpath = os.path.join(pdir, fp + ".txt")
+        keep = mode.startswith("原版")
+        grow = mode.startswith("空白")
         try:
             os.makedirs(pdir, exist_ok=True)
-            with open(tpath, "w", encoding="utf-8", newline="\n") as f:
-                if keep:
+            if mode.startswith("从成品"):
+                shutil.copyfile(ND.final_store_map(fp), tpath)
+            elif keep:
+                with open(tpath, "w", encoding="utf-8", newline="\n") as f:
                     f.write("# ucf-navedit v1 fp=%s\n# keep: 原生点原样保留，只新增节点\nkeep\n" % fp)
-                else:
+            else:
+                with open(tpath, "w", encoding="utf-8", newline="\n") as f:
                     f.write("# ucf-navedit v1 fp=%s\ngrow\n" % fp)
             with open(os.path.join(pdir, "nogen.txt"), "w", encoding="utf-8") as f:
                 f.write("")                       # 存在即关掉自动铺点
+            now = time.strftime("%Y-%m-%d %H:%M:%S")
+            summ = pack_summary(folder, fp)
             man = {
-                "name": name, "folder": folder, "level": lv, "label": lab, "fp": fp,
-                "created": time.strftime("%Y-%m-%d %H:%M:%S"),
-                "source": "console-keep" if keep else "console-grow",
-                "grow": True, "keep": bool(keep),
-                "note": ("keep 测试包：原生点一个都不动（原版路线照常走）+ 新点按 AddNode 新建"
-                         if keep else
-                         "grow 测试包（空白地图）：原生点全禁用 + 新点按 AddNode 新建（不受原生点数限制）"),
+                "name": "%s_%s" % (map_scene(lv, fp), time.strftime("%Y%m%d")),
+                "folder": folder, "level": lv, "label": lab, "fp": fp,
+                "created": now, "updated": now,
+                "source": ("copy-final" if mode.startswith("从成品") else
+                           "console-keep" if keep else "console-grow"),
+                "grow": bool(grow or summ["grow"]),
+                "keep": bool(keep or summ["keep"]),
+                "note": ("grow 草稿（空白地图）：原生点全禁用 + 新点按 AddNode 新建"
+                         if not keep and not mode.startswith("从成品") else
+                         "keep 草稿：原生点原样保留 + 新点按 AddNode 新建"
+                         if keep else "草稿：复制成品后继续改"),
             }
             with open(os.path.join(pdir, "manifest.json"), "w", encoding="utf-8",
                       newline="\n") as f:
                 json.dump(man, f, ensure_ascii=False, indent=2)
                 f.write("\n")
         except OSError as exc:
-            self.set_status("建包失败：%s" % exc)
+            self.set_status("建草稿失败：%s" % exc)
             return
-        values = self._pack_values()
-        self.opt_pack.configure(values=values)
-        self.opt_pack.set(self.disp_of(pid))
         self.seg_mode.set("编辑中（packs·可写）")
         self.pack_on.set(True)
         self.on_pack_change()
-        msg = "已建%s测试包 %s（%s · %s）" % (
-            "「原版基础 + 新增」" if keep else "「空白地图」", name, lab, folder)
+        msg = "已建草稿 %s（%s · %s）" % (man["name"], lab, folder)
         if game_running():
             try:
-                write_nav_cmd("apply", pid, fp)
+                write_nav_cmd("apply", folder, fp)
                 msg += "，已发送到运行中的游戏"
             except OSError:
                 pass
         self.set_status(msg)
 
-    # ---- 成品版本（多版本：一版 = 一整套数据，启动时选一个）----------------
+    # ---- 成品（每张图一份，没有版本下拉）----------------------------------
     def final_selected(self):
-        r"""下拉框里选中的成品版本名（没选中就退回台账里的 current）。"""
-        if hasattr(self, "opt_final") and hasattr(self, "final_disp"):
-            name = self.final_disp.get(self.opt_final.get(), "")
-            if name:
-                return name
+        r"""兼容旧调用：成品有图就返回固定名 final，否则空串。"""
         return final_current_name()
 
     def refresh_final_combo(self):
-        r"""把成品版本刷进下拉框，顺手更新说明行和底部按钮。"""
-        self.final_disp = {}
-        vers = final_versions()
-        for v in vers:
-            nm = v["name"]
-            if len(nm) <= 16:      # 老名字（v1/正式版A）短，补上时间和图数好认
-                label = "%s · %s · %d 张图" % (nm, (v.get("created") or "-")[5:16],
-                                               len(v.get("maps") or {}))
-            else:                  # 版本名沿用测试包名（<场景>_<日期>_<时间>），原样显示，不截断
-                label = nm
-            if not v.get("exists"):
-                label += "（目录缺失）"
-            self.final_disp[label] = v["name"]
-        if hasattr(self, "opt_final"):
-            values = list(self.final_disp) or ["（还没有版本）"]
-            self.opt_final.configure(values=values)
-            cur = final_current_name()
-            pick = ""
-            for label, name in self.final_disp.items():
-                if name == cur:
-                    pick = label
-                    break
-            self.opt_final.set(pick or values[0])
-        for btn in (getattr(self, "btn_rename_final", None),
-                    getattr(self, "btn_delete_final", None)):
-            if btn is not None:      # 没有版本时改名/删除点了也没用，直接灰掉
-                try:
-                    btn.configure(state="normal" if vers else "disabled")
-                except Exception:     # noqa: BLE001
-                    pass
+        r"""刷新成品状态行/按钮（不再有版本下拉）。"""
+        st = final_stats()
+        meta = st.get("maps") or {}
         if hasattr(self, "lbl_final"):
-            cur = self.final_selected()
-            if not vers:
+            if not meta:
                 self.lbl_final.configure(
-                    text="成品里还没有任何版本：去「编辑中」页选一个测试包，点「发布到成品」建第一版。",
+                    text="成品里还没有图：去「编辑中」选一张图，点「发布这张图到成品」。",
                     text_color="#f59f00")
             else:
-                v = next((x for x in vers if x["name"] == cur), None) or {}
-                note = str(v.get("note") or "")
-                self.lbl_final.configure(
-                    text="启动成品 = %s（%d 张图，更新于 %s）  final\\%s%s" % (
-                        cur, len(v.get("maps") or {}), (v.get("updated") or "-")[:16], cur,
-                        ("  ·  " + note) if note else ""),
-                    text_color="#8ab4f8")
+                lv, lab, fp = self.current_map() if hasattr(self, "opt_map") else ("", "", "")
+                cur = meta.get(fp) if fp else None
+                if cur:
+                    text = ("本图已发布：%s · %s · %d 点 / %d 边 · %s · sha %s" % (
+                        lv, lab, cur.get("node", 0), cur.get("edge", 0),
+                        (cur.get("published") or cur.get("mtime") or "-")[:16],
+                        (cur.get("sha256") or "")[:8]))
+                else:
+                    text = "本图还没发布；成品里已有 %d 张图，最近发布 %s" % (
+                        len(meta), (st.get("latest") or "-")[:16])
+                self.lbl_final.configure(text=text, text_color="#8ab4f8")
+        btn = getattr(self, "btn_revoke_final", None)
+        if btn is not None:
+            lv, _lab, fp = self.current_map() if hasattr(self, "opt_map") else ("", "", "")
+            try:
+                btn.configure(state="normal" if (fp and ND.final_store_has(fp)) else "disabled")
+            except Exception:                 # noqa: BLE001
+                pass
+        if hasattr(self, "lbl_final_all"):
+            if meta:
+                names = []
+                for _fp, m in sorted(meta.items(), key=lambda kv: (
+                        str(kv[1].get("level") or ""), kv[0])):
+                    names.append(m.get("label") or m.get("level") or _fp)
+                self.lbl_final_all.configure(
+                    text="已发布 %d 张：%s" % (len(meta), "、".join(names)),
+                    text_color="#8a8f96")
+            else:
+                self.lbl_final_all.configure(text="成品为空：启动成品时所有图走原生。",
+                                             text_color="#f59f00")
         self.update_mode_hint()
         self.refresh_game_button()
 
     def on_final_change(self):
-        name = self.final_selected()
-        if name:
-            try:
-                ND.final_set_current(name)
-            except Exception:                 # noqa: BLE001
-                pass
         self.refresh_final_combo()
         self.refresh_wp_status()
         self.refresh_compare()
 
     def open_final_dir(self):
-        name = self.final_selected()
-        d = os.path.join(FINAL_ROOT, name) if name else FINAL_ROOT
-        if not os.path.isdir(d):
-            d = FINAL_ROOT
-            try:
-                os.makedirs(d, exist_ok=True)
-            except OSError:
-                pass
+        d = FINAL_ROOT
+        try:
+            os.makedirs(d, exist_ok=True)
+        except OSError:
+            pass
         try:
             os.startfile(d)                    # noqa: S606  Windows 专用
         except OSError as exc:
             self.set_status("打不开目录：%s" % exc)
 
-    def rename_final(self):
-        old = self.final_selected()
-        if not old:
-            self.set_status("还没有成品版本，先发布一版")
-            return
-        new = self.ask_text("改成品版本名",
-                            "当前：%s。改成什么名字？（只改目录名和台账，路线数据一个字节不动）" % old,
-                            old)
-        if not new or new == old:
-            return
-        self.run_navdata(["final", "rename", old, new], "改版本名")
-
-    def delete_final(self):
-        r"""删掉当前成品版本：真删 final\<版本>\ 整个目录（用户 2026-11-21 要求，不要归档）。"""
-        name = self.final_selected()
-        if not name:
-            self.set_status("还没有成品版本")
+    def revoke_final(self):
+        r"""撤销当前地图的发布：真删 final\<指纹>.txt（草稿不动）。"""
+        lv, lab, fp = self.current_map() if hasattr(self, "opt_map") else ("", "", "")
+        if not fp or not ND.final_store_has(fp):
+            self.set_status("这张图还没发布")
             return
         if not messagebox.askyesno(
-                "删除成品版本",
-                "真的删掉成品版本「%s」？\n\n"
-                "会连 final\\%s 整个目录一起删（里面所有图），删了找不回来。\n"
-                "游戏正开着就先关掉。其它版本不受影响；删完自动切到剩下的某一版，\n"
-                "全删光了就是「成品没有版本」= 启动原版，再发布一次就又有。\n\n继续？" % (name, name),
+                "撤销这张图的发布",
+                "把「%s」从成品里撤掉？\n\n"
+                "只删 final\\%s.txt；草稿不动，启动成品时这张图会走原生。\n"
+                "发布前的快照仍在 archive\\final_prev\\，需要时可以手工找回。\n\n继续？"
+                % (lab or lv, fp),
                 parent=self):
             return
-        self.run_navdata(["final", "rm", name], "删除成品版本")
+        self.run_navdata(["final", "rm", fp], "撤销发布")

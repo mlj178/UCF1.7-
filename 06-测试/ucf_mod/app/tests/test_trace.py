@@ -29,6 +29,7 @@ for _p in (os.path.join(UCF_ROOT, "app", "core"), os.path.join(UCF_ROOT, "app"),
 import ucf_trace  # noqa: E402
 
 EDITOR = os.path.join(PROJ, "src", "editor.c")
+NAVFIX = os.path.join(PROJ, "src", "navfix.c")
 CONSOLE = os.path.join(PROJ, "app", "控制台.pyw")
 # 2026-11-24 目录重构：轨迹卡片在 tabs/dev/tab.py，ucf_trace 的导入在 ui/env.py
 DEV_TAB = os.path.join(PROJ, "app", "tabs", "dev", "tab.py")
@@ -46,7 +47,7 @@ def check_c(editor):
     assert "static void trace_sample(" in editor, "editor.c 没有 trace_sample()"
     assert "static void trace_tick(" in editor, "editor.c 没有 trace_tick()"
     assert "void editor_rec_tick(void) { rec_tick(); trace_tick(); }" in editor, \
-        "16 ms 定时器没同时驱动 rec 和 trace"
+        "采样定时器没同时驱动 rec 和 trace"
     assert "trace_tick();               /* 原始轨迹采集" in editor, \
         "editor_tick() 没调 trace_tick()"
     assert 'if (!strcmp(cmd, "trace"))' in editor, "navcmd 没接 cmd=trace"
@@ -66,10 +67,57 @@ def check_c(editor):
     for key in ucf_trace.FIELDS:
         assert ('\\"%s\\":' % key) in seg, "trace_sample 少了字段 %s" % key
 
-    # 两个事件行：换图 / 换相机
-    assert '\\"ev\\":\\"cam\\"' in seg, "trace_sample 没有 ev=cam"
+    # 两个事件行：换图 / 换场景
+    assert '\\"ev\\":\\"cam\\"' in seg, "trace_sample 没有 ev=cam（分段行）"
     assert '\\"ev\\":\\"scene\\"' in seg, "trace_sample 没有 ev=scene"
-    assert 'gy\\":%s' in seg and 'strcpy(gyb, "null")' in seg, "gy 没处理射线打空"
+    # 2026-11-24 采样改造：坐标取玩家脚底 + grounded/vy + 落地结算的跳事件
+    assert "PL_CHAR_CONT" in editor and "PL_GROUNDED" in editor and "PL_VELDATA" in editor, \
+        "没按 Player 字段偏移取脚底 / isGrounded / velData"
+    assert 'tr_read_state(' in seg, "trace_sample 没用玩家状态读数（玩家对象 / 相机兜底）"
+    assert '\\"ev\\":\\"jump\\"' in editor, "没有跳事件行（落地结算）"
+    for k in ('\\"h\\":', '\\"rise\\":', '\\"air\\":', '\\"v0\\":', '\\"run\\":', '\\"kind\\":'):
+        assert k in editor, "跳事件少字段 %s" % k
+
+
+def check_hires_timer(editor, navfix):
+    r"""rec/trace 的采样率必须由采样定时器（WM_TIMER 0xF3C1）驱动，不能只靠
+    250 ms 心跳（4 Hz）。
+
+    2026-11-24 现场是两个问题叠在一起，这里都钉住：
+      1) 源码：定时器以前只在 UCF_FREECAM=1 时启动 -> 10/20/30/60 Hz 全变 4 Hz；
+      2) 流程：修好的 DLL 没进真正在跑的那份游戏目录 -> 改了等于没改。
+    所以除了「按需启停」，还要有「定时器到底派发过几次」的证据（ticks）和
+    跑不满时的显式告警，别再让降级悄悄地发生。
+    """
+    assert "static void hi_timer_sync(void)" in navfix, "navfix.c 没有 hi_timer_sync()"
+    assert "void navfix_hires_acquire(void)" in navfix, "navfix.c 没导出 acquire"
+    assert "void navfix_hires_release(void)" in navfix, "navfix.c 没导出 release"
+    assert "SetTimer(g_hwnd, UCF_HI_TIMER_ID, UCF_HI_PERIOD_MS, 0)" in navfix, \
+        "采样定时器没按常量启动"
+    assert "#define UCF_HI_PERIOD_MS 10" in navfix, \
+        "定时器周期不是 10 ms（USER_TIMER_MINIMUM）：60 Hz 档会踩 15.6 ms 系统量子"
+    assert "if (msg == WM_TIMER && w == UCF_HI_TIMER_ID)" in navfix, \
+        "WndProc 没接采样定时器（id 对不上就等于没接）"
+    assert "editor_rec_tick();" in navfix, "WM_TIMER 没驱动 rec/trace"
+    assert "InterlockedIncrement(&g_hiTicks)" in navfix and \
+        "long navfix_hires_ticks(void)" in navfix, \
+        "定时器派发次数没统计：跑不满就只能靠猜"
+    assert "navfix_hires_kick" in navfix, \
+        "没有 4 Hz 自愈补启：acquire 早于窗口钩子时会让整场退回 4 Hz"
+    assert "timeBeginPeriod" in navfix, "没提系统定时器精度（默认 15.6 ms 量子）"
+    assert "g_hiFreecam = (GetEnvironmentVariableA" in navfix, \
+        "UCF_FREECAM 不再作为常驻定时器的条件"
+    assert editor.count("navfix_hires_acquire();") >= 2, \
+        "rec_start / trace_start 没有各自申请采样定时器"
+    assert editor.count("navfix_hires_release();") >= 2, \
+        "rec_stop / trace_stop 没有各自归还采样定时器"
+    assert editor.count("navfix_hires_ticks()") >= 4, \
+        "trace/rec 没记「这次采集里定时器派发了几次」"
+    assert "static void hz_warn(" in editor and editor.count('hz_warn("') >= 2, \
+        "实测频率没跑满档位时没有告警（2026-11-24 那次就是一声不吭）"
+    tick_block = editor.split("static void trace_tick(void)")[1][:900]
+    assert "iv * 0.25" in tick_block, \
+        "trace_tick 没给 25% 提前量：60 Hz 档在 60 fps 主循环下会隔帧丢样本（实测 ~50 Hz）"
 
 
 def check_console(console):
@@ -156,6 +204,16 @@ def check_unit():
     text = ucf_trace.summary_text(sm)
     assert "样本" in text and "空格 1 次" in text, text
 
+    # 「没跑满档位」判定：2026-11-24 的现场是 档位 60 Hz / 实测 4 Hz
+    sm["hz_set"] = 20                                   # 合成日志本身 ~20 Hz
+    assert not ucf_trace.starved(sm), sm
+    assert "没跑满档位" not in ucf_trace.summary_text(sm)
+    sm["hz_set"] = 60
+    assert ucf_trace.starved(sm), "档位 60 Hz 实际 20 Hz 竟然没判成没跑满"
+    assert "没跑满档位" in ucf_trace.summary_text(sm), ucf_trace.summary_text(sm)
+    sm["hz_set"] = 0                                    # 旧日志没有档位：不许误报
+    assert not ucf_trace.starved(sm) and "没跑满档位" not in ucf_trace.summary_text(sm)
+
     # make_path：同一个时间戳不覆盖（只改 DIR，别碰真实目录）
     real_dir = ucf_trace.DIR
     try:
@@ -178,6 +236,63 @@ def check_unit():
     with open(csv_path, "r", encoding="utf-8-sig") as f:
         first = f.readline().strip()
     assert first == ",".join(ucf_trace.FIELDS), first
+
+
+def synth_v2(path):
+    r"""合成一份 ucf-trace/2：10 个样本（第 4~6 帧在空中）+ 一条落地结算的 jump 事件。"""
+    head = {
+        "kind": "trace", "schema": "ucf-trace/2", "hz": 30,
+        "t0": "2026-11-24 20:00:00", "scene": "mp_test",
+        "map": "level1", "label": "运输船", "pack": "p", "fp": "f",
+        "src": "player", "fields": list(ucf_trace.FIELDS),
+    }
+    lines = [json.dumps(head, ensure_ascii=False)]
+    for i in range(10):
+        air = 4 <= i <= 6
+        lines.append(json.dumps({
+            "t": round(i / 30.0, 3), "dt": 0.033 if i else 0.0,
+            "x": round(-50.0 + i * 0.4, 3), "y": round(-16.64 + (1.8 if air else 0.0), 3),
+            "z": 6.0, "g": 0 if air else 1, "vy": 9.0 if i == 4 else (-8.0 if i == 6 else 0.0),
+            "sp": 1 if i == 3 else 0, "ct": 0,
+        }, ensure_ascii=False))
+    lines.append(json.dumps({
+        "t": 0.25, "ev": "jump",
+        "a": [-48.8, -16.64, 6.0], "b": [-47.6, -16.64, 6.0],
+        "h": 1.2, "rise": 1.8, "air": 0.2, "v0": 10.5, "run": 7.5, "kind": "gap",
+    }, ensure_ascii=False))
+    lines.append(json.dumps({"end": 1, "t": 0.3, "n": 10, "dist": 3.6, "missed": 0, "ticks": 12}))
+    with open(path, "w", encoding="utf-8", newline="\n") as f:
+        f.write("\n".join(lines) + "\n")
+
+
+def check_v2():
+    r"""2 版日志：read_full 要能读出跳事件，摘要要带「跳 N 次」，报告要能出 Markdown。"""
+    tmp = tempfile.mkdtemp(prefix="ucf_trace2_")
+    path = os.path.join(tmp, "level1_20261124-200000.jsonl")
+    synth_v2(path)
+    hdr, rows, jumps, end = ucf_trace.read_full(path)
+    assert hdr["schema"] == "ucf-trace/2" and hdr["src"] == "player", hdr
+    assert len(rows) == 10 and rows[4]["g"] == 0 and abs(rows[4]["vy"] - 9.0) < 1e-6, rows[4]
+    assert len(jumps) == 1, jumps
+    j = jumps[0]
+    assert (j["kind"], round(j["h"], 2), round(j["rise"], 2)) == ("gap", 1.2, 1.8), j
+    assert j["a"][0] < j["b"][0]
+    off, n, last, end2 = ucf_trace.scan(path, 0)
+    assert n == 10 and end2 is not None, (n, end2)      # 事件行不能算进样本
+    sm = ucf_trace.summary(path)
+    assert sm["jumps"] == 1 and sm["src"] == "player", sm
+    assert sm["jump_kinds"].get("gap") == 1, sm["jump_kinds"]
+    assert "跳 1 次" in ucf_trace.summary_text(sm), ucf_trace.summary_text(sm)
+
+    # 报告：能出 Markdown，且带上这一跳
+    sys.path.insert(0, os.path.join(PROJ, "app", "tools", "data"))
+    import jump_stats
+    files, evs = jump_stats.collect([path])
+    assert len(files) == 1 and files[0]["est"] is False, files
+    assert len(evs) == 1 and evs[0]["src"] == "plugin", evs
+    md = jump_stats.report_md(files, evs)
+    assert "# 跳跃数据分析" in md and "跨缺口" in md and "1.20" in md, md[:400]
+    assert "缺口" in md or "gap" in md, md[:400]
 
 
 def _fprintf(block, pos=0):
@@ -217,12 +332,14 @@ def check_c_format(editor):
     """
     hdr_block = editor.split("static void tr_header(void)")[1].split("static void trace_stop")[0]
     hfmt, _, _ = _fprintf(hdr_block)
-    hargs = (20, 2026, 11, 21, 15, 0, 0, "mp_x", "level1", "运输船", "pack", "fp")
+    hargs = (30, 2026, 11, 21, 15, 0, 0, "mp_x", "level1", "运输船", "pack", "fp", "player")
     hobj = json.loads(hfmt % hargs)
-    assert hobj["kind"] == "trace" and hobj["schema"] == "ucf-trace/1", hobj
+    assert hobj["kind"] == "trace" and hobj["schema"] == "ucf-trace/2", hobj
     assert tuple(hobj["fields"]) == tuple(ucf_trace.FIELDS), hobj["fields"]
     assert hobj["label"] == "运输船" and hobj["map"] == "level1"
     assert hobj["t0"] == "2026-11-21 15:00:00", hobj["t0"]
+    assert hobj["src"] == "player", "header 没记坐标来源（player / camera）"
+    assert "kind_note" in hobj, "header 没解释 kind 的四种取值"
 
     smp_block = editor.split("static void trace_sample(void)")[1].split("static void trace_tick")[0]
     pos = 0
@@ -231,25 +348,25 @@ def check_c_format(editor):
         if "dt" in sfmt:
             break
 
-    sargs = (0.017, 0.017, 1.234, -18.59, -19.218, "-20.140",
-             0.1234, 0.0, 0.9923, 0, 0, 0, 1, 0, 0, 0)
+    sargs = (0.017, 0.017, 1.234, -18.59, -19.218, 1, 0.02, 0, 0)
     obj = json.loads(sfmt % sargs)
     assert set(obj) == set(ucf_trace.FIELDS), (set(obj), set(ucf_trace.FIELDS))
-    assert abs(obj["t"] - 0.017) < 1e-9 and obj["sp"] == 0 and obj["w"] == 1
-    assert abs(obj["gy"] + 20.14) < 1e-9, obj["gy"]
+    assert abs(obj["t"] - 0.017) < 1e-9 and obj["sp"] == 0 and obj["g"] == 1
+    assert abs(obj["vy"] - 0.02) < 1e-9, obj["vy"]
 
-    # 射线打空：gy 写 null，JSON 里必须是 None
-    obj2 = json.loads(sfmt % (sargs[:5] + ("null",) + sargs[6:]))
-    assert obj2["gy"] is None, obj2["gy"]
+    # 2 版不再有 gy / 相机朝向：那两样是旧格式里最容易骗人的东西
+    assert "gy" not in obj and "fx" not in obj, obj
 
 
 def main():
     editor = read(EDITOR)
     check_c(editor)
+    check_hires_timer(editor, read(NAVFIX))
     check_c_format(editor)
     check_console(chr(10).join([read(CONSOLE), read(DEV_TAB), read(UI_ENV)]))
     check_unit()
-    print("OK: trace 字段表 / navcmd / 控制台入口 / 增量读取 / 摘要 全部通过")
+    check_v2()
+    print("OK: trace 字段表 / navcmd / 控制台入口 / 增量读取 / 摘要 / v2 跳事件+报告 全部通过")
     return 0
 
 

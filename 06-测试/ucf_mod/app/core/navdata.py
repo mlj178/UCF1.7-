@@ -464,6 +464,172 @@ def final_ensure_root():
     print("已把旧成品（② nav\\ %d 个文件）迁成成品版本 %s" % (len(legacy), name))
 
 
+# ---------------------------------------------------------------- 成品（单份）
+# 2026-11-24：一张图只有一份成品。final\<指纹>.txt 平铺，不再有版本目录，也不再有
+# _current.txt。发布 = 覆盖同图那份；覆盖前把旧成品复制到 archive\final_prev\<指纹>\
+# （每张图只留最近 5 份，界面上不出现，只用于误发布时找回）。
+FINAL_PREV = os.path.join(P.DEV, "archive", "final_prev")
+FINAL_PUBLISH_LOG = os.path.join(FINAL_ROOT, "_publish.log")
+
+
+def _store_index_read():
+    idx = {}
+    try:
+        with open(FINAL_INDEX, "r", encoding="utf-8") as f:
+            idx = json.load(f) or {}
+    except (OSError, ValueError):
+        idx = {}
+    if not isinstance(idx, dict) or idx.get("format") != "ucf-final-single":
+        idx = {"format": "ucf-final-single", "version": 2, "maps": {}}
+    idx.setdefault("maps", {})
+    return idx
+
+
+def _store_index_write(idx):
+    os.makedirs(FINAL_ROOT, exist_ok=True)
+    write_json(FINAL_INDEX, idx)
+
+
+def final_store_files():
+    r"""成品里每个地图一份：[(指纹, 路径)]。"""
+    if not os.path.isdir(FINAL_ROOT):
+        return []
+    return [(fn[:-4], os.path.join(FINAL_ROOT, fn))
+            for fn in sorted(os.listdir(FINAL_ROOT)) if _NAV_FP_RE.match(fn)]
+
+
+def final_store_map(fp):
+    fp = str(fp or "").strip()
+    return os.path.join(FINAL_ROOT, fp + ".txt") if fp else ""
+
+
+def final_store_has(fp):
+    p = final_store_map(fp)
+    return bool(p) and os.path.isfile(p)
+
+
+def final_store_meta():
+    r"""{指纹: {path,node,edge,bytes,mtime,sha256,level,label,published,...}}。
+
+    磁盘上的实际文件优先；台账只补 level/label/发布时间。sha256 每次现算
+    （成品最多 11 个文件，几十 KB，界面刷新无压力）。
+    """
+    idx = _store_index_read()
+    ledger = idx.get("maps") or {}
+    out = {}
+    for fp, p in final_store_files():
+        try:
+            st = os.stat(p)
+        except OSError:
+            continue
+        nd, ed = edit_counts(p)
+        item = {"fp": fp, "path": p, "file": os.path.basename(p),
+                "node": nd, "edge": ed, "bytes": st.st_size,
+                "mtime": time.strftime("%Y-%m-%d %H:%M", time.localtime(st.st_mtime)),
+                "sha256": sha256(p)}
+        item.update({k: v for k, v in (ledger.get(fp) or {}).items()
+                     if k in ("level", "label", "published", "created", "from", "note")})
+        out[fp] = item
+    return out
+
+
+def final_store_stats():
+    meta = final_store_meta()
+    latest = ""
+    for m in meta.values():
+        latest = max(latest, str(m.get("published") or m.get("mtime") or ""))
+    return {"n": len(meta), "maps": meta, "latest": latest}
+
+
+def _store_prune_prev(d, keep=5):
+    try:
+        files = sorted((os.path.join(d, fn) for fn in os.listdir(d)
+                        if fn.lower().endswith(".txt")),
+                       key=os.path.getmtime, reverse=True)
+    except OSError:
+        return
+    for p in files[keep:]:
+        try:
+            make_writable(p)
+            os.remove(p)
+        except OSError:
+            pass
+
+
+def final_store_publish(pid, note=""):
+    r"""草稿 -> 成品：覆盖同指纹的那一份，返回 (fp, 路径, 点数, 边数, sha256)。"""
+    pdir, man, fp = find_pack(pid)
+    src = os.path.join(pdir, fp + ".txt")
+    if not os.path.isfile(src):
+        sys.exit("草稿里没有 %s（先在里面写路线）" % (fp + ".txt"))
+    os.makedirs(FINAL_ROOT, exist_ok=True)
+    dst = final_store_map(fp)
+    if os.path.isfile(dst):
+        bdir = os.path.join(FINAL_PREV, fp)
+        try:
+            os.makedirs(bdir, exist_ok=True)
+            make_writable(dst)
+            shutil.copy2(dst, os.path.join(bdir, time.strftime("%Y%m%d_%H%M%S") + ".txt"))
+            _store_prune_prev(bdir, 5)
+        except OSError:
+            pass
+        make_writable(dst)
+    tmp = dst + ".tmp"
+    shutil.copyfile(src, tmp)
+    os.replace(tmp, dst)
+    make_readonly(dst)
+    final_ensure_nogen(FINAL_ROOT)
+    now = time.strftime("%Y-%m-%d %H:%M:%S")
+    nd, ed = edit_counts(dst)
+    sha = sha256(dst)
+    idx = _store_index_read()
+    idx["maps"][fp] = {
+        "file": fp + ".txt", "level": man.get("level", ""), "label": man.get("label", ""),
+        "published": now, "node": nd, "edge": ed, "bytes": os.path.getsize(dst),
+        "sha256": sha, "from": str(pid), "created": man.get("created", ""),
+    }
+    if note:
+        idx["maps"][fp]["note"] = note
+    _store_index_write(idx)
+    try:
+        with open(FINAL_PUBLISH_LOG, "a", encoding="utf-8", newline="\n") as f:
+            f.write("%s\t%s\t%s\t%d/%d\t%s\t%s\n" % (
+                now, fp, man.get("label", ""), nd, ed, sha[:12], note))
+    except OSError:
+        pass
+    return fp, dst, nd, ed, sha
+
+
+def final_store_remove(fp):
+    p = final_store_map(fp)
+    if not p or not os.path.isfile(p):
+        return False
+    make_writable(p)
+    os.remove(p)
+    idx = _store_index_read()
+    idx["maps"].pop(str(fp), None)
+    _store_index_write(idx)
+    return True
+
+
+def final_store_ensure():
+    r"""建好 final\ 目录，顺手清掉旧版的 _current.txt。
+
+    空目录里不提前放 nogen.txt；第一次发布时 final_store_publish 会补。
+    """
+    try:
+        os.makedirs(FINAL_ROOT, exist_ok=True)
+    except OSError:
+        return
+    p = os.path.join(FINAL_ROOT, "_current.txt")
+    if os.path.isfile(p):
+        try:
+            make_writable(p)
+            os.remove(p)
+        except OSError:
+            pass
+
+
 def pack_flags(path):
     r"""读包文件头里的 grow / keep（blank 是旧写法，等同 grow）。"""
     grow = keep = False
@@ -1023,15 +1189,14 @@ def cmd_diff(args):
     for k in diff[:20]:
         print("      ~ %s" % k)
     print("")
-    versions = final_versions()
-    cur = final_current()
-    print("== 成品：%d 个版本，当前启动 %s" % (len(versions), cur or "（没有）"))
-    for v in versions:
-        print("   %s %-12s %s  %d 张图" % (
-            "●" if v["name"] == cur else " ", v["name"],
-            (v.get("created") or "-")[:16], len(v.get("maps") or {})))
-    if not versions:
-        print("    （还没有成品版本 = 成品档没数据；编辑中做完用 pack promote 建第一版）")
+    meta = final_store_meta()
+    print("== 成品：%d 张图（每图一份，没有版本）" % len(meta))
+    for fp, m in sorted(meta.items(), key=lambda kv: (str(kv[1].get("level") or ""), kv[0])):
+        print("   %-22s %-8s %4d/%-4d 发布 %s" % (
+            fp, m.get("level", "?"), m.get("node", 0), m.get("edge", 0),
+            (m.get("published") or m.get("mtime") or "-")[:16]))
+    if not meta:
+        print("    （成品为空；编辑中做完用 pack promote 发布，成品 = 每张图一份）")
     return 0
 
 
@@ -1040,7 +1205,7 @@ def cmd_status(args):
     print("")
     infos = [
         ("① 备份版（原生·只读）", P.NATIVE, "只读，永不编辑"),
-        ("② 开发版（成品 + 收件箱 + 编辑中）", P.DEV, "final 是成品（多版本），packs 是编辑中"),
+        ("② 开发版（成品 + 收件箱 + 草稿）", P.DEV, "final 是成品（每图一份），packs 是草稿"),
         ("③ 游戏目录（运行时·不放数据）", P.DEPLOY, "只放 dll / ucf_mod.json / markers\\"),
     ]
     for title, root, tip in infos:
@@ -1055,25 +1220,21 @@ def cmd_status(args):
     n_files, t_last = _walk_count(P.VIS)
     n_json = _walk_count(P.VIS, lambda f: f.lower().endswith(".json"))[0]
     n_bin = _walk_count(P.VIS, lambda f: f.startswith("navmesh") and f.lower().endswith(".bin"))[0]
-    packs = pack_ids()      # 真·测试包（地图文件夹只是分类目录，不算）
-    print("② 开发版的草稿区（导出 + 测试包）  %s" % P.VIS)
-    print("    %s  导出 %d 个文件（raw %d / 可走面 %d）  测试包 %d 个（%s）  最近改动 %s" % (
+    packs = pack_ids()      # 有草稿的地图文件夹（一张图一个）
+    print("② 开发版的草稿区（导出 + 草稿）  %s" % P.VIS)
+    print("    %s  导出 %d 个文件（raw %d / 可走面 %d）  草稿 %d 个（%s）  最近改动 %s" % (
         "存在" if os.path.isdir(P.EXPORT) else "不存在", n_files, n_json, n_bin,
         len(packs), "、".join(packs) if packs else "无",
         time.strftime("%Y-%m-%d %H:%M", time.localtime(t_last)) if t_last else "-"))
-    print("    测试包：%s" % P.PACKS_DIR)
-    versions = final_versions()
-    cur = final_current()
-    print("    成品版本：%d 个（当前启动 %s）  %s" % (
-        len(versions), cur or "无", FINAL_ROOT))
-    for v in versions[-5:]:
-        print("      %s %-12s %s  %d 张图" % (
-            "●" if v["name"] == cur else " ", v["name"],
-            (v.get("created") or "-")[:16], len(v.get("maps") or {})))
-    if len(versions) > 5:
-        print("      …（只列最新 5 个，全部用 python navdata.py final list）")
+    print("    草稿：%s" % P.PACKS_DIR)
+    meta = final_store_meta()
+    print("    成品：%d 张图  %s" % (len(meta), FINAL_ROOT))
+    for fp, m in sorted(meta.items(), key=lambda kv: (str(kv[1].get("level") or ""), kv[0]))[-5:]:
+        print("      %s %-8s %4d/%-4d 发布 %s" % (
+            fp, m.get("level", "?"), m.get("node", 0), m.get("edge", 0),
+            (m.get("published") or m.get("mtime") or "-")[:16]))
     print("    导出先落这里；「整理导出」把它归进 <图>\\导出\\ + <图>\\map.json；"
-          "编辑中做完用 pack promote 发进成品（默认新建一版）")
+          "编辑中做完用 pack promote 发布（覆盖同图那一份）")
     print("")
     print("当前生效（UCF_PROFILE=%s）：%s" % (P.PROFILE, P.DATA))
     fz = os.path.join(P.manifest_dir(P.NATIVE), ".frozen.json")
@@ -1111,7 +1272,12 @@ def _is_pack(path):
 
 
 def pack_ids():
-    r"""packs\ 下所有包 id（地图文件夹/包名）；根目录平铺的老包也算。"""
+    r"""packs\ 下有草稿的地图文件夹（一张图一个草稿）。
+
+    2026-11-24 起不再有「包名」这一层：packs\<地图文件夹>\ 里直接放
+    manifest.json + <指纹>.txt + nogen.txt，所以这里只返回目录名。
+    兼容旧的 packs\<图>\<包>\：如果发现这种布局，也返回「图/包」。
+    """
     root = packs_root()
     out = []
     try:
@@ -1180,20 +1346,23 @@ def write_json(path, obj):
 
 
 def find_pack(name):
-    r"""按 id（地图文件夹/包名）或只给包名找目录；只给包名时在各地图文件夹里找。"""
+    r"""按地图文件夹名（或旧写法「图/包」）找草稿目录。
+
+    2026-11-24 起一张图只有一个草稿，所以 name 就是 packs\ 下的一级目录名；
+    只给中文名/关卡名时先在 pack_ids 里按尾名匹配一次，匹配不到就报错。
+    """
     root = packs_root()
     name = str(name or "").replace("\\", "/").strip("/")
-    pdir = os.path.join(root, *name.split("/")) if name else ""
+    pdir = os.path.join(root, *[s for s in name.split("/") if s]) if name else ""
     if not pdir or not os.path.isdir(pdir):
         tail = name.split("/")[-1]
-        hits = [x for x in pack_ids() if x.split("/")[-1] == tail]
+        hits = [x for x in pack_ids() if x == tail or x.endswith("/" + tail)]
         if len(hits) > 1:
-            sys.exit("有多个同名测试包，请写全「地图文件夹/包名」：%s"
-                     % ", ".join(hits))
+            sys.exit("有多个同名草稿，请写全「地图文件夹/包名」：%s" % ", ".join(hits))
         if hits:
             pdir = os.path.join(root, *hits[0].split("/"))
     if not pdir or not os.path.isdir(pdir):
-        sys.exit("没有测试包 %r。先看 python navdata.py pack list" % name)
+        sys.exit("这张图还没有草稿：%r。先看 python navdata.py pack list" % name)
     man = {}
     try:
         man = read_json(os.path.join(pdir, "manifest.json")) or {}
@@ -1204,21 +1373,21 @@ def find_pack(name):
         txts = [f for f in os.listdir(pdir) if f.endswith(".txt")]
         fp = txts[0][:-4] if len(txts) == 1 else ""
     if not fp:
-        sys.exit("包里没有指纹（manifest.json 缺 fp，目录里也没有唯一的 <指纹>.txt）：%s" % pdir)
+        sys.exit("草稿里没有指纹（manifest.json 缺 fp，目录里也没有唯一的 <指纹>.txt）：%s" % pdir)
     return pdir, man, fp
 
 
 def cmd_pack_list(args):
     root = packs_root()
-    print("测试包目录：%s" % root)
+    print("草稿目录（一张图一个）：%s" % root)
     names = pack_ids()
     if not names:
-        print("（还没有任何测试包）")
-        print("新建：python navdata.py pack new chain_a --level 11")
+        print("（还没有草稿）")
+        print("新建：python navdata.py pack new --level 11 --grow")
         return 0
     print("")
-    print("| 测试包（地图文件夹/包名） | 地图 | 指纹 | 改动 | 建于 |")
-    print("| --- | --- | --- | --- | --- |")
+    print("| 地图文件夹 | 名称（含创建日期） | 地图 | 指纹 | 改动 | 创建 |")
+    print("| --- | --- | --- | --- | --- | --- |")
     for n in names:
         pdir = os.path.join(root, *n.split("/"))
         try:
@@ -1230,104 +1399,103 @@ def cmd_pack_list(args):
             txts = [f for f in os.listdir(pdir) if f.endswith(".txt")]
             fp = txts[0][:-4] if txts else ""
         nd, ed = edit_counts(os.path.join(pdir, fp + ".txt")) if fp else (0, 0)
-        print("| %s | %s %s | %s | node %d / edge %d%s | %s |" % (
-            n, man.get("level", "?"), man.get("label", ""), fp or "-", nd, ed,
+        print("| %s | %s | %s %s | %s | node %d / edge %d%s | %s |" % (
+            n, man.get("name", "-"), man.get("level", "?"), man.get("label", ""), fp or "-", nd, ed,
             (" · keep（原版+新增）" if man.get("keep") else
              (" · grow（空白地图）" if (man.get("grow") or man.get("blank")) else "")),
             man.get("created", "-")))
     print("")
-    print("用法：控制台「人机路点」页 → 启动档「编辑中（packs·可写）」选包 + 地图，再点开始游戏；")
-    print("      做完点「发布到成品」把 <指纹>.txt 拷进 ② 成品（final\\<包名>\\），成品档就能读到。")
+    print("用法：控制台「人机路点」页 → 启动档「编辑中」→ 选地图 → 开始游戏；")
+    print("      做完点「发布这张图到成品」，成品里同图那份会被覆盖（旧成品自动留 1 份快照）。")
     return 0
 
 
 def cmd_pack_new(args):
-    if not PACK_NAME_RE.match(args.name):
-        sys.exit("包名只能用 ASCII 字母/数字/下划线/减号，1~48 字符：%r" % args.name)
+    r"""给一张图建唯一草稿：packs\<地图文件夹>\。
+
+    默认从成品复制（接着上次改）；--grow 空白地图，--keep 原版基础 + 新增。
+    已经存在就报错，重做必须加 --force（会覆盖这张图的草稿，成品不动）。
+    """
     idx = maps_index()
-    want = args.level if args.level.startswith("level") else "level" + args.level.strip("lL ")
+    want = args.level if args.level.startswith("level") else "level" + str(args.level).strip("lL ")
     info = idx.get(want)
     if not info:
         extra = ""
         if want in ("level4", "level11"):
-            extra = "\n  （%s 只有可走面、没有路点图 —— 点图改动对它不生效，测试包没有意义）" % want
+            extra = "\n  （%s 只有可走面、没有路点图 —— 点图改动对它不生效，草稿没有意义）" % want
         sys.exit("maps/*.json 里没有 %s 的路点数据。可用：%s%s" % (
             want, ", ".join("%s(%s)" % (k, v["label"]) for k, v in sorted(idx.items())), extra))
     fp = info["fp"]
     if not fp:
-        sys.exit("%s 没有指纹（这张图没有路点图，测试包对它没有意义）" % args.level)
-    srcroot = P.DEV if args.src == "dev" else P.DEPLOY
-    src = os.path.join(srcroot, "nav", fp + ".txt")
+        sys.exit("%s 没有指纹（这张图没有路点图，草稿对它没有意义）" % args.level)
     folder = map_table.folder_name(info["level"], info.get("scene") or "", info.get("label") or "")
-    pdir = os.path.join(packs_root(), folder, args.name)
+    pdir = os.path.join(packs_root(), folder)
+    if os.path.isdir(pdir) and _is_pack(pdir) and not getattr(args, "force", False):
+        sys.exit("这张图已经有草稿：%s\n要重做请加 --force（只覆盖草稿，成品不受影响）" % pdir)
     os.makedirs(pdir, exist_ok=True)
     dst = os.path.join(pdir, fp + ".txt")
     grow = bool(getattr(args, "grow", False))
     keep = bool(getattr(args, "keep", False))
-    if keep:
-        # 原版基础 + 新增：原生点一个都不动，只把包里的 node add 建到图上。
-        print("  keep 模式：原生点一个都不动（原版路线照常走），新点按 PointGraph.AddNode 新建")
-    elif grow:
-        # 空白地图：原生点由插件先全禁掉，包里的 node add / edge add 才是唯一路线。
-        print("  grow 模式：原生点会全部标死，新点按 AddNode 新建（数量不受原生点数限制）")
+    if grow and keep:
+        sys.exit("--grow 和 --keep 只能选一个")
+    now = time.strftime("%Y-%m-%d %H:%M:%S")
+    source = ""
     if keep:
         with open(dst, "w", encoding="utf-8", newline="\n") as f:
             f.write("# ucf-navedit v1 fp=%s\nkeep\n" % fp)
-        with open(os.path.join(pdir, "nogen.txt"), "w", encoding="utf-8") as f:
-            f.write("")
-        print("已写 keep 包：%s（原生点原样保留；node 0 起步，进图后再加点）" % dst)
+        source = "keep"
+        print("  keep：原生点一个都不动（原版路线照常走），新点按 PointGraph.AddNode 新建")
     elif grow:
         with open(dst, "w", encoding="utf-8", newline="\n") as f:
             f.write("# ucf-navedit v1 fp=%s\ngrow\n" % fp)
-        with open(os.path.join(pdir, "nogen.txt"), "w", encoding="utf-8") as f:
-            f.write("")                       # 存在即关掉自动铺点
-        print("已写空白地图包：%s（node 0 / edge 0；原生点会在进图时全部禁用）" % dst)
-    elif os.path.abspath(src) == os.path.abspath(dst):
-        pass
-    elif os.path.isfile(src):
-        shutil.copyfile(src, dst)
-        nd, ed = edit_counts(dst)
-        print("从 %s 复制：node %d / edge %d" % (src, nd, ed))
+        source = "grow"
+        print("  grow：原生点全部禁用，新点按 AddNode 新建（数量不受原生点数限制）")
     else:
-        with open(dst, "w", encoding="utf-8", newline="\n") as f:
-            f.write("# ucf-navedit v1 fp=%s\n" % fp)
-        print("%s 不存在（这张图还没有改动）—— 已建一份空清单，编辑器里改完再复制过来" % src)
+        src = final_store_map(fp)
+        if os.path.isfile(src):
+            shutil.copyfile(src, dst)
+            source = "copy-final"
+            nd, ed = edit_counts(dst)
+            print("从成品复制：node %d / edge %d（接着上次改）" % (nd, ed))
+        else:
+            with open(dst, "w", encoding="utf-8", newline="\n") as f:
+                f.write("# ucf-navedit v1 fp=%s\n" % fp)
+            source = "empty"
+            print("成品里还没有这张图：已建一份空清单")
+    with open(os.path.join(pdir, "nogen.txt"), "w", encoding="utf-8") as f:
+        f.write("")
     man = {
-        "name": args.name,
+        "name": "%s_%s" % (info.get("scene") or info["level"], time.strftime("%Y%m%d")),
         "folder": folder,
         "level": info["level"],
         "label": info["label"],
         "fp": fp,
         "scene": info.get("scene", ""),
-        "created": time.strftime("%Y-%m-%d %H:%M:%S"),
-        "source": ("keep" if keep else
-                   "grow" if grow else ("dev" if args.src == "dev" else "deploy")),
-        "grow": bool(grow),
-        "keep": bool(keep),
-        "note": ("keep 测试包：原生点一个都不动（原版路线照常走）+ 新点按 AddNode 新建" if keep
-                 else "grow 测试包（空白地图）：原生点全禁用 + 新点按 AddNode 新建（不受原生点数限制）" if grow
-                 else "测试包：只对 %s(%s) 生效；插件用 UCF_PACK + UCF_FP 读它" % (info["label"], info["level"])),
+        "created": now,
+        "updated": now,
+        "source": source,
+        "grow": bool(grow or (source == "copy-final" and pack_flags(dst)[0])),
+        "keep": bool(keep or (source == "copy-final" and pack_flags(dst)[1])),
+        "note": ("grow 草稿：原生点全禁用 + 新点按 AddNode 新建" if grow else
+                 "keep 草稿：原生点一个都不动 + 新点按 AddNode 新建" if keep else
+                 "草稿：只对 %s(%s) 生效" % (info["label"], info["level"])),
     }
     write_json(os.path.join(pdir, "manifest.json"), man)
     print("")
-    print("已建测试包：%s" % pdir)
-    print("  包名 %s   地图 %s(%s)   指纹 %s" % ("%s/%s" % (folder, args.name),
-                                               info["label"], info["level"], fp))
-    print("下一步：控制台 → 人机路点 → 编辑中（选 %s/%s）→ 地图（%s）→ 开始游戏" % (
-        folder, args.name, info["label"]))
+    print("已建草稿：%s" % pdir)
+    print("  名称 %s   地图 %s(%s)   指纹 %s" % (man["name"], info["label"], info["level"], fp))
+    print("下一步：控制台 → 人机路点 → 编辑中 → 地图（%s）→ 开始游戏" % info["label"])
     return 0
 
 
 def cmd_pack_diff(args):
     pdir, man, fp = find_pack(args.name)
     pfile = os.path.join(pdir, fp + ".txt")
-    print("测试包 %s（%s %s）  指纹 %s" % (args.name, man.get("level", "?"), man.get("label", ""), fp))
+    ffile = final_store_map(fp)
+    print("草稿 %s（%s %s）  指纹 %s" % (args.name, man.get("level", "?"), man.get("label", ""), fp))
     print("")
-    cur = final_current()
-    rows = [
-        ("编辑中 packs\\%s" % args.name, pfile),
-        ("成品 %s" % (cur or "（还没有版本）"), os.path.join(final_version_path(cur), fp + ".txt")),
-    ]
+    rows = [("编辑中 packs\\%s" % args.name, pfile),
+            ("成品 final\\%s.txt" % fp, ffile)]
     print("| 位置 | 文件 | node / edge | 大小 | sha256 |")
     print("| --- | --- | --- | --- | --- |")
     for title, f in rows:
@@ -1337,106 +1505,54 @@ def cmd_pack_diff(args):
         nd, ed = edit_counts(f)
         print("| %s | %s | %d / %d | %s | %s |" % (
             title, fp + ".txt", nd, ed, human(os.path.getsize(f)), sha256(f)[:12]))
+    same = (os.path.isfile(pfile) and os.path.isfile(ffile)
+            and sha256(pfile) == sha256(ffile))
+    print("")
+    print("结论：%s" % ("一致（草稿已发布，字节相同）" if same else "不一致（成品不是这份草稿，或发布后又改过）"))
     return 0
 
 
 def cmd_pack_promote(args):
-    r"""编辑中 -> 成品：把 <指纹>.txt 发布进成品的一个版本。
+    r"""草稿 -> 成品：覆盖 final\<指纹>.txt，覆盖前旧成品自动留一份快照（最近 5 份）。
 
-    默认「新建一版」：以当前版本为底整套复制，再用这个包替换对应那张图，老版本不丢；
-    新版本名 = 测试包名（--as 可改，重名自动加 -2）；--into <版本> 则是更新已有版本里的那一张图。
-    成品档「按包启动」（UCF_PACK_DIR=final、UCF_PACK=<版本名>），和编辑中同一套加载
-    逻辑，所以 grow / keep / 普通增量都能发，发过去效果一模一样。
+    成品档「按包启动」（UCF_PACK_DIR=dev、UCF_PACK=final），和编辑中同一套加载逻辑，
+    所以 grow / keep / 普通增量发过去效果一模一样。
     """
     pdir, man, fp = find_pack(args.name)
     src = os.path.join(pdir, fp + ".txt")
     if not os.path.isfile(src):
-        sys.exit("包里没有 %s（先在里面写改动）" % (fp + ".txt"))
-    grow, keep = pack_flags(src)
-    nd, ed = edit_counts(src)
-    note = (getattr(args, "note", "") or "").strip()
-    into = (getattr(args, "into", "") or "").strip()
-    if into and into not in [v["name"] for v in final_versions()]:
-        sys.exit("没有这个成品版本：%s（现有：%s）" % (
-            into, "、".join(v["name"] for v in final_versions()) or "无"))
-    want = (getattr(args, "as_name", "") or "").strip() or final_name_from_pack(args.name)
+        sys.exit("草稿里没有 %s（先在里面写改动）" % (fp + ".txt"))
+    if getattr(args, "into", "") or getattr(args, "as_name", ""):
+        print("  提示：--into / --as 已废弃（成品不再有版本），本次忽略。")
     if args.dry:
-        if into:
-            print("  [dry] 会更新成品版本 %s 里的 %s.txt" % (into, fp))
-        else:
-            print("  [dry] 会新建一版 %s（以 %s 为底），写入 %s.txt" % (
-                final_unique_name(want), final_current() or "空", fp))
+        print("  [dry] 会覆盖成品 %s" % final_store_map(fp))
         print("  [dry] 不写盘")
         return 0
-    cur = final_current()
-    if into:
-        name = into
-        print("包 %s -> 成品 %s（更新这一版）" % (args.name, name))
-    else:
-        name, copied = final_new_version(base=cur, note=note, name=want)
-        print("包 %s -> 成品 %s（新建一版，版本名跟测试包；从 %s 继承 %d 个文件）" % (
-            args.name, name, cur or "空", copied))
-        if name != want:
-            print("  已经有叫 %s 的版本了，这一版叫 %s（老版本一个没动）" % (want, name))
-    d = final_version_path(name)
-    os.makedirs(d, exist_ok=True)
-    dst = os.path.join(d, fp + ".txt")
-    if os.path.exists(dst):
-        make_writable(dst)
-    shutil.copyfile(src, dst)
-    make_readonly(dst)
-    final_ensure_nogen(d)
-    idx = final_index_read()
-    now = time.strftime("%Y-%m-%d %H:%M:%S")
-    for v in idx.get("versions") or []:
-        if v.get("name") != name:
-            continue
-        v["updated"] = now
-        if note:
-            v["note"] = note
-        maps = v.setdefault("maps", {})
-        meta = {"file": fp + ".txt", "level": man.get("level", ""), "label": man.get("label", ""),
-                "from_pack": args.name, "published": now}
-        meta.update(final_scan_maps(d)[fp])
-        maps[fp] = dict(maps.get(fp) or {}, **meta)
-        break
-    idx["current"] = name
-    final_index_write(idx)
-    print("  改动 node %d / edge %d   地图 %s %s" % (nd, ed, man.get("level", "?"), man.get("label", "")))
-    if keep:
-        print("  原版 + 新增（keep）：成品档同样保留原生点，只加你画的点")
-    elif grow:
-        print("  空白地图（grow）：成品档同样禁用原生点 + AddNode 建点")
-    print("  本图 sha %s   成品共 %d 个版本，当前启动 %s" % (
-        sha256(dst)[:12], len(final_versions()), name))
-    print("  控制台点「开始游戏 · 成品 %s」立即生效，不用再部署。" % name)
+    fp, dst, nd, ed, sha = final_store_publish(args.name, (getattr(args, "note", "") or "").strip())
+    print("草稿 %s -> 成品 %s" % (args.name, dst))
+    print("  node %d / edge %d   地图 %s %s" % (nd, ed, man.get("level", "?"), man.get("label", "")))
+    print("  本图 sha %s   成品共 %d 张图" % (sha[:12], final_store_stats()["n"]))
+    print("  控制台点「开始游戏 · 成品」立即生效，不用再部署。")
     return 0
 
 
 # ---------------------------------------------------------------- 成品版本命令
 def cmd_final_list(args):
-    versions = final_versions()
-    cur = final_current()
-    if not versions:
-        print("成品还没有任何版本。「人机路点」页 → 启动档「编辑中」→ 标签「发布到成品」就会建第一版。")
-        print("  成品版本目录：%s" % FINAL_ROOT)
+    stats = final_store_stats()
+    meta = stats["maps"]
+    print("成品（每张图一份）  %s" % FINAL_ROOT)
+    if not meta:
+        print("  （空的 = 启动成品时所有图走原生。去「编辑中」发布一张图就有了）")
         return 0
-    print("成品版本（%d 个）  %s" % (len(versions), FINAL_ROOT))
-    for v in versions:
-        print("  %s %-12s 建 %s  更新 %s  %d 张图  %s%s" % (
-            "●" if v["name"] == cur else " ", v["name"], (v.get("created") or "-")[:16],
-            (v.get("updated") or "-")[:16], len(v.get("maps") or {}),
-            ("← 继承 %s" % v["base"]) if v.get("base") else "",
-            ("  " + v["note"]) if v.get("note") else ""))
-        if not v.get("exists"):
-            print("      目录不见了：%s" % v.get("path"))
-            continue
-        for fp, m in sorted((v.get("maps") or {}).items()):
-            print("      - %-22s %-10s %4d/%-4d sha %s  ← %s" % (
-                (m.get("file") or fp + ".txt"), (m.get("label") or ""), m.get("node", 0),
-                m.get("edge", 0), (m.get("sha256") or "")[:8], (m.get("from_pack") or "-")))
     print("")
-    print("  ● = 当前启动的版本；换版本：python navdata.py final use <版本名>")
+    print("| 指纹 | 地图 | 点 / 边 | 发布于 | sha256 |")
+    print("| --- | --- | --- | --- | --- |")
+    for fp, m in sorted(meta.items(), key=lambda kv: (str(kv[1].get("level") or ""), kv[0])):
+        print("| %s | %s %s | %d / %d | %s | %s |" % (
+            fp, m.get("level", "?"), m.get("label", ""), m.get("node", 0), m.get("edge", 0),
+            (m.get("published") or m.get("mtime") or "-")[:16], (m.get("sha256") or "")[:12]))
+    print("")
+    print("启动成品 = 这些图一起加载；没发布的图走原生。发布用 python navdata.py pack promote <地图文件夹>")
     return 0
 
 
@@ -1487,72 +1603,53 @@ def final_delete_dir(d):
 
 
 def cmd_final_rm(args):
-    r"""删掉一个成品版本：默认**真删**（final\<版本>\ 整个目录，删了找不回来）；
-    加 --keep 才是旧行为（挪进 dev\archive\final_old\，留个后手）。
+    r"""撤销一张图的发布：真删 final\<指纹>.txt（不归档，发布前快照仍在 archive\final_prev\）。
 
-    删到一版不剩也可以：成品变成「没有版本」，启动就是原版，下次发布又会有一版。
+    name 可以是指纹，也可以是地图文件夹（01_TransportShip运输船）。
     """
-    versions = final_versions()
-    if args.name not in [v["name"] for v in versions]:
-        sys.exit("没有这个成品版本：%s" % args.name)
-    d = final_version_path(args.name)
-    if getattr(args, "keep", False):
-        os.makedirs(FINAL_ARCHIVE, exist_ok=True)
-        dst = os.path.join(FINAL_ARCHIVE, "%s_%s" % (args.name, time.strftime("%Y%m%d_%H%M%S")))
-        if os.path.isdir(d):
-            shutil.move(d, dst)
-        print("已挪走 %s -> %s（不是物理删除，想找回来去这儿拿）" % (args.name, dst))
-    else:
+    name = str(args.name or "").strip()
+    fp = name if final_store_has(name) else ""
+    if not fp:
         try:
-            final_delete_dir(d)
-        except OSError as exc:
-            sys.exit("删不掉 %s：%s（游戏正开着读它？关掉游戏再删）" % (d, exc))
-        print("已删除成品版本 %s（%s）" % (args.name, d))
-    idx = final_index_read()
-    idx["versions"] = [v for v in (idx.get("versions") or []) if v.get("name") != args.name]
-    if idx.get("current") == args.name:
-        idx["current"] = ""
-    if not idx["versions"]:
-        idx["seq"] = 0          # 全删光了：以后老成品迁移重新从 v1 编号
-    final_index_write(idx)
-    cur = final_current()
-    if cur:
-        final_set_current(cur)
-        print("当前成品版本改为 %s" % cur)
-    else:
-        print("成品里已经没有版本了：启动成品 = 原版；发布一版就会重新有。")
+            _pdir, _man, fp = find_pack(name)
+        except SystemExit:
+            fp = ""
+    if not fp or not final_store_has(fp):
+        sys.exit("成品里没有这张图：%s（先看 python navdata.py final list）" % name)
+    d = final_store_map(fp)
+    try:
+        final_store_remove(fp)
+    except OSError as exc:
+        sys.exit("删不掉 %s：%s（游戏正开着读它？关掉游戏再删）" % (d, exc))
+    print("已撤销发布：%s（%s）" % (fp, d))
+    print("启动成品时这张图会走原生；草稿不受影响。")
     return 0
 
 
 def cmd_pack_compare(args):
     pdir, man, fp = find_pack(args.name)
     src = os.path.join(pdir, fp + ".txt")
-    ver = (getattr(args, "final", "") or "").strip() or final_current()
-    versions = {v["name"]: v for v in final_versions()}
-    if not ver or ver not in versions:
-        sys.exit("没有这个成品版本：%s（现有：%s）" % (ver, "、".join(versions) or "无"))
-    v = versions[ver]
-    fmeta = (v.get("maps") or {}).get(fp) or {}
+    fmeta = final_store_meta().get(fp) or {}
     pmeta = {"sha256": "", "node": 0, "edge": 0, "mtime": "-"}
     if os.path.isfile(src):
         nd, ed = edit_counts(src)
         pmeta = {"sha256": sha256(src), "node": nd, "edge": ed,
                  "mtime": time.strftime("%Y-%m-%d %H:%M", time.localtime(os.path.getmtime(src)))}
-    print("成品 %s（建 %s）  vs  编辑中 %s（%s）" % (
-        ver, (v.get("created") or "-")[:16], args.name, man.get("label", "")))
+    print("草稿 %s（%s）  vs  成品 %s" % (args.name, man.get("label", ""), fp))
     print("")
     print("| 位置 | 时间 | 点 / 边 | sha256 |")
     print("| --- | --- | --- | --- |")
     print("| 编辑中 | %s | %d / %d | %s |" % (pmeta["mtime"], pmeta["node"], pmeta["edge"],
                                              (pmeta["sha256"] or "-")[:12]))
     if fmeta:
-        print("| 成品 %s | %s | %d / %d | %s |" % (ver, fmeta.get("mtime", "-"), fmeta.get("node", 0),
-                                                   fmeta.get("edge", 0), (fmeta.get("sha256") or "-")[:12]))
+        print("| 成品 | %s | %d / %d | %s |" % (fmeta.get("published") or fmeta.get("mtime", "-"),
+                                                  fmeta.get("node", 0), fmeta.get("edge", 0),
+                                                  (fmeta.get("sha256") or "-")[:12]))
     else:
-        print("| 成品 %s | - | - | 这一版里没有这张图 |" % ver)
+        print("| 成品 | - | - | 这张图还没发布 |")
     same = bool(pmeta["sha256"]) and pmeta["sha256"] == fmeta.get("sha256")
     print("")
-    print("结论：%s" % ("一致（数据同一个文件，玩起来一样）" if same else "不一致（成品不是这个包发的，或发布后又改过）"))
+    print("结论：%s" % ("一致（数据同一个文件，玩起来一样）" if same else "不一致（成品不是这份草稿发的，或发布后又改过）"))
     return 0
 
 
@@ -1564,7 +1661,7 @@ def main():
     ap = argparse.ArgumentParser(description="导航数据三区管理（备份 / 开发 / 部署）")
     sub = ap.add_subparsers(dest="cmd")
     try:
-        final_ensure_root()          # 首次运行：旧成品（②\nav）自动搬成 v1
+        final_store_ensure()         # 建好 final\ + nogen.txt，清掉旧版 _current.txt
     except OSError:
         pass
 
@@ -1590,53 +1687,45 @@ def main():
     q = sub.add_parser("status", help="三区状态")
     q.set_defaults(func=cmd_status)
 
-    q = sub.add_parser("final", help="成品版本：列表 / 选启动版本 / 改名 / 删除")
+    q = sub.add_parser("final", help="成品：列表 / 撤销某张图的发布")
     q.set_defaults(func=cmd_final_list)
     fs_ = q.add_subparsers(dest="final_cmd")
-    f2 = fs_.add_parser("list", help="列出成品所有版本")
+    f2 = fs_.add_parser("list", help="列出成品里每张图那一份")
     f2.set_defaults(func=cmd_final_list)
-    f2 = fs_.add_parser("use", help="选这次启动哪个版本")
-    f2.add_argument("name")
-    f2.set_defaults(func=cmd_final_use)
-    f2 = fs_.add_parser("rename", help="给版本改名（自动 v1/v2 之外的方案）")
-    f2.add_argument("name")
-    f2.add_argument("new")
-    f2.set_defaults(func=cmd_final_rename)
-    f2 = fs_.add_parser("rm", help="删掉一个版本（真删目录；--keep 才挪进 archive）")
-    f2.add_argument("name")
-    f2.add_argument("--keep", action="store_true",
-                    help="不真删：挪进 archive\\final_old\\（留个后手）")
+    f2 = fs_.add_parser("rm", help="撤销一张图的发布（真删 final\\<指纹>.txt）")
+    f2.add_argument("name", help="指纹或地图文件夹")
+    f2.add_argument("--keep", action="store_true", help="已废弃，忽略")
     f2.set_defaults(func=cmd_final_rm)
 
-    q = sub.add_parser("pack", help="测试包：只对一张图生效的路线数据（② navdata\\dev\\packs/）")
+    q = sub.add_parser("pack", help="草稿：一张图一个（② navdata\\dev\\packs/）")
     q.set_defaults(func=cmd_pack_list)
     ps = q.add_subparsers(dest="pack_cmd")
-    q2 = ps.add_parser("list", help="列出测试包")
+    q2 = ps.add_parser("list", help="列出草稿")
     q2.set_defaults(func=cmd_pack_list)
-    q2 = ps.add_parser("new", help="新建测试包（复制该图现有的改动）")
-    q2.add_argument("name")
+    q2 = ps.add_parser("new", help="新建草稿（默认从成品复制；一张图一个）")
+    q2.add_argument("name", nargs="?", default="", help="已废弃：现在按 --level 定位，一张图一个草稿")
     q2.add_argument("--level", required=True, help="levelN 或纯数字，例：--level 11")
-    q2.add_argument("--from", dest="src", choices=["dev", "deploy"], default="dev")
+    q2.add_argument("--from", dest="src", choices=["dev", "deploy"], default="dev",
+                    help="已废弃，忽略")
     q2.add_argument("--grow", action="store_true",
                     help="空白地图：原生点全禁用 + 新点按 AddNode 新建（数量不受原生点数限制）")
     q2.add_argument("--keep", action="store_true",
                     help="原版基础 + 新增：原生点一个都不动，只把新点按 AddNode 建上去")
+    q2.add_argument("--force", action="store_true", help="这张图已有草稿也重建（覆盖草稿，成品不动）")
     q2.set_defaults(func=cmd_pack_new)
-    q2 = ps.add_parser("diff", help="包 vs 成品 nav")
+    q2 = ps.add_parser("diff", help="草稿 vs 成品（同一张图）")
     q2.add_argument("name")
     q2.set_defaults(func=cmd_pack_diff)
-    q2 = ps.add_parser("promote", help="编辑中 -> 成品（默认新建一版，老版本保留）")
+    q2 = ps.add_parser("promote", help="草稿 -> 成品（覆盖同图那一份，旧成品留快照）")
     q2.add_argument("name")
-    q2.add_argument("--into", metavar="版本", default="",
-                    help="更新指定的成品版本（默认：以当前版本为底新建一版）")
-    q2.add_argument("--note", default="", help="这一版的备注（建新版本时记进台账）")
-    q2.add_argument("--as", dest="as_name", metavar="版本名", default="",
-                    help="自定义版本名（默认沿用测试包名，重名自动加 -2）")
+    q2.add_argument("--into", metavar="版本", default="", help="已废弃，忽略")
+    q2.add_argument("--note", default="", help="记进发布日志（可选）")
+    q2.add_argument("--as", dest="as_name", metavar="版本名", default="", help="已废弃，忽略")
     q2.add_argument("--dry", action="store_true")
     q2.set_defaults(func=cmd_pack_promote)
-    q2 = ps.add_parser("compare", help="一个包 vs 某个成品版本（默认当前版本）")
+    q2 = ps.add_parser("compare", help="草稿 vs 成品（同一张图）")
     q2.add_argument("name")
-    q2.add_argument("--final", default="", help="成品版本名（默认当前启动的那版）")
+    q2.add_argument("--final", default="", help="已废弃，忽略")
     q2.set_defaults(func=cmd_pack_compare)
 
     args = ap.parse_args()

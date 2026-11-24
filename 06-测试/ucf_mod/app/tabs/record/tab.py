@@ -92,8 +92,8 @@ class RecordTab:
         # 2026-11-21 用户要求：原始轨迹采集已搬到「开发者选项」页，这里不再放卡片
 
     def build_rec_ready(self, frame):
-        # ① 启动条件（和人机路点共用同一份 pack_on / pack_name / pack_map）
-        box = self.wp_card(frame, "启动条件", "包和地图跟「人机路点」共用；录制固定写开发版")
+        # ① 启动条件（和人机路点共用同一个地图 / 启动档；一张图一个草稿）
+        box = self.wp_card(frame, "启动条件", "地图跟「人机路点」共用；录制固定写草稿")
         row = ctk.CTkFrame(box, fg_color="transparent")
         row.pack(fill="x", padx=12, pady=(6, 0))
         ctk.CTkLabel(row, text="启动档", font=FONT_S, text_color="#9aa0a6",
@@ -101,7 +101,7 @@ class RecordTab:
         # 录制只写 ② 开发版（编辑中），成品档是只读的，没有第二种选法：
         # 这里只显示当前档位；万一全局停在成品，给一颗「切到编辑中」。
         self.rec_mode_lbl = ctk.CTkLabel(
-            row, text="编辑中（packs·可写）", width=172, height=26,
+            row, text="编辑中（可写）", width=172, height=26,
             corner_radius=6, font=("Microsoft YaHei UI", 12, "bold"),
             fg_color="#1f2a1f", text_color="#9be09b")
         self.rec_mode_lbl.pack(side="left")
@@ -115,31 +115,21 @@ class RecordTab:
 
         row = ctk.CTkFrame(box, fg_color="transparent")
         row.pack(fill="x", padx=12, pady=(6, 0))
-        ctk.CTkLabel(row, text="开发包", font=FONT_S, text_color="#9aa0a6",
-                     width=48, anchor="w").pack(side="left", padx=(0, 6))
-        self.rec_opt_pack = ctk.CTkOptionMenu(
-            row, values=self._pack_values(), font=FONT_S, width=300,
-            command=self.on_rec_pack)
-        self.rec_opt_pack.pack(side="left")
-
-        row = ctk.CTkFrame(box, fg_color="transparent")
-        row.pack(fill="x", padx=12, pady=(6, 0))
         ctk.CTkLabel(row, text="地图", font=FONT_S, text_color="#9aa0a6",
                      width=48, anchor="w").pack(side="left", padx=(0, 6))
         self.rec_opt_map = ctk.CTkOptionMenu(
             row, values=list(self.map_disp) or ["（没有可测的路点图）"],
             font=FONT_S, width=252, command=self.on_rec_map)
         self.rec_opt_map.pack(side="left", padx=(0, 8))
-        ctk.CTkCheckBox(row, text="只对这张图生效", variable=self.pack_only,
-                        font=FONT_S, checkbox_width=18, checkbox_height=18,
-                        command=self.on_pack_change).pack(side="left")
         self.rec_meta = ctk.CTkLabel(box, text="", font=("Microsoft YaHei UI", 11),
                                      text_color="#9aa0a6", anchor="w",
                                      justify="left", wraplength=600)
         self.rec_meta.pack(fill="x", padx=12, pady=(6, 8))
 
         # ② 采样与自动识别
-        box = self.wp_card(frame, "自动识别", "按这套阈值判定；关掉就不再产生这类事件")
+        box = self.wp_card(frame, "自动识别",
+                           "插件 30 Hz 采玩家脚底坐标；落地由游戏自己的 isGrounded 结算，"
+                           "跳链只保留 3D 1.5~3.0 m（人机真能跳的窗口）")
         row = ctk.CTkFrame(box, fg_color="transparent")
         row.pack(fill="x", padx=12, pady=(6, 0))
         ctk.CTkLabel(row, text="采样间距", font=FONT_S, text_color="#9aa0a6",
@@ -183,7 +173,7 @@ class RecordTab:
         ctk.CTkLabel(
             box,
             text="写 ② 开发版 · 编辑中：dev\\vis\\rec\\*.jsonl（原始轨迹）→ 复盘后追加进 "
-                 "dev\\packs\\<图>\\<包>\\<指纹>.txt；成品 / ③ 不动。",
+                 "dev\\packs\\<图>\\<指纹>.txt；成品 / ③ 不动。",
             font=("Consolas", 11), text_color="#8a8f96", anchor="w",
             justify="left", wraplength=600).pack(fill="x", padx=12, pady=(2, 10))
 
@@ -257,8 +247,8 @@ class RecordTab:
                 frame.pack_forget()
         self.rec_head.configure(text={
             "ready": "选包 → 开始录制 → 进游戏走一遍路线",
-            "rec": "在游戏里照目标走；空格起跳、Ctrl 蹲下都会自动记下",
-            "done": "确认节点 / 边 / 跳链没问题，再写进开发包",
+            "rec": "在游戏里照目标走；空格起跳（含跳上箱子/台子）会自动记下",
+            "done": "确认节点 / 边 / 跳链没问题，再写进草稿",
         }.get(state, ""))
         style = {
             "ready": ("#1f2a1f", "#9be09b"),
@@ -293,21 +283,15 @@ class RecordTab:
 
     def rec_sync_from_wp(self):
         r"""人机路点改了包 / 图，录制页的下拉框跟着改（两个下拉读同一个状态）。"""
-        if not hasattr(self, "rec_opt_pack"):
+        if not hasattr(self, "rec_opt_map"):
             return
         try:
             self.rec_show_mode()
-            vals = self._pack_values()
-            self.rec_opt_pack.configure(values=vals)
-            cur = self.opt_pack.get() if hasattr(self, "opt_pack") else ""
-            if cur:
-                self.rec_opt_pack.set(cur)
             self.rec_opt_map.configure(values=list(self.map_disp))
             cur = self.opt_map.get() if hasattr(self, "opt_map") else ""
             if cur:
                 self.rec_opt_map.set(cur)
             state = "normal" if self.pack_on.get() else "disabled"
-            self.rec_opt_pack.configure(state=state)
             self.rec_opt_map.configure(state=state)
         except Exception:
             pass
@@ -319,9 +303,9 @@ class RecordTab:
             out.append("插件总开关关着")
         if not self.pack_on.get():
             out.append("成品档只读，先点上面「切到编辑中」")
-        name = self.selected_pack() if hasattr(self, "opt_pack") else ""
+        name = self.selected_pack() if hasattr(self, "opt_map") else ""
         if not name:
-            out.append("没选开发包")
+            out.append("这张图还没有草稿（先去「人机路点」点开始编辑）")
         if not self.selected_fp():
             out.append("没选地图")
         if not game_running():
@@ -334,7 +318,7 @@ class RecordTab:
         if self.rec_state != "ready":
             return          # 录制中/复盘时别去改顶部那颗「结束 / 保存」按钮
         self.rec_sync_from_wp()
-        name = self.selected_pack() if hasattr(self, "opt_pack") else ""
+        name = self.selected_pack() if hasattr(self, "opt_map") else ""
         fp = self.selected_fp() if hasattr(self, "opt_map") else ""
         block = self.rec_blockers()
         if block:
@@ -361,9 +345,9 @@ class RecordTab:
         if not hasattr(self, "rec_mode_lbl"):
             return
         if self.pack_on.get():
-            self.rec_mode_lbl.configure(text="编辑中（packs·可写）", width=172,
+            self.rec_mode_lbl.configure(text="编辑中（可写）", width=172,
                                         fg_color="#1f2a1f", text_color="#9be09b")
-            self.rec_mode_tip.configure(text="录制只写开发版；成品档只读，录不了")
+            self.rec_mode_tip.configure(text="录制只写草稿；成品档只读，录不了")
             if self.rec_mode_btn.winfo_manager():
                 self.rec_mode_btn.pack_forget()
         else:
@@ -376,15 +360,10 @@ class RecordTab:
     def rec_use_edit(self):
         r"""从录制页一键回到编辑中（和人机路点共用同一个启动档）。"""
         self.pack_on.set(True)
-        self.seg_mode.set("编辑中（packs·可写）")
+        self.seg_mode.set("编辑中（可写）")
         self.on_page_change()
         self.refresh_rec_ready()
         self.set_status("已切到「编辑中」：录制只写 ② 开发版")
-
-    def on_rec_pack(self, disp):
-        if hasattr(self, "opt_pack"):
-            self.opt_pack.set(disp)
-        self.on_pack_change()
 
     def on_rec_map(self, disp):
         if hasattr(self, "opt_map"):
@@ -440,7 +419,7 @@ class RecordTab:
         self.rec_busy = True
         try:
             seq = write_nav_cmd("rec", "", "", {"act": "start", "out": self.rec_file,
-                                                "hz": 20})
+                                                "hz": 30})
         except OSError as exc:
             self.rec_busy = False
             self.set_status("写不进 ucf_navcmd.txt：%s" % exc)
@@ -520,10 +499,12 @@ class RecordTab:
                 lines = f.readlines()
         except OSError:
             lines = []
-        samples = ucf_rec.parse_lines(lines)
+        samples, events = ucf_rec.parse_rec(lines)
         self.rec_samples = samples
+        self.rec_events = events
         if samples:
-            res = ucf_rec.analyse(samples, step=self.rec["step"], sw=self.rec["sw"])
+            res = ucf_rec.analyse(samples, step=self.rec["step"], sw=self.rec["sw"],
+                                  events=events)
             self.rec_result = res
             self.rec_update_live(res, samples)
         if not game_running(fresh=True):
@@ -557,8 +538,9 @@ class RecordTab:
                 d["drop"], " · 可能摔伤" if d.get("hurt") else " · 落差 ≥ 2 m"))
         for b in res.get("branches", [])[:2]:
             ev.append("岔路候选 · 2.5 m 内回访 · 绕 %.0f m" % b["gap"])
-        for c in res.get("crouches", [])[:2]:
-            ev.append("蹲点 · 蹲 %.1f s · 位移 < 1 m" % c["t"])
+        for j in res.get("jumps", []):
+            if not (ucf_rec.LINK_MIN <= j.get("l3", 0.0) <= ucf_rec.LINK_MAX):
+                ev.append("跳链跳过 · 3D %.1f m（人机做不了）" % j.get("l3", 0.0))
         for st in res.get("statics", [])[:1]:
             ev.append("静止 %.1f s · 采样照常" % st["t"])
         return ev[-4:] or ["（还没有事件）"]
@@ -598,9 +580,10 @@ class RecordTab:
                 lines = f.readlines()
         except OSError:
             lines = []
-        samples = ucf_rec.parse_lines(lines)
+        samples, events = ucf_rec.parse_rec(lines)
         self.rec_samples = samples
-        res = ucf_rec.analyse(samples, step=self.rec["step"], sw=self.rec["sw"])
+        res = ucf_rec.analyse(samples, step=self.rec["step"], sw=self.rec["sw"],
+                              events=events)
         self.rec_result = res
         if not res.get("ok"):
             self.rec_error = "这次没录到东西：%s" % (res.get("why") or "没有数据")
@@ -621,7 +604,7 @@ class RecordTab:
         self.rec_draw(self.rec_done_cv, res)
         self.rec_btn_save.configure(state="normal", fg_color="#2f9e44",
                                     hover_color="#37b24d")
-        name = self.selected_pack() if hasattr(self, "opt_pack") else ""
+        name = self.selected_pack() if hasattr(self, "opt_map") else ""
         fp = self.selected_fp() if hasattr(self, "opt_map") else ""
         self.rec_save_info.configure(
             text="目标：dev\\packs\\%s\\%s.txt · 只增不覆盖 → 失败自动回滚"
@@ -630,7 +613,8 @@ class RecordTab:
     def rec_review_retry(self):
         if not self.rec_samples:
             return
-        res = ucf_rec.analyse(self.rec_samples, step=self.rec["step"], sw=self.rec["sw"])
+        res = ucf_rec.analyse(self.rec_samples, step=self.rec["step"], sw=self.rec["sw"],
+                              events=getattr(self, "rec_events", None))
         self.rec_result = res
         if res.get("ok"):
             self.rec_saved = False
@@ -642,6 +626,7 @@ class RecordTab:
     def rec_reset(self):
         self.rec_result = None
         self.rec_samples = []
+        self.rec_events = []
         self.rec_paused = False
         self.rec_busy = False
         self.rec_saved = False
@@ -653,10 +638,10 @@ class RecordTab:
             return
         if self.rec_saved:
             return
-        name = self.selected_pack() if hasattr(self, "opt_pack") else ""
+        name = self.selected_pack() if hasattr(self, "opt_map") else ""
         fp = self.selected_fp() if hasattr(self, "opt_map") else ""
         if not name or not fp:
-            self.set_status("先选开发包和地图")
+            self.set_status("先选地图")
             return
         if not self.pack_on.get():
             self.set_status("成品档只读：切回「编辑中」再保存")
@@ -703,11 +688,11 @@ class RecordTab:
                                    hover_color="#2a332a")
         rel = "dev\\packs\\%s\\%s.txt" % (name.replace("/", "\\"), fp)
         self.rec_save_info.configure(text="已保存 %d 行 → %s" % (len(new), rel))
-        self.set_status("已保存到开发包：%s（+%d 行）" % (rel, len(new)))
+        self.set_status("已保存到草稿：%s（+%d 行）" % (rel, len(new)))
         if game_running():
             try:
                 write_nav_cmd("apply", name, fp)
-                self.set_status("已保存到开发包并通知插件重新载入（%s）" % rel)
+                self.set_status("已保存到草稿并通知插件重新载入（%s）" % rel)
             except OSError:
                 pass
 

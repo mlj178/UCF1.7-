@@ -1,0 +1,45 @@
+{
+  "schema": 1,
+  "updated": "2026-11-24",
+  "game": {
+    "name": "UnityCrossFire 1.7.1",
+    "gameassembly_md5": "fab04426db6a014c0129ef2001530908"
+  },
+  "packs": [
+    {
+      "id": "10_Nano30_Storm飓风危城",
+      "no": 10,
+      "level": "level9",
+      "label": "飓风危城",
+      "switch": "hidden_map",
+      "kind": "game-body",
+      "files": 1,
+      "bytes": 192144,
+      "has_patch_json": true
+    },
+    {
+      "id": "12_TestMap12龙城",
+      "no": 12,
+      "level": "level12",
+      "label": "龙城",
+      "switch": "map_longcheng",
+      "kind": "game-body",
+      "files": 4,
+      "bytes": 6151680,
+      "has_patch_json": true
+    }
+  ],
+  "known_body_changes": [
+    {
+      "path": "UnityCrossFire_Data/sharedassets0.assets",
+      "bytes": 70484196,
+      "sha256_orig": "5443c8947a0aa657836e2c729c25f7ae6a0a5d4b68957e14c542b0832c21697a",
+      "sha256_seen": "f210526fef89f0df8b4ceab94bb78275165729205f72eed0573f2ff6616eab40",
+      "why": "旧方案遗留：在注册表里把团队模式第 3 项 Cebu_City/椰岛之巅 换成 TestMap12/测试地图（19 字节等长替换）",
+      "since": "2026-11-21",
+      "deprecated": "2026-11-24",
+      "replace_with": "插件注入第 4 项（game_mode=0），不再改这个 70 MB 文件",
+      "restore": "从原版副本复制 sharedassets0.assets 覆盖回去即可（原版 sha256 = sha256_orig）"
+    }
+  ]
+}

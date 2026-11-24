@@ -31,6 +31,7 @@ REC_TAB = os.path.join(PROJ, "app", "tabs", "record", "tab.py")
 VIS_TAB = os.path.join(PROJ, "app", "tabs", "vis.py")
 DATA_TAB = os.path.join(PROJ, "app", "tabs", "data.py")
 AUTOTEST_TAB = os.path.join(PROJ, "app", "tabs", "autotest.py")
+OVERVIEW_TAB = os.path.join(PROJ, "app", "tabs", "overview.py")
 KIT = os.path.join(PROJ, "app", "ui", "kit.py")
 
 # 2026-11-17：控制台删掉「建图」页（自动铺路点 / 自动补蹲守点 / 幽灵守卫区）。
@@ -110,7 +111,8 @@ def main():
         assert key not in seen, "自动铺设开关 %s 已从控制台删除，不能再出现在「%s」页" % (
             key, seen[key])
 
-    expected = set(defs) - {"enabled"} - RETIRED   # enabled 是窗口顶部的总开关
+    # enabled 是窗口顶部总开关：2026-11-24 起只在开发者身份显示（用户身份不建这个控件）
+    expected = set(defs) - {"enabled"} - RETIRED
     missing = expected - set(seen)
     extra = set(seen) - expected
     assert not missing, "cfg.c 有、控制台没有：" + ", ".join(sorted(missing))
@@ -169,12 +171,18 @@ def main():
     assert group_names == ["插件开关", "路点数据", "部署与测试", "开发调试"], \
         "控制台分组应为 插件开关/路点数据/部署与测试/开发调试，实际 %s" % group_names
     flat_pages = [p for pages in pages_of.values() for p in pages]
-    assert len(flat_pages) == len(set(flat_pages)) == 10, \
-        "10 个页签必须一组一个、不重不漏，实际 %s" % flat_pages
+    assert len(flat_pages) == len(set(flat_pages)) == 11, \
+        "11 个页签必须一组一个、不重不漏，实际 %s" % flat_pages
     assert pages_of["插件开关"] == ["地图", "可视化", "导出", "快捷键"], \
         "「插件开关」组应为 地图/可视化/导出/快捷键"
+    assert pages_of["路点数据"][0] == "地图总览", \
+        "「地图总览」应排在「路点数据」第一位"
     assert pages_of["路点数据"].index("人机路点") < pages_of["路点数据"].index("数据"), \
         "「人机路点」页应在「数据」页之前（数据页读它建的 opt_pack / opt_map）"
+    assert "def build_overview_tab" in read(OVERVIEW_TAB) and "def refresh_overview" in read(OVERVIEW_TAB), \
+        "「地图总览」页缺少 build_overview_tab / refresh_overview"
+    assert "build_overview_tab(frame)" in src and "refresh_overview()" in src, \
+        "控制台没有接入地图总览页"
     assert 'text="打开文件夹"' in read(DATA_TAB) and "def open_folder" in read(KIT), \
         "数据页的「打开文件夹」按钮 / open_folder 不见了"
 

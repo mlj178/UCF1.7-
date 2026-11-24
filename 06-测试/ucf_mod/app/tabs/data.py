@@ -13,7 +13,7 @@ import customtkinter as ctk
 
 from ui.consts import FONT, FONT_S
 from ui.env import DEPLOY, DEV, FINAL_ROOT, NATIVE, PACKS, TEST_VIS
-from ui.packs import _FINAL_FP_RE, final_current_name, final_versions, load_packs, pack_dir
+from ui.packs import _FINAL_FP_RE, final_stats, load_packs, pack_dir
 from ui.stats import data_counts, diff_count, export_filed, test_stats, tree_hashes
 from ui.util import dir_bytes, dir_stats, fmt_short, fmt_time, human_size
 
@@ -25,10 +25,10 @@ class DataTab:
         外加 发布到成品（编辑中→成品）/ 还原 ①→② / 校验 ① 的按钮。"""
         body = ctk.CTkScrollableFrame(tab, corner_radius=0, fg_color="transparent")
         body.pack(fill="both", expand=True, padx=2, pady=2)
-        ctk.CTkLabel(body, text="① 只读快照；② 唯一数据源：一张图一个文件夹（map.json + navmesh.bin），另有 final 成品、packs 编辑中、vis 收件箱；"
+        ctk.CTkLabel(body, text="① 只读快照；② 唯一数据源：一张图一个文件夹（map.json + navmesh.bin），另有 final 成品、packs 草稿、vis 收件箱；"
                                "③ 游戏目录只当运行环境，不放数据。\n"
                                "数据流：游戏导出 → ② vis →（整理导出）→ ② <图>\\导出\\ + <图>\\map.json；"
-                               "测试包做完 →（发布到成品）→ ② final\\<版本>（每次发布默认新增一版）。",
+                               "草稿做完 →（发布这张图）→ ② final\\<指纹>.txt（一张图一份，没有版本）。",
                      font=FONT_S, text_color="#9aa0a6", anchor="w", justify="left",
                      wraplength=620).pack(fill="x", padx=12, pady=(8, 2))
 
@@ -155,17 +155,16 @@ class DataTab:
         try:
             d1, d2 = tree_hashes(NATIVE), tree_hashes(DEV)
         except OSError:
-            self.lbl_same.configure(text="一致性：读不动某个版本")
+            self.lbl_same.configure(text="一致性：读不动某个数据区")
             return
         n12 = diff_count(d1, d2)
         n_exp = test_stats(DEV)[0]
-        _vers = final_versions()
-        n_fin = len((next((v for v in _vers if v["name"] == final_current_name()), None) or {}
-                     ).get("maps") or {}) if _vers else 0
+        st = final_stats()
+        n_fin = int(st.get("n") or 0)
         self.lbl_same.configure(
             text=r"一致性（只比每张图的 map.json 与路线 txt，索引与 names.json 不算）："
                  + ("①=②（工作区还没改动）" if n12 == 0 else "① vs ② 有 %d 个文件不同" % n12)
-                 + " · 成品 %d 个版本（当前版 %d 张图）" % (len(_vers), n_fin)
+                 + " · 成品 %d 张图（每图一份）" % n_fin
                  + " · " + ("收件箱没有导出" if n_exp == 0
                             else "收件箱有 %d 份导出待整理" % n_exp))
 
@@ -175,26 +174,18 @@ class DataTab:
         rows = getattr(self, "dev_rows", None)
         if not rows:
             return
-        # —— 成品：几个版本 / 当前那版几张图 / 所有版本占多大 ——
-        vers = final_versions()
-        cur = final_current_name()
-        n_maps = n_bytes = 0
-        latest = 0.0
-        for v in vers:
-            size, mt = dir_bytes(os.path.join(FINAL_ROOT, str(v.get("name") or "")))
-            n_bytes += size
-            latest = max(latest, mt)
-            if str(v.get("name") or "") == cur:
-                n_maps = len(v.get("maps") or {})
-        if vers:
-            rows["final"].configure(text="%d 个版本 · 当前 %s · %d 张图 · %s · 最近\u00a0%s" % (
-                len(vers), (cur or "没选（启动 = 原版）"), n_maps,
-                human_size(n_bytes), fmt_short(latest)))
+        # —— 成品：几张图 / 占多大 / 最近发布（没有版本）——
+        st = final_stats()
+        n_maps = int(st.get("n") or 0)
+        n_bytes, latest = dir_bytes(FINAL_ROOT)
+        if n_maps:
+            rows["final"].configure(text="%d 张图（每图一份） · %s · 最近发布\u00a0%s" % (
+                n_maps, human_size(n_bytes), fmt_short(latest)))
         else:
             rows["final"].configure(
-                text="没有版本（启动成品 = 原版）· 去「编辑中」选包 → 发布到成品，就有第一版")
+                text="空的（启动成品 = 全原生）· 去「编辑中」选张图 → 发布这张图到成品")
 
-        # —— 编辑中：几个测试包 / 包里几张图 / 占多大 + 包名 ——
+        # —— 编辑中：几张图有草稿 / 占多大 + 地图名 ——
         names = load_packs()
         n_txt = 0
         for pid in names:
@@ -205,17 +196,16 @@ class DataTab:
                 pass
         p_bytes, p_latest = dir_bytes(PACKS)
         if names:
-            # 包名之间用「、 」隔开（后面留个空格）：Tk 只在空格处断行，
-            # 连写「、」会变成一个超长单词，窄窗口下把包名从中间劈开。
-            shown = [x.split("/")[-1] for x in names[:4]]
+            shown = [self.folder_label(x) if hasattr(self, "folder_label") else x
+                     for x in names[:4]]
             if len(names) > len(shown):
-                shown.append("等 %d 个" % len(names))
-            rows["packs"].configure(text="%d 个测试包 · %d 张图 · %s · 最近\u00a0%s\n%s" % (
+                shown.append("等 %d 张" % len(names))
+            rows["packs"].configure(text="%d 张图有草稿 · %d 个路线文件 · %s · 最近\u00a0%s\n%s" % (
                 len(names), n_txt, human_size(p_bytes), fmt_short(p_latest),
                 "、 ".join(shown)))
         else:
             rows["packs"].configure(
-                text="没有测试包（「人机路点」页选张图，画完保存就是一个包）")
+                text="没有草稿（「人机路点」页选张图，点「开始编辑这张图」）")
 
         # —— 收件箱：还躺着几份待整理 / 已归位几份 ——
         n_json, n_bin, _n_packs, t_total, t_latest = test_stats(DEV)

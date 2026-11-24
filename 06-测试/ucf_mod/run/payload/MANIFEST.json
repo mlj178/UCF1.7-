@@ -12,10 +12,10 @@
     },
     {
       "path": "ucf_mod/ucf_mod.dll",
-      "date": "2026-11-23",
-      "why": "重新编译：日志由 UCF_LOG_DIR 指到工程端 log\\（游戏目录不再生成日志）；没注入时落 <部署端>\\log\\，再退回部署端根；16 MB 轮转；启动首行的路径转成 UTF-8，避免中文工程路径乱码。",
-      "bytes": 374528,
-      "sha256": "72CCE6D98AA8044D98ABE6C1519ACE16F984DF99CD363E4F6D9622BFA017F3BE"
+      "date": "2026-11-24",
+      "why": "重新编译：建跳链时校验 Bot_JumpLink.linkDic（调静态 GetLink 查一次），没有就手工登记；beh: 行补 g/vy；编辑标记按地图分文件夹并可指向工程端；日志不写游戏目录。",
+      "bytes": 384560,
+      "sha256": "29EDA53B17426062FF78B0C26FE89FE3FD25975FA4C6BC5E37E7954991AAD929"
     }
   ],
   "files": [

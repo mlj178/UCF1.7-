@@ -8,6 +8,8 @@ r"""「开发者选项」页：玩家坐标记录 + 原始轨迹采集。
 
 from tkinter import messagebox
 import os
+import subprocess
+import sys
 import time
 import tkinter as tk
 
@@ -199,11 +201,13 @@ class DevTab:
         if not isinstance(trace, dict):
             trace = {}
             self.cfg["trace"] = trace
+        # 2026-11-24：默认档位从 20 提到 30 —— 玩家实测最短滞空 0.17 s，
+        # 20 Hz 只有 3~4 帧，起跳/落点会漂；30 Hz 有 5~6 帧，够判跳。
         try:
-            thz = int(trace.get("hz") or 20)
+            thz = int(trace.get("hz") or 30)
         except (TypeError, ValueError):
-            thz = 20
-        trace["hz"] = thz if thz in ucf_trace.GEARS else 20
+            thz = 30
+        trace["hz"] = thz if thz in ucf_trace.GEARS else 30
         self.trace = trace
         self.tr_state = "idle"
         self.tr_file = ""
@@ -230,8 +234,16 @@ class DevTab:
             command=self.on_trace_hz)
         self.tr_seg.pack(side="left")
         self.tr_seg.set("%d Hz" % self.trace["hz"])
-        ctk.CTkLabel(row, text="越高越细；10 Hz ≈ 7 MB/小时，60 Hz ≈ 40 MB",
+        ctk.CTkLabel(row, text="越高越细；每小时约 5.5~33 MB",
                      font=FONT_S, text_color="#8a8f96").pack(side="left", padx=(10, 0))
+
+        ctk.CTkLabel(
+            box,
+            text="每小时占用：10 Hz ≈ 3 MB · 20 Hz ≈ 6 MB · 30 Hz ≈ 9 MB · 60 Hz ≈ 18 MB\n"
+                 "建议：量跳跃用 30 Hz（一跳 5~20 帧）；连跳 / 短跳 / 调阈值用 60 Hz；"
+                 "10 Hz 不适合判跳。",
+            font=("Microsoft YaHei UI", 11), text_color="#8a8f96", anchor="w",
+            justify="left", wraplength=600).pack(fill="x", padx=12, pady=(4, 0))
 
         row = ctk.CTkFrame(box, fg_color="transparent")
         row.pack(fill="x", padx=12, pady=(8, 0))
@@ -248,6 +260,10 @@ class DevTab:
             row, text="打开日志文件夹", width=124, height=30, font=FONT_S,
             fg_color="#2a2f36", hover_color="#343a42", command=self.trace_open_dir)
         self.tr_btn_dir.pack(side="right")
+        self.tr_btn_report = ctk.CTkButton(
+            row, text="生成跳跃报告(MD)", width=140, height=30, font=FONT_S,
+            fg_color="#1d5c3f", hover_color="#24704c", command=self.trace_report)
+        self.tr_btn_report.pack(side="right", padx=(0, 6))
         self.tr_btn_file = ctk.CTkButton(
             row, text="打开日志", width=84, height=30, font=FONT_S,
             fg_color="#2a2f36", hover_color="#343a42", command=self.trace_open_file)
@@ -282,9 +298,10 @@ class DevTab:
 
         ctk.CTkLabel(
             box,
-            text="每行：t 相对秒 / dt 距上一样本 / x,y,z 相机 / gy 脚下地面（null=没打到）/ "
-                 "fx,fy,fz 朝向 / sp 空格 ct Ctrl sh Shift / w a s d 方向键。"
-                 "首行 header 记地图 / 包 / 频率；换图会插一行 ev=scene。",
+            text="每行：t 相对秒 / dt 距上一样本 / x,y,z 玩家脚底坐标 / g 是否在地面 / "
+                 "vy 竖直速度 / sp 空格 ct Ctrl。\n"
+                 "落地那一帧插件会多写一行 ev=jump（起跳点、落点、跳距、跳高、滞空、起跳速度、类型），"
+                 "「生成跳跃报告」就是把它汇成一张 Markdown 表。",
             font=("Microsoft YaHei UI", 11), text_color="#8a8f96", anchor="w",
             justify="left", wraplength=600).pack(fill="x", padx=12, pady=(6, 10))
 
@@ -298,9 +315,9 @@ class DevTab:
         try:
             hz = int(str(disp).split()[0])
         except (TypeError, ValueError):
-            hz = 20
+            hz = 30
         if hz not in ucf_trace.GEARS:
-            hz = 20
+            hz = 30
         self.trace["hz"] = hz
         try:
             save_cfg(self.cfg)
@@ -317,7 +334,7 @@ class DevTab:
             self.set_status("游戏没跑：先开游戏再点「开始采集」（插件只在游戏进程里写文件）")
             return
         lv, lab, fp = self.map_disp.get(self.opt_map.get(), ("", "", ""))
-        pid = self.selected_pack() if hasattr(self, "opt_pack") else ""
+        pid = self.selected_pack() if hasattr(self, "opt_map") else ""
         try:
             os.makedirs(ucf_trace.DIR, exist_ok=True)
         except OSError as exc:
@@ -452,6 +469,34 @@ class DevTab:
     def trace_show_file(self, path):
         self.tr_file = path or ""
         self.tr_file_lbl.configure(text=os.path.basename(path) if path else "（还没有）")
+
+    def trace_report(self):
+        r"""把轨迹目录里的日志汇成一份 Markdown 跳跃报告并打开。
+
+        跑的是 app/tools/data/jump_stats.py（和命令行同一份代码）：
+        新格式直接用插件结算的 ev=jump；旧格式（相机坐标）会标「估算」。
+        """
+        script = os.path.join(ucf_trace.UCF_ROOT, "app", "tools", "data", "jump_stats.py")
+        if not os.path.isfile(script):
+            self.set_status("找不到报告脚本：%s" % script)
+            return
+        out = os.path.join(ucf_trace.DIR, "跳跃报告_%s.md" % time.strftime("%Y%m%d-%H%M%S"))
+        try:
+            r = subprocess.run([sys.executable, script, "--out", out],
+                               stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                               timeout=180, creationflags=0x08000000)   # CREATE_NO_WINDOW
+        except (OSError, subprocess.SubprocessError) as exc:
+            self.set_status("报告生成失败：%s" % exc)
+            return
+        if r.returncode != 0:
+            msg = (r.stderr or r.stdout or b"").decode("utf-8", "replace").strip()
+            self.set_status("报告生成失败：%s" % (msg[-200:] or "退出码 %d" % r.returncode))
+            return
+        self.set_status("跳跃报告已生成：%s" % os.path.basename(out))
+        try:
+            os.startfile(out)
+        except OSError:
+            pass
 
     def trace_open_dir(self):
         try:

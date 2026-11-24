@@ -58,8 +58,10 @@ NAVDATA = os.path.join(P.CORE, "navdata.py")   # 数据版本命令（部署/还
 TIDY = P.tool("tidy_vis.py")                   # 整理 ② vis：raw/<地图>/ + navmesh/ + _state/
 PACKS = PACKS_DIR                              # ② 测试包：<包名>\<指纹>.txt + manifest.json
 TEST_VIS = os.path.join(DEV, "vis")            # ② 导出收件箱（和递给游戏的那个路径一致）
+#: 编辑标记根目录（② data\navdata\dev\markers，按地图分子文件夹）；启动时用 UCF_MARKERS_DIR 注入插件
+MARKERS = P.MARKERS
 REC_RAW = os.path.join(TEST_VIS, "rec")        # 录制原始轨迹：dev\vis\rec\*.jsonl
-FINAL_ROOT = os.path.join(DEV, "final")        # ② 成品版本集合：每版一个目录
-FINAL_NAV = os.path.join(DEV, "nav")           # 旧成品目录：2026-11-21 起自动迁进 final\vN
+FINAL_ROOT = os.path.join(DEV, "final")        # ② 成品：每张图一份 <指纹>.txt（没有版本）
+FINAL_NAV = os.path.join(DEV, "nav")           # 旧成品目录（历史遗留，不再写入）
 NAVCMD = os.path.join(DEPLOY, "ucf_navcmd.txt")  # 运行中命令：插件每 ~0.5 s 查一次 seq
 PMARK_TXT = os.path.join(LOG_DIR, "player_marks.txt")  # 玩家坐标记录：插件追加，控制台删除
