@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     编译 ucf_mod.dll（可选部署到游戏目录）
 

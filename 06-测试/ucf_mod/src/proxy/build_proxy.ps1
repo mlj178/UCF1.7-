@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     重建 winhttp.dll 代理外壳（ucf_mod 的加载器）
 

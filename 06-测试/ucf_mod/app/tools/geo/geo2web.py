@@ -55,7 +55,7 @@ UCF_ROOT = HERE
 while not os.path.isfile(os.path.join(UCF_ROOT, ".ucfroot")) and os.path.dirname(UCF_ROOT) != UCF_ROOT:
     UCF_ROOT = os.path.dirname(UCF_ROOT)      # 项目根：靠 .ucfroot 标记，本文件搬到哪都对
 UCF = UCF_ROOT
-GEO = os.path.join(UCF, "geo")
+GEO = os.path.join(UCF, "data", "geo")
 OUT = os.path.join(GEO, "web")
 MAGIC = b"UCFG"
 VERSION = 2                          # v2 = 带 UV + 贴图表（v1 老文件仍能读）

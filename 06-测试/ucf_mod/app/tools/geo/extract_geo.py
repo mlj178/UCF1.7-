@@ -952,7 +952,7 @@ def main(argv=None):
     if not data_dir or not os.path.isdir(data_dir):
         print("找不到 UnityCrossFire_Data：用 --data 指定，或设 UCF_GAME_DIR。")
         return 2
-    cache_dir = os.path.join(_ucf_root(), "geo")
+    cache_dir = os.path.join(_ucf_root(), "data", "geo")
     os.makedirs(cache_dir, exist_ok=True)
     print("游戏资源 : %s" % data_dir)
     print("输出目录 : %s" % cache_dir)
