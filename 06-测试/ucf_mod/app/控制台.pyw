@@ -10,6 +10,7 @@ import os
 import subprocess
 import sys
 import tkinter as tk
+from tkinter import messagebox
 
 import customtkinter as ctk
 
@@ -22,9 +23,10 @@ from tabs.map import MapTab
 from tabs.record.tab import RecordTab
 from tabs.vis import VisTab
 from tabs.waypoint import WaypointTab
-from ui.consts import FONT, FONT_B, FONT_S, GROUPS, TAB_GROUPS, TAB_OLD_MAP
+from ui.consts import FONT, FONT_B, FONT_S, GROUPS, TAB_GROUPS, TAB_OLD_MAP, USER_PAGES
 from ui.env import CFG_PATH, DEPLOY, FINAL_ROOT, GAME_EXE, HERE, LOG_DIR, NAVSERVER, PACKS, TEST_VIS
 from ui.kit import Kit
+from ui.role import ROLE_DEV, ROLE_LABEL, ROLE_USER, ask_role, env_role, normalize_role, role_from_cfg, save_role
 from ui.packs import (
     PackMixin, final_current_name, pack_manifest, pack_summary, pack_target_fp,
     prepare_final_dir, write_nav_cmd,
@@ -34,8 +36,10 @@ from ui.util import _python, compact_path, game_running, game_tag, load_cfg, sav
 
 class App(Kit, PackMixin, MapTab, VisTab, ExportTab, HotkeyTab, WaypointTab, RecordTab,
           DataTab, AutotestTab, DevTab, ctk.CTk):
-    def __init__(self):
+    def __init__(self, role=None):
         super().__init__()
+        # 2026-11-24 用户要求：身份决定建哪些页（用户=地图/部署，开发者=全部 10 页）
+        self.role = normalize_role(role) or ROLE_DEV
         self.title("UCF 控制台")
         # 高分屏 125% 缩放时 900 逻辑高会把底部按钮顶到任务栏外：
         # 按实际 DPI 折算屏幕可用高度，再夹在 680~900 之间。
@@ -76,6 +80,17 @@ class App(Kit, PackMixin, MapTab, VisTab, ExportTab, HotkeyTab, WaypointTab, Rec
         self.head = ctk.CTkFrame(self, fg_color="transparent")
         self.head.pack(fill="x", padx=18, pady=(16, 4))
         ctk.CTkLabel(self.head, text="UCF 控制台", font=FONT_B).pack(side="left")
+        # 身份牌：一眼看出这台机器是「用户」还是「开发者」；旁边随时可切（会重启）
+        self.role_chip = ctk.CTkLabel(
+            self.head, text=ROLE_LABEL[self.role], width=72, height=24, corner_radius=12,
+            font=FONT_S,
+            fg_color="#23343f" if self.role == ROLE_USER else "#2a2438",
+            text_color="#7fd0e8" if self.role == ROLE_USER else "#c3a6ff")
+        self.role_chip.pack(side="left", padx=(14, 4))
+        self.btn_role = ctk.CTkButton(self.head, text="切换身份", width=80, height=24,
+                                      font=FONT_S, fg_color="#3a3f47", hover_color="#4a5058",
+                                      command=self.switch_role)
+        self.btn_role.pack(side="left")
         # 2026-11-19 用户要求：右上角加「窗口置顶」勾选 + 折叠成小条的开关。
         self.btn_fold = ctk.CTkButton(self.head, text="折叠", width=52, height=24,
                                       font=FONT_S, fg_color="#3a3f47", hover_color="#4a5058",
@@ -96,13 +111,16 @@ class App(Kit, PackMixin, MapTab, VisTab, ExportTab, HotkeyTab, WaypointTab, Rec
         except tk.TclError:
             pass
 
-        self.intro = ctk.CTkLabel(
-            self,
-            text="只有从本窗口「开始游戏」才会加载 mod；直接双击 UnityCrossFire.exe 是原版。\n"
-                 "开关改完存进 ucf_mod.json，下次启动生效（游戏开着时要重开）。\n"
-                 "启动档（编辑中 / 成品）是「人机路点」页顶部的两页；数据路径 / 还原 / 校验：切到「数据」页。\n"
-                 "路点数据只读查看在工作台；现场编辑在「人机路点」页（游戏内 F2 菜单）。",
-            font=FONT_S, text_color="#9aa0a6", justify="left")
+        if self.role == ROLE_USER:
+            intro_text = ("只有从本窗口「开始游戏」才会加载 mod；直接双击 UnityCrossFire.exe 是原版。\n"
+                          "装好之后，选好图点下面「开始游戏」就行。要改路点 / 做数据，点右上角「切换身份」。")
+        else:
+            intro_text = ("只有从本窗口「开始游戏」才会加载 mod；直接双击 UnityCrossFire.exe 是原版。\n"
+                          "开关改完存进 ucf_mod.json，下次启动生效（游戏开着时要重开）。\n"
+                          "启动档（编辑中 / 成品）是「人机路点」页顶部的两页；数据路径 / 还原 / 校验：切到「数据」页。\n"
+                          "路点数据只读查看在工作台；现场编辑在「人机路点」页（游戏内 F2 菜单）。")
+        self.intro = ctk.CTkLabel(self, text=intro_text,
+                                  font=FONT_S, text_color="#9aa0a6", justify="left")
         self.intro.pack(anchor="w", padx=20)
 
         # ---- 按钮 / 状态：先按底边占位，窗口再矮也不会被页签挤没 ----
@@ -112,9 +130,12 @@ class App(Kit, PackMixin, MapTab, VisTab, ExportTab, HotkeyTab, WaypointTab, Rec
                                       fg_color="#2f6fdb", hover_color="#255bb4",
                                       command=self.launch_game)
         self.btn_game.pack(side="left", fill="x", expand=True, padx=(0, 6))
-        ctk.CTkButton(self.bar, text="路点工作台（查看）", font=FONT, height=42,
-                      fg_color="#3a3f47", hover_color="#4a5058",
-                      command=self.open_workbench).pack(side="left", fill="x", expand=True, padx=(6, 0))
+        # 用户身份看不到开发入口（2026-11-24）：这个按钮只给开发者
+        self.btn_wb = ctk.CTkButton(self.bar, text="路点工作台（查看）", font=FONT, height=42,
+                                    fg_color="#3a3f47", hover_color="#4a5058",
+                                    command=self.open_workbench)
+        if self.role == ROLE_DEV:
+            self.btn_wb.pack(side="left", fill="x", expand=True, padx=(6, 0))
 
         # 2026-11-19：启动条件条 —— 版本/包/生效图常驻在按钮上方，
         # 切到任何页签都看得见；这里只摆控件，文案由 refresh_launch_strip() 刷。
@@ -129,7 +150,8 @@ class App(Kit, PackMixin, MapTab, VisTab, ExportTab, HotkeyTab, WaypointTab, Rec
         self.strip_go = ctk.CTkButton(self.strip, text="去人机路点改", width=112, height=28,
                                       font=FONT_S, fg_color="#3a3f47", hover_color="#4a5058",
                                       command=self.on_strip_go)
-        self.strip_go.pack(side="right", padx=(8, 10), pady=8)
+        if self.role == ROLE_DEV:
+            self.strip_go.pack(side="right", padx=(8, 10), pady=8)
         self.strip_main = ctk.CTkFrame(self.strip, fg_color="transparent")
         self.strip_main.pack(side="left", fill="x", expand=True, pady=8)
         self.strip_title = ctk.CTkLabel(self.strip_main, text="", anchor="w", justify="left",
@@ -155,10 +177,9 @@ class App(Kit, PackMixin, MapTab, VisTab, ExportTab, HotkeyTab, WaypointTab, Rec
                                      fg_color="#141414", activate_scrollbars=True)
         self.logbox.pack(fill="x", padx=14, pady=(2, 12))
 
-        # 2026-11-24 用户要求：页签按功能分 4 组（插件开关 / 路点数据 / 部署与测试 / 开发调试）。
-        # 一级 = CTkTabview（组），二级 = 一行按钮（组内页，2 页以上才显示）。
-        self.tabview = ctk.CTkTabview(self, corner_radius=10, command=self.on_group)
-        self.tabview.pack(fill="both", expand=True, padx=14, pady=(8, 4))
+        # 2026-11-24 用户要求：身份决定建哪些页。
+        #   用户   —— 平铺两页（地图 / 部署），没有分组条
+        #   开发者 —— 4 个功能组 × 组内页（插件开关 / 路点数据 / 部署与测试 / 开发调试）
         self.group_names = []
         self.page_names = []
         self.page_frames = {}
@@ -168,35 +189,53 @@ class App(Kit, PackMixin, MapTab, VisTab, ExportTab, HotkeyTab, WaypointTab, Rec
         self._booting = True
         hint_items = {title: (hint, items) for title, hint, items in GROUPS}
 
-        for group, pages in TAB_GROUPS:
-            self.group_names.append(group)
-            pane = self.tabview.add(group)
-            if len(pages) > 1:
-                frames, show = self.build_sub_tabs(
-                    pane, list(pages),
-                    on_change=lambda page, g=group: self.show_sub(g, page))
-                self.page_show[group] = show
-            else:
-                frame = ctk.CTkFrame(pane, fg_color="transparent")
-                frame.pack(fill="both", expand=True)
-                frames, show = {pages[0]: frame}, None
-                self.page_show[group] = None
-            for page in pages:
+        if self.role == ROLE_USER:
+            self.tabview = ctk.CTkTabview(self, corner_radius=10, command=self.on_flat_tab)
+            self.tabview.pack(fill="both", expand=True, padx=14, pady=(8, 4))
+            self.group_names = [ROLE_LABEL[ROLE_USER]]
+            for page in USER_PAGES:
                 self.page_names.append(page)
-                self.page_frames[page] = frames[page]
-
-        # 建页顺序 = TAB_GROUPS 顺序：人机路点在「数据」「车测」之前（后两页读它建的 opt_pack / opt_map）
-        for group, pages in TAB_GROUPS:
-            for page in pages:
+                self.page_frames[page] = self.tabview.add(page)
+            for page in USER_PAGES:
                 self.build_page(page, self.page_frames[page], hint_items)
+            page = self._restore_user()
+            try:
+                self.tabview.set(page)          # _booting 期间不触发 on_flat_tab
+            except Exception:
+                pass
+            self.show_flat(page, persist=False)
+        else:
+            self.tabview = ctk.CTkTabview(self, corner_radius=10, command=self.on_group)
+            self.tabview.pack(fill="both", expand=True, padx=14, pady=(8, 4))
+            for group, pages in TAB_GROUPS:
+                self.group_names.append(group)
+                pane = self.tabview.add(group)
+                if len(pages) > 1:
+                    frames, show = self.build_sub_tabs(
+                        pane, list(pages),
+                        on_change=lambda page, g=group: self.show_sub(g, page))
+                    self.page_show[group] = show
+                else:
+                    frame = ctk.CTkFrame(pane, fg_color="transparent")
+                    frame.pack(fill="both", expand=True)
+                    frames, show = {pages[0]: frame}, None
+                    self.page_show[group] = None
+                for page in pages:
+                    self.page_names.append(page)
+                    self.page_frames[page] = frames[page]
 
-        # 回到上次停留的组 + 子页；旧版平铺的页签名按 TAB_OLD_MAP 搬进新组
-        group, page = self._restore_tab()
-        try:
-            self.tabview.set(group)          # _booting 期间不触发 on_group
-        except Exception:
-            pass
-        self.show_sub(group, page, persist=False)
+            # 建页顺序 = TAB_GROUPS 顺序：人机路点在「数据」「车测」之前（后两页读它建的 opt_pack / opt_map）
+            for group, pages in TAB_GROUPS:
+                for page in pages:
+                    self.build_page(page, self.page_frames[page], hint_items)
+
+            # 回到上次停留的组 + 子页；旧版平铺的页签名按 TAB_OLD_MAP 搬进新组
+            group, page = self._restore_tab()
+            try:
+                self.tabview.set(group)          # _booting 期间不触发 on_group
+            except Exception:
+                pass
+            self.show_sub(group, page, persist=False)
         self._booting = False
 
         self.refresh_status()
@@ -298,7 +337,12 @@ class App(Kit, PackMixin, MapTab, VisTab, ExportTab, HotkeyTab, WaypointTab, Rec
             self.refresh_wp_tab()
 
     def _restore_tab(self):
-        r"""上次停在哪：新版存 (组, 子页)；旧版存的是平铺页签名，按 TAB_OLD_MAP 搬过来。"""
+        r"""上次停在哪：先看这个身份自己的位置（切换身份时记下的），再看通用记录。"""
+        pos = self.ui.get("pos_%s" % ROLE_DEV)
+        groups = dict(TAB_GROUPS)
+        if isinstance(pos, (list, tuple)) and len(pos) == 2:
+            if pos[0] in groups and pos[1] in groups[pos[0]]:
+                return pos[0], pos[1]
         old = str(self.ui.get("tab") or "")
         if old in TAB_OLD_MAP:
             return TAB_OLD_MAP[old], old
@@ -310,6 +354,67 @@ class App(Kit, PackMixin, MapTab, VisTab, ExportTab, HotkeyTab, WaypointTab, Rec
             return old, page
         first_group, first_pages = TAB_GROUPS[0]
         return first_group, first_pages[0]
+
+    # ---- 用户身份：两页平铺（没有分组条）----
+    def on_flat_tab(self, name=None, persist=True):
+        r"""用户身份切页。CTkTabview 的 command 不传参数，name 为空时自己读当前页。"""
+        if getattr(self, "_booting", False):
+            return
+        if not name:
+            name = self.tabview.get()
+        self.show_flat(name, persist)
+
+    def show_flat(self, page, persist=True):
+        r"""用户身份：切到某一页、记位置、刷新数据。"""
+        if page not in USER_PAGES:
+            page = USER_PAGES[0]
+        self.cur_group = ROLE_LABEL[ROLE_USER]
+        self.cur_page = page
+        self.ui["tab"] = self.cur_group
+        self.ui["sub"] = page
+        self.ui["sub_%s" % self.cur_group] = page
+        if persist and not getattr(self, "_booting", False):
+            try:
+                save_cfg(self.cfg)
+            except OSError:
+                pass
+        self.refresh_page(page)
+
+    def _restore_user(self):
+        r"""用户身份上次停在哪一页；以前存的是开发页名就落回「地图」。"""
+        pos = self.ui.get("pos_%s" % ROLE_USER)
+        if isinstance(pos, (list, tuple)) and len(pos) == 2 and pos[1] in USER_PAGES:
+            return pos[1]
+        page = str(self.ui.get("sub") or self.ui.get("tab") or "")
+        return page if page in USER_PAGES else USER_PAGES[0]
+
+    def switch_role(self):
+        r"""用户 ↔ 开发者：写配置后重启控制台。
+
+        页面是按身份建出来的（用户身份根本不建那 8 页），动态换页签会把控件状态全丢，
+        重启最干净，也复用首次设置向导那套 _restart_after_setup()。
+        """
+        fixed = env_role()
+        if fixed:
+            messagebox.showinfo("切换身份",
+                                "当前身份由环境变量 UCF_ROLE=%s 指定，控制台里改不了。\n"
+                                "去掉这个环境变量（或改成 user / dev）再启动即可。" % fixed,
+                                parent=self)
+            return
+        other = ROLE_DEV if self.role == ROLE_USER else ROLE_USER
+        if not messagebox.askyesno(
+                "切换身份",
+                "切换为「%s」需要重启控制台（约 1 秒）。\n\n当前页会被记住，重启后回到对应身份。继续？"
+                % ROLE_LABEL[other], parent=self):
+            return
+        # 把当前身份的位置记下来，切回来时还停在这一页
+        self.ui["pos_%s" % self.role] = [self.cur_group, self.cur_page]
+        self.ui["role"] = other
+        try:
+            save_cfg(self.cfg)
+        except OSError:
+            pass
+        _restart_after_setup()
 
     # ---- 写盘 ----
     def persist(self, note=""):
@@ -470,10 +575,14 @@ class App(Kit, PackMixin, MapTab, VisTab, ExportTab, HotkeyTab, WaypointTab, Rec
                     "go": "去打开"}
         if not (pk.get("on") and pk.get("name")):
             ver = self.final_selected() if hasattr(self, "opt_final") else final_current_name()
+            if self.role == ROLE_USER:      # 用户身份不提示「切到编辑中」——那是开发页
+                sub = "只读：这一版是发布好的数据，游戏内改动不落盘。"
+            else:
+                sub = "只读：游戏内改动不落盘；要改就切到「编辑中（packs）」"
             return {"mode": "final", "badge": "成品",
                     "title": ("本次启动加载 成品 %s（只读整版）" % ver) if ver
                              else "本次启动加载 成品（还没有版本 = 原版）",
-                    "sub": "只读：游戏内改动不落盘；要改就切到「编辑中（packs）」",
+                    "sub": sub,
                     "go": "去人机路点改"}
         name = pk["name"]
         short = name.split("/")[-1]
@@ -549,6 +658,8 @@ class App(Kit, PackMixin, MapTab, VisTab, ExportTab, HotkeyTab, WaypointTab, Rec
 
     def on_strip_go(self):
         r"""启动条右侧按钮：插件关着就先打开；否则跳到人机路点 ① 卡。"""
+        if self.role == ROLE_USER:
+            return
         if not bool(self.master_var.get()):
             self.master_var.set(True)
             self.on_master()
@@ -557,6 +668,8 @@ class App(Kit, PackMixin, MapTab, VisTab, ExportTab, HotkeyTab, WaypointTab, Rec
 
     def jump_to_pick(self):
         r"""跳到「路点数据 → 人机路点」→「编辑中」页 →「选包与地图」，并闪一下边框。"""
+        if self.role == ROLE_USER:      # 用户身份没有这一页 / 这个按钮
+            return
         try:
             self.tabview.set("路点数据")
             self.show_sub("路点数据", "人机路点", persist=False)
@@ -837,7 +950,15 @@ def main():
             return 1
         _restart_after_setup()
         return 0
-    App().mainloop()
+    # 2026-11-24 用户要求：别人拿到自己选身份。UCF_ROLE 环境变量 > 配置 ui.role > 首次弹窗。
+    role = env_role() or role_from_cfg()
+    if not role:
+        role = ask_role()
+        try:
+            save_role(role)
+        except OSError:
+            pass
+    App(role=role).mainloop()
     return 0
 
 
