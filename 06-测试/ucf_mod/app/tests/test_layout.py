@@ -83,7 +83,12 @@ def main():
     check("from ui.env import" in shell or "from ui.consts import" in shell,
           "入口从 ui.env / ui.consts 取环境（自身不再算路径）")
 
-    print("== 6) README 与实际一致")
+    print("== 6) 页签分组")
+    check("TAB_GROUPS" in read("app/ui/consts.py"), "分组表 TAB_GROUPS 在 ui/consts.py")
+    check("def build_page" in read("app/控制台.pyw"), "页签分派 build_page() 在控制台入口")
+    check("def build_sub_tabs" in read("app/ui/kit.py"), "组内按钮条在 ui/kit.py（共用件）")
+
+    print("== 7) README 与实际一致")
     doc = read("README.md")
     check("app/控制台.pyw" in doc, "README 写了入口 app/控制台.pyw")
     check("app/ui/" in doc and "app/tabs/" in doc, "README 写了 app/ui、app/tabs")

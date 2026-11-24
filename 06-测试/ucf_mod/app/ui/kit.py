@@ -15,6 +15,42 @@ from ui.consts import FONT, FONT_S, VIS_COLORS
 
 
 class Kit:
+    # ---- 页签导航：一行按钮 + 一组内容框（分组页和「人机路点」页共用）----
+    def build_sub_tabs(self, parent, names, on_change=None):
+        r"""页内标签：一行按钮 + 一组内容框，一次只显示一个。
+
+        没用 CTkTabview：对比表是运行时重建的，Tabview 的高度不会跟着内容长。
+        on_change(name)：用户点按钮后回调（控制台用它记「上次停在哪个子页」）。
+        """
+        bar = ctk.CTkFrame(parent, fg_color="transparent")
+        bar.pack(fill="x", padx=10, pady=(8, 0))
+        holder = ctk.CTkFrame(parent, fg_color="transparent")
+        holder.pack(fill="both", expand=True)
+        btns, frames = {}, {}
+        for name in names:
+            frames[name] = ctk.CTkFrame(holder, fg_color="transparent")
+            btns[name] = ctk.CTkButton(bar, text=name, width=112, height=28,
+                                       font=FONT_S, corner_radius=6)
+            btns[name].pack(side="left", padx=(0, 6))
+
+        def show(name, notify=True):
+            for key, frame in frames.items():
+                if key == name:
+                    frame.pack(fill="both", expand=True)
+                else:
+                    frame.pack_forget()
+            for key, btn in btns.items():
+                on = key == name
+                btn.configure(fg_color="#2f6fdb" if on else "#2a2f36",
+                              hover_color="#255bb4" if on else "#343a42",
+                              text_color="#ffffff" if on else "#9aa0a6")
+            if notify and on_change is not None:
+                on_change(name)
+        for name in names:
+            btns[name].configure(command=lambda n=name: show(n))
+        show(names[0], notify=False)
+        return frames, show
+
     # ---- 页签内容：一组开关 = 一页 ----
     def switch_card(self, parent, key, label, desc, default):
         r"""一个开关 + 一行说明；「可视化」等页共用这份样式。"""

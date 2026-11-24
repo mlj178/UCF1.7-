@@ -160,16 +160,30 @@ def main():
     src = read(CONSOLE)
     assert 'add("测试数据")' not in src, "「测试数据」页已删除，不能再出现"
     assert "build_pack_panel" not in src, "build_pack_panel 旧入口应已删除"
-    assert src.index('add("人机路点")') < src.index('add("数据")'), \
-        "「人机路点」页应在「数据」页之前"
+
+    # 2026-11-24 用户要求：页签按功能分 4 组（插件开关 / 路点数据 / 部署与测试 / 开发调试）。
+    # 分组表是唯一来源，和 控制台.pyw 的 build_page() 分派对应。
+    nav = console_const("TAB_GROUPS")
+    group_names = [g[0] for g in nav]
+    pages_of = {g[0]: list(g[1]) for g in nav}
+    assert group_names == ["插件开关", "路点数据", "部署与测试", "开发调试"], \
+        "控制台分组应为 插件开关/路点数据/部署与测试/开发调试，实际 %s" % group_names
+    flat_pages = [p for pages in pages_of.values() for p in pages]
+    assert len(flat_pages) == len(set(flat_pages)) == 10, \
+        "10 个页签必须一组一个、不重不漏，实际 %s" % flat_pages
+    assert pages_of["插件开关"] == ["地图", "可视化", "导出", "快捷键"], \
+        "「插件开关」组应为 地图/可视化/导出/快捷键"
+    assert pages_of["路点数据"].index("人机路点") < pages_of["路点数据"].index("数据"), \
+        "「人机路点」页应在「数据」页之前（数据页读它建的 opt_pack / opt_map）"
     assert 'text="打开文件夹"' in read(DATA_TAB) and "def open_folder" in read(KIT), \
         "数据页的「打开文件夹」按钮 / open_folder 不见了"
 
     # 2026-11-21 用户要求：新开一页「开发者选项」（页签排在最后），
     # 玩家坐标记录从「可视化」、原始轨迹采集从「录制」搬进去。
-    assert 'add("开发者选项")' in src, "「开发者选项」必须是页签"
-    assert src.index('add("车测")') < src.index('add("开发者选项")'), \
-        "「开发者选项」页应在「车测」页之后（排在所有页签最后）"
+    assert "开发者选项" in pages_of["开发调试"], \
+        "「开发者选项」必须是独立一页（收在「开发调试」组）"
+    assert group_names.index("部署与测试") < group_names.index("开发调试"), \
+        "「开发调试」组应排在最后"
     dev_src = read(DEV_TAB)
     dev_body = dev_src[dev_src.index("def build_dev_tab("):dev_src.index("def build_pmark_card(")]
     assert "self.build_pmark_card(body)" in dev_body, \
@@ -186,9 +200,9 @@ def main():
         "「可视化」页不该再放玩家坐标记录卡片（2026-11-21 已搬到开发者选项）"
 
     # 车测页（2026-11-18 用户要求：启动器里能直接跑车测，不用命令行 autotest.ps1）
-    assert 'self.tabview.add("车测")' in src, "车测必须是页签"
-    assert src.index('add("数据")') < src.index('add("车测")'), \
-        "「车测」页应在「数据」页之后"
+    assert "车测" in pages_of["部署与测试"], "车测必须是页签（收在「部署与测试」组）"
+    assert group_names.index("路点数据") < group_names.index("部署与测试"), \
+        "「数据」应在「车测」之前（分组顺序：路点数据 → 部署与测试）"
     at_src = read(AUTOTEST_TAB)
     assert "UCF_AUTOTEST" in at_src and "def run_autotest" in at_src, \
         "车测页缺少 UCF_AUTOTEST / run_autotest"

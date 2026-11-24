@@ -126,38 +126,7 @@ class WaypointTab:
         self.refresh_wp_status()
 
     # ---- 「人机路点」页内：编辑中 / 成品 两页 ------------------------------
-    def build_sub_tabs(self, parent, names):
-        r"""页内标签：一行按钮 + 一组内容框，一次只显示一个。
-
-        没用 CTkTabview：对比表是运行时重建的，Tabview 的高度不会跟着内容长。
-        """
-        bar = ctk.CTkFrame(parent, fg_color="transparent")
-        bar.pack(fill="x", padx=10, pady=(8, 0))
-        holder = ctk.CTkFrame(parent, fg_color="transparent")
-        holder.pack(fill="x")
-        btns, frames = {}, {}
-        for name in names:
-            frames[name] = ctk.CTkFrame(holder, fg_color="transparent")
-            btns[name] = ctk.CTkButton(bar, text=name, width=112, height=28,
-                                       font=FONT_S, corner_radius=6)
-            btns[name].pack(side="left", padx=(0, 6))
-
-        def show(name):
-            for key, frame in frames.items():
-                if key == name:
-                    frame.pack(fill="x")
-                else:
-                    frame.pack_forget()
-            for key, btn in btns.items():
-                on = key == name
-                btn.configure(fg_color="#2f6fdb" if on else "#2a2f36",
-                              hover_color="#255bb4" if on else "#343a42",
-                              text_color="#ffffff" if on else "#9aa0a6")
-        for name in names:
-            btns[name].configure(command=lambda n=name: show(n))
-        show(names[0])
-        return frames, show
-
+    # 页内按钮条在 ui/kit.py 的 build_sub_tabs()（2026-11-24 分组时提到共用层）。
     def show_page(self, which):
         r"""切换「编辑中 / 成品」整页：两档内容各占一块，不再共用一个下拉。"""
         self.page_is_edit = str(which).startswith("编辑中")

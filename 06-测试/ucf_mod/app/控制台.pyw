@@ -22,7 +22,7 @@ from tabs.map import MapTab
 from tabs.record.tab import RecordTab
 from tabs.vis import VisTab
 from tabs.waypoint import WaypointTab
-from ui.consts import FONT, FONT_B, FONT_S, GROUPS
+from ui.consts import FONT, FONT_B, FONT_S, GROUPS, TAB_GROUPS, TAB_OLD_MAP
 from ui.env import CFG_PATH, DEPLOY, FINAL_ROOT, GAME_EXE, HERE, LOG_DIR, NAVSERVER, PACKS, TEST_VIS
 from ui.kit import Kit
 from ui.packs import (
@@ -155,62 +155,129 @@ class App(Kit, PackMixin, MapTab, VisTab, ExportTab, HotkeyTab, WaypointTab, Rec
                                      fg_color="#141414", activate_scrollbars=True)
         self.logbox.pack(fill="x", padx=14, pady=(2, 12))
 
-        # 地图 / 可视化 / 导出 / 快捷键 / 人机路点 / 数据 / 车测 —— 全部页签切换，上方不再压一块常驻面板。
-        self.tabview = ctk.CTkTabview(self, corner_radius=10, command=self.on_tab)
+        # 2026-11-24 用户要求：页签按功能分 4 组（插件开关 / 路点数据 / 部署与测试 / 开发调试）。
+        # 一级 = CTkTabview（组），二级 = 一行按钮（组内页，2 页以上才显示）。
+        self.tabview = ctk.CTkTabview(self, corner_radius=10, command=self.on_group)
         self.tabview.pack(fill="both", expand=True, padx=14, pady=(8, 4))
-        self.tab_titles = []
-        for title, hint, items in GROUPS:
-            self.tab_titles.append(title)
-            tab = self.tabview.add(title)
-            if title == "导出":
-                self.build_export_tab(tab, hint, items)  # 总开关 + 六项勾选（一行多个）+ 最近导出
-            elif title == "快捷键":
-                self.build_hotkey_tab(tab, hint)          # 热键速查（游戏内已不显示）
-            elif title == "可视化":
-                self.build_vis_tab(tab, hint, items)     # 总开关 + 十类数据（勾选）
-            else:
-                self.build_group_tab(tab, hint, items)
-        # 人机路点要在「数据」「车测」之前：后两页读它建的 opt_pack / opt_map。
-        wp_tab = self.tabview.add("人机路点")               # SyPB 式现场编辑入口
-        self.build_waypoint_tab(wp_tab)
-        rec_tab = self.tabview.add("录制")                  # 走一遍就把路线录下来（只写 ② 编辑中）
-        self.build_record_tab(rec_tab)
-        self.build_data_tab(self.tabview.add("数据"))       # 三区路径/时间 + 部署/还原/校验
-        # 2026-11-22：部署页 —— 选游戏位置 + 一键把 dll 迁进游戏目录（取代了原来的独立部署脚本）
-        deploy_view = self.tabview.add("部署")
-        try:
-            import deploy_tab
-            self.deploy_tab = deploy_tab.build_deploy_tab(self, deploy_view)
-        except Exception as exc:                     # 部署页坏了也别把整个控制台带崩
-            ctk.CTkLabel(deploy_view, text="部署页加载失败：%s" % exc,
-                         font=FONT_S, text_color="#c92a2a").pack(padx=12, pady=12)
-        self.build_autotest_tab(self.tabview.add("车测"))   # 不用鼠标键盘：插件自己在进程内切图
-        # 2026-11-21 用户要求：开发者选项单独成页，排在所有页签最后
-        # （玩家坐标记录从「可视化」、原始轨迹采集从「录制」搬进来）
-        self.build_dev_tab(self.tabview.add("开发者选项"))
-        self.tab_titles += ["人机路点", "录制", "数据", "部署", "车测", "开发者选项"]
+        self.group_names = []
+        self.page_names = []
+        self.page_frames = {}
+        self.page_show = {}
+        self._sub_memo = {}
+        self.cur_group, self.cur_page = "", ""
+        self._booting = True
+        hint_items = {title: (hint, items) for title, hint, items in GROUPS}
 
-        # 回到上次停留的页签；记住的页签已经不存在（改版删页）就落在默认第一页
-        saved_tab = str(self.ui.get("tab") or "")
-        if saved_tab in self.tab_titles:
-            self.tabview.set(saved_tab)
-            self.on_tab(saved_tab, persist=False)
+        for group, pages in TAB_GROUPS:
+            self.group_names.append(group)
+            pane = self.tabview.add(group)
+            if len(pages) > 1:
+                frames, show = self.build_sub_tabs(
+                    pane, list(pages),
+                    on_change=lambda page, g=group: self.show_sub(g, page))
+                self.page_show[group] = show
+            else:
+                frame = ctk.CTkFrame(pane, fg_color="transparent")
+                frame.pack(fill="both", expand=True)
+                frames, show = {pages[0]: frame}, None
+                self.page_show[group] = None
+            for page in pages:
+                self.page_names.append(page)
+                self.page_frames[page] = frames[page]
+
+        # 建页顺序 = TAB_GROUPS 顺序：人机路点在「数据」「车测」之前（后两页读它建的 opt_pack / opt_map）
+        for group, pages in TAB_GROUPS:
+            for page in pages:
+                self.build_page(page, self.page_frames[page], hint_items)
+
+        # 回到上次停留的组 + 子页；旧版平铺的页签名按 TAB_OLD_MAP 搬进新组
+        group, page = self._restore_tab()
+        try:
+            self.tabview.set(group)          # _booting 期间不触发 on_group
+        except Exception:
+            pass
+        self.show_sub(group, page, persist=False)
+        self._booting = False
 
         self.refresh_status()
         self.after(4000, self.refresh_status)
 
-    def on_tab(self, name=None, persist=True):
-        r"""页签切换：刷新这一页的数据，并把「上次停在哪」写进 ucf_mod.json。
-        CTkTabview 的 command 不传参数，name 为空时自己读当前页签。"""
+    # ---- 页签：分组（一级）+ 组内页（二级）----
+    def build_page(self, page, frame, hint_items):
+        r"""把一页建进指定容器。页签名 → build_*_tab 的唯一分派表。
+
+        2026-11-24 分组重构：页签从「平铺 10 个」改成「4 组 × 组内页」，
+        各页的 build_* 一行没改，只是父容器从 tabview 换成了组内 frame。
+        """
+        if page == "导出":
+            hint, items = hint_items["导出"]
+            self.build_export_tab(frame, hint, items)   # 总开关 + 六项勾选 + 最近导出
+        elif page == "快捷键":
+            hint, _items = hint_items["快捷键"]
+            self.build_hotkey_tab(frame, hint)          # 热键速查（游戏内已不显示）
+        elif page == "可视化":
+            hint, items = hint_items["可视化"]
+            self.build_vis_tab(frame, hint, items)      # 总开关 + 十类数据（勾选）
+        elif page == "地图":
+            hint, items = hint_items["地图"]
+            self.build_group_tab(frame, hint, items)
+        elif page == "人机路点":
+            self.build_waypoint_tab(frame)              # SyPB 式现场编辑入口
+        elif page == "录制":
+            self.build_record_tab(frame)                # 走一遍就把路线录下来（只写 ② 编辑中）
+        elif page == "数据":
+            self.build_data_tab(frame)                  # 三区路径/时间 + 部署/还原/校验
+        elif page == "部署":
+            try:
+                import deploy_tab
+                self.deploy_tab = deploy_tab.build_deploy_tab(self, frame)
+            except Exception as exc:                 # 部署页坏了也别把整个控制台带崩
+                ctk.CTkLabel(frame, text="部署页加载失败：%s" % exc,
+                             font=FONT_S, text_color="#c92a2a").pack(padx=12, pady=12)
+        elif page == "车测":
+            self.build_autotest_tab(frame)              # 插件自己在进程内逐张切图
+        elif page == "开发者选项":
+            self.build_dev_tab(frame)                   # 坐标记录 + 原始轨迹（排在最后一组）
+        else:
+            raise ValueError("控制台没有这一页：%s" % page)
+
+    def on_group(self, name=None, persist=True):
+        r"""一级页签（分组）切换：回到这一组上次停留的子页。CTkTabview 的 command 不传参数。"""
+        if getattr(self, "_booting", False):
+            return
         if not name:
             name = self.tabview.get()
-        self.save_autotest_ui()          # 离开车测页时把改过的参数带走
-        self.ui["tab"] = name
-        if persist:
+        pages = dict(TAB_GROUPS).get(name) or ()
+        if not pages:
+            return
+        self.show_sub(name, self._sub_memo.get(name) or pages[0], persist)
+
+    def show_sub(self, group, page, persist=True):
+        r"""切到某组的某一页：翻内容框、记位置、按页刷新数据。
+
+        persist=False 用于启动恢复 / 程序内跳转（不写盘）。
+        """
+        pages = dict(TAB_GROUPS).get(group) or ()
+        if page not in pages:
+            page = pages[0] if pages else ""
+        show = self.page_show.get(group)
+        if show is not None:
+            show(page, notify=False)      # 只翻框，不再回调 on_change，避免递归
+        self.cur_group, self.cur_page = group, page
+        self._sub_memo[group] = page
+        self.ui["tab"] = group
+        self.ui["sub"] = page
+        self.ui["sub_%s" % group] = page
+        if persist and not getattr(self, "_booting", False):
             try:
                 save_cfg(self.cfg)
             except OSError:
                 pass
+        self.refresh_page(page)
+
+    def refresh_page(self, name):
+        r"""进入某一页时按页刷新（原来 on_tab 里那段 if/elif）。"""
+        self.save_autotest_ui()          # 离开车测页时把改过的参数带走
         if name == "数据":
             self.refresh_data()
         elif name == "导出":
@@ -229,6 +296,20 @@ class App(Kit, PackMixin, MapTab, VisTab, ExportTab, HotkeyTab, WaypointTab, Rec
                 if cur and self.disp_of(cur):
                     self.opt_pack.set(self.disp_of(cur))
             self.refresh_wp_tab()
+
+    def _restore_tab(self):
+        r"""上次停在哪：新版存 (组, 子页)；旧版存的是平铺页签名，按 TAB_OLD_MAP 搬过来。"""
+        old = str(self.ui.get("tab") or "")
+        if old in TAB_OLD_MAP:
+            return TAB_OLD_MAP[old], old
+        groups = dict(TAB_GROUPS)
+        if old in groups:
+            page = str(self.ui.get("sub_%s" % old) or self.ui.get("sub") or "")
+            if page not in groups[old]:
+                page = groups[old][0]
+            return old, page
+        first_group, first_pages = TAB_GROUPS[0]
+        return first_group, first_pages[0]
 
     # ---- 写盘 ----
     def persist(self, note=""):
@@ -311,9 +392,14 @@ class App(Kit, PackMixin, MapTab, VisTab, ExportTab, HotkeyTab, WaypointTab, Rec
         if tr_on:
             self.set_status("轨迹采集已停止；日志留在 %s" % self.tr_file)
         self.save_autotest_ui()
-        tab = self.tabview.get()
-        if tab:
-            self.ui["tab"] = tab
+        if getattr(self, "cur_group", ""):
+            self.ui["tab"] = self.cur_group
+            self.ui["sub"] = self.cur_page
+            self.ui["sub_%s" % self.cur_group] = self.cur_page
+        else:
+            tab = self.tabview.get()
+            if tab:
+                self.ui["tab"] = tab
         try:
             save_cfg(self.cfg)
         except OSError:
@@ -470,9 +556,10 @@ class App(Kit, PackMixin, MapTab, VisTab, ExportTab, HotkeyTab, WaypointTab, Rec
         self.jump_to_pick()
 
     def jump_to_pick(self):
-        r"""跳到「人机路点」→「编辑中」页 →「选包与地图」，并闪一下边框。"""
+        r"""跳到「路点数据 → 人机路点」→「编辑中」页 →「选包与地图」，并闪一下边框。"""
         try:
-            self.tabview.set("人机路点")
+            self.tabview.set("路点数据")
+            self.show_sub("路点数据", "人机路点", persist=False)
         except Exception:
             pass
         try:
