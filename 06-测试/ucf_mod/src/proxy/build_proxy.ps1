@@ -29,7 +29,7 @@ while (-not (Test-Path -LiteralPath (Join-Path $proj '.ucfroot')) -and (Split-Pa
     $proj = Split-Path -Parent $proj
 }
 
-if (-not $Ref)    { $Ref = Join-Path $proj 'payload\winhttp.dll' }
+if (-not $Ref)    { $Ref = Join-Path $proj 'run\payload\winhttp.dll' }
 if (-not $OutDir) { $OutDir = Join-Path $proj 'build\proxy' }
 if (-not (Test-Path -LiteralPath $Ref)) { throw "参考 DLL 不存在：$Ref" }
 

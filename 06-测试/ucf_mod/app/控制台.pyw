@@ -1,0 +1,758 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+r"""UCF 控制台 —— 窗口壳（入口）。页签代码在 app/tabs/，共用件在 app/ui/，路径与环境在 app/ui/env.py。
+
+2026-11-24 目录重构：从 app/控制台.pyw 拆出，方法体原样搬，只换文件位置。
+"""
+
+
+import os
+import subprocess
+import sys
+import tkinter as tk
+
+import customtkinter as ctk
+
+from tabs.autotest import AutotestTab
+from tabs.data import DataTab
+from tabs.dev.tab import DevTab
+from tabs.export import ExportTab
+from tabs.hotkey import HotkeyTab
+from tabs.map import MapTab
+from tabs.record.tab import RecordTab
+from tabs.vis import VisTab
+from tabs.waypoint import WaypointTab
+from ui.consts import FONT, FONT_B, FONT_S, GROUPS
+from ui.env import CFG_PATH, DEPLOY, FINAL_ROOT, GAME_EXE, HERE, LOG_DIR, NAVSERVER, PACKS, TEST_VIS
+from ui.kit import Kit
+from ui.packs import (
+    PackMixin, final_current_name, pack_manifest, pack_summary, pack_target_fp,
+    prepare_final_dir, write_nav_cmd,
+)
+from ui.util import _python, compact_path, game_running, game_tag, load_cfg, save_cfg, tail_log
+
+
+class App(Kit, PackMixin, MapTab, VisTab, ExportTab, HotkeyTab, WaypointTab, RecordTab,
+          DataTab, AutotestTab, DevTab, ctk.CTk):
+    def __init__(self):
+        super().__init__()
+        self.title("UCF 控制台")
+        # 高分屏 125% 缩放时 900 逻辑高会把底部按钮顶到任务栏外：
+        # 按实际 DPI 折算屏幕可用高度，再夹在 680~900 之间。
+        try:
+            dpi = self.winfo_fpixels("1i") / 96.0
+        except tk.TclError:
+            dpi = 1.0
+        screen_h = int(self.winfo_screenheight() / max(dpi, 0.5))
+        win_h = max(680, min(900, screen_h - 120))
+        # 2026-11-18：新增「人机路点」后 9 个页签 + 4 列类型卡需要约 750 内容宽，
+        # 760 会把最右一列/最后一个页签裁掉；830 仍低于 1366 屏。
+        self.geometry("830x%d+40+20" % win_h)   # 自己定位：交给窗口管理器会压到任务栏
+        self.minsize(720, 620)
+        self.protocol("WM_DELETE_WINDOW", self.on_close)   # 关窗前把没失焦的输入也存了
+        self.cfg = load_cfg()
+        feats = self.cfg.setdefault("features", {})
+        if not isinstance(feats, dict):
+            feats = {}
+            self.cfg["features"] = feats
+        self.feats = feats
+        # 2026-11-19：可视化改成逐类开关；HUD、文字标签都已从游戏里删除
+        for _old in ("vis_lists", "vis_layer_a", "vis_layer_b", "vis_layer_c", "vis_layer_d",
+                     "hud", "hud_states", "hud_keys", "hud_log", "vis_labels"):
+            feats.pop(_old, None)
+        # 控制台自己的界面记忆（上次停在哪个页签）：只给控制台读，插件不认这一节
+        ui = self.cfg.get("ui")
+        if not isinstance(ui, dict):
+            ui = {}
+            self.cfg["ui"] = ui
+        self.ui = ui
+
+        self.vars = {}
+        self.widgets = []
+        # 2026-11-19：启动条件条（版本 / 包 / 生效图）—— 测试包模式的一次性预检可被静音
+        self._mute_preflight = False
+        self._strip_run = None
+
+        self.head = ctk.CTkFrame(self, fg_color="transparent")
+        self.head.pack(fill="x", padx=18, pady=(16, 4))
+        ctk.CTkLabel(self.head, text="UCF 控制台", font=FONT_B).pack(side="left")
+        # 2026-11-19 用户要求：右上角加「窗口置顶」勾选 + 折叠成小条的开关。
+        self.btn_fold = ctk.CTkButton(self.head, text="折叠", width=52, height=24,
+                                      font=FONT_S, fg_color="#3a3f47", hover_color="#4a5058",
+                                      command=self.toggle_fold)
+        self.btn_fold.pack(side="right", padx=(10, 0))
+        self.master_var = tk.BooleanVar(value=bool(self.cfg.get("enabled", True)))
+        ctk.CTkSwitch(self.head, text="插件总开关", variable=self.master_var,
+                      font=FONT, progress_color="#2f9e44",
+                      command=self.on_master).pack(side="right")
+        self.topmost_var = tk.BooleanVar(value=bool(self.ui.get("topmost", False)))
+        ctk.CTkCheckBox(self.head, text="窗口置顶", variable=self.topmost_var, font=FONT_S,
+                        checkbox_width=20, checkbox_height=20,
+                        command=self.on_topmost).pack(side="right", padx=(0, 14))
+        self._folded = False
+        self._geom_saved = ""
+        try:
+            self.attributes("-topmost", bool(self.topmost_var.get()))
+        except tk.TclError:
+            pass
+
+        self.intro = ctk.CTkLabel(
+            self,
+            text="只有从本窗口「开始游戏」才会加载 mod；直接双击 UnityCrossFire.exe 是原版。\n"
+                 "开关改完存进 ucf_mod.json，下次启动生效（游戏开着时要重开）。\n"
+                 "启动档（编辑中 / 成品）是「人机路点」页顶部的两页；数据路径 / 还原 / 校验：切到「数据」页。\n"
+                 "路点数据只读查看在工作台；现场编辑在「人机路点」页（游戏内 F2 菜单）。",
+            font=FONT_S, text_color="#9aa0a6", justify="left")
+        self.intro.pack(anchor="w", padx=20)
+
+        # ---- 按钮 / 状态：先按底边占位，窗口再矮也不会被页签挤没 ----
+        self.bar = ctk.CTkFrame(self, fg_color="transparent")
+        self.bar.pack(side="bottom", fill="x", padx=14, pady=(0, 12))
+        self.btn_game = ctk.CTkButton(self.bar, text="开始游戏（加载 mod）", font=FONT, height=42,
+                                      fg_color="#2f6fdb", hover_color="#255bb4",
+                                      command=self.launch_game)
+        self.btn_game.pack(side="left", fill="x", expand=True, padx=(0, 6))
+        ctk.CTkButton(self.bar, text="路点工作台（查看）", font=FONT, height=42,
+                      fg_color="#3a3f47", hover_color="#4a5058",
+                      command=self.open_workbench).pack(side="left", fill="x", expand=True, padx=(6, 0))
+
+        # 2026-11-19：启动条件条 —— 版本/包/生效图常驻在按钮上方，
+        # 切到任何页签都看得见；这里只摆控件，文案由 refresh_launch_strip() 刷。
+        self.strip = ctk.CTkFrame(self, corner_radius=8, fg_color="#232323",
+                                  border_width=1, border_color="#3a3f47")
+        self.strip.pack(side="bottom", fill="x", padx=14, pady=(0, 8))
+        self.strip_badge = ctk.CTkLabel(self.strip, text="成品", width=78, height=26,
+                                        corner_radius=6, fg_color="#16233a",
+                                        text_color="#9cc3ff",
+                                        font=("Microsoft YaHei UI", 12, "bold"))
+        self.strip_badge.pack(side="left", padx=(10, 8), pady=9)
+        self.strip_go = ctk.CTkButton(self.strip, text="去人机路点改", width=112, height=28,
+                                      font=FONT_S, fg_color="#3a3f47", hover_color="#4a5058",
+                                      command=self.on_strip_go)
+        self.strip_go.pack(side="right", padx=(8, 10), pady=8)
+        self.strip_main = ctk.CTkFrame(self.strip, fg_color="transparent")
+        self.strip_main.pack(side="left", fill="x", expand=True, pady=8)
+        self.strip_title = ctk.CTkLabel(self.strip_main, text="", anchor="w", justify="left",
+                                        font=("Microsoft YaHei UI", 12, "bold"),
+                                        wraplength=640)   # 版本名可能很长，宁可折行也别被裁掉
+        self.strip_title.pack(fill="x")
+        self.strip_sub = ctk.CTkLabel(self.strip_main, text="", anchor="w", justify="left",
+                                      font=FONT_S, text_color="#9aa0a6", wraplength=500)
+        self.strip_sub.pack(fill="x")
+        # 2026-11-22：用户要求「看得见这次到底启动哪个 exe」——常驻显示完整路径
+        self.strip_path = ctk.CTkLabel(self.strip_main, text="", anchor="w", justify="left",
+                                       font=("Consolas", 11), text_color="#7f8792")
+        self.strip_path.pack(fill="x")
+
+        self.stat = ctk.CTkFrame(self, corner_radius=10)
+        self.stat.pack(side="bottom", fill="x", padx=14, pady=(0, 8))
+        top = ctk.CTkFrame(self.stat, fg_color="transparent")
+        top.pack(fill="x", padx=14, pady=(10, 2))
+        ctk.CTkLabel(top, text="上次运行", font=("Microsoft YaHei UI", 14, "bold")).pack(side="left")
+        self.dot = ctk.CTkLabel(top, text="", font=FONT_S, text_color="#9aa0a6")
+        self.dot.pack(side="right")
+        self.logbox = ctk.CTkTextbox(self.stat, height=104, font=("Consolas", 12),
+                                     fg_color="#141414", activate_scrollbars=True)
+        self.logbox.pack(fill="x", padx=14, pady=(2, 12))
+
+        # 地图 / 可视化 / 导出 / 快捷键 / 人机路点 / 数据 / 车测 —— 全部页签切换，上方不再压一块常驻面板。
+        self.tabview = ctk.CTkTabview(self, corner_radius=10, command=self.on_tab)
+        self.tabview.pack(fill="both", expand=True, padx=14, pady=(8, 4))
+        self.tab_titles = []
+        for title, hint, items in GROUPS:
+            self.tab_titles.append(title)
+            tab = self.tabview.add(title)
+            if title == "导出":
+                self.build_export_tab(tab, hint, items)  # 总开关 + 六项勾选（一行多个）+ 最近导出
+            elif title == "快捷键":
+                self.build_hotkey_tab(tab, hint)          # 热键速查（游戏内已不显示）
+            elif title == "可视化":
+                self.build_vis_tab(tab, hint, items)     # 总开关 + 十类数据（勾选）
+            else:
+                self.build_group_tab(tab, hint, items)
+        # 人机路点要在「数据」「车测」之前：后两页读它建的 opt_pack / opt_map。
+        wp_tab = self.tabview.add("人机路点")               # SyPB 式现场编辑入口
+        self.build_waypoint_tab(wp_tab)
+        rec_tab = self.tabview.add("录制")                  # 走一遍就把路线录下来（只写 ② 编辑中）
+        self.build_record_tab(rec_tab)
+        self.build_data_tab(self.tabview.add("数据"))       # 三区路径/时间 + 部署/还原/校验
+        # 2026-11-22：部署页 —— 选游戏位置 + 一键把 dll 迁进游戏目录（取代了原来的独立部署脚本）
+        deploy_view = self.tabview.add("部署")
+        try:
+            import deploy_tab
+            self.deploy_tab = deploy_tab.build_deploy_tab(self, deploy_view)
+        except Exception as exc:                     # 部署页坏了也别把整个控制台带崩
+            ctk.CTkLabel(deploy_view, text="部署页加载失败：%s" % exc,
+                         font=FONT_S, text_color="#c92a2a").pack(padx=12, pady=12)
+        self.build_autotest_tab(self.tabview.add("车测"))   # 不用鼠标键盘：插件自己在进程内切图
+        # 2026-11-21 用户要求：开发者选项单独成页，排在所有页签最后
+        # （玩家坐标记录从「可视化」、原始轨迹采集从「录制」搬进来）
+        self.build_dev_tab(self.tabview.add("开发者选项"))
+        self.tab_titles += ["人机路点", "录制", "数据", "部署", "车测", "开发者选项"]
+
+        # 回到上次停留的页签；记住的页签已经不存在（改版删页）就落在默认第一页
+        saved_tab = str(self.ui.get("tab") or "")
+        if saved_tab in self.tab_titles:
+            self.tabview.set(saved_tab)
+            self.on_tab(saved_tab, persist=False)
+
+        self.refresh_status()
+        self.after(4000, self.refresh_status)
+
+    def on_tab(self, name=None, persist=True):
+        r"""页签切换：刷新这一页的数据，并把「上次停在哪」写进 ucf_mod.json。
+        CTkTabview 的 command 不传参数，name 为空时自己读当前页签。"""
+        if not name:
+            name = self.tabview.get()
+        self.save_autotest_ui()          # 离开车测页时把改过的参数带走
+        self.ui["tab"] = name
+        if persist:
+            try:
+                save_cfg(self.cfg)
+            except OSError:
+                pass
+        if name == "数据":
+            self.refresh_data()
+        elif name == "导出":
+            self.refresh_export_info()
+        elif name == "车测":
+            self.refresh_at()
+        elif name == "录制":
+            self.rec_sync_from_wp()
+            self.refresh_rec_ready()
+        elif name == "开发者选项":
+            self.pmark_refresh()         # 文件可能被编辑器 / 手改过，进来重读
+        elif name == "人机路点":
+            if hasattr(self, "opt_pack"):
+                cur = self.selected_pack()
+                self.opt_pack.configure(values=self._pack_values())   # 编辑器新存的包也刷进来
+                if cur and self.disp_of(cur):
+                    self.opt_pack.set(self.disp_of(cur))
+            self.refresh_wp_tab()
+
+    # ---- 写盘 ----
+    def persist(self, note=""):
+        self.cfg["enabled"] = bool(self.master_var.get())
+        feats = self.cfg.setdefault("features", {})
+        for k, v in self.vars.items():
+            feats[k] = bool(v.get())
+        if hasattr(self, "seg_mode"):
+            self.cfg["pack"] = self.pack_dict()
+        try:
+            save_cfg(self.cfg)
+        except OSError as exc:
+            self.set_status("写不进 ucf_mod.json：%s" % exc)
+            return
+        msg = "已保存 " + (note or "")
+        if game_running():
+            msg += " · 游戏在运行，重启游戏才生效"
+        self.set_status(msg)
+
+    def on_toggle(self, key):
+        self.persist(key)
+
+    def on_master(self):
+        self.persist("总开关")
+        self.refresh_launch_strip()
+
+    # ---- 窗口置顶 / 折叠成小条 ----------------------------------------
+    def on_topmost(self):
+        r"""窗口置顶：勾上就一直浮在游戏上面；状态记进 ucf_mod.json 的 ui 段。"""
+        on = bool(self.topmost_var.get())
+        self.ui["topmost"] = on
+        self.attributes("-topmost", on)
+        try:
+            save_cfg(self.cfg)
+        except OSError:
+            pass
+
+    def toggle_fold(self):
+        r"""折叠：藏起介绍/页签/日志/底部按钮，窗口缩成只剩标题行的一条；
+        再点「展开」按原尺寸、原位置回来。折叠条宽度按标题行实际内容收窄，不留空档。"""
+        if not self._folded:
+            self._geom_saved = str(self.tk.call("wm", "geometry", self))
+            self._folded = True
+            self.intro.pack_forget()
+            self.tabview.pack_forget()
+            self.stat.pack_forget()
+            self.strip.pack_forget()
+            self.bar.pack_forget()
+            self.minsize(1, 1)
+            _size, x, y = self._geom_saved.split("+")
+            w = self.head.winfo_reqwidth() + int(self._apply_window_scaling(44))
+            h = self.head.winfo_reqheight() + int(self._apply_window_scaling(30))
+            self.tk.call("wm", "geometry", self, "%dx%d+%s+%s" % (w, h, x, y))
+            self.btn_fold.configure(text="展开")
+        else:
+            self._folded = False
+            # 按原来的 pack 顺序装回去：介绍 → 底栏 → 日志 → 页签
+            self.intro.pack(anchor="w", padx=20)
+            self.bar.pack(side="bottom", fill="x", padx=14, pady=(0, 12))
+            self.strip.pack(side="bottom", fill="x", padx=14, pady=(0, 8))
+            self.stat.pack(side="bottom", fill="x", padx=14, pady=(0, 8))
+            self.tabview.pack(fill="both", expand=True, padx=14, pady=(8, 4))
+            self.minsize(720, 620)
+            self.tk.call("wm", "geometry", self, self._geom_saved)
+            self.btn_fold.configure(text="折叠")
+
+    def on_close(self):
+        r"""关窗口 = 最后一次落盘：正停在哪个页签、车测输入框里没失焦的数字都不丢。"""
+        rec_on = getattr(self, "rec_state", "") == "rec"
+        tr_on = getattr(self, "tr_state", "") in ("starting", "running")
+        if rec_on or tr_on:
+            try:
+                # 一条命令同时收掉 rec / trace：ucf_navcmd.txt 只保留最后一条命令，
+                # 分开写两条会丢一条。
+                write_nav_cmd("stopall")
+            except OSError:
+                pass
+        if rec_on:
+            self.set_status("录制已停止；原始轨迹留在 %s" % self.rec_file)
+        if tr_on:
+            self.set_status("轨迹采集已停止；日志留在 %s" % self.tr_file)
+        self.save_autotest_ui()
+        tab = self.tabview.get()
+        if tab:
+            self.ui["tab"] = tab
+        try:
+            save_cfg(self.cfg)
+        except OSError:
+            pass
+        self.destroy()
+
+    # ---- 状态 ----
+    def set_status(self, text):
+        self.dot.configure(text=text)
+
+    def refresh_status(self):
+        running = game_running()
+        self.refresh_game_button(running)
+        lines = tail_log(6)
+        self.logbox.configure(state="normal")
+        self.logbox.delete("1.0", "end")
+        self.logbox.insert("end", "\n".join(lines) if lines else "（还没有日志）")
+        self.logbox.configure(state="disabled")
+        if not self.dot.cget("text"):
+            self.set_status("配置：%s" % ("已读取" if os.path.isfile(CFG_PATH) else "未找到，用默认值"))
+        self.refresh_export_info()
+        if hasattr(self, "wp_meta"):
+            self.refresh_wp_status()
+        self.refresh_launch_strip(running)
+        self.after(4000, self.refresh_status)
+
+    def refresh_game_button(self, running=None):
+        r"""底部「开始游戏」按钮：文案和颜色跟着版本走，别让用户猜。"""
+        if not hasattr(self, "btn_game"):
+            return
+        if running is None:
+            running = game_running()
+        # 2026-11-22 用户要求：按钮上要能看出「这次从哪一份游戏启动」——多副本共存时不会点错
+        tag = game_tag(GAME_EXE)
+        suffix = ("  ［%s］" % tag) if tag else ""
+        if running:
+            self.btn_game.configure(text="游戏运行中" + suffix, state="disabled",
+                                    fg_color="#3a3f47", hover_color="#49505a")
+            return
+        pk = self.pack_dict() if hasattr(self, "seg_mode") else {}
+        if not bool(self.master_var.get()):
+            # 总开关关 = 插件加载但待机（plugin.c: loaded but idle）
+            self.btn_game.configure(text="开始游戏 · 插件已关（原版）" + suffix, state="normal",
+                                    fg_color="#3a3f47", hover_color="#49505a")
+        elif pk.get("on") and pk.get("name"):
+            self.btn_game.configure(text="开始游戏 · 编辑中 %s" % pk["name"].split("/")[-1] + suffix,
+                                    state="normal",
+                                    fg_color="#a86a12", hover_color="#bf7c17")
+        else:
+            ver = self.final_selected() if hasattr(self, "opt_final") else final_current_name()
+            if not ver:
+                self.btn_game.configure(text="开始游戏 · 成品（还没有版本）" + suffix, state="disabled",
+                                        fg_color="#3a3f47", hover_color="#49505a")
+            else:
+                self.btn_game.configure(text="开始游戏 · 成品 %s（只读）" % ver + suffix, state="normal",
+                                        fg_color="#2f6fdb", hover_color="#255bb4")
+
+    # ---- 启动条件条 / 测试包预检（2026-11-19 用户要求）---------------
+    # 版本选择原本只活在「人机路点」① 卡里，底部按钮又不带状态；
+    # 这里把「这次启动加载什么」常驻到按钮上方，测试包再补一道预检。
+    def launch_strip_info(self):
+        r"""当前启动条件的文案；与 game_env() 同一套判断：总开关 → 测试包 → 正式版。"""
+        pk = self.pack_dict() if hasattr(self, "seg_mode") else {}
+        if not bool(self.master_var.get()):
+            return {"mode": "off", "badge": "插件已关",
+                    "title": "本次启动 = 原版（插件待机）",
+                    "sub": "总开关关闭：插件加载但不动作，不读 nav、不出 F2 菜单",
+                    "go": "去打开"}
+        if not (pk.get("on") and pk.get("name")):
+            ver = self.final_selected() if hasattr(self, "opt_final") else final_current_name()
+            return {"mode": "final", "badge": "成品",
+                    "title": ("本次启动加载 成品 %s（只读整版）" % ver) if ver
+                             else "本次启动加载 成品（还没有版本 = 原版）",
+                    "sub": "只读：游戏内改动不落盘；要改就切到「编辑中（packs）」",
+                    "go": "去人机路点改"}
+        name = pk["name"]
+        short = name.split("/")[-1]
+        man = pack_manifest(name)
+        summ = pack_summary(name, pack_target_fp(name))
+        ops = summ["nadd"] + summ["ndel"] + summ["eadd"] + summ["edel"]
+        grow = bool(man.get("grow") or man.get("blank") or summ["grow"])
+        keepn = bool(man.get("keep") or summ["keep"])
+        kind = "原版 + 新增" if keepn else ("空白地图" if grow else "增量")
+        label = str(man.get("label") or pk.get("label") or pk.get("map") or "")
+        scope = ("只对 %s 生效" % label) if (pk.get("only_map") and label) else "全部地图生效"
+        title = "%s · %s · %s" % (self.disp_of(name) or short, kind, scope)
+        if keepn:
+            sub = "包内 %d 处改动；原生点原样保留，原版路线照常走，只按 AddNode 追加新点" % ops
+        elif grow and ops == 0:
+            sub = "包内 0 处改动：原生点全禁用又没新建节点，人机没有可走路点"
+        elif grow:
+            sub = "包内 %d 处改动；原生点全禁用，节点按 AddNode 新建（不受原生点数限制）" % ops
+        else:
+            sub = "包内 %d 处改动，套在原生点上执行" % ops
+        return {"mode": "test", "badge": "编辑中", "title": title, "sub": sub,
+                "go": "去人机路点改"}
+
+    def refresh_launch_strip(self, running=None):
+        r"""把启动条件画到按钮上方；运行中显示启动瞬间的快照，改选只影响下次。"""
+        if not hasattr(self, "strip"):
+            return
+        if running is None:
+            running = game_running()
+        if running:
+            if getattr(self, "_strip_run", None) is None:
+                # 外部双击 exe 起的进程：没有 mod，更谈不上版本；单独说清楚
+                info = {"mode": "off", "badge": "外部启动",
+                        "title": "游戏在运行，但不是从本窗口启动的",
+                        "sub": "直接双击 UnityCrossFire.exe 是原版（无 mod）；要加载版本请关掉游戏再点底部按钮",
+                        "go": "去人机路点"}
+            else:
+                info = dict(self._strip_run)
+                info["badge"] = "运行中 · " + info["badge"]
+                info["sub"] += " · 改版本只影响下次启动"
+        else:
+            self._strip_run = None
+            info = self.launch_strip_info()
+        # mode -> (外框, 底色, 徽标底, 徽标字)
+        style = {
+            "off": ("#5a3434", "#2a1a1a", "#301c1c", "#ff9d9d"),
+            "test": ("#7a5a17", "#2c2310", "#3a2c0d", "#f7cd74"),
+            "final": ("#2f4f8a", "#1a2433", "#16233a", "#9cc3ff"),
+        }[info["mode"]]
+        self.strip.configure(border_color=style[0], fg_color=style[1])
+        self.strip_badge.configure(text=info["badge"], fg_color=style[2],
+                                   text_color=style[3],
+                                   width=max(78, 15 * len(info["badge"]) + 14))
+        self.strip_title.configure(text=info["title"],
+                                   text_color="#f7cd74" if info["mode"] == "test" else "#f0f0f0")
+        self.strip_sub.configure(text=info["sub"])
+        self.strip_go.configure(text=info["go"])
+        if hasattr(self, "strip_path"):
+            exists = os.path.isfile(GAME_EXE)
+            text = "启动位置：" + compact_path(GAME_EXE, 96)
+            color = "#7f8792" if exists else "#ff9d9d"
+            # 2026-11-22 用户踩过：部署页选了 A，这里启动的还是 B，眼睛看不出来。
+            # 只要"部署页选的位置"和"实际启动的位置"不一致，就用红字点破。
+            dt = getattr(self, "deploy_tab", None)
+            picked = getattr(dt, "game", None) if dt is not None else None
+            if picked and os.path.dirname(GAME_EXE).lower() != str(picked).lower():
+                text = "⚠ 部署页选的是 %s，但这次启动的仍是 %s" % (
+                    game_tag(os.path.join(str(picked), "UnityCrossFire.exe")),
+                    game_tag(GAME_EXE))
+                color = "#ff9d9d"
+            self.strip_path.configure(text=text, text_color=color)
+        self.refresh_game_button(running)
+
+    def on_strip_go(self):
+        r"""启动条右侧按钮：插件关着就先打开；否则跳到人机路点 ① 卡。"""
+        if not bool(self.master_var.get()):
+            self.master_var.set(True)
+            self.on_master()
+            return
+        self.jump_to_pick()
+
+    def jump_to_pick(self):
+        r"""跳到「人机路点」→「编辑中」页 →「选包与地图」，并闪一下边框。"""
+        try:
+            self.tabview.set("人机路点")
+        except Exception:
+            pass
+        try:
+            if not self.seg_mode.get().startswith("编辑中"):
+                self.seg_mode.set("编辑中（packs·可写）")
+                self.on_pack_change()
+            self.show_page("编辑中")
+            if hasattr(self, "page_edit_tabs"):
+                self.page_edit_tabs("选包与地图")
+        except Exception:                # noqa: BLE001  页面还没建好就算了
+            pass
+        body = getattr(self, "wp_body", None)
+        if body is not None:
+            try:
+                body._parent_canvas.yview_moveto(0.0)   # noqa: SLF001  CTk 内部画布
+            except Exception:
+                pass
+        card = getattr(self, "card_pick", None)
+        if card is None:
+            return
+        try:
+            card.configure(border_width=2, border_color="#f5b942")
+        except Exception:
+            return
+
+        def clear():
+            try:
+                if card.winfo_exists():
+                    card.configure(border_width=0, border_color="#383838")
+            except Exception:
+                pass
+
+        self.after(1600, clear)
+
+    def preflight_start(self):
+        r"""测试包模式的启动预检；返回 True = 继续启动。
+
+        只拦「总开关开 + 测试包选中」的启动；正式版和插件待机直接放行。
+        顺带把空包风险提前说出来：空白地图 + 包内 0 处改动 = 人机没有可走路点。
+        """
+        pk = self.pack_dict()
+        name = pk.get("name") or ""
+        man = pack_manifest(name)
+        summ = pack_summary(name, pack_target_fp(name))
+        ops = summ["nadd"] + summ["ndel"] + summ["eadd"] + summ["edel"]
+        grow = bool(man.get("grow") or man.get("blank") or summ["grow"])
+        keepn = bool(man.get("keep") or summ["keep"])
+        label = str(man.get("label") or pk.get("label") or pk.get("map") or "")
+        level = str(man.get("level") or pk.get("map") or "")
+        where = ("%s（%s）" % (label, level)) if (label and level) else (label or level or "（未知）")
+        scope = "只对这张图生效" if pk.get("only_map") else "全部地图生效"
+        if keepn:
+            alert = ("原版基础 + 新增（keep）：原生点一个都不动，原版路线照常能走；"
+                     "包内 %d 处改动只按 AddNode 追加新点，数量不限。" % ops)
+        elif grow and ops == 0:
+            alert = ("注意：空白地图（grow）+ 包内 0 处改动。进图后原生点全部禁用、"
+                     "又不会新建节点，人机没有可走路点，不会移动。")
+        elif grow:
+            alert = ("空白地图（grow）：原生点全部禁用，节点按 AddNode 新建，"
+                     "包内 %d 处改动不受原生点数限制。" % ops)
+        else:
+            alert = "增量改动：包内 %d 处改动，套在原生点上执行。" % ops
+
+        top = ctk.CTkToplevel(self)
+        top.title("启动预检 · 测试包模式")
+        top.resizable(False, False)
+        top.transient(self)
+        if bool(self.topmost_var.get()):
+            top.attributes("-topmost", True)   # 控制台置顶时别把预检藏到后面
+
+        def grab():
+            try:
+                if top.winfo_exists():
+                    top.grab_set()
+            except tk.TclError:
+                pass
+
+        try:
+            top.grab_set()
+        except tk.TclError:
+            top.after(150, grab)   # CTkToplevel 还没 viewable 时等它映射出来
+        top.bind("<Escape>", lambda _e: top.destroy())
+
+        ctk.CTkLabel(top, text="启动预检 · 测试包模式",
+                     font=("Microsoft YaHei UI", 17, "bold"),
+                     anchor="w").pack(fill="x", padx=18, pady=(16, 0))
+        ctk.CTkLabel(top, text="成品 / 原版不会弹这一步；确认后才会带 UCF_PACK / UCF_FP 启动游戏。",
+                     font=FONT_S, text_color="#9aa0a6", anchor="w",
+                     justify="left", wraplength=470).pack(fill="x", padx=18, pady=(4, 4))
+        # 2026-11-22：预检也把"这次到底启动哪个 exe"写出来，多副本时不会点错
+        ctk.CTkLabel(top, text="将启动：" + GAME_EXE, font=("Consolas", 11),
+                     text_color="#7f8792", anchor="w", justify="left",
+                     wraplength=470).pack(fill="x", padx=18, pady=(0, 8))
+
+        grid = ctk.CTkFrame(top, fg_color="transparent")
+        grid.pack(fill="x", padx=14)
+        cells = [("数据版本", "② 测试包（packs）"),
+                 ("测试包", self.disp_of(name) or name.split("/")[-1]),
+                 ("生效地图", where), ("生效范围", scope)]
+        for i, (k, v) in enumerate(cells):
+            cell = ctk.CTkFrame(grid, corner_radius=7, fg_color="#262626",
+                                border_width=1, border_color="#383838")
+            cell.grid(row=i // 2, column=i % 2, sticky="nsew", padx=4, pady=4)
+            ctk.CTkLabel(cell, text=k, font=FONT_S, text_color="#9aa0a6",
+                         anchor="w").pack(fill="x", padx=10, pady=(6, 0))
+            ctk.CTkLabel(cell, text=v, font=("Microsoft YaHei UI", 13, "bold"),
+                         anchor="w", justify="left", wraplength=210).pack(
+                fill="x", padx=10, pady=(0, 6))
+        for c in range(2):
+            grid.grid_columnconfigure(c, weight=1)
+
+        warn = ctk.CTkFrame(top, corner_radius=7, fg_color="#241511",
+                            border_width=1, border_color="#6b3d2c")
+        warn.pack(fill="x", padx=18, pady=(6, 0))
+        ctk.CTkLabel(warn, text=alert, font=FONT_S, text_color="#ffb59d",
+                     anchor="w", justify="left", wraplength=440).pack(
+            fill="x", padx=10, pady=8)
+
+        mute_var = tk.BooleanVar(value=self._mute_preflight)
+        ctk.CTkCheckBox(top, text="本次控制台会话不再提示（启动条仍会一直显示）",
+                        variable=mute_var, font=FONT_S,
+                        checkbox_width=18, checkbox_height=18).pack(
+            anchor="w", padx=20, pady=(10, 0))
+
+        result = {"go": False}
+
+        def go():
+            result["go"] = True
+            if mute_var.get():
+                self._mute_preflight = True
+            top.destroy()
+
+        btns = ctk.CTkFrame(top, fg_color="transparent")
+        btns.pack(fill="x", padx=18, pady=(12, 16))
+        ctk.CTkButton(btns, text="确认启动", width=104, height=34, font=FONT,
+                      fg_color="#a86a12", hover_color="#bf7c17",
+                      text_color="#fff2d6", command=go).pack(side="right")
+        ctk.CTkButton(btns, text="先去人机路点", width=118, height=34, font=FONT_S,
+                      fg_color="#3a3f47", hover_color="#4a5058",
+                      command=lambda: (top.destroy(), self.jump_to_pick())).pack(
+            side="right", padx=(0, 8))
+        ctk.CTkButton(btns, text="取消", width=76, height=34, font=FONT_S,
+                      fg_color="transparent", border_width=1, border_color="#4a4a4a",
+                      hover_color="#2e2e2e", command=top.destroy).pack(
+            side="right", padx=(0, 8))
+
+        top.update_idletasks()
+        w = max(520, top.winfo_reqwidth())
+        h = top.winfo_reqheight()
+        x = self.winfo_rootx() + (self.winfo_width() - w) // 2
+        y = self.winfo_rooty() + (self.winfo_height() - h) // 2
+        top.geometry("%dx%d+%d+%d" % (w, h, max(x, 0), max(y, 0)))
+        self.wait_window(top)
+        return result["go"]
+
+    # ---- 动作 ----
+    def game_env(self):
+        r"""启动游戏的环境变量 + 一句人话说明（「开始游戏」和「车测」共用）。
+
+        UCF_MOD=1 是通行证。三档启动的路径也在这里定（数据全在 ②，③ 只当运行环境）：
+          UCF_EXPORT_DIR     -> ② 开发版 vis（Ctrl+E 导出、navmesh、_seen_ 都写这里）
+          UCF_PACK_DIR       -> ② 开发版 packs（编辑中）
+          成品：UCF_PACK_DIR=②\final + UCF_PACK=<版本名> —— 一版一目录，和编辑中同一套逻辑
+          编辑中：UCF_PACK=<包>（可写，游戏内存回包里）
+          原版：总开关关，插件待机
+        """
+        env = dict(os.environ)
+        env["UCF_MOD"] = "1"
+        env["UCF_EXPORT_DIR"] = TEST_VIS
+        env["UCF_PACK_DIR"] = PACKS
+        # 2026-11-23：日志写到工程端 log\，游戏目录不再生成；插件建不出目录才落回游戏端
+        env["UCF_LOG_DIR"] = LOG_DIR
+        try:
+            os.makedirs(LOG_DIR, exist_ok=True)
+        except OSError:
+            pass
+        pk = self.pack_dict() if hasattr(self, "seg_mode") else {}
+        enabled = bool(self.master_var.get()) if hasattr(self, "master_var") else True
+        note = "mod 已启用"
+        if not enabled:
+            # 总开关关 = 插件加载但待机（plugin.c）；状态行别再写「mod + 测试包」
+            note = "插件总开关关闭：插件待机（不读 nav、不出菜单）"
+        elif pk.get("on") and pk.get("name"):
+            env["UCF_PACK"] = pk["name"]           # 地图文件夹/包名，插件按子目录读
+            env.pop("UCF_NAV_READONLY", None)      # 测试包允许游戏内保存
+            note = "mod + 编辑中 %s" % pk["name"].split("/")[-1]
+            if pk.get("only_map") and pk.get("fp"):
+                env["UCF_FP"] = pk["fp"]
+                env["UCF_FPLABEL"] = pk.get("label") or pk["map"]
+                note += "（只对 %s）" % (pk.get("label") or pk["map"])
+        else:
+            # 成品：读 ②\final\<版本>\，而且**按「包」启动** —— UCF_PACK_DIR=final +
+            # UCF_PACK=<版本名>，插件走和编辑中完全相同的加载路径（grow/keep 建点、
+            # 0 点图都照常），所以在成品档里玩起来和编辑中一模一样。
+            # 只读靠文件属性（prepare_final_dir 每次启动前设好），游戏内保存会失败。
+            ver = self.final_selected() if hasattr(self, "opt_final") else final_current_name()
+            d = prepare_final_dir(ver)
+            if d:
+                env["UCF_PACK_DIR"] = FINAL_ROOT
+                env["UCF_PACK"] = ver
+                env["UCF_NAV_DIR"] = d             # 万一包名被挡：退回同一个目录
+                env["UCF_NAV_READONLY"] = "1"
+                for k in ("UCF_FP", "UCF_FPLABEL"):
+                    env.pop(k, None)
+                note = "mod + 成品 %s（只读）" % ver
+            else:
+                # 成品里还没有版本：不读任何路线数据（等于原版）
+                for k in ("UCF_PACK", "UCF_FP", "UCF_FPLABEL", "UCF_NAV_DIR"):
+                    env.pop(k, None)
+                note = "mod + 成品（还没有版本，等于原版）"
+        return env, note
+
+    def launch_game(self):
+        if not os.path.isfile(GAME_EXE):
+            self.set_status("找不到 %s" % GAME_EXE)
+            return
+        # 2026-11-19：测试包模式先过一道预检（正式版 / 插件待机直接放行）
+        pk = self.pack_dict() if hasattr(self, "seg_mode") else {}
+        if (bool(self.master_var.get()) and pk.get("on") and pk.get("name")
+                and not self._mute_preflight):
+            if not self.preflight_start():
+                self.set_status("已取消启动（测试包 %s）" % pk.get("name"))
+                return
+        # 通行证：只有这里启动才会带上 UCF_MOD=1，插件据此决定是否工作
+        env, note = self.game_env()
+        try:
+            subprocess.Popen([GAME_EXE], cwd=os.path.dirname(GAME_EXE), env=env)
+            self._strip_run = self.launch_strip_info()   # 运行中显示启动瞬间的快照
+            self.set_status("游戏已启动（%s · %s）" % (note, game_tag(GAME_EXE)))
+        except OSError as exc:
+            self.set_status("启动失败：%s" % exc)
+        self.after(1500, self.refresh_status)
+
+    def open_workbench(self):
+        r"""路点工作台只读：直接起 navserver（新控制台窗口看日志，关掉即停止）。"""
+        if not os.path.isfile(NAVSERVER):
+            self.set_status("找不到 navserver.py")
+            return
+        env = dict(os.environ)
+        env["UCF_PROFILE"] = "dev"
+        try:
+            subprocess.Popen([_python(), "-u", NAVSERVER], cwd=HERE, env=env,
+                             creationflags=subprocess.CREATE_NEW_CONSOLE)
+            self.set_status("已打开路点工作台（只读查看）")
+        except OSError as exc:
+            self.set_status("打不开路点工作台：%s" % exc)
+
+
+def _restart_after_setup():
+    r"""向导会把游戏位置写进用户配置，但 ucf_paths 的 DEPLOY 是 import 时算好的常量，
+    本进程里已经改不动了 —— 直接重启自己最省事，也最不容易踩到 40 多个使用点。"""
+    try:
+        os.execv(sys.executable, [sys.executable] + sys.argv)
+    except Exception:
+        try:
+            subprocess.Popen([sys.executable] + sys.argv, cwd=HERE)
+        except Exception:
+            pass
+        sys.exit(0)
+
+
+def main():
+    ctk.set_appearance_mode("dark")
+    ctk.set_default_color_theme("blue")
+    # 2026-11-22：不再一上来就 return 1。游戏位置没配好（或配的路径已经没了）先走首次设置向导：
+    # 选 UnityCrossFire.exe → 六道闸门 → 一键部署 → 写 %LOCALAPPDATA%\UCFMod\deploy.json。
+    if not os.path.isdir(DEPLOY) or not os.path.isfile(GAME_EXE):
+        try:
+            import first_run
+        except Exception as exc:
+            print("缺少 first_run.py，无法进入首次设置：%s" % exc)
+            return 1
+        if not first_run.ensure_ready(GAME_EXE, DEPLOY):
+            print("没有选择游戏位置，退出。")
+            return 1
+        _restart_after_setup()
+        return 0
+    App().mainloop()
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

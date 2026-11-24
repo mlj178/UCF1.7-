@@ -528,7 +528,7 @@
 
 ### 9.3 复现脚本
 
-复现脚本放在 06-测试\ucf_mod\archive\probe_map_loader\：
+复现脚本曾放在 06-测试\ucf_mod\archive\probe_map_loader\（2026-11-24 目录清理时删除，需要时从 git 历史取回）：
 
     probe_all_maps.py   全 12 张图 + 全 12 个 sharedassets 的类型统计
     probe_scripts.py    按脚本 pathID 分组，找固定骨架

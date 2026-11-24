@@ -41,21 +41,21 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 
 
 def _find_ucf(start):
-    """从脚本位置向上找 ucf_mod 根目录（同时有 geo/ 和 tools/）。"""
+    """从脚本位置向上找 ucf_mod 根目录（认 .ucfroot 标记，2026-11-24 目录重构）。"""
     cur = start
-    for _ in range(10):
-        if os.path.isdir(os.path.join(cur, "geo")) and os.path.isdir(os.path.join(cur, "tools")):
+    for _ in range(12):
+        if os.path.isfile(os.path.join(cur, ".ucfroot")):
             return cur
         nxt = os.path.dirname(cur)
         if nxt == cur:
             break
         cur = nxt
-    return os.path.abspath(os.path.join(start, "..", "..", ".."))
+    return os.path.abspath(os.path.join(start, "..", "..", "..", ".."))
 
 
 UCF = _find_ucf(HERE)
 REPO = os.path.dirname(os.path.dirname(UCF))          # d:\trae_project\ucf1.7-modifier
-GEO = os.path.join(UCF, "geo")
+GEO = os.path.join(UCF, "data", "geo")
 OUT = os.path.join(GEO, "web")
 TEXROOT = os.path.join(GEO, "tex")
 DEFAULT_PROJECT = os.path.join(REPO, "00-游戏逆向分析-相关信息", "地图3D资源导出",

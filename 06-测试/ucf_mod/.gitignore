@@ -1,6 +1,8 @@
 # ---------------------------------------------------------------------------
-# 工程端入库范围：src/ tools/ workbench/ docs/ 文档 geo/*.npz
+# 工程端入库范围：app/ src/ docs/ 文档 + data/geo/*.npz + data/navdata 数据
 # 运行期产物、可再生产物、部署端数据 全部排除
+#
+# 2026-11-24 目录重构后：代码进 app/，数据进 data/，产物进 run/，日志留在 log/
 # ---------------------------------------------------------------------------
 
 # 运行期 / Python
@@ -13,21 +15,22 @@ __pycache__/
 .dsh-tmp-shots/
 screenshots/
 
-# 运行日志（2026-11-23 起插件直接写工程端 log/）：ucf_mod.log / autotest.txt / player_marks.txt
+# 运行日志（插件直接写工程端 log/）：ucf_mod.log / autotest.txt / player_marks.txt
 log/
 
-# 构建产物
-build/
+# 构建产物（run/build/ 下的 dll 也由下面的 *.dll 兜住）
+run/build/
+run/_tmp*
 *.dll
 
-# 可再生产物（从 geo/*.npz 重建）
-geo/web/
-geo/tex/
+# 可再生产物（从 data/geo/*.npz 重建）
+data/geo/web/
+data/geo/tex/
 
 # 本机路径配置
-tools/deploy.json
+app/tools/deploy.json
 
-# 部署端数据：只存在于游戏目录，不在工程端（锚定 ucf_mod 根目录，避免误伤 navdata/**）
+# 部署端数据：只存在于游戏目录，不在工程端（锚定 ucf_mod 根目录）
 /nav/
 /maps/
 /vis/
@@ -35,19 +38,19 @@ tools/deploy.json
 /backup/
 
 # 数据四版：原生备份（冻结只读）/ 开发版 / 测试版统一进库备份
-navdata/*.tmp
-navdata/native/**/*.tmp
-# tools/ 下的一次性脚本（_oneoff/ 除外：那是归档的一次性迁移工具，要进库）
-tools/_scratch/
-tools/_tmp*
-navdata/_logs/
+data/navdata/*.tmp
+data/navdata/native/**/*.tmp
+# 一次性脚本（_oneoff/ 除外：那是归档的一次性迁移工具，要进库）
+app/tools/_scratch/
+app/tools/_tmp*
+data/navdata/_logs/
 # 录制原始轨迹：临时文件，复盘后的增量只写进 packs，不进库
-navdata/dev/vis/rec/
+data/navdata/dev/vis/rec/
 
 # 根 .gitignore 的 *.zip 规则例外：清理前的工作区备份入库
-!navdata/_before_cleanup_*.zip
+!data/navdata/_before_cleanup_*.zip
 
 # 部署弹药库例外：payload 里的 dll 在工程端只有这一份（winhttp.dll 源码已丢失），
 # 必须入库，否则游戏目录一旦被清理，加载器和插件就永久没了
-!payload/*.dll
-!payload/**/*.dll
+!run/payload/*.dll
+!run/payload/**/*.dll

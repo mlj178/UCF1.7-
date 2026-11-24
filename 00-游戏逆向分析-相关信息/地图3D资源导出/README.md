@@ -20,11 +20,11 @@
 工作台实际读取的是：
 
 ```text
-06-测试\ucf_mod\geo\web\level1..level11.bin
-06-测试\ucf_mod\geo\tex\level1..level11\
+06-测试\ucf_mod\data\geo\web\level1..level11.bin
+06-测试\ucf_mod\data\geo\tex\level1..level11\
 ```
 
-本目录的 `工作台数据` 是**供别人复用的副本**；如果要让工作台使用，把 `工作台数据\web` 和 `工作台数据\tex` 覆盖到上面的 `geo` 目录即可。
+本目录的 `工作台数据` 是**供别人复用的副本**；如果要让工作台使用，把 `工作台数据\web` 和 `工作台数据\tex` 覆盖到上面的 `data\geo` 目录即可。
 
 ## 代码
 
@@ -61,4 +61,4 @@ foreach ($n in 2..11) {
 }
 ```
 
-产出会写到 `06-测试\ucf_mod\geo\web` 和 `geo\tex`；如需同步到本资源库，把这两个目录里的 `level*` 复制到 `工作台数据` 即可。
+产出会写到 `06-测试\ucf_mod\data\geo\web` 和 `data\geo\tex`；如需同步到本资源库，把这两个目录里的 `level*` 复制到 `工作台数据` 即可。
