@@ -154,7 +154,7 @@ ucf_mod/
 | | 导出 | `app/tabs/export.py` | Ctrl+E 导出开关与内容、最近导出、整理收件箱 |
 | | 快捷键 | `app/tabs/hotkey.py` | 游戏内热键速查 |
 | **路点数据** | 地图总览 | `app/tabs/overview.py` + `ui/overview.py` | 11 张图一张一行：备份① / 编辑中 / 成品 / 游戏加载；矩阵 / 卡片 / 看板三视图 |
-| | 人机路点 | `app/tabs/waypoint.py` + `ui/packs.py` | 编辑中 / 成品两档、本图草稿、发布、草稿↔成品对比 |
+| | 人机路点 | `app/tabs/waypoint.py` + `ui/packs.py` | 编辑中 / 成品两档、本图草稿（含删除）、发布、草稿↔成品对比 |
 | | 录制 | `app/tabs/record/tab.py` + `ucf_rec.py` | 录前准备 / 录制中 / 复盘 |
 | | 数据 | `app/tabs/data.py` | 三区路径与时间、部署 / 还原 / 校验 |
 | **部署与测试** | 部署 | `app/tabs/deploy/*` | 选游戏位置、六道闸门、一键部署 / 校验 / 卸载 |
@@ -225,9 +225,18 @@ python app\tabs\deploy\deploy_mod.py --game-exe "..." --uninstall
   「部署 / 游戏加载」按当前启动档算，不是把地图复制进游戏目录；每行展开有草稿/成品/快照路径和跳转。
 - **人机路点**：启动档两页（编辑中 / 成品）+ 一个共用地图选择；编辑中只有「本图草稿」（一张图一个），成品只有「已发布」（一张图一份）。
   发布 = 覆盖 `final\<指纹>.txt`；成品页「草稿 ↔ 成品」表按图给结论（sha256 相同 = 同一文件）。
+  编辑中卡片三个动作：打开草稿目录 / 重置本图草稿（只清点边，草稿还在）/ **删除本图草稿**（整份挪到
+  `archive\pack_trash\`，这张图回到「还没有草稿」；成品不动，要撤发布走成品页）。
+  **草稿 ≠ 编辑标记**：守卫区 / 守卫点 / 蹲守点 / 标签 / 出生点 存在 `markers\<图>\markers.txt`；
+  删草稿的弹窗里「同时清空本图标记」默认勾上（取消勾选就只删草稿），同一行也显示「本图标记：N」
+  并可单独「清空本图标记」（都挪到 `archive\markers_trash\`）。
 
 ### 游戏内 F2 菜单要点
 
+- **手动保存（2026-11-25，唯一保存方式）**：游戏内所有编辑（路点 / 连线 / 跳链 / 蹲守点 / 守卫区 / 标签 / 出生点）
+  只改内存和当前场景，**按 Ctrl+S 才写文件**（F2 菜单「撤销 / 保存」→「保存（Ctrl+S）」是同一个入口，
+  菜单第一行常驻「● 未保存 / 已保存」）。没按 Ctrl+S 就退房间 = 改动全部丢弃，
+  `ucf_mod.log` 会写一行「退出房间，丢弃未保存的编辑」。旧的 Ctrl+6 / Ctrl+Shift+S 保存已删除。
 - 按 **F2** 打开；**长按 E 0.45 s** 备用。按 F2 前先点一下游戏画面拿焦点。
 - 键位：`1-9` 直选；小键盘 `8/2` 上下、`5` 确认；`Esc` 或主键盘 `0` 返回（滚轮也可上下）；左键确认、右键返回。
   W/A/S/D、空格、Shift、Ctrl 仍交给游戏。
@@ -239,8 +248,13 @@ python app\tabs\deploy\deploy_mod.py --game-exe "..." --uninstall
 - **方向可视化**：A 起点 = 绿色方块 + 竖条；准星虚线框按身份上色（起点绿 / 终点红 / 非法灰）；
   单向边的箭头层只在菜单打开时显示。
 - **预置虚影**：选好类型后，准星处先显示虚线框，按下去之前就能看清会不会被拒绝（灰框 = 会失败）。
+- **出生点编辑**（2026-11-25）：`1 添加点位 → 4/5 出生点 BL/GR`，准星落点 + 当前朝向；
+  `5 删除点位 → 5/6` 删 BL/GR 出生点（至少保留 1 个）；原来的「删除标记」拆成
+  `5 删除点位` 和 `6 删除区域`（守卫区）。改的是 `MapManager.SP_BL/SP_GR` 运行时数组，
+  不写原图；新增/删除先记在内存，Ctrl+S 才写 `markers\<图>\markers.txt`（`spawn` / `spawndel`），
+  保存后每次进图自动重套。
 
-配置键：`wp_menu`、`wp_autoground`（bool）、`wp_brush`（normal/jump/crouch/guard/area/tag，只在游戏内切）。
+配置键：`wp_menu`、`wp_autoground`（bool）、`wp_brush`（normal/jump/crouch/guard/area/tag/spawn_bl/spawn_gr，只在游戏内切）。
 
 ---
 
@@ -285,6 +299,8 @@ python app\tabs\deploy\deploy_mod.py --game-exe "..." --uninstall
   落下 = 下降 ≥ 1.5 m 且落差 ≥ 2 m；2.5 m 内二次经过 = 岔路候选；蹲 > 0.8 s 只提示；单帧 > 15 m 断段。
 - 落盘：原始轨迹 `data/navdata/dev/vis/rec/<图>_<包>_<时间>.jsonl`；复盘确认后只往包里**追加** `node add`/`edge add`/`jump add`，
   改前备份 `.bak-rec-<时间>`。
+- **必须点「保存增量」才算保存**（2026-11-25）：录制过程只写原始 jsonl，不进草稿；
+  结束录制只到复盘页，不点保存就什么也不写；点保存后才追加 + 通知插件重新载入。
 - 命令：控制台写 `ucf_navcmd.txt` 的 `cmd=rec` + `act=start|stop|pause|resume`；插件 0.5 s 内执行。
 - 已知边界：车测时相机在天上、脚下射线打不到地面（`gy=-9999`），跳跃/落下识别要用真实对局验证。
 
@@ -300,6 +316,7 @@ python app/tests/test_console_packcmd.py    # 包统计 + ucf_navcmd.txt
 python app/tests/test_trace.py              # 轨迹字段表 C/Python 对钉
 python app/tests/test_ucf_rec.py            # 录制识别（合成轨迹）
 python app/tests/test_workbench_views.py    # 工作台三档 + grow/jump/单向边
+python app/tests/test_manual_save.py        # 手动保存：唯一入口 / 无自动保存 / 退房间丢弃
 python app/tests/test_logpaths.py           # 日志三级查找 + 注入 + 轮转
 python app/tests/test_layout.py             # 目录树与 README 一致（重构后新增）
 python app/tests/test_roles.py              # 身份（用户/开发）↔ 页表、旧配置迁移
@@ -322,6 +339,8 @@ python app/tests/test_roles.py              # 身份（用户/开发）↔ 页�
 | `docs/record/目录重构_2026-11-24.md` | 2026-11-24 目录重构：旧路径 → 新路径对照 |
 | `docs/record/身份与页签_2026-11-24.md` | 2026-11-24 身份（用户/开发）：页表、切换、迁移、自检 |
 | `docs/record/游戏目录清理_2026-11-25.md` | 2026-11-25 清游戏目录 + 直读 + 一键部署改造记录 |
+| `docs/record/出生点编辑与删除拆分_2026-11-25.md` | 2026-11-25 出生点 BL/GR 增删 + 删除点位/删除区域拆分 |
+| `docs/record/手动保存_2026-11-25.md` | 2026-11-25 游戏内编辑必须手动保存（Ctrl+S 唯一入口，退房间丢弃未保存） |
 | `docs/record/逆向速查_版本偏移与地址.md` | 引擎版本 + md5、字段偏移、函数 RVA |
 | `docs/record/` | 每轮实现笔记（文件名带日期）；只作历史证据，现状看本文件 |
 | `app/workbench/web/README.md` | 工作台七页的数据来源、方向约定、3D 操作 |

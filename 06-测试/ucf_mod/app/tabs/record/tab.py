@@ -607,7 +607,8 @@ class RecordTab:
         name = self.selected_pack() if hasattr(self, "opt_map") else ""
         fp = self.selected_fp() if hasattr(self, "opt_map") else ""
         self.rec_save_info.configure(
-            text="目标：dev\\packs\\%s\\%s.txt · 只增不覆盖 → 失败自动回滚"
+            text="只预览、还没写进草稿：点顶部「保存增量」才算保存\n"
+                 "目标：dev\\packs\\%s\\%s.txt · 只增不覆盖 → 失败自动回滚"
                  % (name.replace("/", "\\") if name else "—", fp or "—"))
 
     def rec_review_retry(self):

@@ -5,11 +5,18 @@
  *
  * Ctrl+1  toggle edit mode        Ctrl+2  place Bot_CrouchPos (crosshair ground)
  * Ctrl+3  place Bot_NanoGuardPos  Ctrl+4  new Bot_NanoGuardArea
- * Ctrl+5  undo last marker        Ctrl+6  save markers file
+ * Ctrl+5  undo last marker        Ctrl+S  SAVE ALL (markers + nav edits)
  * Ctrl+7  reload markers file     Ctrl+8  team BL/GR for new crouch points
  * Ctrl+9  status log              Ctrl+0  show/hide every marker visual
  * Ctrl+Del remove ANY marker nearest the crosshair (within 3 m)
- * F2 menu 5: typed delete (1 crouch 2 guard pos 3 guard area 4 jump 5 tag 6 any)
+ *
+ * 2026-11-25 用户要求：游戏内编辑**必须手动保存**。所有加点/删点/连线/跳链/
+ * 蹲守点/守卫区/标签/出生点只在内存和场景里生效，只有 Ctrl+S（F2 菜单
+ * 「撤销 / 保存」里的「保存」，或控制台 cmd=save）才写文件；不保存就退出
+ * 房间 = 改动全部丢弃。以前每次编辑自动落盘、Ctrl+6 / Ctrl+Shift+S 另存，
+ * 这些口子全部取消（用户明确「其他快捷键的保存都不要」）。
+ * F2 menu 5: typed point delete (1 crouch 2 guard pos 3 jump 4 tag 5 spawn BL
+ *            6 spawn GR 7 any point)   F2 menu 6: delete area (guard area)
  * Ctrl+Shift+6  A* navmesh wireframe on/off            (cfg navmesh_show)
  * Ctrl+Shift+7  compass rose on/off (汉字东南西北)      (cfg vis_compass)
  *
@@ -99,6 +106,18 @@ static char g_packRoot[MAX_PATH];  /* 测试包根：UCF_PACK_DIR > cfg pack_dir
 static int  g_navReadOnly;         /* UCF_NAV_READONLY=1：正式版 nav\ 不允许游戏内落盘 */
 static int  g_saveWarned;
 
+/* ---- 手动保存（2026-11-25 用户要求）--------------------------------------
+ * 游戏内所有编辑只改内存 / 场景；只有 Ctrl+S（或 F2 菜单「撤销 / 保存」里的
+ * 「保存」，或控制台 cmd=save）才落盘。不保存就退出房间 = 改动丢弃。
+ * 这里只记「哪一边有没落盘的改动」，用来在菜单里显示、并在退房间时打日志；
+ * 保存时也只写脏的那一边 —— 控制台 / 录制可能刚往同一个文件追加过内容，
+ * 没改过的文件不重写，免得把别人的追加盖掉。 */
+static int  g_dirtyMk;             /* markers.txt：蹲守 / 守卫 / 标签 / 出生点 */
+static int  g_dirtyNav;            /* <指纹>.txt：加点 / 删点 / 连线 / 跳链 */
+static int  editor_unsaved(void) { return g_dirtyMk || g_dirtyNav; }
+static void editor_dirty_mk(void)  { g_dirtyMk = 1; }
+static void editor_dirty_nav(void) { g_dirtyNav = 1; }
+
 /* ---- 测试包（UCF_PACK / UCF_FP）-------------------------------------------
  * 「UCF 控制台」启动游戏时递进来的环境变量，决定这次读哪套路线数据：
  *   UCF_PACK=chain_a   读 <插件目录>\packs\chain_a\<指纹>.txt
@@ -148,7 +167,9 @@ static P (*x_class_get_field_from_name)(P, const char*);
 static P (*x_field_get_type)(P);
 static P (*x_class_get_element_class)(P);
 static void (*x_field_static_get_value)(P, void*);
+static void (*x_field_static_set_value)(P, void*);
 static P (*x_array_new)(P, unsigned int);
+static int (*x_array_get_byte_length)(P);
 static P (*x_class_get_parent)(P);
 static P (*x_class_from_il2cpp_type)(P);
 static int (*x_class_instance_size)(P);
@@ -257,12 +278,14 @@ static int g_wpMenuOn = 1;      /* cfg: wp_menu */
 static int g_wpMenuOpen;
 static int g_wpMenuSel;
 static int g_wpMenuSub;         /* 0 main 1 types 2 paths 3 areas 4 edit 5 display
-                                 * 6 删路径/路点 7 删标记（按类型） */
+                                 * 6 删路径/路点 7 删点位（按类型） 8 删区域（守卫区） */
 static int g_wpMenuSubSel;
-/* 删除标记页当前选中的类型：-1 还没选，0 任意（准星最近），1..5 见 MT_*。
- * 2026-11-25 用户要求 1/2/3 分开选，别靠"最近"盲删。 */
+/* 删除页当前选中的类型：-1 还没选，MT_* = 只删这个类型，
+ * MT_ANY_POINT = 任意点位（不含守卫区）。2026-11-25 用户要求按类型分开选，
+ * 别靠"最近"盲删；2026-11-25 再拆成「删除点位 / 删除区域」两页。 */
 static int g_delType = -1;
-static int g_wpBrush;           /* 0 normal 1 jump 2 crouch 3 guard 4 area 5 tag */
+/* 0 normal 1 jump 2 crouch 3 guard 4 area 5 tag 6 出生点 BL 7 出生点 GR */
+static int g_wpBrush;
 static int g_wpPath;            /* 0 both 1 A->B 2 B->A */
 static int g_wpAutoGround = 1;  /* cfg: wp_autoground */
 static int g_wpArm;             /* next Enter/LMB places */
@@ -404,6 +427,11 @@ typedef struct {
 #define MT_AREA    3
 #define MT_JUMP    4
 #define MT_TAG     5
+#define MT_SPAWN_BL 6   /* 出生点：MapManager.SP_BL（幽灵 / 潜伏者） */
+#define MT_SPAWN_GR 7   /* 出生点：MapManager.SP_GR（保卫者 / 人类） */
+/* 删除「点位」页最后一项"任意"：只扫点位型标记，不含守卫区（区域单独一页）。
+ * 老的无类型删除（游戏内 Delete / delete_nearest()）仍是 0 = 任意含区域。 */
+#define MT_ANY_POINT (-2)
 
 static MK g_mk[MAXM];
 static P  g_aidMk[MAX_AID];
@@ -414,6 +442,29 @@ static unsigned char g_areaLive[MAX_AID];
 /* 槽位占用表：g_aidMk 里存的是「marker 下标」，下标 0 和「空槽」都是 0，分不清；
  * 单独记一份，删区/换图时清掉，重建时才不会互相覆盖。 */
 static unsigned char g_aidUsed[MAX_AID];
+
+/* ---- 出生点编辑（MapManager.SP_BL / SP_GR） --------------------------------
+ * 出生点不是场景对象：场景里只有 MapManager.pointDic，Awake 时拆成
+ * SP_BL/SP_GR 两个 SpawnPoint[]（元素 16 B = Vector3 + 朝向 float）。
+ * 这里改的是运行时的数组，不写原图 —— 插件不在时游戏恢复原版。
+ * 每张图的改动记在 markers.txt：
+ *   spawn    <team> <x> <y> <z> <yaw>   用户新增的点
+ *   spawndel <team> <x> <y> <z>         用户删掉的原生点（按坐标匹配）
+ * 进图后 MapManager 就绪时按「原生 - 删除 + 新增」重建数组并写回字段。 */
+#define MAX_SPAWN_ORIG 128
+#define MAX_SPAWN_EDIT 64
+typedef struct { V3 p; float yaw; } SPT;
+static SPT g_spawnOrig[2][MAX_SPAWN_ORIG];
+static int g_spawnOrigN[2];
+static int g_spawnOrigOk[2];
+static SPT g_spawnAdd[2][MAX_SPAWN_EDIT];
+static int g_spawnAddN[2];
+static SPT g_spawnDel[2][MAX_SPAWN_EDIT];
+static int g_spawnDelN[2];
+static P   g_spawnWritten[2];   /* 上次写回去的数组；游戏重建后指针会变 */
+static P   g_spawnCaptured[2];  /* 原生数组快照对应的那一份（重进图/重建后要重拍） */
+static P   g_spawnCls;          /* SpawnPoint（值类型） */
+static P   g_spidFld[2];        /* SPID_BL / SPID_GR 静态字段 */
 
 /* marker type colours */
 static const COL COL_CROUCH = { 1.00f, 0.15f, 0.12f, 1.0f };  /* red    */
@@ -802,7 +853,9 @@ static int ed_init(void) {
   RESOLVE(field_get_type);
   RESOLVE(class_get_element_class);
   RESOLVE(field_static_get_value);
+  RESOLVE(field_static_set_value);
   RESOLVE(array_new);
+  RESOLVE(array_get_byte_length);
   RESOLVE(class_get_parent);
   RESOLVE(class_from_il2cpp_type);
   RESOLVE(class_instance_size);
@@ -878,6 +931,30 @@ static int ed_init(void) {
     P base = x_class_get_parent(g_mmCls);
     if (base) g_mmInstField = x_class_get_field_from_name(base, "<instance>k__BackingField");
   }
+  /* 出生点编辑：SpawnPoint 值类型 + SPID_BL/GR 静态计数器。
+   * SpawnPoint 是全局命名空间的 struct，find_cls 找不到时再从 SP_BL 字段类型反推
+   * （和上面 Bot_JumpLink.Link 同一套办法）。 */
+  g_spawnCls = 0;
+  if (g_mmCls && x_class_get_field_from_name && x_field_get_type &&
+      x_class_from_il2cpp_type && x_class_get_element_class) {
+    /* 优先从 SP_BL 字段类型反推：拿到的就是 SpawnPoint[] 的元素类，
+     * 不会撞上别的程序集里同名的 SpawnPoint。 */
+    P f = x_class_get_field_from_name(g_mmCls, "SP_BL");
+    P ft = f ? x_field_get_type(f) : 0;
+    P ac = ft ? x_class_from_il2cpp_type(ft) : 0;
+    if (ac) g_spawnCls = x_class_get_element_class(ac);
+  }
+  if (!g_spawnCls) g_spawnCls = find_cls("", "SpawnPoint");
+  elog("init: spawnCls=%p instance_size=%d value_size_api=%d",
+       (void*)g_spawnCls,
+       (g_spawnCls && x_class_instance_size) ? x_class_instance_size(g_spawnCls) : -1,
+       x_array_get_byte_length ? 1 : 0);
+  if (g_mmCls && x_class_get_field_from_name) {
+    g_spidFld[0] = x_class_get_field_from_name(g_mmCls, "SPID_BL");
+    g_spidFld[1] = x_class_get_field_from_name(g_mmCls, "SPID_GR");
+  }
+  elog("init: spawnCls=%p spid=%p/%p", (void*)g_spawnCls,
+       (void*)g_spidFld[0], (void*)g_spidFld[1]);
 
   if (g_colCls) g_colType = x_type_get_object(x_class_get_type(g_colCls));
   if (g_boxCls) g_boxType = x_type_get_object(x_class_get_type(g_boxCls));
@@ -1931,6 +2008,7 @@ static int nm_seen;
 static int g_cArea, g_cPos, g_cCrouch, g_cSpawn, g_cJump, g_cTag, g_cGuard;
 static void overlay_refresh(void);
 static void overlay_reset(void);
+static void menu_refresh(void);   /* 保存后立刻刷新「未保存 / 已保存」这一行 */
 static void nm_tick(void);           /* A* 可走面：按需重建（定义在 nm_dump 之后） */
 static void nm_toggle(void);
 static void ghost_reset(void);       /* 预置预览：换图时清掉（定义在 wp_place 之前） */
@@ -4272,6 +4350,7 @@ static int make_nanopos(int aid, V3 p, int safety) {
 /* delete marker at idx, its children, and fix every index reference */
 static void del_index(int idx);
 static int  save_file(void);
+static int editor_spawn_delete(int team);   /* 出生点：准星最近的一个（定义在 load_file 后面） */
 void editor_delete_nearest(void);          /* 定义在文件末尾；菜单里的 Delete 也走它 */
 /* 删跳链时把点图日志里的 jump add 一起摘掉（定义在点图编辑区，那里才有 g_ned）。 */
 static int nav_drop_jump(const V3* takeoff);
@@ -4399,17 +4478,22 @@ static void undo_last(void) {
   if (g_n <= 0) { elog("undo: nothing to undo"); return; }
   elog("undo: removing marker #%d type=%d", g_n - 1, g_mk[g_n - 1].type);
   del_index(g_n - 1);
+  editor_dirty_mk();          /* 手动保存：只改内存，Ctrl+S 才写 markers.txt */
+  elog("undo: 未保存（Ctrl+S 保存）");
   overlay_refresh();
 }
 
 static const char* mt_name(int t) {
   switch (t) {
-    case MT_CROUCH:  return "蹲守点";
-    case MT_NANOPOS: return "守卫点";
-    case MT_AREA:    return "守卫区";
-    case MT_JUMP:    return "跳跃点/跳链";
-    case MT_TAG:     return "标签/范围";
-    default:         return "任意标记";
+    case MT_CROUCH:   return "蹲守点";
+    case MT_NANOPOS:  return "守卫点";
+    case MT_AREA:     return "守卫区";
+    case MT_JUMP:     return "跳跃点/跳链";
+    case MT_TAG:      return "标签/范围";
+    case MT_SPAWN_BL: return "出生点 BL";
+    case MT_SPAWN_GR: return "出生点 GR";
+    case MT_ANY_POINT:return "任意点位";
+    default:          return "任意标记";
   }
 }
 static int mt_count(int t) {
@@ -4427,13 +4511,19 @@ static int delete_nearest_of(int want) {
   int i, byRay = -1, byHit = -1, target = -1, cand = 0;
   float bestPerp = 1e9f, bestHit = 1e9f, bestCam = 1e9f;
   int haveHit, byCam = -1;
-  const char* wn = want > 0 ? mt_name(want) : "任意";
+  const char* wn;
+  /* 出生点不在 g_mk 里，单独走数组编辑；其它类型仍走场景标记。 */
+  if (want == MT_SPAWN_BL) return editor_spawn_delete(0);
+  if (want == MT_SPAWN_GR) return editor_spawn_delete(1);
+  wn = (want == MT_ANY_POINT) ? "任意点位" : (want > 0 ? mt_name(want) : "任意");
   if (!g_n) { elog("delete: no markers"); return 0; }
   if (!cam_ray(&cp, &fw)) { elog("delete: no camera"); return 0; }
   haveHit = cam_point(&hp);
   for (i = 0; i < g_n; i++) {
     float vx, vy, vz, t;
-    if (want > 0 && g_mk[i].type != want) continue;
+    /* 删除点位页的"任意"不碰守卫区（区域在单独一页删）。 */
+    if (want == MT_ANY_POINT) { if (g_mk[i].type == MT_AREA) continue; }
+    else if (want > 0 && g_mk[i].type != want) continue;
     cand++;
     vx = g_mk[i].p.x - cp.x; vy = g_mk[i].p.y - cp.y; vz = g_mk[i].p.z - cp.z;
     t = vx * fw.x + vy * fw.y + vz * fw.z;
@@ -4477,9 +4567,10 @@ static int delete_nearest_of(int want) {
     elog("delete: removing #%d type=%d(%s) at %.2f %.2f %.2f", target, g_mk[target].type,
          mt_name(g_mk[target].type), g_mk[target].p.x, g_mk[target].p.y, g_mk[target].p.z);
     del_index(target);
-    /* 立刻落盘：editor_on_scene() 每次进图都会 load_file() 重放 markers.txt，
-     * 不存盘的话删掉的点下次进图又回来了（看起来就像“删不了”）。 */
-    save_file();
+    /* 2026-11-25：不再立刻落盘。删掉的点只从当前场景 / 内存清单里消失，
+     * Ctrl+S 之后才写 markers.txt；不保存就退房间 = 删了也白删（用户要求）。 */
+    editor_dirty_mk();
+    elog("delete: 未保存（Ctrl+S 保存，退房间前不存会恢复）");
     overlay_refresh();
     return 1;
   }
@@ -4526,7 +4617,7 @@ static void mk_set_path(void) {
 
 static int save_file(void) {
   FILE* f;
-  int i, c1 = 0, c2 = 0, c3 = 0, c5 = 0;
+  int i, t, c1 = 0, c2 = 0, c3 = 0, c5 = 0, sa = 0, sd = 0;
   if (!g_file[0]) return 0;
   CreateDirectoryA(g_dir, 0);
   {
@@ -4543,11 +4634,14 @@ static int save_file(void) {
     else if (g_mk[i].type == 3) c3++;
     else if (g_mk[i].type == 5) c5++;
   }
-  fprintf(f, "# ucf_mod markers v1  crouch=%d nanopos=%d area=%d tag=%d\n", c1, c2, c3, c5);
+  for (t = 0; t < 2; t++) { sa += g_spawnAddN[t]; sd += g_spawnDelN[t]; }
+  fprintf(f, "# ucf_mod markers v1  crouch=%d nanopos=%d area=%d tag=%d spawnadd=%d spawndel=%d\n",
+          c1, c2, c3, c5, sa, sd);
   fprintf(f, "# crouch <team> <x> <y> <z>\n");
   fprintf(f, "# area <scale*10> <x> <y> <z> [aid]\n");
   fprintf(f, "# nanopos <areaId> <x> <y> <z> <safety>\n");
   fprintf(f, "# tag <tag> <x> <y> <z>\n");
+  fprintf(f, "# spawn <team 0BL/1GR> <x> <y> <z> <yaw>   / spawndel <team> <x> <y> <z>\n");
   for (i = 0; i < g_n; i++) {
     MK* m = &g_mk[i];
     if (m->type == 1) fprintf(f, "crouch %d %.3f %.3f %.3f\n", m->prm, m->p.x, m->p.y, m->p.z);
@@ -4557,8 +4651,18 @@ static int save_file(void) {
     else if (m->type == 2) fprintf(f, "nanopos %d %.3f %.3f %.3f %d\n", m->aid, m->p.x, m->p.y, m->p.z, m->prm);
     else if (m->type == 5) fprintf(f, "tag %d %.3f %.3f %.3f\n", m->prm, m->p.x, m->p.y, m->p.z);
   }
+  for (t = 0; t < 2; t++) {
+    for (i = 0; i < g_spawnAddN[t]; i++)
+      fprintf(f, "spawn %d %.3f %.3f %.3f %.1f\n", t,
+              g_spawnAdd[t][i].p.x, g_spawnAdd[t][i].p.y, g_spawnAdd[t][i].p.z,
+              g_spawnAdd[t][i].yaw);
+    for (i = 0; i < g_spawnDelN[t]; i++)
+      fprintf(f, "spawndel %d %.3f %.3f %.3f\n", t,
+              g_spawnDel[t][i].p.x, g_spawnDel[t][i].p.y, g_spawnDel[t][i].p.z);
+  }
   fclose(f);
-  elog("saved %d markers (crouch=%d nanopos=%d area=%d tag=%d) -> %s", g_n, c1, c2, c3, c5, g_file);
+  elog("saved %d markers (crouch=%d nanopos=%d area=%d tag=%d spawnadd=%d spawndel=%d) -> %s",
+       g_n, c1, c2, c3, c5, sa, sd, g_file);
   overlay_refresh();
   return 1;
 }
@@ -4570,6 +4674,14 @@ static void reset_markers(void) {
   memset(g_aidMk, 0, sizeof(g_aidMk));
   memset(g_areaLive, 0, sizeof(g_areaLive));   /* 换图：旧守卫区随场景销毁，激活标记一起清 */
   memset(g_aidUsed, 0, sizeof(g_aidUsed));
+  /* 出生点：换图后 MapManager 是新的，原生快照/写回指针全部作废，等下次进图重拍。
+   * 新增/删除清单来自 markers.txt，由 load_file() 重新读进来。 */
+  memset(g_spawnOrigN, 0, sizeof(g_spawnOrigN));
+  memset(g_spawnOrigOk, 0, sizeof(g_spawnOrigOk));
+  memset(g_spawnAddN, 0, sizeof(g_spawnAddN));
+  memset(g_spawnDelN, 0, sizeof(g_spawnDelN));
+  memset(g_spawnWritten, 0, sizeof(g_spawnWritten));
+  memset(g_spawnCaptured, 0, sizeof(g_spawnCaptured));
 }
 
 static int load_file(void) {
@@ -4580,10 +4692,21 @@ static int load_file(void) {
   f = fopen(g_file, "r");
   if (!f) { elog("load: no markers file yet (%s)", g_file); return 0; }
   while (fgets(line, sizeof(line), f)) {
-    float x, y, z;
+    float x, y, z, yaw = 0.0f;
     int a, b;
     if (line[0] == '#' || line[0] == '\n' || line[0] == '\r') continue;
-    if (sscanf(line, "area %d %f %f %f %d", &a, &x, &y, &z, &b) == 5) {
+    if (sscanf(line, "spawndel %d %f %f %f", &a, &x, &y, &z) == 4) {
+      if ((a == 0 || a == 1) && g_spawnDelN[a] < MAX_SPAWN_EDIT) {
+        SPT* s = &g_spawnDel[a][g_spawnDelN[a]++];
+        memset(s, 0, sizeof *s);
+        s->p.x = x; s->p.y = y; s->p.z = z;
+      }
+    } else if (sscanf(line, "spawn %d %f %f %f %f", &a, &x, &y, &z, &yaw) == 5) {
+      if ((a == 0 || a == 1) && g_spawnAddN[a] < MAX_SPAWN_EDIT) {
+        SPT* s = &g_spawnAdd[a][g_spawnAddN[a]++];
+        s->p.x = x; s->p.y = y; s->p.z = z; s->yaw = yaw;
+      }
+    } else if (sscanf(line, "area %d %f %f %f %d", &a, &x, &y, &z, &b) == 5) {
       V3 p; p.x = x; p.y = y; p.z = z;
       if (make_area_aid(a, p, b)) made++;
     } else if (sscanf(line, "area %d %f %f %f", &a, &x, &y, &z) == 4) {
@@ -4611,6 +4734,327 @@ static int load_file(void) {
   return made;
 }
 
+
+/* ================= 出生点编辑：MapManager.SP_BL / SP_GR =================
+ * 数据来源：0x10 = SP_BL（team 0 幽灵/潜伏者）、0x14 = SP_GR（team 1 保卫者）；
+ * 数组头和 IL2CPP 数组一样：长度 +0xC，元素 +0x10 起、每个 16 B。
+ * 原生点只在进图时拍一次快照（g_spawnOrig），之后所有改动都在
+ * 「原生 - 删除 + 新增」上重算；不碰场景里的 pointDic，也不写原图。 */
+
+static P mm_inst(void) {
+  P mm = 0;
+  if (g_mmInstField && x_field_static_get_value) x_field_static_get_value(g_mmInstField, &mm);
+  if (mm && !uobj_live(mm)) mm = 0;
+  return mm;
+}
+
+static void spawn_capture(int team, P arr) {
+  int n = 0;
+  if (arr && mem_ok(arr, 0x10)) {
+    n = *(int*)((char*)arr + 0xC);
+    if (n < 0) n = 0;
+    if (n > MAX_SPAWN_ORIG) {
+      elog("spawn: 原生 team=%d 有 %d 个，超过上限 %d，只取前 %d 个",
+           team, n, MAX_SPAWN_ORIG, MAX_SPAWN_ORIG);
+      n = MAX_SPAWN_ORIG;
+    }
+    if (n && !mem_ok((char*)arr + 0x10, (size_t)n * 16)) {
+      elog("spawn: 原生 team=%d 数据不可读，按 0 个处理", team);
+      n = 0;
+    }
+    if (n) memcpy(g_spawnOrig[team], (char*)arr + 0x10, (size_t)n * 16);
+  }
+  g_spawnOrigN[team] = n;
+  g_spawnOrigOk[team] = 1;
+  g_spawnCaptured[team] = arr;
+  elog("spawn: 原生快照 team=%d n=%d", team, n);
+}
+
+/* 原生（去掉删掉的）- 坐标匹配 + 新增，按数组顺序；addIdx 回填新增点在
+ * g_spawnAdd 里的下标（-1 = 原生点），删除时据此决定摘哪一边。 */
+static int spawn_effective(int team, SPT* out, int* addIdx, int cap) {
+  unsigned char drop[MAX_SPAWN_ORIG];
+  int i, j, n = 0;
+  memset(drop, 0, sizeof drop);
+  for (i = 0; i < g_spawnDelN[team]; i++) {
+    for (j = 0; j < g_spawnOrigN[team]; j++) {
+      if (drop[j]) continue;
+      if (fabsf(g_spawnOrig[team][j].p.x - g_spawnDel[team][i].p.x) < 0.02f &&
+          fabsf(g_spawnOrig[team][j].p.y - g_spawnDel[team][i].p.y) < 0.02f &&
+          fabsf(g_spawnOrig[team][j].p.z - g_spawnDel[team][i].p.z) < 0.02f) {
+        drop[j] = 1;
+        break;
+      }
+    }
+  }
+  for (j = 0; j < g_spawnOrigN[team] && n < cap; j++) {
+    if (drop[j]) continue;
+    out[n] = g_spawnOrig[team][j];
+    if (addIdx) addIdx[n] = -1;
+    n++;
+  }
+  for (i = 0; i < g_spawnAddN[team] && n < cap; i++) {
+    out[n] = g_spawnAdd[team][i];
+    if (addIdx) addIdx[n] = i;
+    n++;
+  }
+  return n;
+}
+
+static int spawn_count(int team) {
+  unsigned char drop[MAX_SPAWN_ORIG];
+  int i, j, n = 0;
+  if (team < 0 || team > 1 || !g_spawnOrigOk[team]) return -1;
+  memset(drop, 0, sizeof drop);
+  for (i = 0; i < g_spawnDelN[team]; i++)
+    for (j = 0; j < g_spawnOrigN[team]; j++)
+      if (!drop[j] &&
+          fabsf(g_spawnOrig[team][j].p.x - g_spawnDel[team][i].p.x) < 0.02f &&
+          fabsf(g_spawnOrig[team][j].p.y - g_spawnDel[team][i].p.y) < 0.02f &&
+          fabsf(g_spawnOrig[team][j].p.z - g_spawnDel[team][i].p.z) < 0.02f) {
+        drop[j] = 1;
+        break;
+      }
+  for (j = 0; j < g_spawnOrigN[team]; j++) if (!drop[j]) n++;
+  return n + g_spawnAddN[team];
+}
+
+static int spawn_arr_same(P arr, const SPT* pts, int n) {
+  int i;
+  if (!arr || !mem_ok(arr, 0x10)) return n == 0;
+  if (*(int*)((char*)arr + 0xC) != n) return 0;
+  if (n <= 0) return 1;
+  if (!mem_ok((char*)arr + 0x10, (size_t)n * 16)) return 0;
+  for (i = 0; i < n; i++)
+    if (memcmp((char*)arr + 0x10 + i * 16, &pts[i], 16) != 0) return 0;
+  return 1;
+}
+
+static int spawn_write(int team, P mm, const SPT* pts, int n) {
+  P na;
+  unsigned h = 0;
+  int off = team ? 0x14 : 0x10;
+  if (!g_spawnCls || !x_array_new || !mm) return 0;
+  if (n <= 0) return 0;
+  if (sizeof(SPT) != 16) {
+    elog("spawn: SPT 大小 %d != 16，禁用以防写花托管堆", (int)sizeof(SPT));
+    return 0;
+  }
+  na = x_array_new(g_spawnCls, (unsigned)n);
+  if (!na) { elog("spawn: array_new(%d) 失败", n); return 0; }
+  if (*(int*)((char*)na + 0xC) != n) {
+    elog("spawn: 新数组长度 %d != %d，放弃写入", *(int*)((char*)na + 0xC), n);
+    return 0;
+  }
+  /* 最硬的防线：数组字节长度必须正好 n*16。元素类拿错时这里会拦住，
+   * 不会把 memcpy 写到托管堆外面。 */
+  if (x_array_get_byte_length && x_array_get_byte_length(na) != n * 16) {
+    elog("spawn: 数组字节长度 %d != %d（元素不是 16 B），放弃写入",
+         x_array_get_byte_length(na), n * 16);
+    return 0;
+  }
+  /* 填数据期间先拿句柄钉住：这段是原生代码，GC 不知道 na 是活的。
+   * （plugin.c 注入数组时也是同一套做法。） */
+  if (x_gchandle_new) h = x_gchandle_new(na, 0);
+  memcpy((char*)na + 0x10, pts, (size_t)n * 16);
+  /* 和 navfix / plugin.c 同一套写法：先写屏障再显式写字段。 */
+  if (x_gc_wbarrier_set_field) x_gc_wbarrier_set_field(mm, (char*)mm + off, na);
+  *(P*)((char*)mm + off) = na;
+  if (h && x_gchandle_free) x_gchandle_free((P)(size_t)h);
+  /* 数组长度变了：SPID_BL/GR 可能已经超过新长度（取点函数会越界检查），
+   * 每写一次就清零。还原原生数组（spawn_restore_orig）也走这里，同样安全。 */
+  if (x_field_static_set_value) {
+    int zero = 0;
+    if (g_spidFld[0]) x_field_static_set_value(g_spidFld[0], &zero);
+    if (g_spidFld[1]) x_field_static_set_value(g_spidFld[1], &zero);
+  }
+  g_spawnWritten[team] = na;
+  return 1;
+}
+
+static int spawn_apply(void) {
+  static const int OFF[2] = { 0x10, 0x14 };
+  SPT fin[MAX_SPAWN_ORIG + MAX_SPAWN_EDIT];
+  P mm;
+  int team, ok = 1;
+  if (!g_spawnAddN[0] && !g_spawnAddN[1] && !g_spawnDelN[0] && !g_spawnDelN[1]) return 1;
+  mm = mm_inst();
+  if (!mm) return 0;
+  for (team = 0; team < 2; team++) {
+    P cur;
+    int n;
+    if (!g_spawnAddN[team] && !g_spawnDelN[team]) continue;
+    cur = *(P*)((char*)mm + OFF[team]);
+    /* 指针既不是我们写回去的那份、也不是拍快照时那份 = 游戏重建了数组
+     * （最典型：进图时我们先写、MapManager.Awake 后跑）。重新拍快照。 */
+    if (!g_spawnOrigOk[team] ||
+        (cur != g_spawnWritten[team] && cur != g_spawnCaptured[team])) {
+      spawn_capture(team, cur);
+      g_spawnWritten[team] = 0;
+    }
+    n = spawn_effective(team, fin, 0, (int)(sizeof fin / sizeof fin[0]));
+    if (n <= 0) {
+      /* 原生还没读到（进图瞬间）时安静等着；真把点删空了才值得报一行。 */
+      if (g_spawnOrigN[team] > 0)
+        elog("spawn: team=%d 结果为空，保留原生 %d 个（空数组会让游戏越界）",
+             team, g_spawnOrigN[team]);
+      continue;
+    }
+    if (spawn_arr_same(cur, fin, n)) { g_spawnWritten[team] = cur; continue; }
+    if (!spawn_write(team, mm, fin, n)) { ok = 0; continue; }
+    elog("spawn: team=%d 写回 原生 %d - 删除 %d + 新增 %d = %d 个",
+         team, g_spawnOrigN[team], g_spawnDelN[team], g_spawnAddN[team], n);
+  }
+  return ok;
+}
+
+/* 每 tick 保活：没编辑时也拍一次原生快照（删除页要显示计数/找目标）；
+ * 有编辑时核对数组，被游戏重建就自动重套。场景切换后等几帧再碰 MapManager。 */
+static void spawn_tick(void) {
+  P mm;
+  int team, edits = 0;
+  if (!g_inited || g_collectOnly || g_sceneAge < 4) return;
+  mm = mm_inst();
+  if (!mm) return;
+  for (team = 0; team < 2; team++) {
+    P cur = *(P*)((char*)mm + (team ? 0x14 : 0x10));
+    if (!g_spawnOrigOk[team] && cur) spawn_capture(team, cur);
+    if (g_spawnAddN[team] || g_spawnDelN[team]) edits = 1;
+  }
+  if (edits) spawn_apply();
+}
+
+static float cam_yaw(void) {
+  V3 cp, fw;
+  if (!cam_ray(&cp, &fw)) return 0.0f;
+  return atan2f(fw.x, fw.z) * 57.29578f;
+}
+
+static int spawn_add_point(int team, V3 p, float yaw) {
+  int n;
+  if (team < 0 || team > 1) return 0;
+  if (!g_spawnCls) { elog("spawn: SpawnPoint 类没找到，不能加出生点"); return 0; }
+  if (g_spawnAddN[team] >= MAX_SPAWN_EDIT) {
+    elog("spawn: team=%d 新增到上限 %d", team, MAX_SPAWN_EDIT);
+    return 0;
+  }
+  n = spawn_count(team);
+  if (n >= MAX_SPAWN_ORIG + MAX_SPAWN_EDIT - 1) {
+    elog("spawn: team=%d 总数到上限 %d", team, MAX_SPAWN_ORIG + MAX_SPAWN_EDIT);
+    return 0;
+  }
+  g_spawnAdd[team][g_spawnAddN[team]].p = p;
+  g_spawnAdd[team][g_spawnAddN[team]].yaw = yaw;
+  g_spawnAddN[team]++;
+  if (!spawn_apply()) elog("spawn: MapManager 还没就绪，进图后自动重试");
+  editor_dirty_mk();          /* 手动保存：Ctrl+S 才写 markers.txt */
+  g_visDirty = 1;
+  elog("spawn: 新增 team=%d (%0.2f %0.2f %0.2f) yaw=%.0f，本图新增 %d 个（未保存，Ctrl+S）",
+       team, p.x, p.y, p.z, yaw, g_spawnAddN[team]);
+  return 1;
+}
+
+/* 准星最近的一个出生点：和 delete_nearest_of 同一套判定
+ * （射线偏移 <=1 m -> 落点 12 m 内 -> 相机 12 m 内）。
+ * 命中原生点记 spawndel；命中自己新增的点直接摘新增清单。 */
+static int editor_spawn_delete(int team) {
+  SPT eff[MAX_SPAWN_ORIG + MAX_SPAWN_EDIT];
+  int addIdx[MAX_SPAWN_ORIG + MAX_SPAWN_EDIT];
+  int n, i, target = -1, byRay = -1, byHit = -1, byCam = -1;
+  float bestPerp = 1e9f, bestHit = 1e9f, bestCam = 1e9f;
+  V3 cp, fw, hp;
+  int haveHit;
+  if (team < 0 || team > 1) return 0;
+  if (!g_spawnOrigOk[team]) {
+    /* 菜单刚打开 / 进图不到 1 s：现场补拍一次，别让"删除"第一下落空。 */
+    P mm = mm_inst();
+    if (mm) {
+      P cur = *(P*)((char*)mm + (team ? 0x14 : 0x10));
+      if (cur) spawn_capture(team, cur);
+    }
+  }
+  if (!g_spawnOrigOk[team] && !g_spawnAddN[team]) {
+    elog("spawn: team=%d 的数组还没读到（进图后再试）", team);
+    return 0;
+  }
+  n = spawn_effective(team, eff, addIdx, (int)(sizeof eff / sizeof eff[0]));
+  if (n <= 0) { elog("spawn: team=%d 没有出生点可删", team); return 0; }
+  if (n <= 1) {
+    elog("spawn: team=%d 只剩 1 个出生点，不能再删（空数组会让游戏越界）", team);
+    return 0;
+  }
+  if (!cam_ray(&cp, &fw)) { elog("spawn: no camera"); return 0; }
+  haveHit = cam_point(&hp);
+  for (i = 0; i < n; i++) {
+    float vx = eff[i].p.x - cp.x, vy = eff[i].p.y - cp.y, vz = eff[i].p.z - cp.z;
+    float t = vx * fw.x + vy * fw.y + vz * fw.z;
+    if (t > 0.3f && t < 60.0f) {
+      float px = vx - fw.x * t, py = vy - fw.y * t, pz = vz - fw.z * t;
+      float perp = sqrtf(px * px + py * py + pz * pz);
+      if (perp < bestPerp) { bestPerp = perp; byRay = i; }
+    }
+    if (haveHit) {
+      float dx = eff[i].p.x - hp.x, dy = eff[i].p.y - hp.y, dz = eff[i].p.z - hp.z;
+      float d2 = dx * dx + dy * dy + dz * dz;
+      if (d2 < bestHit) { bestHit = d2; byHit = i; }
+    }
+    {
+      float d2 = vx * vx + vy * vy + vz * vz;
+      if (d2 < bestCam) { bestCam = d2; byCam = i; }
+    }
+  }
+  if (byRay >= 0 && bestPerp <= 1.0f) target = byRay;
+  else if (byHit >= 0 && bestHit <= 144.0f) target = byHit;
+  else if (byCam >= 0 && bestCam <= 144.0f) target = byCam;
+  if (target < 0) {
+    elog("spawn: team=%d 没选中（%d 个点，射线偏移 %.2f m）—— 准星对准出生点再按 5",
+         team, n, byRay >= 0 ? bestPerp : -1.0f);
+    return 0;
+  }
+  if (addIdx[target] >= 0) {
+    int k = addIdx[target];
+    elog("spawn: 删除新增 team=%d idx=%d (%.2f %.2f %.2f)", team, k,
+         eff[target].p.x, eff[target].p.y, eff[target].p.z);
+    for (i = k; i < g_spawnAddN[team] - 1; i++) g_spawnAdd[team][i] = g_spawnAdd[team][i + 1];
+    g_spawnAddN[team]--;
+  } else {
+    if (g_spawnDelN[team] >= MAX_SPAWN_EDIT) {
+      elog("spawn: team=%d 删除记录到上限 %d", team, MAX_SPAWN_EDIT);
+      return 0;
+    }
+    elog("spawn: 删除原生 team=%d (%.2f %.2f %.2f)", team,
+         eff[target].p.x, eff[target].p.y, eff[target].p.z);
+    g_spawnDel[team][g_spawnDelN[team]] = eff[target];
+    g_spawnDel[team][g_spawnDelN[team]].yaw = 0.0f;
+    g_spawnDelN[team]++;
+  }
+  if (!spawn_apply()) elog("spawn: MapManager 还没就绪，进图后自动重试");
+  editor_dirty_mk();          /* 手动保存：Ctrl+S 才写 markers.txt */
+  g_visDirty = 1;
+  elog("spawn: 删除已生效，未保存（Ctrl+S 保存，退房间前不存会恢复）");
+  overlay_refresh();
+  return 1;
+}
+
+/* Ctrl+7「重读 markers」前把数组还原成原生：否则 reset 之后会把
+ * 我们写回去的（含新增点的）数组当成原生快照，再套一遍就重复了。 */
+static void spawn_restore_orig(void) {
+  P mm = mm_inst();
+  int team;
+  if (!mm) return;
+  for (team = 0; team < 2; team++) {
+    int off = team ? 0x14 : 0x10;
+    P cur = *(P*)((char*)mm + off);
+    if (!g_spawnOrigOk[team] || !g_spawnWritten[team] || cur != g_spawnWritten[team]) continue;
+    if (g_spawnOrigN[team] > 0 &&
+        spawn_write(team, mm, g_spawnOrig[team], g_spawnOrigN[team]))
+      elog("spawn: 重读前还原原生 team=%d %d 个", team, g_spawnOrigN[team]);
+    g_spawnWritten[team] = 0;
+    g_spawnCaptured[team] = 0;
+    g_spawnOrigOk[team] = 0;
+  }
+}
+
 static void status(void) {
   int c1 = 0, c2 = 0, c3 = 0, c5 = 0, i;
   for (i = 0; i < g_n; i++) {
@@ -4622,6 +5066,11 @@ static void status(void) {
   elog("status: edit=%d vis=%d team=%d markers=%d (crouch=%d nanopos=%d area=%d tag=%d) curAreaAid=%d ui=%d",
        g_on, g_vis, g_team, g_n, c1, c2, c3, c5,
        (g_curArea >= 0 && g_curArea < g_n) ? g_mk[g_curArea].aid : -1, g_cat ? 1 : 0);
+  /* 保存状态：菜单里也显示同一份；save=1 表示有改动没按 Ctrl+S */
+  elog("status: save=%s (navDirty=%d mkDirty=%d navEdits=%d markers=%d spawnAdd=%d/%d spawnDel=%d/%d)",
+       editor_unsaved() ? "未保存（Ctrl+S）" : "已保存",
+       g_dirtyNav, g_dirtyMk, g_nedN, g_n,
+       g_spawnAddN[0], g_spawnAddN[1], g_spawnDelN[0], g_spawnDelN[1]);
   /* 最后一个字段是「屏幕覆盖层是否已建」：1 = 图例/菜单文字已创建 */
   if (g_areaCls && x_class_get_field_from_name) {
     P f = x_class_get_field_from_name(g_areaCls, "SpareAreaList");
@@ -4670,6 +5119,18 @@ void editor_on_scene(void* astar) {
   if (astar == g_lastAstar) return;
   elog("scene: enter astar=%p inited=%d", astar, g_inited);
   g_lastAstar = (P)astar;
+  /* 2026-11-25：换房间 = 没按 Ctrl+S 的编辑作废（用户要求：不保存，退出房间就没了）。
+   * 这里先按旧图的状态打一行日志，再交给下面的 reset/load 清内存。 */
+  if (editor_unsaved()) {
+    elog("scene: 退出房间，丢弃未保存的编辑（点图 %d 项 / 标记 %d 个 / 出生点 新增 %d+%d 删除 %d+%d）"
+         "-- 只有 Ctrl+S 才会落盘",
+         g_nedN, g_n, g_spawnAddN[0], g_spawnAddN[1], g_spawnDelN[0], g_spawnDelN[1]);
+  }
+  g_dirtyNav = 0;
+  g_dirtyMk = 0;
+  /* 换图前如果字段里还是我们写回去的数组，先还原成快照里的原生点脚，
+   * 再 reset/load；避免上一张图的改动静默留在新图数组里。 */
+  spawn_restore_orig();
   reset_markers();
   elog("scene: markers reset");
   overlay_reset();
@@ -5157,12 +5618,14 @@ static int nav_zero_grow_ready(void) {
   fclose(f);
   return grow;
 }
-static void nav_save(void) {
+/* 返回 1 = 写成功（含「没有点图改动 → 删掉文件」），0 = 被拒 / 失败。
+ * 2026-11-25 起只由 editor_save_all（Ctrl+S）和控制台 cmd=save 调用。 */
+static int nav_save(void) {
   FILE* f;
   int i;
   int blank = g_nedBlank && g_packName[0];
   int keep = g_nedKeep && g_packName[0];
-  if (!g_nedPath[0]) return;
+  if (!g_nedPath[0]) { elog("naved: save skipped (no edit file for this map)"); return 0; }
   /* 四版纪律：正式版 nav\ 只允许控制台从 ② 开发版推过来，游戏内不许直接写 ③。
    * 想边玩边改就先选一个测试包（④ packs），或去网页编辑器改 ②。 */
   if (g_navReadOnly && !g_packName[0]) {
@@ -5171,11 +5634,11 @@ static void nav_save(void) {
       elog("naved: save blocked - official nav\\ is read-only (UCF_NAV_READONLY); "
            "use a test pack or the web editor (navdata\\dev)");
     }
-    return;
+    return 0;
   }
-  if (!g_nedN && !blank && !keep) { DeleteFileA(g_nedPath); return; }
+  if (!g_nedN && !blank && !keep) { DeleteFileA(g_nedPath); return 1; }
   f = fopen(g_nedPath, "w");
-  if (!f) { elog("naved: save failed %s", g_nedPath); return; }
+  if (!f) { elog("naved: save failed %s", g_nedPath); return 0; }
   fprintf(f, "# ucf-navedit v1 fp=%s\n", g_nedFp);
   if (blank) fprintf(f, "grow\n");   /* 空白地图 = grow（不再写 blank 兼容行） */
   if (keep) fprintf(f, "keep\n");    /* keep 自带 grow 语义，不写 grow */
@@ -5209,6 +5672,48 @@ static void nav_save(void) {
   elog("naved: saved %d edits -> %s%s%s%s", g_nedN, g_nedPath,
        blank ? " (blank base)" : "", (blank && g_nedGrow) ? " [grow]" : "",
        keep ? " [keep native]" : "");
+  return 1;
+}
+
+/* ---- 唯一的保存入口（2026-11-25 用户要求）----------------------------------
+ * Ctrl+S / F2 菜单「撤销 / 保存」→「保存」/ 控制台 cmd=save 都走这里。
+ * 只写脏的那一边；两边都没改就不写 —— 控制台和录制会直接改盘上的同一个文件，
+ * 没改过的文件重写一次就可能把它们刚追加的行盖掉。 */
+void editor_save_all(void) {
+  int ok = 1, wrote = 0;
+  if (!ed_init()) return;
+  if (g_collectOnly) { elog("save: collect-only，不写文件"); return; }
+  if (!navfix_point_graph()) {
+    elog("save: 不在房间里（没有 PointGraph），没有可保存的编辑");
+    return;
+  }
+  if (!editor_unsaved()) {
+    elog("save: 没有改动（Ctrl+S 只保存改过的内容；不保存就退房间 = 改动丢弃）");
+    menu_refresh();
+    return;
+  }
+  if (g_dirtyNav) {
+    if (!g_nedPath[0]) {
+      elog("save: 本图没有点图编辑文件（测试包被跳过 / 图还没就绪），点图改动没保存");
+      ok = 0;
+    } else if (!nav_save()) {
+      ok = 0;
+    } else {
+      g_dirtyNav = 0;
+      wrote = 1;
+    }
+  }
+  if (g_dirtyMk) {
+    if (!save_file()) ok = 0;
+    else { g_dirtyMk = 0; wrote = 1; }
+  }
+  if (ok && wrote)
+    elog("save: 已保存（Ctrl+S）-- 点图 %d 项 / 标记 %d 个 / 出生点 新增 %d+%d 删除 %d+%d；退出房间后仍然有效",
+         g_nedN, g_n, g_spawnAddN[0], g_spawnAddN[1], g_spawnDelN[0], g_spawnDelN[1]);
+  else if (!ok)
+    elog("save: 有改动没写进去（见上面的错误），未保存状态保留");
+  menu_refresh();
+  overlay_refresh();
 }
 static void nav_edit_load(const char* path) {
   FILE* f = fopen(path, "r");
@@ -5766,8 +6271,8 @@ static void nav_undo(void) {
   }
   g_nedN--;
   nav_refresh(g);
-  nav_save();
-  elog("naved: undo -> %d edits left (redo=%d)", g_nedN, g_redoN);
+  editor_dirty_nav();         /* 手动保存：Ctrl+S 才写 <指纹>.txt */
+  elog("naved: undo -> %d edits left (redo=%d) 未保存（Ctrl+S）", g_nedN, g_redoN);
 }
 
 static void nav_redo(void) {
@@ -5788,8 +6293,8 @@ static void nav_redo(void) {
   if (g_nedN < NAV_ED_MAX) g_ned[g_nedN++] = e;
   g_redoN--;
   nav_refresh(g);
-  nav_save();
-  elog("naved: redo -> %d edits left (redo=%d)", g_nedN, g_redoN);
+  editor_dirty_nav();         /* 手动保存：Ctrl+S 才写 <指纹>.txt */
+  elog("naved: redo -> %d edits left (redo=%d) 未保存（Ctrl+S）", g_nedN, g_redoN);
 }
 /* 删掉自己加的点时，把清单里对应的 node add / 相关边一起摘掉。
  * 否则重进图会先 node del 再 node add，点又活过来（空白底图尤其明显）。 */
@@ -5818,10 +6323,10 @@ static int nav_drop_jump(const V3* takeoff) {
   }
   if (!hit) return 0;
   g_nedN = j;
-  nav_save();
+  editor_dirty_nav();         /* 2026-11-25：删跳链也只改内存，Ctrl+S 才落盘 */
   return 1;
 }
-/* 记录一条编辑 + 自动保存 */
+/* 记录一条编辑：只改内存 / 当前图，Ctrl+S 才落盘（2026-11-25 用户要求） */
 static void nav_push(int kind, const V3* a, const V3* b) {
   NAVED* e;
   if (g_nedN >= NAV_ED_MAX) { elog("naved: edit list full"); return; }
@@ -5831,12 +6336,11 @@ static void nav_push(int kind, const V3* a, const V3* b) {
   e->a = *a;
   if (b) e->b = *b; else memset(&e->b, 0, sizeof(e->b));
   g_redoN = 0;
-  nav_save();
+  editor_dirty_nav();
 }
 static void nav_push_dir(int kind, const V3* a, const V3* b, int dir) {
-  nav_push(kind, a, b);
+  nav_push(kind, a, b);        /* 内部已 mark dirty；dir 补齐后不需要再存一次 */
   if (g_nedN > 0) g_ned[g_nedN - 1].dir = dir;
-  nav_save();
 }
 /* ---- 交互：加点 / 删点 / 连断边 / 选 A ---- */
 static int nav_pick(const V3* hint, float maxd) {
@@ -5888,9 +6392,9 @@ static void nav_del_here(void) {
   nav_pos(nav_node(g, i), &q);
   nav_kill_node(g, nav_node(g, i));
   if (!nav_drop_add(&q)) nav_push(NDEL, &q, 0);
-  else nav_save();
+  else editor_dirty_nav();    /* 删掉自己加的点：只摘清单，Ctrl+S 才落盘 */
   nav_refresh(g);
-  elog("naved: node disabled idx=%d at %.2f %.2f %.2f", i, q.x, q.y, q.z);
+  elog("naved: node disabled idx=%d at %.2f %.2f %.2f 未保存（Ctrl+S）", i, q.x, q.y, q.z);
 }
 static void nav_toggle_edge(void) {
   P g = navfix_point_graph();
@@ -5925,10 +6429,15 @@ static void nav_reapply(void) {
     elog("naved: no edits for this map");
     return;
   }
+  /* 2026-11-25：重读 = 以磁盘为准，内存里没保存的点图编辑会丢。先提醒一句，
+   * 用户按 Ctrl+S 之后这里才是「保存过的状态」。 */
+  if (g_dirtyNav)
+    elog("naved: 重读会丢弃未保存的点图编辑 %d 项（先 Ctrl+S 才能保留）", g_nedN);
   /* 从原生底图重来，再读盘：否则已经套过的 node add 会被当成“已存在”跳过，
    * 文件里删掉的点也还留在图里（控制台「重新应用」和 Ctrl+Shift+R 都走这里）。 */
   if (!nav_base_restore(g)) { elog("naved: reload aborted (no base snapshot)"); return; }
   if (g_nedPath[0]) nav_edit_load(g_nedPath);
+  g_dirtyNav = 0;      /* 内存清单已换成磁盘内容 */
   if (g_nedBlank && !g_packName[0]) g_nedBlank = 0;
   ops = nav_apply_all(g);           /* 内部已按需 refresh */
   elog("naved: re-applied %d/%d edits (reloaded from disk)", ops, g_nedN);
@@ -6138,6 +6647,8 @@ static int ghost_slot(int brush) {
     case 3: return 2;       /* 守卫点 */
     case 4: return 3;       /* 守卫区 */
     case 5: return 6;       /* 标签区 */
+    case 6: return 11;      /* 出生点 BL：和 read_spawns 的幽灵出生同色（蓝） */
+    case 7: return 12;      /* 出生点 GR：和保卫者出生同色（红） */
     default: return 5;      /* 普通路点 */
   }
 }
@@ -6332,7 +6843,7 @@ static void ghost_tick(void) {
   if (!g_ghostGo || !uobj_live(g_ghostGo)) { g_ghostGo = g_ghostMf = g_ghostMr = 0; }
   if (!cam_point(&p)) { ghost_hide(); return; }
   brush = g_wpArm ? g_wpBrush : 0;
-  if (brush < 0 || brush > 5) brush = 0;
+  if (brush < 0 || brush > 7) brush = 0;
 
   /* 预置点必须和真正落点的规则一致，否则预览就是在骗人：
    *   跳跃起点 / 路径两端   必须是准星 3 m 内的路点（吸到那个点，wp_place / nav_link_one 也这么找）；
@@ -6677,9 +7188,14 @@ static void wp_place(void) {
       make_area(30, p);
       break;
     case 5: make_tag(p, 7, 3.0f); break;
+    case 6: spawn_add_point(0, p, cam_yaw()); break;   /* 出生点 BL：追加到 SP_BL */
+    case 7: spawn_add_point(1, p, cam_yaw()); break;   /* 出生点 GR：追加到 SP_GR */
     default: break;
   }
-  if (g_wpBrush == 2 || g_wpBrush == 3 || g_wpBrush == 4 || g_wpBrush == 5) save_file();
+  /* 2026-11-25：蹲守 / 守卫 / 标签 / 出生点只记在内存里，Ctrl+S 才写文件。
+   * 路点 / 跳链由 nav_push 自己 mark（g_dirtyNav），这里只管 marker 这边。 */
+  if (g_wpBrush == 2 || g_wpBrush == 3 || g_wpBrush == 4 || g_wpBrush == 5)
+    editor_dirty_mk();
   overlay_refresh();
   menu_refresh();
 }
@@ -6831,6 +7347,11 @@ static int nav_cmd_set_pack(P g, const char* pack, const char* fp) {
     elog("navcmd: refuse switch: base snapshot unavailable (re-enter the map)");
     return 0;
   }
+  /* 2026-11-25：切包 / 重新载入 = 以磁盘为准；内存里没按 Ctrl+S 的编辑会被丢掉。
+   * 用户从控制台主动点「载入到游戏」时这是有意的，但日志里必须留一行。 */
+  if (editor_unsaved())
+    elog("navcmd: 切包 / 重新载入会丢弃未保存的游戏内编辑（点图 %d 项 / 标记 %d 个）-- 先 Ctrl+S 才能保留",
+         g_nedN, g_n);
   mapChanged = !fp || !fp[0] || strcmp(fp, g_packFp) != 0;
   if (pack && pack[0]) {
     strcpy(g_packName, pack);
@@ -6863,8 +7384,11 @@ static int nav_cmd_set_pack(P g, const char* pack, const char* fp) {
   /* 换包 = 换地图：编辑标记换成这张图自己的那份（markers\<包名>\markers.txt），
    * 顺手把场景里的旧标记重放一遍，别让上一张图的蹲守点留在这一张图里。 */
   mk_set_path();
+  spawn_restore_orig();       /* 换包前先把数组还原成原生，别把上一次的出生点当原生快照 */
   reset_markers();
   load_file();
+  g_dirtyNav = 0;             /* 内存清单 / 标记都换成磁盘内容了 */
+  g_dirtyMk = 0;
   elog("markers: map file -> %s", g_file);
   pack_stat();
   elog("navcmd: pack -> %s (fp %s)", g_packName[0] ? g_packName : "(official nav)",
@@ -6928,9 +7452,8 @@ static void nav_cmd_tick(P g) {
   elog("navcmd: seq=%llu cmd=%s pack=%s fp=%s", seq,
        cmd[0] ? cmd : "(none)", pack[0] ? pack : "(none)", fp[0] ? fp : "(any)");
   if (!strcmp(cmd, "save")) {
-    if (g_nedPath[0]) nav_save();
-    else elog("navcmd: save skipped (no edit file for this map)");
-    save_file();
+    /* 控制台 / 自动化：和 Ctrl+S 走同一个入口（只写改过的那一边） */
+    editor_save_all();
     return;
   }
   if (!strcmp(cmd, "undo")) { nav_undo(); return; }
@@ -6985,6 +7508,10 @@ static void nav_edit_tick(void) {
   nav_cmd_tick(g);            /* 控制台命令：运行中切包 / 重读 / 保存 */
   if (!g) { g_nedGraph = 0; g_nedApplied = 0; g_nedWaitN = -1; return; }
   if (g != g_nedGraph) {
+    /* 换图 / 图被重建：内存里的点图改动不再对得上，直接作废（和退房间同一原则） */
+    if (g_dirtyNav && g_nedN)
+      elog("naved: 点图对象换了，丢弃未保存的 %d 项编辑 -- 只有 Ctrl+S 才会落盘", g_nedN);
+    g_dirtyNav = 0;
     g_nedGraph = g;
     g_nedApplied = 0;
     g_nedWaitN = -1;
@@ -7040,6 +7567,12 @@ static void nav_edit_tick(void) {
     sprintf(g_nedPath, "%s\\%s.txt", g_navDir, g_nedFp);
     nav_base_take(g);     /* 先拍原生底图，再套文件；切包时才能还原 */
     nav_edit_load(g_nedPath);
+    /* 防御：套文件前如果内存里已经有未保存的点图编辑（进图第一秒就加点的极端情况），
+     * 它们会被文件内容覆盖；清掉脏标记，别让后面 Ctrl+S 拿空清单去删文件。 */
+    if (g_dirtyNav) {
+      elog("naved: 套用磁盘内容前有未保存的点图编辑，已被覆盖（Ctrl+S 才能保留）");
+      g_dirtyNav = 0;
+    }
     if ((g_nedBlank || g_nedGrow) && !g_packName[0]) {
       g_nedBlank = 0;
       g_nedGrow = 0;
@@ -7093,56 +7626,70 @@ void editor_map_name(char* out, int cap) {
  * 同一件事只留一个入口，不再两处都能新建。 */
 static const char* WP_MENU[] = {
   "添加点位", "建立路径", "守卫区工具", "删除点图连线 / 路点",
-  "删除标记（按类型选）", "落地 / 贴地", "撤销 / 保存", "显示图层",
-  "关闭菜单（Esc 逐级返回）"
+  "删除点位（按类型选）", "删除区域（守卫区）", "落地 / 贴地", "撤销 / 保存",
+  "显示图层", "关闭菜单（Esc 逐级返回）"
 };
 #define WP_MENU_N ((int)(sizeof WP_MENU / sizeof WP_MENU[0]))
 /* 添加点位子菜单只放点位型标记；守卫点/守卫区走「守卫区工具」，
- * 标签区不再从菜单提供（控制台 brush tag 仍可用） */
-static const char* WP_TYPES[3] = {
-  "普通路点（可走的 PointNode）", "跳跃点（Bot_JumpLink）", "蹲守点（Bot_CrouchPos）"
+ * 标签区不再从菜单提供（控制台 brush tag 仍可用）。
+ * 2026-11-25：加出生点 BL/GR —— 直接往 MapManager.SP_BL/SP_GR 里追加。 */
+static const char* WP_TYPES[5] = {
+  "普通路点（可走的 PointNode）",
+  "跳跃点（Bot_JumpLink）",
+  "蹲守点（Bot_CrouchPos）",
+  "出生点 BL（幽灵 / 潜伏者）",
+  "出生点 GR（保卫者 / 人类）"
 };
 /* 子菜单序号 → 实际笔刷编号（3=守卫点、4=守卫区、5=标签区 不在这里） */
-static const int WP_TYPE_BRUSH[3] = { 0, 1, 2 };
+static const int WP_TYPE_BRUSH[5] = { 0, 1, 2, 6, 7 };
 
 static int wp_type_index(int brush) {
   int i;
-  for (i = 0; i < 3; i++) if (WP_TYPE_BRUSH[i] == brush) return i;
+  for (i = 0; i < 5; i++) if (WP_TYPE_BRUSH[i] == brush) return i;
   return 0;
 }
 static int wp_type_brush(int idx) {
-  return (idx >= 0 && idx < 3) ? WP_TYPE_BRUSH[idx] : 0;
+  return (idx >= 0 && idx < 5) ? WP_TYPE_BRUSH[idx] : 0;
 }
 /* 提示文字用：按笔刷编号取名字（含菜单里不提供的守卫点/守卫区） */
 static const char* wp_brush_label(int brush) {
   switch (brush) {
     case 1: return WP_TYPES[1];
     case 2: return WP_TYPES[2];
-    case 3: return "守卫点";
-    case 4: return "守卫区";
+    case 3: return "守卫点（Bot_NanoGuardPos）";
+    case 4: return "守卫区（Bot_NanoGuardArea）";
     case 5: return "标签区";
+    case 6: return "出生点 BL（幽灵 / 潜伏者）";
+    case 7: return "出生点 GR（保卫者 / 人类）";
     default: return WP_TYPES[0];
   }
 }
 static const char* WP_PATHS[3] = { "双向", "单向 A -> B", "单向 B -> A" };
 static const char* WP_AREAS[4] = {
-  "新建守卫区", "加守卫点", "加入口 entrancePos", "加逃跑点 escapePos"
+  "新建守卫区（Bot_NanoGuardArea）", "加守卫点（Bot_NanoGuardPos）",
+  "加入口 entrancePos", "加逃跑点 escapePos"
 };
-static const char* WP_EDIT[4] = { "撤销一步", "重做一步", "保存到文件", "重读并套用" };
+/* 2026-11-25：保存改成唯一入口 Ctrl+S；菜单文字直接写出来，别再藏「保存到文件」。 */
+static const char* WP_EDIT[4] = { "撤销一步", "重做一步", "保存（Ctrl+S）", "重读并套用" };
 static const char* WP_LAYERS[3] = { "路点/连线", "可走面", "路点总开关" };
 static const char* WP_DEL[2] = { "删除点图连线（A-B）", "删除路点（A* 节点）" };
-/* 删除标记：1-5 按类型定向，6 才是老的"准星最近"（2026-11-25 用户要求分开）。*/
-static const char* WP_DELMK[6] = {
+/* 删除点位：按类型定向，最后一项才是老的"准星最近"。
+ * 2026-11-25 用户要求：原来的「删除标记」拆成「删除点位 / 删除区域」两页；
+ * 区域单独一页，点位页的"任意"也不含守卫区，避免手滑删掉整片守卫区。 */
+static const char* WP_DELPT[7] = {
   "蹲守点（Bot_CrouchPos）",
   "守卫点（Bot_NanoGuardPos）",
-  "守卫区（连带它下面的守卫点）",
   "跳跃点 / 跳链（Bot_JumpLink）",
   "标签 / 范围（tag，只删标记）",
-  "任意类型（准星最近 · 老行为）"
+  "出生点 BL（幽灵 / 潜伏者）",
+  "出生点 GR（保卫者 / 人类）",
+  "任意点位（准星最近 · 老行为）"
 };
-static const int WP_DELMK_TYPE[6] = {
-  MT_CROUCH, MT_NANOPOS, MT_AREA, MT_JUMP, MT_TAG, 0
+static const int WP_DELPT_TYPE[7] = {
+  MT_CROUCH, MT_NANOPOS, MT_JUMP, MT_TAG, MT_SPAWN_BL, MT_SPAWN_GR, MT_ANY_POINT
 };
+/* 删除区域页：目前只有守卫区（旧的 Bot_GuardArea 是死数据，不单列）。 */
+static const char* WP_DELAREA[1] = { "守卫区（连带它下面的守卫点）" };
 
 /* 小键盘键码：mingw 的 winuser.h 一般都有；老头文件缺失时兜底。 */
 #ifndef VK_NUMPAD0
@@ -7175,35 +7722,39 @@ static void menu_sub_title(char* out, int cap) {
   else if (g_wpMenuSub == 5) s = "显示图层";
   else if (g_wpMenuSub == 6) s = "删除：选类型（可连续删）";
   else if (g_wpMenuSub == 7) {
-    if (g_delType < 0) s = "删除标记：先选类型（1-6）";
-    else if (g_delType == 0) s = "删除标记：任意类型（准星最近）";
+    if (g_delType < 0) s = "删除点位：先选类型（1-7）";
+    else if (g_delType == MT_ANY_POINT) s = "删除点位：任意点位（准星最近）";
     else {
-      snprintf(out, (size_t)cap, "删除标记：%s（5/Delete 删）", mt_name(g_delType));
+      snprintf(out, (size_t)cap, "删除点位：%s（5/Delete 删）", mt_name(g_delType));
       return;
     }
   }
+
+  else if (g_wpMenuSub == 8) s = "删除区域：守卫区（5/Delete 删）";
   snprintf(out, (size_t)cap, "%s", s);
 }
 
 static int menu_sub_count(void) {
-  if (g_wpMenuSub == 1) return 3;
+  if (g_wpMenuSub == 1) return 5;
   if (g_wpMenuSub == 2) return 3;
   if (g_wpMenuSub == 3) return 4;
   if (g_wpMenuSub == 4) return 4;
   if (g_wpMenuSub == 5) return 3;
   if (g_wpMenuSub == 6) return 2;
-  if (g_wpMenuSub == 7) return 6;
+  if (g_wpMenuSub == 7) return 7;
+  if (g_wpMenuSub == 8) return 1;
   return 10;
 }
 
 static const char* menu_sub_label(int i) {
-  if (g_wpMenuSub == 1) return (i >= 0 && i < 3) ? WP_TYPES[i] : "";
+  if (g_wpMenuSub == 1) return (i >= 0 && i < 5) ? WP_TYPES[i] : "";
   if (g_wpMenuSub == 2) return (i >= 0 && i < 3) ? WP_PATHS[i] : "";
   if (g_wpMenuSub == 3) return (i >= 0 && i < 4) ? WP_AREAS[i] : "";
   if (g_wpMenuSub == 4) return (i >= 0 && i < 4) ? WP_EDIT[i] : "";
   if (g_wpMenuSub == 5) return (i >= 0 && i < 3) ? WP_LAYERS[i] : "";
   if (g_wpMenuSub == 6) return (i >= 0 && i < 2) ? WP_DEL[i] : "";
-  if (g_wpMenuSub == 7) return (i >= 0 && i < 6) ? WP_DELMK[i] : "";
+  if (g_wpMenuSub == 7) return (i >= 0 && i < 7) ? WP_DELPT[i] : "";
+  if (g_wpMenuSub == 8) return (i >= 0 && i < 1) ? WP_DELAREA[i] : "";
   return "";
 }
 
@@ -7232,12 +7783,17 @@ static void menu_refresh(void) {
     return;
   }
   menu_sub_title(title, sizeof title);
+  /* 2026-11-25：菜单第一行常驻保存状态 —— 用户要求「必须手动保存」，
+   * 不能等退房间才发现没存。 */
   off += snprintf(s + off, sizeof s - (size_t)off,
-                  "%s   [F2/长按E 关]\n", title);
+                  "%s   [F2/长按E 关]   %s\n", title,
+                  editor_unsaved() ? "● 未保存 · Ctrl+S 保存" : "已保存 · Ctrl+S 保存");
   if (g_wpMenuSub == 0) {
     for (i = 0; i < WP_MENU_N && off < (int)sizeof s - 80; i++) {
+      /* 主菜单最后一项是「关闭菜单」：显示成 0（数字键 0 也走这一项）。 */
+      int key = (i == WP_MENU_N - 1) ? 0 : i + 1;
       off += snprintf(s + off, sizeof s - (size_t)off, "%s%d  %s\n",
-                      i == g_wpMenuSel ? "> " : "  ", i + 1, WP_MENU[i]);
+                      i == g_wpMenuSel ? "> " : "  ", key, WP_MENU[i]);
     }
   } else {
     n = menu_sub_count();
@@ -7246,15 +7802,30 @@ static void menu_refresh(void) {
                       i == g_wpMenuSubSel ? "> " : "  ", i + 1, menu_sub_label(i));
     }
   }
-  if (g_wpMenuSub == 7) {
+  if (g_wpMenuSub == 4 && off < (int)sizeof s - 160) {
     off += snprintf(s + off, sizeof s - (size_t)off,
-                    "\n图里现有：蹲守 %d · 守卫点 %d · 守卫区 %d · 跳链 %d · 标签 %d\n",
-                    mt_count(MT_CROUCH), mt_count(MT_NANOPOS), mt_count(MT_AREA),
-                    mt_count(MT_JUMP), mt_count(MT_TAG));
+                    "\nCtrl+S 保存全部（点图 + 标记 / 出生点）；不保存就退房间 = 改动丢弃\n");
+  }
+  if (g_wpMenuSub == 7) {
+    char bls[12], grs[12];
+    int bl = spawn_count(0), gr = spawn_count(1);
+    if (bl < 0) strcpy(bls, "?"); else snprintf(bls, sizeof bls, "%d", bl);
+    if (gr < 0) strcpy(grs, "?"); else snprintf(grs, sizeof grs, "%d", gr);
+    off += snprintf(s + off, sizeof s - (size_t)off,
+                    "\n图里现有：蹲守 %d · 守卫点 %d · 跳链 %d · 标签 %d · 出生点 BL %s / GR %s\n",
+                    mt_count(MT_CROUCH), mt_count(MT_NANOPOS), mt_count(MT_JUMP),
+                    mt_count(MT_TAG), bls, grs);
     if (off < (int)sizeof s - 260)
       off += snprintf(s + off, sizeof s - (size_t)off,
-                      "1-6 选类型 · 准星对准对象按 小键盘5 / Enter / Delete 删除（可连续）· 0 返回\n"
-                      "守卫区会连同它下面的守卫点一起删；跳链会同时摘掉点图日志里的 jump add\n");
+                      "1-7 选类型 · 准星对准对象按 小键盘5 / Enter / Delete 删除（可连续）· 0 返回\n"
+                      "出生点按坐标匹配原生数组，至少保留 1 个；加/删只改内存，Ctrl+S 才写文件\n");
+  }
+  if (g_wpMenuSub == 8) {
+    off += snprintf(s + off, sizeof s - (size_t)off,
+                    "\n图里现有：守卫区 %d\n", mt_count(MT_AREA));
+    if (off < (int)sizeof s - 160)
+      off += snprintf(s + off, sizeof s - (size_t)off,
+                      "准星对准守卫区按 5/Delete 删除（连同它下面的守卫点）· 0 返回\n");
   }
   if (g_wpMenuSub == 2 && off < (int)sizeof s - 120) {
     off += snprintf(s + off, sizeof s - (size_t)off,
@@ -7277,7 +7848,7 @@ static void menu_refresh(void) {
     }
     if (off < (int)sizeof s - 96)
       off += snprintf(s + off, sizeof s - (size_t)off,
-                      "换类型：1-3 直选或 8/2 · 结束放置：0 / Esc（菜单不会关）\n");
+                      "换类型：1-5 直选或 8/2 · 结束放置：0 / Esc（菜单不会关）\n");
   } else if (g_wpLinkStep == 1) {
     off += snprintf(s + off, sizeof s - (size_t)off,
                     "\n对准起点（准星框变绿 = 就是它），小键盘5 选 A\n"
@@ -7307,7 +7878,7 @@ static void menu_refresh(void) {
     }
     off += snprintf(s + off, sizeof s - (size_t)off,
                     "按 5 连边 · 连完 A 前进到落点 · 0 / Esc 结束连线\n");
-  } else if (g_wpMenuSub != 7) {
+  } else if (g_wpMenuSub != 7 && g_wpMenuSub != 8) {
     off += snprintf(s + off, sizeof s - (size_t)off, "\n当前笔刷: %s  A: %s\n",
                     wp_brush_label(g_wpBrush), g_nedHasA ? "已选" : "未选");
   }
@@ -7318,7 +7889,7 @@ static void menu_refresh(void) {
                     g_ghostPv.x, g_ghostPv.y, g_ghostPv.z,
                     g_ghostValid ? "" : "  × 这里按下去会被拒绝");
   if (off < (int)sizeof s - 80)
-    off += snprintf(s + off, sizeof s - (size_t)off, "小键盘 8/2 上下   5 确认   0 返回   1-9 直选\n");
+    off += snprintf(s + off, sizeof s - (size_t)off, "小键盘 8/2 上下   5 确认   0 返回   数字直选\n");
   ((set_txt_t)RVA(R_TEXT_SETTEXT))(g_menu, x_string_new(s), 0);
 }
 
@@ -7390,8 +7961,11 @@ static void menu_move(int delta) {
       elog("wpmenu: 换方向 dir=%d（A 清掉，重新选起点）", g_wpPath);
     } else if (g_wpMenuSub == 7) {
       /* 高亮即选中：8/2 挪到哪一类，5/Delete 就删哪一类 */
-      g_delType = WP_DELMK_TYPE[g_wpMenuSubSel];
+      g_delType = WP_DELPT_TYPE[g_wpMenuSubSel];
       elog("wpmenu: 删除类型 = %s", mt_name(g_delType));
+    } else if (g_wpMenuSub == 8) {
+      g_delType = MT_AREA;
+      elog("wpmenu: 删除区域 = 守卫区");
     }
   } else {
     g_wpMenuSel = (g_wpMenuSel + delta + n) % n;
@@ -7408,16 +7982,19 @@ static int brush_from_name(const char* name) {
   if (!strcmp(name, "guard")) return 3;
   if (!strcmp(name, "area")) return 4;
   if (!strcmp(name, "tag")) return 5;
+  if (!strcmp(name, "spawn_bl") || !strcmp(name, "spawnbl")) return 6;
+  if (!strcmp(name, "spawn_gr") || !strcmp(name, "spawngr")) return 7;
   return 0;
 }
 
 static const char* brush_name(int b) {
-  static const char* n[6] = { "normal", "jump", "crouch", "guard", "area", "tag" };
-  return (b >= 0 && b < 6) ? n[b] : "normal";
+  static const char* n[8] = { "normal", "jump", "crouch", "guard", "area", "tag",
+                              "spawn_bl", "spawn_gr" };
+  return (b >= 0 && b < 8) ? n[b] : "normal";
 }
 
 static void set_brush(int b) {
-  if (b < 0 || b > 5) b = 0;
+  if (b < 0 || b > 7) b = 0;
   g_wpBrush = b;
   strncpy(g_wpBrushName, brush_name(b), sizeof g_wpBrushName - 1);
   g_wpBrushName[sizeof g_wpBrushName - 1] = 0;
@@ -7443,19 +8020,30 @@ static void menu_activate(void) {
     if (i == 2) { g_wpMenuSub = 3; g_wpMenuSubSel = 0; menu_refresh(); return; }
     if (i == 3) { g_wpMenuSub = 6; g_wpMenuSubSel = 0; menu_refresh(); return; }
     if (i == 4) {
-      /* 删除标记：先进类型页，别在"最近"上盲删（2026-11-25 用户要求）。
+      /* 删除点位：先进类型页，别在"最近"上盲删（2026-11-25 用户要求）。
        * 这里只切类型；真正删除要再按 5 / Delete，防手滑。 */
       int k;
       g_wpMenuSub = 7;
       g_wpMenuSubSel = -1;
-      for (k = 0; k < 6; k++) if (WP_DELMK_TYPE[k] == g_delType) g_wpMenuSubSel = k;
+      for (k = 0; k < 7; k++) if (WP_DELPT_TYPE[k] == g_delType) g_wpMenuSubSel = k;
+      /* 刚从「删除区域」页过来时 g_delType 还是 MT_AREA：点位页没有这个类型，
+       * 不清掉的话按 5 会在点位页里把守卫区删了。 */
+      if (g_wpMenuSubSel < 0) g_delType = -1;
       menu_refresh();
       return;
     }
-    if (i == 5) { nav_ground_here(); menu_refresh(); return; }
-    if (i == 6) { g_wpMenuSub = 4; g_wpMenuSubSel = 0; menu_refresh(); return; }
-    if (i == 7) { g_wpMenuSub = 5; g_wpMenuSubSel = 0; menu_refresh(); return; }
-    if (i == 8) { menu_close(); return; }
+    if (i == 5) {
+      /* 删除区域：单独一页，默认就是守卫区。 */
+      g_wpMenuSub = 8;
+      g_wpMenuSubSel = 0;
+      g_delType = MT_AREA;
+      menu_refresh();
+      return;
+    }
+    if (i == 6) { nav_ground_here(); menu_refresh(); return; }
+    if (i == 7) { g_wpMenuSub = 4; g_wpMenuSubSel = 0; menu_refresh(); return; }
+    if (i == 8) { g_wpMenuSub = 5; g_wpMenuSubSel = 0; menu_refresh(); return; }
+    if (i == 9) { menu_close(); return; }
     return;
   }
   i = g_wpMenuSubSel;
@@ -7486,14 +8074,14 @@ static void menu_activate(void) {
     } else {
       elog("wpmenu: entrance/escape not wired yet");
     }
-    save_file();
+    editor_dirty_mk();                  /* 手动保存：Ctrl+S 才写 markers.txt */
     menu_refresh();
     return;
   }
   if (g_wpMenuSub == 4) {                 /* 撤销 / 保存 */
     if (i == 0) nav_undo();
     else if (i == 1) nav_redo();
-    else if (i == 2) nav_save();
+    else if (i == 2) editor_save_all();   /* 唯一保存入口：点图 + 标记一起写 */
     else nav_reapply();
     menu_refresh();
     return;
@@ -7512,11 +8100,19 @@ static void menu_activate(void) {
     menu_refresh();
     return;
   }
-  if (g_wpMenuSub == 7) {                 /* 删除标记：先选类型，真正删要再按 5/Delete */
-    if (i < 0 || i >= 6) return;          /* 防御：menu_activate 的其它入口 */
-    g_delType = WP_DELMK_TYPE[i];
+  if (g_wpMenuSub == 7) {                 /* 删除点位：先选类型，真正删要再按 5/Delete */
+    if (i < 0 || i >= 7) return;          /* 防御：menu_activate 的其它入口 */
+    g_delType = WP_DELPT_TYPE[i];
     g_wpMenuSubSel = i;
     elog("wpmenu: 删除类型 = %s（准星对准对象后 5 / Delete 删除，可连续）", mt_name(g_delType));
+    menu_refresh();
+    return;
+  }
+  if (g_wpMenuSub == 8) {                 /* 删除区域：守卫区 */
+    if (i < 0 || i >= 1) return;
+    g_delType = MT_AREA;
+    g_wpMenuSubSel = 0;
+    elog("wpmenu: 删除区域 = 守卫区（准星对准区后 5 / Delete 删除）");
     menu_refresh();
     return;
   }
@@ -7527,8 +8123,8 @@ static void menu_confirm(void) {
   if (!g_wpMenuOpen) return;
   if (g_wpArm) { wp_place(); menu_refresh(); return; }
   if (g_wpLinkStep) { nav_link_one(); menu_refresh(); return; }
-  if (g_wpMenuSub == 7) {                 /* 删除标记页：5 = 删当前选中的类型 */
-    if (g_delType < 0) elog("wpmenu: 先选删除类型（1-6）再按 5");
+  if (g_wpMenuSub == 7 || g_wpMenuSub == 8) {   /* 删除页：5 = 删当前选中的类型 */
+    if (g_delType < 0) elog("wpmenu: 先选删除类型（1-7）再按 5");
     else if (!delete_nearest_of(g_delType))
       elog("wpmenu: 没删到（类型 %s）", mt_name(g_delType));
     menu_refresh();
@@ -7574,8 +8170,8 @@ int editor_menu_key(unsigned vk, int ext) {
   /* 菜单开着时旧版把其余键全部吞掉：Delete 根本到不了编辑器，蹲守点就“删不了”。
    * 这里直接走和游戏内 Delete 同一条路径；删除标记页里只删当前选中的类型。 */
   if (vk == VK_DELETE) {
-    if (g_wpMenuSub == 7) {
-      if (g_delType < 0) elog("wpmenu: 先选删除类型（1-6）再按 Delete");
+    if (g_wpMenuSub == 7 || g_wpMenuSub == 8) {
+      if (g_delType < 0) elog("wpmenu: 先选删除类型（1-7）再按 Delete");
       else if (!delete_nearest_of(g_delType))
         elog("wpmenu: 没删到（类型 %s）", mt_name(g_delType));
       menu_refresh();
@@ -8088,6 +8684,7 @@ void editor_tick(void) {
   if (g_sceneAge < 1000000) g_sceneAge++;
   if (g_sceneAge >= VIS_SCENE_WAIT) g_sceneReadyOnce = 1;
   nm_auto_tick();
+  spawn_tick();               /* 出生点覆盖：进图后重套 / 游戏重建数组后自愈 */
   menu_tick();                /* F2 / 长按 E 路点菜单 */
   rec_tick();                 /* 路点录制：控制台开了才写文件（与可视化开关无关） */
   trace_tick();               /* 原始轨迹采集：同样只看控制台命令，与可视化开关无关 */
@@ -8173,6 +8770,10 @@ void editor_on_key_mod(unsigned vk, int shift) {
   V3 p;
   if (!ed_init()) return;
 
+  /* ---- 保存：唯一的键（2026-11-25 用户要求）----
+   * Ctrl+S 保存全部（markers + 点图）；Ctrl+6 / Ctrl+Shift+S 的保存口子已删。 */
+  if (!shift && vk == 'S') { editor_save_all(); return; }
+
   /* ---- visualizer hotkeys (work with or without edit mode) ---- */
   if (vk == 'V') { vis_toggle(); return; }
   if (shift && vk == 'X') { set_collect_only(!g_collectOnly); return; }
@@ -8186,7 +8787,7 @@ void editor_on_key_mod(unsigned vk, int shift) {
   if (shift && vk == 'J') { nav_toggle_edge(); return; }  /* A <-> 准星节点 连/断 */
   if (shift && vk == 'D') { nav_del_here(); return; }     /* 禁用准星节点 */
   if (shift && vk == 'Z') { nav_undo(); return; }         /* 撤销上一条 */
-  if (shift && vk == 'S') { nav_save(); return; }         /* 手动再存一次 */
+  if (shift && vk == 'S') { elog("Ctrl+Shift+S 保存已取消：保存只用 Ctrl+S"); return; }
   if (shift && vk == 'R') { nav_reapply(); return; }      /* 强制重新套用 */
 
   if (vk == '1') {
@@ -8205,6 +8806,7 @@ void editor_on_key_mod(unsigned vk, int shift) {
     case '2':
       if (!cam_point(&p)) { elog("crouch: no ground under crosshair"); break; }
       make_crouch(p);
+      editor_dirty_mk();       /* 手动保存：Ctrl+S 才写 markers.txt */
       break;
     case '3':
       elog("nanopos: use Ctrl+4 (navfix creates area+pos with correct wiring)");
@@ -8226,11 +8828,16 @@ void editor_on_key_mod(unsigned vk, int shift) {
       undo_last();
       break;
     case '6':
-      save_file();
+      /* 2026-11-25 用户要求：其他保存快捷键全部取消，只留 Ctrl+S */
+      elog("Ctrl+6 保存已取消：保存只用 Ctrl+S（F2 菜单 → 撤销 / 保存 → 保存）");
       break;
     case '7':
+      if (g_dirtyMk)
+        elog("markers: 重读会丢弃未保存的标记编辑（先 Ctrl+S 才能保留）");
+      spawn_restore_orig();   /* 重读前还原原生数组，避免新增点被当成原生快照叠加 */
       reset_markers();
       load_file();
+      g_dirtyMk = 0;
       break;
     case '8':
       g_team = g_team ? 0 : 1;
@@ -8260,6 +8867,9 @@ void editor_on_key_any(unsigned vk, int shift) {
 }
 
 void editor_on_quit(void) {
+  if (editor_unsaved())
+    elog("quit: 退出游戏，丢弃未保存的游戏内编辑（点图 %d 项 / 标记 %d 个）-- 只有 Ctrl+S 会落盘",
+         g_nedN, g_n);
   rec_stop("quit");           /* 游戏退出：把录制文件收尾，别留半截 */
   trace_stop("quit");         /* 原始轨迹：同样写 end 行再关文件 */
   elog("quit: editor stop (markers=%d vis nodes=%d features=%d)", g_n, g_vnN, g_vfN);

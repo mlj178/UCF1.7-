@@ -231,6 +231,21 @@ class WaypointTab:
             row, text="重置本图草稿", width=96, height=28, font=FONT_S,
             fg_color="#8a4b1e", hover_color="#a55d26", command=self.clear_pack_map)
         self.btn_reset_draft.pack(side="left")
+        # 危险操作贴右边，和「重置」隔开：重置=清内容（草稿还在），删除=整份挪走（回到没有草稿）
+        self.btn_delete_draft = ctk.CTkButton(
+            row, text="删除本图草稿", width=100, height=28, font=FONT_S,
+            fg_color="#8a1c1c", hover_color="#a32424", command=self.delete_draft)
+        self.btn_delete_draft.pack(side="right")
+        # 编辑标记（守卫区 / 守卫点 / 蹲守点 / 标签）不在草稿里：同一行给个数 + 清空入口，
+        # 别藏在下面（窗口矮时会被滚动视口裁掉，用户就以为“没删干净”）。
+        self.btn_clear_markers = ctk.CTkButton(
+            row, text="清空本图标记", width=104, height=28, font=FONT_S,
+            fg_color="#4a3a1f", hover_color="#5c4826", text_color="#f7cd74",
+            command=self.clear_markers)
+        self.btn_clear_markers.pack(side="right", padx=(0, 8))
+        self.lbl_markers = ctk.CTkLabel(row, text="", font=FONT_S, text_color="#8a8f96",
+                                        width=150, anchor="e", justify="right")
+        self.lbl_markers.pack(side="right", padx=(0, 10))
         # 详细状态在顶部「编辑中：…」那行；卡片里只留按钮，窗口矮时不会把按钮挤到下面。
 
         hint = self.missing_maps_hint()
@@ -247,7 +262,12 @@ class WaypointTab:
             box,
             text="草稿目录：packs\\<序号_场景名中文名>\\，一张图一个，不再有包名/版本号。\n"
                  "两种底图：空白地图（grow，原生点全禁用、从 0 画）/ 原版基础 + 新增（keep，原版路线照常走，只加你的点）。\n"
-                 "成品里已有这张图时，默认「从成品继续改」；两种建法都不限点数，飓风危城原生 0 点用「空白地图」。",
+                 "成品里已有这张图时，默认「从成品继续改」；两种建法都不限点数，飓风危城原生 0 点用「空白地图」。\n"
+                 "「重置本图草稿」只清内容（草稿还在，接着画）；「删除本图草稿」整份挪到 archive\\pack_trash\\，"
+                 "这张图回到「还没有草稿」，成品不动。\n"
+                 "守卫区 / 守卫点 / 蹲守点 / 标签 / 出生点 不在草稿 txt 里，存在 markers\\<图>\\markers.txt；"
+                 "「删除本图草稿」默认连它们一起清（弹窗里可取消勾选），也能单独点「清空本图标记」"
+                 "（都先挪到 archive\\markers_trash\\，误清能挪回）。",
             font=FONT_S, text_color="#9aa0a6", anchor="w", justify="left",
             wraplength=620).pack(fill="x", padx=12, pady=(2, 6))
         ctk.CTkLabel(
@@ -524,8 +544,11 @@ class WaypointTab:
                     (man.get("created") or "-")[:16]),
                 text_color="#c9d1d9")
             try:
+                # 有草稿时主按钮就是「打开草稿目录」，灰色那个收起来（两个同样的按钮没意义）
                 self.btn_start_draft.configure(text="打开草稿目录")
+                self.btn_open_draft.pack_forget()
                 self.btn_reset_draft.configure(state="normal")
+                self.btn_delete_draft.configure(state="normal", fg_color="#8a1c1c")
             except Exception:                 # noqa: BLE001
                 pass
         else:
@@ -534,9 +557,26 @@ class WaypointTab:
                 text_color="#f7cd74")
             try:
                 self.btn_start_draft.configure(text="开始编辑这张图")
+                if not self.btn_open_draft.winfo_manager():
+                    self.btn_open_draft.pack(side="left", padx=(0, 6),
+                                             before=self.btn_reset_draft)
                 self.btn_reset_draft.configure(state="disabled")
+                self.btn_delete_draft.configure(state="disabled", fg_color="#3a3f47")
             except Exception:                 # noqa: BLE001
                 pass
+        # 本图标记：有/无草稿都要显示（标记按图存，草稿删了它们还在）
+        try:
+            counts = self.marker_counts()
+            summary = self.marker_summary(counts)
+            if summary:
+                self.lbl_markers.configure(text="本图标记：%s" % summary,
+                                           text_color="#f7cd74")
+                self.btn_clear_markers.configure(state="normal")
+            else:
+                self.lbl_markers.configure(text="本图标记：无", text_color="#8a8f96")
+                self.btn_clear_markers.configure(state="disabled", fg_color="#3a3f47")
+        except Exception:                 # noqa: BLE001
+            pass
         fmap = (final_stats().get("maps") or {}).get(fp) or {}
         try:
             self.btn_promote.configure(state="normal" if exists else "disabled",

@@ -19,12 +19,16 @@ import tkinter as tk
 import customtkinter as ctk
 
 from ui.consts import CREATE_NO_WINDOW, FONT, FONT_S
-from ui.env import FINAL_ROOT, HERE, NAVCMD, NAVDATA, ND, PACKS
+from ui.env import DEV, FINAL_ROOT, HERE, MARKERS, NAVCMD, NAVDATA, ND, PACKS
 from ui.maps import folder_alias, map_folder, map_scene
 from ui.util import _python, game_running
 
 
 _FINAL_FP_RE = re.compile(r"^n\d+-[0-9a-f]{16}\.txt$", re.I)   # 成品版本里的真图（不含 nogen.txt）
+
+#: 本图编辑标记（markers\<图>\markers.txt）的中文名：顺序就是界面上那一行的顺序
+MARKER_LABELS = (("area", "守卫区"), ("nanopos", "守卫点"), ("crouch", "蹲守点"),
+                 ("tag", "标签"), ("spawn", "出生点"))
 
 
 _CMD_SEQ = 0
@@ -325,6 +329,11 @@ class PackMixin:
         self.refresh_final_combo()
         self.refresh_compare()
         self.refresh_launch_strip()
+        if title == "删除本图草稿" and code == 0:
+            # 启动档还停在「编辑中」时这张图已经没草稿了：说清楚，免得以为没生效
+            if getattr(self, "pack_on", None) and self.pack_on.get() and not self.draft_exists():
+                self.set_status("草稿已删；启动档还是「编辑中」，这张图会走原版。"
+                                "要做新的点「开始编辑这张图」。")
 
     def _guard_game(self, title):
         r"""游戏开着时部署/还原不会报错，但这一局读的还是旧数据 —— 先问一句，别让人以为改完没生效。"""
@@ -481,6 +490,87 @@ class PackMixin:
             return 0, 0
         summ = pack_summary(folder, fp)
         return summ.get("nadd", 0) + summ.get("ndel", 0), summ.get("eadd", 0) + summ.get("edel", 0)
+
+    # ---- 本图编辑标记（守卫区 / 守卫点 / 蹲守点 / 标签 / 出生点）--------------------
+    # 2026-11-25 用户问「守卫区怎么删了还在」：这些标记根本不在草稿 txt 里 ——
+    # 草稿只装路点/边/跳跃；标记由插件每次进图重放 markers\<图>\markers.txt。
+    def marker_path(self):
+        r"""当前地图的编辑标记文件：② data\navdata\dev\markers\<地图文件夹>\markers.txt。"""
+        folder = self.current_folder() if hasattr(self, "opt_map") else ""
+        return os.path.join(MARKERS, folder, "markers.txt") if folder else ""
+
+    def marker_counts(self):
+        r"""当前图标记条数 {area/nanopos/crouch/tag/spawn: n}；没文件全 0。"""
+        counts = {k: 0 for k, _lab in MARKER_LABELS}
+        p = self.marker_path()
+        if not p:
+            return counts
+        try:
+            with open(p, "r", encoding="utf-8", errors="replace") as f:
+                for line in f:
+                    s = line.strip()
+                    if not s or s.startswith("#"):
+                        continue
+                    kind = s.split()[0]
+                    if kind == "spawndel":
+                        counts["spawn"] += 1      # 删原生出生点也是一条改动
+                    elif kind in counts:
+                        counts[kind] += 1
+        except OSError:
+            pass
+        return counts
+
+    def marker_summary(self, counts=None, max_items=2):
+        r"""「守卫区 9 · 守卫点 2」——只列非 0 的；类型多时收成「等 N 项」，别把按钮挤掉。"""
+        c = counts if counts is not None else self.marker_counts()
+        items = [(lab, c[k]) for k, lab in MARKER_LABELS if c.get(k)]
+        bits = ["%s %d" % (lab, n) for lab, n in items[:max_items]]
+        if len(items) > max_items:
+            bits.append("等 %d 项" % len(items))
+        return " · ".join(bits)
+
+    def clear_markers(self, ask=True):
+        r"""清空当前图的编辑标记：markers.txt 挪到 ② archive\markers_trash\<图>__<时间>\。
+
+        不真删（和删草稿一个思路），误清能从 archive 挪回来。
+        ask=False 给「删除本图草稿」复用（那边已经确认过了，不再二次弹框）。
+        返回 True = 真的挪走了；False = 没动。
+        """
+        folder = self.current_folder() if hasattr(self, "opt_map") else ""
+        p = self.marker_path()
+        if not folder or not p or not os.path.isfile(p):
+            if ask:
+                self.set_status("这张图没有编辑标记（守卫区 / 守卫点 / 蹲守点 / 标签）")
+            return False
+        counts = self.marker_counts()
+        summary = self.marker_summary(counts) or "（文件里没有有效条目）"
+        if ask and not self._guard_game("清空本图标记"):
+            return False
+        if ask and not self.confirm_danger(
+                "清空本图标记",
+                ["「%s」的编辑标记整份清掉。" % (self.folder_label(folder) or folder),
+                 "",
+                 "现有：" + summary,
+                 "文件：markers\\%s\\markers.txt" % folder.replace("/", "\\"),
+                 "",
+                 "守卫区 / 守卫点 / 蹲守点 / 标签 / 出生点 都存在 markers\\，不在草稿里；",
+                 "所以删草稿不会带走它们。标记按图存、不分档：清空后成品档和原版也一起没有。",
+                 "文件先挪到 archive\\markers_trash\\，误清可以挪回来。",
+                 "",
+                 "游戏开着时，重进图或按 Ctrl+7 才按新文件重放。"],
+                ok_text="清空标记"):
+            return False
+        dst_dir = os.path.join(DEV, "archive", "markers_trash",
+                               "%s__%s" % (folder, time.strftime("%Y%m%d_%H%M%S")))
+        try:
+            os.makedirs(dst_dir, exist_ok=True)
+            shutil.move(p, os.path.join(dst_dir, "markers.txt"))
+        except OSError as exc:
+            self.set_status("清空标记失败：%s" % exc)
+            return False
+        self.refresh_draft_panel()
+        self.set_status("已清空本图标记（%s）：文件在 archive\\markers_trash\\；重进图生效" % summary)
+        return True
 
     def resolve_pack_id(self, pid):
         r"""老配置里存的是平铺包名：按尾名找回分类后的 id（地图文件夹/包名）。"""
@@ -673,6 +763,61 @@ class PackMixin:
             return
         self.send_pack_cmd("apply")
         self.set_status("已清空 %s / %s：进图后从 0 画（Ctrl+Shift+N 加点）" % (name, fp))
+
+    def delete_draft(self):
+        r"""删掉当前地图的草稿（整份目录）—— 和「重置」不是一回事。
+
+        重置 = 留着草稿、把点/边清成 0（下次接着画）；
+        删除 = 这张图回到「还没有草稿」，编辑中里没有它了，要重做得重新「开始编辑这张图」。
+        草稿之外还有 markers\ 里的守卫区 / 守卫点 / 蹲守点 / 标签 / 出生点：默认连草稿一起清
+        （弹窗里的勾选框，默认勾上；取消勾选就只删草稿、留着标记）。
+        两样都不真删：草稿挪 archive\pack_trash\，标记挪 archive\markers_trash\，误删都能挪回。
+        成品 final\<指纹>.txt 不动（要撤发布去「成品」页）。
+        """
+        if not hasattr(self, "opt_map"):
+            return
+        lv, lab, _fp = self.current_map()
+        folder = self.current_folder()
+        where = lab or lv or folder
+        if not folder or not self.draft_exists():
+            self.set_status("这张图还没有草稿，没有可删的（「重置本图草稿」只清空已有的草稿）")
+            return
+        if not self._guard_game("删除本图草稿"):
+            return
+        man = self.draft_manifest()
+        nd, ed = self.draft_counts()
+        mode = ("空白地图" if (man.get("grow") or man.get("blank")) else
+                "原版 + 新增" if man.get("keep") else "增量")
+        lines = ["「%s」这张图的草稿整份删掉。" % where,
+                 "",
+                 "草稿：%d 点 / %d 边 · %s · 创建于 %s" % (
+                     nd, ed, mode, (man.get("created") or "-")[:16]),
+                 "目录：packs\\%s\\" % folder.replace("/", "\\"),
+                 "",
+                 "删完这张图回到「还没有草稿」，要重做点「开始编辑这张图」。",
+                 "成品里已发布的那份不动（要撤发布去「成品」页）。",
+                 "整份目录先移到 archive\\pack_trash\\，误删可以挪回来。"]
+        counts = self.marker_counts()
+        has_markers = any(counts.values())
+        marker_summary = self.marker_summary(counts) if has_markers else ""
+        extra = {"checked": has_markers}
+        if has_markers:
+            # 守卫区/蹲守点等不在草稿里：默认一起清，用户要的就是「删干净」
+            lines += ["",
+                      "本图标记：%s（守卫区 / 守卫点 / 蹲守点 / 标签 / 出生点）" % marker_summary,
+                      "它们在 markers\\<图>\\markers.txt，不在草稿里 —— 不清的话，新建空白草稿进图还会看到。"]
+        # 自定义确认框：× / Esc / 取消 一律当「否」（askyesno 在 Windows 上关窗会返回「是」）
+        if not self.confirm_danger(
+                "删除本图草稿", lines, ok_text="删除草稿",
+                checkbox_text=("同时清空本图标记（%s）" % marker_summary) if has_markers else "",
+                checkbox_checked=True, out=extra):
+            return
+        if has_markers and extra.get("checked"):
+            if not self.clear_markers(ask=False):
+                # 标记挪不走就停手：不然草稿没了、旧标记还挂着，比现在更乱
+                self.set_status("本图标记没清掉，草稿没删：先关掉游戏再试一次" )
+                return
+        self.run_navdata(["pack", "rm", folder], "删除本图草稿")
 
     def default_pack_name(self, lv, fp):
         r"""测试包默认名：地图英文场景名 + 当前日期时间，如 TransportShip_20261119_213512。

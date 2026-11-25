@@ -1015,7 +1015,13 @@ static LRESULT CALLBACK NavProc(HWND h, UINT msg, WPARAM w, LPARAM l) {
        * 否则选 A 只剩「建立路径」第 1 步那一条路，而它一进主菜单就被清掉，
        * 跳跃点（要 A -> B 两个点）在菜单里根本建不出来（2026-11-20 用户现场）。 */
       int shift = (GetAsyncKeyState(VK_SHIFT) & 0x8000) ? 1 : 0;
-      if (!editor_menu_is_open() || shift) {
+      /* Ctrl+S = 唯一保存键（2026-11-25 用户要求）。菜单把 S 留给游戏走路，
+       * 所以 editor_menu_key 不会消费它；这里不管菜单开没开都要放行，
+       * 否则「开着菜单想保存」就按不出来。 */
+      if (w == 'S' && !shift) {
+        void editor_save_all(void);
+        editor_save_all();
+      } else if (!editor_menu_is_open() || shift) {
         void editor_on_key_mod(unsigned, int);
         editor_on_key_mod((unsigned)w, shift);
       }

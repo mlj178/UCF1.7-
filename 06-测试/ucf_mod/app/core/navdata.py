@@ -1263,6 +1263,12 @@ def packs_root():
     return P.PACKS_DIR
 
 
+# 删草稿不真删：整份目录挪进 archive\pack_trash\（和发布前快照 final_prev\ 一个思路），
+# 界面上不出现，误删能从那儿挪回来。UCF_PACK_TRASH 只给自检指临时目录用。
+PACK_TRASH = (os.environ.get("UCF_PACK_TRASH", "").strip()
+              or os.path.join(P.DEV, "archive", "pack_trash"))
+
+
 def _is_pack(path):
     if os.path.isfile(os.path.join(path, "manifest.json")):
         return True
@@ -1603,6 +1609,51 @@ def final_delete_dir(d):
     return True
 
 
+def pack_store_remove(name, hard=False):
+    r"""删掉一张图的草稿（packs\<地图文件夹>\ 整份目录）。
+
+    默认不真删：整份挪到 archive\pack_trash\<文件夹>__<时间>\，返回
+    (原目录, 挪到哪, node 数, edge 数)；hard=True 才物理删除（返回的「挪到哪」为空）。
+    成品 final\ 一个字节都不碰 —— 要撤发布用 final rm。
+    """
+    pdir, _man, fp = find_pack(name)
+    nd, ed = edit_counts(os.path.join(pdir, fp + ".txt"))
+    if hard:
+        final_delete_dir(pdir)
+        return pdir, "", nd, ed
+    os.makedirs(PACK_TRASH, exist_ok=True)
+    base = os.path.basename(os.path.normpath(pdir))
+    dst = os.path.join(PACK_TRASH, "%s__%s" % (base, time.strftime("%Y%m%d_%H%M%S")))
+    n = 2
+    while os.path.exists(dst):           # 同一秒删两张：加 -2 / -3，别互相覆盖
+        dst = os.path.join(PACK_TRASH, "%s__%s-%d" % (base, time.strftime("%Y%m%d_%H%M%S"), n))
+        n += 1
+    try:
+        shutil.move(pdir, dst)
+    except OSError:
+        shutil.copytree(pdir, dst)       # 跨盘 / 占用：复制成功再删原目录
+        final_delete_dir(pdir)
+    return pdir, dst, nd, ed
+
+
+def cmd_pack_rm(args):
+    r"""删除一张图的草稿：默认整份挪到 archive\pack_trash\，--hard 才真删。
+
+    删完这张图回到「还没有草稿」；成品（已发布的 final\<指纹>.txt）不受影响。
+    """
+    name = str(args.name or "").strip()
+    pdir, where, nd, ed = pack_store_remove(name, hard=bool(getattr(args, "hard", False)))
+    print("已删除草稿：%s" % pdir)
+    print("  node %d / edge %d（这张图现在「还没有草稿」）" % (nd, ed))
+    if where:
+        print("  目录已移到：%s" % where)
+        print("  误删找回：把那个目录整个挪回 packs\\ 下（同名即可），状态就回来了。")
+    else:
+        print("  --hard：目录已物理删除，不保留（重做点控制台「开始编辑这张图」）。")
+    print("  成品不受影响：已发布的 final\\<指纹>.txt 还在，要撤发布用 final rm。")
+    return 0
+
+
 def cmd_final_rm(args):
     r"""撤销一张图的发布：真删 final\<指纹>.txt（不归档，发布前快照仍在 archive\final_prev\）。
 
@@ -1724,6 +1775,10 @@ def main():
     q2.add_argument("--as", dest="as_name", metavar="版本名", default="", help="已废弃，忽略")
     q2.add_argument("--dry", action="store_true")
     q2.set_defaults(func=cmd_pack_promote)
+    q2 = ps.add_parser("rm", help="删除草稿（整份挪到 archive\\pack_trash\\，成品不动）")
+    q2.add_argument("name", help="地图文件夹，例：10_Nano30_Storm飓风危城")
+    q2.add_argument("--hard", action="store_true", help="真删，不进 archive（不可恢复）")
+    q2.set_defaults(func=cmd_pack_rm)
     q2 = ps.add_parser("compare", help="草稿 vs 成品（同一张图）")
     q2.add_argument("name")
     q2.add_argument("--final", default="", help="已废弃，忽略")

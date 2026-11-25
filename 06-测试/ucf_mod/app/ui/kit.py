@@ -210,3 +210,71 @@ class Kit:
                       command=ok).pack(side="right", padx=(0, 8))
         self.wait_window(top)
         return out["v"]
+
+    def confirm_danger(self, title, lines, ok_text="删除", cancel_text="取消",
+                       checkbox_text="", checkbox_checked=False, out=None):
+        r"""危险操作确认：只有点红色按钮才算「是」；× / Esc / 取消都算「否」。
+
+        故意不用 messagebox.askyesno：Windows 上它把标题栏 × 交给默认按钮，
+        实测「关掉弹窗」会返回 yes —— 删文件这种动作不能赌这个。
+        返回 True/False；调用方拿到 False 就当没发生过。
+
+        checkbox_text 非空时多一个勾选框（默认 checkbox_checked），勾没勾写进 out["checked"]，
+        给「删草稿时顺手清标记」这种二合一确认用。
+        """
+        res = {"ok": False}
+        top = ctk.CTkToplevel(self)
+        top.title(title)
+        top.resizable(False, False)
+        top.transient(self)
+        if bool(self.topmost_var.get()):
+            top.attributes("-topmost", True)
+        try:
+            top.grab_set()
+        except tk.TclError:
+            top.after(150, lambda: top.winfo_exists() and top.grab_set())
+
+        def close(ok=False):
+            res["ok"] = bool(ok)
+            if out is not None and var is not None:
+                out["checked"] = bool(var.get())
+            top.destroy()
+
+        top.protocol("WM_DELETE_WINDOW", lambda: close(False))
+        top.bind("<Escape>", lambda _e: close(False))
+
+        head = ctk.CTkFrame(top, fg_color="transparent")
+        head.pack(fill="x", padx=18, pady=(16, 2))
+        ctk.CTkLabel(head, text="⚠", font=("Microsoft YaHei UI", 18, "bold"),
+                     text_color="#f0a020", width=26).pack(side="left")
+        ctk.CTkLabel(head, text=title, font=("Microsoft YaHei UI", 15, "bold"),
+                     anchor="w").pack(side="left")
+        ctk.CTkLabel(top, text=chr(10).join(lines), font=FONT_S, text_color="#c9d1d9",
+                     anchor="w", justify="left", wraplength=470).pack(
+            fill="x", padx=18, pady=(6, 12))
+        var = None
+        if checkbox_text:
+            var = tk.BooleanVar(value=bool(checkbox_checked))
+            ctk.CTkCheckBox(top, text=checkbox_text, variable=var, font=FONT_S,
+                            checkbox_width=18, checkbox_height=18,
+                            fg_color="#8a1c1c", hover_color="#a32424").pack(
+                anchor="w", padx=20, pady=(0, 10))
+        bar = ctk.CTkFrame(top, fg_color="transparent")
+        bar.pack(fill="x", padx=18, pady=(0, 16))
+        ctk.CTkButton(bar, text=ok_text, width=104, height=32, font=FONT,
+                      fg_color="#8a1c1c", hover_color="#a32424",
+                      command=lambda: close(True)).pack(side="right")
+        btn_cancel = ctk.CTkButton(bar, text=cancel_text, width=96, height=32, font=FONT,
+                                   fg_color="#3a3f47", hover_color="#4a5058",
+                                   command=lambda: close(False))
+        btn_cancel.pack(side="right", padx=(0, 8))
+        btn_cancel.focus_set()          # 默认停在「取消」：回车也不会误删
+        top.update_idletasks()
+        try:
+            x = self.winfo_rootx() + (self.winfo_width() - top.winfo_width()) // 2
+            y = self.winfo_rooty() + (self.winfo_height() - top.winfo_height()) // 3
+            top.geometry("+%d+%d" % (max(x, 0), max(y, 0)))
+        except tk.TclError:
+            pass
+        self.wait_window(top)
+        return res["ok"]
