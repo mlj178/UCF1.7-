@@ -32,9 +32,13 @@ r"""工程端 / 部署端 / 三区数据 的路径解析 —— 全工具唯一�
            final\<指纹>.txt         成品（一张图一份，平铺，只读）
            vis\                     导出收件箱（插件临时落点，整理后进 <图>\导出\）
            archive\                 处理过的导出 / 发布前快照
-  ③ 游戏目录（运行时，不放数据）
-       游戏目录 ucf_mod\
-           ucf_mod.dll  ucf_mod.json  markers\    （nav\ maps\ 2026-11-21 清空）
+  ③ 游戏目录（运行时，只放加载器 + 本体补丁）
+       游戏目录 winhttp.dll  winhttp_orig.dll
+       （2026-11-25 起不再有 ucf_mod\；插件本体/配置/命令/日志/标记全在工程端）
+
+  运行时状态（工程端，2026-11-25 起）：
+      run\runtime\ucf_mod.json     配置（控制台读写，插件通过 UCF_MOD_DIR 读）
+      run\runtime\ucf_navcmd.txt  控制台 ↔ 插件命令（插件每 ~0.5 s 查一次 seq）
   ---------------------------------------------------------------------------
   路径解析：
       导出根 EXPORT   = UCF_EXPORT_DIR  > ② vis\      （插件 Ctrl+E / navmesh 写这里）
@@ -56,10 +60,11 @@ r"""工程端 / 部署端 / 三区数据 的路径解析 —— 全工具唯一�
     geo/      *.npz 地形源 + web/*.bin（可重建）
     navdata/  三区数据（native / dev）
 
-部署端（不进 git）= 游戏目录里的 ucf_mod\
+部署端（不进 git）= 游戏目录本身
     解析顺序：1) 环境变量 UCF_DEPLOY  2) tools/deploy.json  3) 回退工程端
-    部署端只放运行时要读的东西（DLL / ucf_mod.json / markers）；数据全在 ②，
-    由 UCF_PACK（成品 = ②\nav、编辑中 = ②\packs\…）指过去，游戏目录不再放数据。
+    2026-11-25 起游戏目录只放"必须有的文件"：winhttp.dll / winhttp_orig.dll + 本体补丁；
+    插件本体、ucf_mod.json、ucf_navcmd.txt、日志、标记、地图数据全部在工程端，
+    由 UCF_MOD_DIR / UCF_LOG_DIR / UCF_MARKERS_DIR / UCF_PACK 指过去。
 """
 import json
 import os
@@ -89,7 +94,7 @@ if CORE not in sys.path:
 # ---------------------------------------------------------------- 三区目录
 # ① 备份版 navdata\native   冻结、只读
 # ② 开发版 navdata\dev      唯一数据源：maps\nav 成品，vis 收件箱，packs 编辑中
-# ③ 游戏目录 <ucf_mod>      运行时：dll / 配置 / markers（2026-11-21 起不放数据）
+# ③ 游戏目录               运行时：winhttp.dll / winhttp_orig.dll + 本体补丁（2026-11-25 起不建 ucf_mod\）
 NATIVE = os.path.join(DATA_ROOT, "navdata", "native")   # ① 原生备份（只读）
 DEV = os.path.join(DATA_ROOT, "navdata", "dev")         # ② 开发版（正式数据 + 收件箱 + 测试包）
 # 2026-11-21 四区改三区：原 navdata\test 已改名为 dev（内容原样保留），
@@ -142,6 +147,13 @@ def _resolve_deploy():
 
 
 DEPLOY, DEPLOY_SOURCE = _resolve_deploy()
+
+# 2026-11-25：运行时状态搬到工程端。插件启动时由控制台注入 UCF_MOD_DIR，
+# 所以 ucf_mod.json / ucf_navcmd.txt 不再写游戏目录。
+RUNTIME = os.path.abspath(os.environ.get("UCF_RUNTIME", "").strip()
+                          or os.path.join(PROJ, "run", "runtime"))
+CFG_PATH = os.path.join(RUNTIME, "ucf_mod.json")
+NAVCMD = os.path.join(RUNTIME, "ucf_navcmd.txt")
 
 
 def game_dir_of(deploy_root=None):
@@ -296,7 +308,7 @@ def _resolve_env_dir(env_name, default):
 # ② 开发版里的草稿区：导出收件箱 / 测试包 / 已处理导出的归档（都不会进 ③）
 EXPORT = _resolve_env_dir("UCF_EXPORT_DIR", os.path.join(DEV, "vis"))
 PACKS_DIR = _resolve_env_dir("UCF_PACK_DIR", os.path.join(DEV, "packs"))
-#: 编辑标记（蹲守点/守点/守区/tag）根目录：按地图分子文件夹，一张图一份
+#: 编辑标记（蹲守点/守卫点/守卫区/tag）根目录：按地图分子文件夹，一张图一份
 #: 2026-11-24 用户要求放工程端（游戏目录不再存数据），控制台启动时用 UCF_MARKERS_DIR 指给插件
 MARKERS = _resolve_env_dir("UCF_MARKERS_DIR", os.path.join(DEV, "markers"))
 ARCHIVE = os.path.join(DEV, "archive")

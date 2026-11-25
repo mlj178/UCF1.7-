@@ -4,6 +4,13 @@
   "note": "从部署端抢救回来的、工程端没有副本的文件",
   "edited_after_rescue": [
     {
+      "path": "winhttp.dll",
+      "date": "2026-11-25",
+      "why": "加载器改为只读 UCF_MOD_DLL：控制台注入工程端 run\\build\\ucf_mod.dll；没注入=原版；载入失败只写 %TEMP%\\ucf_mod_proxy.log，不再往游戏目录建 ucf_mod\\。旧版哈希记录在 run/payload/loader_history.json。",
+      "bytes": 50984,
+      "sha256": "42C5FED44B5D7402455C70EC9D046D26F252C3E5116706D831512289FF5A0990"
+    },
+    {
       "path": "ucf_mod/README.txt",
       "date": "2026-11-23",
       "why": "目录整理：控制台从 tools/ 移到 console/，改掉两处路径、一条已删的 启动导航编辑器.bat 指引，并把「网页编辑器」改成只读工作台；下面 files[] 里的 sha256 是 2026-11-22 抢救时刻的快照，不是这一版的。",
@@ -13,9 +20,9 @@
     {
       "path": "ucf_mod/ucf_mod.dll",
       "date": "2026-11-24",
-      "why": "重新编译：建跳链时校验 Bot_JumpLink.linkDic（调静态 GetLink 查一次），没有就手工登记；beh: 行补 g/vy；编辑标记按地图分文件夹并可指向工程端；日志不写游戏目录。",
-      "bytes": 384560,
-      "sha256": "29EDA53B17426062FF78B0C26FE89FE3FD25975FA4C6BC5E37E7954991AAD929"
+      "why": "重新编译：jump add 支持可选 needSpeed/accuracy/direction（对照组实验）；建链日志带参数；read_jump 打出原生跳链参数（jumpbase:）当基准；beh: 带 njs/njend/njspeed/njacc/njtime。",
+      "bytes": 385922,
+      "sha256": "E521E704E2529829F6450998E69147C06186C4DC0D593F008667CA7351085BB4"
     }
   ],
   "files": [

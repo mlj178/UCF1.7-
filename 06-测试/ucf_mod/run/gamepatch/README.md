@@ -9,9 +9,10 @@
 run\gamepatch\
 ├─ _index.json              总表：有哪些包、对应哪个开关、多少字节
 ├─ <序号>_<场景名><中文名>\   一个包 = 一张图
-│  ├─ patch.json            唯一权威：目标文件、原版哈希、补丁后哈希
+│  ├─ patch.json            唯一权威：目标文件、原版哈希、补丁后哈希、orig_file
 │  ├─ README.md             人读的说明（为什么这么改）
-│  └─ UnityCrossFire_Data\  文件按"游戏内相对路径"摆，部署器直接 src→game/<rel>
+│  ├─ UnityCrossFire_Data\  文件按"游戏内相对路径"摆，部署器直接 src→game/<rel>
+│  └─ orig\                 可选：原版副本，卸载时没有现场备份就靠它还原
 └─ README.md
 ```
 
@@ -26,7 +27,16 @@ run\gamepatch\
 | `sha256 == files[].sha256`（已经是我们的） | 跳过（幂等，重复点=修复） |
 | 其他（原版对不上，也不是我们的） | **拒绝并说明**，绝不盲打 |
 
-卸载：只还原有 `orig` 的、且哈希还是我们那份的文件；新增文件直接删。
+卸载：只还原有 `orig` 的、且哈希还是我们那份的文件；优先用部署时备份，
+没有备份就用 `orig_file` 指向的包内原版；新增文件直接删。
+
+**部署入口**：控制台「部署」页 → 一键部署，或
+`python app\tabs\deploy\deploy_mod.py --game-exe "D:\...\UnityCrossFire.exe"`。
+部署器只铺加载器 + `patch.json` 里登记的文件，**不建 `ucf_mod\`**、不写游戏内 manifest/备份。
+
+**开关**：`patch.json` 的 `switch` 对应 `run\runtime\ucf_mod.json` 的 `features`；
+没配置时用 `default_enabled`（暴风 true / 龙城 false）。未启用的包默认不铺，
+要一次全铺加 `--all-packs`。
 
 ## 三、开关映射
 

@@ -43,6 +43,8 @@ NODE_MIN_GAP = 0.60   # 重采样后两个节点至少隔这么远
 MERGE_NEAR = 1.05     # 同层两个节点近于这个距离就合并。**必须略大于游戏的吸附半径 1 m**：
                       # 否则 1 m 内有两个路点时，路径排到哪个、跳链挂到哪个可能不是同一个，
                       # 人机就会在两点之间来回转头（2026-11-24 现场）
+CHAIN_NEAR = 1.5      # 上一跳落点 B 与下一跳起点 A 的水平距离 ≤ 这个值：合并成同一个点
+CHAIN_DY = 0.5        # 上面那条的高差上限；超过说明不在同一层，不合并
 CORNER_DEG = 55.0     # 转角超过 55° 强制补一个节点
 CORNER_REACH = 1.20   # 判断转角时前后各看 1.2 m
 
@@ -525,6 +527,28 @@ def analyse(samples, step=STEP_DEFAULT, sw=None, events=None):
     before = sum(len(p["nodes"]) for p in out["pieces"])
     out["pieces"] = _merge_nodes(out["pieces"], out["jumps"], out["drops"])
     out["merged"] = max(0, before - sum(len(p["nodes"]) for p in out["pieces"]))
+
+    # ---- 连续跳链：上一跳的落点 = 下一跳的起点（2026-11-25）----
+    # 分开成两个点时，人机落在两点之间的台阶/栏杆上就既不在起点（JumpCheck 不跳）、
+    # 也回不到落点（被几何挡住），2026-11-25 运输船现场卡了 15 s+。
+    chain_merged = 0
+    for i in range(len(out["jumps"]) - 1):
+        cur, nxt = out["jumps"][i], out["jumps"][i + 1]
+        if abs(cur["b"][1] - nxt["a"][1]) > CHAIN_DY:
+            continue
+        if dist2(cur["b"], nxt["a"]) > CHAIN_NEAR:
+            continue
+        # 合并后下一跳不能超出 1.5~3.0 窗口，否则本来 2.5 m 的两跳会被接成 4 m
+        new_l3 = dist3(cur["b"], nxt["b"])
+        if not (LINK_MIN <= new_l3 <= LINK_MAX):
+            continue
+        nxt["a"] = cur["b"]
+        nxt["l3"] = new_l3
+        nxt["h"] = dist2(nxt["a"], nxt["b"])
+        chain_merged += 1
+    if chain_merged:
+        out["issues"].append("%d 处「上一跳落点 / 下一跳起点」已合并成同一个路点" % chain_merged)
+
     # 合并后跳链长度可能变了一点，重新按窗口分一遍
     if out["jumps"]:
         keep = []
@@ -609,8 +633,8 @@ def _fmt(p):
 def save_lines(result, allow_both=True):
     r"""复盘结果 -> 包 txt 的增量行（只增不覆盖；去重由调用方做）。
 
-    走路的边双向；跳链 = jump add + A->B；落下只 A->B。
-    只有通过 3D 1.5~3.0 体检的跳才会写进来（超长的已经在 issues 里）。
+    走路的边双向；跳链 = jump add + A->B（参数固定 0 / 0.5，和竞技场原生跳链一致）；
+    落下只 A->B。只有通过 3D 1.5~3.0 体检的跳才会写进来（超长的已经在 issues 里）。
     """
     lines = []
     if not result or not result.get("ok"):
@@ -637,7 +661,9 @@ def save_lines(result, allow_both=True):
         add_node(a)
         add_node(b)
         if link["kind"] == "jump":
-            lines.append("jump add %s %s" % (_fmt(a), _fmt(b)))
+            # 和竞技场原生跳链一致：needSpeed=0 / accuracy=0.5
+            # （0 = 不要求助跑速度，站着也能起跳；0.5 = 朝向阈值降到 0，只有反向走才会失败）
+            lines.append("jump add %s %s 0 0.5 0" % (_fmt(a), _fmt(b)))
         lines.append("edge add %s %s" % (_fmt(a), _fmt(b)))
         if allow_both:
             lines.append("edge add %s %s" % (_fmt(b), _fmt(a)))
@@ -650,8 +676,14 @@ def save_lines(result, allow_both=True):
     return lines
 
 
-def dedupe_lines(lines, existing_text, near=0.35):
-    r"""把增量行和包 txt 现有内容比对：节点/边落在 near 米内就不再写一遍。"""
+def dedupe_lines(lines, existing_text, near=MERGE_NEAR):
+    r"""把增量行和包 txt 现有内容比对：节点落在 near 米内就不再写一遍。
+
+    2026-11-25：near 从 0.35 提到 MERGE_NEAR（1.05）。跨次录制时只按 0.35 去重，
+    第二次沿同一条路录会在 0.5~1.5 m 处生成近点（抢吸附）。提高去重半径的同时，
+    被去掉的节点坐标会被**改写到保留下来的节点**上，边 / 跳链一起改写，
+    否则端点对不上（插件按 0.35 m 找点），边会被静默丢掉。
+    """
     nodes, edges, jumps = [], set(), set()
     for raw in (existing_text or "").splitlines():
         s = raw.strip()
@@ -675,8 +707,28 @@ def dedupe_lines(lines, existing_text, near=0.35):
                                     (float(bits[5]), float(bits[6]), float(bits[7]))))
             except ValueError:
                 pass
+
     out = []
     batch = []
+    snap = {}
+
+    def node_key(p):
+        return (round(p[0], 3), round(p[1], 3), round(p[2], 3))
+
+    def nearest(q):
+        best, bd = None, near
+        for r in nodes + batch:
+            d = dist3(q, r)
+            if d <= bd:
+                bd, best = d, r
+        return best
+
+    def snap_pt(q):
+        if node_key(q) in snap:
+            return snap[node_key(q)]
+        r = nearest(q)
+        return r if r is not None else q
+
     for ln in lines or []:
         bits = ln.split()
         if len(bits) >= 5 and bits[0] == "node" and bits[1] == "add":
@@ -684,7 +736,9 @@ def dedupe_lines(lines, existing_text, near=0.35):
                 p = (float(bits[2]), float(bits[3]), float(bits[4]))
             except ValueError:
                 continue
-            if any(dist3(p, q) <= near for q in nodes + batch):
+            q = nearest(p)
+            if q is not None:
+                snap[node_key(p)] = q
                 continue
             batch.append(p)
             out.append(ln)
@@ -694,22 +748,32 @@ def dedupe_lines(lines, existing_text, near=0.35):
                 b = (float(bits[5]), float(bits[6]), float(bits[7]))
             except (ValueError, IndexError):
                 continue
+            a, b = snap_pt(a), snap_pt(b)
+            if dist3(a, b) < 0.3:
+                continue
             key = _edge_key(a, b)
             if key in jumps:
                 continue
             jumps.add(key)
-            out.append(ln)
+            # 保留可选参数（needSpeed / accuracy / direction），只改写端点
+            line = "jump add %s %s" % (_fmt(a), _fmt(b))
+            if len(bits) > 8:
+                line += " " + " ".join(bits[8:])
+            out.append(line)
         elif len(bits) >= 8 and bits[0] == "edge" and bits[1] == "add":
             try:
                 a = (float(bits[2]), float(bits[3]), float(bits[4]))
                 b = (float(bits[5]), float(bits[6]), float(bits[7]))
             except ValueError:
                 continue
+            a, b = snap_pt(a), snap_pt(b)
+            if dist3(a, b) < 0.3:
+                continue
             key = _edge_key(a, b)
             if key in edges:
                 continue
             edges.add(key)
-            out.append(ln)
+            out.append("edge add %s %s" % (_fmt(a), _fmt(b)))
     return out
 
 

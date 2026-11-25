@@ -18,6 +18,7 @@ param(
     [int]$Settle = 120,
     [int]$Warm = 40,
     [int]$TimeoutSec = 240,
+    [string]$GameDir = '',
     [switch]$NoKill
 )
 
@@ -28,23 +29,39 @@ $projRoot = $tools
 while (-not (Test-Path -LiteralPath (Join-Path $projRoot '.ucfroot')) -and (Split-Path -Parent $projRoot) -ne $projRoot) {
     $projRoot = Split-Path -Parent $projRoot
 }
-$cfg = Join-Path $tools 'deploy.json'
-if (-not (Test-Path -LiteralPath $cfg)) { throw "missing tools/deploy.json" }
-$modDir = (Get-Content -LiteralPath $cfg -Raw | ConvertFrom-Json).deploy
-$gameDir = Split-Path -Parent $modDir
-# 2026-11-23 起日志主位置在**工程端** log\（和控制台一致：启动时注入 UCF_LOG_DIR），
-# 没走控制台时插件落 <部署端>\log\，更老的部署还在部署端根目录 —— 三级都认。
-$logDir   = Join-Path $projRoot 'log'          # 工程端（主）
-$gameLog  = Join-Path $modDir 'log'            # 部署端（没走控制台时）
+# 游戏位置：命令行 > 用户配置 > 工程 tools/deploy.json（开发机兜底）
+if (-not $GameDir) {
+    $userCfg = Join-Path $env:LOCALAPPDATA 'UCFMod\deploy.json'
+    if (Test-Path -LiteralPath $userCfg) {
+        try {
+            $j = Get-Content -LiteralPath $userCfg -Raw | ConvertFrom-Json
+            if ($j.game_dir) { $GameDir = $j.game_dir }
+        } catch { }
+    }
+}
+if (-not $GameDir) {
+    $cfg = Join-Path $tools 'deploy.json'
+    if (Test-Path -LiteralPath $cfg) {
+        $dep = (Get-Content -LiteralPath $cfg -Raw | ConvertFrom-Json).deploy
+        if ($dep) { $GameDir = Split-Path -Parent $dep }
+    }
+}
+if (-not $GameDir -or -not (Test-Path -LiteralPath (Join-Path $GameDir 'UnityCrossFire.exe'))) {
+    throw "找不到游戏目录：$GameDir（用 -GameDir 指定，或先在控制台选游戏）"
+}
+
+# 2026-11-25：运行时状态全在工程端 run\runtime\，日志在工程端 log\；
+# 游戏目录不再生成 ucf_mod\。
+$logDir   = Join-Path $projRoot 'log'
+$runtime  = Join-Path $projRoot 'run\runtime'
 $logPath  = Join-Path $logDir 'ucf_mod.log'
 $atPath   = Join-Path $logDir 'autotest.txt'
-foreach ($cand in @(($gameLog + '\ucf_mod.log'), ($modDir + '\ucf_mod.log'))) {
-    if (-not (Test-Path -LiteralPath $logPath) -and (Test-Path -LiteralPath $cand)) { $logPath = $cand }
-}
-foreach ($cand in @(($gameLog + '\autotest.txt'), ($modDir + '\autotest.txt'))) {
-    if (-not (Test-Path -LiteralPath $atPath) -and (Test-Path -LiteralPath $cand)) { $atPath = $cand }
-}
-$cmdPath = Join-Path $modDir '_autotest.cmd'
+$cmdPath  = Join-Path $runtime '_autotest.cmd'
+$buildDll = Join-Path $projRoot 'run\build\ucf_mod.dll'
+$payloadDll = Join-Path $projRoot 'run\payload\ucf_mod\ucf_mod.dll'
+$modDll = if (Test-Path -LiteralPath $buildDll) { $buildDll } else { $payloadDll }
+if (-not (Test-Path -LiteralPath $modDll)) { throw "插件未编译：$buildDll / $payloadDll 都不存在" }
+New-Item -ItemType Directory -Force -Path $runtime | Out-Null
 
 if (-not $NoKill) {
     Get-Process UnityCrossFire -ErrorAction SilentlyContinue | Stop-Process -Force
@@ -60,9 +77,13 @@ if (Test-Path -LiteralPath $atPath) { Remove-Item -LiteralPath $atPath -Force }
 $testVis = Join-Path $projRoot 'data\navdata\dev\vis'
 $testPacks = Join-Path $projRoot 'data\navdata\dev\packs'
 
+$markers = Join-Path $projRoot 'data\navdata\dev\markers'
 $lines = @(
     '@echo off',
     'set UCF_MOD=1',
+    ('set "UCF_MOD_DLL=' + $modDll + '"'),
+    ('set "UCF_MOD_DIR=' + $runtime + '"'),
+    ('set "UCF_MARKERS_DIR=' + $markers + '"'),
     ('set "UCF_EXPORT_DIR=' + $testVis + '"'),
     ('set "UCF_PACK_DIR=' + $testPacks + '"'),
     ('set "UCF_LOG_DIR=' + $logDir + '"'),

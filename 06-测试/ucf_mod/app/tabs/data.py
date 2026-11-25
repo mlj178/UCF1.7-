@@ -12,7 +12,7 @@ import queue
 import customtkinter as ctk
 
 from ui.consts import FONT, FONT_S
-from ui.env import DEPLOY, DEV, FINAL_ROOT, NATIVE, PACKS, TEST_VIS
+from ui.env import DEV, FINAL_ROOT, GAME_EXE, NATIVE, PACKS, TEST_VIS
 from ui.packs import _FINAL_FP_RE, final_stats, load_packs, pack_dir
 from ui.stats import data_counts, diff_count, export_filed, test_stats, tree_hashes
 from ui.util import dir_bytes, dir_stats, fmt_short, fmt_time, human_size
@@ -38,7 +38,9 @@ class DataTab:
                 ("②", "开发版（图文件夹 / 成品 / 编辑中 / 收件箱）", DEV,
                  "一张图一个文件夹：01_TransportShip运输船\\map.json + navmesh.bin；"
                  "另有 final 成品 / packs 编辑中 / vis 收件箱"),
-                ("③", "游戏目录（运行时）", DEPLOY, "只放 dll / 配置 / markers；2026-11-21 起不放数据")):
+                ("③", "游戏目录（运行时）", os.path.dirname(GAME_EXE),
+                 "只放 winhttp.dll / winhttp_orig.dll + 本体补丁；"
+                 "插件 / 配置 / 日志 / 标记 / 数据全在工程端")):
             box = ctk.CTkFrame(body, corner_radius=8)
             box.pack(fill="x", padx=10, pady=(8, 0))
             top = ctk.CTkFrame(box, fg_color="transparent")
@@ -150,7 +152,7 @@ class DataTab:
                 maps, files, lines, bins, human_size(total), n)
             if card["tag"] == "③":
                 # 2026-11-21 起 ③ 只当运行环境：数字没意义，直接说清楚
-                text = "运行时：dll / ucf_mod.json / markers\\；数据全在 ②，游戏目录不放数据"
+                text = "运行时：加载器 + 本体补丁；插件 / 配置 / 日志 / 标记全在工程端 run\\runtime / log / data"
             card["info"].configure(text=text)
         try:
             d1, d2 = tree_hashes(NATIVE), tree_hashes(DEV)

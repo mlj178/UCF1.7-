@@ -7,6 +7,7 @@ r"""UCF 控制台 —— 窗口壳（入口）。页签代码在 app/tabs/，共
 
 
 import os
+import shutil
 import subprocess
 import sys
 import tkinter as tk
@@ -25,7 +26,8 @@ from tabs.record.tab import RecordTab
 from tabs.vis import VisTab
 from tabs.waypoint import WaypointTab
 from ui.consts import FONT, FONT_B, FONT_S, GROUPS, TAB_GROUPS, TAB_OLD_MAP, USER_PAGES
-from ui.env import CFG_PATH, DEPLOY, DEV, FINAL_ROOT, GAME_EXE, HERE, LOG_DIR, MARKERS, NAVSERVER, PACKS, TEST_VIS
+from ui.env import (BUILD_DLL, CFG_PATH, DEPLOY, DEV, FINAL_ROOT, GAME_EXE, HERE, LOG_DIR,
+                    MARKERS, NAVSERVER, PACKS, PAYLOAD_DLL, RUNTIME, TEST_VIS)
 from ui.kit import Kit
 from ui.role import ROLE_DEV, ROLE_LABEL, ROLE_USER, ask_role, env_role, normalize_role, role_from_cfg, save_role
 from ui.packs import (
@@ -861,11 +863,28 @@ class App(Kit, PackMixin, MapTab, VisTab, ExportTab, HotkeyTab, WaypointTab, Ove
         """
         env = dict(os.environ)
         env["UCF_MOD"] = "1"
+        # 2026-11-25：开发直读 —— 加载器直接从 run\build 取最新编译的插件；
+        # 配置/命令也在工程端 run\runtime\，游戏目录不再需要 ucf_mod\。
+        dll = BUILD_DLL if os.path.isfile(BUILD_DLL) else PAYLOAD_DLL
+        if os.path.isfile(dll):
+            env["UCF_MOD_DLL"] = dll
+        env["UCF_MOD_DIR"] = RUNTIME
+        try:
+            os.makedirs(RUNTIME, exist_ok=True)
+        except OSError:
+            pass
+        # 老配置只在第一次直读时搬一次：优先用 run\runtime 里的，缺了才从旧部署端复制。
+        legacy_cfg = os.path.join(DEPLOY, "ucf_mod.json")
+        if not os.path.isfile(CFG_PATH) and os.path.isfile(legacy_cfg):
+            try:
+                shutil.copy2(legacy_cfg, CFG_PATH)
+            except OSError:
+                pass
         env["UCF_EXPORT_DIR"] = TEST_VIS
         env["UCF_PACK_DIR"] = PACKS
         # 2026-11-23：日志写到工程端 log\，游戏目录不再生成；插件建不出目录才落回游戏端
         env["UCF_LOG_DIR"] = LOG_DIR
-        # 2026-11-24：编辑标记（蹲守点/守点/守区/tag）也放工程端，按地图分子文件夹
+        # 2026-11-24：编辑标记（蹲守点/守卫点/守卫区/tag）也放工程端，按地图分子文件夹
         env["UCF_MARKERS_DIR"] = MARKERS
         for _d in (LOG_DIR, MARKERS):
             try:
@@ -910,6 +929,10 @@ class App(Kit, PackMixin, MapTab, VisTab, ExportTab, HotkeyTab, WaypointTab, Ove
     def launch_game(self):
         if not os.path.isfile(GAME_EXE):
             self.set_status("找不到 %s" % GAME_EXE)
+            return
+        if (hasattr(self, "master_var") and self.master_var.get()
+                and not (os.path.isfile(BUILD_DLL) or os.path.isfile(PAYLOAD_DLL))):
+            self.set_status("插件未编译：先运行 app\\tools\\build.ps1（或先更新 run\\payload）")
             return
         # 2026-11-19：测试包模式先过一道预检（正式版 / 插件待机直接放行）
         pk = self.pack_dict() if hasattr(self, "seg_mode") else {}
@@ -961,7 +984,7 @@ def main():
     ctk.set_default_color_theme("blue")
     # 2026-11-22：不再一上来就 return 1。游戏位置没配好（或配的路径已经没了）先走首次设置向导：
     # 选 UnityCrossFire.exe → 六道闸门 → 一键部署 → 写 %LOCALAPPDATA%\UCFMod\deploy.json。
-    if not os.path.isdir(DEPLOY) or not os.path.isfile(GAME_EXE):
+    if not os.path.isfile(GAME_EXE):
         try:
             import first_run
         except Exception as exc:

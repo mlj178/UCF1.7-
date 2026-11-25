@@ -57,7 +57,7 @@ class Wizard(ctk.CTk):
         ctk.CTkLabel(head, text="UCF 控制台 · 首次设置", font=FONT_B).pack(anchor="w")
         ctk.CTkLabel(
             head,
-            text="选一次 UnityCrossFire.exe，把运行件装进游戏目录；以后控制台就认这个位置。",
+            text="选一次 UnityCrossFire.exe，把游戏目录必须有的文件（加载器 + 本体补丁）铺过去；以后控制台就认这个位置。",
             font=FONT_S, text_color="#9aa4b2",
         ).pack(anchor="w", pady=(2, 0))
 
@@ -167,7 +167,7 @@ class Wizard(ctk.CTk):
             return
         try:
             self.steps = D.build_plan(self.game)
-        except FileNotFoundError as exc:
+        except Exception as exc:
             self._write(f"\n[X] {exc}\n")
             return
         current = D.all_current(self.game, self.steps)
@@ -185,7 +185,8 @@ class Wizard(ctk.CTk):
         buf = io.StringIO()
         try:
             with contextlib.redirect_stdout(buf):
-                rc = D.run_deploy(self.game, self.steps, repair=False)
+                rc = D.run_deploy(self.game, self.steps, repair=False,
+                                    force=bool(self.force.get()))
         except Exception as exc:
             buf.write(f"\n[X] 部署异常：{exc}\n")
             rc = 3

@@ -21,6 +21,12 @@ log/
 # 构建产物（run/build/ 下的 dll 也由下面的 *.dll 兜住）
 run/build/
 run/_tmp*
+
+# 运行时状态（控制台 ↔ 插件的配置 / 命令 / 部署清单）：机器相关，不进库
+run/runtime/
+
+# 一键部署的"覆盖前备份"：工程端安全副本，机器相关，不进库
+run/deploy_backup/
 *.dll
 
 # 可再生产物（从 data/geo/*.npz 重建）

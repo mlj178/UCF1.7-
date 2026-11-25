@@ -1,6 +1,6 @@
 ; winhttp.def - 代理外壳的导出表（由 build_proxy.ps1 自动生成，勿手改）
-; 来源: D:\trae_project\ucf1.7-modifier\06-测试\ucf_mod\payload\winhttp.dll
-; 生成: 2026-11-22 11:04:29
+; 来源: D:\trae_project\ucf1.7-modifier\06-测试\ucf_mod\run\payload\winhttp.dll
+; 生成: 2026-11-25 14:26:59
 LIBRARY winhttp
 EXPORTS
 DllCanUnloadNow=winhttp_orig.DllCanUnloadNow

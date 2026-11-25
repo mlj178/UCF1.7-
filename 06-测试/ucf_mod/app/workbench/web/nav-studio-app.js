@@ -37,7 +37,7 @@ var COLORS = {
 var SPAWN_NAMES = { 0: '幽灵出生', 1: '保卫者出生', 2: '中立点', 3: '补给箱', 4: '红箱', 5: '蓝箱' };
 var SPAWN_SUB = { 0: 'SP_BL · MapManager', 1: 'SP_GR · MapManager', 2: 'SP_Netural', 3: 'SP_SupplyBox', 4: 'SP_RedBox', 5: 'SP_BlueBox' };
 var KIND_LABEL = {
-  nano_area: '幽灵守区', nano_pos: '幽灵守点', crouch: '蹲守点', guard: '旧守卫点',
+  nano_area: '守卫区', nano_pos: '守卫点', crouch: '蹲守点', guard: '旧守卫点',
   guard_area: '旧守卫区', spawn: '出生 / 补给', jump: '跳跃链接', tag_region: '标签区'
 };
 var PAGE_TITLE = {
@@ -72,11 +72,11 @@ var MODE_LAYERS = {
 var MODE_NOTES = {
   '团队模式': '蹲守 BL/GR、双方出生点生效',
   '个人竞技': '主要用中立出生点，蹲守不生效',
-  '特殊战': '出生点 + 跳跃链路为主，蹲守/守区不生效',
-  '生化模式': '幽灵守区/守点 + 补给箱生效，蹲守不生效',
-  '生化剑客模式': '幽灵守区/守点 + 补给箱生效，蹲守不生效',
-  '多人生化模式': '守区/守点 + 补给箱 + 升级箱生效，蹲守不生效',
-  '终结者模式': '守区/守点 + 补给箱 + 升级箱生效，蹲守不生效'
+  '特殊战': '出生点 + 跳跃链路为主，蹲守/守卫区不生效',
+  '生化模式': '守卫区/守卫点 + 补给箱生效，蹲守不生效',
+  '生化剑客模式': '守卫区/守卫点 + 补给箱生效，蹲守不生效',
+  '多人生化模式': '守卫区/守卫点 + 补给箱 + 升级箱生效，蹲守不生效',
+  '终结者模式': '守卫区/守卫点 + 补给箱 + 升级箱生效，蹲守不生效'
 };
 var SPAWN_LABEL = { 0: '幽灵出生（BL）', 1: '保卫者出生（GR）', 2: '中立出生', 3: '补给箱', 4: '红箱', 5: '蓝箱' };
 /* 数据档：① 备份版 / ② 成品 / ② 编辑中。
@@ -501,8 +501,8 @@ function layerDefs() {
       { key: 'jump', name: '跳跃链接端点', sub: 'Bot_JumpLink · links[]', color: COLORS.jump, count: (k.jump || 0), cls: 'Bot_JumpLink' }
     ] },
     { group: '区域类（C 层）', letter: 'D', items: [
-      { key: 'nano_area', name: '幽灵守区', sub: 'Bot_NanoGuardArea', color: COLORS.nano_area, count: (k.nano_area || 0), cls: 'Bot_NanoGuardArea' },
-      { key: 'nano_pos', name: '幽灵守点', sub: 'Bot_NanoGuardPos', color: COLORS.nano_pos, count: (k.nano_pos || 0), cls: 'Bot_NanoGuardPos' },
+      { key: 'nano_area', name: '守卫区', sub: 'Bot_NanoGuardArea', color: COLORS.nano_area, count: (k.nano_area || 0), cls: 'Bot_NanoGuardArea' },
+      { key: 'nano_pos', name: '守卫点', sub: 'Bot_NanoGuardPos', color: COLORS.nano_pos, count: (k.nano_pos || 0), cls: 'Bot_NanoGuardPos' },
       { key: 'guard_area', name: '旧守卫区', sub: 'Bot_GuardArea · 游戏未使用', color: COLORS.guard_area, count: (k.guard_area || 0), cls: 'Bot_GuardArea' },
       { key: 'guard', name: '旧守卫点', sub: 'Bot_GuardPos · 游戏未使用', color: COLORS.guard, count: (k.guard || 0), cls: 'Bot_GuardPos' },
       { key: 'tag_region', name: '标签区', sub: 'PointNodeTagModifier', color: COLORS.tag_region, count: (k.tag_region || 0), cls: 'PointNodeTagModifier' }
@@ -1013,7 +1013,7 @@ function drawMap(cv, kind) {
 }
 
 /* =====================================================================
- * 3. 区域分组（守区 + 最近的守点）
+ * 3. 区域分组（守卫区 + 最近的守卫点）
  * ===================================================================*/
 function zoneGroups() {
   var areas = [];
@@ -1038,7 +1038,7 @@ function zoneGroups() {
       var key = f.kind === 'nano_pos' ? 'nano_pos' : 'guard';
       var g = areas.filter(function (a) { return a.type === 'loose' && a.kind === key; })[0];
       if (!g) {
-        g = { type: 'loose', kind: key, name: f.kind === 'nano_pos' ? '未归属幽灵守点' : '未归属旧守卫点',
+        g = { type: 'loose', kind: key, name: f.kind === 'nano_pos' ? '未归属守卫点' : '未归属旧守卫点',
               x: f.x, y: f.y, z: f.z, pts: [] };
         areas.push(g);
       }
@@ -1301,7 +1301,7 @@ function updateHeader() {
   if (ST.page === 'routes') sub = s ? (s.jumpLinks + ' 条跳跃链路 · ' + s.jumpEndpoints + ' 个跳跃端点 · 路线由点图自动连通') : sub;
   if (ST.page === 'zones') {
     var k = (s && s.kinds) || {};
-    sub = s ? ('幽灵守区 ' + (k.nano_area || 0) + ' · 幽灵守点 ' + (k.nano_pos || 0) +
+    sub = s ? ('守卫区 ' + (k.nano_area || 0) + ' · 守卫点 ' + (k.nano_pos || 0) +
       ' · 旧守卫区 ' + (k.guard_area || 0) + ' · 标签区 ' + (k.tag_region || 0)) : sub;
   }
   if (ST.page === 'auto') {
@@ -1389,7 +1389,7 @@ function renderOverview() {
   var k = s.kinds;
   $('ovTitle').innerHTML = (m.label || m.level) + ' <em>' + s.nodes + '</em> 点 / <em>' + s.edges + '</em> 边';
   $('ovDesc').textContent = '这张图的可走面' + (m.navmesh ? '有导出' : '没有导出') + '；' +
-    '出生点 ' + ((k.spawn || 0)) + ' 个、蹲守点 ' + ((k.crouch || 0)) + ' 个、跳跃端点 ' + ((k.jump || 0)) + ' 个、守区 ' +
+    '出生点 ' + ((k.spawn || 0)) + ' 个、蹲守点 ' + ((k.crouch || 0)) + ' 个、跳跃端点 ' + ((k.jump || 0)) + ' 个、守卫区 ' +
     ((k.nano_area || 0) + (k.guard_area || 0)) + ' 个。人机真正跑的是 PointNode 点图，路线不是手画线。';
 
   var boxes = [
@@ -1482,7 +1482,7 @@ function buildTips() {
   if (s.components > 1) out.push({ c: '#f5b942', text: s.components + ' 个连通块：块与块之间人机过不去，检查跳跃链接或补边。' });
   if (!m.navmesh) out.push({ c: '#8fa5c0', text: '这张图没有可走面导出（NavMeshGraph），3D 视图只能画点；自动铺设不看这份导出，仍按 A* 图跑。' });
   if (!(s.kinds.crouch)) out.push({ c: '#38d9f5', text: '蹲守点 0：进图时 auto_crouch 开就会自动补一批 Bot_CrouchPos。' });
-  if (!(s.kinds.nano_area)) out.push({ c: '#a78bfa', text: '幽灵守区 0：ghost_areas 开时插件会按采样点凭空造守区；旧 guard_area 不算。' });
+  if (!(s.kinds.nano_area)) out.push({ c: '#a78bfa', text: '守卫区 0：ghost_areas 开时插件会按采样点凭空造守卫区；旧 guard_area 不算。' });
   var c = wb && wb.consistency;
   if (c && c.nativeDev && c.nativeDev.maps &&
       ((c.nativeDev.maps.diff || []).length || (c.nativeDev.maps.onlyA || []).length || (c.nativeDev.maps.onlyB || []).length)) {
@@ -1562,7 +1562,7 @@ function layerDetailHtml() {
   else if (it.key === 'node_block') note = 'GraphNode.flags bit0=0，寻路会绕开；一般是手动禁用的点。';
   else if (it.key === 'edge') note = 'PointGraph.Scan 按 maxDistance + 射线自动连的边，不是手画线。运输船 1391 条边就是它自己连的。';
   else if (it.key === 'jump') note = 'Bot_JumpLink 的端点 ' + ((s.kinds.jump) || 0) + ' 个；插件导出的成对链路 ' + s.jumpLinks + ' 条。人机路径经过时会插入跳跃段。';
-  else if (it.key === 'nano_area' || it.key === 'nano_pos') note = '生化/终结者模式真正使用的守区/守点；守点必须挂在守区下才会被 NanoGuard 收集。';
+  else if (it.key === 'nano_area' || it.key === 'nano_pos') note = '生化/终结者模式真正使用的守卫区/守卫点；守卫点必须挂在守卫区下才会被 NanoGuard 收集。';
   else if (it.key === 'guard_area' || it.key === 'guard') note = '旧 Bot_GuardArea / Bot_GuardPos：Bot_GuardArea 是空类、Bot_GuardPos 只当 Bot_CrouchPos 基类，所有模式都不使用。';
   else if (it.key === 'tag_region') note = 'PointNodeTagModifier 把节点打 tag；只有人机 Seeker.traversableTags / tagPenalties 认它才有意义。';
   else if (it.key === 'supply') note = '普通/红/蓝补给箱点位；生化/终结者模式里优先级 51，人机会突然不打了去抢箱。';
@@ -1650,7 +1650,7 @@ function renderLegend() {
     'jump', 'nano_area', 'nano_pos', 'guard_area', 'guard', 'supply'];
   var names = { node_walk: '可走', node_block: '不可走', spawn_bl: '幽灵出生', spawn_gr: '保卫出生',
     spawn_neutral: '中立出生', crouch_bl: '蹲守BL', crouch_gr: '蹲守GR', jump: '跳跃',
-    nano_area: '幽灵守区', nano_pos: '幽灵守点', guard_area: '旧守卫区*', guard: '旧守卫点*', supply: '补给' };
+    nano_area: '守卫区', nano_pos: '守卫点', guard_area: '旧守卫区*', guard: '旧守卫点*', supply: '补给' };
   $('legend').innerHTML = keys.map(function (k) {
     var allowed = modeAllows(k);
     if (!ST.showAllLayers && !allowed) return '';
@@ -1672,14 +1672,14 @@ function renderQuickLists() {
 
   var k = (ST.stats && ST.stats.kinds) || {};
   var zs = [];
-  if (k.nano_area) zs.push(['Z', '幽灵守区', k.nano_area, '#a78bfa']);
+  if (k.nano_area) zs.push(['Z', '守卫区', k.nano_area, '#a78bfa']);
   if (k.guard_area) zs.push(['G', '旧守卫区', k.guard_area, '#7c6bd4']);
   if (k.tag_region) zs.push(['T', '标签区', k.tag_region, '#f97316']);
-  if (k.nano_pos) zs.push(['P', '幽灵守点', k.nano_pos, '#c4b5fd']);
+  if (k.nano_pos) zs.push(['P', '守卫点', k.nano_pos, '#c4b5fd']);
   $('quickZones').innerHTML = zs.map(function (z) {
     return '<div class="rrow" data-zonequick="1"><div class="rtag" style="--c:' + z[3] + '">' + z[0] + '</div>' +
       '<div class="rname">' + z[1] + '</div><div class="rmeta">' + z[2] + '</div></div>';
-  }).join('') || '<div class="rtip">没有守区 / 标签区数据；可看「自动铺设」页的触发条件。</div>';
+  }).join('') || '<div class="rtip">没有守卫区 / 标签区数据；可看「自动铺设」页的触发条件。</div>';
   $('rzSum').textContent = jumps.length + ' / ' + zs.length;
 }
 
@@ -1891,7 +1891,7 @@ function zoneItems() {
         type: 'area', index: i,
         name: KIND_LABEL[g.kind] + (g.aux != null ? ' #' + g.aux : ''),
         color: COLORS[g.kind] || '#a78bfa',
-        meta: g.kind + ' · ' + g.pts.length + ' 个守点'
+        meta: g.kind + ' · ' + g.pts.length + ' 个守卫点'
       });
     } else if (g.type === 'loose') {
       items.push({
@@ -1923,8 +1923,8 @@ function renderZones() {
       '<div class="ltag" style="--c:' + it.color + '">' + tag + '</div>' +
       '<div><div class="lname">' + esc(it.name) + '</div><div class="lmeta">' + esc(it.meta) + '</div></div>' +
       '<div class="lgo">›</div></div>';
-  }).join('') || '<div class="empty">这张图没有幽灵守区（nano_area=0）、旧守卫区、标签区，也没有 zones[]。<br>' +
-    '<b>不是坏数据</b>：很多图本来就不挂守区；ghost_areas 开时插件进图会自己造。</div>';
+  }).join('') || '<div class="empty">这张图没有守卫区（nano_area=0）、旧守卫区、标签区，也没有 zones[]。<br>' +
+    '<b>不是坏数据</b>：很多图本来就不挂守卫区；ghost_areas 开时插件进图会自己造。</div>';
 
   renderZoneDetail();
 }
@@ -1940,7 +1940,7 @@ function renderZoneDetail() {
     $('mbZone').innerHTML = '<b>—</b> 没有区域';
     $('zoneRule').textContent = '—';
     $('zoneKk').textContent = '—';
-    $('zoneDetail').innerHTML = '<div class="empty">没有选中项。能用的守区是 Bot_NanoGuardArea；旧 Bot_GuardArea 游戏没用。</div>';
+    $('zoneDetail').innerHTML = '<div class="empty">没有选中项。能用的守卫区是 Bot_NanoGuardArea；旧 Bot_GuardArea 游戏没用。</div>';
     return;
   }
   var groups = zoneGroups();
@@ -1948,26 +1948,26 @@ function renderZoneDetail() {
     var g = groups[it.index];
     var pts = g.pts;
     $('zoneTitle').textContent = it.name;
-    $('zoneMeta').textContent = g.kind + ' · ' + pts.length + ' 个守点';
+    $('zoneMeta').textContent = g.kind + ' · ' + pts.length + ' 个守卫点';
     $('mbZone').innerHTML = '<i style="--c:' + it.color + '"></i><b>' + (it.type === 'area' ? 'Z' : '·') + '</b> ' + esc(it.name);
-    $('zoneRule').textContent = it.type === 'area' ? '守区 / 守点（按最近距离分组）' : '未归属守点';
+    $('zoneRule').textContent = it.type === 'area' ? '守卫区 / 守卫点（按最近距离分组）' : '未归属守卫点';
     $('zoneKk').textContent = pts.length + ' 点';
     var functional = g.kind === 'nano_area' || g.kind === 'nano_pos';
     $('zoneDetail').innerHTML = '' +
       '<div class="kline"><span class="k">类型</span><span class="v c" style="--c:' + it.color + '">' + esc(KIND_LABEL[g.kind] || g.kind) + '</span></div>' +
       '<div class="kline"><span class="k">游戏类</span><span class="v">' + esc(g.kind.indexOf('nano') === 0 ? 'Bot_NanoGuard' + (g.kind === 'nano_area' ? 'Area' : 'Pos') : 'Bot_Guard' + (g.kind === 'guard_area' ? 'Area' : 'Pos')) + '</span></div>' +
       '<div class="kline"><span class="k">中心</span><span class="v">' + g.x.toFixed(2) + ', ' + g.z.toFixed(2) + '</span></div>' +
-      '<div class="kline"><span class="k">守点</span><span class="v">' + pts.length + ' 个</span></div>' +
+      '<div class="kline"><span class="k">守卫点</span><span class="v">' + pts.length + ' 个</span></div>' +
       '<div class="kline"><span class="k">是否生效</span><span class="v" style="color:' + (functional ? '#68d9a6' : '#f5c56a') + '">' + (functional ? '是（NanoGuard）' : '否（旧类 / 未归属）') + '</span></div>' +
-      '<div class="sect">守点列表</div>' +
+      '<div class="sect">守卫点列表</div>' +
       '<div class="tags">' + (pts.slice(0, 24).map(function (f) {
         return '<span class="tag">' + (f.aux != null ? '#' + f.aux + ' ' : '') + f.x.toFixed(1) + ', ' + f.z.toFixed(1) + '</span>';
-      }).join('') || '<span class="tag">没有守点</span>') + '</div>' +
+      }).join('') || '<span class="tag">没有守卫点</span>') + '</div>' +
       '<div class="sect">说明</div>' +
       '<div class="note">' + (functional
-        ? 'NanoGuard 会把这个守区下的守点收集起来；安全度 _safety、入口 entrancePos、逃跑 escapePos、邻区 neighborAreas 当前导出里没有，所以不画也不编。'
-        : 'Bot_GuardArea / Bot_GuardPos 是旧类，docs 确认没人用；插件自动铺守区时查的是 NanoGuardArea，不会因为旧守卫区存在就跳过。') + '</div>' +
-      '<div class="note">分组按“守点到守区中心的最近距离”算，只用于看图，不改游戏数据。</div>';
+        ? 'NanoGuard 会把这个守卫区下的守卫点收集起来；安全度 _safety、入口 entrancePos、逃跑 escapePos、邻区 neighborAreas 当前导出里没有，所以不画也不编。'
+        : 'Bot_GuardArea / Bot_GuardPos 是旧类，docs 确认没人用；插件自动铺守卫区时查的是 NanoGuardArea，不会因为旧守卫区存在就跳过。') + '</div>' +
+      '<div class="note">分组按“守卫点到守卫区中心的最近距离”算，只用于看图，不改游戏数据。</div>';
     return;
   }
   var z = ST.zones[it.index];
@@ -2045,14 +2045,14 @@ function renderAuto() {
     { t: '会补', d: '这张图蹲守点是 0，进图会按 9 m 网格补 Bot_CrouchPos。' },
     { t: '不会', d: '这张图已经有 ' + ((k.crouch) || 0) + ' 个蹲守点，插件跳过。' });
   var rg = result(ga.on, m.auto.guard,
-    { t: '会造', d: '这张图 NanoGuardArea 是 0，进图会从采样点里造守区并挂守点。' },
-    { t: '不会', d: '这张图已经有 ' + ((k.nano_area) || 0) + ' 个幽灵守区，插件跳过。' });
+    { t: '会造', d: '这张图 NanoGuardArea 是 0，进图会从采样点里造守卫区并挂守卫点。' },
+    { t: '不会', d: '这张图已经有 ' + ((k.nano_area) || 0) + ' 个守卫区，插件跳过。' });
 
   $('autoCfgChip').textContent = cfg.exists ? (cfg.enabled ? '插件开' : '插件关') : '无配置';
   $('autoActions').innerHTML =
     autoActHtml('W', '自动铺路点 + 连线', 'auto_waypoints', way, rw, 'PointGraph 节点数 = 0 才触发；已有路点的图不动。') +
     autoActHtml('C', '自动补蹲守点', 'auto_crouch', cr, rc, 'SpareList_BL 里没有蹲守点才触发。') +
-    autoActHtml('G', '自动造幽灵守区', 'ghost_areas', ga, rg, 'NanoGuardArea.SpareAreaList 为空才触发；旧 guard_area 不算。');
+    autoActHtml('G', '自动造守卫区', 'ghost_areas', ga, rg, 'NanoGuardArea.SpareAreaList 为空才触发；旧 guard_area 不算。');
 
   $('autoCfgNote').innerHTML = cfg.exists
     ? ('配置：<b>' + esc(cfg.path) + '</b><br>插件总开关 <b>' + (cfg.enabled ? '开' : '关') + '</b> · 场景 <b>' + esc(cfg.scene || '—') +
@@ -2066,7 +2066,7 @@ function renderAuto() {
     '<div class="kline"><span class="k">点图节点</span><span class="v">' + m.nodes + '</span></div>' +
     '<div class="kline"><span class="k">自动铺点</span><span class="v" style="color:' + (m.auto.waypoints ? '#7fe0b3' : '#8fa5c0') + '">' + (m.auto.waypoints ? '触发（0 点）' : '跳过（已有 ' + m.nodes + ' 点）') + '</span></div>' +
     '<div class="kline"><span class="k">蹲守点</span><span class="v">' + ((k.crouch) || 0) + ' · ' + (m.auto.crouch ? '会自动补' : '已存在，跳过') + '</span></div>' +
-    '<div class="kline"><span class="k">幽灵守区</span><span class="v">' + ((k.nano_area) || 0) + ' · ' + (m.auto.guard ? '会自动造' : '已存在，跳过') + '</span></div>' +
+    '<div class="kline"><span class="k">守卫区</span><span class="v">' + ((k.nano_area) || 0) + ' · ' + (m.auto.guard ? '会自动造' : '已存在，跳过') + '</span></div>' +
     '<div class="kline"><span class="k">旧守卫区</span><span class="v">' + ((k.guard_area) || 0) + ' · 不参与判断</span></div>' +
     '<div class="kline"><span class="k">可走面</span><span class="v">' + (m.navmesh ? '有导出' : '没有导出') + '</span></div>' +
     '<div class="kline"><span class="k">结论</span><span class="v">' + (dis ? '插件关闭' : (co ? '只读采集，全部跳过' : (packNogen ? 'nogen.txt，铺点跳过' : '按上面三个开关跑'))) + '</span></div>' +
@@ -2081,7 +2081,7 @@ function renderAuto() {
     ['3', '铺点', '每个命中点建一个 UCF_WayPoints 子物体'],
     ['4', '连边', 'maxDistance 4.6 m + raycast 挡视线'],
     ['5', '补蹲守', '9 m 网格，法线 ≥ 0.8'],
-    ['6', '造守区', '每 11 个采样点取 1 个，≤64 个']
+    ['6', '造守卫区', '每 11 个采样点取 1 个，≤64 个']
   ].map(function (x) {
     return '<div class="step on"><span class="n">' + x[0] + '</span><div><div class="t">' + x[1] + '</div><div class="d">' + x[2] + '</div></div></div>';
   }).join('');
@@ -2089,11 +2089,11 @@ function renderAuto() {
   $('autoRules').innerHTML = '' +
     '<div class="kline"><span class="k">铺点条件</span><span class="v">PointGraph 节点数 == 0</span></div>' +
     '<div class="kline"><span class="k">蹲点条件</span><span class="v">SpareList_BL == 0</span></div>' +
-    '<div class="kline"><span class="k">守区条件</span><span class="v">SpareAreaList == 0</span></div>' +
+    '<div class="kline"><span class="k">守卫区条件</span><span class="v">SpareAreaList == 0</span></div>' +
     '<div class="kline"><span class="k">连边半径</span><span class="v">4.6 m + raycast</span></div>' +
     '<div class="kline"><span class="k">跳点</span><span class="v">不自动生成</span></div>' +
     '<div class="sect">所有地图的触发判断</div>' +
-    '<table class="mtable"><thead><tr><th>地图</th><th>点</th><th>蹲守</th><th>守区</th><th>铺点</th></tr></thead><tbody>' +
+    '<table class="mtable"><thead><tr><th>地图</th><th>点</th><th>蹲守</th><th>守卫区</th><th>铺点</th></tr></thead><tbody>' +
     (ST.maps || []).map(function (x) {
       var c = x.status === 'missing' ? '—' : (x.auto.waypoints ? '会' : '跳过');
       return '<tr><td>' + esc(x.label || x.level) + '</td><td class="mono">' + x.nodes + '</td><td class="mono">' +

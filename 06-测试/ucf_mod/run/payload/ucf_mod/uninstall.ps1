@@ -1,4 +1,8 @@
-# UCF 插件卸载 —— 默认只移除「部署物」，不动导航数据与工程源码
+﻿# UCF 插件卸载 —— 默认只移除「部署物」，不动导航数据与工程源码
+#
+# 2026-11-25 起：新部署不再把本脚本放进游戏目录。卸载请用控制台「部署」页，
+# 或 python app\tabs\deploy\deploy_mod.py --game-exe "D:\...\UnityCrossFire.exe" --uninstall。
+# 本脚本只留作 2026-11-25 之前旧部署的手工清理。
 #
 #   默认：还原 level9 → 删加载器 → 删 dll/配置/日志/vis
 #   保留：markers\ backup\（蹲守点 + level9 还原点；nav\ maps\ 已于 2026-11-21 清空）

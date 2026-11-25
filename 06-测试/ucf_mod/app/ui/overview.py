@@ -291,10 +291,10 @@ def snapshots_of(fp):
 
 
 def deployment_status():
-    r"""全局插件部署：payload 5 个文件落到游戏目录后是否哈希一致。
+    r"""全局部署状态：游戏目录必须有的文件（加载器 + 启用的本体补丁）是否齐全。
 
-    部署是全局的（winhttp / dll / README / 卸载脚本 / winhttp_orig），不是每张图一份；
-    总览这一列讲的是「游戏里会加载哪份地图数据」，所以全局状态单独放顶部卡片。
+    插件本体/配置/数据不写游戏目录（直读模式），所以这里只算加载器和 gamepatch；
+    总览这一列讲的是「游戏里会加载哪份地图数据」，全局状态单独放顶部卡片。
     """
     game = os.path.abspath(P.game_dir_of())
     exe = os.path.join(game, "UnityCrossFire.exe")
@@ -304,32 +304,31 @@ def deployment_status():
         return base
     try:
         import deploy_mod as D
-        steps = D.build_plan(game)
-        ok = missing = bad = 0
-        for s in steps:
-            dst = s["dst"]
-            if not os.path.isfile(dst):
-                missing += 1
-            elif D.sha256_file(dst) == s["sha256"]:
-                ok += 1
-            else:
-                bad += 1
-        total = len(steps)
+        summary = D.plan_summary(game)
+        total = summary["total"] - summary["disabled"]
+        ok = summary["ok"]
+        ready = summary["ready"]
+        missing = summary["missing"]
+        bad = summary["conflict"]
     except Exception as exc:                 # noqa: BLE001
         base.update({"state": "bad", "text": "检查失败",
                      "sub": str(exc)[:100] or "payload 读不了"})
         return base
     if total and ok == total:
         state, text = "ok", "已部署"
-    elif ok == 0 and missing == total:
+    elif ok == 0 and ready + missing == total:
         state, text = "none", "未部署"
+    elif bad:
+        state, text = "bad", "有冲突"
     elif missing:
         state, text = "warn", "部分缺失"
     else:
-        state, text = "warn", "待更新"
-    sub = "%d/%d 文件一致" % (ok, total)
+        state, text = "warn", "待部署"
+    sub = "%d/%d 个必须文件一致" % (ok, total)
+    if ready:
+        sub += " · %d 个待部署" % ready
     if bad:
-        sub += " · %d 个不一致" % bad
+        sub += " · %d 个冲突" % bad
     if missing:
         sub += " · %d 个缺失" % missing
     return {"game": game, "ok": ok, "total": total, "missing": missing,

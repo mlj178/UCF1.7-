@@ -305,7 +305,7 @@ body.embed .hud{font-size:10px;padding:3px 6px;max-width:calc(100% - 12px)}
           <label class="chk"><input type="checkbox" id="c-edges" checked><span class="dot" style="background:var(--edge)"></span>连接边</label>
           <label class="chk"><input type="checkbox" id="c-blocked" checked><span class="dot" style="background:var(--blocked)"></span>不可走路点</label>
           <label class="chk"><input type="checkbox" id="c-tagged" checked><span class="dot" style="background:var(--tagged)"></span>带 tag 路点</label>
-          <label class="chk"><input type="checkbox" id="c-feats" checked><span class="dot" style="background:var(--feat)"></span>特征点 / 守区</label>
+          <label class="chk"><input type="checkbox" id="c-feats" checked><span class="dot" style="background:var(--feat)"></span>特征点 / 守卫区</label>
           <label class="chk"><input type="checkbox" id="c-iso" checked><span class="dot" style="background:#ff2d55"></span>孤立点标红</label>
           <div class="field" style="margin-top:6px">
             <label>楼层带</label>
@@ -422,11 +422,11 @@ const VIEWONLY = true;
 const EMBED = /[?&]embed=1(&|$)/.test(location.search);
 const $ = function (id) { return document.getElementById(id); };
 const KINDS = {
-  nano_area:  { c: "#3ddc84", label: "幽灵守区", r: 2.4 },
-  nano_pos:   { c: "#19f2f2", label: "幽灵守点", r: 1.0 },
+  nano_area:  { c: "#3ddc84", label: "守卫区", r: 2.4 },
+  nano_pos:   { c: "#19f2f2", label: "守卫点", r: 1.0 },
   crouch:     { c: "#ff6b6b", label: "蹲守点",   r: 0.9 },
-  guard:      { c: "#ffa03a", label: "守卫点",   r: 0.9 },
-  guard_area: { c: "#b06bff", label: "守卫区域", r: 1.8 },
+  guard:      { c: "#ffa03a", label: "旧守卫点", r: 0.9 },
+  guard_area: { c: "#b06bff", label: "旧守卫区", r: 1.8 },
   spawn:      { c: "#ffd633", label: "出生点",   r: 1.1 },
   jump:       { c: "#ffe400", label: "跳跃链接", r: 0.8 },
   tag_region: { c: "#ffa03a", label: "标签区",   r: 0.9 }
@@ -1815,7 +1815,7 @@ function render2() {
     });
   }
 
-  /* 特征点连线（守区邻居 / 入口撤离 / 跳链） */
+  /* 特征点连线（守卫区邻居 / 入口撤离 / 跳链） */
   if (S.showFeats && S.lines) {
     c.lineWidth = 1;
     [["nano_neighbor", "rgba(255,90,175,.34)"], ["entrance_escape", "rgba(255,255,255,.22)"],
@@ -3256,7 +3256,7 @@ function showHelp() {
     "改坏了点 <b>还原原生</b> 就回到 ① 备份版。</p>" +
     "<p><b>能改的和不能改的</b>：插件只认四种指令 —— <code class='k'>node add/del</code>（加点 / 删点）、" +
     "<code class='k'>edge add/del</code>（连边 / 断边）。所以这里能做的编辑就是：加点、删点、移动点（=删旧+加新）、" +
-    "可走/不可走、连边、断边。特征点（出生点、蹲守点、守区）只显示不可改 —— 插件没有对应指令。</p>" +
+    "可走/不可走、连边、断边。特征点（出生点、蹲守点、守卫区）只显示不可改 —— 插件没有对应指令。</p>" +
     "<p><b>楼层带</b>：一张图常常有好几层，俯视会互相重叠。勾上「楼层带」并拖动两个滑块，" +
     "只显示这段 Y 之间的地形与路点（3D 里可以勾「切层」把上面的楼板切掉看室内）。</p>" +
     "<p><b>操作 · 俯视（2D）</b></p><table class='tbl'>" +

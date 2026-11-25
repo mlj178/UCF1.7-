@@ -1,10 +1,11 @@
 # ucf_mod · UCF 1.7 导航/人机插件
 
 UnityCrossFire 1.7.1（Unity + IL2CPP）的文件化插件。
-形态：游戏目录的 `winhttp.dll` 代理加载器 → 加载 `ucf_mod\ucf_mod.dll`（原生 C，mingw 编译，运行时挂 il2cpp）。
+形态：游戏目录的 `winhttp.dll` 代理加载器 → 读 `UCF_MOD_DLL`，直接加载**工程端** `run\build\ucf_mod.dll`（原生 C，mingw 编译，运行时挂 il2cpp）。
 
-> **只想玩游戏 / 只想改路点？** 不用看本文件，看游戏目录里的 `ucf_mod\README.txt`（三句话讲完）。
+> **只想玩游戏 / 只想改路点？** 不用看本文件，看 `run\payload\ucf_mod\README.txt`（用户说明；游戏目录不再放它）。
 > 本文件是开发说明，给改代码的人看。
+> **2026-11-25 直读**：游戏目录不再有 `ucf_mod\`；插件/配置/日志/标记全在工程端，一键部署只铺加载器 + 本体补丁。
 > **2026-11-24 目录重构**：代码进 `app/`，数据进 `data/`，产物进 `run/`，日志留在 `log/`；
 > 控制台按页签拆开（一个页签一个文件）。迁移明细见 `docs/record/目录重构_2026-11-24.md`。
 > **2026-11-24 身份**：控制台分「用户 / 开发者」两种身份，首次启动自己选；用户只有 2 页，开发者 11 页。
@@ -17,12 +18,13 @@ UnityCrossFire 1.7.1（Unity + IL2CPP）的文件化插件。
 | | 位置 | 内容 | 版本控制 |
 |---|---|---|---|
 | **工程端** | 本目录（`06-测试\ucf_mod`）| `app/ src/ docs/ data/ run/ log/ archive/` | ✅ 进 git（run/build、log、部分派生数据除外） |
-| **部署端（运行时）** | 游戏目录 `...\UnityCrossFire1.7.1\ucf_mod\` | `ucf_mod.dll` `ucf_mod.json` `log/` `markers/` | ❌ 不进 git |
+| **部署端（运行时）** | 游戏目录 `...\UnityCrossFire1.7.1\` | 只有 `winhttp.dll` `winhttp_orig.dll` + 本体补丁 | ❌ 不进 git |
 
 ```
 ① 备份版（只读）   工程端 data\navdata\native    只有 navdata.py freeze 会写
 ② 开发版（唯一源） 工程端 data\navdata\dev       编辑器 / 插件导出 / 控制台「整理导出」「发布到成品」
-③ 游戏目录         游戏目录 ucf_mod\             只放 dll + 配置 + log\ + markers（2026-11-21 起不放数据）
+③ 游戏目录         游戏目录（不再有 ucf_mod\）   只放加载器 + 本体补丁（2026-11-25 起）
+运行时状态          工程端 run\runtime\          ucf_mod.json / ucf_navcmd.txt / deploy 清单
 ```
 
 ② 里 `final\` 是**成品**（每张图一份，没有版本），`vis\` 是导出收件箱，`packs\` 是**草稿**（每张图一份，可写沙盒），`archive\` 是归档。
@@ -43,11 +45,12 @@ UnityCrossFire 1.7.1（Unity + IL2CPP）的文件化插件。
 **日志（2026-11-23 起）**：主位置是**工程端** `log\` —— 控制台启动游戏时用环境变量 `UCF_LOG_DIR` 指过去，
 所以**游戏目录里不生成日志**。`ucf_mod.log`（超过 16 MB 自动轮转成 `ucf_mod.prev.log`，只保 1 代）、`autotest.txt`（车测结果）、
 `player_marks.txt`（玩家坐标记录）都在这里。历史日志在 `log\_历史\`。
-没走控制台启动（手动开 / 别人机器上）时，插件依次落 `<游戏>\ucf_mod\log\` → `<游戏>\ucf_mod\`，
-控制台和工作台三级都能读到。`ucf_navcmd.txt` 是控制台 ↔ 插件的命令通道，仍留在游戏目录根。
+没走控制台启动时，插件落 `%LOCALAPPDATA%\UCFMod\log` 或 `%TEMP%\ucf_mod\log`，不会写游戏目录。
+`ucf_navcmd.txt` 是控制台 ↔ 插件的命令通道，现在在 `run\runtime\`；`ucf_mod.json` 也在那里。
 
 部署端路径由 `%LOCALAPPDATA%\UCFMod\deploy.json`（控制台「部署」页选游戏时写）或 `app/tools/deploy.json`（开发机）指定，
-所有工具都通过 `app/core/ucf_paths.py` 解析：`DEPLOY` = 游戏目录，`PROJ` = 工程端，`DEV` = ② 开发版。
+所有工具都通过 `app/core/ucf_paths.py` 解析：`DEPLOY` = `<游戏>\ucf_mod`（只用于反推游戏目录，目录可以不建）、
+`RUNTIME` = 工程端 `run\runtime`，`PROJ` = 工程端，`DEV` = ② 开发版。
 
 ---
 
@@ -116,8 +119,10 @@ ucf_mod/
 │   ├── 00_模板/             脚手架：ProjectSettings + Packages + UcfBuild.cs + map.json
 │   └── 12_TestMap12龙城/    龙城：src/（GLB）+ unity/（工程）+ tools/（构建/补丁脚本）
 ├── run/                     ★ 产物与弹药
-│   ├── payload/             部署弹药库：加载器 dll、uninstall.ps1、README.txt、level9 回滚点（唯一副本）
-│   ├── gamepatch/           ★ 游戏本体补丁包：一张图一个目录 + patch.json（原版哈希 → 补丁后哈希）
+│   ├── runtime/             运行时状态：ucf_mod.json / ucf_navcmd.txt / deploy 清单（gitignore）
+│   ├── deploy_backup/       一键部署覆盖前备份（gitignore；卸载还原用）
+│   ├── payload/             部署弹药库：加载器 dll、loader_history.json、README.txt、level9 回滚点
+│   ├── gamepatch/           ★ 游戏本体补丁包：一张图一个目录 + patch.json + orig/（原版哈希 → 补丁后哈希）
 │   ├── ledger/              资产台账运行态：drift.json + 快照（gitignore）
 │   └── build/               编译产物（gitignore）
 ├── log/                     运行日志（gitignore；控制台注入 UCF_LOG_DIR）
@@ -165,17 +170,30 @@ ucf_mod/
 ## 三、构建与部署
 
 ```powershell
-# 编译（产物进 run/build/，带日期与 git 短哈希）
+# 编译（产物进 run\build\，带日期与 git 短哈希）
 .\app\tools\build.ps1
 
-# 部署到游戏目录：用控制台「部署」页（推荐，会自动选位置 + 六道闸门）
-# 命令行老路：.\app\tools\build.ps1 -Deploy   ← 读 app\tools\deploy.json
+# 可选：同步到 run\payload\ucf_mod\ucf_mod.dll（不写游戏目录）
+.\app\tools\build.ps1 -Payload
+
+# 一键部署：只铺游戏目录必须有的文件（加载器 + 启用的本体补丁）
+python app\tabs\deploy\deploy_mod.py --game-exe "D:\...\UnityCrossFire.exe"
+# 也可以：控制台「部署」页 → 一键部署
+
+# 连未启用的地图补丁一起铺（例如龙城）
+python app\tabs\deploy\deploy_mod.py --game-exe "..." --all-packs
+
+# 校验 / 卸载
+python app\tabs\deploy\deploy_mod.py --game-exe "..." --verify
+python app\tabs\deploy\deploy_mod.py --game-exe "..." --uninstall
 ```
 
-> `app\tools\deploy.json` 目前指向 `D:\BaiduNetdiskDownload\UnityCrossFire1.7.1\`（另一份游戏副本），
-> 而控制台的用户配置指向 `...\test-1\UnityCrossFire1.7.1\` —— **这是有意为之**，`-Deploy` 会装到前者。
-
-部署端 `uninstall.ps1` 只移除部署物（dll / 加载器 / 还原场景），**不会删源码**。
+**部署语义（2026-11-25 起）**：
+- 不再往游戏目录写 `ucf_mod\`（没有 dll / 配置 / README / uninstall / manifest）；
+- 游戏目录只放：`winhttp.dll`、`winhttp_orig.dll`、`run\gamepatch` 里登记的本体补丁；
+- 覆盖前备份、部署清单都在工程端 `run\deploy_backup` / `run\runtime\deploy`；
+- `patch.json` 的 `orig` 哈希对不上就拒绝，绝不盲打；卸载按清单 + 包内 `orig/` 还原。
+- 插件本体/配置/日志/标记/地图数据全在工程端；控制台启动时用 `UCF_MOD_DLL` / `UCF_MOD_DIR` 指过去。
 
 ---
 
@@ -295,7 +313,7 @@ python app/tests/test_roles.py              # 身份（用户/开发）↔ 页�
 | --- | --- |
 | `docs/guide/地图对照表.md` | ★ **唯一权威表**：11 张图的 序号/关卡/中文名/场景名（手写，脚本都读它）+ 原生 A* 数据 |
 | `docs/guide/地图数据标准_取用与核对.md` | 数据长什么样、谁写谁读、怎么核对 |
-| `docs/guide/部署总览.md` | 部署端的组成与三档启动怎么落 |
+| `docs/guide/部署总览.md` | 直读模式 + 一键部署（加载器 / 本体补丁 / 备份 / 卸载） |
 | `docs/guide/人机与路线设计.md` | **新手先看**：人机行为优先级、路线元素、各模式需要什么 |
 | `docs/guide/寻路全流程_从建图到蹲下.md` | 想懂原理：三层结构、类关系、五个阶段 |
 | `docs/guide/点图与可走面_为什么每张图不一样.md` | 一张图靠点、一张图靠面，为什么 |
@@ -303,6 +321,7 @@ python app/tests/test_roles.py              # 身份（用户/开发）↔ 页�
 | `docs/guide/游戏基础信息.md` | 模式枚举 + 阵营缩写 + 出生点容器 |
 | `docs/record/目录重构_2026-11-24.md` | 2026-11-24 目录重构：旧路径 → 新路径对照 |
 | `docs/record/身份与页签_2026-11-24.md` | 2026-11-24 身份（用户/开发）：页表、切换、迁移、自检 |
+| `docs/record/游戏目录清理_2026-11-25.md` | 2026-11-25 清游戏目录 + 直读 + 一键部署改造记录 |
 | `docs/record/逆向速查_版本偏移与地址.md` | 引擎版本 + md5、字段偏移、函数 RVA |
 | `docs/record/` | 每轮实现笔记（文件名带日期）；只作历史证据，现状看本文件 |
 | `app/workbench/web/README.md` | 工作台七页的数据来源、方向约定、3D 操作 |
@@ -312,9 +331,12 @@ python app/tests/test_roles.py              # 身份（用户/开发）↔ 页�
 
 ## 九、已知问题
 
-1. `data/navdata/dev/vis/` 里还有两份没归位的可走面（`navmesh_nm532-…`、`navmesh_nm716-…`），
-   所以 `app/tests/test_mapfolders.py` 的第 2 项红 3 条。整理收件箱即可：`python app/core/navdata.py import`（可先 `--dry`）。
-2. `app/tools/deploy.json` 指向另一份游戏副本（见「构建与部署」），命令行 `-Deploy` 与控制台部署页目标不同——有意保留。
+1. `data/navdata/dev/vis/` 里还有两份没归位的可走面（`navmesh_nm532-…`、`navmesh_nm716-…`）；
+   当前 `test_mapfolders.py` 已通过，但收件箱仍建议用 `python app/core/navdata.py import`（可先 `--dry`）整理。
+2. `app/tools/deploy.json` 只用于开发机兜底找游戏；控制台「部署」页和 `deploy_mod.py` 以用户配置/命令行
+   `--game-exe` 为准，不再用 `build.ps1 -Deploy` 往游戏目录拷 dll。
+3. 运行时配置 `run\runtime\ucf_mod.json` 和部署清单 `run\runtime\deploy\` 是机器相关文件，已 gitignore；
+   换机器/重装工程端时，第一次启动会从旧部署端 `ucf_mod.json` 自动搬一次（如果还在），否则用默认值。
 3. `src/editor.c` 里还留着 5 个 `UCF_UI_*` 环境变量（2026-11-20 排查进图闪退用的调试开关），代码自述“定位完就删”；
    删之前要真机验证一次。
 4. 2026-11-24 目录重构删掉了几份历史快照（`archive/probe_map_loader/`、`data/navdata/dev/archive/` 下的四个迁移快照），

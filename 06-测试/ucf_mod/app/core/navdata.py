@@ -8,7 +8,7 @@ r"""navdata.py —— 导航数据「三区」管理：① 备份  ② 开发  �
                                    maps\ nav\ vis\   成品数据（成品档按包读 nav\）+ 导出收件箱
                                    packs\            编辑中（可写沙盒）；做完 promote 升进 nav\
                                    archive\          处理过的导出 / 只读还原点
-  ③ 游戏目录 ucf_mod/           运行时：dll / ucf_mod.json / markers\（2026-11-21 起不放数据）
+  ③ 游戏目录                   运行时：winhttp.dll / winhttp_orig.dll + 本体补丁（2026-11-25 起不建 ucf_mod\）
   流水线：游戏导出 -> ②\vis ->（import 整理）-> ②\maps ->（pack promote）-> ②\nav -> 成品
   ---------------------------------------------------------------------------
 
@@ -1206,7 +1206,8 @@ def cmd_status(args):
     infos = [
         ("① 备份版（原生·只读）", P.NATIVE, "只读，永不编辑"),
         ("② 开发版（成品 + 收件箱 + 草稿）", P.DEV, "final 是成品（每图一份），packs 是草稿"),
-        ("③ 游戏目录（运行时·不放数据）", P.DEPLOY, "只放 dll / ucf_mod.json / markers\\"),
+        ("③ 游戏目录（运行时·不放数据）", P.game_dir_of(),
+         "只放加载器 + 本体补丁；插件 / 配置 / 日志 / 标记在工程端"),
     ]
     for title, root, tip in infos:
         s = summary(root)

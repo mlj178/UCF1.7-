@@ -77,7 +77,10 @@ def main():
         pl = read(os.path.join("src", "plugin.c"))
         check("log: dir=" in pl, "插件启动第一行写明日志落点（env/fallback）")
         proxy = read(os.path.join("src", "proxy", "proxy.c"))
-        check('MOD_DIR "log' in proxy, "加载器失败日志也进日志目录")
+        check("UCF_MOD_DLL" in proxy, "加载器只认控制台注入的 UCF_MOD_DLL")
+        check("GetTempPathA" in proxy and "ucf_mod_proxy.log" in proxy,
+              "加载器载入失败只写 %TEMP%，不碰游戏目录")
+        check("MOD_DIR" not in proxy, "加载器不再引用游戏目录 ucf_mod\\")
 
         print("== 2) 控制台：三级查找 ==")
         # 2026-11-24 目录重构：常量在 app/ui/env.py，find_log 在 app/ui/util.py

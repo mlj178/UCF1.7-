@@ -44,7 +44,7 @@ GROUPS = [
         ("vis_nodes", "路点 / 连线（PointNode / Connection）", "浅蓝点 = 普通路点，橙点 = 带标签，红点 = 禁走点；蓝线 = 连线", True),
         ("vis_crouch", "蹲守点（Bot_CrouchPos）", "红色实心小方块（两阵营同色）", True),
         ("vis_guard", "守卫区 / 守卫点（Bot_GuardArea / Bot_GuardPos）", "紫色线框区 + 橙色实心点", True),
-        ("vis_nano", "幽灵守区 / 幽灵守点（Bot_NanoGuardArea / Bot_NanoGuardPos）", "绿色线框区 + 青色实心点", True),
+        ("vis_nano", "守卫区 / 守卫点（Bot_NanoGuardArea / Bot_NanoGuardPos）", "绿色线框区 + 青色实心点", True),
         ("vis_born", "出生点（SpawnPoint）", "潜伏者(蓝)/保卫者(红)/中立点(灰)；个人竞技用中立点、全员敌对；生化/剑客与补给箱混布，叠色偏粉紫", True),
         ("vis_supply", "补给箱（SupplyBox / RedBox / BlueBox）", "金/粉/青实心高柱 = 补给/红/蓝", True),
         ("vis_jump", "跳点（Bot_JumpLink）", "黄色连线（没有点标记）", True),
@@ -58,7 +58,7 @@ GROUPS = [
         ("export_enabled", "启用导出", "总开关；关掉后下面勾选全部不生效，Ctrl+E 不读也不写", True),
         ("export_nodes", "路点 / 连线", "JSON 主体；关掉后只导特征点（文件名 f<特征数>，不写 _seen 去重）", True),
         ("export_crouch", "人类蹲守点", "读人类蹲守点；关掉后 JSON 里 crouch=0", True),
-        ("export_area", "幽灵守区 / 守点", "读幽灵守区与幽灵守点；关掉后 nano_area/nano_pos=0", True),
+        ("export_area", "守卫区 / 守卫点", "读守卫区与守卫点；关掉后 nano_area/nano_pos=0", True),
         ("export_guard", "守卫区 / 守卫点", "读守卫区与守卫点；关掉后 guard=0", True),
         ("export_spawn", "出生点 / 补给箱", "读出生点与补给箱；关掉后 spawn=0", True),
         ("export_tags", "跳点 / 标签区", "读跳点与标签区；关掉后 jump/tag=0", True),
@@ -145,7 +145,7 @@ HUD_KEYS = (
 
 
 HUD_NOTES = (
-    "· 游戏内数据面板和文字标签已删除；节点/守区等计数看 log\\ucf_mod.log 里的 [vis] 行，"
+    "· 游戏内数据面板和文字标签已删除；节点/守卫区等计数看 log\\ucf_mod.log 里的 [vis] 行，"
     "或控制台「上次运行」日志框。"
 )
 

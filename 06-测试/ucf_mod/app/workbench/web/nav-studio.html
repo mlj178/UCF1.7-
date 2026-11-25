@@ -102,7 +102,7 @@
               <div class="ch"><b>图层 / 路点种类</b><span class="sub" id="layerMode">点眼睛显隐</span><div class="right"><button class="btn sm" id="btnShowAllLayers" type="button">显示全部</button><span class="kk" id="layerSum">—</span></div></div>
               <div class="tlist" id="layerList"></div>
               <div class="thints">
-                <div><b>这个游戏里</b>：路点 = PointNode；蹲守 = Bot_CrouchPos；跳跃 = Bot_JumpLink；守区 = Bot_NanoGuardArea。</div>
+                <div><b>这个游戏里</b>：路点 = PointNode；蹲守 = Bot_CrouchPos；跳跃 = Bot_JumpLink；守卫区 = Bot_NanoGuardArea。</div>
                 <div>按当前模式只列生效图层；实际数据里没有的层显示 0，可用「显示全部」查看其余。</div>
                 <div id="layerHint">网页只读；加点 / 连线 / 保存都在游戏内或 <b>navdata.py</b>。</div>
               </div>
@@ -185,16 +185,16 @@
         <section class="page" data-page="zones">
           <div class="wgrid">
             <div class="card">
-              <div class="ch"><b>区域 / 守点</b><span class="sub" id="zoneSub">—</span><div class="right"><span class="chip">只读</span></div></div>
+              <div class="ch"><b>区域 / 守卫点</b><span class="sub" id="zoneSub">—</span><div class="right"><span class="chip">只读</span></div></div>
               <div class="listbody" id="zoneList"></div>
-              <div class="listnote">能用的守区是 <b>Bot_NanoGuardArea</b> + <b>Bot_NanoGuardPos</b>；<b>Bot_GuardArea</b> / <b>Bot_GuardPos</b> 是没人用的旧类。插件没导出守区半径，所以这里只画守点包围圈，不编半径。</div>
+              <div class="listnote">能用的守卫区是 <b>Bot_NanoGuardArea</b> + <b>Bot_NanoGuardPos</b>；<b>Bot_GuardArea</b> / <b>Bot_GuardPos</b> 是没人用的旧类。插件没导出守卫区半径，所以这里只画守卫点包围圈，不编半径。</div>
             </div>
             <div class="card diagramcard">
               <div class="ch"><b id="zoneTitle">区域预览</b><span class="sub" id="zoneMeta">—</span><div class="right"><span class="chip" id="zoneMode">浏览</span></div></div>
               <div class="diagrambody">
                 <canvas id="cvZone"></canvas>
                 <div class="mapbadge tl" id="mbZone">—</div>
-                <div class="mapbadge bl">● 守点　○ 守区中心　· 顶点可看不可改</div>
+                <div class="mapbadge bl">● 守卫点　○ 守卫区中心　· 顶点可看不可改</div>
               </div>
               <div class="dtimeline" style="flex:0 0 58px">
                 <div class="dtlhead"><b>区域规则</b><span class="r" id="zoneRule">—</span></div>

@@ -1335,8 +1335,8 @@ def collect_packs():
 
 
 def collect_config():
-    """③ 部署端的 ucf_mod.json：自动铺设三个开关和当前测试包。"""
-    p = os.path.join(DEPLOY, "ucf_mod.json")
+    r"""工程端 run\runtime\ucf_mod.json：自动铺设三个开关和当前测试包。"""
+    p = P.CFG_PATH
     out = {"path": p, "exists": os.path.isfile(p), "enabled": None,
            "scene": "", "label": "", "features": {}, "pack": {}}
     if not out["exists"]:

@@ -746,7 +746,7 @@ static void act_crouch(void) {
   if (hname2 && i_gchandle_free) i_gchandle_free(hname2);
 }
 
-/* ---- 动作 3：幽灵守卫区 ---- */
+/* ---- 动作 3：守卫区 ---- */
 static void act_guard(void) {
   P f = 0, list = 0;
   int madeA = 0, k, existing = -1;

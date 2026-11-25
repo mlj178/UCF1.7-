@@ -30,7 +30,7 @@ while (-not (Test-Path -LiteralPath (Join-Path $proj '.ucfroot')) -and (Split-Pa
 }
 
 if (-not $Ref)    { $Ref = Join-Path $proj 'run\payload\winhttp.dll' }
-if (-not $OutDir) { $OutDir = Join-Path $proj 'build\proxy' }
+if (-not $OutDir) { $OutDir = Join-Path $proj 'run\build\proxy' }
 if (-not (Test-Path -LiteralPath $Ref)) { throw "参考 DLL 不存在：$Ref" }
 
 function Rva2Off([uint32]$rva) {

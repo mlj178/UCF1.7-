@@ -34,7 +34,7 @@ AUTOTEST_TAB = os.path.join(PROJ, "app", "tabs", "autotest.py")
 OVERVIEW_TAB = os.path.join(PROJ, "app", "tabs", "overview.py")
 KIT = os.path.join(PROJ, "app", "ui", "kit.py")
 
-# 2026-11-17：控制台删掉「建图」页（自动铺路点 / 自动补蹲守点 / 幽灵守卫区）。
+# 2026-11-17：控制台删掉「建图」页（自动铺路点 / 自动补蹲守点 / 守卫区）。
 # 2026-11-18：用户要求自动铺设回控制台，落在「手动」页（不再是 RETIRED）。
 # 2026-11-19：用户要求删除「手动」页的自动铺设整块，回到 RETIRED（C 侧键保留，默认仍为开）。
 # 2026-11-19：用户要求删除 editor（允许游戏内编辑）；C 侧仍按默认 1 运行。

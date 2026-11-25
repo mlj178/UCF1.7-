@@ -209,7 +209,13 @@ BOOL APIENTRY DllMain(HMODULE h, DWORD reason, LPVOID reserved) {
     }
     char path[MAX_PATH]; GetModuleFileNameA(h, path, MAX_PATH);
     char* p = strrchr(path, '\\'); if (p) *p = 0;
-    strcpy(gDir, path);
+    /* 2026-11-25：开发直读时 DLL 在工程 run\build，但配置/数据根仍应指向
+     * 部署端 <游戏目录>\ucf_mod；控制台启动时注入 UCF_MOD_DIR。没注入才用 DLL 目录。 */
+    {
+      char over[MAX_PATH];
+      DWORD n = GetEnvironmentVariableA("UCF_MOD_DIR", over, sizeof over);
+      strcpy(gDir, (n > 0 && over[0]) ? over : path);
+    }
     /* 2026-11-23：日志主位置在工程端（控制台注入 UCF_LOG_DIR）；没注入就落
      * <modDir>\log\；再不行退回 <modDir> —— 三步都不许静默丢日志。 */
     ucf_log_file(gLog, sizeof gLog, gDir, "ucf_mod.log");

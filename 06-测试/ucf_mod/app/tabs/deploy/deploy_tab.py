@@ -96,9 +96,9 @@ class DeployTab:
 
         ctk.CTkLabel(
             body,
-            text="把插件装进游戏目录：选一次 UnityCrossFire.exe，点「一键部署」。\n"
-                 "会写入 winhttp.dll / winhttp_orig.dll / ucf_mod\\（dll、README、uninstall.ps1），"
-                 "并生成部署清单；覆盖前先备份，卸载能还原。直接双击游戏 exe 是原版，必须用控制台「开始游戏」。",
+            text="只把游戏目录必须有的文件铺过去：加载器（winhttp.dll / winhttp_orig.dll）+ 游戏本体补丁。\n"
+                 "插件本体、配置、日志、路点、地图数据都在工程端 run\\ / data\\ / log\\，不写游戏目录；"
+                 "部署清单和覆盖前备份也在工程端，卸载可还原。直接双击游戏 exe 是原版，必须用控制台「开始游戏」。",
             font=FONT_S, text_color="#9aa0a6", anchor="w", justify="left", wraplength=640,
         ).pack(fill="x", padx=12, pady=(8, 4))
 
@@ -414,22 +414,16 @@ class DeployTab:
     def _status(self):
         rows = []
         if not self.steps:
-            return [("缺失", "payload", "payload 目录不完整，无法部署")]
+            return [("缺失", "payload", "payload / gamepatch 目录不完整，无法部署")]
         for s in self.steps:
-            dst = s["dst"]
-            rel = str(dst.relative_to(self.game)).replace(os.sep, "/")
-            if not dst.is_file():
-                rows.append(("缺失", rel, s["role"]))
-            elif D.sha256_file(dst) != s["sha256"]:
-                rows.append(("不一致", rel, s["role"]))
-            else:
-                rows.append(("一致", rel, s["role"]))
+            rows.append((D.classify_item(self.game, s), s["rel"], s["role"]))
         return rows
 
     def _render_rows(self, rows):
         for w in self.rows.winfo_children():
             w.destroy()
-        color = {"一致": "#2f9e44", "缺失": "#c92a2a", "不一致": "#d6b676"}
+        color = {"一致": "#2f9e44", "原版": "#d6b676", "新增": "#d6b676",
+                 "缺失": "#c92a2a", "冲突": "#c92a2a", "已禁用": "#6b7280"}
         for state, name, role in rows:
             r = ctk.CTkFrame(self.rows, fg_color="transparent")
             r.pack(fill="x", pady=1)
@@ -454,7 +448,7 @@ class DeployTab:
     def open_folder(self):
         if not self.game:
             return
-        target = self.game / "ucf_mod" if (self.game / "ucf_mod").is_dir() else self.game
+        target = self.game
         try:
             os.startfile(str(target))
         except Exception as exc:

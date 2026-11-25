@@ -1,12 +1,14 @@
 ﻿<#
 .SYNOPSIS
-    编译 ucf_mod.dll（可选部署到游戏目录）
+    编译 ucf_mod.dll（可选同步到 run\payload 部署弹药库）
 
 .EXAMPLE
-    .\tools\build.ps1              # 只编译，产物进 build/
-    .\tools\build.ps1 -Deploy      # 编译并部署（会先关游戏、备份旧 dll）
+    .\app\tools\build.ps1              # 只编译，产物进 run\build\
+    .\app\tools\build.ps1 -Payload     # 编译并更新 run\payload\ucf_mod\ucf_mod.dll
+    .\app\tools\build.ps1 -Deploy      # 旧参数，等同 -Payload（不再写游戏目录）
 #>
 param(
+    [switch]$Payload,
     [switch]$Deploy,
     [string]$Gcc = 'D:\Program Files\mingw32\bin\gcc.exe'
 )
@@ -71,24 +73,14 @@ $meta = [ordered]@{
 $meta | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $build 'build.json') -Encoding UTF8
 Copy-Item -LiteralPath $out -Destination (Join-Path $build 'ucf_mod.dll') -Force
 
-# ---- 部署 ----
-if ($Deploy) {
-    $cfg = Join-Path $tools 'deploy.json'
-    if (-not (Test-Path -LiteralPath $cfg)) { throw "缺少 tools/deploy.json（复制 deploy.json.example 改成实际路径）" }
-    $deployDir = (Get-Content -LiteralPath $cfg -Raw | ConvertFrom-Json).deploy
-    if (-not (Test-Path -LiteralPath $deployDir)) { throw "部署端不存在：$deployDir" }
-
-    $proc = Get-Process UnityCrossFire -ErrorAction SilentlyContinue
-    if ($proc) { "游戏在运行，先关闭..."; $proc | Stop-Process -Force; Start-Sleep -Seconds 2 }
-
-    $target = Join-Path $deployDir 'ucf_mod.dll'
-    if (Test-Path -LiteralPath $target) {
-        $bak = 'ucf_mod.dll.deployed_' + (Get-Date -Format 'yyyyMMdd_HHmmss')
-        Copy-Item -LiteralPath $target -Destination (Join-Path $deployDir $bak) -Force
-        "旧 dll 备份: $bak"
-    }
-    Copy-Item -LiteralPath $out -Destination $target -Force
-    $live = Get-Item -LiteralPath $target
-    "已部署   : $($live.Length) B  sha256=$((Get-FileHash -LiteralPath $target -Algorithm SHA256).Hash.Substring(0,16))"
-    "别忘了同步更新 STATUS.md 里的 DLL 哈希与构建时间。"
+# ---- 同步到 payload（可选；不再往任何游戏目录写 dll）----
+if ($Payload -or $Deploy) {
+    if ($Deploy -and -not $Payload) { "注意：-Deploy 已改为只更新 payload，不再写游戏目录。" }
+    $pdir = Join-Path $root 'run\payload\ucf_mod'
+    New-Item -ItemType Directory -Force -Path $pdir | Out-Null
+    Copy-Item -LiteralPath $out -Destination (Join-Path $pdir 'ucf_mod.dll') -Force
+    $live = Get-Item -LiteralPath (Join-Path $pdir 'ucf_mod.dll')
+    "已更新 payload: $($live.FullName)"
+    "  $($live.Length) B  sha256=$((Get-FileHash -LiteralPath $live.FullName -Algorithm SHA256).Hash.Substring(0,16))…"
+    "游戏目录不写 dll；控制台启动时用 UCF_MOD_DLL 直接加载 run\build\ucf_mod.dll。"
 }

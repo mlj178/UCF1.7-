@@ -94,7 +94,7 @@ def load_scene_counts():
     r"""{level: {jump, crouch, guard, area, tag}} —— 读《地图对照表》第二张表。
 
     地图 JSON 是运行期导出（只有 PointGraph + spawn/tag），
-    守点/聚集区/蹲点只在场景组件统计里，所以页签显示以这张表为准。
+    守卫点/守卫区/蹲点只在场景组件统计里，所以页签显示以这张表为准。
     """
     out = {}
     try:
