@@ -81,6 +81,65 @@ def build():
     return samples, events
 
 
+def build_two_close_jumps():
+    r"""两跳只隔 0.5 m：第 2 跳的起点紧挨第 1 跳的落点。
+
+    2026-11-26 之前：起点会被吸到落点上，3D 2.73 m 变成 3.16 m（> 3.0）被丢掉，
+    两跳只剩一跳。现在两个跳点原样保留，两跳都要在。
+    """
+    samples, events = [], []
+    t = walk(samples, 0.0, 0.0, 9.0, 0.0)
+    # 第 1 跳：a1=(10,0,0) -> b1=(12.7,1.2,0.4)，3D 2.97
+    n = 10
+    for i in range(n):
+        u = i / float(n - 1)
+        samples.append(s(t + i * 0.033, 10.0 + 2.7 * u,
+                         1.2 * u + 0.3 * (1 - abs(2 * u - 1)), 0.4 * u,
+                         g=0, vy=10.0 if i == 0 else 4.0))
+    t += n * 0.033
+    events.append({"t": round(t, 3), "ev": "jump",
+                   "a": [10.0, 0.0, 0.0], "b": [12.7, 1.2, 0.4],
+                   "h": 2.73, "rise": 1.2, "air": 0.33, "v0": 10.0, "run": 9.0,
+                   "kind": "mount"})
+    # 落点走 0.5 m 到下一跳起点 a2=(13.2,1.2,0.5)
+    for i in range(6):
+        u = i / 5.0
+        samples.append(s(t + i * 0.033, 12.7 + 0.5 * u, 1.2, 0.4 + 0.1 * u))
+    t += 6 * 0.033
+    # 第 2 跳：a2 -> b2=(15.4,2.8,0.75)，3D 2.73
+    for i in range(10):
+        u = i / 9.0
+        samples.append(s(t + i * 0.033, 13.2 + 2.2 * u,
+                         1.2 + 1.6 * u + 0.3 * (1 - abs(2 * u - 1)), 0.5 + 0.25 * u,
+                         g=0, vy=10.0 if i == 0 else 4.0))
+    t += 10 * 0.033
+    events.append({"t": round(t, 3), "ev": "jump",
+                   "a": [13.2, 1.2, 0.5], "b": [15.4, 2.8, 0.75],
+                   "h": 2.22, "rise": 1.6, "air": 0.33, "v0": 10.0, "run": 4.0,
+                   "kind": "mount"})
+    walk(samples, t, 15.4, 24.0, 2.8)
+    return samples, events
+
+
+def build_long_jump():
+    r"""一跳 5.9 m：默认（上限 5.5）丢并报断口；打开「超长跳也建链」后要建上。"""
+    samples, events = [], []
+    t = walk(samples, 0.0, 0.0, 20.0, 0.0)
+    n = 18
+    for i in range(n):
+        u = i / float(n - 1)
+        samples.append(s(t + i * 0.033, 20.0 + 5.7 * u,
+                         1.2 * u + 0.6 * (1 - abs(2 * u - 1)), 1.0 * u,
+                         g=0, vy=10.0 if i == 0 else 4.0))
+    t += n * 0.033
+    events.append({"t": round(t, 3), "ev": "jump",
+                   "a": [20.0, 0.0, 0.0], "b": [25.7, 1.2, 1.0],
+                   "h": 5.79, "rise": 1.2, "air": 0.59, "v0": 10.0, "run": 9.0,
+                   "kind": "gap"})
+    walk(samples, t, 25.7, 34.0, 1.2)
+    return samples, events
+
+
 def main():
     samples, events = build()
     res = ucf_rec.analyse(samples, step=4.0, events=events)
@@ -127,11 +186,13 @@ def main():
     assert not r3["drops"], r3["drops"]
     print("switch off jump / drop -> ok")
 
-    # 采样间距 2.5 / 4 / 6 m 节点数随之间隔变化
+    # 采样间距 1.5 / 2.5 / 4 / 6 m 节点数随之间隔变化
+    assert ucf_rec.STEP_OPTIONS[0] == 1.5, ucf_rec.STEP_OPTIONS
+    assert min(ucf_rec.STEP_OPTIONS) >= 1.2, "比 MERGE_NEAR(1.05) 还密会并点"
     counts = [ucf_rec.analyse(samples, step=st, events=events)["nodes"]
-              for st in (2.5, 4.0, 6.0)]
-    print("step 2.5 / 4 / 6 -> nodes", counts)
-    assert counts[0] >= counts[1] >= counts[2], counts
+              for st in (1.5, 2.5, 4.0, 6.0)]
+    print("step 1.5 / 2.5 / 4 / 6 -> nodes", counts)
+    assert counts[0] >= counts[1] >= counts[2] >= counts[3], counts
 
     # 没有事件时（旧文件兜底）也不能崩
     r4 = ucf_rec.analyse(samples, step=4.0)
@@ -144,6 +205,37 @@ def main():
     r5 = ucf_rec.analyse(legacy, step=4.0)
     assert r5["ok"], r5.get("why")
     print("legacy v1 rows -> nodes=%d" % r5["nodes"])
+
+    # 跳点保护：两跳只隔 0.5 m 时都要保留（以前第 2 跳会被吸超 3 m 丢掉）
+    s2, e2 = build_two_close_jumps()
+    r6 = ucf_rec.analyse(s2, step=1.5, events=e2)
+    l3 = sorted(round(j["l3"], 2) for j in r6["jumps"])
+    print("two close jumps -> links %d %s" % (len(r6["jumps"]), l3))
+    assert len(r6["jumps"]) == 2, r6["issues"]
+    assert l3 == [2.73, 2.97] or (abs(l3[0] - 2.73) < 0.12 and abs(l3[1] - 2.97) < 0.12), l3
+    starts = [tuple(round(v, 2) for v in j["a"]) for j in r6["jumps"]]
+    assert (13.2, 1.2, 0.5) in starts, "第 2 跳起点被吸走了：%s" % (starts,)
+    txt = "\n".join(ucf_rec.save_lines(r6))
+    assert txt.count("jump add") == 2, txt
+    assert not ucf_rec.dedupe_lines(ucf_rec.save_lines(r6), txt), "两跳不该被去重掉"
+
+    # 断口：被拒的 6 m 跳要报出来，不能静默
+    assert len(res["gaps"]) >= 1, res["gaps"]
+    # 连通性：覆盖率 100%，没有孤立点
+    assert res["coverage"] >= 95.0, res["coverage"]
+    assert res["orphans"] == [], res["orphans"]
+
+    # 超长跳开关：5.5 m 默认丢（上限 5.0）、报断口；打开后建链
+    s3, e3 = build_long_jump()
+    r7 = ucf_rec.analyse(s3, step=1.5, events=e3)
+    print("long jump default -> links %d gaps %d" % (len(r7["jumps"]), len(r7["gaps"])))
+    assert not r7["jumps"] and len(r7["gaps"]) == 1, (r7["jumps"], r7["gaps"])
+    assert any("断开" in i for i in r7["issues"]), r7["issues"]
+    sw2 = dict(ucf_rec.SW_DEFAULT)
+    sw2["long_jump"] = True
+    r8 = ucf_rec.analyse(s3, step=1.5, events=e3, sw=sw2)
+    print("long jump switch on -> links %d gaps %d" % (len(r8["jumps"]), len(r8["gaps"])))
+    assert len(r8["jumps"]) == 1 and not r8["gaps"], (r8["jumps"], r8["gaps"])
 
     print("OK: ucf_rec 自检通过")
     return 0

@@ -106,7 +106,8 @@ class WaypointTab:
         self.page_final = ctk.CTkFrame(self.page_holder, fg_color="transparent")
         self.page_is_edit = True
         self.build_edit_page(self.page_edit)
-        self.build_final_page(self.page_final)
+        # 2026-11-26 启动加速：「成品」页（含对比表，约 1 s）等第一次切过去再建
+        self._final_built = False
         self.show_page("编辑中" if self.pack_on.get() else "成品")
 
         # 游戏内编辑：两档共用（成品档里菜单照样能开，只是改动存不进去）
@@ -137,8 +138,17 @@ class WaypointTab:
 
     # ---- 「人机路点」页内：编辑中 / 成品 两页 ------------------------------
     # 页内按钮条在 ui/kit.py 的 build_sub_tabs()（2026-11-24 分组时提到共用层）。
+    def _ensure_final(self):
+        r"""「成品」页按需建：第一次切过去才建（约 1 s，含对比表）。"""
+        if getattr(self, "_final_built", False):
+            return
+        self._final_built = True
+        self.build_final_page(self.page_final)
+
     def show_page(self, which):
         r"""切换「编辑中 / 成品」整页：两档内容各占一块，不再共用一个下拉。"""
+        if not str(which).startswith("编辑中"):
+            self._ensure_final()
         self.page_is_edit = str(which).startswith("编辑中")
         if self.page_is_edit:
             self.page_final.pack_forget()
@@ -300,6 +310,7 @@ class WaypointTab:
                      font=FONT_S, text_color="#9aa0a6").pack(side="left", padx=(10, 0))
 
     def build_final_page(self, page):
+        self._final_built = True
         r"""「成品」页：当前图已发布状态 + 草稿↔成品对比（没有版本下拉）。"""
         frames, show = self.build_sub_tabs(page, ["成品", "草稿 ↔ 成品"])
         self._final_tab = "成品"

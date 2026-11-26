@@ -32,7 +32,14 @@ import math
 
 # ---- 阈值（改这里；控制台「录制」页的说明文字按这几行写）----
 LINK_MIN = 1.5        # 游戏跳链最短 3D 长度（再短人机就「原地跳」）
-LINK_MAX = 3.0        # 游戏跳链最长 3D 长度（原生 41 条最长 2.91 m）
+# 游戏跳链最长 3D 长度。
+# 2026-11-26 实测（风暴 10 Hz 人机录制）：人机在 9 m/s 助跑下真的跨过了 5.22 m 的链，
+# 一路连跳到 13.99；原生 41 条最长 2.91 m 只是作者摆得短，不是引擎上限。
+LINK_MAX = 5.5
+LINK_MAX_LONG = 6.0   # 「超长跳也建链」打开时的上限：只给实测用，不确定人机真能跳
+# 连续两跳合并（落点 = 下一起点）后的上限：固定 3.0，不跟着 LINK_MAX 放宽。
+# 理由：合并会把「两次 2.5 m 的小跳」接成一条 4~5 m 的链，人机只会跳一次 —— 危险。
+MERGE_MAX_L3 = 3.0
 RISE_TYP = (1.2, 2.6)  # 常规跳高（实测 1.2~2.3；游戏 JumpPower=10.5 决定约 1.9 m）
 DROP_MIN = 2.0        # down 事件落点低多少算「落下」
 BRANCH_NEAR = 2.5     # 2.5 m 内第二次经过 = 岔路候选
@@ -57,10 +64,27 @@ SWITCHES = (
      "2.5 m 内第二次经过 -> 标黄待确认"),
     ("static", "静止提示",
      "2 s 没位移 -> 复盘里写一句，不加节点"),
+    ("long_jump", "超长跳也建链（实测用）",
+     "5.5~6 m 的跳也生成 jump；人机能不能跳过去得进游戏看，默认关"),
+    ("need_speed", "跳链写助跑速度（实测用）",
+     "needSpeed 写成录到的助跑速度（run），而不是 0；人机会不会因此先加速要进游戏验证"),
 )
 SW_DEFAULT = {key: True for key, _l, _d in SWITCHES}
-STEP_OPTIONS = (2.5, 4.0, 6.0)
+# 「超长跳也建链」是实测开关，默认关：3 m 以上能不能跳过去还没验证过
+SW_DEFAULT["long_jump"] = False
+SW_DEFAULT["need_speed"] = False
+# 采样间距：1.5 给窄道 / 拐角多的图，4 是默认。
+# 2026-11-26 实测（风暴 50.9 m 轨迹）：2.5 m 时折线偏离真实脚步 p90 9 cm / 最大 40 cm，
+# 1.5 m 时降到 p90 4.5 cm / 最大 25 cm，节点数 25 -> 35；再往下（<=1.05 m）会被
+# MERGE_NEAR 去重半径吃成近点对（1.0 m 时 45 对），跳链端点也会被并到走路节点上，
+# 所以 1.5 是给出的最细档，不要轻易再降。
+STEP_OPTIONS = (1.5, 2.5, 4.0, 6.0)
 STEP_DEFAULT = 4.0
+# 2026-11-26：路点不再「每 step 米放一个」，改成「形状误差超过 DP_EPS 才放点」，
+# 再用 step 当最大段长上限（3D 距离）。实测 09:07 风暴：46 点 / 最大偏差 0.25 m
+# → DP ε=0.10 + 2.5 m 上限是 34 点 / 最大偏差 0.088 m。
+DP_EPS = 0.10
+COVER_R = 2.5     # 轨迹覆盖率：走路的采样点到最近节点 <= 这个距离算「覆盖到了」
 
 KIND_CN = {"gap": "跨缺口", "mount": "跳上高台", "down": "跳下", "hop": "原地小跳"}
 
@@ -96,6 +120,8 @@ def parse_lines(lines):
         except ValueError:
             continue
         if not isinstance(d, dict) or "x" not in d:
+            continue
+        if d.get("k") == "b":          # 人机样本：走 parse_bots，不混进玩家轨迹
             continue
         try:
             out.append({
@@ -155,6 +181,38 @@ def parse_rec(lines):
     r"""一次读全套：-> (样本, 跳事件)。控制台录制页用这个。"""
     lines = list(lines)
     return parse_lines(lines), parse_events(lines)
+
+
+def parse_bots(lines):
+    r"""人机样本（k="b"）-> 按 id 分组的列表。
+
+    2026-11-26 起录制可以选「人机 / 全部」，每台 10 Hz 一行：
+    t / id / xyz / g / vy / spd / j(空中) / en(有敌人) / act(行为名|分隔) / tgt(闲逛目标)。
+    """
+    out = {}
+    for raw in lines or []:
+        s = (raw or "").strip()
+        if not s or s[0] != "{" or '"k":"b"' not in s:
+            continue
+        try:
+            d = json.loads(s)
+        except ValueError:
+            continue
+        try:
+            bid = str(d.get("id") or "?")
+            out.setdefault(bid, []).append({
+                "t": float(d.get("t") or 0.0),
+                "x": float(d["x"]), "y": float(d["y"]), "z": float(d["z"]),
+                "g": int(d.get("g", -1)), "vy": float(d.get("vy") or 0.0),
+                "spd": float(d.get("spd") or 0.0), "j": int(d.get("j") or 0),
+                "en": int(d.get("en") or 0), "act": str(d.get("act") or ""),
+                "tgt": list(d.get("tgt") or (0, 0, 0)),
+            })
+        except (TypeError, ValueError, KeyError):
+            continue
+    for v in out.values():
+        v.sort(key=lambda s: s["t"])
+    return out
 
 
 def _grounded(s):
@@ -295,52 +353,142 @@ def _corner_index(pts):
     return out
 
 
+def _seg_dev(p, a, b):
+    r"""点到 3D 线段 ab 的距离（用来判断这段直线能不能代表轨迹）。"""
+    ax, ay, az = a
+    dx, dy, dz = b[0] - ax, b[1] - ay, b[2] - az
+    L2 = dx * dx + dy * dy + dz * dz
+    if L2 < 1e-12:
+        return dist3(p, a)
+    t = ((p[0] - ax) * dx + (p[1] - ay) * dy + (p[2] - az) * dz) / L2
+    t = max(0.0, min(1.0, t))
+    return dist3(p, (ax + dx * t, ay + dy * t, az + dz * t))
+
+
+def _dp_simplify(points, eps=DP_EPS):
+    r"""Douglas–Peucker：折线偏离真实轨迹超过 eps 才保留拐点。
+
+    为什么不用「每 N 米放一个」：距离法在缓弯处切角（实测最大 0.25 m）、
+    在斜坡上会把 3D 间距拉长；误差上限也没法保证。
+    DP 的是「离这条直线最远的点」，天然把拐点留在节点上，
+    直线段一个多余的点都不放，误差有硬上限。
+    """
+    n = len(points)
+    if n <= 2:
+        return list(points)
+    keep = {0, n - 1}
+    stack = [(0, n - 1)]
+    while stack:
+        i, j = stack.pop()
+        if j <= i + 1:
+            continue
+        a, b = points[i], points[j]
+        best, bi = -1.0, -1
+        for k in range(i + 1, j):
+            d = _seg_dev(points[k], a, b)
+            if d > best:
+                best, bi = d, k
+        if best > eps:
+            keep.add(bi)
+            stack.append((i, bi))
+            stack.append((bi, j))
+    return [points[k] for k in sorted(keep)]
+
+
+def _cap_segments(nodes, maxlen):
+    r"""把长于 maxlen 的段等分（用人机侧希望每段都别太长）。按 3D 长度算。"""
+    if not nodes or maxlen <= 0:
+        return list(nodes)
+    out = [nodes[0]]
+    for p in nodes[1:]:
+        a = out[-1]
+        d = dist3(a, p)
+        if d > maxlen:
+            k = int(math.ceil(d / maxlen))
+            for m in range(1, k):
+                t = m / float(k)
+                out.append((a[0] + (p[0] - a[0]) * t,
+                            a[1] + (p[1] - a[1]) * t,
+                            a[2] + (p[2] - a[2]) * t))
+        out.append(p)
+    return out
+
+
 def _piece(points, step):
-    r"""一段连续走路 -> 节点链 + 双向边。"""
+    r"""一段连续走路 -> 节点链 + 双向边（DP 形状误差 + 最大段长）。"""
     if len(points) < 2:
         return {"nodes": list(points), "walk": [], "from": 0, "to": 0}
-    forced = {0, len(points) - 1}
-    forced |= {i for i in _corner_index(points) if 0 < i < len(points) - 1}
-    nodes = _resample(points, max(0.5, float(step)), forced)
-    walk = [(i, i + 1) for i in range(len(nodes) - 1)
-            if dist2(nodes[i], nodes[i + 1]) >= 0.30]
-    return {"nodes": nodes, "walk": walk, "from": 0, "to": 0}
+    nodes = _dp_simplify(points, DP_EPS)
+    nodes = _cap_segments(nodes, max(0.5, float(step)))
+    out = [nodes[0]]
+    for p in nodes[1:]:
+        if dist3(out[-1], p) < 0.30:      # 极近的点会让人机来回转头
+            continue
+        out.append(p)
+    walk = [(i, i + 1) for i in range(len(out) - 1)
+            if dist2(out[i], out[i + 1]) >= 0.30]
+    return {"nodes": out, "walk": walk, "from": 0, "to": 0}
 
 
-def _merge_nodes(pieces, links, drops, near=MERGE_NEAR, max_dy=0.5):
+def _merge_nodes(pieces, links, drops, near=MERGE_NEAR, max_dy=0.5, lmax=LINK_MAX):
     r"""把靠得太近的节点合并成一个。
 
     为什么必须合并：游戏的跳链是**按「最近的路点」吸附**的（吸附半径 1 m），
     1 m 内有两个路点时，路径排到哪个、跳链挂在哪个，就可能不是同一个 ——
     人机表现为「走到跳点来回转头、不跳」。录制里「落点」和「下一跳起点」
     往往只隔 0.5~0.7 m，就是最典型的例子。
+
+    2026-11-26 跳点保护：人机真正的起跳点常常离最近的路点 0.4~0.7 m，
+    以前会被吸过去 —— 3.00 m 的跳吸成 3.50 m、2.82 m 吸成 3.29 m，
+    超过游戏 1.5~3.0 m 的窗口就整条丢掉（08:48 风暴：4 跳只活了 1 条）。
+    现在的规则：
+      * 每一个「录到时本来就合格」的跳，两端坐标原样保留（不吸）；
+      * 附近的走路节点反过来并到精确跳点上（路径仍然经过它）；
+      * 两个精确跳点互相靠得近时不合并，留给 analyse 报一句警告。
+    不合格的跳（例如 4.16 m）不保护，照旧合并 / 丢弃。
     """
-    kept = []
-
-    def find(p):
+    def find_in(kept, p):
+        best, bd = None, near
         for q in kept:
-            if abs(q[1] - p[1]) <= max_dy and dist3(q, p) <= near:
-                return q
-        return None
+            if abs(q[1] - p[1]) > max_dy:
+                continue
+            d = dist3(q, p)
+            if d <= bd:
+                bd, best = d, q
+        return best
 
-    new_pieces = []
-    for piece in pieces:
-        nodes = []
-        for p in piece["nodes"]:
-            q = find(p)
-            if q is None:
-                kept.append(p)
-                nodes.append(p)
-            elif not nodes or nodes[-1] is not q:
-                nodes.append(q)
-        if not nodes:
+    def build(protected):
+        kept = list(protected)
+        out = []
+        for piece in pieces:
+            nodes = []
+            for p in piece["nodes"]:
+                q = find_in(kept, p)
+                if q is None:
+                    kept.append(p)
+                    nodes.append(p)
+                elif not nodes or nodes[-1] != q:
+                    nodes.append(q)
+            if not nodes:
+                continue
+            walk = [(i, i + 1) for i in range(len(nodes) - 1)
+                    if dist2(nodes[i], nodes[i + 1]) >= 0.30]
+            out.append({"nodes": nodes, "walk": walk, "from": 0, "to": 0})
+        return kept, out
+
+    # 录到时本来就在 1.5~3.0 窗口里的跳，两端原样保留（后面的去重也不再吸）。
+    # 不合格的跳（例如 4.16 m）不保护，照旧合并、最后由窗口过滤掉。
+    prot = []
+    for ln in links:
+        if not (LINK_MIN <= dist3(ln["a"], ln["b"]) <= lmax):
             continue
-        walk = [(i, i + 1) for i in range(len(nodes) - 1)
-                if dist2(nodes[i], nodes[i + 1]) >= 0.30]
-        new_pieces.append({"nodes": nodes, "walk": walk, "from": 0, "to": 0})
+        for p in (ln["a"], ln["b"]):
+            if not any(dist3(p, q) <= 1e-3 for q in prot):
+                prot.append(p)
+    kept, new_pieces = build(prot)
 
     def snap(p):
-        q = find(p)
+        q = find_in(kept, p)
         return q if q is not None else p
 
     for ln in links:
@@ -446,6 +594,7 @@ def analyse(samples, step=STEP_DEFAULT, sw=None, events=None):
     """
     sw = norm_switch(sw)
     step = float(step or STEP_DEFAULT)
+    lmax = LINK_MAX_LONG if sw.get("long_jump") else LINK_MAX
     out = {
         "ok": False, "why": "", "step": step, "sw": sw,
         "samples": len(samples or []), "duration": 0.0, "dist": 0.0,
@@ -504,12 +653,12 @@ def analyse(samples, step=STEP_DEFAULT, sw=None, events=None):
             continue
         if not sw["jump"]:
             continue
-        if LINK_MIN <= l3 <= LINK_MAX:
+        if LINK_MIN <= l3 <= lmax:
             out["jumps"].append(rec)
             out["links"].append({"kind": "jump", "a": a, "b": b, "h": e["h"], "l3": l3})
         else:
             out["links_bad"] += 1
-            why = "太短（< %.1f m）" % LINK_MIN if l3 < LINK_MIN else "太长（> %.1f m）" % LINK_MAX
+            why = "太短（< %.1f m）" % LINK_MIN if l3 < LINK_MIN else "太长（> %.1f m）" % lmax
             out["skipped_jump"] += 1
             out["issues"].append(
                 "第 %.1f s 那一跳 %s：%s，3D %.2f m —— 人机用不了，没建跳链"
@@ -525,7 +674,7 @@ def analyse(samples, step=STEP_DEFAULT, sw=None, events=None):
 
     # ---- 合并靠得太近的节点（1 m 内两个路点会抢吸附，人机会在原地打转）----
     before = sum(len(p["nodes"]) for p in out["pieces"])
-    out["pieces"] = _merge_nodes(out["pieces"], out["jumps"], out["drops"])
+    out["pieces"] = _merge_nodes(out["pieces"], out["jumps"], out["drops"], lmax=lmax)
     out["merged"] = max(0, before - sum(len(p["nodes"]) for p in out["pieces"]))
 
     # ---- 连续跳链：上一跳的落点 = 下一跳的起点（2026-11-25）----
@@ -540,7 +689,7 @@ def analyse(samples, step=STEP_DEFAULT, sw=None, events=None):
             continue
         # 合并后下一跳不能超出 1.5~3.0 窗口，否则本来 2.5 m 的两跳会被接成 4 m
         new_l3 = dist3(cur["b"], nxt["b"])
-        if not (LINK_MIN <= new_l3 <= LINK_MAX):
+        if not (LINK_MIN <= new_l3 <= MERGE_MAX_L3):
             continue
         nxt["a"] = cur["b"]
         nxt["l3"] = new_l3
@@ -553,7 +702,7 @@ def analyse(samples, step=STEP_DEFAULT, sw=None, events=None):
     if out["jumps"]:
         keep = []
         for j in out["jumps"]:
-            if LINK_MIN <= j["l3"] <= LINK_MAX:
+            if LINK_MIN <= j["l3"] <= lmax:
                 keep.append(j)
             else:
                 out["links_bad"] += 1
@@ -561,7 +710,82 @@ def analyse(samples, step=STEP_DEFAULT, sw=None, events=None):
                 out["issues"].append("合并后这一跳 3D %.2f m 超出 1.5~3.0，没建跳链" % j["l3"])
         out["jumps"] = keep
     out["links"] = [{"kind": "jump", "a": j["a"], "b": j["b"],
-                     "h": j["h"], "l3": j["l3"]} for j in out["jumps"]]
+                     "h": j["h"], "l3": j["l3"],
+                     "run": float(j.get("run") or 0.0)} for j in out["jumps"]]
+
+    # 2026-11-26：两跳的「落点 / 下一起点」靠得很近却没能合并，说明合并后会超过 3 m。
+    # 各自保留精确点两条都能成立，但人机可能在这 0.5~1 m 之间来回转头 —— 提醒一句。
+    for i in range(len(out["jumps"]) - 1):
+        cur, nxt = out["jumps"][i], out["jumps"][i + 1]
+        gap = dist2(cur["b"], nxt["a"])
+        if 0.30 <= gap < MERGE_NEAR and abs(cur["b"][1] - nxt["a"][1]) <= CHAIN_DY:
+            out["issues"].append(
+                "第 %d / %d 跳的落点与下一起点只隔 %.2f m（< %.2f m）：已各自保留精确点，"
+                "人机若在这里来回转头，重录时跳完先走开 1.5 m 再跳"
+                % (i + 1, i + 2, gap, MERGE_NEAR))
+
+    # ---- 断口：相邻两段路之间没有跳链/落地边接上（人机会停在这里）----
+    out["gaps"] = []
+    ends = [(tuple(j["a"]), tuple(j["b"])) for j in out["jumps"]] + \
+           [(tuple(d["a"]), tuple(d["b"])) for d in out["drops"]]
+
+    def linked(a, b):
+        r"""从 a 出发沿跳链/落地边最多走 8 步，能不能到 b 附近。
+
+        连续两跳（落地就是下一跳起点）时，单条 link 盖不住整段，
+        以前会误报断口；这里按链走一遍。
+        """
+        stack = [y for x, y in ends if dist3(a, x) <= 1.2]
+        seen = 0
+        while stack and seen < 8:
+            p = stack.pop()
+            seen += 1
+            if dist3(p, b) <= 1.2:
+                return True
+            for x, y in ends:
+                if dist3(p, x) <= 1.2:
+                    stack.append(y)
+        return False
+
+    for i in range(len(out["pieces"]) - 1):
+        a = out["pieces"][i]["nodes"][-1]
+        b = out["pieces"][i + 1]["nodes"][0]
+        if dist3(a, b) <= 0.60:
+            continue
+        if not linked(a, b):
+            out["gaps"].append({"a": a, "b": b, "d": dist3(a, b)})
+
+    # ---- 连通性：孤儿点（没有边的节点）+ 轨迹覆盖率 ----
+    used = set()
+    for pc in out["pieces"]:
+        for i, j in pc["walk"]:
+            used.add(tuple(pc["nodes"][i]))
+            used.add(tuple(pc["nodes"][j]))
+    for j in out["jumps"]:
+        used.add(tuple(j["a"]))
+        used.add(tuple(j["b"]))
+    for d in out["drops"]:
+        used.add(tuple(d["a"]))
+        used.add(tuple(d["b"]))
+    all_nodes = [tuple(n) for pc in out["pieces"] for n in pc["nodes"]]
+    out["orphans"] = [n for n in all_nodes if n not in used]
+    walk_pts = [(s["x"], s["y"], s["z"]) for i, s in enumerate(samples) if walk_mask[i]]
+    hit, worst = 0, 0.0
+    for p in walk_pts:
+        d = min((dist3(p, n) for n in all_nodes), default=1e9)
+        if d <= COVER_R:
+            hit += 1
+        elif d < 1e8:
+            worst = max(worst, d)
+    out["coverage"] = (100.0 * hit / len(walk_pts)) if walk_pts else 100.0
+    out["cover_worst"] = worst
+    # 孤立点对人是没用的（写进包里也只是个摆设），直接从路点里去掉；
+    # 典型来源：录完一跳立刻按停止，落地后只有 1 个样本 -> 1 个节点 0 条边。
+    if out["orphans"]:
+        out["pieces"] = [pc for pc in out["pieces"]
+                         if len(pc["nodes"]) >= 2 and pc["walk"]]
+        out["orphan_dropped"] = len(out["orphans"])
+        out["orphans"] = []
 
     # ---- 岔路候选：2.5 m 内第二次经过，且中间绕了 8 m 以上 ----
     if sw["branch"]:
@@ -598,6 +822,17 @@ def analyse(samples, step=STEP_DEFAULT, sw=None, events=None):
         out["why"] = "重采样后不到 2 个节点：走得太短，或采样没进来"
 
     iss = out["issues"]
+    if out.get("orphan_dropped"):
+        iss.append("丢掉 %d 个孤立点（没有边，人机走不到；录完一跳马上停、落地只有 1 个样本时会出现）"
+                   % out["orphan_dropped"])
+    if out["coverage"] < 95.0:
+        iss.append("轨迹覆盖率 %.0f%%：最远有 %.1f m 的地方没有节点（人机会绕开或卡住）"
+                   % (out["coverage"], out["cover_worst"]))
+    if out["gaps"]:
+        iss.append("路线在 %d 处断开（%s）：这里没有人机可用的跳链或边，"
+                   "要么把跳分成两跳，要么打开「超长跳也建链」实测"
+                   % (len(out["gaps"]),
+                      " / ".join("%.1f m" % g["d"] for g in out["gaps"])))
     if long_edges:
         iss.append("%d 条边长于 %.1f m：人机可能绕不过去" % (long_edges, EDGE_MAX))
     for d in out["drops"]:
@@ -619,11 +854,16 @@ def summary(result):
     r"""一行字：时长 / 距离 / 节点 / 事件（控制台复盘标题用）。"""
     if not result or not result.get("ok"):
         return (result or {}).get("why") or "没有可复盘的数据"
-    return ("%d 分 %02d 秒 · %.1f m · %d 节点 / %d 边 · 跳链 %d（没用 %d）/ 落 %d / 岔 %d" % (
+    gaps = len(result.get("gaps") or [])
+    orphans = len(result.get("orphans") or [])
+    return ("%d 分 %02d 秒 · %.1f m · %d 节点 / %d 边 · 跳链 %d（没用 %d）/ 落 %d / 岔 %d%s%s%s" % (
         int(result["duration"] // 60), int(result["duration"] % 60),
         result["dist"], result["nodes"], result["edges"],
         len(result["jumps"]), result.get("links_bad", 0),
-        len(result["drops"]), len(result["branches"])))
+        len(result["drops"]), len(result["branches"]),
+        (" · 断口 %d" % gaps) if gaps else "",
+        " · 覆盖 %.0f%%" % result.get("coverage", 100.0),
+        (" · 孤儿 %d" % orphans) if orphans else ""))
 
 
 def _fmt(p):
@@ -661,9 +901,13 @@ def save_lines(result, allow_both=True):
         add_node(a)
         add_node(b)
         if link["kind"] == "jump":
-            # 和竞技场原生跳链一致：needSpeed=0 / accuracy=0.5
-            # （0 = 不要求助跑速度，站着也能起跳；0.5 = 朝向阈值降到 0，只有反向走才会失败）
-            lines.append("jump add %s %s 0 0.5 0" % (_fmt(a), _fmt(b)))
+            # 和竞技场原生跳链一致：accuracy=0.5（朝向阈值降到 0，只有反向走才会失败）
+            # needSpeed：默认 0 = 不要求助跑速度；打开「跳链写助跑速度」后写录到的 run，
+            # 让游戏自己去卡「够快才起跳」（语义未逆证，属于实测开关）。
+            need = 0.0
+            if (result.get("sw") or {}).get("need_speed"):
+                need = max(0.0, min(9.9, round(float(link.get("run") or 0.0), 1)))
+            lines.append("jump add %s %s %.1f 0.5 0" % (_fmt(a), _fmt(b), need))
         lines.append("edge add %s %s" % (_fmt(a), _fmt(b)))
         if allow_both:
             lines.append("edge add %s %s" % (_fmt(b), _fmt(a)))
@@ -723,7 +967,22 @@ def dedupe_lines(lines, existing_text, near=MERGE_NEAR):
                 bd, best = d, r
         return best
 
+    # 2026-11-26：跳点端点原样保留。以前这里会把离已有节点 1.05 m 内的跳点
+    # 吸过去，3.00 m 的跳变成 3.50 m 就废了（见 _merge_nodes 的说明）。
+    keep_exact = set()
+    for ln in lines or []:
+        bits = ln.split()
+        if len(bits) >= 8 and bits[0] == "jump" and bits[1] == "add":
+            try:
+                keep_exact.add(node_key((float(bits[2]), float(bits[3]), float(bits[4]))))
+                keep_exact.add(node_key((float(bits[5]), float(bits[6]), float(bits[7]))))
+            except ValueError:
+                pass
+    have = {node_key(r) for r in nodes}
+
     def snap_pt(q):
+        if node_key(q) in keep_exact:
+            return q
         if node_key(q) in snap:
             return snap[node_key(q)]
         r = nearest(q)
@@ -736,11 +995,20 @@ def dedupe_lines(lines, existing_text, near=MERGE_NEAR):
                 p = (float(bits[2]), float(bits[3]), float(bits[4]))
             except ValueError:
                 continue
+            k = node_key(p)
+            if k in keep_exact:
+                if k in have:
+                    continue
+                have.add(k)
+                batch.append(p)
+                out.append(ln)
+                continue
             q = nearest(p)
             if q is not None:
-                snap[node_key(p)] = q
+                snap[k] = q
                 continue
             batch.append(p)
+            have.add(k)
             out.append(ln)
         elif len(bits) >= 5 and bits[0] == "jump" and bits[1] == "add":
             try:

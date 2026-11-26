@@ -9,8 +9,14 @@ r"""地图对照表与图文件夹：序号_场景名中文名、map.json / navm
 import json
 import os
 import re
+import time
 
 from ui.env import DEPLOY, DEV, MAP_MD, P, map_folder_name, map_row, map_table_rows
+
+# 2026-11-26 启动加速：map.json 的指纹扫描会被调用上百次（每次都要 listdir + json.load），
+# 按指纹缓存 5 s；部署/导出刷新最迟 5 s 后就能看到新数据。
+_DOC_MEMO = {}
+_DOC_TTL = 5.0
 
 
 def load_maps():
@@ -78,6 +84,10 @@ def find_map_doc(fp):
     """
     if not fp:
         return None, ""
+    now = time.time()
+    hit = _DOC_MEMO.get(fp)
+    if hit and now - hit[0] < _DOC_TTL:
+        return hit[1], hit[2]
     for root in (DEPLOY, DEV):
         for _rel, path in P.map_files(root):
             try:
@@ -86,7 +96,9 @@ def find_map_doc(fp):
             except (OSError, ValueError):
                 continue
             if str((doc.get("map") or {}).get("fingerprint") or "") == fp:
+                _DOC_MEMO[fp] = (now, doc, path)
                 return doc, path
+    _DOC_MEMO[fp] = (now, None, "")
     return None, ""
 
 

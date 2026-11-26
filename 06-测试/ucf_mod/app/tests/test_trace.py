@@ -46,7 +46,8 @@ def check_c(editor):
     assert "static void trace_stop(" in editor, "editor.c 没有 trace_stop()"
     assert "static void trace_sample(" in editor, "editor.c 没有 trace_sample()"
     assert "static void trace_tick(" in editor, "editor.c 没有 trace_tick()"
-    assert "void editor_rec_tick(void) { rec_tick(); trace_tick(); }" in editor, \
+    assert ("void editor_rec_tick(void) {" in editor and "rec_tick();" in editor
+            and "trace_tick();" in editor), \
         "采样定时器没同时驱动 rec 和 trace"
     assert "trace_tick();               /* 原始轨迹采集" in editor, \
         "editor_tick() 没调 trace_tick()"

@@ -10,6 +10,7 @@ import os
 import shutil
 import subprocess
 import sys
+import time
 import tkinter as tk
 from tkinter import messagebox
 
@@ -203,14 +204,20 @@ class App(Kit, PackMixin, MapTab, VisTab, ExportTab, HotkeyTab, WaypointTab, Ove
             for page in USER_PAGES:
                 self.page_names.append(page)
                 self.page_frames[page] = self.tabview.add(page)
-            for page in USER_PAGES:
-                self.build_page(page, self.page_frames[page], hint_items)
+            # 2026-11-26 启动加速：先把空窗口画出来，再建当前页，其余页后台逐页建
+            self._hint_items = hint_items
+            self._built = set()
+            self._queue = []
             page = self._restore_user()
+            self._paint_now()
+            self._ensure_page(page)
             try:
                 self.tabview.set(page)          # _booting 期间不触发 on_flat_tab
             except Exception:
                 pass
             self.show_flat(page, persist=False)
+            self._queue = [p for p in USER_PAGES if p not in self._built]
+            self._start_pump(250)
         else:
             self.tabview = ctk.CTkTabview(self, corner_radius=10, command=self.on_group)
             self.tabview.pack(fill="both", expand=True, padx=14, pady=(8, 4))
@@ -231,22 +238,28 @@ class App(Kit, PackMixin, MapTab, VisTab, ExportTab, HotkeyTab, WaypointTab, Ove
                     self.page_names.append(page)
                     self.page_frames[page] = frames[page]
 
-            # 建页顺序 = TAB_GROUPS 顺序：人机路点在「数据」「车测」之前（后两页读它建的 opt_pack / opt_map）
-            for group, pages in TAB_GROUPS:
-                for page in pages:
-                    self.build_page(page, self.page_frames[page], hint_items)
-
-            # 回到上次停留的组 + 子页；旧版平铺的页签名按 TAB_OLD_MAP 搬进新组
+            # 2026-11-26 启动加速：先把空窗口画出来，只建当前页，其余按 TAB_GROUPS 顺序后台逐页建
+            self._hint_items = hint_items
+            self._built = set()
+            self._queue = []
             group, page = self._restore_tab()
+            self._paint_now()
+            self._ensure_page(page)
+
             try:
                 self.tabview.set(group)          # _booting 期间不触发 on_group
             except Exception:
                 pass
             self.show_sub(group, page, persist=False)
+            # 同一组里的页排前面：用户下一步最可能点的就是这一组
+            cur_pages = list(dict(TAB_GROUPS).get(group) or ())
+            order = cur_pages + [p for _g, pages in TAB_GROUPS for p in pages
+                                 if p not in cur_pages]
+            self._queue = [p for p in order if p not in self._built]
+            self._start_pump(250)
         self._booting = False
 
-        self.refresh_status()
-        self.after(4000, self.refresh_status)
+        self._safe_status()
 
     # ---- 页签：分组（一级）+ 组内页（二级）----
     def build_page(self, page, frame, hint_items):
@@ -289,6 +302,83 @@ class App(Kit, PackMixin, MapTab, VisTab, ExportTab, HotkeyTab, WaypointTab, Ove
         else:
             raise ValueError("控制台没有这一页：%s" % page)
 
+    # ---- 启动加速（2026-11-26）：先画窗口，页面按需 / 后台逐页建 ----------
+    _PAGE_DEPS = {"数据": ("人机路点",), "车测": ("人机路点",),
+                  "录制": ("人机路点",), "部署": ("人机路点",)}
+
+    def _paint_now(self):
+        r"""把还没建页的空壳先画出来：用户先看到窗口，不用等 11 页建完。"""
+        try:
+            self.update_idletasks()
+            self.update()
+        except tk.TclError:
+            pass
+
+    def _ensure_page(self, page):
+        r"""这一页没建就现在建；有依赖的页先补依赖（数据/车测/录制读人机路点的 opt_*）。
+
+        2026-11-26：加 `_building` 重入保护 —— 建页过程中如果被 `update()`（折叠/对话框）
+        重入，不能再建一遍，否则会自己嵌套自己，界面就卡死。
+        """
+        if page in getattr(self, "_built", ()):
+            return
+        if page in getattr(self, "_building", ()):
+            return
+        if not hasattr(self, "_building"):
+            self._building = set()
+        for dep in self._PAGE_DEPS.get(page, ()):
+            self._ensure_page(dep)
+        frame = self.page_frames.get(page)
+        if frame is None:
+            return
+        self._building.add(page)
+        try:
+            self.build_page(page, frame, self._hint_items)
+        finally:
+            self._building.discard(page)
+        self._built.add(page)
+
+    def _start_pump(self, delay=150):
+        r"""只保留一条后台建页的链：重复排程会叠成两条，越跑越像卡死。"""
+        if getattr(self, "_pump_on", False):
+            return
+        self._pump_on = True
+        try:
+            self.after(int(delay), self._pump_pages)
+        except tk.TclError:
+            self._pump_on = False
+
+    def _pump_pages(self):
+        r"""后台逐页建：一次只建一页，建完让出主线程，窗口不卡。
+
+        2026-11-26：折叠时暂停（页签都藏起来了，建了也看不见），展开再接着建；
+        间隔 150 ms，让点击/折叠有机会被处理。
+        """
+        self._pump_on = False
+        if getattr(self, "_folded", False) or time.time() < getattr(self, "_pump_pause_until", 0):
+            self._start_pump(500)          # 折叠中 / 刚展开：先别建，让窗口先响应
+            return
+        while self._queue:
+            page = self._queue.pop(0)
+            if page in self._built:
+                continue
+            try:
+                self._ensure_page(page)
+            except Exception as exc:      # noqa: BLE001  单页坏了别拖垮启动
+                print("build page failed:", page, exc)
+            self._start_pump(150)
+            return
+
+    def _safe_status(self):
+        try:
+            self.refresh_status()
+        except Exception:                 # noqa: BLE001  页面还没建完就先跳过
+            pass
+        try:
+            self.after(4000, self._safe_status)
+        except tk.TclError:
+            pass
+
     def on_group(self, name=None, persist=True):
         r"""一级页签（分组）切换：回到这一组上次停留的子页。CTkTabview 的 command 不传参数。"""
         if getattr(self, "_booting", False):
@@ -308,6 +398,7 @@ class App(Kit, PackMixin, MapTab, VisTab, ExportTab, HotkeyTab, WaypointTab, Ove
         pages = dict(TAB_GROUPS).get(group) or ()
         if page not in pages:
             page = pages[0] if pages else ""
+        self._ensure_page(page)          # 懒加载：点到的页没建就先建
         show = self.page_show.get(group)
         if show is not None:
             show(page, notify=False)      # 只翻框，不再回调 on_change，避免递归
@@ -325,7 +416,10 @@ class App(Kit, PackMixin, MapTab, VisTab, ExportTab, HotkeyTab, WaypointTab, Ove
 
     def refresh_page(self, name):
         r"""进入某一页时按页刷新（原来 on_tab 里那段 if/elif）。"""
-        self.save_autotest_ui()          # 离开车测页时把改过的参数带走
+        try:
+            self.save_autotest_ui()      # 离开车测页时把改过的参数带走（页没建完时跳过）
+        except Exception:                # noqa: BLE001
+            pass
         if name == "数据":
             self.refresh_data()
         elif name == "导出":
@@ -379,6 +473,7 @@ class App(Kit, PackMixin, MapTab, VisTab, ExportTab, HotkeyTab, WaypointTab, Ove
         r"""用户身份：切到某一页、记位置、刷新数据。"""
         if page not in USER_PAGES:
             page = USER_PAGES[0]
+        self._ensure_page(page)
         self.cur_group = ROLE_LABEL[ROLE_USER]
         self.cur_page = page
         self.ui["tab"] = self.cur_group
@@ -465,7 +560,12 @@ class App(Kit, PackMixin, MapTab, VisTab, ExportTab, HotkeyTab, WaypointTab, Ove
 
     def toggle_fold(self):
         r"""折叠：藏起介绍/页签/日志/底部按钮，窗口缩成只剩标题行的一条；
-        再点「展开」按原尺寸、原位置回来。折叠条宽度按标题行实际内容收窄，不留空档。"""
+        再点「展开」按原尺寸、原位置回来。折叠条宽度按标题行实际内容收窄，不留空档。
+
+        2026-11-26：折叠/展开前后 1 s 内暂停后台建页 —— 否则展开这一下正好撞上
+        正在建的页（最多 1.7 s），看起来就是「展开后卡死」。
+        """
+        self._pump_pause_until = time.time() + 1.0
         if not self._folded:
             self._geom_saved = str(self.tk.call("wm", "geometry", self))
             self._folded = True
@@ -480,6 +580,7 @@ class App(Kit, PackMixin, MapTab, VisTab, ExportTab, HotkeyTab, WaypointTab, Ove
             h = self.head.winfo_reqheight() + int(self._apply_window_scaling(30))
             self.tk.call("wm", "geometry", self, "%dx%d+%s+%s" % (w, h, x, y))
             self.btn_fold.configure(text="展开")
+            self._pump_generation = getattr(self, "_pump_generation", 0) + 1
         else:
             self._folded = False
             # 按原来的 pack 顺序装回去：介绍 → 底栏 → 日志 → 页签
@@ -491,6 +592,13 @@ class App(Kit, PackMixin, MapTab, VisTab, ExportTab, HotkeyTab, WaypointTab, Ove
             self.minsize(720, 620)
             self.tk.call("wm", "geometry", self, self._geom_saved)
             self.btn_fold.configure(text="折叠")
+            # 展开后：当前页保证已经建好，再让后台接着建剩下的
+            try:
+                self._ensure_page(self.cur_page)
+            except Exception:          # noqa: BLE001
+                pass
+            if getattr(self, "_queue", None):
+                self._start_pump(400)
 
     def on_close(self):
         r"""关窗口 = 最后一次落盘：正停在哪个页签、车测输入框里没失焦的数字都不丢。"""

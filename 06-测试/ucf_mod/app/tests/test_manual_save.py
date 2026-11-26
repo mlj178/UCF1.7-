@@ -11,7 +11,7 @@ r"""自检：游戏内编辑「必须手动保存」的语义（2026-11-25 用�
   4) F2 菜单里显示「未保存 / 已保存」，保存项走 editor_save_all
   5) 退出房间 / 退出游戏 / 切包 / 重读都会丢弃未保存编辑并写日志
   6) navfix 把 Ctrl+S 派发给编辑器（菜单开着也能存）
-  7) 控制台热键速查同步；录制页必须点「保存增量」才落盘
+  7) 控制台热键速查同步；录制页必须点保存按钮（保存增量 / 保存并接着录下一段）才落盘
 """
 import os
 import re
@@ -106,6 +106,15 @@ def main():
     review = section(rec, "def rec_review_from_file(", "def rec_fill_done(")
     check("self.rec_save(" not in finish, "结束录制不会自动保存")
     check("self.rec_save(" not in review, "复盘完成不会自动保存")
+    check('text="重新录制"' not in rec and 'text="放弃"' not in rec,
+          "旧「重新录制 / 放弃」两颗同义按钮已合并")
+    check("保存并接着录下一段" in rec and "不要这段，回准备" in rec,
+          "复盘页按钮是「保存并接着录下一段 / 不要这段，回准备」")
+    check("重算（不重录）" in rec, "「重新采样」改名「重算（不重录）」")
+    check("rec_step_seg_done" in rec, "复盘页能直接改采样间距")
+    nxt = section(rec, "def rec_next_segment(", "def rec_save(")
+    check("self.rec_save()" in nxt and "self.after(1200, self.rec_start)" in nxt,
+          "「保存并接着录下一段」先保存再开录")
 
     print("[8] 文档")
     check("Ctrl+S 才写文件" in readme, "README 写清「Ctrl+S 才写文件」")

@@ -39,10 +39,13 @@ class RecordTab:
         except (TypeError, ValueError):
             step = ucf_rec.STEP_DEFAULT
         rec["step"] = step if step in ucf_rec.STEP_OPTIONS else ucf_rec.STEP_DEFAULT
+        if rec.get("who") not in ("player", "bots", "all"):
+            rec["who"] = "player"     # 采集对象：玩家 / 人机 / 全部
         self.rec = rec
         self.rec_state = "ready"
         self.rec_file = ""
         self.rec_samples = []
+        self.rec_events = []
         self.rec_result = None
         self.rec_paused = False
         self.rec_busy = False
@@ -135,14 +138,30 @@ class RecordTab:
         ctk.CTkLabel(row, text="采样间距", font=FONT_S, text_color="#9aa0a6",
                      width=64, anchor="w").pack(side="left", padx=(0, 6))
         self.rec_step_seg = ctk.CTkSegmentedButton(
-            row, values=["2.5 m", "4 m", "6 m"], width=210, height=28,
+            row, values=["%g m" % s for s in ucf_rec.STEP_OPTIONS],
+            width=248, height=28,
             dynamic_resizing=False, font=FONT_S,
             selected_color="#2f6fdb", selected_hover_color="#255bb4",
             unselected_color="#2a2f36", unselected_hover_color="#343a42",
             command=self.on_rec_step)
         self.rec_step_seg.pack(side="left")
-        self.rec_step_seg.set({2.5: "2.5 m", 4.0: "4 m", 6.0: "6 m"}[self.rec["step"]])
-        ctk.CTkLabel(row, text="走得越细节点越多；4 m 是默认", font=FONT_S,
+        self.rec_step_seg.set("%g m" % self.rec["step"])
+        ctk.CTkLabel(row, text="按形状放点（误差≤10 cm）；这里选最大段长，4 m 默认", font=FONT_S,
+                     text_color="#8a8f96").pack(side="left", padx=(10, 0))
+
+        row2 = ctk.CTkFrame(box, fg_color="transparent")
+        row2.pack(fill="x", padx=12, pady=(6, 0))
+        ctk.CTkLabel(row2, text="采集对象", font=FONT_S, text_color="#9aa0a6",
+                     width=64, anchor="w").pack(side="left", padx=(0, 6))
+        self.rec_who_seg = ctk.CTkSegmentedButton(
+            row2, values=["玩家", "人机", "全部"], width=180, height=28,
+            dynamic_resizing=False, font=FONT_S,
+            selected_color="#2f6fdb", selected_hover_color="#255bb4",
+            unselected_color="#2a2f36", unselected_hover_color="#343a42",
+            command=self.on_rec_who)
+        self.rec_who_seg.pack(side="left")
+        self.rec_who_seg.set({"player": "玩家", "bots": "人机", "all": "全部"}[self.rec["who"]])
+        ctk.CTkLabel(row2, text="人机 10 Hz（位置/动作/目标/跳跃）；轨迹分析只用玩家样本", font=FONT_S,
                      text_color="#8a8f96").pack(side="left", padx=(10, 0))
 
         grid = ctk.CTkFrame(box, fg_color="transparent")
@@ -177,6 +196,75 @@ class RecordTab:
             font=("Consolas", 11), text_color="#8a8f96", anchor="w",
             justify="left", wraplength=600).pack(fill="x", padx=12, pady=(2, 10))
 
+        # ④ 人机验证（drive）
+        box = self.wp_card(frame, "人机验证（drive）",
+                           "把「没有 path」的人机沿点图赶着走，看路线通不通；只对测试包（blank）生效。"
+                           "关着是「观察原版 AI」，开着是「强制压测你画的路线」")
+        self.drv_state = ctk.CTkLabel(box, text="状态：点「刷新」看最近一次 drive",
+                                      font=FONT_S, text_color="#9aa0a6",
+                                      anchor="w", justify="left", wraplength=600)
+        self.drv_state.pack(fill="x", padx=12, pady=(6, 2))
+        rowd = ctk.CTkFrame(box, fg_color="transparent")
+        rowd.pack(fill="x", padx=12, pady=(0, 4))
+        for txt, fn, fg in (("开启", lambda: self.drive_set(True), "#2f9e44"),
+                            ("关闭", lambda: self.drive_set(False), "#2a2f36"),
+                            ("刷新", self.drive_refresh, "#2a2f36")):
+            ctk.CTkButton(rowd, text=txt, width=70, height=26, font=FONT_S,
+                          fg_color=fg, hover_color="#343a42",
+                          command=fn).pack(side="left", padx=(0, 6))
+        self.drv_stat = ctk.CTkLabel(box, text="", font=("Consolas", 11),
+                                     text_color="#8a8f96", anchor="w",
+                                     justify="left", wraplength=600)
+        self.drv_stat.pack(fill="x", padx=12, pady=(0, 8))
+
+        # 每 2 s 自己刷一次「开始录制」：不然游戏后开、或换图之后按钮会一直是灰的
+        self.after(2000, self._rec_auto_tick)
+
+    def _rec_auto_tick(self):
+        try:
+            if self.rec_state == "ready":
+                self.refresh_rec_ready()
+        except Exception:      # noqa: BLE001  控件还没建好/窗口在关
+            pass
+        try:
+            self.after(2000, self._rec_auto_tick)
+        except Exception:      # noqa: BLE001
+            pass
+
+    def drive_set(self, on):
+        try:
+            write_nav_cmd("drive", "", "", {"act": "on" if on else "off"})
+        except OSError as exc:
+            self.set_status("写不进 ucf_navcmd.txt：%s" % exc)
+            return
+        self.set_status("已发送：drive %s（测试包里才会动）" % ("开" if on else "关"))
+        self.after(700, self.drive_refresh)
+
+    def drive_refresh(self):
+        lines = tail_log(600) or []
+        drv = [l for l in lines if "drive:" in l][-3:]
+        beh = [l for l in lines if "beh:" in l]
+        stuck = 0
+        for l in beh:
+            if " spd=0.00 " not in l:
+                continue
+            try:
+                d = float(l.split("nearD=")[1].split()[0])
+            except (IndexError, ValueError):
+                continue
+            if d > 3.0:
+                stuck += 1
+        onoff = "未知"
+        for l in reversed(drv):
+            if "drive: ON" in l:
+                onoff = "开"; break
+            if "drive: OFF" in l:
+                onoff = "关"; break
+        self.drv_state.configure(
+            text="状态：%s ｜ 最近 %d 条日志 ｜ 人机探针 %d 行，其中「原地 + 离图 >3 m」%d 行"
+                 % (onoff, len(drv), len(beh), stuck))
+        self.drv_stat.configure(text="\n".join(drv[-2:]) or "（还没有 drive 日志）")
+
     def build_rec_live(self, frame):
         box = self.wp_card(frame, "实时轨迹", "游戏里照常走；这里只看数字")
         self.rec_big = ctk.CTkLabel(box, text="00:00 · 0.0 m", anchor="w",
@@ -199,7 +287,8 @@ class RecordTab:
                      justify="left", wraplength=600).pack(fill="x", padx=14, pady=(0, 10))
 
     def build_rec_done(self, frame):
-        box = self.wp_card(frame, "轨迹与问题", "先看图和问题，再决定存不存")
+        box = self.wp_card(frame, "轨迹与问题",
+                           "先看图和问题；可以只保存，也可以保存后接着录下一段")
         self.rec_sum = ctk.CTkLabel(box, text="", anchor="w", justify="left",
                                     font=FONT_S, text_color="#dce4ee", wraplength=600)
         self.rec_sum.pack(fill="x", padx=14, pady=(8, 2))
@@ -215,6 +304,7 @@ class RecordTab:
                                         font=("Consolas", 11), text_color="#9aa0a6",
                                         wraplength=600)
         self.rec_done_ev.pack(fill="x", padx=14, pady=(0, 6))
+
         row = ctk.CTkFrame(box, fg_color="transparent")
         row.pack(fill="x", padx=14, pady=(2, 4))
         self.rec_both = tk.BooleanVar(value=bool(self.rec.get("allow_both", False)))
@@ -224,13 +314,50 @@ class RecordTab:
                         command=self.on_rec_both).pack(side="left")
         row = ctk.CTkFrame(box, fg_color="transparent")
         row.pack(fill="x", padx=14, pady=(2, 4))
-        self.rec_btn_save = self.rec_primary      # 保存 / 重新采样都在顶部条
-        ctk.CTkButton(row, text="重新录制", width=96, height=30, font=FONT_S,
-                      fg_color="#3a3f47", hover_color="#4a5058",
-                      command=self.rec_reset).pack(side="left", padx=(8, 0))
-        ctk.CTkButton(row, text="放弃", width=64, height=30, font=FONT_S,
-                      fg_color="#8a1c1c", hover_color="#a32424",
-                      command=self.rec_reset).pack(side="left", padx=(8, 0))
+        self.rec_btn_save = self.rec_primary      # 保存 / 重算都在顶部条
+        # 2026-11-26 用户反馈「重新录制 / 放弃」分不清：两颗旧按钮其实是同一个回调。
+        # 现在改成：绿 = 保存并接着录下一段（已保存后变成「接着录下一段」）；
+        # 红 = 不要这段回准备（已保存后变成灰色「回录前准备」，不再像丢弃）。
+        self.rec_btn_next = ctk.CTkButton(
+            row, text="保存并接着录下一段", width=152, height=30, font=FONT_S,
+            fg_color="#2f9e44", hover_color="#37b24d",
+            command=self.rec_next_segment)
+        self.rec_btn_next.pack(side="left", padx=(8, 0))
+        self.rec_btn_discard = ctk.CTkButton(
+            row, text="不要这段，回准备", width=132, height=30, font=FONT_S,
+            fg_color="#8a1c1c", hover_color="#a32424",
+            command=self.rec_reset)
+        self.rec_btn_discard.pack(side="left", padx=(8, 0))
+
+        # 2026-11-26：把「采样间距 / 识别开关」也放到复盘页。
+        # 以前这两项只在①里，复盘时看不到，右上角「重新采样」只能按同一套参数重算，
+        # 结果当然不变；放进来之后改参数是真的能重算。
+        row = ctk.CTkFrame(box, fg_color="transparent")
+        row.pack(fill="x", padx=14, pady=(2, 0))
+        ctk.CTkLabel(row, text="重算参数", font=FONT_S, text_color="#9aa0a6",
+                     width=64, anchor="w").pack(side="left", padx=(0, 6))
+        self.rec_step_seg_done = ctk.CTkSegmentedButton(
+            row, values=["%g m" % s for s in ucf_rec.STEP_OPTIONS],
+            width=248, height=26, dynamic_resizing=False, font=FONT_S,
+            selected_color="#2f6fdb", selected_hover_color="#255bb4",
+            unselected_color="#2a2f36", unselected_hover_color="#343a42",
+            command=self.on_rec_step)
+        self.rec_step_seg_done.pack(side="left")
+        ctk.CTkLabel(row, text="改完立即重算，不重录", font=FONT_S,
+                     text_color="#8a8f96").pack(side="left", padx=(10, 0))
+
+        grid = ctk.CTkFrame(box, fg_color="transparent")
+        grid.pack(fill="x", padx=8, pady=(2, 0))
+        for idx, (key, label, desc) in enumerate(ucf_rec.SWITCHES):
+            cell = ctk.CTkFrame(grid, fg_color="transparent")
+            cell.grid(row=idx // 3, column=idx % 3, sticky="w",
+                      padx=(6, 8), pady=2)
+            ctk.CTkSwitch(cell, text=label, variable=self.rec_sw_vars[key],
+                          font=FONT_S, progress_color="#2f9e44",
+                          command=lambda k=key: self.on_rec_switch(k)).pack(anchor="w")
+        for c in range(3):
+            grid.grid_columnconfigure(c, weight=1)
+
         self.rec_save_info = ctk.CTkLabel(box, text="", anchor="w", justify="left",
                                           font=FONT_S, text_color="#8a8f96",
                                           wraplength=600)
@@ -248,7 +375,7 @@ class RecordTab:
         self.rec_head.configure(text={
             "ready": "选包 → 开始录制 → 进游戏走一遍路线",
             "rec": "在游戏里照目标走；空格起跳（含跳上箱子/台子）会自动记下",
-            "done": "确认节点 / 边 / 跳链没问题，再写进草稿",
+            "done": "确认节点 / 边 / 跳链没问题再保存；保存后可以直接接着录下一段",
         }.get(state, ""))
         style = {
             "ready": ("#1f2a1f", "#9be09b"),
@@ -268,18 +395,29 @@ class RecordTab:
                                        fg_color=conf[2], hover_color=conf[3],
                                        state="normal")
         aux = {
-            "ready": ("打开游戏", self.launch_game),
-            "rec": ("继续" if self.rec_paused else "暂停", self.rec_pause_toggle),
-            "done": ("重新采样", self.rec_review_retry),
+            "ready": ("打开游戏", self.launch_game, 88),
+            "rec": ("继续" if self.rec_paused else "暂停", self.rec_pause_toggle, 88),
+            "done": ("重算（不重录）", self.rec_review_retry, 120),
         }.get(state)
         if aux:
-            self.rec_aux.configure(text=aux[0], command=aux[1], state="normal")
+            self.rec_aux.configure(text=aux[0], command=aux[1], width=aux[2],
+                                   state="normal")
             if state != "rec" or not self.rec_paused:
                 self.rec_aux.configure(fg_color="#3a3f47")
             if not self.rec_aux.winfo_ismapped():
                 self.rec_aux.pack(side="right", padx=(0, 4), pady=8)
         if state == "ready":
             self.refresh_rec_ready()
+        if state in ("ready", "done"):
+            self.rec_sync_step_seg()
+
+    def rec_sync_step_seg(self):
+        r"""① 和 ③ 的两个「采样间距」条保持同一个值。"""
+        label = "%g m" % float(self.rec["step"])
+        for seg in (getattr(self, "rec_step_seg", None),
+                    getattr(self, "rec_step_seg_done", None)):
+            if seg is not None:
+                seg.set(label)
 
     def rec_sync_from_wp(self):
         r"""人机路点改了包 / 图，录制页的下拉框跟着改（两个下拉读同一个状态）。"""
@@ -377,8 +515,13 @@ class RecordTab:
             step = ucf_rec.STEP_DEFAULT
         self.rec["step"] = step
         self.persist("录制采样间距")
+        self.rec_sync_step_seg()
         if self.rec_state == "done":
             self.rec_review_retry()
+
+    def on_rec_who(self, disp):
+        self.rec["who"] = {"玩家": "player", "人机": "bots", "全部": "all"}.get(disp, "player")
+        self.persist("采集对象")
 
     def on_rec_switch(self, key):
         self.rec["sw"][key] = bool(self.rec_sw_vars[key].get())
@@ -419,7 +562,8 @@ class RecordTab:
         self.rec_busy = True
         try:
             seq = write_nav_cmd("rec", "", "", {"act": "start", "out": self.rec_file,
-                                                "hz": 30})
+                                                "hz": 30,
+                                                "who": self.rec.get("who", "player")})
         except OSError as exc:
             self.rec_busy = False
             self.set_status("写不进 ucf_navcmd.txt：%s" % exc)
@@ -519,9 +663,11 @@ class RecordTab:
         self.rec_big.configure(text="%02d:%02d · %.1f m" % (
             int(dur // 60), int(dur % 60), res.get("dist", 0.0)))
         if res.get("ok"):
-            self.rec_sub.configure(text="%d 样本 · %d 节点 / %d 边 · 跳 %d / 落 %d / 岔 %d%s" % (
+            self.rec_sub.configure(text="%d 样本 · %d 节点 / %d 边 · 跳 %d / 落 %d / 岔 %d%s%s%s" % (
                 res["samples"], res["nodes"], res["edges"], len(res["jumps"]),
                 len(res["drops"]), len(res["branches"]),
+                (" · 断口 %d" % len(res.get("gaps") or [])) if res.get("gaps") else "",
+                (" · 人机 %d 台" % len(self.rec_bots)) if self.rec_bots else "",
                 (" · 已暂停" if self.rec_paused else "")))
         else:
             self.rec_sub.configure(text="%d 样本 · %s" % (
@@ -582,6 +728,7 @@ class RecordTab:
             lines = []
         samples, events = ucf_rec.parse_rec(lines)
         self.rec_samples = samples
+        self.rec_events = events
         res = ucf_rec.analyse(samples, step=self.rec["step"], sw=self.rec["sw"],
                               events=events)
         self.rec_result = res
@@ -602,14 +749,37 @@ class RecordTab:
         iss = res.get("issues") or []
         self.rec_issue.configure(text=("· " + "\n· ".join(iss)) if iss else "没有发现问题")
         self.rec_draw(self.rec_done_cv, res)
-        self.rec_btn_save.configure(state="normal", fg_color="#2f9e44",
-                                    hover_color="#37b24d")
         name = self.selected_pack() if hasattr(self, "opt_map") else ""
         fp = self.selected_fp() if hasattr(self, "opt_map") else ""
         self.rec_save_info.configure(
-            text="只预览、还没写进草稿：点顶部「保存增量」才算保存\n"
+            text="只预览、还没写进草稿：右上「保存增量」只保存；"
+                 "点「保存并接着录下一段」= 保存后直接开录\n"
                  "目标：dev\\packs\\%s\\%s.txt · 只增不覆盖 → 失败自动回滚"
                  % (name.replace("/", "\\") if name else "—", fp or "—"))
+        self.rec_sync_saved_ui()
+
+    def rec_sync_saved_ui(self):
+        r"""复盘页按钮跟着「写没写进包」变：没保存 = 保存 + 丢弃；已保存 = 已保存 + 回准备。"""
+        if self.rec_state != "done" or not hasattr(self, "rec_btn_next"):
+            return
+        if self.rec_saved:
+            # 保存完把右上主按钮直接换成「接着录下一段」：复盘卡片可能在滚动区
+            # 下面，这样不滚动也能接着录。
+            self.rec_primary.configure(text="接着录下一段", state="normal",
+                                       command=self.rec_next_segment,
+                                       fg_color="#2f9e44", hover_color="#37b24d")
+            self.rec_head.configure(text="已保存；点「接着录下一段」继续，或回录前准备")
+            self.rec_btn_next.configure(text="接着录下一段")
+            self.rec_btn_discard.configure(text="回录前准备",
+                                           fg_color="#3a3f47", hover_color="#4a5058")
+        else:
+            self.rec_primary.configure(text="保存增量", state="normal",
+                                       command=self.rec_save,
+                                       fg_color="#2f9e44", hover_color="#37b24d")
+            self.rec_head.configure(text="确认没问题再保存；或点下面「保存并接着录下一段」")
+            self.rec_btn_next.configure(text="保存并接着录下一段")
+            self.rec_btn_discard.configure(text="不要这段，回准备",
+                                           fg_color="#8a1c1c", hover_color="#a32424")
 
     def rec_review_retry(self):
         if not self.rec_samples:
@@ -620,11 +790,12 @@ class RecordTab:
         if res.get("ok"):
             self.rec_saved = False
             self.rec_fill_done(res)
-            self.set_status("已按当前阈值重新采样：%s" % ucf_rec.summary(res))
+            self.set_status("已按当前参数重算（没有重录）：%s" % ucf_rec.summary(res))
         else:
-            self.set_status("重新采样失败：%s" % (res.get("why") or "没有数据"))
+            self.set_status("重算失败：%s" % (res.get("why") or "没有数据"))
 
     def rec_reset(self):
+        was_saved = self.rec_saved
         self.rec_result = None
         self.rec_samples = []
         self.rec_events = []
@@ -633,6 +804,22 @@ class RecordTab:
         self.rec_saved = False
         self.rec_error = ""
         self.show_rec_state("ready")
+        self.set_status("已回到录前准备（已保存的包内容不变）" if was_saved
+                        else "已回到录前准备：这段没有写进包")
+
+    def rec_next_segment(self):
+        r"""复盘页绿按钮：没保存就先保存，然后立刻开下一段。"""
+        if self.rec_state != "done":
+            return
+        if not self.rec_saved:
+            self.rec_save()
+            if not self.rec_saved:
+                return
+        self.rec_reset()
+        self.set_status("已保存；1.2 s 后开始下一段（同一局里接着走）…")
+        # 保存时写过 cmd=apply，插件 0.5 s 轮询；等它先读走再发 rec start，
+        # 不然两条命令会互相覆盖（navcmd 文件只保留最后一条）。
+        self.after(1200, self.rec_start)
 
     def rec_save(self):
         if self.rec_state != "done" or not self.rec_result:
@@ -662,9 +849,11 @@ class RecordTab:
                     existing = f.read()
             new = ucf_rec.dedupe_lines(lines, existing)
             if not new:
-                self.set_status("这些节点 / 边包里已经有了（按 0.35 m 去重）")
+                self.set_status("这些节点 / 边包里已经有了（按 %.2f m 去重）"
+                                % ucf_rec.MERGE_NEAR)
                 self.rec_saved = True
                 self.rec_save_info.configure(text="没有新增：包里已经有这条路线")
+                self.rec_sync_saved_ui()
                 return
             prefix = ""
             if not existing:
@@ -685,8 +874,7 @@ class RecordTab:
             self.set_status("保存失败（原文件没动）：%s" % exc)
             return
         self.rec_saved = True
-        self.rec_primary.configure(state="disabled", fg_color="#2a332a",
-                                   hover_color="#2a332a")
+        self.rec_sync_saved_ui()
         rel = "dev\\packs\\%s\\%s.txt" % (name.replace("/", "\\"), fp)
         self.rec_save_info.configure(text="已保存 %d 行 → %s" % (len(new), rel))
         self.set_status("已保存到草稿：%s（+%d 行）" % (rel, len(new)))

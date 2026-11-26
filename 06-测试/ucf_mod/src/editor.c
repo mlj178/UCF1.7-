@@ -1120,6 +1120,9 @@ static double g_recDist;
 static V3     g_recPrev;
 static int    g_recHasPrev;
 static int    g_recHdr, g_recSrcMode;   /* header 写没写 / 坐标来源（1=player 2=camera） */
+/* 采集对象：1=玩家 2=人机 3=全部（2026-11-26）。人机 10 Hz，玩家仍 30 Hz。 */
+static int    g_recWho = 1;
+#define REC_BOT_HZ 10
 static double g_recPrevT;               /* 上一帧的时间（算 dt / 速度） */
 
 /* 录制文件的 header：和轨迹同一套字段，方便复盘工具直接读（第一帧才写） */
@@ -1161,8 +1164,9 @@ static void rec_stop(const char* why) {
   hz_warn("rec", g_recN, dur, g_recHz, ticks);
 }
 
-static int rec_start(const char* path, int hz) {
+static int rec_start(const char* path, int hz, int who) {
   if (!path || !path[0]) { elog("rec: start without out= path"); return 0; }
+  g_recWho = (who & 3) ? (who & 3) : 1;
   if (strlen(path) >= sizeof g_recPath) { elog("rec: path too long"); return 0; }
   rec_stop("restart");
   strcpy(g_recPath, path);
@@ -1175,7 +1179,8 @@ static int rec_start(const char* path, int hz) {
   g_recHdr = 0; g_recSrcMode = 0; g_recPrevT = 0.0;
   g_recT0 = g_recNext = GetTickCount64();
   jr_reset(&g_recJump, g_recFp);
-  elog("rec: start %d Hz -> %s", g_recHz, g_recPath);
+  elog("rec: start %d Hz who=%s -> %s", g_recHz,
+       g_recWho == 1 ? "player" : (g_recWho == 2 ? "bots" : "all"), g_recPath);
   return 1;
 }
 
@@ -1190,6 +1195,10 @@ static void rec_tick(void) {
   int sp, ct, src;
 
   if (!g_recOn || g_recPaused || !g_recFp) return;
+  if (!(g_recWho & 1)) {          /* 只采人机：不写玩家样本，但 header 还是要有 */
+    if (!g_recHdr) { g_recSrcMode = 1; rec_header(); }
+    return;
+  }
   now = GetTickCount64();
   dt = now - g_recNext;
   /* 和 trace_tick 同一套：差 25% 以内也算到点 */
@@ -1226,7 +1235,7 @@ static void rec_tick(void) {
   }
   sp = (GetAsyncKeyState(VK_SPACE) & 0x8000) ? 1 : 0;
   ct = (GetAsyncKeyState(VK_CONTROL) & 0x8000) ? 1 : 0;
-  fprintf(g_recFp, "{\"t\":%.3f,\"dt\":%.3f,\"x\":%.3f,\"y\":%.3f,\"z\":%.3f,"
+  fprintf(g_recFp, "{\"t\":%.3f,\"k\":\"p\",\"dt\":%.3f,\"x\":%.3f,\"y\":%.3f,\"z\":%.3f,"
                    "\"g\":%d,\"vy\":%.2f,\"sp\":%d,\"ct\":%d}\n",
           t, g_recHasPrev ? t - g_recPrevT : 0.0,
           st.pos.x, st.pos.y, st.pos.z, st.grounded ? 1 : 0, st.vy, sp, ct);
@@ -1661,7 +1670,12 @@ static void trace_tick(void) {
 
 /* navfix 的采样定时器（10 ms）也调一次：editor_tick 只跟着 4 Hz 心跳走，
  * 只靠它会录成 4 Hz；这里补到 ~100 次/秒的机会（rec/trace 自己按 hz 闸门采，重复调用没事）。 */
-void editor_rec_tick(void) { rec_tick(); trace_tick(); }
+static void rec_bot_tick(void);
+void editor_rec_tick(void) {
+  rec_tick();
+  if (g_recWho & 2) rec_bot_tick();
+  trace_tick();
+}
 
 /* ---- per-type colour ---------------------------------------------------- */
 static void str_ascii(P s, char* out, int cap) {
@@ -2014,7 +2028,6 @@ static void nm_toggle(void);
 static void ghost_reset(void);       /* 预置预览：换图时清掉（定义在 wp_place 之前） */
 static void nm_walk(int draw);       /* 只统计 = 0 / 画 = 1 */
 static P comp_tr(P comp);
-/* 路点体检（实现在 probe.c，本文件末尾 #include） */
 
 /* --- geometry batch ----------------------------------------------------- */
 static V3 g_bV[MB_MAXV];
@@ -7410,6 +7423,7 @@ static void nav_cmd_tick(P g) {
   char brush[24] = "";
   char menu[8] = "";
   char act[16] = "";
+  char who[16] = "";
   char mapname[64] = "";
   char label[64] = "";
   char out[MAX_PATH] = "";
@@ -7432,6 +7446,7 @@ static void nav_cmd_tick(P g) {
     if (sscanf(line, "brush=%23s", brush) == 1) continue;
     if (sscanf(line, "menu=%7s", menu) == 1) continue;
     if (sscanf(line, "act=%15s", act) == 1) continue;
+    if (sscanf(line, "who=%15s", who) == 1) continue;
     if (sscanf(line, "hz=%d", &hz) == 1) continue;
     if (sscanf(line, "map=%63s", mapname) == 1) continue;
     if (sscanf(line, "label=%63s", label) == 1) continue;
@@ -7466,7 +7481,10 @@ static void nav_cmd_tick(P g) {
     return;
   }
   if (!strcmp(cmd, "rec")) {                      /* 路点录制：控制台「录制」页 */
-    if (!strcmp(act, "start")) rec_start(out, hz);
+    int whoMask = 1;
+    if (!strcmp(who, "bots")) whoMask = 2;
+    else if (!strcmp(who, "all")) whoMask = 3;
+    if (!strcmp(act, "start")) rec_start(out, hz, whoMask);
     else if (!strcmp(act, "stop")) rec_stop("console");
     else if (!strcmp(act, "pause")) {
       g_recPaused = 1;
@@ -7484,6 +7502,13 @@ static void nav_cmd_tick(P g) {
     if (!strcmp(act, "start")) trace_start(out, hz, mapname, label, pack, fp);
     else if (!strcmp(act, "stop")) trace_stop("console");
     else elog("navcmd: trace needs act=start|stop");
+    return;
+  }
+  if (!strcmp(cmd, "drive")) {                    /* 人机巡线驱动：控制台「验证」卡片 */
+    extern int ucf_drive_set(int on);
+    int on2 = (!strcmp(act, "on") || !strcmp(act, "1")) ? 1 : 0;
+    ucf_drive_set(on2);
+    elog("drive: %s (navcmd)", on2 ? "ON" : "OFF");
     return;
   }
   if (!strcmp(cmd, "stopall")) {                  /* 关控制台时一条命令收掉两个采样器 */
@@ -8269,13 +8294,14 @@ static void drv_release(DRV* d) {
   d->path = 0; d->h = 0;
 }
 
+static int g_driveOn = -1;        /* -1=跟 cfg，0/1=控制台强制（navcmd cmd=drive）*/
+int ucf_drive_set(int on) { g_driveOn = on ? 1 : 0; return g_driveOn; }
 static void drive_tick(void) {
-  static int on = -1;
   P arr, g = navfix_point_graph();
   int n, i, j, nn2;
   unsigned now = GetTickCount();
-  if (on < 0) on = cfg_bool("bot_drive", 0) ? 1 : 0;   /* 默认关：先复现原版 AI 的目标来源 */
-  if (!on || !g || !g_nedBlank || !g_packName[0]) return;
+  if (g_driveOn < 0) g_driveOn = cfg_bool("bot_drive", 0) ? 1 : 0;   /* 默认关 */
+  if (!g_driveOn || !g || !g_nedBlank || !g_packName[0]) return;
   if (!g_prBotType || g_sceneAge < 12) return;
   nn2 = nav_count(g);
   if (nn2 <= 0) return;
@@ -8577,6 +8603,89 @@ static P bot_type_get(void) {
   if (x_class_get_field_from_name) g_prStopFld = x_class_get_field_from_name(g_prBotCls, "stopAllBot");
   return g_prBotType;
 }
+/* ---- 录制：人机采样（10 Hz，k="b"）2026-11-26 --------------------------
+ * 字段只取「分析用得上」的：位置/着地/竖直速度/水平速度/行为名/闲逛目标/有没有敌人。
+ * id 用 Bot 指针（同一次录制内稳定）；玩家样本仍然是 30 Hz、k="p"。
+ * 只在录制页选了「人机 / 全部」时才跑，正常玩家录制一行都不写。 */
+static void rec_bot_tick(void) {
+  static unsigned long long nextTick;
+  static struct { P bot; V3 p; unsigned t; } bp[32];
+  unsigned long long now = GetTickCount64();
+  P arr, bt;
+  int n, i, k;
+  if (!g_recOn || g_recPaused || !g_recFp) return;
+  if (now < nextTick) return;
+  nextTick = now + (1000 / REC_BOT_HZ);
+  bt = bot_type_get();
+  if (!bt) return;
+  arr = ((find_objs_t)RVA(R_FINDOBJS))(bt, 1, 0);
+  if (!arr) return;
+  n = *(int*)((char*)arr + 0x0C);
+  if (n < 0) n = 0;
+  if (n > 32) n = 32;
+  for (i = 0; i < n; i++) {
+    P b = *(P*)((char*)arr + 0x10 + i * 4), tr, sa, pl, vel, acts;
+    V3 p, tgt;
+    float vy = 0.0f, spd = -1.0f, dt;
+    int g = -1, en = 0, j = 0, an = 0, ai;
+    char names[120];
+    if (!b || !uobj_live(b) || !pr_readable(b, 0xE0)) continue;
+    tr = ((get_tr_t)RVA(R_COMP_TR))(b, 0);
+    if (!tr) continue;
+    ((get_pos_t)RVA(R_GET_POS_INJ))(tr, &p, 0);
+    pl = pr_readable((char*)b + 0x24, 0x10) ? *(P*)((char*)b + 0x24) : 0;
+    if (pl && pr_readable(pl, 0x100)) {
+      g = *(unsigned char*)((char*)pl + 0x70) ? 1 : 0;
+      vel = *(P*)((char*)pl + 0x90);
+      if (vel && pr_readable(vel, 0x18)) vy = *(float*)((char*)vel + 0x10);
+    }
+    j = (g == 0) ? 1 : 0;
+    sa = pr_readable((char*)b + 0x64, 0x30) ? *(P*)((char*)b + 0x64) : 0;
+    tgt.x = tgt.y = tgt.z = 0.0f;
+    if (sa && pr_readable(sa, 0x30)) {
+      tgt.x = *(float*)((char*)sa + 0x14);
+      tgt.y = *(float*)((char*)sa + 0x18);
+      tgt.z = *(float*)((char*)sa + 0x1C);
+    }
+    if (pr_readable((char*)b + 0x28, 0x10)) en = *(P*)((char*)b + 0x28) ? 1 : 0;
+    acts = *(P*)((char*)b + 0x58);
+    names[0] = 0;
+    if (pr_readable(acts, 0x20)) {
+      P items = *(P*)((char*)acts + 0x8);
+      an = *(int*)((char*)acts + 0xC);
+      if (pr_readable(items, 0x20)) {
+        int lim = an > 3 ? 3 : an;
+        for (ai = 0; ai < lim; ai++) {
+          P o = *(P*)((char*)items + 0x10 + ai * 4);
+          const char* nm = pr_readable(o, 0x10) ? type_name(*(P*)o) : "?";
+          if (nm && !strncmp(nm, "BotAction.", 10)) nm += 10;
+          if (ai) strncat(names, "|", sizeof names - strlen(names) - 1);
+          strncat(names, nm ? nm : "?", sizeof names - strlen(names) - 1);
+        }
+      }
+    }
+    for (k = 0; k < 32; k++) if (bp[k].bot == b) break;
+    if (k == 32) {
+      for (k = 0; k < 32; k++) if (!bp[k].bot) { bp[k].bot = b; bp[k].p = p; bp[k].t = (unsigned)now; break; }
+    }
+    if (k < 32 && bp[k].bot == b) {
+      dt = (float)((unsigned)now - bp[k].t) / 1000.0f;
+      if (dt > 0.05f) {
+        spd = sqrtf((p.x - bp[k].p.x) * (p.x - bp[k].p.x) + (p.z - bp[k].p.z) * (p.z - bp[k].p.z)) / dt;
+        bp[k].p = p; bp[k].t = (unsigned)now;
+      }
+    }
+    fprintf(g_recFp,
+            "{\"t\":%.3f,\"k\":\"b\",\"id\":\"%08x\",\"x\":%.3f,\"y\":%.3f,\"z\":%.3f,"
+            "\"g\":%d,\"vy\":%.2f,\"spd\":%.2f,\"j\":%d,\"en\":%d,\"act\":\"%s\","
+            "\"tgt\":[%.2f,%.2f,%.2f]}\n",
+            (double)(now - g_recT0) / 1000.0, (unsigned)(size_t)b,
+            p.x, p.y, p.z, g, vy, spd, j, en, names, tgt.x, tgt.y, tgt.z);
+  }
+  for (k = 0; k < 32; k++) if (bp[k].bot && !uobj_live(bp[k].bot)) bp[k].bot = 0;
+  fflush(g_recFp);
+}
+
 static void diag_gn(P nd, int* idx, int* walk) {
   *idx = -1; *walk = -1;
   if (!pr_readable(nd, 0x20)) return;
