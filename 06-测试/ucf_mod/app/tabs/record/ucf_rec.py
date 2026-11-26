@@ -67,7 +67,7 @@ SWITCHES = (
     ("long_jump", "超长跳也建链（实测用）",
      "5.5~6 m 的跳也生成 jump；人机能不能跳过去得进游戏看，默认关"),
     ("need_speed", "跳链写助跑速度（实测用）",
-     "needSpeed 写成录到的助跑速度（run），而不是 0；人机会不会因此先加速要进游戏验证"),
+     "已实测：人机到跳点不会助跑，needSpeed>0 就永远不跳（顶着墙走）。别开，保持 0"),
 )
 SW_DEFAULT = {key: True for key, _l, _d in SWITCHES}
 # 「超长跳也建链」是实测开关，默认关：3 m 以上能不能跳过去还没验证过
@@ -207,6 +207,8 @@ def parse_bots(lines):
                 "spd": float(d.get("spd") or 0.0), "j": int(d.get("j") or 0),
                 "en": int(d.get("en") or 0), "act": str(d.get("act") or ""),
                 "tgt": list(d.get("tgt") or (0, 0, 0)),
+                "njs": str(d.get("njs") or ""), "near": str(d.get("near") or ""),
+                "pts": int(d.get("pts", -1)),
             })
         except (TypeError, ValueError, KeyError):
             continue
@@ -697,6 +699,14 @@ def analyse(samples, step=STEP_DEFAULT, sw=None, events=None):
         chain_merged += 1
     if chain_merged:
         out["issues"].append("%d 处「上一跳落点 / 下一跳起点」已合并成同一个路点" % chain_merged)
+
+    # 2026-11-26：人机到跳点不会助跑（实测 needSpeed>0 就原地顶着墙走）。
+    # 超过 3 m 的跳要提前告诉用户「这是靠助跑跳出来的」，别指望人机复现。
+    for j in out["jumps"]:
+        if j["l3"] > 3.0 and float(j.get("run") or 0.0) > 5.0:
+            out["issues"].append(
+                "这一跳 3D %.2f m，录到时助跑 %.1f m/s；人机不会助跑，可能跳不过去"
+                "（要么拆成两跳，要么在跳点前留出助跑段）" % (j["l3"], j["run"]))
 
     # 合并后跳链长度可能变了一点，重新按窗口分一遍
     if out["jumps"]:

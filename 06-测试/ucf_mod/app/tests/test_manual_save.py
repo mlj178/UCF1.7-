@@ -60,7 +60,8 @@ def main():
     check("!nav_save()" in save_body, "editor_save_all 会检查 nav_save 的返回值")
 
     print("[2] 编辑只 mark dirty")
-    check(ed.count("editor_dirty_mk();") >= 6, "markers 编辑都走 editor_dirty_mk（>=6 处）")
+    # 2026-11-26：Ctrl+2 / Ctrl+5 两条热键路径删掉后只剩 5 处（菜单 + 删除 + 建区等）
+    check(ed.count("editor_dirty_mk();") >= 5, "markers 编辑都走 editor_dirty_mk（>=5 处）")
     check(ed.count("editor_dirty_nav();") >= 4, "点图编辑都走 editor_dirty_nav（>=4 处）")
     push = section(ed, "static void nav_push(int kind", "static void nav_push_dir")
     check("editor_dirty_nav();" in push, "nav_push 只 mark，不写盘")
@@ -68,10 +69,11 @@ def main():
     check("记录一条编辑：只改内存" in ed, "nav_push 的注释写清「只改内存」")
 
     print("[3] Ctrl+S 是唯一保存键")
-    check("if (!shift && vk == 'S') { editor_save_all(); return; }" in ed,
+    check("if (vk == 'S') { editor_save_all(); return; }" in ed,
           "editor_on_key_mod 里 Ctrl+S -> editor_save_all")
-    check("Ctrl+6 保存已取消" in ed, "Ctrl+6 保存已删除（只提示用 Ctrl+S）")
-    check("Ctrl+Shift+S 保存已取消" in ed, "Ctrl+Shift+S 保存已删除")
+    # 2026-11-26：这两个键连同提示代码一起删了，不是「按了给个提示」
+    check("Ctrl+6" not in ed, "Ctrl+6 连提示一起删了")
+    check("Ctrl+Shift+S" not in ed, "Ctrl+Shift+S 连提示一起删了")
     check("ctrl+6 保存" not in consts.lower(), "热键速查里不再把 Ctrl+6 当保存")
     check("Ctrl+Shift+S 手动保存" not in consts, "热键速查里不再有 Ctrl+Shift+S 手动保存")
 
@@ -90,8 +92,10 @@ def main():
     pack = section(ed, "static int nav_cmd_set_pack", "static void nav_cmd_tick")
     check("切包 / 重新载入会丢弃未保存的游戏内编辑" in pack, "切包 / 重新载入前提醒")
     check("g_dirtyNav = 0;" in pack and "g_dirtyMk = 0;" in pack, "切包后清脏标记")
-    reapply = section(ed, "static void nav_reapply(void)", "static void nav_unlink_here")
-    check("重读会丢弃未保存的点图编辑" in reapply, "重读（Ctrl+Shift+R）前提醒")
+    # 2026-11-26：F2 菜单里的「重读并套用」整项删除（用户要求），
+    # 重读改走控制台「重新应用 / 载入到游戏」（cmd=reload → nav_cmd_set_pack）。
+    check("static void nav_reapply" not in ed and '"重读并套用"' not in ed,
+          "菜单「重读并套用」已删除（重读改走控制台）")
 
     print("[6] 键盘派发（navfix）")
     key = section(nv, "if (msg == WM_KEYDOWN)", "if (msg == WM_LBUTTONDOWN")

@@ -19,14 +19,13 @@ import customtkinter as ctk
 from tabs.autotest import AutotestTab
 from tabs.data import DataTab
 from tabs.dev.tab import DevTab
-from tabs.export import ExportTab
 from tabs.hotkey import HotkeyTab
 from tabs.map import MapTab
 from tabs.overview import OverviewTab
 from tabs.record.tab import RecordTab
 from tabs.vis import VisTab
 from tabs.waypoint import WaypointTab
-from ui.consts import FONT, FONT_B, FONT_S, GROUPS, TAB_GROUPS, TAB_OLD_MAP, USER_PAGES
+from ui.consts import FONT, FONT_B, FONT_S, GROUPS, LIVE_VIS_KEYS, TAB_GROUPS, TAB_OLD_MAP, USER_PAGES
 from ui.env import (BUILD_DLL, CFG_PATH, DEPLOY, DEV, FINAL_ROOT, GAME_EXE, HERE, LOG_DIR,
                     MARKERS, NAVSERVER, PACKS, PAYLOAD_DLL, RUNTIME, TEST_VIS)
 from ui.kit import Kit
@@ -38,11 +37,11 @@ from ui.packs import (
 from ui.util import _python, compact_path, game_running, game_tag, load_cfg, save_cfg, tail_log
 
 
-class App(Kit, PackMixin, MapTab, VisTab, ExportTab, HotkeyTab, WaypointTab, OverviewTab,
+class App(Kit, PackMixin, MapTab, VisTab, HotkeyTab, WaypointTab, OverviewTab,
           RecordTab, DataTab, AutotestTab, DevTab, ctk.CTk):
     def __init__(self, role=None):
         super().__init__()
-        # 2026-11-24 用户要求：身份决定建哪些页（用户=地图/部署，开发者=全部 11 页）
+        # 2026-11-24 用户要求：身份决定建哪些页（用户=地图/部署，开发者=全部 10 页）
         self.role = normalize_role(role) or ROLE_DEV
         self.title("UCF 控制台")
         # 高分屏 125% 缩放时 900 逻辑高会把底部按钮顶到任务栏外：
@@ -259,7 +258,7 @@ class App(Kit, PackMixin, MapTab, VisTab, ExportTab, HotkeyTab, WaypointTab, Ove
             self._start_pump(250)
         self._booting = False
 
-        self._safe_status()
+        self._start_status()          # 唯一的一条状态链（见 _safe_status 的说明）
 
     # ---- 页签：分组（一级）+ 组内页（二级）----
     def build_page(self, page, frame, hint_items):
@@ -268,10 +267,7 @@ class App(Kit, PackMixin, MapTab, VisTab, ExportTab, HotkeyTab, WaypointTab, Ove
         2026-11-24 分组重构：页签从「平铺 10 个」改成「4 组 × 组内页」，
         各页的 build_* 一行没改，只是父容器从 tabview 换成了组内 frame。
         """
-        if page == "导出":
-            hint, items = hint_items["导出"]
-            self.build_export_tab(frame, hint, items)   # 总开关 + 六项勾选 + 最近导出
-        elif page == "快捷键":
+        if page == "快捷键":
             hint, _items = hint_items["快捷键"]
             self.build_hotkey_tab(frame, hint)          # 热键速查（游戏内已不显示）
         elif page == "可视化":
@@ -307,7 +303,7 @@ class App(Kit, PackMixin, MapTab, VisTab, ExportTab, HotkeyTab, WaypointTab, Ove
                   "录制": ("人机路点",), "部署": ("人机路点",)}
 
     def _paint_now(self):
-        r"""把还没建页的空壳先画出来：用户先看到窗口，不用等 11 页建完。"""
+        r"""把还没建页的空壳先画出来：用户先看到窗口，不用等 10 页建完。"""
         try:
             self.update_idletasks()
             self.update()
@@ -344,19 +340,38 @@ class App(Kit, PackMixin, MapTab, VisTab, ExportTab, HotkeyTab, WaypointTab, Ove
             return
         self._pump_on = True
         try:
-            self.after(int(delay), self._pump_pages)
+            self._pump_job = self.after(int(delay), self._pump_pages)
         except tk.TclError:
             self._pump_on = False
+            self._pump_job = None
+
+    def _stop_pump(self):
+        r"""停掉后台建页（折叠 / 关窗）；展开时 _start_pump 再续上。"""
+        job = getattr(self, "_pump_job", None)
+        self._pump_job = None
+        self._pump_on = False
+        if job:
+            try:
+                self.after_cancel(job)
+            except Exception:             # noqa: BLE001  已经跑过/已被销毁
+                pass
 
     def _pump_pages(self):
         r"""后台逐页建：一次只建一页，建完让出主线程，窗口不卡。
 
         2026-11-26：折叠时暂停（页签都藏起来了，建了也看不见），展开再接着建；
         间隔 150 ms，让点击/折叠有机会被处理。
+
+        2026-11-26 二次卡死修复：折叠时不再排下一条。以前这里每 500 ms
+        醒一次、一直醒到展开，折叠着放一晚上就是十几万次空转；
+        现在整条链停掉，toggle_fold 展开时再启动。
         """
         self._pump_on = False
-        if getattr(self, "_folded", False) or time.time() < getattr(self, "_pump_pause_until", 0):
-            self._start_pump(500)          # 折叠中 / 刚展开：先别建，让窗口先响应
+        self._pump_job = None
+        if getattr(self, "_folded", False):
+            return                          # 折叠：链停掉，展开时再续
+        if time.time() < getattr(self, "_pump_pause_until", 0):
+            self._start_pump(500)           # 刚展开：先别建，让窗口先响应
             return
         while self._queue:
             page = self._queue.pop(0)
@@ -369,15 +384,50 @@ class App(Kit, PackMixin, MapTab, VisTab, ExportTab, HotkeyTab, WaypointTab, Ove
             self._start_pump(150)
             return
 
+    #: 状态刷新间隔（毫秒）；全程序只允许一条定时链
+    STATUS_EVERY = 4000
+
+    def _start_status(self):
+        r"""启动唯一的状态刷新链；已经在排队就什么都不做。"""
+        if getattr(self, "_status_job", None) is not None:
+            return
+        self._safe_status()
+
+    def _stop_status(self):
+        r"""停掉状态链（折叠 / 关窗）；展开时 _start_status 再续上。"""
+        job = getattr(self, "_status_job", None)
+        self._status_job = None
+        if job:
+            try:
+                self.after_cancel(job)
+            except Exception:             # noqa: BLE001  已经跑过/已被销毁
+                pass
+
     def _safe_status(self):
+        r"""4 s 状态刷新：全控制台唯一的一条状态定时链。
+
+        2026-11-26 卡死修复（重点）：refresh_status 以前结尾也会
+        after(4000, self.refresh_status)。这里再调一次刷新，等于每 tick
+        凭空多一条链：4 s 后两条、8 s 后三条……跑十分钟能堆出上百条，
+        主线程永远走不出 refresh_status（Windows 事件日志里的 AppHangB1），
+        窗口就从「有点卡」变成「未响应」。折叠只是让它更明显 —— 用户把窗口
+        收起去干别的，回来时链已经堆满。
+
+        现在：排程只在这里，永远一条；refresh_status 自己不再排程。
+        折叠时整条链停掉（窗口都藏起来了，刷了看不见），展开立刻补一次。
+        """
+        self._status_job = None
         try:
-            self.refresh_status()
+            if not getattr(self, "_folded", False):
+                self.refresh_status()
         except Exception:                 # noqa: BLE001  页面还没建完就先跳过
             pass
+        if getattr(self, "_folded", False):
+            return                        # 折叠：不排下一条，展开时 _start_status
         try:
-            self.after(4000, self._safe_status)
+            self._status_job = self.after(self.STATUS_EVERY, self._safe_status)
         except tk.TclError:
-            pass
+            self._status_job = None
 
     def on_group(self, name=None, persist=True):
         r"""一级页签（分组）切换：回到这一组上次停留的子页。CTkTabview 的 command 不传参数。"""
@@ -422,8 +472,6 @@ class App(Kit, PackMixin, MapTab, VisTab, ExportTab, HotkeyTab, WaypointTab, Ove
             pass
         if name == "数据":
             self.refresh_data()
-        elif name == "导出":
-            self.refresh_export_info()
         elif name == "车测":
             self.refresh_at()
         elif name == "录制":
@@ -523,7 +571,7 @@ class App(Kit, PackMixin, MapTab, VisTab, ExportTab, HotkeyTab, WaypointTab, Ove
         _restart_after_setup()
 
     # ---- 写盘 ----
-    def persist(self, note=""):
+    def persist(self, note="", live=False):
         self.cfg["enabled"] = bool(self.master_var.get())
         feats = self.cfg.setdefault("features", {})
         for k, v in self.vars.items():
@@ -536,12 +584,35 @@ class App(Kit, PackMixin, MapTab, VisTab, ExportTab, HotkeyTab, WaypointTab, Ove
             self.set_status("写不进 ucf_mod.json：%s" % exc)
             return
         msg = "已保存 " + (note or "")
-        if game_running():
+        if live and game_running():
+            # 可视化这几项可以边玩边切：写一条 cmd=vis，插件 0.5 s 内应用
+            if self.send_vis_cmd():
+                msg += " · 已实时下发（不用重进图）"
+        elif game_running():
             msg += " · 游戏在运行，重启游戏才生效"
         self.set_status(msg)
 
+    def send_vis_cmd(self):
+        r"""把「可视化」页现在的勾选状态整批发给运行中的插件（cmd=vis）。
+
+        整批发而不是只发改的那一个：插件也不需要记状态，收到什么就是什么。
+        游戏没开就不写（配置已经存盘，下次启动按配置来）。"""
+        extra = {}
+        for key, field in LIVE_VIS_KEYS.items():
+            var = self.vars.get(key)
+            if var is not None:
+                extra[field] = 1 if var.get() else 0
+        if not extra:
+            return False
+        try:
+            write_nav_cmd("vis", extra=extra)
+        except OSError as exc:
+            self.set_status("写不进 ucf_navcmd.txt：%s" % exc)
+            return False
+        return True
+
     def on_toggle(self, key):
-        self.persist(key)
+        self.persist(key, live=key in LIVE_VIS_KEYS)
 
     def on_master(self):
         self.persist("总开关")
@@ -569,6 +640,10 @@ class App(Kit, PackMixin, MapTab, VisTab, ExportTab, HotkeyTab, WaypointTab, Ove
         if not self._folded:
             self._geom_saved = str(self.tk.call("wm", "geometry", self))
             self._folded = True
+            # 2026-11-26 卡死修复：折叠后界面全看不见，别让后台链还醒着。
+            # 两条链都停掉；展开时再启动（见下面 else 分支）。
+            self._stop_status()
+            self._stop_pump()
             self.intro.pack_forget()
             self.tabview.pack_forget()
             self.stat.pack_forget()
@@ -599,9 +674,14 @@ class App(Kit, PackMixin, MapTab, VisTab, ExportTab, HotkeyTab, WaypointTab, Ove
                 pass
             if getattr(self, "_queue", None):
                 self._start_pump(400)
+            # 状态链是折叠时停掉的：展开立刻补一次刷新，再照常每 4 s 一次
+            self._start_status()
 
     def on_close(self):
         r"""关窗口 = 最后一次落盘：正停在哪个页签、车测输入框里没失焦的数字都不丢。"""
+        # 2026-11-26：先把两条定时链摘掉，别让 destroy 之后的 after 回调再炸
+        self._stop_status()
+        self._stop_pump()
         rec_on = getattr(self, "rec_state", "") == "rec"
         tr_on = getattr(self, "tr_state", "") in ("starting", "running")
         if rec_on or tr_on:
@@ -644,13 +724,14 @@ class App(Kit, PackMixin, MapTab, VisTab, ExportTab, HotkeyTab, WaypointTab, Ove
         self.logbox.configure(state="disabled")
         if not self.dot.cget("text"):
             self.set_status("配置：%s" % ("已读取" if os.path.isfile(CFG_PATH) else "未找到，用默认值"))
-        self.refresh_export_info()
         if hasattr(self, "refresh_at_ready"):
             self.refresh_at_ready()      # 车测：总开关关着就别让「开跑」能点
         if hasattr(self, "wp_meta"):
             self.refresh_wp_status()
         self.refresh_launch_strip(running)
-        self.after(4000, self.refresh_status)
+        # 2026-11-26 卡死修复：这里以前还有一行 after(4000, self.refresh_status)。
+        # 它和 _safe_status 的定时链叠在一起，每次 tick 多一条，越跑越多，
+        # 主线程被刷状态占满 → Windows 判无响应。排程只留 _safe_status 一处。
 
     def refresh_game_button(self, running=None):
         r"""底部「开始游戏」按钮：文案和颜色跟着版本走，别让用户猜。"""
@@ -963,7 +1044,7 @@ class App(Kit, PackMixin, MapTab, VisTab, ExportTab, HotkeyTab, WaypointTab, Ove
         r"""启动游戏的环境变量 + 一句人话说明（「开始游戏」和「车测」共用）。
 
         UCF_MOD=1 是通行证。三档启动的路径也在这里定（数据全在 ②，③ 只当运行环境）：
-          UCF_EXPORT_DIR     -> ② 开发版 vis（Ctrl+E 导出、navmesh、_seen_ 都写这里）
+          UCF_EXPORT_DIR     -> ② 开发版 vis（可走面 navmesh_*.bin 写这里）
           UCF_PACK_DIR       -> ② 开发版 packs（编辑中）
           成品：UCF_PACK_DIR=② + UCF_PACK=final —— 读 final\<指纹>.txt，和编辑中同一套逻辑
           编辑中：UCF_PACK=②\packs\<图>（可写，游戏内存回草稿）

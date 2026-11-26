@@ -67,12 +67,13 @@ def main():
     dev_pages = [p for _g, pages in TAB_GROUPS for p in pages]
     check(tuple(USER_PAGES) == ("地图", "部署"), "USER_PAGES = 地图 / 部署（实际 %s）" % (USER_PAGES,))
     check(set(USER_PAGES) <= set(dev_pages), "用户的两页都在开发页里（超集关系）")
-    check(not (set(USER_PAGES) & {"地图总览", "人机路点", "录制", "数据", "可视化", "导出",
+    check(not (set(USER_PAGES) & {"地图总览", "人机路点", "录制", "数据", "可视化",
                                   "快捷键", "车测", "开发者选项"}),
           "用户身份里没有开发页")
 
-    print("== 4) 开发身份的 11 页")
-    check(len(dev_pages) == len(set(dev_pages)) == 11, "开发页 11 个、不重不漏（实际 %d）" % len(dev_pages))
+    print("== 4) 开发身份的 10 页")
+    # 2026-11-26：「导出」页连同 Ctrl+E 导出一起删了，10 页
+    check(len(dev_pages) == len(set(dev_pages)) == 10, "开发页 10 个、不重不漏（实际 %d）" % len(dev_pages))
     check([g[0] for g in TAB_GROUPS] == ["插件开关", "路点数据", "部署与测试", "开发调试"],
           "4 个功能组的名字和顺序")
     check(all(p in TAB_OLD_MAP for p in dev_pages), "TAB_OLD_MAP 覆盖全部页名（旧配置能迁移）")

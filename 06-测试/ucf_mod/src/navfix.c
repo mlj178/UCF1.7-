@@ -441,9 +441,6 @@ static void link_guard_areas(void) {
 }
 
 static int g_graphOurs;   /* 1 = build_waypoints generated the current graph */
-static int g_collectOnly; /* 1 = 只读采集：不改动游戏里的任何状态 */
-int  navfix_collect_only(void) { return g_collectOnly; }
-void navfix_set_collect_only(int on) { g_collectOnly = on ? 1 : 0; nlog("collect-only %s", on ? "ON" : "OFF"); }
 
 /* ===================== 地面采样 + 三个独立动作 ==========================
  * 2026-11-16 拆解：原来 build_waypoints() 把「铺路点 / 补蹲守点 / 造守卫区」
@@ -782,7 +779,6 @@ static void act_guard(void) {
 static void run_setup(void) {
   int wp, cr, ga;
   if (InterlockedCompareExchange(&g_appQuit, 0, 0)) return;
-  if (g_collectOnly) { nlog("readonly: skip setup (collect-only)"); return; }
   wp = cfg_bool("auto_waypoints", 1);
   cr = cfg_bool("auto_crouch", 1);
   ga = cfg_bool("ghost_areas", 1);
@@ -814,7 +810,7 @@ static void nav_tick(void) {
     g_graphOurs = 0;
     setup_reset();
     nlog("scene astar=%p (purge start)", a);
-    if (!g_collectOnly) purge_guard_areas();
+    purge_guard_areas();
     nlog("scene astar=%p (purge done, notify editor)", a);
     { void editor_gc_probe(void); editor_gc_probe(); }   /* gc_probe 调试开关 */
     { void editor_on_scene(void*); editor_on_scene((void*)a); }
@@ -823,16 +819,14 @@ static void nav_tick(void) {
     {
       P pg0 = point_graph(a);
       { int editor_nogen(void);
-        if (!g_collectOnly && !editor_nogen() && pg0 && *(int*)((char*)pg0 + 0xEC) == 0) { nlog("scene change: running setup immediately"); run_setup(); } }
+        if (!editor_nogen() && pg0 && *(int*)((char*)pg0 + 0xEC) == 0) { nlog("scene change: running setup immediately"); run_setup(); } }
     }
   }
   pg = point_graph(a);
   nodes = pg ? *(int*)((char*)pg + 0xEC) : -1;
   if (pg && nodes == 0) {
     g_zeroStreak++;
-    if (g_collectOnly) {
-      if ((g_zeroStreak % 20) == 0) nlog("collect-only: graph still empty (~%.0f s)", g_zeroStreak * 0.25f);
-    } else { int editor_nogen(void);
+    { int editor_nogen(void);
       if (!editor_nogen() && (g_zeroStreak == 4 || (g_zeroStreak > 4 && (g_zeroStreak % 10) == 0))) {
         run_setup();
       }
@@ -845,10 +839,6 @@ static void nav_tick(void) {
   }
   { void editor_tick(void); editor_tick(); }
   { void navfix_hires_kick(void); navfix_hires_kick(); }   /* 采样定时器没起来就再补一次 */
-  if (g_collectOnly) {
-    static int diagTick;
-    if ((++diagTick % 40) == 0) navfix_diag_graphs();   /* 每 ~10 s 再打一次，看会不会后来长出来 */
-  }
 }
 
 static WNDPROC g_oldProc;

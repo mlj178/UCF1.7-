@@ -145,13 +145,12 @@ ucf_mod/
 首次启动弹窗选，右上角「切换身份」随时改（会重启一下）。表在 `app/ui/consts.py`：
 
 - **用户**（`USER_PAGES`）：地图、部署 —— 平铺两页，隐藏「路点工作台」「去人机路点改」等开发入口。
-- **开发者**（`TAB_GROUPS`）：11 页分 4 组（用户那两页也在里面，不用切身份）：
+- **开发者**（`TAB_GROUPS`）：10 页分 4 组（用户那两页也在里面，不用切身份）：
 
 | 组 | 页签 | 代码 | 说明 |
 |---|---|---|---|
 | **插件开关** | 地图 | `app/tabs/map.py` | 房间选图列表里的隐藏图（暴风） |
 | | 可视化 | `app/tabs/vis.py` | 进图读什么、画什么（逐类勾选 + 图例） |
-| | 导出 | `app/tabs/export.py` | Ctrl+E 导出开关与内容、最近导出、整理收件箱 |
 | | 快捷键 | `app/tabs/hotkey.py` | 游戏内热键速查 |
 | **路点数据** | 地图总览 | `app/tabs/overview.py` + `ui/overview.py` | 11 张图一张一行：备份① / 编辑中 / 成品 / 游戏加载；矩阵 / 卡片 / 看板三视图 |
 | | 人机路点 | `app/tabs/waypoint.py` + `ui/packs.py` | 编辑中 / 成品两档、本图草稿（含删除）、发布、草稿↔成品对比 |
@@ -236,10 +235,16 @@ python app\tabs\deploy\deploy_mod.py --game-exe "..." --uninstall
 - **手动保存（2026-11-25，唯一保存方式）**：游戏内所有编辑（路点 / 连线 / 跳链 / 蹲守点 / 守卫区 / 标签 / 出生点）
   只改内存和当前场景，**按 Ctrl+S 才写文件**（F2 菜单「撤销 / 保存」→「保存（Ctrl+S）」是同一个入口，
   菜单第一行常驻「● 未保存 / 已保存」）。没按 Ctrl+S 就退房间 = 改动全部丢弃，
-  `ucf_mod.log` 会写一行「退出房间，丢弃未保存的编辑」。旧的 Ctrl+6 / Ctrl+Shift+S 保存已删除。
+  `ucf_mod.log` 会写一行「退出房间，丢弃未保存的编辑」。旧的快捷键保存入口（Ctrl+6 / Ctrl+Shift+S 等）已全部删除。
 - 按 **F2** 打开；**长按 E 0.45 s** 备用。按 F2 前先点一下游戏画面拿焦点。
 - 键位：`1-9` 直选；小键盘 `8/2` 上下、`5` 确认；`Esc` 或主键盘 `0` 返回（滚轮也可上下）；左键确认、右键返回。
   W/A/S/D、空格、Shift、Ctrl 仍交给游戏。
+- **热键（2026-11-26 精简）**：游戏里只剩 F2 菜单、`Ctrl+S` 保存、`Ctrl+V` 可视化总开关、`Delete` 删准星最近标记。
+  原来的 `Ctrl+0`~`Ctrl+9`（编辑模式那一套）、`Ctrl+Shift+A/N/J/D/Z/R`、`Ctrl+Shift+6/+7`、
+  `Ctrl+E`（手动导出 JSON）、`Ctrl+Shift+X`（只读采集）全部下线 —— 前两组做的事 F2 菜单里都有，
+  后两个功能连代码一起删了（导出页、export_* 开关、collect.flag 都不在了）。
+- **可视化实时下发**：控制台「插件开关 → 可视化」的勾选会在游戏运行时写一条 `ucf_navcmd.txt`（`cmd=vis`），
+  插件 0.5 s 内应用，**不用重进图、不用重开游戏**。
 - **连续编辑**：类型页 / 方向页常驻，选好类型后按 5 可以一直放同一种点；连完 `A->B` 后 A 自动前进到 B；删除页也停留。
 - **加点前提**：运行期不能增长 PointGraph 节点数组，只能复用「不可走」槽位。原生点全可走的图（沙漠要塞、运输船）要先建**空白底图草稿**；
   飓风危城原生 0 点，建不了空白包。
@@ -275,7 +280,7 @@ python app\tabs\deploy\deploy_mod.py --game-exe "..." --uninstall
 ```
 
 约定写在 `app/workbench/web/nav-studio-app.js` 的 `DIR4/dirScreen`、`app/workbench/web/navview.html` 的同名函数、
-`src/editor.c` 的 `compass_bucket` 三处，改要一起改。游戏内还有一份汉字罗盘（控制台「可视化」→「方向罗盘」，或 Ctrl+Shift+7）。
+`src/editor.c` 的 `compass_bucket` 三处，改要一起改。游戏内还有一份汉字罗盘（控制台「可视化」→「方向罗盘」勾选，运行中实时生效）。
 
 ### 3D 地形与贴图
 
@@ -320,6 +325,7 @@ python app/tests/test_manual_save.py        # 手动保存：唯一入口 / 无�
 python app/tests/test_logpaths.py           # 日志三级查找 + 注入 + 轮转
 python app/tests/test_layout.py             # 目录树与 README 一致（重构后新增）
 python app/tests/test_roles.py              # 身份（用户/开发）↔ 页表、旧配置迁移
+python app/tests/test_console_timers.py     # 控制台定时链只有一条：折叠停 / 展开续 / 关窗摘
 ```
 
 ---

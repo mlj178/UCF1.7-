@@ -6,7 +6,7 @@
 例外是「建图」页：2026-11-17 控制台删掉了这一页的三个开关，C 侧键留给旧配置
 与回滚用（默认仍为开），所以它们在 RETIRED 里显式豁免，不允许再冒回面板。
 
-另外核对页面归属：可视化、导出两页的开关必须留在对应页。
+另外核对页面归属：可视化那几页的开关必须留在对应页。
 
 本测试只读两份源码，不需要游戏、部署端、网络或窗口。
 
@@ -40,7 +40,7 @@ KIT = os.path.join(PROJ, "app", "ui", "kit.py")
 # 2026-11-19：用户要求删除 editor（允许游戏内编辑）；C 侧仍按默认 1 运行。
 # 2026-11-19：用户要求整个「手动」页删除，collect_only 入口一并下线（collect.flag 仍可用）。
 RETIRED = {"auto_waypoints", "auto_crouch", "ghost_areas", "editor", "collect_only"}
-TABS = ["地图", "可视化", "导出", "快捷键"]   # 「测试数据」「数据」「车测」不是开关页，不在此列
+TABS = ["地图", "可视化", "快捷键"]   # 「测试数据」「数据」「车测」不是开关页，不在此列
 # 非 bool 开关（画笔字符串等）：控件不是 switch，但必须在对应页有入口
 CUSTOM = {"wp_menu": "人机路点", "wp_autoground": "人机路点"}
 # 2026-11-19：可视化改成逐类开关（读+画同一颗），全部落在「可视化」页
@@ -48,7 +48,8 @@ CUSTOM = {"wp_menu": "人机路点", "wp_autoground": "人机路点"}
 #              「画不画」，所以和可走面一样归在「可视化」页并在 editor.c 里读。
 # 2026-11-21：玩家坐标记录搬出「可视化」，和原始轨迹采集一起进新页「开发者选项」；
 #              该页的开关不在 GROUPS 里，单独定义在控制台的 DEV_ITEMS。
-VIS_DATA = ("vis_nodes", "vis_crouch", "vis_guard", "vis_nano", "vis_born",
+# 2026-11-26：vis_guard（旧守卫 Bot_GuardArea/GuardPos）已删 —— 游戏没用这份数据。
+VIS_DATA = ("vis_nodes", "vis_crouch", "vis_nano", "vis_born",
             "vis_supply", "vis_jump", "vis_tag", "navmesh_show", "vis_compass")
 DEV_PAGE = "开发者选项"
 
@@ -157,6 +158,18 @@ def main():
         assert ('cfg_bool("%s"' % key) in editor_c, \
             "cfg.c 有 %s，但 editor.c 没有 cfg_bool 读取" % key
 
+    # 2026-11-26 用户要求：可视化各层改成"控制台勾选 → 实时下发"，不再占游戏内热键。
+    # 控制台字段名必须和插件 cmd=vis 的解析一一对应，写错一个就静默失效。
+    live = console_const("LIVE_VIS_KEYS")
+    assert live.get("visualizer") == "on" and live.get("vis_jump") == "jump" \
+        and live.get("vis_player_marks") == "marks", "LIVE_VIS_KEYS 映射不对"
+    for key, field in live.items():
+        assert key in seen, "实时下发的开关 %s 不在任何页" % key
+        assert ('sscanf(line, "%s=%%d"' % field) in editor_c, \
+            "LIVE_VIS_KEYS 的 %s -> %s 在 editor.c 没有对应解析" % (key, field)
+    assert 'if (!strcmp(cmd, "vis"))' in editor_c, "editor.c 没接 cmd=vis"
+    assert 'write_nav_cmd("vis"' in read(CONSOLE), "控制台没发 cmd=vis"
+
     # 2026-11-19 用户要求：「测试数据」页删除，选图/选包并入「人机路点」①；
     # 人机路点必须在数据页之前（数据页读它建的 opt_pack / opt_map）。
     src = read(CONSOLE)
@@ -171,10 +184,10 @@ def main():
     assert group_names == ["插件开关", "路点数据", "部署与测试", "开发调试"], \
         "控制台分组应为 插件开关/路点数据/部署与测试/开发调试，实际 %s" % group_names
     flat_pages = [p for pages in pages_of.values() for p in pages]
-    assert len(flat_pages) == len(set(flat_pages)) == 11, \
-        "11 个页签必须一组一个、不重不漏，实际 %s" % flat_pages
-    assert pages_of["插件开关"] == ["地图", "可视化", "导出", "快捷键"], \
-        "「插件开关」组应为 地图/可视化/导出/快捷键"
+    assert len(flat_pages) == len(set(flat_pages)) == 10, \
+        "10 个页签必须一组一个、不重不漏，实际 %s" % flat_pages
+    assert pages_of["插件开关"] == ["地图", "可视化", "快捷键"], \
+        "「插件开关」组应为 地图/可视化/快捷键（导出页已删）"
     assert pages_of["路点数据"][0] == "地图总览", \
         "「地图总览」应排在「路点数据」第一位"
     assert pages_of["路点数据"].index("人机路点") < pages_of["路点数据"].index("数据"), \

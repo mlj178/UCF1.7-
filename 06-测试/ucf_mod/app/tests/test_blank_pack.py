@@ -114,6 +114,11 @@ def main():
     for name in want:
         assert re.match(r"^[^\\/:*?\"<>|]{1,30}$", name), name   # 控制台的包 id 规则
 
+    # 2026-11-26：菜单里的「重读并套用」整项删除（用户要求），grow 包不会再被那条
+    # 路径（nav_base_restore + 「只建一次」早退）把点全标死；重读改走控制台 cmd=reload。
+    assert "static void nav_reapply" not in editor, \
+        "菜单「重读并套用」又回来了（2026-11-26 已按用户要求删除）"
+
     print("OK: grow/keep pack chain present in editor.c / navdata.py / navserver.py / "
           "navview.html / 控制台.pyw（blank / seed 已删）")
     return 0

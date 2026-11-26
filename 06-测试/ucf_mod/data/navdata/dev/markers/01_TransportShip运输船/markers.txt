@@ -1,6 +1,7 @@
-# ucf_mod markers v1  crouch=0 nanopos=0 area=1 tag=0
+# ucf_mod markers v1  crouch=1 nanopos=0 area=0 tag=0 spawnadd=0 spawndel=0
 # crouch <team> <x> <y> <z>
-# area <scale*10> <x> <y> <z>
+# area <scale*10> <x> <y> <z> [aid]
 # nanopos <areaId> <x> <y> <z> <safety>
 # tag <tag> <x> <y> <z>
-area 30 -56.401 -11.769 -14.187
+# spawn <team 0BL/1GR> <x> <y> <z> <yaw>   / spawndel <team> <x> <y> <z>
+crouch 0 -61.485 -16.590 -13.377

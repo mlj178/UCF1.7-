@@ -61,7 +61,7 @@ def main():
     check(os.path.isfile(j("app", "core", "ucf_paths.py")), "路径真相 app/core/ucf_paths.py 在")
 
     print("== 3) 页签与共用件")
-    for t in ("map.py", "vis.py", "export.py", "hotkey.py", "waypoint.py", "overview.py",
+    for t in ("map.py", "vis.py", "hotkey.py", "waypoint.py", "overview.py",
               "data.py", "autotest.py"):
         check(os.path.isfile(j("app", "tabs", t)), "页签 app/tabs/%s 在" % t)
     for d, f, name in (("record", "tab.py", "录制"), ("deploy", "deploy_tab.py", "部署"),

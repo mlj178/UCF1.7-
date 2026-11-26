@@ -10,7 +10,7 @@ import tkinter as tk
 
 import customtkinter as ctk
 
-from ui.consts import FONT_S
+from ui.consts import FONT_S, MARK_BALLS
 
 
 class VisTab:
@@ -70,9 +70,40 @@ class VisTab:
         for c in range(3):
             grid.grid_columnconfigure(c, weight=1)
         self.after(120, lambda: self.wrap_cells(body, txts, legends, 1.0))
-        ctk.CTkLabel(box, text="勾上 = 进图时读这一类并画出来；关掉 = 不读也不画（少一次可能出事的读取）。\n"
-                              "只影响画面，不影响 Ctrl+E 导出（导出读什么由「导出」页那 6 项决定），"
-                              "也不改动游戏本身。改完重启游戏生效。",
+        ctk.CTkLabel(box, text="勾上 = 读这一类并画出来；关掉 = 不读也不画（少一次可能出事的读取）。\n"
+                              "只影响画面，不影响 Ctrl+E 导出（导出读什么由「导出」页那几项决定），"
+                              "也不改动游戏本身。\n"
+                              "游戏在运行时改勾选会**立刻下发**（0.5 s 内生效，不用重进图）；"
+                              "游戏没开就只存配置，下次启动按配置来。",
                      font=FONT_S, text_color="#9aa0a6", anchor="w",
                      justify="left", wraplength=600).pack(
             fill="x", padx=12, pady=(8, 10))
+        self.build_mark_ball_card(body)
+
+    # ---- 「点位上的小球」：DLL 给每个标记建的可视化球，颜色 = 类型 ----
+    # 2026-11-26 用户要求：写在「可视化」页里，只记颜色和是什么。
+    def build_mark_ball_card(self, body):
+        box = ctk.CTkFrame(body, corner_radius=8)
+        box.pack(fill="x", padx=10, pady=(8, 10))
+        ctk.CTkLabel(box, text="点位上的小球（DLL 自己建的，不是游戏里的物体）",
+                     font=("Microsoft YaHei UI", 12, "bold"),
+                     anchor="w").pack(fill="x", padx=12, pady=(8, 2))
+        # 圆点用画出来的色块，不用 emoji：Tk 8.6 在 Windows 上把 🟡🟢🔵🔴
+        # 全渲染成同一个灰色斜纹圈，颜色区分不出来（2026-11-26 实测截图）。
+        for chip, name, what in MARK_BALLS:
+            row = ctk.CTkFrame(box, fg_color="transparent")
+            row.pack(fill="x", padx=12, pady=1)
+            ctk.CTkFrame(row, width=12, height=12, corner_radius=6,
+                         fg_color=chip).pack(side="left", padx=(2, 6))
+            ctk.CTkLabel(row, text=name, font=FONT_S,
+                         text_color="#c9d1d9", width=24, anchor="w").pack(side="left")
+            ctk.CTkLabel(row, text=what, font=FONT_S, text_color="#9aa0a6",
+                         anchor="w", justify="left").pack(side="left")
+        ctk.CTkLabel(box, text="建点 / 读点时才有：球在那个点正上方 0.45 m，游戏里的点位本身看不见，"
+                              "靠它找位置。不写进 markers.txt 或包文件，换图 / 退游戏就没了。\n"
+                              "显隐：Ctrl+V 关掉 → 球和数据一起没；Ctrl+0 只切球（随时能按，不用开编辑模式）；"
+                              "两个都开着球才在。\n"
+                              "本页那 10 个勾选管的是「读不读游戏自己的数据」，不管球（球来自你自己的 markers.txt）。",
+                     font=FONT_S, text_color="#9aa0a6", anchor="w",
+                     justify="left", wraplength=600).pack(
+            fill="x", padx=12, pady=(6, 10))
