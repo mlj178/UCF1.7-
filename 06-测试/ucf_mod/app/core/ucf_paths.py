@@ -1,64 +1,61 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-r"""工程端 / 部署端 / 三区数据 的路径解析 —— 全工具唯一的路径真相。
+r"""工程端 / 部署端 / 地图数据 的路径解析 —— 全工具唯一的路径真相。
 
-三区（2026-11-21 起；此前是"四版"，④ 测试版已并入 ② 开发版）：
+一图一夹（2026-11-27 起；此前 ① 备份 / ② 开发 / 草稿 / 标记 分在 navdata\ 下四处）：
 
-  三档启动（控制台底部按钮决定，都从 ② 读，游戏目录不再存数据）：
-      成品    UCF_PACK_DIR=② + UCF_PACK=final        每张图一份 final\<指纹>.txt，只读；
-                                                        和编辑中同一套加载逻辑（grow/keep 也生效）
-      编辑中  UCF_PACK=②\packs\<图>                   一张图一个草稿，可写，调图 / 试路线
-      原版    插件总开关关                             插件待机，什么都不读
-
-  ---------------------------------------------------------------------------
-  2026-11-21 起：① 备份 / ② 开发 都按**地图分文件夹**（和 ② packs 同一套命名）：
-
-    <数据根>\
-        00_公共\                      names.json / _index.json / INDEX.md / 清单（不属于某张图）
-        01_TransportShip运输船\        map.json  navmesh.bin  <指纹>.txt（② 还有 导出\）
-        02_Factory小型工厂\            …
-        04_NY_TM胜利广场\              原生没有点图，只有 navmesh.bin
+    data\maps\
+        00_公共\                      names.json / _index.json / INDEX.md / SHA256SUMS.txt / .frozen.json
+        01_TransportShip运输船\        同一张图的所有东西都在这一个文件夹里：
+            map.json                  点图元数据（指纹 / 点数 / bbox）
+            navmesh.bin               可走面（原生没有 NavMeshGraph 的图就没有这个文件）
+            <指纹>.txt                 点图草稿（编辑中档读写这里）
+            markers.txt               蹲守点 / 守卫区 / 守卫点 / 标签 / 出生点
+            manifest.json             草稿状态（谁建的 / 什么时候 / grow|keep）
+            native\                    ① 冻结副本：map.json + navmesh.bin（只读）
+            final\<指纹>.txt           成品（成品档读这里，只读）
+        04_NY_TM胜利广场\              原生没有点图，只有 navmesh.bin（native\ 里也是）
         07_DeathRing死亡擂台\          同上
+        _inbox\                       插件写出来的可走面导出 / 录制轨迹（派生，可重建）
+        _archive\                     删草稿 / 清标记 / 发布前快照 / 迁移日志（派生）
 
   文件夹名唯一来源：docs/guide/地图对照表.md（map_table.folder_name）。
-  旧布局（maps\*.json + nav\ + vis\）仍然能读——下面的地图函数都兼容两种，迁移期间不会翻车。
+
+  ---------------------------------------------------------------------------
+  三档启动（控制台底部按钮决定，都从 data\maps 读，游戏目录不存数据）：
+      成品    UCF_PACK_DIR=data\maps + UCF_NAV_SEARCH=1 + UCF_NAV_SUB=final
+              插件按当前图指纹找 <图>\final\<指纹>.txt，markers 也跟着 <图>\markers.txt；只读
+      编辑中  UCF_PACK_DIR=data\maps + UCF_PACK=<图>   一张图一个草稿，可写
+      原版    插件总开关关                              插件待机，什么都不读
 
    ---------------------------------------------------------------------------
-  ① 备份版（原生，只读，永不编辑）
-       工程端 navdata\native\   <图>\{map.json, navmesh.bin} + 00_公共\
-  ② 开发版（唯一数据源：成品 + 收件箱 + 草稿）
-       工程端 navdata\dev\      <图>\{map.json, navmesh.bin, 导出\} + 00_公共\
-           packs\<图>\              草稿（可写沙盒，一张图一个）；做完用 pack promote 发布
-           final\<指纹>.txt         成品（一张图一份，平铺，只读）
-           vis\                     导出收件箱（插件临时落点，整理后进 <图>\导出\）
-           archive\                 处理过的导出 / 发布前快照
-  ③ 游戏目录（运行时，只放加载器 + 本体补丁）
+  部署端（运行时，只放加载器 + 本体补丁）
        游戏目录 winhttp.dll  winhttp_orig.dll
        （2026-11-25 起不再有 ucf_mod\；插件本体/配置/命令/日志/标记全在工程端）
 
   运行时状态（工程端，2026-11-25 起）：
       run\runtime\ucf_mod.json     配置（控制台读写，插件通过 UCF_MOD_DIR 读）
       run\runtime\ucf_navcmd.txt  控制台 ↔ 插件命令（插件每 ~0.5 s 查一次 seq）
+
+  日志（工程端 log\，2026-11-27 起全部集中这一处；都不进 git）：
+      ucf_mod.log / ucf_mod.prev.log      插件主日志（16 MB 轮转，保 1 代）
+      ucf_mod.prev_HHMMSS.log             车测开跑前的备份
+      autotest.txt / player_marks.txt     车测结果 / 玩家坐标记录
+      navdata.log / navdata.prev.log      命令行 stdout 抄本（16 MB 轮转）
+      publish.log                         成品发布流水（TSV）
   ---------------------------------------------------------------------------
   路径解析：
-      导出根 EXPORT   = UCF_EXPORT_DIR  > ② vis\      （插件 Ctrl+E / navmesh 写这里）
-      测试包 PACKS_DIR = UCF_PACK_DIR    > ② packs\
-      部署根 DEPLOY   = UCF_DEPLOY       > tools/deploy.json
-
-哪一版生效由环境变量 UCF_PROFILE 决定（默认 dev）：
-    UCF_PROFILE=dev      -> 编辑器/工具读写 navdata\dev     （日常）
-    UCF_PROFILE=native   -> 只读打开 navdata\native         （对照/救急，写会被拒绝）
-    UCF_PROFILE=deploy   -> 直接读写游戏目录（等同 2026-11-17 之前的旧行为）
+      导出收件箱 EXPORT     = UCF_EXPORT_DIR  > data\maps\_inbox\（插件写可走面 / 轨迹）
+      草稿根 PACKS_DIR      = UCF_PACK_DIR    > data\maps\（<图>\<指纹>.txt）
+      编辑标记 MARKERS      = UCF_MARKERS_DIR > data\maps\（<图>\markers.txt）
+      部署根 DEPLOY         = UCF_DEPLOY      > tools/deploy.json
 
 工程端（进 git）= 本文件所在目录向上找到 .ucfroot 的那一层
-    core/     本模块 + map_table / navdata（路径与数据台账）
-    src/      C 源码
-    tools/    命令行工具（geo/ data/ _oneoff/）
-    console/  控制台 + 本地只读服务 + 网页
-    tests/    静态自检
-    docs/     文档（guide / record）
-    geo/      *.npz 地形源 + web/*.bin（可重建）
-    navdata/  三区数据（native / dev）
+    app\core\    本模块 + map_table / navdata（路径与数据台账）
+    app\ui\ app\tabs\ app\workbench\ app\tools\  控制台 / 页面 / 工具
+    src\        C 源码
+    data\maps\  地图数据（一图一夹）+ data\geo\（地形源）
+    docs\      文档（guide / record）
 
 部署端（不进 git）= 游戏目录本身
     解析顺序：1) 环境变量 UCF_DEPLOY  2) tools/deploy.json  3) 回退工程端
@@ -83,7 +80,9 @@ TOOLS_GEO = os.path.join(TOOLS, "geo")
 TOOLS_DATA = os.path.join(TOOLS, "data")
 CONSOLE = os.path.join(PROJ, "app")
 WEB = os.path.join(CONSOLE, "workbench", "web")
-LOG_DIR = os.path.join(PROJ, "log")       # 日志主位置（控制台用 UCF_LOG_DIR 指给插件）
+#: 日志主位置：控制台用 UCF_LOG_DIR 指给插件，控制台/工具自己那份也写这里
+#: （ucf_mod.log / autotest.txt / player_marks.txt / navdata.log / publish.log）
+LOG_DIR = os.path.join(PROJ, "log")
 DOCS = os.path.join(PROJ, "docs")
 DATA_ROOT = os.path.join(PROJ, "data")    # 2026-11-24：数据统一进 data（geo + navdata）
 GEO = os.path.join(DATA_ROOT, "geo")
@@ -91,15 +90,35 @@ DEPLOY_JSON = os.path.join(TOOLS, "deploy.json")
 if CORE not in sys.path:
     sys.path.insert(0, CORE)          # map_table 和本文件同目录（下面延迟 import 它）
 
-# ---------------------------------------------------------------- 三区目录
-# ① 备份版 navdata\native   冻结、只读
-# ② 开发版 navdata\dev      唯一数据源：maps\nav 成品，vis 收件箱，packs 编辑中
-# ③ 游戏目录               运行时：winhttp.dll / winhttp_orig.dll + 本体补丁（2026-11-25 起不建 ucf_mod\）
-NATIVE = os.path.join(DATA_ROOT, "navdata", "native")   # ① 原生备份（只读）
-DEV = os.path.join(DATA_ROOT, "navdata", "dev")         # ② 开发版（正式数据 + 收件箱 + 测试包）
-# 2026-11-21 四区改三区：原 navdata\test 已改名为 dev（内容原样保留），
-# TEST 只剩别名作用——老的调用点（EXPORT / PACKS_DIR / ARCHIVE）不用改指向。
-TEST = DEV
+# ---------------------------------------------------------------- 一图一夹（2026-11-27）
+# 唯一源：data\maps\<序号_场景名中文名>\ —— 同一张图的点图 / 可走面 / 编辑标记 / 成品
+# 全在这一个文件夹里（2026-11-27 之前分在 navdata\{native,dev,dev\packs,dev\markers} 四处）。
+#
+#   <图>\map.json            点图元数据（指纹 / 点数 / bbox）
+#   <图>\navmesh.bin          可走面（原生就有 NavMeshGraph 的图才有）
+#   <图>\<指纹>.txt           点图草稿（编辑中档读写这里）
+#   <图>\markers.txt          蹲守点 / 守卫区 / 守卫点 / 标签 / 出生点
+#   <图>\manifest.json        草稿状态（谁建的 / 什么时候 / grow|keep）
+#   <图>\native\{map.json,navmesh.bin}   ① 冻结副本（只读，回滚用）
+#   <图>\final\<指纹>.txt     成品（成品档读这里，只读）
+#
+# 派生目录（不属于任何一张图，可以随时重建）：
+#   data\maps\_inbox\    插件写出来的可走面导出 / 录制轨迹（原来的 dev\vis）
+#   data\maps\_archive\ 删草稿 / 清标记 / 发布前快照（原来的 dev\archive）
+MAPS = os.path.join(DATA_ROOT, "maps")
+COMMON = "00_公共"          # 公共文件（names / _index / 清单）：不属于任何一张图
+NATIVE_SUB = "native"       # <图>\native\  ① 冻结副本
+FINAL_SUB = "final"         # <图>\final\   成品
+INBOX = os.path.join(MAPS, "_inbox")      # 导出收件箱
+ARCHIVE = os.path.join(MAPS, "_archive")  # 回收站
+
+# 兼容旧名（2026-11-27 之前是三个独立的数据根，现在同一个根）：
+# 老调用点写 P.NATIVE / P.DEV / P.PACKS_DIR / P.MARKERS 都还指得动，
+# 但"① 备份版"现在要用 native_files() / native_dir() 读 <图>\native\。
+NATIVE = MAPS
+DEV = MAPS
+TEST = MAPS
+DATA = MAPS
 
 _PROFILE_ALIAS = {
     "dev": "dev", "develop": "dev", "开发": "dev",
@@ -305,19 +324,15 @@ def _resolve_env_dir(env_name, default):
     return default
 
 
-# ② 开发版里的草稿区：导出收件箱 / 测试包 / 已处理导出的归档（都不会进 ③）
-EXPORT = _resolve_env_dir("UCF_EXPORT_DIR", os.path.join(DEV, "vis"))
-PACKS_DIR = _resolve_env_dir("UCF_PACK_DIR", os.path.join(DEV, "packs"))
-#: 编辑标记（蹲守点/守卫点/守卫区/tag）根目录：按地图分子文件夹，一张图一份
-#: 2026-11-24 用户要求放工程端（游戏目录不再存数据），控制台启动时用 UCF_MARKERS_DIR 指给插件
-MARKERS = _resolve_env_dir("UCF_MARKERS_DIR", os.path.join(DEV, "markers"))
-ARCHIVE = os.path.join(DEV, "archive")
-FINAL = os.path.join(DEV, "final")          # ② 成品：<FINAL>\<指纹>.txt（每图一份，没有版本）
-
-# 当前生效的数据根（maps/nav 读写这里）
-DATA = {"native": NATIVE, "dev": DEV, "deploy": DEPLOY}[PROFILE]
-MAPS = os.path.join(DATA, "maps")
-NAV = os.path.join(DATA, "nav")
+# 插件三档启动注入的三个根。一图一夹之后三者可以指向同一个 data\maps：
+#   草稿  = <根>\<图>\<指纹>.txt        （UCF_PACK_DIR + UCF_PACK=<图>）
+#   标记  = <根>\<图>\markers.txt        （UCF_MARKERS_DIR + UCF_PACK=<图>）
+#   成品  = <根>\<图>\final\<指纹>.txt   （UCF_PACK_DIR=<根> + UCF_NAV_SEARCH=1，按指纹找图）
+EXPORT = _resolve_env_dir("UCF_EXPORT_DIR", INBOX)
+PACKS_DIR = _resolve_env_dir("UCF_PACK_DIR", MAPS)
+MARKERS = _resolve_env_dir("UCF_MARKERS_DIR", MAPS)
+FINAL = MAPS                    # 成品根：<图>\final\ 的父目录
+NAV = MAPS                      # 旧的 nav\ 已经没有内容，只作回退名
 
 # 导出根：插件把新扫描 / navmesh 写这里（② 开发版的收件箱）。
 # 兼容旧名 VIS；2026-11-18 之前它指向 ③ 部署版。工具只读这里，不再碰 ③\vis。
@@ -325,15 +340,15 @@ VIS = EXPORT
 GAME_VIS = os.path.join(DEPLOY, "vis")   # ③ 里的旧位置（迁移后只留 README）
 LEGACY_VIS = GAME_VIS
 # 当前版本自带的可走面（原生备份里也有 navmesh）
-DATAVIS = os.path.join(DATA, "vis")
+DATAVIS = INBOX
 # ③ 里的回滚区：DLL 备份 + 历史导出快照。游戏不读，不算部署数据。
 BACKUP = os.path.join(DEPLOY, "backup")
-NAMES_FILE = os.path.join(NAV, "names.json")
+NAMES_FILE = os.path.join(MAPS, COMMON, "names.json")
 
 # ---------------------------------------------------------------- 图文件夹（按地图分类）
-# 2026-11-21：① 备份 / ② 开发 从「maps\ nav\ vis\ 三块平铺」改成「一张图一个文件夹」，
-# 和 ② packs\ 共用一套名字（docs/guide/地图对照表.md 的 序号_场景名中文名）。
-# 旧布局仍然能读：下面每个函数先找新布局，找不到再回退 maps\ / nav\ / vis\。
+# 2026-11-27：一张图一个文件夹（data\maps\序号_场景名中文名\），点图 / 可走面 / 编辑标记 /
+# 成品 / 冻结副本全在里面。文件夹名以 docs/guide/地图对照表.md 为准。
+# ① 备份版不再是独立的数据根：它是每张图自己的 native\ 子目录，用 native_dir()/native_files() 读。
 # 原生 A* 顶点数（网格顶点去重后）：旧布局的 navmesh 文件名 navmesh_nm<顶点数>-<指纹>.bin
 # 就是按这个对号的，见 docs/guide/地图对照表.md §「原生可通行空间（A* 图）」。
 # 运输船 / 生化酒店 / 飓风危城 原生没有 NavMeshGraph，不在表里。
@@ -367,6 +382,57 @@ def map_folder(level):
     return name
 
 
+def folder_dir(name, root=None):
+    r"""图文件夹本身：data\maps\<序号_场景名中文名>\（传文件夹名，不传关卡）。"""
+    return os.path.join(root or MAPS, str(name or ""))
+
+
+def native_dir(name, root=None):
+    r"""① 冻结副本：<图>\native\。"""
+    return os.path.join(folder_dir(name, root), NATIVE_SUB)
+
+
+def final_dir(name, root=None):
+    r"""成品：<图>\final\。"""
+    return os.path.join(folder_dir(name, root), FINAL_SUB)
+
+
+def folder_names(root=None):
+    r"""所有地图文件夹名（有 map.json 的才算；跳过 _inbox / _archive / 00_公共）。"""
+    root = root or MAPS
+    out = []
+    try:
+        names = sorted(os.listdir(root))
+    except OSError:
+        return out
+    for name in names:
+        if name.startswith((".", "_")) or name == COMMON:
+            continue
+        if os.path.isfile(os.path.join(root, name, MAP_JSON)):
+            out.append(name)
+    return out
+
+
+def native_files(root=None):
+    r"""[(图文件夹/map.json, 绝对路径)] —— ① 冻结副本里的点图。"""
+    root = root or MAPS
+    out = []
+    for name in folder_names(root):
+        p = os.path.join(native_dir(name, root), MAP_JSON)
+        if os.path.isfile(p):
+            out.append((name + "/" + MAP_JSON, p))
+    return out
+
+
+def native_navmesh_files(root=None):
+    r"""[(图文件夹/navmesh.bin, 绝对路径)] —— ① 冻结副本里的可走面。
+
+    注意：有的图原生只有可走面、没有 PointGraph（胜利广场 / 死亡擂台），
+    所以这里按目录扫，不能只按「有 map.json 的图」扫。
+    """
+    return navmesh_files(root or MAPS, NATIVE_SUB)
+
+
 def is_folders(root):
     r"""这个数据根是不是「一张图一个文件夹」的新布局。
 
@@ -395,28 +461,24 @@ def map_json(root, level):
     return os.path.join(map_dir(root, level), MAP_JSON)
 
 
-def common_dir(root):
-    """公共文件目录：新布局 00_公共\，旧布局 nav\（names.json 原来在这）。"""
-    d = os.path.join(root, COMMON)
-    if os.path.isdir(d):
-        return d
-    return os.path.join(root, "nav")
+def common_dir(root=None):
+    """公共文件目录：00_公共\（names / _index / 清单 / 冻结台账都在这一处）。"""
+    return os.path.join(root or MAPS, COMMON)
 
 
-def names_dir(root):
-    """names.json 该放哪个目录：新布局 00_公共\\，旧布局 nav\\。"""
-    return os.path.join(root, COMMON) if is_folders(root) else os.path.join(root, "nav")
+def names_dir(root=None):
+    """names.json 放哪：00_公共\\。"""
+    return os.path.join(root or MAPS, COMMON)
 
 
-def index_dir(root):
-    """_index.json / INDEX.md 该放哪个目录：新布局 00_公共\\，旧布局 maps\\。"""
-    return os.path.join(root, COMMON) if is_folders(root) else os.path.join(root, "maps")
+def index_dir(root=None):
+    """_index.json / INDEX.md 放哪：00_公共\\。"""
+    return os.path.join(root or MAPS, COMMON)
 
 
-def manifest_dir(root):
-    """清单类文件（SHA256SUMS / README / .frozen.json）放哪：新布局 00_公共\\，旧布局根目录。"""
-    d = os.path.join(root, COMMON)
-    return d if os.path.isdir(d) else root
+def manifest_dir(root=None):
+    """清单类文件（SHA256SUMS / README / .frozen.json）放哪：00_公共\\。"""
+    return os.path.join(root or MAPS, COMMON)
 
 
 def names_path(root):
@@ -437,11 +499,14 @@ def index_path(root):
     return os.path.join(root, COMMON, "_index.json")
 
 
-def map_files(root):
-    r"""[(相对路径, 绝对路径)] —— 这一版的所有地图 JSON。
+def map_files(root=None, sub=""):
+    r"""[(相对路径, 绝对路径)] —— 这个根下的所有地图 JSON。
 
-    新布局：01_TransportShip运输船/map.json；旧布局：01_运输船.json。
+    根 = data\maps，sub="" 读开发版（<图>\map.json），sub="native" 读 ① 冻结副本
+    （<图>\native\map.json）。相对路径一律是「<图>/map.json」，搬过 native 之后
+    调用方不用关心物理层级。
     """
+    root = root or MAPS
     out = []
     if not root or not os.path.isdir(root):
         return out
@@ -452,7 +517,7 @@ def map_files(root):
     for name in names:
         if name.startswith((".", "_")):
             continue
-        p = os.path.join(root, name, MAP_JSON)
+        p = os.path.join(root, name, sub, MAP_JSON) if sub else os.path.join(root, name, MAP_JSON)
         if os.path.isfile(p):
             out.append((name + "/" + MAP_JSON, p))
     if out:
@@ -527,8 +592,13 @@ def navmesh_file(root, level):
     return None
 
 
-def navmesh_files(root):
-    r"""[(相对路径, 绝对路径)] —— 这一版的全部可走面（比对 / 统计用）。"""
+def navmesh_files(root=None, sub=""):
+    r"""[(相对路径, 绝对路径)] —— 这个根下的全部可走面（比对 / 统计用）。
+
+    sub="" 读 <图>\navmesh.bin；sub="native" 读 <图>\native\navmesh.bin。
+    相对路径一律是「<图>/navmesh.bin」。
+    """
+    root = root or MAPS
     out = []
     if not root or not os.path.isdir(root):
         return out
@@ -536,25 +606,15 @@ def navmesh_files(root):
         names = sorted(os.listdir(root))
     except OSError:
         return out
-    skip = {"vis", "packs", "final", "archive", "nav"}
     for name in names:
-        if name.startswith((".", "_")) or name in skip or name.startswith("00_"):
+        if name.startswith((".", "_")) or name == COMMON:
             continue
-        d = os.path.join(root, name)
+        d = os.path.join(root, name, sub) if sub else os.path.join(root, name)
         if not os.path.isdir(d):
             continue
         for fn in sorted(os.listdir(d)):
             if fn.startswith("navmesh") and fn.lower().endswith(".bin"):
                 out.append((name + "/" + fn, os.path.join(d, fn)))
-    if out:
-        return out
-    for base, rel in ((os.path.join(root, "vis"), "vis"),
-                      (os.path.join(root, "vis", "navmesh"), "vis/navmesh")):
-        if not os.path.isdir(base):
-            continue
-        for fn in sorted(os.listdir(base)):
-            if fn.startswith("navmesh") and fn.lower().endswith(".bin"):
-                out.append((rel + "/" + fn, os.path.join(base, fn)))
     return out
 
 

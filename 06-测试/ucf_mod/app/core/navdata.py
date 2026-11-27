@@ -1,41 +1,42 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-r"""navdata.py —— 导航数据「三区」管理：① 备份  ② 开发  ③ 部署
+r"""navdata.py —— 地图数据「一图一夹」管理：① 冻结副本  ② 开发数据  ③ 部署端
 
   ---------------------------------------------------------------------------
-  ① 备份版  navdata/native/      UCF 原版数据，只读、永不编辑（本脚本之外没人写它）
-  ② 开发版  navdata/dev/         唯一数据源（控制台三档启动都读这里）
-                                   maps\ nav\ vis\   成品数据（成品档按包读 nav\）+ 导出收件箱
-                                   packs\            编辑中（可写沙盒）；做完 promote 升进 nav\
-                                   archive\          处理过的导出 / 只读还原点
-  ③ 游戏目录                   运行时：winhttp.dll / winhttp_orig.dll + 本体补丁（2026-11-25 起不建 ucf_mod\）
-  流水线：游戏导出 -> ②\vis ->（import 整理）-> ②\maps ->（pack promote）-> ②\nav -> 成品
+  ① 冻结副本  data/maps/<图>/native/   UCF 原版点图 + 可走面，只读、永不编辑
+                                        清单：00_公共/SHA256SUMS.txt + .frozen.json
+  ② 开发数据  data/maps/<图>/          唯一数据源（控制台三档启动都读这里）
+                                         map.json / navmesh.bin / <指纹>.txt / markers.txt
+                                         manifest.json；成品在 <图>/final/<指纹>.txt
+  派生目录    data/maps/_inbox/        插件写出来的导出收件箱
+              data/maps/_archive/      删草稿 / 清标记 / 发布前快照 / 迁移日志
+  ③ 游戏目录                          运行时：winhttp.dll / winhttp_orig.dll + 本体补丁
+                                        （2026-11-25 起不建 ucf_mod/）
+  流水线：游戏导出 -> _inbox ->（import 整理）-> <图>/map.json ->（pack promote）-> <图>/final/
   ---------------------------------------------------------------------------
 
-  三档启动（控制台底部按钮，不再往游戏目录搬数据）：
-      成品    读 ②\nav\，但按「包」启动（UCF_PACK_DIR=②、UCF_PACK=nav）
-              和编辑中走完全同一套加载逻辑：grow/keep 建点、0 点图都照常，
-              所以发布进来的东西在成品档里的效果和编辑中一模一样（只读靠文件属性）
-      编辑中  读 ②\packs\<包>（UCF_PACK），可写      调图、试路线、游戏内存回包里
-      原版    插件待机，什么都不读                     对照原生行为
+  三档启动（控制台底部按钮，不往游戏目录搬数据）：
+      成品    按指纹找 <图>/final/<指纹>.txt（UCF_PACK_DIR=data/maps + UCF_NAV_SEARCH=1
+              + UCF_NAV_SUB=final），markers 也跟着 <图>/markers.txt；只读靠文件属性
+      编辑中  UCF_PACK=<图>，读写 <图>/<指纹>.txt（可写）  调图、试路线、游戏内存回草稿
+      原版    插件待机，什么都不读                        对照原生行为
 
-常用命令（在 tools/ 下跑）：
+常用命令（在 app/core/ 下跑）：
 
-    python navdata.py status              # 三区各自在哪、各有几个文件、是否只读
-    python navdata.py verify              # 校验备份版没被动过（SHA256 清单）
-    python navdata.py restore             # 开发版 <- 备份版（丢掉开发版的改动）
-    python navdata.py import              # 整理开发版：vis 归位 + 原始导出 -> maps
-    python navdata.py diff                # 开发版 vs 备份版差在哪 + 成品里有几张图
-    python navdata.py freeze --force      # 用当前数据重建「备份版」（只在确认要重新冻结时用）
+    python navdata.py status              # ①②③ 各自在哪、各有几个文件、是否只读
+    python navdata.py verify              # 校验冻结副本没被动过（SHA256 清单）
+    python navdata.py restore             # 开发数据 <- 冻结副本（丢掉开发改动）
+    python navdata.py import              # 整理收件箱：vis 归位 + 原始导出 -> <图>/map.json
+    python navdata.py diff                # 开发数据 vs 冻结副本差在哪 + 成品里有几张图
+    python navdata.py freeze --force      # 用当前数据重建「冻结副本」（确认要重新冻结时才用）
 
-  测试包 = 编辑中：一份只对某一张图生效的路线改动，放在
-  navdata\dev\packs\<序号_场景名中文名>\<包名>\<指纹>.txt（序号见《地图对照表》）；
-  插件用 UCF_PACK / UCF_FP 读它，成品 nav\ 一个字节都不动。
+  草稿 = 编辑中：一份只对某一张图生效的路线改动，就在那张图的文件夹里
+  （data/maps/<序号_场景名中文名>/<指纹>.txt，序号见《地图对照表》）；
+  插件用 UCF_PACK / UCF_FP 读它，别的一张图一个字节都不动。
 
-    python navdata.py pack list                     # 有哪些测试包
-    python navdata.py pack new chain_a --level 11   # 从开发版复制 level11 的改动做包
-    python navdata.py pack diff chain_a             # 包 vs 成品 nav / 原版
-    python navdata.py pack promote chain_a          # 编辑中 -> 成品（版本名沿用包名；不碰游戏目录）
+    python navdata.py pack list                     # 有哪些草稿
+    python navdata.py pack new --level 11 --grow    # 给 level11 建空白底图草稿
+    python navdata.py pack promote <图文件夹>        # 编辑中 -> 成品（<图>/final/<指纹>.txt）
 
 注意：freeze 只收【原生】内容 —— 判据是导出文件里 map.source
       （"game" 才算原生；"ours"/"practice" = 我们造的，一律不收），
@@ -54,7 +55,12 @@ import time
 
 def _setup_console():
     """控制台（双击 bat）用系统编码（中文 Windows = cp936 才能显示中文）；
-    管道/重定向时统一 UTF-8，方便别的程序读。顺带把输出抄一份到 navdata/_logs/navdata.log。"""
+    管道/重定向时统一 UTF-8，方便别的程序读。
+
+    顺带把输出抄一份到**工程端 log\\navdata.log** —— 2026-11-27 起，以前在
+    data\\navdata\\_logs\\，跟插件日志分两处，排查要在两个目录来回翻。
+    老位置那份历史日志第一次启动时并进来（navdata_migrate_log），不会从空白开始。
+    环境变量 UCF_NO_LOG_TEE=1 可整体关掉抄写（自检用，免得污染真日志）。"""
     out = sys.stdout
     enc = (getattr(out, "encoding", "") or "").lower().replace("-", "")
     try:
@@ -65,9 +71,12 @@ def _setup_console():
     except Exception:
         pass
     try:
-        logdir = os.path.join(P.DATA_ROOT, "navdata", "_logs")
-        os.makedirs(logdir, exist_ok=True)
-        sys.stdout = _Tee(out, os.path.join(logdir, "navdata.log"))
+        if os.environ.get("UCF_NO_LOG_TEE"):
+            return
+        os.makedirs(P.LOG_DIR, exist_ok=True)
+        navdata_migrate_log()               # 老位置的历史日志并一次
+        rotate_log(NAVDATA_LOG)             # 超 16 MB 先轮转，再接着写
+        sys.stdout = _Tee(out, NAVDATA_LOG)
     except Exception:
         pass
 
@@ -112,6 +121,78 @@ for _p in (os.path.join(UCF_ROOT, "app", "core"), HERE):
         sys.path.insert(0, _p)
 import ucf_paths as P  # noqa: E402
 import map_table  # noqa: E402  序号 + 文件夹命名（和《地图对照表》第一张表一致）
+
+# ---------------------------------------------------------------- 日志落点（工程端 log\）
+# 2026-11-27：控制台/工具自己的日志也收进工程端 log\，跟插件的 ucf_mod.log / autotest.txt
+# 同一个目录。以前 stdout 抄本在 data\navdata\_logs\、发布流水在 dev\final\_publish.log，
+# 加上插件日志一共三处，排查时要挨个翻 —— 用户要求集中。
+NAVDATA_LOG = os.path.join(P.LOG_DIR, "navdata.log")
+#: 和 cfg.c 的 UCF_LOG_MAX_BYTES 对齐：超了轮转，只保 1 代
+LOG_MAX_BYTES = 16 * 1024 * 1024
+#: 迁移前的老位置：只用于「第一次并进 log\」，之后不再写
+LEGACY_NAVDATA_LOG = os.path.join(P.DATA_ROOT, "navdata", "_logs", "navdata.log")
+
+
+def rotate_log(path):
+    r"""path 超过 16 MB 就改名成 <名>.prev.log（只保 1 代），返回是否转了。
+
+    stdout 抄写没人管大小的话会一直涨，跑久了是几百 MB，还拖慢 tail。
+    命名跟插件的 ucf_mod.log -> ucf_mod.prev.log 一致。
+    """
+    try:
+        if os.path.getsize(path) < LOG_MAX_BYTES:
+            return False
+    except OSError:
+        return False
+    stem, ext = os.path.splitext(path)              # navdata.log -> navdata
+    prev = stem + ".prev" + (ext or ".log")         # navdata.prev.log
+    try:
+        os.replace(path, prev)
+        return True
+    except OSError:
+        return False
+
+
+def _append_file(src, dst):
+    r"""把 src 的字节追加到 dst 后面（不解析、不改编码），成功后删掉 src。
+
+    字节级搬运：老日志是 UTF-8，新日志也是，中间不掺任何解码 —— 省得碰上
+    半行截断或旧的 cp936 内容时整个文件读不出来。
+    """
+    try:
+        with open(src, "rb") as f:
+            data = f.read()
+        if not data:
+            os.remove(src)
+            return True
+        d = os.path.dirname(dst)
+        if d:
+            os.makedirs(d, exist_ok=True)
+        with open(dst, "ab") as f:
+            f.write(data)
+        os.remove(src)
+        return True
+    except OSError:
+        return False
+
+
+def navdata_migrate_log():
+    r"""把老位置 data\navdata\_logs\navdata.log 并进 log\navdata.log（做一次就没了）。
+
+    不并的话历史日志孤零零躺在旧目录，新日志从空白开始 —— 排查时
+    「最后一次正常」那半段就丢了。
+    """
+    if not os.path.isfile(LEGACY_NAVDATA_LOG):
+        return False
+    ok = _append_file(LEGACY_NAVDATA_LOG, NAVDATA_LOG)
+    try:                                            # 目录空了就顺手删掉
+        d = os.path.dirname(LEGACY_NAVDATA_LOG)
+        if os.path.isdir(d) and not os.listdir(d):
+            os.rmdir(d)
+    except OSError:
+        pass
+    return ok
+
 
 SUBS = ("maps", "nav", "vis")
 KEEP_ALWAYS = {"nogen.txt", "collect.flag", "README.txt", "README.md", "INDEX.md", "_index.json"}
@@ -197,11 +278,16 @@ def make_writable(path):
 # 发布默认「新建一版」：以当前版为底整套复制，再用这个包替换对应图；老版本一律保留，
 # 新版本名 = 测试包名（--as 可改，重名自动加 -2）。不要的版本用 final rm 真删
 # （控制台成品页「删除」同一个动作）；想留个后手才加 --keep（挪进 dev\archive\final_old\）。
-FINAL_ROOT = os.path.join(P.DEV, "final")
-FINAL_INDEX = os.path.join(FINAL_ROOT, "_index.json")
+# 2026-11-27 一图一夹：成品进 <图>\final\<指纹>.txt（不再是平铺的 final\<指纹>.txt）。
+#   发布 = 覆盖这张图那一份；覆盖前旧成品进 _archive\final_prev\<指纹>\（每图留最近 5 份）。
+#   台账 00_公共\final_index.json 记 level / label / 发布时刻 / sha256。
+FINAL_INDEX = os.path.join(P.MAPS, P.COMMON, "final_index.json")
+# 旧的多版本成品机制（2026-11-24 已废）：只读兼容，挪到回收站目录下，不再参与运行
+LEGACY_FINAL_ROOT = os.path.join(P.ARCHIVE, "final_versions_legacy")
+FINAL_ROOT = LEGACY_FINAL_ROOT
 FINAL_CURRENT = os.path.join(FINAL_ROOT, "_current.txt")
-FINAL_ARCHIVE = os.path.join(P.DEV, "archive", "final_old")
-LEGACY_FINAL = os.path.join(P.DEV, "nav")      # 2026-11-21 之前成品放这儿（首次自动搬走）
+FINAL_ARCHIVE = os.path.join(P.ARCHIVE, "final_old")
+LEGACY_FINAL = os.path.join(P.ARCHIVE, "nav_legacy")
 _NAV_FP_RE = re.compile(r"^n\d+-[0-9a-f]{16}\.txt$", re.I)
 FINAL_NAME_BAD = '\\/:*?"<>| '
 
@@ -468,8 +554,20 @@ def final_ensure_root():
 # 2026-11-24：一张图只有一份成品。final\<指纹>.txt 平铺，不再有版本目录，也不再有
 # _current.txt。发布 = 覆盖同图那份；覆盖前把旧成品复制到 archive\final_prev\<指纹>\
 # （每张图只留最近 5 份，界面上不出现，只用于误发布时找回）。
-FINAL_PREV = os.path.join(P.DEV, "archive", "final_prev")
-FINAL_PUBLISH_LOG = os.path.join(FINAL_ROOT, "_publish.log")
+FINAL_PREV = os.path.join(P.ARCHIVE, "final_prev")
+#: 发布流水（TSV）：2026-11-27 起集中到工程端 log\\publish.log，跟插件日志同目录。
+#: 每张图的权威发布信息仍在 final\\_index.json（published / sha256 / from），
+#: 这里只是一条按时间排的流水账 —— 所以 log\\ 被清掉也不影响成品追溯。
+PUBLISH_LOG = os.path.join(P.LOG_DIR, "publish.log")
+#: 迁移前的老位置：只用于「第一次并进 log\\」
+LEGACY_PUBLISH_LOG = os.path.join(FINAL_ROOT, "_publish.log")
+
+
+def publish_log_migrate():
+    r"""把老位置 final\\_publish.log 并进 log\\publish.log（做一次就没了）。"""
+    if not os.path.isfile(LEGACY_PUBLISH_LOG):
+        return False
+    return _append_file(LEGACY_PUBLISH_LOG, PUBLISH_LOG)
 
 
 def _store_index_read():
@@ -486,21 +584,56 @@ def _store_index_read():
 
 
 def _store_index_write(idx):
-    os.makedirs(FINAL_ROOT, exist_ok=True)
+    os.makedirs(os.path.dirname(FINAL_INDEX), exist_ok=True)
     write_json(FINAL_INDEX, idx)
 
 
+_FP_FOLDER = {}
+
+
+def _fp_to_folder():
+    r"""{指纹: 图文件夹名} —— 成品要落到 <图>inal，靠每张图 map.json 里的指纹认图。"""
+    out = {}
+    for name in P.folder_names():
+        try:
+            doc = read_json(os.path.join(P.folder_dir(name), P.MAP_JSON))
+        except Exception:                  # noqa: BLE001  读不了就跳过，不影响别的图
+            continue
+        fp = str((doc.get("map") or {}).get("fingerprint") or "")
+        if fp:
+            out[fp] = name
+    return out
+
+
+def final_dir_of(fp):
+    r"""这张图的成品目录 <图>inal；认不出图就返回空串。"""
+    fp = str(fp or "").strip()
+    if not fp:
+        return ""
+    if fp not in _FP_FOLDER:
+        _FP_FOLDER.clear()
+        _FP_FOLDER.update(_fp_to_folder())
+    name = _FP_FOLDER.get(fp)
+    return P.final_dir(name) if name else ""
+
+
 def final_store_files():
-    r"""成品里每个地图一份：[(指纹, 路径)]。"""
-    if not os.path.isdir(FINAL_ROOT):
-        return []
-    return [(fn[:-4], os.path.join(FINAL_ROOT, fn))
-            for fn in sorted(os.listdir(FINAL_ROOT)) if _NAV_FP_RE.match(fn)]
+    r"""成品里每个地图一份：[(指纹, 路径)] —— 扫每张图的 <图>inal。"""
+    out = []
+    for name in P.folder_names():
+        d = P.final_dir(name)
+        if not os.path.isdir(d):
+            continue
+        for fn in sorted(os.listdir(d)):
+            if _NAV_FP_RE.match(fn):
+                out.append((fn[:-4], os.path.join(d, fn)))
+    return out
 
 
 def final_store_map(fp):
     fp = str(fp or "").strip()
-    return os.path.join(FINAL_ROOT, fp + ".txt") if fp else ""
+    d = final_dir_of(fp)
+    return os.path.join(d, fp + ".txt") if (d and fp) else ""
 
 
 def final_store_has(fp):
@@ -562,8 +695,10 @@ def final_store_publish(pid, note=""):
     src = os.path.join(pdir, fp + ".txt")
     if not os.path.isfile(src):
         sys.exit("草稿里没有 %s（先在里面写路线）" % (fp + ".txt"))
-    os.makedirs(FINAL_ROOT, exist_ok=True)
     dst = final_store_map(fp)
+    if not dst:
+        sys.exit("认不出 %s 是哪张图（map.json 里没有这个指纹）" % fp)
+    os.makedirs(os.path.dirname(dst), exist_ok=True)
     if os.path.isfile(dst):
         bdir = os.path.join(FINAL_PREV, fp)
         try:
@@ -578,7 +713,7 @@ def final_store_publish(pid, note=""):
     shutil.copyfile(src, tmp)
     os.replace(tmp, dst)
     make_readonly(dst)
-    final_ensure_nogen(FINAL_ROOT)
+    final_ensure_nogen(os.path.dirname(dst))
     now = time.strftime("%Y-%m-%d %H:%M:%S")
     nd, ed = edit_counts(dst)
     sha = sha256(dst)
@@ -592,7 +727,9 @@ def final_store_publish(pid, note=""):
         idx["maps"][fp]["note"] = note
     _store_index_write(idx)
     try:
-        with open(FINAL_PUBLISH_LOG, "a", encoding="utf-8", newline="\n") as f:
+        publish_log_migrate()               # 老位置那份先并进来（只有第一次有用）
+        os.makedirs(P.LOG_DIR, exist_ok=True)
+        with open(PUBLISH_LOG, "a", encoding="utf-8", newline="\n") as f:
             f.write("%s\t%s\t%s\t%d/%d\t%s\t%s\n" % (
                 now, fp, man.get("label", ""), nd, ed, sha[:12], note))
     except OSError:
@@ -613,14 +750,10 @@ def final_store_remove(fp):
 
 
 def final_store_ensure():
-    r"""建好 final\ 目录，顺手清掉旧版的 _current.txt。
+    r"""一图一夹：成品目录是 <图>\final\，不预先建（没有成品就是没有这个文件夹）。
 
-    空目录里不提前放 nogen.txt；第一次发布时 final_store_publish 会补。
+    这里只负责清掉旧机制留在回收站里的 _current.txt，顺手把老 final\ 里的成品搬进各图。
     """
-    try:
-        os.makedirs(FINAL_ROOT, exist_ok=True)
-    except OSError:
-        return
     p = os.path.join(FINAL_ROOT, "_current.txt")
     if os.path.isfile(p):
         try:
@@ -660,13 +793,16 @@ def walk_files(root):
     return out
 
 
-def summary(root):
-    """一版数据的概况：图 / 可走面 / 路线各几个，占多大，最近改动（只看数据，不算 packs/final）。"""
+def summary(root, sub=""):
+    """一版数据的概况：图 / 可走面 / 路线各几个，占多大，最近改动（只看数据，不算草稿/成品）。
+
+    sub="native" 只看 ① 冻结副本（<图>/native/），空串看 ② 开发数据（<图>/ 根下）。
+    """
     if not os.path.isdir(root):
         return {"path": root, "exists": False, "files": 0, "bytes": 0, "mtime": "-", "sub": {}}
-    maps = P.map_files(root)
-    bins = P.navmesh_files(root)
-    routes = P.route_files(root)
+    maps = P.map_files(root, sub)
+    bins = P.navmesh_files(root, sub)
+    routes = [] if sub else P.route_files(root)
     sub = {"图": len(maps), "可走面": len(bins), "路线": len(routes)}
     size, latest = 0, 0
     for _key, path in list(maps) + list(bins) + list(routes):
@@ -740,6 +876,48 @@ def empty_stub(level, cn, scene, why):
 
 
 # ---------------------------------------------------------------- ① freeze
+def _rmtree_force(d):
+    r"""删目录：先把只读位去掉（① 冻结副本每个文件都是只读的，rmtree 会失败）。"""
+    if not os.path.isdir(d):
+        return
+    for base, _dirs, files in os.walk(d):
+        for fn in files:
+            make_writable(os.path.join(base, fn))
+    shutil.rmtree(d, ignore_errors=True)
+
+
+def _native_tmp():
+    return os.path.join(P.MAPS, "_tmp_freezenative")
+
+
+def _native_existing():
+    r"""① 现在已有的文件：[(<图>/model, 路径)]（含可走面）。"""
+    return list(P.native_files()) + list(P.native_navmesh_files())
+
+
+def _merge_native(tmp):
+    r"""把 tmp\<图>\native\ 并进 data\maps\<图>\native\，公共清单进 00_公共\。"""
+    os.makedirs(os.path.join(P.MAPS, P.COMMON), exist_ok=True)
+    n = 0
+    for folder in sorted(os.listdir(tmp)):
+        if folder == P.COMMON:
+            continue
+        src = os.path.join(tmp, folder, P.NATIVE_SUB)
+        if not os.path.isdir(src):
+            continue
+        dst = P.native_dir(folder)
+        _rmtree_force(dst)
+        os.makedirs(os.path.dirname(dst), exist_ok=True)
+        shutil.copytree(src, dst)
+        n += 1
+    for fn in sorted(os.listdir(os.path.join(tmp, P.COMMON))):
+        s = os.path.join(tmp, P.COMMON, fn)
+        if os.path.isfile(s):
+            shutil.copy2(s, os.path.join(P.MAPS, P.COMMON, fn))
+    _rmtree_force(tmp)
+    return n
+
+
 def cmd_freeze(args):
     src = os.path.abspath(args.src or P.DEPLOY)
     smaps = os.path.join(src, "maps")
@@ -752,19 +930,21 @@ def cmd_freeze(args):
                      if f.lower().endswith(".json") and f not in ("_index.json", "names.json")])
     except OSError:
         n_src = 0
-    if n_src == 0 and os.path.isdir(P.NATIVE):
+    if n_src == 0 and _native_existing():
         # 2026-11-21：③ 不再存数据；源目录空着跑 freeze 会把备份版洗成空壳，先拦住
         sys.exit("源目录里一张图都没有：%s\n③ 游戏目录已不存数据，备份版没有动。" % smaps)
 
-    if os.path.isdir(P.NATIVE) and walk_files(P.NATIVE):
+    if _native_existing():
         if not args.force:
-            sys.exit("备份版已存在：%s\n要重建请加 --force（旧的会被删掉）" % P.NATIVE)
-        for rel in walk_files(P.NATIVE):
-            make_writable(os.path.join(P.NATIVE, rel.replace("/", os.sep)))
-        shutil.rmtree(P.NATIVE, ignore_errors=True)
+            sys.exit("备份版已存在（%s\\<图>\\%s\\）\n要重建请加 --force（旧的会被删掉）"
+                     % (P.MAPS, P.NATIVE_SUB))
+        for _rel, path in _native_existing():
+            make_writable(path)
+        for name in P.folder_names():
+            _rmtree_force(P.native_dir(name))
 
-    tmp = P.NATIVE + ".tmp"
-    shutil.rmtree(tmp, ignore_errors=True)
+    tmp = _native_tmp()
+    _rmtree_force(tmp)
     os.makedirs(os.path.join(tmp, P.COMMON), exist_ok=True)
 
     table = {r["level"]: r for r in load_table()}
@@ -787,10 +967,10 @@ def cmd_freeze(args):
         scene = str(m.get("scene") or "")
         # 文件夹名以《地图对照表》为准；表里没有这张图才退回 JSON 里的场景名
         folder = map_table.folder_name(level, scene, cn) or os.path.splitext(fn)[0]
-        rel = folder + "/map.json"
+        rel = folder + "/" + P.NATIVE_SUB + "/map.json"
         if str(m.get("origin") or "") == "native-empty":
             # 之前生成的「原生为空」空档：原样保留，别当成「来源不明」再生成一遍
-            save_json(os.path.join(tmp, folder, "map.json"), doc)
+            save_json(os.path.join(tmp, folder, P.NATIVE_SUB, "map.json"), doc)
             kept.append({"file": rel, "level": level, "cn": cn, "scene": scene,
                          "nodes": 0, "edges": 0, "fp": "", "source": "native-empty"})
             continue
@@ -803,7 +983,7 @@ def cmd_freeze(args):
                               "no": row["no"], "why": "原生 0 个路点、没有 NavMeshGraph（%s）" % why})
             continue
         doc.pop("edits", None)
-        save_json(os.path.join(tmp, folder, "map.json"), doc)
+        save_json(os.path.join(tmp, folder, P.NATIVE_SUB, "map.json"), doc)
         kept.append({"file": rel, "level": level, "cn": cn, "scene": scene,
                      "nodes": len(doc.get("nodes") or []),
                      "edges": len(doc.get("edges") or []),
@@ -812,8 +992,8 @@ def cmd_freeze(args):
 
     for s in stubs:
         folder = map_table.folder_name(s["level"], s["scene"], s["cn"])
-        rel = folder + "/map.json"
-        save_json(os.path.join(tmp, folder, "map.json"),
+        rel = folder + "/" + P.NATIVE_SUB + "/map.json"
+        save_json(os.path.join(tmp, folder, P.NATIVE_SUB, "map.json"),
                   empty_stub(s["level"], s["cn"], s["scene"], s["why"]))
         kept.append({"file": rel, "level": s["level"], "cn": s["cn"], "scene": s["scene"],
                      "nodes": 0, "edges": 0, "fp": "", "source": "native-empty"})
@@ -860,11 +1040,12 @@ def cmd_freeze(args):
                 if not level:
                     bin_skipped.append(fn)
                     continue
-                rel = map_table.folder_name(level) + "/navmesh.bin"
+                rel = map_table.folder_name(level) + "/" + P.NATIVE_SUB + "/navmesh.bin"
                 if rel in bins:
                     continue
-                shutil.copy2(os.path.join(base, fn),
-                             os.path.join(tmp, os.path.dirname(rel).replace("/", os.sep), "navmesh.bin"))
+                dstp = os.path.join(tmp, rel.replace("/", os.sep))
+                os.makedirs(os.path.dirname(dstp), exist_ok=True)
+                shutil.copy2(os.path.join(base, fn), dstp)
                 bins.append(rel)
                 bin_origin[rel] = fn
 
@@ -902,9 +1083,9 @@ def cmd_freeze(args):
         f.write(native_readme(frozen, sums))
     for rel in walk_files(tmp):
         make_readonly(os.path.join(tmp, rel.replace("/", os.sep)))
-    os.replace(tmp, P.NATIVE)
+    _merge_native(tmp)
 
-    print("① 备份版已生成：%s" % P.NATIVE)
+    print("① 备份版已生成（每张图自己的 native\\）：%s" % P.MAPS)
     for k in kept:
         print("   收  %-34s %-8s %-6s %3d 点 / %3d 边  %s" % (
             k["file"], k["level"], k["cn"], k["nodes"], k["edges"], k["fp"] or "-"))
@@ -980,6 +1161,20 @@ def native_readme(frozen, sums):
 
 
 # ---------------------------------------------------------------- ② verify
+def _native_rel_map():
+    r"""{清单里的相对路径: 绝对路径} —— <图>/native/<文件>（SHA256SUMS 就是按这个写的）。"""
+    out = {}
+    for name in P.folder_names():
+        d = P.native_dir(name)
+        if not os.path.isdir(d):
+            continue
+        for fn in sorted(os.listdir(d)):
+            p = os.path.join(d, fn)
+            if os.path.isfile(p):
+                out["%s/%s/%s" % (name, P.NATIVE_SUB, fn)] = p
+    return out
+
+
 def cmd_verify(args):
     sums = os.path.join(P.manifest_dir(P.NATIVE), "SHA256SUMS.txt")
     if not os.path.isfile(sums):
@@ -993,12 +1188,11 @@ def cmd_verify(args):
                 continue
             h, rel = line.split("  ", 1)
             want[rel] = h
-    meta = {"SHA256SUMS.txt", "README.md", ".frozen.json"}
-    meta |= {P.COMMON + "/" + n for n in ("SHA256SUMS.txt", "README.md", ".frozen.json")}
-    have = set(walk_files(P.NATIVE)) - meta
+    files = _native_rel_map()
+    have = set(files)
     bad, missing = [], sorted(set(want) - have)
     for rel in sorted(have & set(want)):
-        if sha256(os.path.join(P.NATIVE, rel.replace("/", os.sep))) != want[rel]:
+        if sha256(files[rel]) != want[rel]:
             bad.append(rel)
     extra = sorted(have - set(want))
     ok = not (bad or missing or extra)
@@ -1010,8 +1204,7 @@ def cmd_verify(args):
     for rel in extra:
         print("   多出来：%s" % rel)
     if ok:
-        ro = all(not (os.stat(os.path.join(P.NATIVE, r.replace("/", os.sep))).st_mode & stat.S_IWRITE)
-                 for r in have)
+        ro = all(not (os.stat(files[r]).st_mode & stat.S_IWRITE) for r in have)
         print("   只读属性：%s" % ("是" if ro else "否（跑 make_readonly）"))
     return 0 if ok else 1
 
@@ -1079,41 +1272,41 @@ def rebuild_index(root):
 
 
 def cmd_restore(args):
-    if not walk_files(P.NATIVE):
-        sys.exit("备份版是空的：%s\n先跑 python navdata.py freeze" % P.NATIVE)
+    r"""② 开发数据 <- ① 冻结副本：把 <图>\native\ 里的 map.json / navmesh.bin 抄回 <图>\ 根下。
+
+    草稿（<指纹>.txt）/ markers.txt / manifest.json 都不动 —— 那些不是"原生数据"。
+    """
+    native = _native_rel_map()
+    if not native:
+        sys.exit("备份版是空的（每张图的 %s\\ 里没有文件）\n先跑 python navdata.py freeze" % P.NATIVE_SUB)
     want = {}
-    for rel, src in list(P.map_files(P.NATIVE)) + list(P.navmesh_files(P.NATIVE)):
-        want[rel] = src
+    for rel, srcp in sorted(native.items()):
+        parts = rel.split("/")            # <图>/native/<文件>
+        if len(parts) < 3:
+            continue
+        want[parts[0] + "/" + "/".join(parts[2:])] = srcp
     copied = 0
-    for rel in sorted(want):
-        dst = os.path.join(P.DEV, rel.replace("/", os.sep))
+    for rel, srcp in sorted(want.items()):
+        dst = os.path.join(P.MAPS, rel.replace("/", os.sep))
         os.makedirs(os.path.dirname(dst), exist_ok=True)
         if os.path.exists(dst):
             make_writable(dst)
-        shutil.copy2(want[rel], dst)
+        shutil.copy2(srcp, dst)
         make_writable(dst)
         copied += 1
-    # 开发版里多出来的点图 / 可走面（我们加的）删掉；packs / final / vis / archive 一律不碰。
-    # 只有两边都是「一张图一个文件夹」的新布局才敢删——半迁移状态下删错就找不回来了。
+    # 开发版里多出来的点图 / 可走面（我们加的）删掉；草稿 / 标记 / 成品 / 收件箱 一律不碰。
     deleted = 0
-    if P.is_folders(P.DEV) and P.is_folders(P.NATIVE):
-        for rel, path in sorted(list(P.map_files(P.DEV)) + list(P.navmesh_files(P.DEV))):
-            if rel in want:
-                continue
-            try:
-                make_writable(path)
-                os.remove(path)
-                deleted += 1
-            except OSError:
-                pass
-    src_names = P.names_path(P.NATIVE)
-    if os.path.isfile(src_names):
-        dst = os.path.join(P.names_dir(P.DEV), "names.json")
-        os.makedirs(os.path.dirname(dst), exist_ok=True)
-        shutil.copy2(src_names, dst)
-        make_writable(dst)
-    rebuild_index(P.DEV)
-    print("② 开发版已还原成原生：%s" % P.DEV)
+    for rel, path in sorted(list(P.map_files(P.MAPS)) + list(P.navmesh_files(P.MAPS))):
+        if rel in want:
+            continue
+        try:
+            make_writable(path)
+            os.remove(path)
+            deleted += 1
+        except OSError:
+            pass
+    rebuild_index(P.MAPS)
+    print("② 开发数据已还原成原生：%s" % P.MAPS)
     print("   写回 %d 个文件（点图 + 可走面），删掉 %d 个（我们加的）" % (copied, deleted))
     return 0
 
@@ -1159,22 +1352,23 @@ def cmd_import(args):
 
 
 def cmd_diff(args):
-    def snap(root):
+    def snap(sub=""):
         out = {}
-        for rel, path in list(P.map_files(root)) + list(P.navmesh_files(root)):
+        for rel, path in list(P.map_files(P.MAPS, sub)) + list(P.navmesh_files(P.MAPS, sub)):
             try:
                 out[rel] = sha256(path)
             except OSError:
                 pass
-        for _fp, path in P.route_files(root):
-            try:
-                out[os.path.relpath(path, root).replace(os.sep, "/")] = sha256(path)
-            except OSError:
-                pass
+        if not sub:                       # 草稿只在开发版里有意义
+            for _fp, path in P.route_files(P.MAPS):
+                try:
+                    out[os.path.relpath(path, P.MAPS).replace(os.sep, "/")] = sha256(path)
+                except OSError:
+                    pass
         return out
 
-    # 2026-11-21 三档启动后 ③ 不再存数据：只比 ② vs ①，另报成品里有哪些图。
-    a, b = snap(P.DEV), snap(P.NATIVE)
+    # 一图一夹：只比「开发数据」vs「① 冻结副本」，另报成品里有哪些图。
+    a, b = snap(), snap(P.NATIVE_SUB)
     only_a = sorted(set(a) - set(b))
     only_b = sorted(set(b) - set(a))
     diff = sorted(k for k in set(a) & set(b) if a[k] != b[k])
@@ -1204,13 +1398,13 @@ def cmd_status(args):
     print("UCF 导航数据 · 三区")
     print("")
     infos = [
-        ("① 备份版（原生·只读）", P.NATIVE, "只读，永不编辑"),
-        ("② 开发版（成品 + 收件箱 + 草稿）", P.DEV, "final 是成品（每图一份），packs 是草稿"),
-        ("③ 游戏目录（运行时·不放数据）", P.game_dir_of(),
+        ("① 备份版（每张图的 native\\，只读）", P.MAPS, P.NATIVE_SUB, "只读，永不编辑；restore 从这里抄回"),
+        ("② 开发数据（每张图的根目录）", P.MAPS, "", "map.json / navmesh.bin / 草稿 / markers.txt 都在这"),
+        ("③ 游戏目录（运行时·不放数据）", P.game_dir_of(), "", 
          "只放加载器 + 本体补丁；插件 / 配置 / 日志 / 标记在工程端"),
     ]
-    for title, root, tip in infos:
-        s = summary(root)
+    for title, root, sub, tip in infos:
+        s = summary(root, sub)
         print("%s  %s" % (title, s["path"]))
         print("    %s  数据 %d 个（图 %d / 可走面 %d / 路线 %d）  %s  最近改动 %s" % (
             "存在" if s["exists"] else "不存在", s["files"],
@@ -1229,7 +1423,7 @@ def cmd_status(args):
         time.strftime("%Y-%m-%d %H:%M", time.localtime(t_last)) if t_last else "-"))
     print("    草稿：%s" % P.PACKS_DIR)
     meta = final_store_meta()
-    print("    成品：%d 张图  %s" % (len(meta), FINAL_ROOT))
+    print("    成品：%d 张图（每张图 <图>\\final\\<指纹>.txt）  %s" % (len(meta), P.MAPS))
     for fp, m in sorted(meta.items(), key=lambda kv: (str(kv[1].get("level") or ""), kv[0]))[-5:]:
         print("      %s %-8s %4d/%-4d 发布 %s" % (
             fp, m.get("level", "?"), m.get("node", 0), m.get("edge", 0),
@@ -1266,7 +1460,7 @@ def packs_root():
 # 删草稿不真删：整份目录挪进 archive\pack_trash\（和发布前快照 final_prev\ 一个思路），
 # 界面上不出现，误删能从那儿挪回来。UCF_PACK_TRASH 只给自检指临时目录用。
 PACK_TRASH = (os.environ.get("UCF_PACK_TRASH", "").strip()
-              or os.path.join(P.DEV, "archive", "pack_trash"))
+              or os.path.join(P.ARCHIVE, "pack_trash"))
 
 
 def _is_pack(path):
@@ -1547,7 +1741,7 @@ def cmd_pack_promote(args):
 def cmd_final_list(args):
     stats = final_store_stats()
     meta = stats["maps"]
-    print("成品（每张图一份）  %s" % FINAL_ROOT)
+    print("成品（每张图一份，在各图 final\\ 里）  %s" % P.MAPS)
     if not meta:
         print("  （空的 = 启动成品时所有图走原生。去「编辑中」发布一张图就有了）")
         return 0

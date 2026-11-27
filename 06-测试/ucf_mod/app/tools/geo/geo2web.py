@@ -120,11 +120,11 @@ def vertex_normals(pos, tri):
 
 
 
-NAVDATA = os.path.join(UCF, "data", "navdata", "dev")   # ② 开发版的图文件夹（只读，用来校准分块）
+NAVDATA = os.path.join(UCF, "data", "maps")   # 图文件夹（只读，用来校准分块）
 
 
 def _level_waypoints(level):
-    """这张图的路点（navdata/dev/<图文件夹>/map.json 的 nodes），没有就返回 None。
+    """这张图的路点（data/maps/<图文件夹>/map.json 的 nodes），没有就返回 None。
 
     只用来判断「同一块网格被导出了两遍时，哪一遍的世界坐标是对的」，不改任何数据。
     路点是游戏运行时 A* 图里的真实坐标（出生点、人机走的路都在上面），

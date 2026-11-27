@@ -1,0 +1,123 @@
+{
+  "feature_id": "direct_damage",
+  "canonical_id": "direct_damage",
+  "display_name": "开火直伤/弹体追踪",
+  "category": "weapon",
+  "tab": "weapon_tab",
+  "tab_title": "武器",
+  "tab_order": 10,
+  "order": 110,
+  "desc": "准星附近有敌人时，开枪子弹会自动追踪目标（搭配子弹穿墙，可追踪墙后的敌人）；手雷、榴弹、火箭弹、技能弹会拐弯追人；刚复活的敌人也能打掉血（无视复活无敌）。",
+  "ui_text": {
+    "lines": [
+      "准星附近有敌人时，开枪子弹会自动追踪目标（搭配子弹穿墙，可追踪墙后的敌人）。",
+      "手雷、榴弹、火箭弹、技能弹会拐弯追人。",
+      "刚复活的敌人也能打掉血（无视复活无敌）。"
+    ]
+  },
+  "script": "script.js",
+  "runtime": {
+    "type": "plugin_script"
+  },
+  "layout": {
+    "card_type": "simple",
+    "columnspan": 2,
+    "title_color": "#f472b6"
+  },
+  "controls": [
+    {
+      "type": "switch",
+      "action": "enable"
+    },
+    {
+      "type": "switch",
+      "action": "setConfig",
+      "key": "enable_guns",
+      "label": "普通枪械自动跟枪",
+      "default": true
+    },
+    {
+      "type": "switch",
+      "action": "setConfig",
+      "key": "enable_explosives",
+      "label": "榴弹/手雷/RPG 追踪",
+      "default": true
+    },
+    {
+      "type": "switch",
+      "action": "setConfig",
+      "key": "enable_skill_projectiles",
+      "label": "特殊技能弹 追踪",
+      "default": true
+    },
+    {
+      "type": "switch",
+      "action": "setConfig",
+      "key": "pierce_respawn_invincible",
+      "label": "突破复活无敌（开枪/爆炸都能打死）",
+      "default": true
+    }
+  ],
+  "config": {
+    "enable_guns": true,
+    "enable_homing": true,
+    "enable_explosives": true,
+    "enable_skill_projectiles": true,
+    "pierce_respawn_invincible": true,
+    "target_outer_cone_deg": 30,
+    "target_inner_cone_deg": 20,
+    "target_angle_tie_deg": 1,
+    "target_switch_margin_deg": 1.2,
+    "target_switch_confirm_scans": 1,
+    "target_switch_cooldown_ms": 100,
+    "max_distance": 0,
+    "local_eye_height": 1.55,
+    "chest_fallback_height": 1.1,
+    "target_cache_ms": 15,
+    "gun_fallback_nearest": false,
+    "gun_fallback_max_distance": 10,
+    "homing_speed": 0,
+    "homing_turn": 1,
+    "homing_retarget": true,
+    "homing_max_ms": 20000,
+    "homing_pending_ms": 800,
+    "missile_fallback_nearest": true,
+    "missile_fallback_max_distance": 0,
+    "diagnostic_log": false,
+    "log_every": 20,
+    "verbose_probe": false,
+    "log_to_file": false,
+    "log_file": ""
+  },
+  "rpc": [
+    "enable",
+    "disable",
+    "setConfig",
+    "set_config",
+    "setconfig",
+    "status",
+    "cleanup"
+  ],
+  "lifecycle": {
+    "cleanup": true,
+    "restore": true,
+    "requires_room_ready_reapply": false,
+    "room_ready_retry": false,
+    "room_ready_reapply_exempt_reason": "只装固定 RVA 钩子（WPN_Gun.Damage 的 attach 射线接管 + 投射物入口 attach + WPN_Missile 的物理步改写），每次开火/每个物理步按 enabled/config 实时读取房间内玩家列表；不注入伤害、不处理死亡与复活，因此不依赖进房时写入任何运行态对象。唯一的写操作是「突破复活无敌」开启时对目标（枪械=选中目标，爆炸=半径内敌人）的 Entity.damageRate / Entity.isInvincible / HealthData.invinsibleEndTime 三个防御字段复位，不写血量、不写任何指针。"
+  },
+  "source": {
+    "single_feature_js": "05-正式功能/40-开火直伤/script.js",
+    "runtime_script_js": "features/40_direct_damage/script.js",
+    "retired_injection_version": "04-正式发行版/_备份_40_direct_damage_注入版_2.7/40_direct_damage/"
+  },
+  "ui_handles": {
+    "switch": "direct_damage_switch",
+    "enable_guns_var": "direct_damage_enable_guns_var",
+    "enable_explosives_var": "direct_damage_enable_explosives_var",
+    "enable_skill_projectiles_var": "direct_damage_enable_skill_projectiles_var",
+    "pierce_respawn_invincible_var": "direct_damage_pierce_respawn_invincible_var"
+  },
+  "state": {
+    "sync_enabled_from_config": true
+  }
+}

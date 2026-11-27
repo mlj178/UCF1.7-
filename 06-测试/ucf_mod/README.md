@@ -21,31 +21,44 @@ UnityCrossFire 1.7.1（Unity + IL2CPP）的文件化插件。
 | **部署端（运行时）** | 游戏目录 `...\UnityCrossFire1.7.1\` | 只有 `winhttp.dll` `winhttp_orig.dll` + 本体补丁 | ❌ 不进 git |
 
 ```
-① 备份版（只读）   工程端 data\navdata\native    只有 navdata.py freeze 会写
-② 开发版（唯一源） 工程端 data\navdata\dev       编辑器 / 插件导出 / 控制台「整理导出」「发布到成品」
-③ 游戏目录         游戏目录（不再有 ucf_mod\）   只放加载器 + 本体补丁（2026-11-25 起）
-运行时状态          工程端 run\runtime\          ucf_mod.json / ucf_navcmd.txt / deploy 清单
+① 冻结副本（只读） 工程端 data\maps\<图>\native     只有 navdata.py freeze 会写
+② 开发数据（唯一源）工程端 data\maps\<图>\          编辑器 / 插件导出 / 控制台「整理导出」「发布到成品」
+③ 游戏目录         游戏目录（不再有 ucf_mod\）       只放加载器 + 本体补丁（2026-11-25 起）
+运行时状态          工程端 run\runtime\              ucf_mod.json / ucf_navcmd.txt / deploy 清单
 ```
 
-② 里 `final\` 是**成品**（每张图一份，没有版本），`vis\` 是导出收件箱，`packs\` 是**草稿**（每张图一份，可写沙盒），`archive\` 是归档。
+**一张图一个文件夹**（2026-11-27 起，见 §二）：点图 `map.json`、可走面 `navmesh.bin`、草稿 `<指纹>.txt`、
+编辑标记 `markers.txt`、成品 `final\<指纹>.txt`、冻结副本 `native\` 全在同一张图的文件夹里。
+`_inbox\` 是导出收件箱，`_archive\` 是回收站（都挂在 `data\maps\` 下，不属于任何一张图）。
 
 ### 三档启动（控制台底部按钮）
 
 | 档 | 插件读哪 | 能写吗 |
 |---|---|---|
-| 成品 | `UCF_PACK_DIR=②` + `UCF_PACK=final` | 不能（文件带只读属性） |
-| 编辑中 | `UCF_PACK_DIR=②\packs` + `UCF_PACK=<地图文件夹>` | 可写，游戏内存回草稿 |
+| 成品 | `UCF_PACK_DIR=data\maps` + `UCF_NAV_SEARCH=1` + `UCF_NAV_SUB=final`（按当前图指纹找 `<图>\final\<指纹>.txt`） | 不能（文件带只读属性） |
+| 编辑中 | `UCF_PACK_DIR=data\maps` + `UCF_PACK=<地图文件夹>`（读 `<图>\<指纹>.txt`） | 可写，游戏内存回草稿 |
 | 原版 | 插件待机 | — |
 
-成品是**一张图一份**（没有版本号）：发布 = 覆盖 `final\<指纹>.txt`，覆盖前旧成品自动进 `archive\final_prev\`（每图最近 5 份）。
-成品档和编辑中走完全相同的加载逻辑，所以 grow / keep / 增量发布过去后行为一致；草稿目录是 `packs\<地图文件夹>\`，一张图只有一个。
+成品是**一张图一份**（没有版本号）：发布 = 覆盖 `<图>\final\<指纹>.txt`，覆盖前旧成品自动进 `_archive\final_prev\`（每图最近 5 份）。
+成品档和编辑中走完全相同的加载逻辑，所以 grow / keep / 增量发布过去后行为一致；草稿就在 `<图>\` 根下，一张图只有一个。
+成品档不设 `UCF_PACK`（没有"唯一一张图"），插件按场景指纹去各图文件夹里找 —— 一次启动照样能玩全部图。
 
-数据流：**游戏导出 → ② vis →（整理导出）→ ② 图文件夹；草稿做完 →（发布这张图）→ ② final\<指纹>.txt → 成品档**。
+数据流：**游戏导出 → _inbox →（整理导出）→ `<图>\map.json`；草稿做完 →（发布这张图）→ `<图>\final\<指纹>.txt` → 成品档**。
 
-**日志（2026-11-23 起）**：主位置是**工程端** `log\` —— 控制台启动游戏时用环境变量 `UCF_LOG_DIR` 指过去，
-所以**游戏目录里不生成日志**。`ucf_mod.log`（超过 16 MB 自动轮转成 `ucf_mod.prev.log`，只保 1 代）、`autotest.txt`（车测结果）、
-`player_marks.txt`（玩家坐标记录）都在这里。历史日志在 `log\_历史\`。
-没走控制台启动时，插件落 `%LOCALAPPDATA%\UCFMod\log` 或 `%TEMP%\ucf_mod\log`，不会写游戏目录。
+**日志（2026-11-23 起，2026-11-27 全部集中）**：唯一位置是**工程端** `log\` —— 控制台启动游戏时用环境变量
+`UCF_LOG_DIR` 指过去，所以**游戏目录里不生成日志**。现在一处的文件：
+
+| 文件 | 谁写的 | 说明 |
+| --- | --- | --- |
+| `ucf_mod.log` / `ucf_mod.prev.log` | C 插件 | 主日志；超过 16 MB 轮转，只保 1 代 |
+| `ucf_mod.prev_HHMMSS.log` | 车测脚本 | 开跑前备份上一份，方便对比 |
+| `autotest.txt` | C 插件 | 车测结果（每张图 OK + 最后 RESULT） |
+| `player_marks.txt` | C 插件 | 玩家坐标记录（追加） |
+| `navdata.log` / `navdata.prev.log` | `navdata.py` | 命令行 stdout 抄本；超过 16 MB 轮转 |
+| `publish.log` | `navdata.py` | 成品发布流水（TSV：时间 / 指纹 / 标签 / 点数 / sha / 备注） |
+
+历史日志在 `log\_历史\`。没走控制台启动时，插件落 `%LOCALAPPDATA%\UCFMod\log` 或 `%TEMP%\ucf_mod\log`，
+不会写游戏目录；加载器载入失败只写 `%TEMP%\ucf_mod_proxy.log`（那时工程端路径还不可信，故意留在 %TEMP%）。
 `ucf_navcmd.txt` 是控制台 ↔ 插件的命令通道，现在在 `run\runtime\`；`ucf_mod.json` 也在那里。
 
 部署端路径由 `%LOCALAPPDATA%\UCFMod\deploy.json`（控制台「部署」页选游戏时写）或 `app/tools/deploy.json`（开发机）指定，
@@ -91,12 +104,13 @@ ucf_mod/
 │   │   │   └── first_run.py   首次设置向导
 │   │   ├── autotest.py        车测（插件自己在进程内切图）
 │   │   └── dev/               开发者选项
-│   │       ├── tab.py         玩家坐标记录 + 轨迹采集卡片
-│   │       └── ucf_trace.py   原始轨迹：目录 / 增量读取 / 摘要
+│   │       ├── tab.py         玩家坐标记录 + 轨迹采集卡片（采集对象 / 档位 / 报告）
+│   │       └── ucf_trace.py   原始轨迹：目录 / 增量读取 / 摘要（解析在 core/ucf_sample.py）
 │   ├── core/                  ★ 路径与数据台账
 │   │   ├── ucf_paths.py       工程端 / 部署端 / 三区路径解析（唯一真相）+ P.tool()
+│   │   ├── ucf_sample.py      ★ 采样文件读取（ucf-trace/1·2·3）：录制和采集共用一份解析
 │   │   ├── map_table.py       读 docs/guide/地图对照表.md（序号_场景名中文名）
-│   │   └── navdata.py         三区台账：status / verify / restore / diff / freeze / pack …
+│   │   └── navdata.py         数据台账：status / verify / restore / diff / freeze / pack …
 │   ├── workbench/             网页端（只读）
 │   │   ├── navserver.py       本地只读服务（也托管网页）
 │   │   └── web/               nav-studio.html/.css/.js（七页工作台）+ navview.html（2D/3D 查看器）
@@ -113,7 +127,14 @@ ucf_mod/
 │   └── proxy/               winhttp 加载器源码 + 编译脚本
 ├── data/                    ★ 数据
 │   ├── geo/                 *.npz 地形源；web/、tex/ 由脚本生成（gitignore）
-│   └── navdata/             三区数据：native/（冻结只读）+ dev/（开发版）
+│   └── maps/                ★ 一图一夹（2026-11-27）：同上 11 张图，每张一个文件夹
+│       ├── 00_公共/          names.json / _index.json / INDEX.md / SHA256SUMS.txt / .frozen.json
+│       ├── 01_TransportShip运输船/      map.json  navmesh.bin  <指纹>.txt  markers.txt
+│       │                              native\（冻结只读）  final\<指纹>.txt（成品）
+│       ├── …（02 / 03 / 05 / 06 / 08 / 09 / 10 / 11）
+│       ├── 04_NY_TM胜利广场/  07_DeathRing死亡擂台/  原生没有点图，只有 navmesh.bin
+│       ├── _inbox/          可走面导出 / 录制轨迹（派生，可重建）
+│       └── _archive/        删草稿 / 清标记 / 发布前快照 / 迁移日志
 ├── unity-map-project/       ★ 地图工程（生产侧：进 git，不进分发包）
 │   ├── README.md            命名规则 / 加图 9 步 / 三处同名
 │   ├── 00_模板/             脚手架：ProjectSettings + Packages + UcfBuild.cs + map.json
@@ -125,7 +146,9 @@ ucf_mod/
 │   ├── gamepatch/           ★ 游戏本体补丁包：一张图一个目录 + patch.json + orig/（原版哈希 → 补丁后哈希）
 │   ├── ledger/              资产台账运行态：drift.json + 快照（gitignore）
 │   └── build/               编译产物（gitignore）
-├── log/                     运行日志（gitignore；控制台注入 UCF_LOG_DIR）
+├── log/                     运行日志唯一目录（gitignore；控制台注入 UCF_LOG_DIR）
+│                            ucf_mod.log / autotest.txt / player_marks.txt /
+│                            navdata.log / publish.log
 ├── docs/                    guide/（指南）+ record/（每轮实现记录）
 └── archive/                 不参与运行的历史证据：design/ bench_watch.c README-原文
 ```
@@ -220,15 +243,17 @@ python app\tabs\deploy\deploy_mod.py --game-exe "..." --uninstall
 - **数据 / 部署**：三区路径与时间、部署/还原/校验；选游戏位置 + 一键部署（取代了原来的独立部署脚本）。
 - **车测**：插件自己在进程内逐张 LoadScene，不用鼠标键盘。
 - **开发者选项**：玩家坐标记录、原始轨迹采集（原来的「可视化」「录制」里的两块搬来）。
+  采集对象可选 玩家 / 人机 / 全部（人机 10 Hz）；「选文件出报告…」可以直接指到录制目录，
+  因为录制和采集写的是同一套格式。边界见 docs/record/采集与录制_边界_2026-11-27.md。
 - **地图总览**：只读总览，矩阵 / 卡片 / 看板共用同一套筛选和状态；顶部显示全局插件部署、当前启动档、草稿/成品/快照数量。
   「部署 / 游戏加载」按当前启动档算，不是把地图复制进游戏目录；每行展开有草稿/成品/快照路径和跳转。
 - **人机路点**：启动档两页（编辑中 / 成品）+ 一个共用地图选择；编辑中只有「本图草稿」（一张图一个），成品只有「已发布」（一张图一份）。
-  发布 = 覆盖 `final\<指纹>.txt`；成品页「草稿 ↔ 成品」表按图给结论（sha256 相同 = 同一文件）。
+  发布 = 覆盖 `<图>\final\<指纹>.txt`；成品页「草稿 ↔ 成品」表按图给结论（sha256 相同 = 同一文件）。
   编辑中卡片三个动作：打开草稿目录 / 重置本图草稿（只清点边，草稿还在）/ **删除本图草稿**（整份挪到
-  `archive\pack_trash\`，这张图回到「还没有草稿」；成品不动，要撤发布走成品页）。
-  **草稿 ≠ 编辑标记**：守卫区 / 守卫点 / 蹲守点 / 标签 / 出生点 存在 `markers\<图>\markers.txt`；
+  `_archive\pack_trash\`，这张图回到「还没有草稿」；成品不动，要撤发布走成品页）。
+  **草稿 ≠ 编辑标记**：守卫区 / 守卫点 / 蹲守点 / 标签 / 出生点 存在 `<图>\markers.txt`；
   删草稿的弹窗里「同时清空本图标记」默认勾上（取消勾选就只删草稿），同一行也显示「本图标记：N」
-  并可单独「清空本图标记」（都挪到 `archive\markers_trash\`）。
+  并可单独「清空本图标记」（都挪到 `_archive\markers_trash\`）。
 
 ### 游戏内 F2 菜单要点
 
@@ -252,12 +277,31 @@ python app\tabs\deploy\deploy_mod.py --game-exe "..." --uninstall
   旧数据用 `python app/tools/data/check_jumps.py` 体检（同点 / 缺路点 / 无连线 / 太短）。
 - **方向可视化**：A 起点 = 绿色方块 + 竖条；准星虚线框按身份上色（起点绿 / 终点红 / 非法灰）；
   单向边的箭头层只在菜单打开时显示。
+- **蹲守点 / 守卫点的朝向**（2026-11-27）：球看不出朝向，所以准星对着这两类点时，
+  地上画**射线 + 箭头**（多方向最多 3 条），准星下方一行「朝向 东北 42°」；读不到方向的画虚线写「未知」。
+  放置时朝向 = **相机朝向**（按 5 之前虚线框旁就有橙色箭头预览）；放完在
+  `F2 → 9 朝向工具` 里改：设为相机朝向 / 顺逆 15°（**←  →** 直接转，Shift 精调 1°）/ 清空 / 显示样式。
+  方向写进游戏 `zoomPos`（世界目标点 = 点位 + 朝向 × 10 m，同高），原生点只读、不能改。
+  详见 `docs/record/朝向显示_2026-11-27.md`。
+- **守卫点只建点，不连带建区**（2026-11-27）：`3 守卫区工具 → 2 加守卫点` 只在**已有守卫区**的
+  3 m 框里挂点；准星不在任何区里时虚线框变灰、按 5 只提示「这里没有守卫区：先按 1 建区」，
+  不建对象、不进撤销栈、也不点亮「未保存」。以前会顺手在同一坐标再建一个区
+  （一次点击两个物体），看着像「加点却多出来一个区」。详见 `docs/record/守卫点只建点_2026-11-27.md`。
 - **预置虚影**：选好类型后，准星处先显示虚线框，按下去之前就能看清会不会被拒绝（灰框 = 会失败）。
-- **出生点编辑**（2026-11-25）：`1 添加点位 → 4/5 出生点 BL/GR`，准星落点 + 当前朝向；
-  `5 删除点位 → 5/6` 删 BL/GR 出生点（至少保留 1 个）；原来的「删除标记」拆成
-  `5 删除点位` 和 `6 删除区域`（守卫区）。改的是 `MapManager.SP_BL/SP_GR` 运行时数组，
-  不写原图；新增/删除先记在内存，Ctrl+S 才写 `markers\<图>\markers.txt`（`spawn` / `spawndel`），
+- **出生点编辑**（2026-11-25；2026-11-27 加中立）：`1 添加点位 → 4/5/6 = 出生点 BL/GR/中立`，
+  准星落点 + 当前朝向；`5 删除点位 → 5/6/7` 删三种出生点（至少保留 1 个）；原来的「删除标记」拆成
+  `5 删除点位` 和 `6 删除区域`（守卫区）。改的是 `MapManager.SP_BL/SP_GR/SP_Netural` 运行时数组，
+  不写原图；新增/删除先记在内存，Ctrl+S 才写 `markers\<图>\markers.txt`（`spawn` / `spawndel`，队号 0/1/2），
   保存后每次进图自动重套。
+  **第一次出生**：写数组抢不过"地图加载那一帧"，事后挪玩家又会闪退，最终改成
+  **整函数替换 `MapManager.GetSpawnPoint`**（入口 5 字节 `E9`，2026-11-27）：
+  初始化时预读 markers 的 `spawn / spawndel`，钩子里按队返回"新增优先 + 原生去删除"的点，
+  第一波和复活都走它；不碰 Player/Transform。`ucf_mod.json: "spawn_hook": false` 可一键关）。
+  **高度**：新增点不是「地面 + 5 cm」，而是从本图原生出生点反推「地面 + 原生高度」
+  （`spawn_height_gap`），历史存的低点在进图后自动回填 —— 以前重生会穿地板/掉进虚空。
+  为什么要有中立：`GameManager.AddPlayer` 按 `GameMode` 定队 —— 团队/特殊战用 `ClientData.joinTeam`（BL/GR），
+  **个人竞技（DeathMatch）全员 Neutral**，生化（Nano3/4/6、终结者）全员 GlobalRisk。所以只改 BL/GR 时，
+  个人竞技里"加了出生点没人出生"（游戏只读 `SP_Netural`）。详见 `docs/record/出生点三阵营_2026-11-27.md`。
 
 配置键：`wp_menu`、`wp_autoground`（bool）、`wp_brush`（normal/jump/crouch/guard/area/tag/spawn_bl/spawn_gr，只在游戏内切）。
 
@@ -298,16 +342,20 @@ python app\tabs\deploy\deploy_mod.py --game-exe "..." --uninstall
 
 三态：① 录前准备 → ② 录制中 → ③ 复盘。启动档固定 **编辑中**（成品档只读，不能录）。
 
-- 采样：`src/editor.c` 的 `rec_tick()`，20 Hz 节流，记相机位置/朝向、正下方射线地面高度、空格/Ctrl。
-  插件**不推断路点**，怎么走、哪里跳由玩家决定。
-- 识别（`app/tabs/record/ucf_rec.py`，纯计算）：4 m 重采样（2.5 / 4 / 6 可选）；跳链 = 空格 + 离地 > 0.3 m 且水平 ≥ 1.5 m；
-  落下 = 下降 ≥ 1.5 m 且落差 ≥ 2 m；2.5 m 内二次经过 = 岔路候选；蹲 > 0.8 s 只提示；单帧 > 15 m 断段。
-- 落盘：原始轨迹 `data/navdata/dev/vis/rec/<图>_<包>_<时间>.jsonl`；复盘确认后只往包里**追加** `node add`/`edge add`/`jump add`，
-  改前备份 `.bak-rec-<时间>`。
+- 采样（`src/editor.c` 的采样会话，和「原始轨迹采集」共用 `ss_tick()`）：玩家 30 Hz，
+  记**脚底坐标** / 是否在地面 / 竖直速度 / 空格·Ctrl；落地那一帧插件直接写一行 `ev=jump`。
+  「采集对象」可选 玩家 / 人机 / 全部（人机 10 Hz，给人机验证用）。插件**不推断路点**，怎么走、哪里跳由玩家决定。
+- 识别（`app/tabs/record/ucf_rec.py`，纯计算）：按形状放点（DP ε=10 cm，最大段长 1.5 / 2.5 / 4 / 6 m 可选）；
+  跳链只保留 3D **1.5~5.5 m**（人机实测能跳的窗口，> 5.5 只报断口；「超长跳也建链」放到 6.0）；
+  落下（落差 ≥ 2 m）写单向边；2.5 m 内二次经过 = 岔路候选；静止 2 s 只提示；单帧 > 15 m 的那条边不建。
+- 落盘：原始轨迹 `data/maps/_inbox/rec/<图>_<包>_<时间>.jsonl`（同一套 `ucf-trace/3`，header 带图 / 包 / who）；
+  复盘确认后只往草稿里**追加** `node add`/`edge add`/`jump add`，改前备份 `.bak-rec-<时间>`。
 - **必须点「保存增量」才算保存**（2026-11-25）：录制过程只写原始 jsonl，不进草稿；
   结束录制只到复盘页，不点保存就什么也不写；点保存后才追加 + 通知插件重新载入。
-- 命令：控制台写 `ucf_navcmd.txt` 的 `cmd=rec` + `act=start|stop|pause|resume`；插件 0.5 s 内执行。
-- 已知边界：车测时相机在天上、脚下射线打不到地面（`gy=-9999`），跳跃/落下识别要用真实对局验证。
+- 命令：控制台写 `ucf_navcmd.txt` 的 `cmd=rec` + `act=start|stop|pause|resume`（带 `out=` / `hz=` / `who=`）；插件 0.5 s 内执行。
+- **一个写入者**（2026-11-27）：录制和采集同时只跑一个，开另一个会先把这一个收尾（录制照样能复盘保存）。
+- 录制日志就是可分析的原始轨迹：开发者选项页「选文件出报告…」可以直接选它，不用重录。
+- 已知边界：玩家对象抓不到时退回相机估算（header 写 `src=camera`，绝对高度有常数偏差）。
 
 ---
 
@@ -316,7 +364,8 @@ python app\tabs\deploy\deploy_mod.py --game-exe "..." --uninstall
 ```powershell
 python app/tests/test_console_switches.py   # cfg.c 开关表 ↔ 控制台页签分组
 python app/tests/test_blank_pack.py         # grow/keep 建包链路（editor.c / navdata / navserver / navview / 控制台）
-python app/tests/test_mapfolders.py         # ①② 目录布局、四个读法数字一致、迁移日志
+python app/tests/test_mapfolders.py         # 一图一夹：native 冻结副本 / 草稿 / 成品 / 四个读法数字一致
+python app/tests/test_navsearch_c.py       # 成品档按指纹找图的 C 实现（从 editor.c 抽函数编译跑）
 python app/tests/test_console_packcmd.py    # 包统计 + ucf_navcmd.txt
 python app/tests/test_trace.py              # 轨迹字段表 C/Python 对钉
 python app/tests/test_ucf_rec.py            # 录制识别（合成轨迹）
@@ -342,10 +391,12 @@ python app/tests/test_console_timers.py     # 控制台定时链只有一条：�
 | `docs/guide/点图与可走面_为什么每张图不一样.md` | 一张图靠点、一张图靠面，为什么 |
 | `docs/guide/新增地图_完整工作流.md` | 加新地图：Blender → Unity → 字节补丁 → 修出生点 |
 | `docs/guide/游戏基础信息.md` | 模式枚举 + 阵营缩写 + 出生点容器 |
+| `docs/record/一图一夹_2026-11-27.md` | ★ 2026-11-27 一图一夹：navdata 四处并进 data/maps，成品进 <图>/final |
 | `docs/record/目录重构_2026-11-24.md` | 2026-11-24 目录重构：旧路径 → 新路径对照 |
 | `docs/record/身份与页签_2026-11-24.md` | 2026-11-24 身份（用户/开发）：页表、切换、迁移、自检 |
 | `docs/record/游戏目录清理_2026-11-25.md` | 2026-11-25 清游戏目录 + 直读 + 一键部署改造记录 |
 | `docs/record/出生点编辑与删除拆分_2026-11-25.md` | 2026-11-25 出生点 BL/GR 增删 + 删除点位/删除区域拆分 |
+| `docs/record/出生点三阵营_2026-11-27.md` | **为什么"加了出生点没人出生"**：模式↔数组映射、人机重生路径、三阵营编辑 + 新增点优先 |
 | `docs/record/手动保存_2026-11-25.md` | 2026-11-25 游戏内编辑必须手动保存（Ctrl+S 唯一入口，退房间丢弃未保存） |
 | `docs/record/逆向速查_版本偏移与地址.md` | 引擎版本 + md5、字段偏移、函数 RVA |
 | `docs/record/` | 每轮实现笔记（文件名带日期）；只作历史证据，现状看本文件 |
@@ -356,8 +407,11 @@ python app/tests/test_console_timers.py     # 控制台定时链只有一条：�
 
 ## 九、已知问题
 
-1. `data/navdata/dev/vis/` 里还有两份没归位的可走面（`navmesh_nm532-…`、`navmesh_nm716-…`）；
-   当前 `test_mapfolders.py` 已通过，但收件箱仍建议用 `python app/core/navdata.py import`（可先 `--dry`）整理。
+1. `data/maps/_inbox/` 里还有几份没归位的可走面（`navmesh_nm*.bin` 6 个）；
+   归位用 `python app/core/navdata.py import`（可先 `--dry`）。
+2. ① 冻结副本的 SHA256 清单与磁盘内容对不上（9 个 map.json + 8 个 navmesh.bin 全部被标记"被改过"）。
+   这是**搬动之前就有**的：清单是 2026-11-17 冻结时写的，之后 native 目录被重写过一次但没重算清单。
+   `navdata.py verify` 因此一直是红的；要不要重新冻结（`freeze --force`，从游戏目录重建）由作者定。
 2. `app/tools/deploy.json` 只用于开发机兜底找游戏；控制台「部署」页和 `deploy_mod.py` 以用户配置/命令行
    `--game-exe` 为准，不再用 `build.ps1 -Deploy` 往游戏目录拷 dll。
 3. 运行时配置 `run\runtime\ucf_mod.json` 和部署清单 `run\runtime\deploy\` 是机器相关文件，已 gitignore；

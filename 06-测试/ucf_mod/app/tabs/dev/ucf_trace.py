@@ -2,9 +2,9 @@
 # -*- coding: utf-8 -*-
 r"""原始轨迹采集：落盘位置 / 增量读取 / 摘要 —— 控制台「开发者选项」页和命令行共用。
 
-**2026-11-24 起是 ucf-trace/2（跳跃取证版）**，数据来源 src/editor.c 的 trace_tick()：
+**2026-11-27 起是 ucf-trace/3（录制 / 采集同一套采样器）**，数据来源 src/editor.c 的 sess_tick()：
 
-    header  {"kind":"trace","schema":"ucf-trace/2","hz":30,"t0":"...","scene":"...",
+    header  {"kind":"trace","schema":"ucf-trace/3","who":"player","hz":30,"t0":"...","scene":"...",
              "map":"level1","label":"运输船","pack":"...","fp":"...",
              "src":"player","fields":["t","dt","x","y","z","g","vy","sp","ct"],
              "notes":"..."}
@@ -25,6 +25,8 @@ r"""原始轨迹采集：落盘位置 / 增量读取 / 摘要 —— 控制台�
 所以跳距/跳高/滞空是**直接读出来的**，不是推出来的。
 
 旧文件（ucf-trace/1）继续能读：字段少就按缺省值补，分析端会在报告里标出来。
+**读文件的部分已经搬到 app/core/ucf_sample.py**（录制和采集共用一份解析，见那里的说明）；
+本模块只保留「这个功能自己的东西」：目录 / 文件命名 / 摘要 / 报告入口。
 
 只做纯计算（不读 tkinter），tests/test_trace.py 可以离线跑。
 """
@@ -46,21 +48,15 @@ for _p in (os.path.join(UCF_ROOT, "app", "core"), HERE):
 import ucf_paths as P  # noqa: E402
 
 #: 轨迹目录：② 开发版 vis\trace（和录制的 vis\rec 并列，都是插件写的原始档）
-DIR = os.path.join(P.DEV, "vis", "trace")
+DIR = os.path.join(P.INBOX, "trace")
 
 #: 采样档位（Hz）。插件采样定时器 10 ms（USER_TIMER_MINIMUM），60 Hz 是最高档；
 #: 实际上限≈游戏帧率（WM_TIMER 只在主循环泵消息时派发），跑不满时 summary 会标出来。
 GEARS = (10, 20, 30, 60)
 
-#: 新格式（ucf-trace/2）的样本字段 —— 必须和 editor.c header 的 fields 一一对应
-FIELDS = ("t", "dt", "x", "y", "z", "g", "vy", "sp", "ct")
-
-#: 旧格式（ucf-trace/1）字段；只为读历史日志，新日志不会再用
-FIELDS_V1 = ("t", "dt", "x", "y", "z", "gy", "fx", "fy", "fz",
-             "sp", "ct", "sh", "w", "a", "s", "d")
-
-#: 跳事件行里的键（和 editor.c 的 tr_emit_jump 对齐）
-JUMP_KEYS = ("a", "b", "h", "rise", "air", "v0", "run", "kind")
+#: 样本字段 / 跳事件键 / 解析：唯一实现在 core/ucf_sample.py（录制也用它）
+import ucf_sample  # noqa: E402
+from ucf_sample import FIELDS, FIELDS_V1, JUMP_KEYS, KINDS, SCHEMAS  # noqa: E402,F401
 
 #: 站立时眼睛离地高度的兜底值（识别不出来时用）
 EYE_DEFAULT = 1.60
@@ -98,132 +94,32 @@ def latest():
 
 
 def _row(d):
-    r"""一行 JSON -> 样本 dict。
-
-    2 版：x/y/z（玩家脚底）、g（是否在地面）、vy（竖直速度）、sp/ct；
-    1 版：xyz 是相机、还有 gy/fx/fy/fz/sh/wasd —— 缺的键按缺省补，老日志照样能读。
-    """
-    gy = d.get("gy")
-    g = d.get("g")
-    vy = d.get("vy")
-    return {
-        "t": float(d.get("t") or 0.0),
-        "dt": float(d.get("dt") or 0.0),
-        "x": float(d["x"]), "y": float(d["y"]), "z": float(d["z"]),
-        "g": None if g is None else int(g),
-        "vy": None if vy is None else float(vy),
-        "gy": None if gy is None else float(gy),
-        "fx": float(d.get("fx") or 0.0), "fy": float(d.get("fy") or 0.0),
-        "fz": float(d.get("fz") or 0.0),
-        "sp": int(d.get("sp") or 0), "ct": int(d.get("ct") or 0),
-        "sh": int(d.get("sh") or 0),
-        "w": int(d.get("w") or 0), "a": int(d.get("a") or 0),
-        "s": int(d.get("s") or 0), "d": int(d.get("d") or 0),
-    }
+    r"""一行 JSON -> 样本 dict（实现见 core/ucf_sample.row）。"""
+    return ucf_sample.row(d)
 
 
 def _jump(d):
-    r"""一行 ev=jump -> 跳事件 dict（兼容 1 版没有事件的情况：返回 None）。"""
-    try:
-        a, b = d.get("a"), d.get("b")
-        if not (isinstance(a, (list, tuple)) and isinstance(b, (list, tuple))):
-            return None
-        return {
-            "t": float(d.get("t") or 0.0),
-            "a": (float(a[0]), float(a[1]), float(a[2])),
-            "b": (float(b[0]), float(b[1]), float(b[2])),
-            "h": float(d.get("h") or 0.0),
-            "rise": float(d.get("rise") or 0.0),
-            "air": float(d.get("air") or 0.0),
-            "v0": float(d.get("v0") or 0.0),
-            "run": float(d.get("run") or 0.0),
-            "kind": str(d.get("kind") or ""),
-        }
-    except (TypeError, ValueError, IndexError):
-        return None
+    r"""一行 ev=jump -> 跳事件 dict（实现见 core/ucf_sample.jump）。"""
+    return ucf_sample.jump(d)
 
 
 def scan(path, offset=0):
-    r"""从 offset 往后读新写完的行（控制台 0.5 s 一次，不重读整个文件）。
-
-    返回 (新 offset, 新样本数, 最后一个样本, end 行或 None)。
-    只处理以换行结尾的行：插件正在写的那一行留到下次。
-    """
-    try:
-        with open(path, "rb") as f:
-            f.seek(offset)
-            blob = f.read()
-    except OSError:
-        return offset, 0, None, None
-    cut = blob.rfind(b"\n")
-    if cut < 0:
-        return offset, 0, None, None
-    chunk = blob[:cut + 1]
-    new_off = offset + len(chunk)
-    count, last, end = 0, None, None
-    for raw in chunk.split(b"\n"):
-        s = raw.strip()
-        if not s or not s.startswith(b"{"):
-            continue
-        try:
-            d = json.loads(s.decode("utf-8", "replace"))
-        except ValueError:
-            continue
-        if not isinstance(d, dict):
-            continue
-        if d.get("end"):
-            end = d
-            continue
-        if d.get("kind") == "trace" or "ev" in d or "x" not in d:
-            continue
-        try:
-            row = _row(d)
-        except (TypeError, ValueError):
-            continue
-        count += 1
-        last = row
-    return new_off, count, last, end
+    r"""增量读取（实现见 core/ucf_sample.scan；人机行不算进样本数）。"""
+    return ucf_sample.scan(path, offset)
 
 
 def read_full(path):
-    r"""整个文件 -> (header, 样本列表, 跳事件列表, end 行)。坏行跳过，不抛。"""
-    hdr, rows, jumps, end = {}, [], [], None
-    with open(path, "r", encoding="utf-8", errors="replace") as f:
-        for raw in f:
-            s = raw.strip()
-            if not s.startswith("{"):
-                continue
-            try:
-                d = json.loads(s)
-            except ValueError:
-                continue
-            if not isinstance(d, dict):
-                continue
-            if d.get("kind") == "trace":
-                hdr = d
-                continue
-            if d.get("end"):
-                end = d
-                continue
-            if d.get("ev") == "jump":
-                j = _jump(d)
-                if j:
-                    jumps.append(j)
-                continue
-            if "x" not in d or "ev" in d:
-                continue
-            try:
-                rows.append(_row(d))
-            except (TypeError, ValueError):
-                continue
-    jumps.sort(key=lambda j: j["t"])
-    return hdr, rows, jumps, end
+    r"""整个文件 -> (header, 样本列表, 跳事件列表, end 行)。
+
+    实现在 core/ucf_sample.read_full：**header 按 kind/fields 判定**，所以录制
+    （kind=rec）和采集（kind=trace）的文件用同一个函数读，不再各写一份。
+    """
+    return ucf_sample.read_full(path)
 
 
 def read(path):
-    r"""整个文件 -> (header, 样本列表, end 行) —— 老接口，不要跳事件时用它。"""
-    hdr, rows, _jumps, end = read_full(path)
-    return hdr, rows, end
+    r"""整个文件 -> (header, 样本列表, end 行) —— 不要跳事件时用它。"""
+    return ucf_sample.read(path)
 
 
 def _median(xs):

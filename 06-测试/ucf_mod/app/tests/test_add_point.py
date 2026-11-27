@@ -81,12 +81,14 @@ def main():
 
     body = n_toasts("static void nav_add_here(void)", "static void nav_del_here", 3, "普通路点")
     check("toast_ok(" in body, "普通路点：成功也提示")
-    body = n_toasts("static void wp_place(void)", "/* ---- 测试包", 12, "放置（跳点/蹲守/守卫区/标签/出生点）")
+    body = n_toasts("static void wp_place(void)", "/* ---- 测试包", 14, "放置（跳点/蹲守/守卫区/标签/出生点）")
     for kw, label in (("跳点已建", "跳点成功"), ("蹲守点已放", "蹲守点"),
                       ("守卫区已建", "守卫区"), ("守卫点已加到守卫区", "守卫点"),
                       ("标签区已建", "标签区"), ("出生点 BL 已加", "出生点 BL"),
-                      ("出生点 GR 已加", "出生点 GR")):
+                      ("出生点 GR 已加", "出生点 GR"),
+                      ("出生点 中立 已加", "出生点 中立")):
         check(kw in body, "放置反馈包含「%s」" % label)
+
     body = n_toasts("static void nav_link_one(void)", "static void make_tag", 4, "连边 / 选 A")
     check("已连边" in body, "连边成功提示")
     body = n_toasts("static void nav_unlink_here(void)", "static void nav_ground_here", 2, "断边")
@@ -113,6 +115,75 @@ def main():
     check("入口 / 逃跑点还没接线" in body, "没接线的菜单项会说明「不会改图」")
     body = n_toasts("static void menu_confirm(void) {", "static int menu_sys_key", 1, "确认键（删除页未选类型）")
     check("先选删除类型" in body, "删除页没选类型也有提示")
+
+    print("[3b] 出生点三个数组都能改（2026-11-27：个人竞技全员走 Neutral）")
+    check("#define SPAWN_TEAMS 3" in ed, "SPAWN_TEAMS = 3")
+    check("SPAWN_OFF[SPAWN_TEAMS] = { 0x10, 0x14, 0x18 }" in ed,
+          "字段偏移 0x10/0x14/0x18（SP_BL / SP_GR / SP_Netural）")
+    check('x_class_get_field_from_name(g_mmCls, "SPID_Netural")' in ed,
+          "取到 SPID_Netural 静态计数器")
+    eff = section(ed, "static int spawn_effective(int team", "static int spawn_count(int team)")
+    loop_add = eff.find("for (i = 0; i < g_spawnAddN[team] && n < cap")
+    loop_orig = eff.find("for (j = 0; j < g_spawnOrigN[team] && n < cap")
+    check(loop_add >= 0 and loop_orig >= 0 and loop_add < loop_orig,
+          "新增点排在原生点前面（否则要轮完一遍原生点才轮到，看起来像没用）")
+    check("static void spawn_clear_ids(void)" in ed and "spawn_clear_ids();" in ed,
+          "写回后清 SPID_*（下一次取点 = 第 1 个新增点）")
+    check("if (!g_inited || g_sceneAge < 1) return;" in ed,
+          "进图第 1 个心跳就套出生点（抢在死亡重生 2 s 之前）")
+    check("MT_SPAWN_NT" in ed and "editor_spawn_delete(2)" in ed, "中立出生点也能删")
+
+    print("[3c] 出生点高度 = 游戏原生高度（2026-11-27：以前 +0.05 太低，重生穿地板）")
+    gap = section(ed, "static float spawn_height_gap(void)", "static void spawn_fix_heights_all(void)")
+    check("g_spawnOrig[team][i].p" in gap and "ground_below(" in gap,
+          "从本图原生出生点反推「地面 + 高度」")
+    check("g_spawnGap > 0.02f && g_spawnGap < 3.0f" in gap, "离谱值有兜底")
+    fix = section(ed, "static void spawn_fix_height(V3* p)", "static void spawn_fix_heights_all(void)")
+    check("want = g.y + gap;" in fix, "新增点抬到地面 + 原生高度")
+    addp = section(ed, "static int spawn_add_point(int team, V3 p, float yaw)", "static int editor_spawn_delete(int team)")
+    check("spawn_fix_height(&p);" in addp, "加点时先对齐高度再存")
+    apply_body = section(ed, "static int spawn_apply(void)", "static void spawn_tick(void)")
+    check("spawn_fix_heights_all();" in apply_body, "进图后把旧文件的低点一起改正")
+    ghost = section(ed, "static void ghost_tick(void)", "static void wp_place(void) {")
+    check("ground_below(p, 1.0f, 40.0f, &g)" in ghost and "MT_SPAWN" in ghost,
+          "预览框也按原生高度摆（别骗人）")
+
+    print("[3d] 开局抢跑：人机第一次出生也用改过的点（2026-11-27）")
+    early = section(ed, "static void spawn_early_tick(void)", "void editor_spawn_tick(void)")
+    check("mm != g_spawnEarlyMm" in early, "按 MapManager 实例变化触发（不等 navfix 场景通知）")
+    check("spawn_early_load()" in early and "spawn_apply();" in early,
+          "只读 spawn 行 + 立刻写回数组")
+    check("if (!ready) return;" in early, "Awake 还没拆数组时不动")
+    check("void editor_spawn_tick(void)" in ed, "对外提供高频入口")
+    nv = read(os.path.join("src", "navfix.c"))
+    check("editor_spawn_tick();" in nv, "hi-res WM_TIMER（≈15 ms）里调用")
+    check(ed.count("spawn_early_tick();") >= 2, "4 Hz 的 editor_tick 也调（兜底）")
+    check("spawn_parse_line(line)" in ed, "markers 的 spawn 解析只有一份（load_file 与抢跑共用）")
+
+    print("[3f] 取点钩子：整函数替换 MapManager.GetSpawnPoint（2026-11-27 第四轮）")
+    check("#define R_GET_SPAWN 0xAEB6E0" in ed, "目标 RVA 0xAEB6E0")
+    hook = section(ed, "static int spawn_hook_install(void)", "/* Ctrl+7")
+    check("0x55 && p[1] == 0x8B && p[2] == 0xEC" in hook,
+          "打补丁前校验函数开头（版本不对就不动）")
+    check("p[0] = 0xE9" in hook and "VirtualProtect" in hook and "FlushInstructionCache" in hook,
+          "入口 5 字节 E9 + 改页保护 + 刷指令缓存")
+    getbody = section(ed, "static void* __cdecl spawn_hook_get", "/* 打补丁")
+    check("return ret;" in getbody, "把 sret 缓冲区指针放在 EAX 返回（调用方 [eax] 取结果）")
+    check("hook_sync();" in getbody and "hook_points(" in getbody, "先对齐本图数据再取点")
+    sync = section(ed, "static void hook_sync(void)", "/* 取 team 的生效点")
+    check("mm == g_hookMm" in sync and "spawn_early_load();" in sync,
+          "MapManager 换实例就丢旧图数据、重读本图 markers")
+    check("g_hookId[team] = 0;" in section(ed, "static int hook_points(int team", "static void* __cdecl spawn_hook_get"),
+          "数组被游戏重建时轮转一起归零")
+    check("void spawn_preload(void)" in ed and "spawn_preload();" in ed,
+          "启动时预读 markers 的 spawn 行（第一波出生比任何 tick 早）")
+    check('cfg_bool("spawn_hook", 1)' in ed, "有 spawn_hook 开关（出事可整体关掉）")
+    init = section(ed, "static int ed_init(void)", "elog(\"init: exports ok")
+    check("spawn_hook_install();" in ed, "安装点存在")
+    check(init == "" or "spawn_hook_install();" not in init, "不在 ed_init 前段装（g_ga 未就绪）")
+    check(ed.count("spawn_hook_install();") >= 2, "ed_init 末尾 + 早 tick 兜底重试都在调")
+    check("if (!g_hookOn) spawn_hook_install();" in ed, "早 tick 每拍兜底重试（装上前不会静默）")
+
 
     print("[4] toast 的样子")
     tb = section(ed, "static void toast_build(P canvasTr)", "/* 弹一条提示")

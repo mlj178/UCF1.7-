@@ -254,13 +254,13 @@ def report_md(files, jumps):
     L.append("")
     L.append("---")
     L.append("")
-    L.append("判定口径：ucf-trace/2 的跳事件由插件在落地瞬间结算（a/b/h/rise/air/v0/run/kind）；"
+    L.append("判定口径：ucf-trace/2 及以后的跳事件由插件在落地瞬间结算（a/b/h/rise/air/v0/run/kind）；"
              "标了「（估）」的是旧格式，本脚本用相机高度反推，只作参考。")
     return chr(10).join(L) + chr(10)
 
 
-def default_paths():
-    d = ucf_trace.DIR
+def dir_paths(d):
+    r"""目录 -> 里面全部 .jsonl（按文件名排序）。不存在就返回 []。"""
     try:
         names = sorted(n for n in os.listdir(d) if n.endswith(".jsonl"))
     except OSError:
@@ -268,15 +268,35 @@ def default_paths():
     return [os.path.join(d, n) for n in names]
 
 
+def default_paths():
+    return dir_paths(ucf_trace.DIR)
+
+
+def expand(paths):
+    r"""命令行 / 控制台给的参数 -> 真正的文件列表。
+
+    可以给文件，也可以给目录（2026-11-27：录制的日志和采集的日志同格式，
+    想拿哪一份出报告就让用户自己指过去，不必再拷到轨迹目录）。
+    """
+    out = []
+    for p in paths or []:
+        if os.path.isdir(p):
+            out.extend(dir_paths(p))
+        elif p:
+            out.append(p)
+    return out
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description="轨迹日志 -> 跳跃分析 Markdown 报告")
-    ap.add_argument("files", nargs="*", help="要分析的 .jsonl；不给就用轨迹目录里全部")
+    ap.add_argument("files", nargs="*",
+                    help="要分析的 .jsonl 或目录（录制 / 采集都行）；不给就用轨迹目录里全部")
     ap.add_argument("--out", default="", help="Markdown 输出路径")
     ap.add_argument("--no-v1", action="store_true", help="旧格式不做估算，只统计")
     args = ap.parse_args(argv)
-    paths = args.files or default_paths()
+    paths = expand(args.files) if args.files else default_paths()
     if not paths:
-        print("没有轨迹文件：%s" % ucf_trace.DIR)
+        print("没有轨迹文件：%s" % (args.files or ucf_trace.DIR))
         return 2
     files, jumps = collect(paths, allow_v1=not args.no_v1)
     md = report_md(files, jumps)

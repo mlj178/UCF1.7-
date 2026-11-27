@@ -13,7 +13,7 @@ import customtkinter as ctk
 
 from ui.consts import FONT, FONT_S
 from ui.env import DEV, FINAL_ROOT, GAME_EXE, NATIVE, PACKS, TEST_VIS
-from ui.packs import _FINAL_FP_RE, final_stats, load_packs, pack_dir
+from ui.packs import _FINAL_FP_RE, final_bytes, final_stats, load_packs, pack_dir
 from ui.stats import data_counts, diff_count, export_filed, test_stats, tree_hashes
 from ui.util import dir_bytes, dir_stats, fmt_short, fmt_time, human_size
 
@@ -66,7 +66,7 @@ class DataTab:
                 ctk.CTkFrame(box, height=1, fg_color="#33383f").pack(
                     fill="x", padx=12, pady=(6, 0))
                 for key, label, color, sub in (
-                        ("final", "成品（final · 只读）", "#d6b676", FINAL_ROOT),
+                        ("final", "成品（各图 final/ · 只读）", "#d6b676", FINAL_ROOT),
                         ("packs", "编辑中（packs · 可写）", "#8fb7d9", PACKS),
                         ("vis", "收件箱（vis）", "#9aa0a6", TEST_VIS)):
                     rw = ctk.CTkFrame(box, fg_color="transparent")
@@ -179,7 +179,7 @@ class DataTab:
         # —— 成品：几张图 / 占多大 / 最近发布（没有版本）——
         st = final_stats()
         n_maps = int(st.get("n") or 0)
-        n_bytes, latest = dir_bytes(FINAL_ROOT)
+        n_bytes, latest = final_bytes()
         if n_maps:
             rows["final"].configure(text="%d 张图（每图一份） · %s · 最近发布\u00a0%s" % (
                 n_maps, human_size(n_bytes), fmt_short(latest)))

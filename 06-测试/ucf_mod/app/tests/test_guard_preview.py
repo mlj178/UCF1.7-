@@ -78,7 +78,12 @@ def main():
     check("mke_note_add(n0);" in act, "创建仍进撤销栈（预览不进）")
 
     print("[4] 预览位置 = 创建位置")
-    check("if (preview) p.y += 0.05f;" in tick, "预览也 +0.05（和创建时的落点修正一致）")
+    norm = tick.replace("\r\n", "\n")
+    # 2026-11-27 起预览多了"出生点按地面高度"的分支，抬高那两行写成了
+    #   } else if (preview) {  p.y += 0.05f;  }
+    # 语义没变（预览落点 = 创建落点），两种写法都认。
+    check("if (preview) p.y += 0.05f;" in norm or "else if (preview) {\n    p.y += 0.05f;" in norm,
+          "预览也 +0.05（和创建时的落点修正一致）")
     check("p.y += 0.05f;" in act, "menu_activate 里创建前同样 +0.05")
     check("if (preview && brush == 4) q.y -= ghost_size(4) * 0.5f;" in tick,
           "守卫区按 BoxCollider 中心摆框（3 m 立方体上下各 1.5 m）")
@@ -95,7 +100,9 @@ def main():
     check("蓝色框" in block, "第 1 项说明颜色")
     check("准星在守卫区 #%d（aid=%d）里：按 5 就挂进这个区" in block,
           "第 2 项说明会挂进准星所在的那个区")
-    check("准星不在任何守卫区里" in block, "不在任何区里时说明会新建一个区")
+    # 2026-11-27 用户要求：守卫点只是"设立点"，区外按 5 不再连带建区，所以这里改成"不建"
+    check("准星不在任何守卫区里：按 5 不会建点" in block,
+          "不在任何区里时说明按 5 不会建点（区外不再自动建区）")
     check("area_at" in block, "用的是按落点归区（area_at），不是「当前区」")
     check("入口 / 逃跑点还没接" in block, "第 3/4 项说明还没接（别让人等虚线）")
     check("准星没打到地面" in block, "打不到地面时说明虚线为何不显示")

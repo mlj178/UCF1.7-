@@ -191,8 +191,8 @@ class RecordTab:
                       command=self.refresh_rec_ready).pack(anchor="w", padx=12, pady=(0, 2))
         ctk.CTkLabel(
             box,
-            text="写 ② 开发版 · 编辑中：dev\\vis\\rec\\*.jsonl（原始轨迹）→ 复盘后追加进 "
-                 "dev\\packs\\<图>\\<指纹>.txt；成品 / ③ 不动。",
+            text="写 ② 开发版 · 编辑中：data\\maps\\_inbox\\rec\\*.jsonl（原始轨迹）"
+                 "→ 复盘后追加进 data\\maps\\<图>\\<指纹>.txt；成品 / ③ 不动。",
             font=("Consolas", 11), text_color="#8a8f96", anchor="w",
             justify="left", wraplength=600).pack(fill="x", padx=12, pady=(2, 10))
 
@@ -543,9 +543,17 @@ class RecordTab:
             self.refresh_rec_ready()
             return
         self.rec_error = ""
+        # 一个写入者（2026-11-27）：插件里只有一个采样会话，接管前先把采集收尾。
+        # 采集日志不会因此丢失 —— 已经写进文件的行照样能出报告。
+        if getattr(self, "tr_state", "idle") in ("starting", "running"):
+            try:
+                self.trace_stop()
+                self.set_status("录制接管：正在把上一份采集收尾（日志还在，可以出报告）")
+            except Exception:      # noqa: BLE001  采集页半截状态不该挡住录制
+                pass
         name = self.selected_pack()
         fp = self.selected_fp()
-        lv = self.map_disp.get(self.opt_map.get(), ("", "", ""))[0]
+        lv, lab = self.map_disp.get(self.opt_map.get(), ("", "", ""))[:2]
         tail = re.sub(r"[^0-9A-Za-z_-]+", "_", name.split("/")[-1])[:32] or "pack"
         try:
             os.makedirs(REC_RAW, exist_ok=True)
@@ -561,9 +569,12 @@ class RecordTab:
         self.rec_paused = False
         self.rec_busy = True
         try:
-            seq = write_nav_cmd("rec", "", "", {"act": "start", "out": self.rec_file,
-                                                "hz": 30,
-                                                "who": self.rec.get("who", "player")})
+            # pack / fp / map / label 只写进会话 header（cmd=rec 不改当前测试包），
+            # 这样录制日志被拿去分析时知道是哪张图、哪个包
+            seq = write_nav_cmd("rec", name, fp, {"act": "start", "out": self.rec_file,
+                                                  "hz": 30,
+                                                  "who": self.rec.get("who", "player"),
+                                                  "map": lv or "", "label": lab or ""})
         except OSError as exc:
             self.rec_busy = False
             self.set_status("写不进 ucf_navcmd.txt：%s" % exc)

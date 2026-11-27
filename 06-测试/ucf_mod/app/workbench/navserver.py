@@ -67,7 +67,7 @@ PROFILE_ALIAS = {
     # ③ 部署版已取消（不再放数据）：旧深链接落到 ② 成品，前端会提示一句
     "deploy": "final", "game": "final", "部署": "final",
 }
-FINAL = os.path.join(DEV, "final")      # ② 的成品版本集合（③ 不放数据）
+FINAL = MAPS      # 成品根：成品在各图自己的 final\ 里（<图>\final\<指纹>.txt）
 VIEW_LOCK = threading.RLock()
 VIEW_NOTE = ""
 
@@ -105,9 +105,9 @@ def dev_nav_dir(data_root, key):
 
 
 def _final_index():
-    r"""② 成品台账 dev\final\_index.json（读不到就当空台账）。"""
+    r"""成品台账 00_公共\final_index.json（读不到就当空台账）。"""
     try:
-        with open(os.path.join(FINAL, "_index.json"), "r", encoding="utf-8") as f:
+        with open(os.path.join(P.MAPS, P.COMMON, "final_index.json"), "r", encoding="utf-8") as f:
             idx = json.load(f) or {}
     except (OSError, ValueError):
         idx = {}
@@ -119,11 +119,21 @@ def _final_current_name(idx=None):
     return "final" if _final_has_any() else ""
 
 
+def _final_files():
+    r"""[(指纹, 路径)] —— 每张图 <图>\final\<指纹>.txt（一图一份）。"""
+    out = []
+    for name in P.folder_names():
+        d = P.final_dir(name)
+        if not os.path.isdir(d):
+            continue
+        for fn in sorted(os.listdir(d)):
+            if EDIT_FILE_RE.match(fn):
+                out.append((fn[:-4], os.path.join(d, fn)))
+    return out
+
+
 def _final_has_any():
-    try:
-        return any(re.match(r"^n\d+-[0-9a-fA-F]{16}\.txt$", n) for n in os.listdir(FINAL))
-    except OSError:
-        return False
+    return bool(_final_files())
 
 
 def _final_dir():
@@ -217,8 +227,8 @@ def navmesh_for(level):
                 continue
             for base in (DATAVIS, VIS, os.path.join(VIS, "navmesh"),
                          os.path.join(GAME_VIS, "navmesh"),   # 迁移前的旧位置
-                         os.path.join(NATIVE, "vis"),
-                         os.path.join(DEV, "vis"),
+                         VIS,
+                         VIS,
                          os.path.join(UCF, "backup"), GEOWEB):
                 p = os.path.join(base, os.path.basename(fn))
                 if os.path.isfile(p):
@@ -232,7 +242,7 @@ def navmesh_for(level):
             prefix = "navmesh_nm%d-" % v
             for base in (DATAVIS, VIS, os.path.join(VIS, "navmesh"),
                          os.path.join(GAME_VIS, "navmesh"),
-                         os.path.join(NATIVE, "vis"), os.path.join(DEV, "vis")):
+                         VIS):
                 if not os.path.isdir(base):
                     continue
                 for name in sorted(os.listdir(base)):
@@ -713,9 +723,7 @@ def list_backups(fp):
         return out
     # 路线清单现在可能在：图文件夹 → ② 成品当前版本 → ② 编辑中的包 → 旧布局 nav\
     dirs = [NAV] + [os.path.dirname(p) for _rel, p in P.map_files(DATA)]
-    cur = _final_dir()
-    if cur:
-        dirs.append(cur)
+    dirs.extend(sorted({os.path.dirname(p) for _fp, p in _final_files()}))
     for pk in collect_packs():
         dirs.append(os.path.join(PACKS_DIR, *str(pk.get("name") or "").split("/")))
     seen = set()
@@ -781,8 +789,8 @@ def find_navmesh(level, filename=""):
         if p:
             return os.path.basename(p), True
     bases = (DATAVIS, VIS, os.path.join(VIS, "navmesh"),
-             os.path.join(GAME_VIS, "navmesh"), os.path.join(NATIVE, "vis"),
-             os.path.join(DEV, "vis"), os.path.join(UCF, "backup"), GEOWEB)
+             os.path.join(GAME_VIS, "navmesh"),
+             VIS, os.path.join(UCF, "backup"), GEOWEB)
     if filename:
         base = os.path.basename(filename)
         for d in bases:
@@ -956,11 +964,12 @@ def _route_txt(root, fp):
     for cand_fp, p in P.route_files(root):
         if cand_fp == fp:
             return p
-    if PROFILE != "final" or os.path.normpath(root) != os.path.normpath(DEV):
-        return ""                        # 只有 ② 成品有 final\
-    cur = _final_dir()
-    p = os.path.join(cur, fp + ".txt") if cur else ""
-    return p if p and os.path.isfile(p) else ""
+    if PROFILE != "final" or os.path.normpath(root) != os.path.normpath(P.MAPS):
+        return ""                        # 成品只在 <图>\final\ 里
+    for f_fp, f_path in _final_files():
+        if f_fp == fp:
+            return f_path
+    return ""
 
 
 def _edit_ops(root, fp):
@@ -994,18 +1003,9 @@ def _map_ctx():
     成品「当前版本」用 _final_dir() 解析（_current.txt → 台账 current → 最后一版）。
     """
     final = {}
-    cur = _final_dir()
-    if cur:
-        try:
-            names = sorted(os.listdir(cur))
-        except OSError:
-            names = []
-        for fn in names:
-            f = os.path.join(cur, fn)
-            if not EDIT_FILE_RE.match(fn) or not os.path.isfile(f):
-                continue
-            head = read_txt_head(f) or {}
-            final[fn[:-4]] = {"has": True, "sha": sha256(f), "ops": int(head.get("ops") or 0)}
+    for f_fp, f in _final_files():
+        head = read_txt_head(f) or {}
+        final[f_fp] = {"has": True, "sha": sha256(f), "ops": int(head.get("ops") or 0)}
     # 编辑中：packs\<图文件夹>\<包名>\<指纹>.txt（collect_packs 已经把 ops 算好了）
     packs = {}
     for pk in collect_packs():
@@ -1382,17 +1382,10 @@ def collect_events(limit=24):
             ops = int(head.get("ops") or 0) if head else 0
             _add("编辑", label + " 编辑清单 · %s · %d 条" % (os.path.basename(p), ops), p)
     if PROFILE == "final":
-        # ② 的成品当前版本：final\<版本>\<指纹>.txt
-        cur = _final_dir()
-        if cur:
-            try:
-                names = sorted(os.listdir(cur))
-            except OSError:
-                names = []
-            for fn in names:
-                if EDIT_FILE_RE.match(fn):
-                    _add("成品", "%s · %s" % (os.path.basename(cur), fn),
-                         os.path.join(cur, fn))
+        # 成品：<图>\final\<指纹>.txt（一图一份）
+        for _f_fp, f in _final_files():
+            _add("成品", "%s · %s" % (os.path.basename(os.path.dirname(f)), os.path.basename(f)),
+                 f)
     elif PROFILE == "pack":
         # ② 的编辑中：packs\<图>\<包>\<指纹>.txt
         for pk in collect_packs():
@@ -1420,14 +1413,7 @@ def _final_stats():
     新前端应该直接看 maps（图数）。
     """
     maps_n = total = latest = 0
-    try:
-        names = sorted(os.listdir(FINAL))
-    except OSError:
-        names = []
-    for fn in names:
-        if not EDIT_FILE_RE.match(fn):
-            continue
-        f = os.path.join(FINAL, fn)
+    for _fp, f in _final_files():
         try:
             st = os.stat(f)
         except OSError:

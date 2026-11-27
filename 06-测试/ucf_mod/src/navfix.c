@@ -977,10 +977,14 @@ static LRESULT CALLBACK NavProc(HWND h, UINT msg, WPARAM w, LPARAM l) {
     void editor_freecam_tick(void);
     void editor_compass_tick(void);
     void editor_rec_tick(void);
+    void editor_spawn_tick(void);
     InterlockedIncrement(&g_hiTicks);   /* 诊断：这个定时器到底有没有在派发 */
     editor_freecam_tick();
     editor_compass_tick();      /* 方向罗盘跟着镜头转（函数内部节流到 ~30 Hz） */
     editor_rec_tick();          /* rec/trace 在这里按各自 hz 取样本（QPC 闸门） */
+    /* 出生点：进房间时 MapManager 一就绪就写数组（≈15 ms 一跳）。
+     * 等 4 Hz 的 editor_tick 或 navfix 的场景通知都太晚 —— 人机第一次出生已经过去了。 */
+    editor_spawn_tick();
     return 0;
   }
   if (msg == WM_CHAR || msg == WM_SYSCHAR) {

@@ -34,6 +34,9 @@ CONSOLE = os.path.join(PROJ, "app", "控制台.pyw")
 # 2026-11-24 目录重构：轨迹卡片在 tabs/dev/tab.py，ucf_trace 的导入在 ui/env.py
 DEV_TAB = os.path.join(PROJ, "app", "tabs", "dev", "tab.py")
 UI_ENV = os.path.join(PROJ, "app", "ui", "env.py")
+# 2026-11-27：解析搬进 core，两个功能都调它
+REC_ALG = os.path.join(PROJ, "app", "tabs", "record", "ucf_rec.py")
+TRACE_READER = os.path.join(PROJ, "app", "tabs", "dev", "ucf_trace.py")
 
 
 def read(path):
@@ -42,19 +45,37 @@ def read(path):
 
 
 def check_c(editor):
-    assert "static int trace_start(" in editor, "editor.c 没有 trace_start()"
-    assert "static void trace_stop(" in editor, "editor.c 没有 trace_stop()"
-    assert "static void trace_sample(" in editor, "editor.c 没有 trace_sample()"
-    assert "static void trace_tick(" in editor, "editor.c 没有 trace_tick()"
-    assert ("void editor_rec_tick(void) {" in editor and "rec_tick();" in editor
-            and "trace_tick();" in editor), \
-        "采样定时器没同时驱动 rec 和 trace"
-    assert "trace_tick();               /* 原始轨迹采集" in editor, \
-        "editor_tick() 没调 trace_tick()"
-    assert 'if (!strcmp(cmd, "trace"))' in editor, "navcmd 没接 cmd=trace"
+    r"""采样会话只有一个（2026-11-27）：录制和采集都走 ss_begin / ss_stop / ss_tick。
+
+    以前这里钉的是 trace_start / trace_sample / trace_tick 那套，录制那边另有一套
+    rec_*；两套同时开会把同一帧采两遍、写两个文件。现在钉的是「只有一个」：
+    旧的 rec_tick / trace_tick / rec_start / trace_start 都不许再出现。
+    """
+    assert "typedef struct {\n  FILE*  fp;\n  char   path[MAX_PATH];" in editor, \
+        "没有采样会话结构（SampleSess）"
+    assert "static SampleSess g_ss;" in editor, "采样会话不是唯一一份状态"
+    assert "static int ss_begin(" in editor, "editor.c 没有 ss_begin()"
+    assert "static void ss_stop(" in editor, "editor.c 没有 ss_stop()"
+    assert "static void ss_sample_player(" in editor, "editor.c 没有 ss_sample_player()"
+    assert "static void ss_tick(" in editor, "editor.c 没有 ss_tick()"
+    assert "static void ss_sample_bots(" in editor, "editor.c 没有人机采样"
+    assert "void editor_rec_tick(void) {" in editor and "ss_tick();" in editor, \
+        "采样定时器入口没调 ss_tick()"
+    assert "  ss_tick();                  /* 采样会话" in editor, \
+        "editor_tick() 没调 ss_tick()"
+    for gone in ("static void rec_tick(void)", "static void trace_sample(void)",
+                 "static void trace_tick(void)", "static void rec_bot_tick(void)",
+                 "static int rec_start(", "static int trace_start("):
+        assert gone not in editor, "旧的独立采样器还在：%s" % gone
+    assert 'if (!strcmp(cmd, "rec") || !strcmp(cmd, "trace"))' in editor, \
+        "navcmd 没接 cmd=rec / cmd=trace 到同一个会话"
+    assert "ss_begin(kind, out, hz, whoMask" in editor, "navcmd 没把 who 传给会话"
     assert 'if (!strcmp(cmd, "stopall"))' in editor, "navcmd 没接 cmd=stopall"
-    assert "trace_stop(\"restart\")" in editor, "trace_start 没先收掉上一份"
-    assert "QueryPerformanceCounter" in editor, "trace 没用 QPC（60 Hz 时间太粗）"
+    assert "ss_stop(\"restart\")" in editor, "ss_begin 没先收掉上一个会话（一个写入者）"
+    assert "ss_stop(\"quit\")" in editor, "退出游戏没收尾采样文件"
+    assert "QueryPerformanceCounter" in editor, "采样没用 QPC（60 Hz 时间太粗）"
+    assert '\\"who\\":\\"%s\\"' in editor, "header 没写 who（采集对象）"
+    assert "SS_SCHEMA" in editor and "ucf-trace/3" in editor, "schema 没升到 ucf-trace/3"
 
     # header 的 fields 数组 = ucf_trace.FIELDS
     m = re.search(r"fields.*?\[(.*?)\]", editor, re.S)
@@ -63,18 +84,20 @@ def check_c(editor):
     assert fields == tuple(ucf_trace.FIELDS), \
         "字段表不一致：C=%s Python=%s" % (fields, ucf_trace.FIELDS)
 
-    # 样本 fprintf 里必须有全部字段
-    seg = editor.split("static void trace_sample(void)")[1].split("static void trace_tick")[0]
+    # 样本 fprintf 里必须有全部字段（录制和采集共用这一个写法）
+    seg = editor.split("static void ss_sample_player(void)")[1].split("static void ss_tick")[0]
     for key in ucf_trace.FIELDS:
-        assert ('\\"%s\\":' % key) in seg, "trace_sample 少了字段 %s" % key
+        assert ('\\"%s\\":' % key) in seg, "采样 fprintf 少了字段 %s" % key
+    assert '\\"k\\":\\"p\\"' not in seg, \
+        "玩家样本不该再带 k=p：录制和采集写同一行（人机才是 k=b）"
 
     # 两个事件行：换图 / 换场景
-    assert '\\"ev\\":\\"cam\\"' in seg, "trace_sample 没有 ev=cam（分段行）"
-    assert '\\"ev\\":\\"scene\\"' in seg, "trace_sample 没有 ev=scene"
+    assert '\\"ev\\":\\"cam\\"' in seg, "采样没有 ev=cam（分段行）"
+    assert '\\"ev\\":\\"scene\\"' in seg, "采样没有 ev=scene"
     # 2026-11-24 采样改造：坐标取玩家脚底 + grounded/vy + 落地结算的跳事件
     assert "PL_CHAR_CONT" in editor and "PL_GROUNDED" in editor and "PL_VELDATA" in editor, \
         "没按 Player 字段偏移取脚底 / isGrounded / velData"
-    assert 'tr_read_state(' in seg, "trace_sample 没用玩家状态读数（玩家对象 / 相机兜底）"
+    assert 'tr_read_state(' in seg, "采样没用玩家状态读数（玩家对象 / 相机兜底）"
     assert '\\"ev\\":\\"jump\\"' in editor, "没有跳事件行（落地结算）"
     for k in ('\\"h\\":', '\\"rise\\":', '\\"air\\":', '\\"v0\\":', '\\"run\\":', '\\"kind\\":'):
         assert k in editor, "跳事件少字段 %s" % k
@@ -108,17 +131,36 @@ def check_hires_timer(editor, navfix):
     assert "timeBeginPeriod" in navfix, "没提系统定时器精度（默认 15.6 ms 量子）"
     assert "g_hiFreecam = (GetEnvironmentVariableA" in navfix, \
         "UCF_FREECAM 不再作为常驻定时器的条件"
-    assert editor.count("navfix_hires_acquire();") >= 2, \
-        "rec_start / trace_start 没有各自申请采样定时器"
-    assert editor.count("navfix_hires_release();") >= 2, \
-        "rec_stop / trace_stop 没有各自归还采样定时器"
-    assert editor.count("navfix_hires_ticks()") >= 4, \
-        "trace/rec 没记「这次采集里定时器派发了几次」"
-    assert "static void hz_warn(" in editor and editor.count('hz_warn("') >= 2, \
+    # 2026-11-27 合并成一个采样会话：acquire/release 只剩一处（ss_begin / ss_stop）
+    assert editor.count("navfix_hires_acquire();") == 1, \
+        "采样会话申请定时器的地方不止一处（应该只有 ss_begin）"
+    assert editor.count("navfix_hires_release();") == 1, \
+        "采样会话归还定时器的地方不止一处（应该只有 ss_stop）"
+    assert editor.count("navfix_hires_ticks()") >= 2, \
+        "没记「这次采样里定时器派发了几次」"
+    assert "static void hz_warn(" in editor and editor.count("hz_warn(") >= 2, \
         "实测频率没跑满档位时没有告警（2026-11-24 那次就是一声不吭）"
-    tick_block = editor.split("static void trace_tick(void)")[1][:900]
+    tick_block = editor.split("static void ss_tick(void)")[1][:1200]
     assert "iv * 0.25" in tick_block, \
-        "trace_tick 没给 25% 提前量：60 Hz 档在 60 fps 主循环下会隔帧丢样本（实测 ~50 Hz）"
+        "ss_tick 没给 25% 提前量：60 Hz 档在 60 fps 主循环下会隔帧丢样本（实测 ~50 Hz）"
+    assert "g_ss.who & 2" in editor, "人机采样没接到同一个会话的 who"
+    assert "g_ss.who & 1" in editor, "玩家采样没接到同一个会话的 who"
+
+
+def check_shared(rec_src, trace_src):
+    r"""录制和采集必须用同一个读取器（2026-11-27）：两边都调 core/ucf_sample。
+
+    以前各写一份：排序 / 去重 / 缺省 / header 判定都不一样，同一份文件两个页面
+    能给出不同的数；而且 ucf_trace 只认 kind=="trace"，录制文件的 header 会被丢掉。
+    """
+    assert "ucf_sample.player_rows(lines)" in rec_src, "ucf_rec.parse_lines 没走共用读取器"
+    assert "ucf_sample.jump_rows(lines)" in rec_src, "ucf_rec.parse_events 没走共用读取器"
+    assert "ucf_sample.bots_by_id(lines)" in rec_src, "ucf_rec.parse_bots 没走共用读取器"
+    assert "ucf_sample.scan(path, offset)" in trace_src, "ucf_trace.scan 没走共用读取器"
+    assert "ucf_sample.read_full(path)" in trace_src, "ucf_trace.read_full 没走共用读取器"
+    for bad in ('json.loads', 'open(path'):
+        assert bad not in rec_src.split("# ---------------------------------------------------------------- 解析")[-1], \
+            "ucf_rec 里又自己解析了一遍：%s" % bad
 
 
 def check_console(console):
@@ -130,6 +172,10 @@ def check_console(console):
     assert "原始轨迹采集（给 AI 分析用）" in console, "「开发者选项」页没有轨迹卡片标题"
     # 2026-11-21 用户要求：卡片从「录制」搬到「开发者选项」，状态在卡片前单独备好
     assert "def init_trace_state(self" in console, "控制台少了 init_trace_state()"
+    assert "def on_trace_who(self" in console, "采集页没有「采集对象」"
+    assert '"who": self.trace.get("who"' in console, "开始采集时没把 who 发给插件"
+    assert "def trace_report_file(self" in console, "没有「选文件出报告」"
+    assert "def _trace_run_report(self" in console, "报告入口没抽成一个函数"
     assert "self.init_trace_state()" in console, "建轨迹卡片前没初始化采集状态"
     assert "self.build_trace_card(body)" in console, "轨迹卡片没挂到「开发者选项」页"
     assert "打开日志文件夹" in console, "缺「打开日志文件夹」按钮"
@@ -296,12 +342,12 @@ def check_v2():
     assert "缺口" in md or "gap" in md, md[:400]
 
 
-def _fprintf(block, pos=0):
+def _fprintf(block, pos=0, fp="g_ss.fp"):
     r"""取一个 fprintf(g_trFp, ...) 的格式串，并跳过字符串里的 ');'。
 
     返回 (格式串, 起始位置, 结束位置)。格式串 = 所有 "..." 片段按 C 转义还原后拼接。
     """
-    i = block.index("fprintf(g_trFp,", pos)
+    i = block.index("fprintf(" + fp + ",", pos)
     k = i
     in_str = False
     while k < len(block):
@@ -322,7 +368,7 @@ def _fprintf(block, pos=0):
                 fmt += ast.literal_eval('"' + s + '"')
             return fmt, i, k + 2
         k += 1
-    raise AssertionError("fprintf(g_trFp, ...) 没有结尾")
+    raise AssertionError("fprintf(%s, ...) 没有结尾" % fp)
 
 
 def check_c_format(editor):
@@ -331,18 +377,23 @@ def check_c_format(editor):
     这条能抓住「少一个逗号 / 引号没转义 / %s 和参数对不上」——编译不会报，
     但 Python 侧会整份读不出来。
     """
-    hdr_block = editor.split("static void tr_header(void)")[1].split("static void trace_stop")[0]
+    hdr_block = editor.split("static void ss_header(void)")[1].split("static void ss_stop")[0]
+    # 格式串里 schema 用的是 #define SS_SCHEMA；这里换成字面量再拼，否则会被跳过
+    hdr_block = hdr_block.replace("SS_SCHEMA", '"ucf-trace/3"')
     hfmt, _, _ = _fprintf(hdr_block)
-    hargs = (30, 2026, 11, 21, 15, 0, 0, "mp_x", "level1", "运输船", "pack", "fp", "player")
+    # 参数顺序：kind / who / hz / 年月日时分秒 / scene / map / label / pack / fp / src
+    hargs = ("rec", "all", 30, 2026, 11, 27, 12, 0, 0,
+             "mp_x", "level1", "运输船", "pack", "fp", "player")
     hobj = json.loads(hfmt % hargs)
-    assert hobj["kind"] == "trace" and hobj["schema"] == "ucf-trace/2", hobj
+    assert hobj["kind"] == "rec" and hobj["schema"] == "ucf-trace/3", hobj
+    assert hobj["who"] == "all", "header 没记采集对象（who）"
     assert tuple(hobj["fields"]) == tuple(ucf_trace.FIELDS), hobj["fields"]
     assert hobj["label"] == "运输船" and hobj["map"] == "level1"
-    assert hobj["t0"] == "2026-11-21 15:00:00", hobj["t0"]
+    assert hobj["t0"] == "2026-11-27 12:00:00", hobj["t0"]
     assert hobj["src"] == "player", "header 没记坐标来源（player / camera）"
     assert "kind_note" in hobj, "header 没解释 kind 的四种取值"
 
-    smp_block = editor.split("static void trace_sample(void)")[1].split("static void trace_tick")[0]
+    smp_block = editor.split("static void ss_sample_player(void)")[1].split("static void ss_tick")[0]
     pos = 0
     while True:
         sfmt, _, pos = _fprintf(smp_block, pos)
@@ -365,6 +416,7 @@ def main():
     check_hires_timer(editor, read(NAVFIX))
     check_c_format(editor)
     check_console(chr(10).join([read(CONSOLE), read(DEV_TAB), read(UI_ENV)]))
+    check_shared(read(REC_ALG), read(TRACE_READER))
     check_unit()
     check_v2()
     print("OK: trace 字段表 / navcmd / 控制台入口 / 增量读取 / 摘要 / v2 跳事件+报告 全部通过")

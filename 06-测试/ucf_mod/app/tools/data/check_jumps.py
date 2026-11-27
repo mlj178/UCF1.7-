@@ -27,8 +27,8 @@ for _p in (os.path.join(UCF_ROOT, "app", "core"), HERE):
         sys.path.insert(0, _p)
 import ucf_paths as P                       # noqa: E402  图文件夹 / 测试包的唯一来源
 
-PACKS = P.PACKS_DIR                          # ② navdata\dev\packs\<图>\<包>
-NATIVE = P.NATIVE                            # ① 备份版：一张图一个文件夹
+PACKS = P.PACKS_DIR                          # 草稿根 = data\maps（<图>\<指纹>.txt）
+NATIVE = P.PACKS_DIR                         # ① 冻结副本在 <图>\native\，走 P.native_files()
 
 SNAP = 1.0          # 端点吸附到路点的最大距离（对齐游戏 OnLatePostScan 的 GetNearest，别用 3 m 放宽）
 MIN_LEN = 1.5       # 短于这个距离的跳链没意义
@@ -142,7 +142,7 @@ def vec3(v):
 
 def check_native():
     total_ok = total = 0
-    for rel, path in P.map_files(NATIVE):
+    for rel, path in P.native_files(NATIVE):
         name = rel.replace("/map.json", "")
         j = json.load(open(path, encoding="utf-8"))
         jumps = ((j.get("lines") or {}).get("jump") or [])

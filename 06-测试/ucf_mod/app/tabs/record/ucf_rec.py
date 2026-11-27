@@ -26,9 +26,19 @@ r"""录制轨迹的解析 / 重采样 / 事件识别 —— 控制台「录制�
     传送    **不再单独断段**（同上）；只把单帧位移 > 15 m 的那条边跳过。
 
 只做纯计算（不读文件、不碰 tkinter），tests/test_ucf_rec.py 可以离线跑。
+**读 jsonl 的部分和采集共用 core/ucf_sample.py**（2026-11-27），本模块只管识别和落盘。
 """
-import json
 import math
+import os
+import sys
+
+try:
+    import ucf_sample
+except ImportError:          # 单独 import 时（app/core 不在 sys.path）自己找
+    sys.path.insert(0, os.path.join(
+        os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+        "core"))
+    import ucf_sample
 
 # ---- 阈值（改这里；控制台「录制」页的说明文字按这几行写）----
 LINK_MIN = 1.5        # 游戏跳链最短 3D 长度（再短人机就「原地跳」）
@@ -107,74 +117,19 @@ def dist3(a, b):
     return math.sqrt((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2 + (a[2] - b[2]) ** 2)
 
 
-# ---------------------------------------------------------------- 解析
+# ---------------------------------------------------------------- 解析（实现见 core/ucf_sample.py）
 def parse_lines(lines):
-    r"""jsonl 行 -> 样本列表（按 t 排序；坏行跳过）。兼容 1 版（只有相机坐标）。"""
-    out = []
-    for raw in lines:
-        s = (raw or "").strip()
-        if not s or s[0] != "{":
-            continue
-        try:
-            d = json.loads(s)
-        except ValueError:
-            continue
-        if not isinstance(d, dict) or "x" not in d:
-            continue
-        if d.get("k") == "b":          # 人机样本：走 parse_bots，不混进玩家轨迹
-            continue
-        try:
-            out.append({
-                "t": float(d.get("t") or 0.0),
-                "dt": float(d.get("dt") or 0.0),
-                "x": float(d["x"]), "y": float(d["y"]), "z": float(d["z"]),
-                "g": None if d.get("g") is None else int(d["g"]),
-                "vy": None if d.get("vy") is None else float(d["vy"]),
-                "gy": None if d.get("gy") is None else float(d["gy"]),
-                "sp": int(d.get("sp") or 0), "ct": int(d.get("ct") or 0),
-            })
-        except (TypeError, ValueError):
-            continue
-    out.sort(key=lambda s: s["t"])
-    clean = []
-    for s in out:
-        if clean and abs(s["t"] - clean[-1]["t"]) < 0.002:
-            clean[-1] = s
-        else:
-            clean.append(s)
-    return clean
+    r"""jsonl 行 -> 玩家样本（按 t 排序、0.002 s 内去重；人机行不混进来）。
+
+    和「开发者选项 → 原始轨迹采集」读的是同一个函数（core/ucf_sample.player_rows），
+    所以同一份文件在两个页面给出的样本数一定一样。
+    """
+    return ucf_sample.player_rows(lines)
 
 
 def parse_events(lines):
     r"""jsonl 行 -> 插件结算的跳事件（按 t 排序）。"""
-    out = []
-    for raw in lines:
-        s = (raw or "").strip()
-        if not s.startswith("{"):
-            continue
-        try:
-            d = json.loads(s)
-        except ValueError:
-            continue
-        if not isinstance(d, dict) or d.get("ev") != "jump":
-            continue
-        try:
-            a, b = d["a"], d["b"]
-            out.append({
-                "t": float(d.get("t") or 0.0),
-                "a": (float(a[0]), float(a[1]), float(a[2])),
-                "b": (float(b[0]), float(b[1]), float(b[2])),
-                "h": float(d.get("h") or 0.0),
-                "rise": float(d.get("rise") or 0.0),
-                "air": float(d.get("air") or 0.0),
-                "v0": float(d.get("v0") or 0.0),
-                "run": float(d.get("run") or 0.0),
-                "kind": str(d.get("kind") or ""),
-            })
-        except (KeyError, TypeError, ValueError, IndexError):
-            continue
-    out.sort(key=lambda e: e["t"])
-    return out
+    return ucf_sample.jump_rows(lines)
 
 
 def parse_rec(lines):
@@ -186,35 +141,10 @@ def parse_rec(lines):
 def parse_bots(lines):
     r"""人机样本（k="b"）-> 按 id 分组的列表。
 
-    2026-11-26 起录制可以选「人机 / 全部」，每台 10 Hz 一行：
+    会话选了「人机 / 全部」时每台 10 Hz 一行：
     t / id / xyz / g / vy / spd / j(空中) / en(有敌人) / act(行为名|分隔) / tgt(闲逛目标)。
     """
-    out = {}
-    for raw in lines or []:
-        s = (raw or "").strip()
-        if not s or s[0] != "{" or '"k":"b"' not in s:
-            continue
-        try:
-            d = json.loads(s)
-        except ValueError:
-            continue
-        try:
-            bid = str(d.get("id") or "?")
-            out.setdefault(bid, []).append({
-                "t": float(d.get("t") or 0.0),
-                "x": float(d["x"]), "y": float(d["y"]), "z": float(d["z"]),
-                "g": int(d.get("g", -1)), "vy": float(d.get("vy") or 0.0),
-                "spd": float(d.get("spd") or 0.0), "j": int(d.get("j") or 0),
-                "en": int(d.get("en") or 0), "act": str(d.get("act") or ""),
-                "tgt": list(d.get("tgt") or (0, 0, 0)),
-                "njs": str(d.get("njs") or ""), "near": str(d.get("near") or ""),
-                "pts": int(d.get("pts", -1)),
-            })
-        except (TypeError, ValueError, KeyError):
-            continue
-    for v in out.values():
-        v.sort(key=lambda s: s["t"])
-    return out
+    return ucf_sample.bots_by_id(lines)
 
 
 def _grounded(s):

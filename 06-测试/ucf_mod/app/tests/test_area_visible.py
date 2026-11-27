@@ -61,7 +61,8 @@ def main():
     check("g_areaLive[aid] = 0;" in area, "新建区标记为「未激活」")
     check("((set_active_t)RVA(R_SETACTIVE))(go, 0, 0);" in area, "新建区 GameObject 先不激活")
     check("等第一个守卫点再激活" in area, "代码里写明「等第一个守卫点再激活」")
-    npos = section(ed, "static int make_nanopos(int aid, V3 p, int safety) {", "/* delete marker at idx")
+    # 2026-11-27：make_nanopos 多了一个朝向参数（蹲守点 / 守卫点写 zoomPos 用）
+    npos = section(ed, "static int make_nanopos(int aid, V3 p, int safety, float yaw) {", "/* delete marker at idx")
     check("g_areaLive[aid] = 1;" in npos, "挂上第一个守卫点时把区标成已激活")
     check("((set_active_t)RVA(R_SETACTIVE))(areaGo, 1, 0);" in npos, "挂上第一个守卫点时激活区")
     check("area_register(areaComp);" in npos, "激活后兜底登记 SpareAreaList")

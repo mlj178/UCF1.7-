@@ -37,24 +37,27 @@ def main():
     assert "def prepare_final_root" in packs, "packs.py 缺 prepare_final_root"
     assert "opt_pack" not in way and "opt_final" not in way, "waypoint.py 还有包/版本下拉"
     assert "一张图一个" in way or "一张图只有一个" in way, "waypoint.py 没写单草稿"
-    assert 'env["UCF_PACK"] = "final"' in console, "成品启动没改成 UCF_PACK=final"
-    assert 'env["UCF_PACK_DIR"] = DEV' in console, "成品启动没改成 UCF_PACK_DIR=dev"
+    assert 'env["UCF_NAV_SEARCH"] = "1"' in console, "成品启动没改成 UCF_NAV_SEARCH=1（按指纹找图）"
+    assert 'env["UCF_NAV_SUB"] = P.FINAL_SUB' in console, "成品启动没指到各图的 final\\"
+    assert '"UCF_PACK"' in console and 'env.pop(k, None)' in console, "成品档还在带 UCF_PACK"
     assert "prepare_final_root()" in console, "控制台还在用 prepare_final_dir(版本)"
 
-    dev = os.path.join(ROOT, "data", "navdata", "dev")
-    pack_root = os.path.join(dev, "packs")
-    if os.path.isdir(pack_root):
-        for name in os.listdir(pack_root):
-            d = os.path.join(pack_root, name)
-            if not os.path.isdir(d) or name.startswith("_"):
-                continue
-            subs = [x for x in os.listdir(d) if os.path.isdir(os.path.join(d, x))]
-            assert not subs, "packs\\%s 里还有第二层包目录：%s" % (name, subs)
-    final = os.path.join(dev, "final")
-    if os.path.isdir(final):
-        for name in os.listdir(final):
-            assert not os.path.isdir(os.path.join(final, name)),                 "final\\ 里还有版本目录：%s" % name
-        assert not os.path.isfile(os.path.join(final, "_current.txt")),             "final\\ 里还有 _current.txt"
+    maps = os.path.join(ROOT, "data", "maps")
+    assert not os.path.isdir(os.path.join(maps, "final")), "还有平铺的 final\\（成品应该在 <图>\\final\\）"
+    assert not os.path.isdir(os.path.join(maps, "packs")), "还有 packs\\ 这一层（草稿应该在 <图>\\ 根下）"
+    for name in sorted(os.listdir(maps)):
+        d = os.path.join(maps, name)
+        if name.startswith(("_", ".")) or name == "00_公共" or not os.path.isdir(d):
+            continue
+        subs = [x for x in os.listdir(d) if os.path.isdir(os.path.join(d, x))
+                and x not in ("native", "final")]
+        assert not subs, "图文件夹 %s 里还多出目录：%s" % (name, subs)
+        fin = os.path.join(d, "final")
+        if os.path.isdir(fin):
+            assert not os.path.isdir(os.path.join(fin, "_index.json")), "-"
+            for fn in os.listdir(fin):
+                assert not os.path.isdir(os.path.join(fin, fn)), "final\\ 里还有版本目录：%s" % fn
+            assert not os.path.isfile(os.path.join(fin, "_current.txt")), "final\\ 里还有 _current.txt"
 
     print("OK: 单草稿 / 单成品（packs\\<图> / final\\<指纹>.txt，无版本下拉）")
     return 0

@@ -19,6 +19,10 @@ import shutil
 import sys
 import tempfile
 
+# 自检会 import ui.env -> navdata，而 navdata 一 import 就会把 stdout 抄进 log\navdata.log。
+# 关掉抄写，免得跑一次测试就往真日志里糊一屏 OK（也会连带触发老位置迁移）。
+os.environ["UCF_NO_LOG_TEE"] = "1"
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 UCF_ROOT = HERE
 while not os.path.isfile(os.path.join(UCF_ROOT, ".ucfroot")) and os.path.dirname(UCF_ROOT) != UCF_ROOT:
@@ -134,6 +138,45 @@ def main():
         un = read(os.path.join("run", "payload", "ucf_mod", "uninstall.ps1"))
         check("'log'" in un, "uninstall.ps1 会删 log 目录")
         check("ucf_mod.prev_*.log" in un, "uninstall.ps1 认得车测的 prev_*.log")
+
+        print("== 6) 控制台 / 工具自己的日志也集中到 log\\ ==")
+        # 2026-11-27：navdata.log 从 data/navdata/_logs/、publish.log 从 dev/final/ 收进 log/
+        import navdata as ND
+        check(os.path.normcase(ND.NAVDATA_LOG) ==
+              os.path.normcase(os.path.join(PROJ, "log", "navdata.log")),
+              "navdata.py 的 stdout 抄本 = 工程端 log/navdata.log")
+        check(os.path.normcase(ND.PUBLISH_LOG) ==
+              os.path.normcase(os.path.join(PROJ, "log", "publish.log")),
+              "成品发布流水 = 工程端 log/publish.log")
+        check(not hasattr(ND, "FINAL_PUBLISH_LOG"), "旧的 FINAL_PUBLISH_LOG 常量已移除（别再写回 final/）")
+        check("UCF_NO_LOG_TEE" in read(os.path.join("app", "core", "navdata.py")),
+              "自检可关掉日志抄写（UCF_NO_LOG_TEE）")
+
+        # 轮转 + 老位置合并都真跑一遍（临时目录，不碰真日志）
+        logs = os.path.join(tmp, "logs")
+        os.makedirs(logs, exist_ok=True)
+        big = os.path.join(logs, "navdata.log")
+        with open(big, "wb") as f:
+            f.write(b"x" * (ND.LOG_MAX_BYTES + 1))
+        rotated = ND.rotate_log(big)
+        check(rotated and os.path.isfile(os.path.join(logs, "navdata.prev.log")),
+              "超过 16 MB 轮转成 navdata.prev.log（只保 1 代）")
+
+        old_log = os.path.join(tmp, "old", "_logs", "navdata.log")
+        new_log = os.path.join(logs, "merged.log")
+        os.makedirs(os.path.dirname(old_log), exist_ok=True)
+        with open(old_log, "w", encoding="utf-8") as f:
+            f.write("legacy-line\n")
+        saved = (ND.NAVDATA_LOG, ND.LEGACY_NAVDATA_LOG)
+        ND.NAVDATA_LOG, ND.LEGACY_NAVDATA_LOG = new_log, old_log
+        try:
+            merged = ND.navdata_migrate_log()
+        finally:
+            ND.NAVDATA_LOG, ND.LEGACY_NAVDATA_LOG = saved
+        with open(new_log, "r", encoding="utf-8") as f:
+            got = f.read()
+        check(merged and not os.path.exists(old_log) and got.endswith("legacy-line\n"),
+              "老位置 data/navdata/_logs/ 的历史日志并进 log/（只做一次）")
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 

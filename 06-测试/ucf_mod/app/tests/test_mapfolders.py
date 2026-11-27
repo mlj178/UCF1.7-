@@ -1,17 +1,18 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-r"""自检：① 备份 / ② 开发 是不是「一张图一个文件夹」（2026-11-21 的布局）。
+r"""自检：一张图一个文件夹（2026-11-27「一图一夹」）。
 
-跑法：python tests/test_mapfolders.py
+跑法：python app/tests/test_mapfolders.py
 
-查 7 件事：
-  1) 两个数据根都是新布局，10 个图文件夹都在（对照表 11 张里，有数据的 9 张 + 只有可走面的 2 张）
-  2) 每张图的 map.json 在自己文件夹里；可走面叫 navmesh.bin，也在同一个文件夹
-  3) 公共文件只在 00_公共\；旧的 maps\ nav\ vis\ 不再存数据
-  4) 收件箱 vis\ 只留认不出关卡的导出（不删）
-  5) ucf_paths / 控制台 / 网页编辑器 / navdata 四个读法算出来的数一致：9 图 / 8 面
-  6) 迁移日志还在（--undo 能退回去）
-  7) packs\ final\ archive\ 没被碰过
+查 8 件事：
+  1) 唯一数据根 data\maps\ 存在，00_公共\ 在，旧 data\navdata\ 已经没了
+  2) 9 张图的 map.json 在各图文件夹根下；8 个可走面叫 navmesh.bin，也在同一层
+  3) ① 冻结副本在 <图>\native\（9 个 map.json / 8 个 navmesh.bin），SHA256SUMS 就在 00_公共\
+  4) 编辑标记在 <图>\markers.txt（不再有 markers\ 这一层）
+  5) 草稿在 <图>/<指纹>.txt（不再有 packs/ 这一层），成品在 <图>/final/（不再有平铺 final/）
+  6) 收件箱 _inbox\ 里没有「认得出却没归位」的导出
+  7) ucf_paths / 控制台 / 网页编辑器 / navdata 四个读法算出来的数一致：9 图 / 8 面
+  8) 迁移日志还在（--undo 能退回去）
 """
 import importlib.util
 import json
@@ -42,38 +43,67 @@ def check(cond, msg):
 
 
 def main():
-    print("== 1) 两个数据根都是新布局")
-    for name, root in (("① 备份", P.NATIVE), ("② 开发", P.DEV)):
-        check(os.path.isdir(os.path.join(root, P.COMMON)), "%s 有 00_公共\\" % name)
-        check(P.is_folders(root), "%s 认得出「一张图一个文件夹」" % name)
+    print("== 1) 唯一数据根")
+    check(os.path.isdir(P.MAPS), "data/maps/ 在")
+    check(os.path.isdir(os.path.join(P.MAPS, P.COMMON)), "00_公共/ 在")
+    check(P.is_folders(P.MAPS), "认得出「一张图一个文件夹」")
+    check(not os.path.exists(os.path.join(P.DATA_ROOT, "navdata")), "旧的 data/navdata/ 已经没了")
+    for legacy in ("maps", "nav", "packs", "markers", "vis", "archive", "final"):
+        check(not os.path.isdir(os.path.join(P.MAPS, legacy)), "旧的 %s/ 没有回来" % legacy)
 
     print("== 2) 图文件夹 / map.json / navmesh.bin")
-    for name, root in (("① 备份", P.NATIVE), ("② 开发", P.DEV)):
-        docs = P.map_docs(root)
-        check(len(docs) == 9, "%s 有 9 张图的 map.json（实际 %d）" % (name, len(docs)))
-        for level, _cn, path in docs:
-            folder = os.path.dirname(path)
-            want = P.map_dir(root, level)
-            check(os.path.normcase(os.path.abspath(folder)) == os.path.normcase(os.path.abspath(want)),
-                  "%s %s -> %s" % (name, level, os.path.basename(folder)))
-        check(len(P.navmesh_files(root)) == 8, "%s 有 8 个 navmesh.bin（实际 %d）"
-              % (name, len(P.navmesh_files(root))))
-        for rel, path in P.navmesh_files(root):
-            check(os.path.basename(path) == P.NAVMESH, "%s %s 叫 navmesh.bin" % (name, rel))
+    docs = P.map_docs(P.MAPS)
+    check(len(docs) == 9, "9 张图的 map.json（实际 %d）" % len(docs))
+    for level, _cn, path in docs:
+        folder = os.path.dirname(path)
+        want = P.map_dir(P.MAPS, level)
+        check(os.path.normcase(os.path.abspath(folder)) == os.path.normcase(os.path.abspath(want)),
+              "%s -> %s" % (level, os.path.basename(folder)))
+    check(len(P.navmesh_files(P.MAPS)) == 8, "8 个 navmesh.bin（实际 %d）"
+          % len(P.navmesh_files(P.MAPS)))
+    for rel, path in P.navmesh_files(P.MAPS):
+        check(os.path.basename(path) == P.NAVMESH, "%s 叫 navmesh.bin" % rel)
 
-    print("== 3) 旧目录不再存数据")
-    for name, root in (("① 备份", P.NATIVE), ("② 开发", P.DEV)):
-        for legacy, tip in ((os.path.join(root, "maps"), "maps"), (os.path.join(root, "nav"), "nav")):
-            left = os.listdir(legacy) if os.path.isdir(legacy) else []
-            check(not left, "%s 的 %s\\ 里没有数据了（%s）" % (name, tip, "、".join(left) or "空"))
-        check(os.path.isfile(P.names_path(root)), "%s names.json 在 00_公共\\" % name)
-    check(os.path.isfile(P.index_path(P.DEV)), "② _index.json 在 00_公共\\")
-    check(os.path.isfile(os.path.join(P.common_dir(P.DEV), "INDEX.md")), "② INDEX.md 在 00_公共\\")
+    print("== 3) ① 冻结副本在 <图>/native/")
+    check(len(P.native_files(P.MAPS)) == 9, "native/ 里 9 个 map.json（实际 %d）"
+          % len(P.native_files(P.MAPS)))
+    check(len(P.native_navmesh_files(P.MAPS)) == 8, "native/ 里 8 个 navmesh.bin（实际 %d）"
+          % len(P.native_navmesh_files(P.MAPS)))
+    for rel, path in P.native_files(P.MAPS):
+        folder = rel.split("/")[0]
+        check(os.path.normcase(os.path.dirname(path)) ==
+              os.path.normcase(P.native_dir(folder)),
+              "① %s 在 <图>/native/%s" % (rel, os.path.basename(path)))
+    check(os.path.isfile(os.path.join(P.MAPS, P.COMMON, "SHA256SUMS.txt")),
+          "SHA256SUMS.txt 在 00_公共/")
+    check(os.path.isfile(os.path.join(P.MAPS, P.COMMON, ".frozen.json")),
+          ".frozen.json 在 00_公共/")
 
-    print("== 4) 收件箱只剩认不出的导出")
+    print("== 4) 编辑标记在 <图>/markers.txt")
+    n_mk = 0
+    for name in P.folder_names(P.MAPS):
+        if os.path.isfile(os.path.join(P.folder_dir(name, P.MAPS), "markers.txt")):
+            n_mk += 1
+    check(n_mk <= len(P.folder_names(P.MAPS)), "markers.txt 都挂在图文件夹根下（%d 张有）" % n_mk)
+
+    print("== 5) 草稿 / 成品都在图文件夹里")
+    import navdata as N
+    ids = N.pack_ids()
+    check(all("/" not in x for x in ids), "草稿是 <图>/<指纹>.txt（没有 图/包 两层；实际 %s）" % (ids or "空"))
+    for pid in ids:
+        p = os.path.join(P.MAPS, pid)
+        check(os.path.isfile(os.path.join(p, "manifest.json")), "%s 有 manifest.json" % pid)
+        fps = [fn for fn in os.listdir(p) if fn.startswith("n") and fn.endswith(".txt")]
+        check(fps, "%s 有点图文件 %s" % (pid, fps[:2]))
+    for fp, path in N.final_store_files():
+        check(os.path.basename(os.path.dirname(path)) == P.FINAL_SUB,
+              "成品 %s 在 <图>/final/%s" % (fp, os.path.basename(path)))
+    check(not os.path.isdir(os.path.join(P.MAPS, "final")), "没有平铺的 final/ 了")
+
+    print("== 6) 收件箱只剩认不出的导出")
     idx = {}
     try:
-        with open(P.index_path(P.DEV), encoding="utf-8") as f:
+        with open(P.index_path(P.MAPS), encoding="utf-8") as f:
             for row in (json.load(f).get("maps") or []):
                 fp = (row.get("fingerprint") or "").strip()
                 if fp:
@@ -81,7 +111,7 @@ def main():
     except (OSError, ValueError):
         pass
     inbox = []
-    raw = os.path.join(P.VIS, "raw")
+    raw = os.path.join(P.INBOX, "raw")
     for base, _dirs, files in os.walk(raw):
         for fn in files:
             if not fn.endswith(".json"):
@@ -95,11 +125,10 @@ def main():
                 inbox.append(os.path.join(base, fn))
     check(not inbox, "收件箱里没有「认得出却没归位」的导出（%d 个）" % len(inbox))
 
-    print("== 5) 四个读法数字一致")
-    n_maps = len(P.map_files(P.DEV))
-    n_bins = len(P.navmesh_files(P.DEV))
+    print("== 7) 四个读法数字一致")
+    n_maps = len(P.map_files(P.MAPS))
+    n_bins = len(P.navmesh_files(P.MAPS))
 
-    # 2026-11-24 目录重构：控制台的统计/地图函数拆进 app/ui/stats.py、app/ui/maps.py
     import ui.env as CEnv
     import ui.stats as CStats
     import ui.maps as CMaps
@@ -110,33 +139,26 @@ def main():
 
     import navserver as S
     rows = S.collect_maps()
-    # 2026-11-24：对照表加了 level12 龙城（新增地图），网页编辑器的补齐行数 11 → 12
     check(len(rows) == 12, "网页编辑器 12 行（对照表补全 04/07/12）")
     check(len([r for r in rows if r.get("file")]) == 9, "网页编辑器 9 行有文件")
     dev_ver = S._dir_version(S.DEV)
     check(dev_ver["maps"] == n_maps and dev_ver["navmesh"] == n_bins,
           "网页编辑器版本统计 (%d 图, %d 面)" % (dev_ver["maps"], dev_ver["navmesh"]))
 
-    import navdata as N
-    s = N.summary(P.DEV)
+    s = N.summary(P.MAPS)
     check(s["sub"].get("图") == n_maps and s["sub"].get("可走面") == n_bins,
           "navdata.py summary (%s)" % s["sub"])
 
-    print("== 6) 单草稿 / 单成品目录")
-    check(os.path.isdir(P.PACKS_DIR), "packs\\ 还在")
-    ids = N.pack_ids()
-    check(all("/" not in x for x in ids),
-          "packs 下只有平铺草稿（没有旧的 图/包 两层；实际 %s）" % (ids or "空"))
-    check(os.path.isdir(os.path.join(P.DEV, "final")), "final\\ 还在")
-    check(not os.path.isfile(os.path.join(P.DEV, "final", "_current.txt")),
-          "final\\ 不再有 _current.txt（没有版本概念）")
-    check(os.path.isdir(os.path.join(P.DEV, "archive")), "archive\\ 还在")
+    print("== 8) 迁移日志还在")
+    arch = P.ARCHIVE
+    logs = [f for f in os.listdir(arch) if f.startswith("migrate_onemap_")] if os.path.isdir(arch) else []
+    check(bool(logs), "_archive/ 里有迁移日志（--undo 能退回去）：%s" % (logs[-1:] or "无"))
 
     print("")
     if FAIL:
         print("!! %d 项没过" % len(FAIL))
         return 1
-    print("OK: 布局自检通过（9 图 / 8 面 / 00_公共 / 收件箱干净）")
+    print("OK: 一图一夹自检通过（9 图 / 8 面 / native 冻结副本 / 00_公共 / 收件箱干净）")
     return 0
 
 

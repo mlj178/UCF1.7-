@@ -19,14 +19,14 @@ import tkinter as tk
 import customtkinter as ctk
 
 from ui.consts import CREATE_NO_WINDOW, FONT, FONT_S
-from ui.env import DEV, FINAL_ROOT, HERE, MARKERS, NAVCMD, NAVDATA, ND, PACKS
+from ui.env import DEV, FINAL_ROOT, HERE, MARKERS, NAVCMD, NAVDATA, ND, P, PACKS
 from ui.maps import folder_alias, map_folder, map_scene
 from ui.util import _python, game_running
 
 
 _FINAL_FP_RE = re.compile(r"^n\d+-[0-9a-f]{16}\.txt$", re.I)   # 成品版本里的真图（不含 nogen.txt）
 
-#: 本图编辑标记（markers\<图>\markers.txt）的中文名：顺序就是界面上那一行的顺序
+#: 本图编辑标记（<图>\markers.txt）的中文名：顺序就是界面上那一行的顺序
 MARKER_LABELS = (("area", "守卫区"), ("nanopos", "守卫点"), ("crouch", "蹲守点"),
                  ("tag", "标签"), ("spawn", "出生点"))
 
@@ -40,24 +40,26 @@ def prepare_final_root():
       1) nogen.txt —— 编辑中的 grow/keep 草稿都带这个文件（空图不自动铺点），成品要一致；
       2) *.txt 设只读 —— 成品不允许游戏内保存（DLL 的 fopen("w") 会失败）。
 
-    成品不再有版本：final\<指纹>.txt 平铺，一张图一份。
+    一图一夹（2026-11-27）：成品在 <图>\final\<指纹>.txt，没有"一个大 final 目录"了。
+    返回成品根（= data\maps，给控制台的 UCF_PACK_DIR 用）；一份成品都没有就返回空串。
     """
-    d = FINAL_ROOT
-    try:
-        os.makedirs(d, exist_ok=True)
-        ng = os.path.join(d, "nogen.txt")
-        if not os.path.isfile(ng):
-            with open(ng, "w", encoding="utf-8", newline="\n") as f:
-                f.write("")
-        for fn in os.listdir(d):
-            if _FINAL_FP_RE.match(fn):
-                try:
+    n = 0
+    for name in P.folder_names():
+        d = P.final_dir(name)
+        if not os.path.isdir(d):
+            continue
+        try:
+            ng = os.path.join(d, "nogen.txt")
+            if not os.path.isfile(ng):
+                with open(ng, "w", encoding="utf-8", newline="\n") as f:
+                    f.write("")
+            for fn in os.listdir(d):
+                if _FINAL_FP_RE.match(fn):
                     os.chmod(os.path.join(d, fn), 0o444)
-                except OSError:
-                    pass
-    except OSError:
-        pass
-    return d
+                    n += 1
+        except OSError:
+            pass
+    return FINAL_ROOT if n else ""
 
 
 def final_stats():
@@ -66,6 +68,24 @@ def final_stats():
         return ND.final_store_stats()
     except Exception:                 # noqa: BLE001
         return {"n": 0, "maps": {}, "latest": ""}
+
+
+def final_bytes():
+    r"""成品占多大 / 最近发布（<图>\final\<指纹>.txt 加起来）。"""
+    n = 0
+    latest = 0.0
+    for name in P.folder_names():
+        d = P.final_dir(name)
+        try:
+            for fn in os.listdir(d):
+                if not _FINAL_FP_RE.match(fn):
+                    continue
+                st = os.stat(os.path.join(d, fn))
+                n += st.st_size
+                latest = max(latest, st.st_mtime)
+        except OSError:
+            pass
+    return n, latest
 
 
 def final_versions():
@@ -560,7 +580,7 @@ class PackMixin:
                  "游戏开着时，重进图或按 Ctrl+7 才按新文件重放。"],
                 ok_text="清空标记"):
             return False
-        dst_dir = os.path.join(DEV, "archive", "markers_trash",
+        dst_dir = os.path.join(P.ARCHIVE, "markers_trash",
                                "%s__%s" % (folder, time.strftime("%Y%m%d_%H%M%S")))
         try:
             os.makedirs(dst_dir, exist_ok=True)

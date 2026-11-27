@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-r"""自检：2026-11-24 目录重构后的树没被放乱。
+r"""自检：目录树没被放乱（2026-11-24 重构 + 2026-11-27 一图一夹）。
 
 跑法：python app/tests/test_layout.py
 
@@ -73,8 +73,9 @@ def main():
 
     print("== 4) 数据与产物")
     check(os.path.isdir(j("data", "geo")), "data/geo/ 在")
-    check(os.path.isdir(j("data", "navdata", "native")), "data/navdata/native/ 在")
-    check(os.path.isdir(j("data", "navdata", "dev")), "data/navdata/dev/ 在")
+    check(os.path.isdir(j("data", "maps")), "data/maps/ 在（一图一夹）")
+    check(os.path.isdir(j("data", "maps", "00_公共")), "data/maps/00_公共/ 在")
+    check(not os.path.exists(j("data", "navdata")), "旧的 data/navdata/ 已经没了")
     check(os.path.isfile(j("run", "payload", "winhttp.dll")), "run/payload/winhttp.dll 在")
     check(os.path.isdir(j("log")), "log/ 在")
 
@@ -96,7 +97,7 @@ def main():
     doc = read("README.md")
     check("app/控制台.pyw" in doc, "README 写了入口 app/控制台.pyw")
     check("app/ui/" in doc and "app/tabs/" in doc, "README 写了 app/ui、app/tabs")
-    check("data/navdata" in doc, "README 写了 data/navdata")
+    check("data/maps" in doc or "data\\maps" in doc, "README 写了 data/maps（一图一夹）")
 
     if FAIL:
         print("\n!! %d 项没过" % len(FAIL))

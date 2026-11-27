@@ -27,7 +27,7 @@ from tabs.vis import VisTab
 from tabs.waypoint import WaypointTab
 from ui.consts import FONT, FONT_B, FONT_S, GROUPS, LIVE_VIS_KEYS, TAB_GROUPS, TAB_OLD_MAP, USER_PAGES
 from ui.env import (BUILD_DLL, CFG_PATH, DEPLOY, DEV, FINAL_ROOT, GAME_EXE, HERE, LOG_DIR,
-                    MARKERS, NAVSERVER, PACKS, PAYLOAD_DLL, RUNTIME, TEST_VIS)
+                    MARKERS, NAVSERVER, P, PACKS, PAYLOAD_DLL, RUNTIME, TEST_VIS)
 from ui.kit import Kit
 from ui.role import ROLE_DEV, ROLE_LABEL, ROLE_USER, ask_role, env_role, normalize_role, role_from_cfg, save_role
 from ui.packs import (
@@ -1044,10 +1044,11 @@ class App(Kit, PackMixin, MapTab, VisTab, HotkeyTab, WaypointTab, OverviewTab,
         r"""启动游戏的环境变量 + 一句人话说明（「开始游戏」和「车测」共用）。
 
         UCF_MOD=1 是通行证。三档启动的路径也在这里定（数据全在 ②，③ 只当运行环境）：
-          UCF_EXPORT_DIR     -> ② 开发版 vis（可走面 navmesh_*.bin 写这里）
-          UCF_PACK_DIR       -> ② 开发版 packs（编辑中）
-          成品：UCF_PACK_DIR=② + UCF_PACK=final —— 读 final\<指纹>.txt，和编辑中同一套逻辑
-          编辑中：UCF_PACK=②\packs\<图>（可写，游戏内存回草稿）
+          UCF_EXPORT_DIR     -> data\maps\_inbox（可走面 navmesh_*.bin 写这里）
+          UCF_PACK_DIR       -> data\maps（草稿根；<图>\<指纹>.txt）
+          成品：UCF_PACK_DIR=data\maps + UCF_NAV_SEARCH=1 + UCF_NAV_SUB=final
+                —— 插件按当前图指纹找 <图>\final\<指纹>.txt，markers 也跟到 <图>\markers.txt
+          编辑中：UCF_PACK=<图>（可写，游戏内存回草稿）
           原版：总开关关，插件待机
         """
         env = dict(os.environ)
@@ -1096,16 +1097,18 @@ class App(Kit, PackMixin, MapTab, VisTab, HotkeyTab, WaypointTab, OverviewTab,
                 env["UCF_FPLABEL"] = pk.get("label") or pk["map"]
                 note += "（只对 %s）" % (pk.get("label") or pk["map"])
         else:
-            # 成品：UCF_PACK_DIR=dev + UCF_PACK=final，插件读 dev\\final\\<指纹>.txt。
+            # 成品：一图一夹，插件按当前图指纹读 <图>\\final\\<指纹>.txt。
             # 和编辑中完全同一套加载逻辑（grow/keep/0 点图都照常），只是文件带只读属性。
             st = final_stats()
             d = prepare_final_root() if st.get("n") else ""
             if d:
-                env["UCF_PACK_DIR"] = DEV
-                env["UCF_PACK"] = "final"
-                env["UCF_NAV_DIR"] = d             # 万一包名被挡：退回同一个目录
+                # 一图一夹（2026-11-27）：成品在各图自己的 final\ 里，插件按当前图指纹去搜
+                # （UCF_NAV_SEARCH=1 + UCF_NAV_SUB=final），所以不设 UCF_PACK —— 一次启动照样能玩全部图。
+                env["UCF_PACK_DIR"] = P.MAPS
+                env["UCF_NAV_SEARCH"] = "1"
+                env["UCF_NAV_SUB"] = P.FINAL_SUB
                 env["UCF_NAV_READONLY"] = "1"
-                for k in ("UCF_FP", "UCF_FPLABEL"):
+                for k in ("UCF_PACK", "UCF_FP", "UCF_FPLABEL", "UCF_NAV_DIR"):
                     env.pop(k, None)
                 note = "mod + 成品（%d 张图，只读）" % st["n"]
             else:

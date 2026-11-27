@@ -1,0 +1,14 @@
+# ucf_mod markers v1  crouch=0 nanopos=0 area=0 tag=0 spawnadd=2 spawndel=6
+# crouch <team> <x> <y> <z> [yaw]        yaw = 朝向(度,0=北,90=东)，未知则省略
+# area <scale*10> <x> <y> <z> [aid]
+# nanopos <areaId> <x> <y> <z> <safety> [yaw]   同上
+# tag <tag> <x> <y> <z>
+# spawn <team 0BL/1GR/2中立> <x> <y> <z> <yaw>   / spawndel <team> <x> <y> <z>
+spawn 0 -58.360 -15.194 8.643 74.4
+spawn 0 -61.928 -15.194 8.496 58.0
+spawndel 0 -60.000 -15.000 -7.000
+spawndel 0 -64.000 -15.000 -7.000
+spawndel 0 -60.000 -15.000 -3.000
+spawndel 0 -64.000 -15.000 -3.000
+spawndel 0 -64.000 -15.000 1.000
+spawndel 0 -60.000 -15.000 1.000
