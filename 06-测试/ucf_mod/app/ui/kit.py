@@ -133,20 +133,6 @@ class Kit:
                      text_color="#c9d1d9", anchor="w").pack(
             fill="x", padx=14, pady=(12, 0))
 
-    # ---- 「快捷键」页：只读速查表 ----
-    def text_card(self, parent, title, text, height):
-        r"""深色只读文本框（和「上次运行」日志同一套配色），插完内容立刻锁死。"""
-        box = ctk.CTkFrame(parent, corner_radius=8)
-        box.pack(fill="x", padx=10, pady=(8, 0))
-        ctk.CTkLabel(box, text=title, font=FONT, anchor="w").pack(
-            fill="x", padx=12, pady=(8, 0))
-        tb = ctk.CTkTextbox(box, height=height, font=("Consolas", 12),
-                            fg_color="#141414", wrap="word")
-        tb.pack(fill="x", padx=12, pady=(4, 10))
-        tb.insert("1.0", text)
-        tb.configure(state="disabled")
-        return tb
-
     def open_file(self, path, what):
         if not os.path.isfile(path):
             self.set_status("还没有 %s" % what)

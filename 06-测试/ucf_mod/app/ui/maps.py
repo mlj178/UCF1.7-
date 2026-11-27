@@ -24,6 +24,9 @@ def load_maps():
 
     一个图文件夹一份：<序号>_<场景><中文名>\map.json。部署端没有数据时退回开发版。
     飓风危城（level9）原生 0 点、没有指纹，运行时就是 n0-0000000000000000。
+
+    2026-11-27：纯面图（原生没有 PointGraph：胜利广场 / 死亡擂台）也列进来，指纹给**空串**。
+    它们画不了路点（见 face_maps()），但列出来才看得出来「不是数据丢了」，状态行再说原因。
     """
     out, seen = [], set()
     for root in (DEPLOY, DEV):
@@ -41,11 +44,50 @@ def load_maps():
             if not fp and lv == "level9":
                 fp = "n0-0000000000000000"
             if not fp:
-                continue                      # 没指纹 = 这张图没有路点图，测不了
+                fp = ""                       # 没指纹 = 这张图没有点图（下面按纯面图处理）
             seen.add(lv)
             cn, _sc = map_row(lv)             # 中文名以《地图对照表》为准（暴风 JSON 里是旧名）
-            out.append((lv, cn or str(m.get("label") or m.get("scene") or lv), fp))
+            if fp or os.path.isfile(os.path.join(P.map_dir(root, lv), P.NAVMESH)):
+                out.append((lv, cn or str(m.get("label") or m.get("scene") or lv), fp))
+    for lv, cn, _nm in face_maps():
+        if lv in seen:
+            continue
+        seen.add(lv)
+        out.append((lv, cn, ""))
     out.sort(key=lambda r: int("".join(ch for ch in r[0] if ch.isdigit()) or 0))
+    return out
+
+
+def face_maps():
+    r"""[(level, 中文名, 可走面文件)] —— 纯面图：对照表里有、没有 map.json、只有可走面。
+
+    证据（app/tools/data/scan_native_nav.py 直接读游戏场景 + resources.assets）：
+
+        level4  胜利广场  NavMeshGraph · NY_TM_NavMesh     716 顶点 / 976 三角
+        level11 死亡擂台  NavMeshGraph · DeathRing_NavMesh  60 顶点 /  94 三角
+
+    这两张图的 A* 里**只有 NavMeshGraph、没有 PointGraph**（不是「0 个点」，是连图对象都没有），
+    插件加减点要先有 PointGraph 才能 AddNode，所以画不了路点；人机在这两张图走三角网。
+    以前 load_maps 干脆不收它们，界面上就变成「这张图选不了」—— 2026-11-27 用户问的就是这个。
+    """
+    out = []
+    try:
+        rows = map_table_rows()               # [(序号, level, 中文名, 场景名)]
+    except Exception:                         # noqa: BLE001  表读不了就不列
+        return out
+    for _no, lv, cn, scene in rows:
+        try:
+            folder = map_folder_name(lv, scene or "", cn or "")
+        except Exception:                     # noqa: BLE001
+            continue
+        d = os.path.join(P.MAPS, folder)
+        if not os.path.isdir(d):
+            continue
+        if os.path.isfile(os.path.join(d, "map.json")):
+            continue                          # 有点图 = 正常图，不归这里
+        if not os.path.isfile(os.path.join(d, P.NAVMESH)):
+            continue                          # 连可走面都没有：还没采集，不列
+        out.append((lv, cn, P.NAVMESH))
     return out
 
 

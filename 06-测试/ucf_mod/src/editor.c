@@ -228,6 +228,11 @@ typedef struct {
   float jspeed;                    /* 跳链 needSpeed（-1 = 用默认 0） */
   float jacc;                      /* 跳链 accuracy（-1 = 用默认 1.0） */
   int   jdir;                      /* 跳链 direction: 0 = B-A 归一化 / 1 = 正上 / 2 = 前上 */
+  /* 蹲（2026-11-27）：录制结算出来的「这一跳要蹲」。
+   * jct0 / jct1 = 空中开始 / 结束蹲（相对起跳秒，-1 = 没蹲 / 蹲到落地）；
+   * jctb = 起跳那一帧是否蹲着；jctb < 0 = 老文件没有这三列（未知）。 */
+  float jct0, jct1;
+  int   jctb;
   /* 撤销步号：一次用户动作（放一个点 / 连一条边 / 贴一次地）里的条目同号。
    * 2026-11-26：以前「撤销一步」只弹一条记录，加点 + 自动连边是两条、跳点是三条，
    * 用户按一次撤销只看到一半变化（甚至只弹掉一条没有可见效果的 jump add），
@@ -244,7 +249,6 @@ typedef struct {
 #define NPOPADD 7  /* 删掉「本次会话里加的点」：a = 坐标，dir = g_drop 槽位 */
 #define NAV_ED_MAX 4096
 #define NAV_MAXN 20000
-
 /* connections 数组的强根。
  * 只写 connections 字段 + GC 写屏障，在 138 点/105 边这种大图上仍然会在旧图
  * 销毁时崩在 PointNode.ClearConnections：屏障保证“字段→数组”，但数组里
@@ -291,6 +295,8 @@ static NAVDROP g_lastDrop;   /* 最近一次 nav_drop_add 摘掉的条目（撤�
 static NAVED g_lastJump;     /* 最近一次 nav_drop_jump 摘掉的 jump add（撤销跳链删除用） */
 static int g_nedBlank;      /* 1 = 空白地图：原生点全禁；旧文件里的 blank 行也当 grow 读 */
 static int g_nedGrow;       /* 1 = 文件写了 grow：原生点标死 + 用 AddNode 新建节点 */
+static int g_pgSynthetic;   /* 1 = 本图的 PointGraph 是插件现场补的（纯面图：胜利广场 / 死亡擂台） */
+static int g_pgNmDropped;   /* 1 = 已经摘掉可走面（一张图只摘一次） */
 static int g_nedKeep;       /* 1 = 文件写了 keep：原生点一个都不动，只新增节点 */
 static P   g_growGraph;     /* 已经 grow 过的图：同一张图只新建一次（节点没有删除 API） */
 /* 本次进图已经建过的跳链（起终点坐标）：重套包时只补新建的，不整批重建。
@@ -422,6 +428,7 @@ static int g_tintLogged; /* one-shot material/shader diagnostic */
 #define R_SCREEN_W    0x3E6820   /* Screen.get_width                        */
 #define R_SCREEN_H    0x3E6800   /* Screen.get_height                       */
 #define R_FINDOBJS    0x4E9620   /* Object.FindObjectsOfType(Type,bool)     */
+#define R_TIME_GET    0x3F2540   /* UnityEngine.Time.get_time() -> float     */
 #define R_MESH_CTOR   0x4E8030   /* Mesh..ctor()                            */
 #define R_MESH_VERTS  0x4E8510   /* Mesh.set_vertices(Vector3[])            */
 #define R_MESH_TRIS   0x4E8420   /* Mesh.set_triangles(int[])               */
@@ -702,6 +709,31 @@ static void elog(const char* fmt, ...) {
     }
   }
   log_ring_push(buf);
+}
+
+/* ---- 蹲跳驱动（2026-11-27）-------------------------------------------------
+ * 录到的蹲跳落在 jump add 第 10~12 列（ct0 / ct1 / ctb）。进图建跳链时把
+ * 「起点节点 + 空中起蹲时间」记进这张小表；之后每 ~100 ms 扫一遍人机，只要它
+ * 已经在空中、而且 nextJumpStartNode 正是这条链的起点，就把 Bot.crouchEndTime
+ * 顶到 now+0.6。游戏自己的 Bot.TryCrouch 每帧算
+ *   SetCrouchState(crouchEndTime > Time.time)
+ * 所以这里不直接调 SetCrouchState —— 直接调会和游戏每帧的判定打架（蹲住不放）。
+ * 关掉：ucf_mod.json 里 "bot_crouchjump": false。
+ * 2026-11-27 现场：风暴那道 6.7 m 缺口，人机 5 次全跳了，但都差 10~15 cm
+ * 撞在台沿下沿滑到地面；玩家同一条弧线蹲着就上去了。 */
+#define CJ_MAX 32
+static struct { P startNode; float ct0, ct1; } g_cj[CJ_MAX];
+static int g_cjN;
+
+static void cj_remember(P startNode, float ct0, float ct1) {
+  int i;
+  if (!startNode || g_cjN >= CJ_MAX) return;
+  for (i = 0; i < g_cjN; i++) if (g_cj[i].startNode == startNode) return;
+  g_cj[g_cjN].startNode = startNode;
+  g_cj[g_cjN].ct0 = ct0;
+  g_cj[g_cjN].ct1 = ct1;
+  g_cjN++;
+  elog("crouchjump: 登记蹲跳起点节点 %p（空中蹲 [%.2f, %.2f] s）", startNode, ct0, ct1);
 }
 
 /* ---------------- 崩溃现场记录（VEH）---------------------------------------
@@ -1340,10 +1372,12 @@ static int cam_point(V3* out) { return cam_point_ray(out, 0, 0); }
 #define SS_SCHEMA    "ucf-trace/3"
 #define SS_BOT_HZ    10
 
-typedef struct { V3 pos; int grounded; double vy; } PlSt;
+typedef struct { V3 pos; int grounded; double vy; int ct; } PlSt;
 
 /* 跳跃结算状态机：录制 / 采集各持一个实例（同一套判据：起跳看竖直速度，
- * 落地看游戏自己的 isGrounded）。 */
+ * 落地看游戏自己的 isGrounded）。
+ * 2026-11-27 加蹲：ct0/ct1 是「空中开始 / 结束蹲」相对起跳的秒数（-1 = 没蹲 / 蹲到落地），
+ * ctb = 起跳那一帧是不是已经蹲着。事件里带出去，复盘落盘进 jump add 的第 10~12 列。 */
 typedef struct {
   FILE*  fp;
   int    air;                 /* 1 = 已起跳、等落地结算 */
@@ -1352,6 +1386,8 @@ typedef struct {
   V3     a;                   /* 起跳点 */
   double t0, apex, v0, run, lastT;
   int    n, mount, gap, down, hop;
+  double ct0, ct1;            /* 空中蹲的起止（相对起跳秒，-1 = 没有） */
+  int    ctb, ctOn, prevCt;   /* 起跳时是否蹲着 / 空中现在蹲着 / 上一帧的蹲 */
 } JumpRec;
 
 /* 采样定时器（navfix.c 的 WM_TIMER 0xF3C1）：以前只在车测自由视角启动，所以
@@ -1527,6 +1563,10 @@ static void jr_line(JumpRec* j, const PlSt* st, double t) {
   rise = j->apex - (double)a.y;
   if (h < 0.5) kind = "hop";
   else if (dy > 0.5) kind = "mount";
+  /* 2026-11-27：主动起跳优先于「跳下」。v0 够大 + 滞空够久就是真跳，落点低一点也按 gap；
+   * 否则蹲跳 / 跨缺口落到低 0.5~1 m 的台子会被记成 down，然后因为落差不够 2 m 被静默丢掉
+   * （11-27 风暴那次 6.93 m 蹲跳就是这么没的）。判据和 ucf_rec._kind 必须一致。 */
+  else if (j->v0 >= 9.0 && air >= 0.3) kind = "gap";
   else if (dy < -0.5) kind = "down";
   else kind = "gap";
   if (!strcmp(kind, "gap")) j->gap++;
@@ -1536,8 +1576,10 @@ static void jr_line(JumpRec* j, const PlSt* st, double t) {
   j->n++;
   fprintf(j->fp, "{\"t\":%.3f,\"ev\":\"jump\",\"a\":[%.3f,%.3f,%.3f],"
                  "\"b\":[%.3f,%.3f,%.3f],\"h\":%.3f,\"rise\":%.3f,"
-                 "\"air\":%.3f,\"v0\":%.1f,\"run\":%.1f,\"kind\":\"%s\"}\n",
-          t, a.x, a.y, a.z, b.x, b.y, b.z, h, rise, air, j->v0, j->run, kind);
+                 "\"air\":%.3f,\"v0\":%.1f,\"run\":%.1f,\"kind\":\"%s\","
+                 "\"ct\":[%.3f,%.3f],\"ctb\":%d}\n",
+          t, a.x, a.y, a.z, b.x, b.y, b.z, h, rise, air, j->v0, j->run, kind,
+          j->ct0, j->ct1, j->ctb);
 }
 
 static void jr_step(JumpRec* j, const PlSt* st, double t, double run) {
@@ -1549,9 +1591,23 @@ static void jr_step(JumpRec* j, const PlSt* st, double t, double run) {
       j->v0 = st->vy;
       j->run = run;
       j->apex = j->prev.y;            /* 跳高基准 = 起跳脚底 */
+      j->ctb = j->prevCt;             /* 起跳前那一帧蹲着 = 「蹲着起跳」 */
+      j->ct0 = -1.0;
+      j->ct1 = -1.0;
+      j->ctOn = 0;
     }
   } else {
     if ((double)st->pos.y > j->apex) j->apex = st->pos.y;
+    /* 空中蹲的起止：只记「离地 -> 落地」这一段；落地后的蹲行不算进这一跳 */
+    if (st->ct) {
+      if (!j->ctOn) {
+        j->ctOn = 1;
+        if (j->ct0 < 0.0) j->ct0 = t - j->t0;
+      }
+    } else if (j->ctOn) {
+      j->ctOn = 0;
+      if (j->ct1 < 0.0) j->ct1 = t - j->t0;
+    }
     if (st->grounded && (t - j->t0) > 0.06) {
       jr_line(j, st, t);
       j->air = 0;
@@ -1563,6 +1619,7 @@ static void jr_step(JumpRec* j, const PlSt* st, double t, double run) {
   j->hasPrev = 1;
   j->grounded = st->grounded;
   j->lastT = t;
+  j->prevCt = st->ct;
 }
 
 /* 读一帧玩家状态：1 = 从玩家对象读到，2 = 退回相机 + 眼高估算，0 = 这一帧拿不到。
@@ -1631,7 +1688,8 @@ static void ss_header(void) {
           "\"fields\":[\"t\",\"dt\",\"x\",\"y\",\"z\",\"g\",\"vy\",\"sp\",\"ct\"],"
           "\"notes\":\"t/dt s; xyz = player feet in world; g = grounded 1/0; "
           "vy = vertical speed m/s; sp/ct = space/ctrl; "
-          "jump event line: {t,ev:jump,a:[x,y,z] takeoff,b:[x,y,z] landing,h,rise,air,v0,run,kind}; "
+          "jump event line: {t,ev:jump,a:[x,y,z] takeoff,b:[x,y,z] landing,h,rise,air,v0,run,kind,"
+          "ct:[c0,c1] crouch start/end in air (s from takeoff, -1 = none),ctb: crouched at takeoff}; "
           "bot line: {t,k:b,id,spd,act,tgt}\","
           "\"kind_note\":\"gap = 同高度跨缺口, mount = 跳上高台, down = 跳下, hop = 原地小跳\"}\n",
           ss_kind_name(), ss_who_name(), g_ss.hz,
@@ -1791,9 +1849,10 @@ static void ss_sample_player(void) {
     double dd = sqrt(dx * dx + dz * dz);
     if (dd < 20.0) g_ss.dist += dd;           /* 传送 / 换图不计进里程 */
   }
-  jr_step(&g_ss.jump, &st, t, run);           /* 起跳/落地结算（录制和采集同一套） */
   sp = (GetAsyncKeyState(VK_SPACE) & 0x8000) ? 1 : 0;
   ct = (GetAsyncKeyState(VK_CONTROL) & 0x8000) ? 1 : 0;
+  st.ct = ct;                                 /* 跳事件按这一帧的蹲状态结算（空中蹲） */
+  jr_step(&g_ss.jump, &st, t, run);           /* 起跳/落地结算（录制和采集同一套） */
   fprintf(g_ss.fp, "{\"t\":%.3f,\"dt\":%.3f,\"x\":%.3f,\"y\":%.3f,\"z\":%.3f,"
                    "\"g\":%d,\"vy\":%.2f,\"sp\":%d,\"ct\":%d}\n",
           t, dt, st.pos.x, st.pos.y, st.pos.z, st.grounded ? 1 : 0, st.vy, sp, ct);
@@ -2071,6 +2130,9 @@ static P spawn_vis(V3 p, float s, int slot) {
  *   E  mode state (log only)
  * ------------------------------------------------------------------------- */
 P navfix_point_graph(void);
+P navfix_add_point_graph(void);   /* 纯面图：现场补一张 0 节点的 PointGraph */
+int navfix_drop_navmesh(void);    /* 纯面图：grow 时把可走面摘掉，人机才走点图 */
+void navfix_pg_reset(void);
 P navfix_astar(void);
 P navfix_add_guard_area(float x, float y, float z);
 
@@ -6543,8 +6605,15 @@ static int nav_save(void) {
       fprintf(f, "node del %.3f %.3f %.3f\n", e->a.x, e->a.y, e->a.z);
     else if (e->kind == JADD) {
       /* 2026-11-25：needSpeed / accuracy / direction 不是默认值时一起写回。
-       * 否则文件里调好的「0 0.5 0」只要在游戏内保存一次就退回 0 / 1.0（站着不跳）。 */
-      if (e->jspeed >= 0.0f || e->jacc >= 0.0f || e->jdir != 0)
+       * 否则文件里调好的「0 0.5 0」只要在游戏内保存一次就退回 0 / 1.0（站着不跳）。
+       * 2026-11-27：带蹲信息的跳要写满 12 列，否则游戏里保存一次蹲信息就没了。 */
+      if (e->jctb >= 0)
+        fprintf(f, "jump add %.3f %.3f %.3f %.3f %.3f %.3f %.2f %.2f %d %.2f %.2f %d\n",
+                e->a.x, e->a.y, e->a.z, e->b.x, e->b.y, e->b.z,
+                (e->jspeed >= 0.0f) ? e->jspeed : 0.0f,
+                (e->jacc >= 0.0f) ? e->jacc : 0.5f, e->jdir,
+                e->jct0, e->jct1, e->jctb);
+      else if (e->jspeed >= 0.0f || e->jacc >= 0.0f || e->jdir != 0)
         fprintf(f, "jump add %.3f %.3f %.3f %.3f %.3f %.3f %.2f %.2f %d\n",
                 e->a.x, e->a.y, e->a.z, e->b.x, e->b.y, e->b.z,
                 e->jspeed, e->jacc, e->jdir);
@@ -6619,18 +6688,23 @@ static void nav_edit_load(const char* path) {
   char line[256];
   g_nedN = 0;
   g_redoN = 0;
+  g_cjN = 0;                 /* 换图 / 重载清单：节点指针全变了，蹲跳表作废重登记 */
   g_nedBlank = 0;
   g_nedGrow = 0;
   g_nedKeep = 0;
   if (!f) return;
   while (fgets(line, sizeof(line), f)) {
     NAVED e;
-    int n = 0, jdir = 0;
+    int n = 0, jdir = 0, jctb = -1;
     float x, y, z, x2, y2, z2, jspeed = -1.0f, jacc = -1.0f;
+    float jct0 = -1.0f, jct1 = -1.0f;
     char k1[16];
     memset(&e, 0, sizeof e);
     e.jspeed = -1.0f;
     e.jacc = -1.0f;
+    e.jct0 = -1.0f;
+    e.jct1 = -1.0f;
+    e.jctb = -1;
     if (line[0] == '#' || line[0] == '\n') continue;
     /* 空白地图（grow）：原生点全禁 + AddNode 新建，文件里的 node add / edge add
      * 就是进图后的全部路线。旧的 blank 写法等价于 grow（借槽位那套已经删掉了），
@@ -6656,9 +6730,9 @@ static void nav_edit_load(const char* path) {
               ((k1[0] == 'i' || !strcmp(k1, "delin")) ? 2 : 0);
       e.a.x = x; e.a.y = y; e.a.z = z;
       e.b.x = x2; e.b.y = y2; e.b.z = z2;
-    } else if ((n = sscanf(line, "jump %15s %f %f %f %f %f %f %f %f %d",
+    } else if ((n = sscanf(line, "jump %15s %f %f %f %f %f %f %f %f %d %f %f %d",
                             k1, &x, &y, &z, &x2, &y2, &z2,
-                            &jspeed, &jacc, &jdir)) >= 7) {
+                            &jspeed, &jacc, &jdir, &jct0, &jct1, &jctb)) >= 7) {
       /* 跳跃链接：起点 A（人机跑到这里起跳）-> 落点 B（踩箱子 / 上层平台）。
        * 可选三个参数（2026-11-25 为对照实验加的，不写就是老行为）：
        *   needSpeed  accuracy  direction(0=沿A->B / 1=正上 / 2=前上)
@@ -6670,6 +6744,10 @@ static void nav_edit_load(const char* path) {
       e.jspeed = (n >= 8) ? jspeed : -1.0f;
       e.jacc   = (n >= 9) ? jacc   : -1.0f;
       e.jdir   = (n >= 10) ? jdir  : 0;
+      /* 2026-11-27：第 11~13 列是蹲（老文件没有 = 未知，-1） */
+      e.jct0 = (n >= 11) ? jct0 : -1.0f;
+      e.jct1 = (n >= 12) ? jct1 : -1.0f;
+      e.jctb = (n >= 13) ? jctb : -1;
     } else {
       continue;
     }
@@ -6978,6 +7056,14 @@ static int nav_grow_enabled(void) {
   if (GetEnvironmentVariableA("UCF_NAVGROW", v, sizeof v) > 0 && v[0] == '0') return 0;
   return 1;
 }
+/* 2026-11-27：给纯面图现场补 PointGraph 的试验开关（车测/命令行用；正常靠「选了测试包」触发） */
+static int nav_pg_test(void) {
+  static int cached = -1;
+  char v[8];
+  if (cached >= 0) return cached;
+  cached = (GetEnvironmentVariableA("UCF_PG_TEST", v, sizeof v) > 0 && v[0] == '1');
+  return cached;
+}
 static P nav_grow_node(P g, const V3* p) {
   return ((P (*)(P, int, int, int, void*))RVA(R_PG_ADD_NODE))(
       g, (int)(p->x * 1000.0f), (int)(p->y * 1000.0f), (int)(p->z * 1000.0f), 0);
@@ -7023,7 +7109,12 @@ static int nav_apply_jumps(P g) {
     ia = nav_find(g, &e->a, 1.0f);
     ib = nav_find(g, &e->b, 1.0f);
     if (ia < 0 || ib < 0 || ia == ib) { bad++; continue; }
+    if (e->jctb >= 0)
+      elog("naved: jump (%.2f %.2f %.2f)->(%.2f %.2f %.2f) 带蹲: 空中蹲 [%.2f, %.2f] s, 起跳时蹲=%d",
+           e->a.x, e->a.y, e->a.z, e->b.x, e->b.y, e->b.z, e->jct0, e->jct1, e->jctb);
     if (!make_jump_link_ex(e->a, e->b, e->jspeed, e->jacc, e->jdir)) continue;
+    /* 带蹲的跳：把起点节点登记下来，飞行中把人机顶成蹲（crouch_jump_tick） */
+    if (e->jctb >= 0) cj_remember(nav_node(g, ia), e->jct0, e->jct1);
     made++;
     if (g_jumpSeenN < JSEEN_MAX) {
       g_jumpSeenA[g_jumpSeenN] = e->a;
@@ -7048,6 +7139,11 @@ static int nav_apply_grow(P g) {
   int i, n, killed = 0, made = 0, skipped = 0, ops = 0, lockId;
   int keep = g_nedKeep;           /* keep：原生点原样保留，只新增节点 */
   if (!g) return 0;
+  /* 2026-11-27 纯面图：点图是插件现场补的、这份草稿又是空白/grow —— 把这张图的可走面摘掉。
+   * 不摘的话人机「脚下最近节点」永远落在三角网上（A* 多图不跨图连边），画的点等于没画。 */
+  if (!keep && g_pgSynthetic && !g_pgNmDropped) {
+    if (navfix_drop_navmesh()) g_pgNmDropped = 1;
+  }
   n = nav_count(g);
   /* n == 0 也允许：0 点图（飓风危城）正是 grow 唯一能用的场景 */
   if (n < 0 || n > NAV_MAXN) { elog("naved: grow skipped: bad node count %d", n); return 0; }
@@ -7799,6 +7895,9 @@ static void nav_push(int kind, const V3* a, const V3* b) {
   e = &g_ned[g_nedN++];
   e->kind = kind;
   e->dir = 0;
+  e->jct0 = -1.0f;
+  e->jct1 = -1.0f;
+  e->jctb = -1;                 /* 菜单里手建的跳链没有蹲信息 */
   e->a = *a;
   if (b) e->b = *b; else memset(&e->b, 0, sizeof(e->b));
   e->grp = g_edStep;
@@ -9256,13 +9355,6 @@ static void nav_cmd_tick(P g) {
          g_visJump, g_visTag, g_nmShow, g_visCompass, g_visPm);
     return;
   }
-  if (!strcmp(cmd, "drive")) {                    /* 人机巡线驱动：控制台「验证」卡片 */
-    extern int ucf_drive_set(int on);
-    int on2 = (!strcmp(act, "on") || !strcmp(act, "1")) ? 1 : 0;
-    ucf_drive_set(on2);
-    elog("drive: %s (navcmd)", on2 ? "ON" : "OFF");
-    return;
-  }
   if (!strcmp(cmd, "stopall")) {                  /* 关控制台的收尾命令（旧版控制台还在发） */
     ss_stop("console");
     return;
@@ -9278,10 +9370,20 @@ static void nav_cmd_tick(P g) {
 /* 主线程 tick：等图稳定 -> 读本图的编辑文件 -> 套用 */
 static void nav_edit_tick(void) {
   P g;
-  int n, ops;
+  int n, ops, made = 0;
   if (!ed_init()) return;
   g = navfix_point_graph();
   nav_cmd_tick(g);            /* 控制台命令：运行中切包 / 重读 / 保存 */
+  if (!g && (g_packName[0] || nav_pg_test())) {
+    /* 2026-11-27 纯面图（胜利广场 / 死亡擂台）：场景 A* 里连 PointGraph 都没有，
+     * 插件没有 AddNode 的地方。选着测试包（或 UCF_PG_TEST=1 试验）时现场补一张，
+     * 补上之后就和飓风危城一样是「0 点图 + grow」。 */
+    g = navfix_add_point_graph();
+    if (g) {
+      made = 1;                 /* 下面「图变了」那段会清标记，补完再置位 */
+      elog("naved: 本图没有 PointGraph，已现场补一张（0 节点，走 grow）");
+    }
+  }
   if (!g) { g_nedGraph = 0; g_nedApplied = 0; g_nedWaitN = -1; return; }
   if (g != g_nedGraph) {
     /* 换图 / 图被重建：内存里的点图改动不再对得上，直接作废（和退房间同一原则） */
@@ -9305,10 +9407,14 @@ static void nav_edit_tick(void) {
   g_nativeJumpLogged = 0;
     g_packSkip = 0;      /* 换图：让下一张图重新判断一次，并在日志里各记一行 */
     nav_base_free();     /* 旧图的快照只对旧图有效 */
+    navfix_pg_reset();   /* 换图：纯面图补 PointGraph 的「试过一次」也清掉 */
+    g_pgSynthetic = 0;   /* 换图：补图 / 摘可走面只对旧图有效（补完当场会再置 1） */
+    g_pgNmDropped = 0;
     g_fpGraph = 0;       /* 指纹的原生点数只对这张图有效 */
     g_fpBaseN = -1;
     g_nedZeroTicks = 0;
   }
+  if (made) g_pgSynthetic = 1;   /* 这一 tick 刚补的图：标记要盖过上面的清零 */
   n = nav_count(g);
   if (!g_nedApplied) {
     /* 0 节点图只能靠 grow：它不需要原生槽位。图可能还没扫出来，所以要求
@@ -10329,114 +10435,14 @@ static void menu_tick(void) {
   if (g_wpMenuOpen && (tick % 3) == 0) menu_refresh();
 }
 
-/* ---- 2026-11-19 人机巡线驱动 -------------------------------------------------
- * 证据（blank_b 实测）：bot.path=0、enemy=0、crouchList BL=9/GR=9、
- * gameRoundOver=0——游戏 AI 不给目的地，人机全程原地。
- * 这里对没有 path 的 bot 用 Seeker.StartPath 沿本图可走点下一条路径，
- * 算完调用 Bot.OnPathComplete 装车；AI 自己有目标/有敌人时不抢。
- * 只在测试包（blank）里生效，正常游戏一行不执行。 */
-#define R_SEEK_STARTPATH 0x5A4260
-#define R_BOT_ONPATH    0xB31950
-typedef P    (*seek_start_t)(P seeker, V3 start, V3 end, P cb, void* mi);
-typedef void (*bot_onpath_t)(P bot, P path, void* mi);
-
+/* ---- 人机探针 / bot 采样共用的小工具 --------------------------------------
+ * 2026-11-27 删掉了「人机巡线驱动 drive」（用户实测判定没用：空白图上没有可走点
+ * 时它完全静默、对正常地图又不生效，留着只会误导）。这里保留探针与 bot 采样
+ * 还要用的声明。 */
 static P g_prBotCls, g_prBotType, g_prStopFld;
 static int pr_readable(P p, size_t n);
 typedef struct { P bot; V3 p; unsigned t; } BPOS;
 static BPOS g_bp[32];
-
-typedef struct { P bot, path; unsigned h; unsigned next; } DRV;
-static DRV g_drv[32];
-
-static void drv_release(DRV* d) {
-  if (d->h && x_gchandle_free) x_gchandle_free((P)(size_t)d->h);
-  d->path = 0; d->h = 0;
-}
-
-static int g_driveOn = -1;        /* -1=跟 cfg，0/1=控制台强制（navcmd cmd=drive）*/
-int ucf_drive_set(int on) { g_driveOn = on ? 1 : 0; return g_driveOn; }
-static void drive_tick(void) {
-  P arr, g = navfix_point_graph();
-  int n, i, j, nn2;
-  unsigned now = GetTickCount();
-  if (g_driveOn < 0) g_driveOn = cfg_bool("bot_drive", 0) ? 1 : 0;   /* 默认关 */
-  if (!g_driveOn || !g || !g_nedBlank || !g_packName[0]) return;
-  if (!g_prBotType || g_sceneAge < 12) return;
-  nn2 = nav_count(g);
-  if (nn2 <= 0) return;
-  for (j = 0; j < 32; j++) {
-    if (g_drv[j].bot && !uobj_live(g_drv[j].bot)) {
-      drv_release(&g_drv[j]); g_drv[j].bot = 0;
-    }
-  }
-  arr = ((find_objs_t)RVA(R_FINDOBJS))(g_prBotType, 1, 0);
-  if (!arr) return;
-  n = *(int*)((char*)arr + 0x0C);
-  if (n > 32) n = 32;
-  for (i = 0; i < n; i++) {
-    P b = *(P*)((char*)arr + 0x10 + i * 4);
-    P tr, path, seeker, ei, enemy;
-    DRV* d = 0;
-    V3 bp;
-    int cand[64], nc = 0;
-    if (!b || !uobj_live(b)) continue;
-    for (j = 0; j < 32; j++) if (g_drv[j].bot == b) { d = &g_drv[j]; break; }
-    if (!d) for (j = 0; j < 32; j++) if (!g_drv[j].bot) { d = &g_drv[j]; d->bot = b; break; }
-    if (!d) continue;
-    path = *(P*)((char*)b + 0x80);
-    if (path) { if (d->path) drv_release(d); d->next = now + 500; continue; }
-    ei = *(P*)((char*)b + 0x28);
-    enemy = (pr_readable(ei, 0x40) && pr_readable(*(P*)((char*)ei + 0x0C), 0x30))
-              ? *(P*)((char*)ei + 0x0C) : 0;
-    if (enemy) { if (d->path) drv_release(d); d->next = now + 500; continue; }
-    if (d->path) {
-      int st = pr_readable(d->path, 0x40) ? *(int*)((char*)d->path + 0x20) : -1;
-      P lst = pr_readable(d->path, 0x40) ? *(P*)((char*)d->path + 0x2C) : 0;
-      int pts = pr_readable(lst, 0x20) ? *(int*)((char*)lst + 0xC) : -1;
-      if ((st == 2 || st == 3) && pts > 0) {
-        ((bot_onpath_t)RVA(R_BOT_ONPATH))(b, d->path, 0);
-        elog("drive: adopt bot=%p pts=%d", b, pts);
-        drv_release(d); d->next = now + 700;
-      } else if (now > d->next) {
-        drv_release(d); d->next = now + 1500;
-      }
-      continue;
-    }
-    if (now < d->next) continue;
-    tr = ((get_tr_t)RVA(R_COMP_TR))(b, 0);
-    if (!tr) continue;
-    ((get_pos_t)RVA(R_GET_POS_INJ))(tr, &bp, 0);
-    seeker = *(P*)((char*)b + 0x78);
-    if (!seeker) continue;
-    /* 选一个离自己 >20m、在对侧的可走点当目标 */
-    for (j = 0; j < nn2 && nc < 64; j++) {
-      P nd = nav_node(g, j);
-      V3 q;
-      float dx, dz, dd;
-      if (!nd || !nav_walk(nd)) continue;
-      nav_pos(nd, &q);
-      dx = q.x - bp.x; dz = q.z - bp.z; dd = dx * dx + dz * dz;
-      if (dd < 400.0f) continue;
-      if (bp.x > 0.0f ? (q.x > bp.x + 5.0f) : (q.x < bp.x - 5.0f)) continue;
-      cand[nc++] = j;
-    }
-    if (!nc) continue;
-    {
-      V3 tp;
-      P pth;
-      nav_pos(nav_node(g, cand[(now + (unsigned)(size_t)b) % (unsigned)nc]), &tp);
-      pth = ((seek_start_t)RVA(R_SEEK_STARTPATH))(seeker, bp, tp, 0, 0);
-      if (pth) {
-        d->path = pth;
-        d->h = x_gchandle_new ? x_gchandle_new(pth, 0) : 0;
-        d->next = now + 4000;
-      } else {
-        d->next = now + 2000;
-      }
-      elog("drive: ask bot=%p -> (%.1f,%.1f) path=%p", b, tp.x, tp.z, pth);
-    }
-  }
-}
 
 /* ---- 2026-11-19 人机探针：排查「路线通了人机还是不动」 -----------------
  * 每 ~5 s 打一行：AstarPath 的吸附半径、bot 数、前 3 个 bot 的位置 /
@@ -10666,6 +10672,44 @@ static P bot_type_get(void) {
  * 字段只取「分析用得上」的：位置/着地/竖直速度/水平速度/行为名/闲逛目标/有没有敌人。
  * id 用 Bot 指针（同一次会话内稳定）。只在 who=bots|all 时才跑，只采玩家时一行不写。
  * 录制页（人机验证）和采集页（批量取证）走的是同一个函数。 */
+/* 蹲跳：每 ~100 ms 扫一遍人机，空中 + 正走这条蹲跳链 -> 把 crouchEndTime 顶住。
+ * 判据只用「已经在空中」（g=0）：「还在地面」时先不蹲，免得蹲着跳不起来。 */
+static void crouch_jump_tick(void) {
+  static unsigned last;
+  static unsigned long long lastLog;
+  unsigned long long now = GetTickCount64();
+  P arr, bt;
+  int n, i, k;
+  if (!g_cjN) return;
+  if (!cfg_bool("bot_crouchjump", 1)) return;
+  if (now - last < 100) return;
+  last = (unsigned)now;
+  bt = bot_type_get();
+  if (!bt) return;
+  arr = ((find_objs_t)RVA(R_FINDOBJS))(bt, 1, 0);
+  if (!arr) return;
+  n = *(int*)((char*)arr + 0x0C);
+  if (n <= 0 || n > 32) return;
+  for (i = 0; i < n; i++) {
+    P b = *(P*)((char*)arr + 0x10 + i * 4), pl, njs;
+    if (!b || !uobj_live(b) || !pr_readable(b, 0xF4)) continue;
+    njs = *(P*)((char*)b + 0xC8);                       /* Bot.nextJumpStartNode */
+    if (!njs) continue;
+    for (k = 0; k < g_cjN; k++) if (g_cj[k].startNode == njs) break;
+    if (k >= g_cjN) continue;
+    pl = pr_readable((char*)b + 0x24, 0x10) ? *(P*)((char*)b + 0x24) : 0;
+    if (!pl || !pr_readable(pl, 0x100)) continue;
+    if (*(unsigned char*)((char*)pl + 0x70)) continue;   /* 还在地面：等它跳起来 */
+    *(float*)((char*)b + 0xF0) =                         /* Bot.crouchEndTime */
+        ((float (*)(void*))RVA(R_TIME_GET))(0) + 0.6f;
+    if (now - lastLog > 1000) {
+      lastLog = now;
+      elog("crouchjump: bot=%p 空中，顶 crouchEndTime（链 ct=[%.2f, %.2f]）",
+           b, g_cj[k].ct0, g_cj[k].ct1);
+    }
+  }
+}
+
 static void ss_sample_bots(void) {
   static struct { P bot; V3 p; unsigned t; } bp[32];
   unsigned long long now = GetTickCount64();
@@ -10680,6 +10724,7 @@ static void ss_sample_bots(void) {
     QueryPerformanceCounter(&g_ss.t0q);
     g_ss.srcMode = 1;
     g_ss.nextT = 1.0 / (double)g_ss.hz;
+    memset(bp, 0, sizeof bp);          /* 新会话：速度基线别拿上一场的样本算 */
     ss_header();
   }
   t = ss_now();
@@ -10878,8 +10923,8 @@ void editor_tick(void) {
   ss_tick();                  /* 采样会话（录制 / 采集同一套）：控制台开了才写文件，与可视化无关 */
   nav_edit_tick();            /* 等图稳定后自动套用本图的编辑（不看 vis 开关） */
   { static int pr; if ((++pr % 20) == 0) bot_probe(); }   /* 人机状态探针：~5 s 一次 */
+  crouch_jump_tick();         /* 蹲跳：录到 ct 的跳链，人机在空中时顶成蹲（~10 Hz） */
   { static int dg; if ((++dg % 4) == 0) nav_diag(); }      /* 寻路诊断：~1 s 一行（只在测试包） */
-  { static int dr; if ((++dr % 4) == 0) drive_tick(); }    /* 人机巡线：~1 s 一次 */
   nm_tick();                  /* 可走面独立于可视化：Ctrl+V 关着也能显示 */
   compass_tick();             /* 方向罗盘独立于可视化：Ctrl+Shift+7 开关 */
   ghost_tick();               /* 放置前的虚影预览：独立于可视化，菜单一开就在 */

@@ -5,8 +5,8 @@ r"""ucf_rec.py 的离线自检：造一条「走路 → 跳上箱子 → 走路 
 2026-11-24 起录制数据是 ucf-trace/2（插件给玩家脚底坐标 + grounded/vy + 落地结算的 ev=jump），
 所以这里也按那个格式造数据：样本带 g/vy，跳事件单独给，和游戏里跑出来的一模一样。
 
-验证：走路节点链、跳链 3D 1.5~3.0 过滤（超长只标不建）、落下单向边、静止提示、
-蹲点/传送断段已删除、去重、采样间距。
+验证：走路节点链、跳链下限 1.5 m（2026-11-27 起不设上限）、落下单向边（含 < 2 m 的小落差）、
+主动起跳不记 down、蹲的起止落盘、静止提示、蹲点/传送断段已删除、去重、采样间距。
 跑法：python tests/test_ucf_rec.py
 """
 import json
@@ -122,7 +122,7 @@ def build_two_close_jumps():
 
 
 def build_long_jump():
-    r"""一跳 5.9 m：默认（上限 5.5）丢并报断口；打开「超长跳也建链」后要建上。"""
+    r"""一跳 5.9 m：2026-11-27 起默认就建链（上限取消），也不再提示「人机做不了」。"""
     samples, events = [], []
     t = walk(samples, 0.0, 0.0, 20.0, 0.0)
     n = 18
@@ -140,7 +140,114 @@ def build_long_jump():
     return samples, events
 
 
+def build_small_drop():
+    r"""走下 0.735 m 的小落差。
+
+    2026-11-27 之前：down 事件落差 < 2 m 就什么都不建、也不写 issues —— 静默消失。
+    现在要建一条 A->B 单向边，并在 issues 里提一句。
+    """
+    samples, events = [], []
+    t = walk(samples, 0.0, 0.0, 12.0, 0.0)
+    n = 6
+    for i in range(n):
+        u = i / float(n - 1)
+        samples.append(s(t + i * 0.033, 12.0 + 0.6 * u, -0.735 * u, 0.0, g=0, vy=-2.0))
+    t += n * 0.033
+    events.append({"t": round(t, 3), "ev": "jump",
+                   "a": [12.0, 0.0, 0.0], "b": [12.6, -0.735, 0.0],
+                   "h": 0.6, "rise": 0.1, "air": 0.2, "v0": 0.0, "run": 1.5,
+                   "kind": "down"})
+    walk(samples, t, 12.6, 22.0, -0.735)
+    return samples, events
+
+
+def build_crouch_jump():
+    r"""2026-11-27 风暴那次蹲跳的真实数值：跳过 6.93 m 缺口、落点低 0.735 m、空中按蹲。
+
+    以前：判成 down -> 落差 0.735 < 2 m -> 一个点一条边都不建（静默消失）。
+    现在：主动起跳 -> gap -> 建链（只留 A->B），蹲的起止写进 jump add 第 10~12 列。
+    """
+    samples, events = [], []
+    t = walk(samples, 0.0, -2.0, 4.88, 9.9)
+    n = 23
+    for i in range(n):
+        u = i / float(n - 1)
+        y = 9.9 + 1.925 * (1 - (2 * u - 1) ** 2) - 0.735 * u
+        samples.append(s(t + i * 0.033, 4.88 + 6.93 * u, y, -39.05,
+                         g=0, vy=9.5 if i == 0 else 5.0, sp=1 if i == 0 else 0,
+                         ct=1 if u > 0.6 else 0))
+    t += n * 0.033
+    events.append({"t": round(t, 3), "ev": "jump",
+                   "a": [4.88, 9.9, -39.05], "b": [11.81, 9.165, -39.03],
+                   "h": 6.93, "rise": 1.925, "air": 0.73, "v0": 9.5, "run": 8.2,
+                   "kind": "gap", "ct": [0.57, -1.0], "ctb": 0})
+    walk(samples, t, 11.81, 18.0, 9.165)
+    return samples, events
+
+
+def build_big_drop_jump():
+    r"""跳下高台：水平 9.9 m、净下落 8.7 m（2026-11-27 19:14 那次真实录制）。
+
+    以前按「主动起跳」判成 gap，建出一条 13.2 m 的跳链 —— 人机真会去跳它。
+    现在：净下落 >= 3 m 只写单向边，不建跳链。
+    """
+    samples, events = [], []
+    t = walk(samples, 0.0, -2.0, 4.0, 9.9)
+    n = 20
+    for i in range(n):
+        u = i / float(n - 1)
+        y = 9.9 + 1.9 * (1 - (2 * u - 1) ** 2) - 8.71 * u
+        samples.append(s(t + i * 0.033, 4.0 + 9.88 * u, y, 0.0,
+                         g=0, vy=9.5 if i == 0 else -5.0, sp=1 if i == 0 else 0))
+    t += n * 0.033
+    events.append({"t": round(t, 3), "ev": "jump",
+                   "a": [4.0, 9.9, 0.0], "b": [13.88, 1.19, 0.0],
+                   "h": 9.88, "rise": 1.917, "air": 1.2, "v0": 9.5, "run": 8.8,
+                   "kind": "gap"})
+    walk(samples, t, 13.88, 22.0, 1.19)
+    return samples, events
+
+
+def check_bots():
+    r"""录制文件也要能分出玩家 / 人机（2026-11-27）。
+
+    人机行靠 k="b"；玩家行不带 k（老录制日志可能带 k="p"，读取器也认）。
+    录制页只把玩家样本送进路点分析，人机只做台数 / 条数观察 —— 这个测试钉住
+    「解析不混、界面有计数、控制台真的把 who 发给插件」。
+    """
+    head = {"kind": "rec", "schema": "ucf-trace/3", "who": "all", "hz": 30,
+            "fields": ["t", "dt", "x", "y", "z", "g", "vy", "sp", "ct"]}
+    lines = [
+        json.dumps(head),
+        json.dumps({"t": 0.0, "k": "p", "dt": 0.0, "x": 0.0, "y": 0.0, "z": 0.0,
+                    "g": 1, "vy": 0.0, "sp": 0, "ct": 0}),
+        json.dumps({"t": 0.1, "k": "b", "id": "a", "x": 1.0, "y": 0.0, "z": 0.0,
+                    "g": 1, "vy": 0.0, "spd": 4.0, "j": 0, "en": 0, "act": "Move"}),
+        json.dumps({"t": 0.2, "k": "b", "id": "a", "x": 1.2, "y": 0.0, "z": 0.0,
+                    "g": 1, "vy": 0.0, "spd": 4.0, "j": 0, "en": 0, "act": "Move"}),
+        json.dumps({"t": 0.15, "k": "b", "id": "b", "x": 5.0, "y": 0.0, "z": 0.0,
+                    "g": 1, "vy": 0.0, "spd": 3.0, "j": 0, "en": 0, "act": "Chase"}),
+    ]
+    bots = ucf_rec.parse_bots(lines)
+    assert sorted(bots) == ["a", "b"], bots.keys()
+    assert [len(bots["a"]), len(bots["b"])] == [2, 1], bots
+    samples, events = ucf_rec.parse_rec(lines)
+    assert len(samples) == 1 and not events, (len(samples), events)
+    print("parse_bots: a=2 b=1；玩家样本 1（人机不混进路点）")
+
+    tab = ""
+    path = os.path.join(UCF_ROOT, "app", "tabs", "record", "tab.py")
+    with open(path, "r", encoding="utf-8") as f:
+        tab = f.read()
+    assert "self.rec_bots = {}" in tab, "录制页没初始化人机计数（会 AttributeError）"
+    assert "ucf_rec.parse_bots(lines)" in tab, "录制页没解析人机行"
+    assert '"who": self.rec_who_active' in tab, "录制开始没把 who 发给插件"
+    assert "def rec_bot_stats" in tab and "人机 %d 台 / %d 条" in tab, \
+        "录制页没显示人机台数 / 条数"
+
+
 def main():
+    check_bots()
     samples, events = build()
     res = ucf_rec.analyse(samples, step=4.0, events=events)
     print("summary:", ucf_rec.summary(res))
@@ -150,12 +257,12 @@ def main():
     for i in res["issues"]:
         print("  issue:", i)
     assert res["ok"], res.get("why")
-    # 只有 1.5~3.0 的那一跳能建链；6 m 的只标问题
-    assert len(res["jumps"]) == 1, "应只建 1 条跳链，实际 %d" % len(res["jumps"])
-    j = res["jumps"][0]
-    assert j["kind"] == "mount" and abs(j["l3"] - 2.25) < 0.1, j
-    assert res["links_bad"] == 1, res["links_bad"]
-    assert any("太长" in i for i in res["issues"]), res["issues"]
+    # 2026-11-27 起不设上限：2.25 m 和 6.0 m 两跳都要建链，不再有「太长」
+    assert len(res["jumps"]) == 2, "应建 2 条跳链，实际 %d" % len(res["jumps"])
+    j = [x for x in res["jumps"] if x["kind"] == "mount"][0]
+    assert abs(j["l3"] - 2.25) < 0.1, j
+    assert res["links_bad"] == 0, res["links_bad"]
+    assert not any("太长" in i for i in res["issues"]), res["issues"]
     # 落下：单向边
     assert len(res["drops"]) == 1 and abs(res["drops"][0]["drop"] - 4.0) < 0.3, res["drops"]
     # 蹲点已经删掉：结果里永远是空
@@ -166,7 +273,7 @@ def main():
     lines = ucf_rec.save_lines(res)
     text = "\n".join(lines)
     assert "node add " in text and "edge add " in text
-    assert text.count("jump add") == 1, "只该有 1 条 jump add"
+    assert text.count("jump add") == 2, "两跳两条 jump add"
     print("save lines: %d（node %d / edge %d / jump %d）" % (
         len(lines), text.count("node add"), text.count("edge add"), text.count("jump add")))
 
@@ -219,23 +326,61 @@ def main():
     assert txt.count("jump add") == 2, txt
     assert not ucf_rec.dedupe_lines(ucf_rec.save_lines(r6), txt), "两跳不该被去重掉"
 
-    # 断口：被拒的 6 m 跳要报出来，不能静默
-    assert len(res["gaps"]) >= 1, res["gaps"]
+    # 断口：6 m 跳现在建链了，所以四段路应当首尾相连，一个断口都没有
+    assert len(res["gaps"]) == 0, res["gaps"]
     # 连通性：覆盖率 100%，没有孤立点
     assert res["coverage"] >= 95.0, res["coverage"]
     assert res["orphans"] == [], res["orphans"]
 
-    # 超长跳开关：5.5 m 默认丢（上限 5.0）、报断口；打开后建链
+    # 5.9 m 的跳：2026-11-27 起默认就建链（上限取消），也不再提示「人机做不了」
     s3, e3 = build_long_jump()
     r7 = ucf_rec.analyse(s3, step=1.5, events=e3)
-    print("long jump default -> links %d gaps %d" % (len(r7["jumps"]), len(r7["gaps"])))
-    assert not r7["jumps"] and len(r7["gaps"]) == 1, (r7["jumps"], r7["gaps"])
-    assert any("断开" in i for i in r7["issues"]), r7["issues"]
-    sw2 = dict(ucf_rec.SW_DEFAULT)
-    sw2["long_jump"] = True
-    r8 = ucf_rec.analyse(s3, step=1.5, events=e3, sw=sw2)
-    print("long jump switch on -> links %d gaps %d" % (len(r8["jumps"]), len(r8["gaps"])))
-    assert len(r8["jumps"]) == 1 and not r8["gaps"], (r8["jumps"], r8["gaps"])
+    print("long jump -> links %d gaps %d" % (len(r7["jumps"]), len(r7["gaps"])))
+    assert len(r7["jumps"]) == 1 and not r7["gaps"], (r7["jumps"], r7["gaps"])
+    assert not any("太长" in i or "人机做不了" in i for i in r7["issues"]), r7["issues"]
+
+    # 主动起跳判据（2026-11-27 风暴 6.93 m 蹲跳：落点低 0.735 m，以前被判成 down 后静默丢掉）
+    assert ucf_rec._kind(6.93, -0.735, 9.5, 0.73) == "gap", "主动起跳不该记成 down"
+    assert ucf_rec._kind(6.93, -0.735, 0.0, 0.73) == "down", "没起跳速度就是跳下"
+    assert ucf_rec._kind(6.93, -0.735, 9.5, 0.1) == "down", "滞空太短不算主动跳"
+    assert ucf_rec._kind(1.0, 1.9, 10.0, 0.4) == "mount", "往上跳还是 mount"
+    assert ucf_rec._kind(0.2, 0.0, 10.0, 0.4) == "hop", "原地小跳"
+
+    # 小落差 down（0.735 m）：以前什么都不建也不吭声，现在要建单向边 + 提一句
+    s4, e4 = build_small_drop()
+    r9 = ucf_rec.analyse(s4, step=4.0, events=e4)
+    print("small drop -> drops %d issues %s" % (
+        len(r9["drops"]), [i for i in r9["issues"] if "落下" in i][:1]))
+    assert len(r9["drops"]) == 1 and r9["drops"][0]["small"], r9["drops"]
+    assert any("落下" in i for i in r9["issues"]), r9["issues"]
+    txt9 = "\n".join(ucf_rec.save_lines(r9))
+    a9, b9 = r9["drops"][0]["a"], r9["drops"][0]["b"]
+    one = "edge add %.3f %.3f %.3f %.3f %.3f %.3f" % (a9[0], a9[1], a9[2], b9[0], b9[1], b9[2])
+    back = "edge add %.3f %.3f %.3f %.3f %.3f %.3f" % (b9[0], b9[1], b9[2], a9[0], a9[1], a9[2])
+    assert one in txt9 and back not in txt9, "落下只该有 A->B 单向边"
+
+    # 跳下高台（净下落 8.7 m）：只写单向边，不建跳链
+    s6, e6 = build_big_drop_jump()
+    r11 = ucf_rec.analyse(s6, step=4.0, events=e6)
+    print("big drop jump -> jumps %d drops %d" % (len(r11["jumps"]), len(r11["drops"])))
+    assert not r11["jumps"] and len(r11["drops"]) == 1, (r11["jumps"], r11["drops"])
+    assert any("跳下" in i for i in r11["issues"]), r11["issues"]
+    assert not any(l.startswith("jump add") for l in ucf_rec.save_lines(r11))
+
+    # 控制台是常驻进程：这个模块刚从磁盘加载，code_stale() 必须是 False
+    assert ucf_rec.code_stale() is False, "刚加载的模块不该被判成旧代码"
+
+    # 蹲：事件带 ct -> jump add 第 10~12 列；插件 nav_load 能读回来
+    s5, e5 = build_crouch_jump()
+    r10 = ucf_rec.analyse(s5, step=4.0, events=e5)
+    assert len(r10["jumps"]) == 1, r10["issues"]
+    cj = r10["jumps"][0]
+    assert abs(cj["ct0"] - 0.57) < 1e-6 and cj["ct1"] < 0 and cj["ctb"] == 0, cj
+    line10 = [l for l in ucf_rec.save_lines(r10) if l.startswith("jump add")][0]
+    assert line10.endswith(" 0.57 -1.00 0"), line10
+    print("crouch jump -> %s" % line10)
+    # 净下落的主动跳只留单向边
+    assert cj["oneway"], cj
 
     print("OK: ucf_rec 自检通过")
     return 0

@@ -8,7 +8,7 @@ r"""自检：目录树没被放乱（2026-11-24 重构 + 2026-11-27 一图一夹
   1) 根目录 = 7 个文件夹（app data docs log run src archive），旧的 console/core/tools/
      tests/geo/navdata/payload/build 不能回来
   2) app/ 下有 ui / tabs / core / workbench / tools / tests，入口 app/控制台.pyw 在
-  3) 11 个页签各有一个文件；ui 的 8 个共用件都在
+  3) 9 个页签各有一个文件；ui 的 8 个共用件都在
   4) data/geo、data/navdata/{native,dev}、run/payload、log/ 在
   5) 各入口脚本还带着 .ucfroot 上溯那 4 行（否则搬目录就找不到项目根）
   6) README 里写的入口路径与实际一致（抽查 app/ui、app/tabs）
@@ -61,8 +61,8 @@ def main():
     check(os.path.isfile(j("app", "core", "ucf_paths.py")), "路径真相 app/core/ucf_paths.py 在")
 
     print("== 3) 页签与共用件")
-    for t in ("map.py", "vis.py", "hotkey.py", "waypoint.py", "overview.py",
-              "data.py", "autotest.py"):
+    for t in ("map.py", "vis.py", "waypoint.py", "overview.py",
+              "data.py", "autotest.py"):     # 2026-11-27：hotkey.py（快捷键页）已停用
         check(os.path.isfile(j("app", "tabs", t)), "页签 app/tabs/%s 在" % t)
     for d, f, name in (("record", "tab.py", "录制"), ("deploy", "deploy_tab.py", "部署"),
                        ("dev", "tab.py", "开发者选项")):
@@ -102,7 +102,7 @@ def main():
     if FAIL:
         print("\n!! %d 项没过" % len(FAIL))
         return 1
-    print("\nOK: 目录树与 README 一致（根目录 8 个文件夹，页签 11 个，共用件 8 个）")
+    print("\nOK: 目录树与 README 一致（根目录 8 个文件夹，页签 9 个，共用件 8 个）")
     return 0
 
 

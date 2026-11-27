@@ -58,6 +58,31 @@ GEARS = (10, 20, 30, 60)
 import ucf_sample  # noqa: E402
 from ucf_sample import FIELDS, FIELDS_V1, JUMP_KEYS, KINDS, SCHEMAS  # noqa: E402,F401
 
+#: 采集对象（who）：控制台「原始轨迹采集」的 玩家 / 人机 / 全部，和录制页同一套语义。
+#: 显示名 ↔ 插件值；控制台把选择存进 ucf_mod.json 的 trace.who（2026-11-27 用户要求记住），
+#: 下次打开控制台按上次的选择恢复。
+WHO_LABELS = {"player": "玩家", "bots": "人机", "all": "全部"}
+_WHO_ALIASES = {
+    "player": "player", "玩家": "player", "1": "player",
+    "bots": "bots", "人机": "bots", "2": "bots",
+    "all": "all", "全部": "all", "3": "all",
+}
+
+
+def who_value(raw, default="player"):
+    r"""配置 / 界面上的采集对象 -> 插件值；认不出就用 default（正常是「玩家」）。
+
+    除了 player / bots / all，也认中文和 1/2/3：旧配置或手改过的 ucf_mod.json
+    不会把「上次的选择」悄悄弄丢（2026-11-27）。
+    """
+    key = str(raw if raw is not None else "").strip().lower()
+    return _WHO_ALIASES.get(key, default)
+
+
+def who_label(value):
+    r"""插件值 -> 界面显示名；认不出按「玩家」显示。"""
+    return WHO_LABELS.get(who_value(value), "玩家")
+
 #: 站立时眼睛离地高度的兜底值（识别不出来时用）
 EYE_DEFAULT = 1.60
 
@@ -104,8 +129,17 @@ def _jump(d):
 
 
 def scan(path, offset=0):
-    r"""增量读取（实现见 core/ucf_sample.scan；人机行不算进样本数）。"""
+    r"""增量读取（实现见 core/ucf_sample.scan；人机行不算进玩家样本数）。"""
     return ucf_sample.scan(path, offset)
+
+
+def scan_counts(path, offset=0):
+    r"""增量读取并分开数：-> (offset, 玩家样本数, 人机样本数, 最后玩家样本, end)。
+
+    控制台采集中要同时显示「玩家 N / 人机 M」；实时 Hz 只按玩家样本算，
+    人机是 10 Hz 固定闸门，混进去会把实测频率拉低。
+    """
+    return ucf_sample.scan_counts(path, offset)
 
 
 def read_full(path):
@@ -179,8 +213,8 @@ def summary_rows(rows):
 
 
 def summary(path):
-    r"""文件 -> 摘要 dict；顺便带上 header 里的图名/包名/坐标来源。"""
-    hdr, rows, jumps, end = read_full(path)
+    r"""文件 -> 摘要 dict；带上 header 的图名/包名/坐标来源，以及玩家/人机各自的样本数。"""
+    hdr, rows, jumps, bots, end = ucf_sample.split_file(path)
     sm = summary_rows(rows)
     sm["map"] = hdr.get("map") or ""
     sm["label"] = hdr.get("label") or ""
@@ -189,7 +223,14 @@ def summary(path):
     sm["schema"] = hdr.get("schema") or ""
     sm["src"] = hdr.get("src") or ("camera" if hdr.get("schema") == "ucf-trace/1" else "")
     sm["hz_set"] = hdr.get("hz") or 0
+    sm["who"] = hdr.get("who") or ""           # 3 版：采集对象 player / bots / all
     sm["ticks"] = (end or {}).get("ticks")     # 插件采样定时器派发次数（新 DLL 才有）
+    # 人机样本行数：按行数最准（没有 end 也能算），end 里的 bots 只作兜底
+    try:
+        end_bots = int((end or {}).get("bots") or 0)
+    except (TypeError, ValueError):
+        end_bots = 0
+    sm["bots"] = max(len(bots), end_bots)
     sm["jumps"] = len(jumps)                   # 插件结算好的跳事件（2 版才有）
     sm["jump_kinds"] = {}
     for j in jumps:
@@ -218,14 +259,24 @@ def starved(sm):
 
 
 def summary_text(sm):
-    r"""一行中文摘要（控制台状态条 / 命令行共用）。"""
-    if not sm or not sm.get("samples"):
+    r"""一行中文摘要（控制台状态条 / 命令行共用）。玩家和人机分开报。"""
+    if not sm or not (sm.get("samples") or sm.get("bots")):
         return "没有样本"
-    txt = ("%d 样本 · %.1f s · 平均 %.1f Hz（档位 %s Hz） · 走 %.1f m · "
-           "空格 %d 次 · 空中 %.1f s · Ctrl %.1f s · Shift %.1f s · 传送 %d"
-           % (sm["samples"], sm["duration"], sm["hz"], sm.get("hz_set") or "?",
-              sm["dist"], sm["jumps"], sm["air"], sm["crouch"], sm["run"],
-              sm["warps"]))
+    who = who_label(sm["who"]) if sm.get("who") else ""
+    head = "采集对象：%s · " % who if who else ""
+    try:
+        bots = int(sm.get("bots") or 0)
+    except (TypeError, ValueError):
+        bots = 0
+    if not sm.get("samples"):
+        return head + "没有玩家样本 · 人机样本 %d 条" % bots
+    txt = head + ("%d 玩家样本 · %.1f s · 平均 %.1f Hz（档位 %s Hz） · 走 %.1f m · "
+                  "空格 %d 次 · 空中 %.1f s · Ctrl %.1f s · Shift %.1f s · 传送 %d"
+                  % (sm["samples"], sm["duration"], sm["hz"], sm.get("hz_set") or "?",
+                     sm["dist"], sm["jumps"], sm["air"], sm["crouch"], sm["run"],
+                     sm["warps"]))
+    if bots:
+        txt += " · 人机样本 %d 条" % bots
     if sm.get("jumps"):
         kinds = sm.get("jump_kinds") or {}
         parts = ["%s %d" % (k, kinds[k]) for k in ("gap", "mount", "down", "hop") if kinds.get(k)]

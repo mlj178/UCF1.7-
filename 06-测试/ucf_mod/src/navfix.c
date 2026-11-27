@@ -144,6 +144,123 @@ static P point_graph(P astar) {
   return pg;
 }
 
+/* ---- 2026-11-27：给「纯面图」现场补一张 PointGraph ---------------------------
+ * 胜利广场 / 死亡擂台 的场景 A* 里只有 NavMeshGraph，连 PointGraph 对象都没有：
+ * 插件没有 AddNode 的地方，控制台也就没法给它们画点。
+ * 这里手工造一张 0 节点的 PointGraph 挂进 AstarData.graphs，再让这张图自己 Scan 一次。
+ * 为什么不走 AstarData.AddGraph(Type)：A* 4.x 里它先按 serialized 的 graphTypes 找类型，
+ * 纯面图那一项是空的，大概率直接返回 null（而且 string/Type 两个 overload 同名同参数个数，
+ * 用 class_get_method_from_name 取不准）。手工挂数组不用赌这些。
+ * 造失败只记日志 + 返回 0，调用方按「没有点图」的老路走；一张图只试一次（换图 navfix_pg_reset）。 */
+static P g_pgCls;
+static P g_pgNavCls;
+static int g_pgTried;
+static int g_pgDead;
+
+void navfix_pg_reset(void) { g_pgTried = 0; }
+
+static P pg_class_from_assemblies(void) {
+  int na = 0, i;
+  P arr = i_domain_get_assemblies ? i_domain_get_assemblies(i_domain_get(), &na) : 0;
+  if (!arr) return 0;
+  for (i = 0; i < na; i++) {
+    P asm_ = *(P*)((char*)arr + 0x10 + i*4);
+    P img = (asm_ && i_assembly_get_image) ? i_assembly_get_image(asm_) : 0;
+    P c;
+    if (!img) continue;
+    c = i_class_from_name(img, "", "PointGraph");
+    if (!c) c = i_class_from_name(img, "Pathfinding", "PointGraph");
+    if (c) return c;
+  }
+  return 0;
+}
+
+P navfix_add_point_graph(void) {
+  P astar, data, old, elem, neu, pg, nm, scanM;
+  int n;
+  void* excp = 0;
+  astar = astar_active();
+  if (!n_live(astar)) return 0;
+  pg = point_graph(astar);
+  if (pg) return pg;                       /* 本来就有：不重复造 */
+  if (g_pgDead || g_pgTried) return 0;
+  data = *(P*)((char*)astar + 0x10);
+  if (!data) return 0;
+  g_pgTried = 1;
+  if (!g_pgCls) g_pgCls = pg_class_from_assemblies();
+  if (!g_pgCls) { g_pgDead = 1; nlog("pointgraph: class PointGraph not found"); return 0; }
+  old = *(P*)((char*)data + 0x20);
+  n = old ? *(int*)((char*)old + 0xC) : 0;
+  if (n < 0 || n > 15) { g_pgDead = 1; nlog("pointgraph: bad graph count %d", n); return 0; }
+  /* 数组元素类型必须是 NavGraph：从现有数组的 klass 取；一个图都没有时退到 PointGraph 的父类 */
+  elem = (old && n > 0 && i_class_get_element_class)
+         ? i_class_get_element_class(*(P*)old) : 0;
+  if (!elem) elem = i_class_get_parent(g_pgCls);
+  if (!elem || !i_array_new || !g_pgCls) {
+    g_pgDead = 1; nlog("pointgraph: element class missing");
+    return 0;
+  }
+  neu = i_array_new(elem, (unsigned)(n + 1));
+  pg = i_object_new(g_pgCls);
+  if (!neu || !pg) { g_pgDead = 1; nlog("pointgraph: alloc failed"); return 0; }
+  if (n > 0) memcpy((char*)neu + 0x10, (char*)old + 0x10, (size_t)n * 4);
+  wfield(pg, 0x08, astar);                        /* NavGraph.active */
+  nm = i_string_new("UCF PointGraph");
+  if (nm) wfield(pg, 0x2C, nm);                   /* NavGraph.name */
+  *(unsigned*)((char*)pg + 0x28) = (unsigned)n;   /* graphIndex */
+  *(float*)((char*)pg + 0xC0) = 2.1f;             /* PointGraph.maxDistance（运输船同款） */
+  *(unsigned char*)((char*)pg + 0xD0) = 0;        /* raycast */
+  *(P*)((char*)pg + 0xE8) = 0;                    /* nodes */
+  *(int*)((char*)pg + 0xEC) = 0;                  /* nodeCount */
+  *(P*)((char*)neu + 0x10 + n*4) = pg;
+  wfield(data, 0x20, neu);                        /* AstarData.graphs = 新数组 */
+  /* 让这张空图自己 Scan 一次（NavGraph.Scan()，0 参）：nodes / lookupTree 建起来，
+   * 之后 PointGraph.AddNode 才有地方落。失败不影响「图已挂上」这个事实，只记一笔。 */
+  if (!g_pgNavCls) g_pgNavCls = i_class_get_parent(g_pgCls);
+  scanM = i_class_get_method_from_name(g_pgCls, "Scan", 0);
+  if (!scanM && g_pgNavCls) scanM = i_class_get_method_from_name(g_pgNavCls, "Scan", 0);
+  if (scanM && i_runtime_invoke) {
+    i_runtime_invoke(scanM, pg, 0, &excp);
+    if (excp) nlog("pointgraph: Scan() threw (graph still added)");
+  } else {
+    nlog("pointgraph: Scan() not found (graph added, unscanned)");
+  }
+  nlog("pointgraph: created -> graphs %d -> %d, nodes %d",
+       n, n + 1, *(int*)((char*)pg + 0xEC));
+  return pg;
+}
+
+/* 2026-11-27：纯面图补完点图以后，把这张图的可走面（NavMeshGraph）从 A* 里摘掉。
+ * 不摘的话人机取「脚下最近节点」永远落在三角网上（A* 多图共存时不会跨图连边），
+ * 画的点等于没画。用 A* 官方的 AstarData.RemoveGraph 路线，失败只记日志。
+ * 只在「本图的 PointGraph 是我们现场补的」时候调用，正常图永远不碰。 */
+int navfix_drop_navmesh(void) {
+  P astar = astar_active();
+  P data, graphs, cls, m, g = 0;
+  int n, i;
+  void* args[1];
+  void* exc = 0;
+  if (!n_live(astar)) return 0;
+  data = *(P*)((char*)astar + 0x10);
+  if (!data) return 0;
+  graphs = *(P*)((char*)data + 0x20);
+  n = graphs ? *(int*)((char*)graphs + 0xC) : 0;
+  for (i = 0; i < n; i++) {
+    P gg = *(P*)((char*)graphs + 0x10 + i * 4);
+    const char* cn = gg ? i_class_get_name(*(P*)gg) : 0;
+    if (cn && strstr(cn, "NavMesh")) { g = gg; break; }
+  }
+  if (!g) return 0;                       /* 没可走面：没什么可摘的 */
+  cls = *(P*)data;                        /* AstarData 的运行时类 */
+  m = i_class_get_method_from_name ? i_class_get_method_from_name(cls, "RemoveGraph", 1) : 0;
+  if (!m || !i_runtime_invoke) { nlog("navmesh: RemoveGraph 没找到，可走面保留"); return 0; }
+  args[0] = g;
+  i_runtime_invoke(m, data, args, &exc);
+  if (exc) { nlog("navmesh: RemoveGraph threw，可走面保留"); return 0; }
+  nlog("navmesh: 已摘掉 NavMeshGraph（纯面图改成走补出来的点图）");
+  return 1;
+}
+
 /* 诊断：把 AstarPath 里每一张图都打出来（类型名 + 关键字段），
  * 用来确认“真实的路点图”到底是哪一张、是不是 PointGraph。 */
 void navfix_diag_graphs(void) {

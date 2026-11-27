@@ -16,10 +16,13 @@ r"""录制轨迹的解析 / 重采样 / 事件识别 —— 控制台「录制�
 
 识别规则（2026-11-24 按真实采集数据重做；改阈值只改下面常量）：
 
-    跳链    插件给的 gap / mount 事件，**3D 长度 1.5~3.0 m** 才落链
-            （游戏硬规则：两端 1 m 内吸附、两点之间要有 A->B 边、原生最长 2.91 m）。
-            超长 / 太短的不建链，写进 issues —— 让人一眼看到「这一跳人机做不了」。
-    落下    down 事件（落点比起点低 >= 2 m）-> 单向边，不建跳链。
+    判类    落点比起点高 0.5 m 以上 = mount；**主动起跳（v0>=9 且滞空>=0.3 s）落点低也
+            算 gap**，不当 down（2026-11-27：蹲跳落地低一点被记成「跳下」就整条丢了）。
+    跳链    插件给的 gap / mount 事件，**3D 长度 >= 1.5 m 就落链**，不设上限
+            （游戏硬规则：两端 1 m 内吸附、两点之间要有 A->B 边）。
+            太短的不建链，写进 issues —— 让人一眼看到「这一跳人机做不了」。
+            带蹲的跳把蹲的起止写进 jump add 的第 10~12 列（见 save_lines）。
+    落下    down 事件 -> 单向边，不建跳链；落差 < 2 m 的也建，只在 issues 里提一句。
     岔路    2.5 m 内第二次经过 -> 标黄候选（保存仍按双向边）。
     静止    2 s 没位移 -> 复盘里写一句，不影响节点。
     蹲点    **不再识别**（2026-11-24 用户要求删除：没用）。
@@ -31,6 +34,7 @@ r"""录制轨迹的解析 / 重采样 / 事件识别 —— 控制台「录制�
 import math
 import os
 import sys
+import time
 
 try:
     import ucf_sample
@@ -42,14 +46,21 @@ except ImportError:          # 单独 import 时（app/core 不在 sys.path）�
 
 # ---- 阈值（改这里；控制台「录制」页的说明文字按这几行写）----
 LINK_MIN = 1.5        # 游戏跳链最短 3D 长度（再短人机就「原地跳」）
-# 游戏跳链最长 3D 长度。
-# 2026-11-26 实测（风暴 10 Hz 人机录制）：人机在 9 m/s 助跑下真的跨过了 5.22 m 的链，
-# 一路连跳到 13.99；原生 41 条最长 2.91 m 只是作者摆得短，不是引擎上限。
-LINK_MAX = 5.5
-LINK_MAX_LONG = 6.0   # 「超长跳也建链」打开时的上限：只给实测用，不确定人机真能跳
-# 连续两跳合并（落点 = 下一起点）后的上限：固定 3.0，不跟着 LINK_MAX 放宽。
+# 最长：**不再设上限**（2026-11-27 用户要求）。
+# 5.5 / 6.0 本来就是我们猜的窗口：2026-11-26 实测人机在 9 m/s 助跑下跨过了 5.22 m，
+# 2026-11-27 又要试 6.97 m 的蹲跳 —— 长度到底能不能跳，进游戏看，录制端不拦、也不提示。
+LINK_MAX = float("inf")
+# 连续两跳合并（落点 = 下一起点）后的上限：固定 3.0，不跟着放宽。
 # 理由：合并会把「两次 2.5 m 的小跳」接成一条 4~5 m 的链，人机只会跳一次 —— 危险。
 MERGE_MAX_L3 = 3.0
+# 主动起跳的判据（2026-11-27）：游戏 JumpPower=10.5，实测起跳 v0 落在 9.5~10.5；
+# 滞空 0.3 s 大约 0.4 m 高。两条都够 = 是「跳」，不是「掉下去」——落点低一点也别记成 down。
+ACTIVE_V0 = 9.0
+ACTIVE_AIR = 0.3
+# 但净下落超过这个高度就是「从高台跳下来」，不是跨缺口：只写单向边，不建跳链。
+# 2026-11-27 实测：跳下 8.7 m 的落地被当成「跨缺口」，建了一条 13.2 m 的跳链 ——
+# 人机真会去跳它，跳不过去就掉在原地打转。落差不大的（0.5~3 m）仍然建链。
+LINK_DROP_MAX = 3.0
 RISE_TYP = (1.2, 2.6)  # 常规跳高（实测 1.2~2.3；游戏 JumpPower=10.5 决定约 1.9 m）
 DROP_MIN = 2.0        # down 事件落点低多少算「落下」
 BRANCH_NEAR = 2.5     # 2.5 m 内第二次经过 = 岔路候选
@@ -67,21 +78,17 @@ CORNER_REACH = 1.20   # 判断转角时前后各看 1.2 m
 
 SWITCHES = (
     ("jump",   "自动识别跳跃 / 跳上高台",
-     "插件结算的跳事件；3D 长度 1.5~3.0 m 才建跳链，超出的只标出来"),
+     "插件结算的跳事件；3D >= 1.5 m 就建跳链（2026-11-27 起不设上限，能不能跳进游戏看）"),
     ("drop",   "自动识别落下",
-     "落点比起点低 >= 2 m -> 单向边（不建跳链）"),
+     "down 事件 -> 单向边；落差 < 2 m 的也建，只在复盘里提一句"),
     ("branch", "自动识别岔路",
      "2.5 m 内第二次经过 -> 标黄待确认"),
     ("static", "静止提示",
      "2 s 没位移 -> 复盘里写一句，不加节点"),
-    ("long_jump", "超长跳也建链（实测用）",
-     "5.5~6 m 的跳也生成 jump；人机能不能跳过去得进游戏看，默认关"),
     ("need_speed", "跳链写助跑速度（实测用）",
      "已实测：人机到跳点不会助跑，needSpeed>0 就永远不跳（顶着墙走）。别开，保持 0"),
 )
 SW_DEFAULT = {key: True for key, _l, _d in SWITCHES}
-# 「超长跳也建链」是实测开关，默认关：3 m 以上能不能跳过去还没验证过
-SW_DEFAULT["long_jump"] = False
 SW_DEFAULT["need_speed"] = False
 # 采样间距：1.5 给窄道 / 拐角多的图，4 是默认。
 # 2026-11-26 实测（风暴 50.9 m 轨迹）：2.5 m 时折线偏离真实脚步 p90 9 cm / 最大 40 cm，
@@ -97,6 +104,44 @@ DP_EPS = 0.10
 COVER_R = 2.5     # 轨迹覆盖率：走路的采样点到最近节点 <= 这个距离算「覆盖到了」
 
 KIND_CN = {"gap": "跨缺口", "mount": "跳上高台", "down": "跳下", "hop": "原地小跳"}
+
+
+# 本模块被 import 的时刻。控制台是常驻进程，改了 ucf_rec.py 不重启就还是旧逻辑 ——
+# 2026-11-27 连踩两次（「录进去了但复盘没有跳链」），所以复盘页要能自己发现。
+_LOAD_TS = time.time()
+_FILE = os.path.abspath(__file__)      # 导入时定死：进程中途换工作目录也不会指错文件
+
+
+def code_stale():
+    r"""磁盘上的 ucf_rec.py 比本进程里加载的这份新 -> 复盘用的是旧逻辑。"""
+    try:
+        return os.path.getmtime(_FILE) > _LOAD_TS + 0.5
+    except OSError:
+        return False
+
+
+def dll_stale():
+    r"""run/build/ucf_mod.dll 比最新的 ucf_mod-<时间>-<hash>.dll 旧。
+
+    构建脚本编译完会把它复制成 ucf_mod.dll —— 但游戏开着的时候这个文件是锁着的，
+    复制会失败，于是「编译成功、游戏还在跑旧 DLL」。2026-11-27 就这样白测了两轮
+    （蹲跳驱动根本没加载）。这里按 mtime 判一下，复盘页直接提示。
+    """
+    try:
+        # ucf_rec.py 在 <项目根>/app/tabs/record/ → 往上 4 层才是项目根
+        root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(_FILE))))
+        d = os.path.join(root, "run", "build")
+        cur = os.path.join(d, "ucf_mod.dll")
+        if not os.path.isfile(cur):
+            return False
+        base_m = os.path.getmtime(cur)
+        newest = 0.0
+        for name in os.listdir(d):
+            if name.startswith("ucf_mod-") and name.endswith(".dll"):
+                newest = max(newest, os.path.getmtime(os.path.join(d, name)))
+        return newest > base_m + 5.0
+    except OSError:
+        return False
 
 
 def norm_switch(sw):
@@ -167,6 +212,39 @@ def _eye_base(samples):
     return gaps[len(gaps) // 2]
 
 
+def _ct_of(e):
+    r"""事件里的蹲信息 -> (ct0, ct1, ctb)。
+
+    插件写的原始事件是 "ct":[c0,c1] + "ctb"；ucf_sample.jump() 解析后是 ct0/ct1/ctb。
+    两种都要认（测试 / 手工构造的事件只给其中一种）。
+    """
+    c0, c1 = e.get("ct0"), e.get("ct1")
+    if c0 is None or c1 is None:
+        try:
+            c0, c1 = float(e["ct"][0]), float(e["ct"][1])
+        except (KeyError, TypeError, ValueError, IndexError):
+            c0, c1 = -1.0, -1.0
+    return float(c0), float(c1), (1 if e.get("ctb") else 0)
+
+
+def _kind(h, dy, v0, air):
+    r"""跳事件的种类。插件（editor.c jr_line）和这里的兜底必须**同一套判据**。
+
+    2026-11-27 加「主动起跳」：v0 >= 9 且滞空 >= 0.3 s 就是真跳，落点比起点低也按 gap，
+    不记 down —— 蹲跳 / 跨缺口落地低 0.5~1 m 的，以前一律被记成「跳下」，
+    然后因为落差不够 2 m 被静默丢掉（2026-11-27 风暴 6.93 m 蹲跳就是这么没的）。
+    """
+    if h < 0.5:
+        return "hop"
+    if dy > 0.5:
+        return "mount"
+    if v0 >= ACTIVE_V0 and air >= ACTIVE_AIR:
+        return "gap"
+    if dy < -0.5:
+        return "down"
+    return "gap"
+
+
 def detect_events(samples):
     r"""没有事件行时的兜底识别（读旧文件 / 插件没结算时）。
 
@@ -205,17 +283,12 @@ def detect_events(samples):
         A, B = samples[i - 1], samples[k]
         h = math.hypot(B["x"] - A["x"], B["z"] - A["z"])
         dy = B["y"] - A["y"]
-        if h < 0.5:
-            kind = "hop"
-        elif dy > 0.5:
-            kind = "mount"
-        elif dy < -0.5:
-            kind = "down"
-        else:
-            kind = "gap"
+        air = B["t"] - A["t"]
+        kind = _kind(h, dy, v, air)
         out.append({"t": B["t"], "a": (A["x"], A["y"], A["z"]), "b": (B["x"], B["y"], B["z"]),
-                    "h": h, "rise": apex - A["y"], "air": B["t"] - A["t"],
-                    "v0": v, "run": 0.0, "kind": kind, "est": True})
+                    "h": h, "rise": apex - A["y"], "air": air,
+                    "v0": v, "run": 0.0, "kind": kind, "est": True,
+                    "ct0": -1.0, "ct1": -1.0, "ctb": 0})
         i = k + 1
     return out
 
@@ -408,8 +481,8 @@ def _merge_nodes(pieces, links, drops, near=MERGE_NEAR, max_dy=0.5, lmax=LINK_MA
             out.append({"nodes": nodes, "walk": walk, "from": 0, "to": 0})
         return kept, out
 
-    # 录到时本来就在 1.5~3.0 窗口里的跳，两端原样保留（后面的去重也不再吸）。
-    # 不合格的跳（例如 4.16 m）不保护，照旧合并、最后由窗口过滤掉。
+    # 录到时本来就 >= 1.5 m 的跳，两端原样保留（后面的去重也不再吸）。
+    # 更短的跳不保护，照旧合并、最后由下限过滤掉。
     prot = []
     for ln in links:
         if not (LINK_MIN <= dist3(ln["a"], ln["b"]) <= lmax):
@@ -526,7 +599,7 @@ def analyse(samples, step=STEP_DEFAULT, sw=None, events=None):
     """
     sw = norm_switch(sw)
     step = float(step or STEP_DEFAULT)
-    lmax = LINK_MAX_LONG if sw.get("long_jump") else LINK_MAX
+    lmax = LINK_MAX          # 2026-11-27 起是 inf：只拦「太短」，不拦长
     out = {
         "ok": False, "why": "", "step": step, "sw": sw,
         "samples": len(samples or []), "duration": 0.0, "dist": 0.0,
@@ -574,27 +647,52 @@ def analyse(samples, step=STEP_DEFAULT, sw=None, events=None):
         a, b = e["a"], e["b"]
         l3 = dist3(a, b)
         dy = b[1] - a[1]
+        c0, c1, cb = _ct_of(e)
+        # 种类按同一套判据重算一遍，不直接信文件里的 kind：
+        # 老录制是旧插件判的（蹲跳被记成 down），重跑复盘也要能按新规则建链。
+        kind = _kind(math.hypot(b[0] - a[0], b[2] - a[2]), dy, e["v0"], e["air"])
         rec = {"a": a, "b": b, "h": e["h"], "rise": e["rise"], "air": e["air"],
-               "v0": e["v0"], "run": e["run"], "kind": e["kind"], "l3": l3,
+               "v0": e["v0"], "run": e["run"], "kind": kind, "l3": l3,
+               "ct0": c0, "ct1": c1, "ctb": cb,
                "est": bool(e.get("est"))}
-        if e["kind"] == "down":
+        if kind == "down":
             if not sw["drop"]:
                 continue
-            if -dy >= DROP_MIN:
-                out["drops"].append(dict(rec, drop=-dy, hurt=(-dy) >= 6.0))
+            # 2026-11-27：落差 < 2 m 的也建单向边。以前这里是「够 2 m 才建，否则什么都不做
+            # 也不吭声」—— 风暴那次 0.735 m 的蹲跳就这样整条消失了，复盘里一句提示都没有。
+            drop = -dy
+            out["drops"].append(dict(rec, drop=drop, hurt=drop >= 6.0,
+                                     small=drop < DROP_MIN))
+            if drop < DROP_MIN:
+                out["issues"].append(
+                    "第 %.1f s 落下 %.2f m（< %.1f m）：也建了单向边 —— 落差小，"
+                    "人机可能直接走下去；嫌多余就删掉这条边"
+                    % (e["t"], drop, DROP_MIN))
+            continue
+        if dy <= -LINK_DROP_MAX:
+            # 净下落太多 = 跳下高台。给它一条单向边就够（和普通落下同一套处理），
+            # 不建跳链：13 m 的 Bot_JumpLink 人机只会去跳、跳不过去就卡在原地。
+            if sw["drop"]:
+                drop = -dy
+                out["drops"].append(dict(rec, drop=drop, hurt=drop >= 6.0, small=False))
+                out["issues"].append(
+                    "第 %.1f s 这一跳净下落 %.2f m：按「跳下」处理，只写单向边、没建跳链"
+                    % (e["t"], drop))
             continue
         if not sw["jump"]:
             continue
-        if LINK_MIN <= l3 <= lmax:
-            out["jumps"].append(rec)
-            out["links"].append({"kind": "jump", "a": a, "b": b, "h": e["h"], "l3": l3})
-        else:
+        if l3 < LINK_MIN:
             out["links_bad"] += 1
-            why = "太短（< %.1f m）" % LINK_MIN if l3 < LINK_MIN else "太长（> %.1f m）" % lmax
             out["skipped_jump"] += 1
             out["issues"].append(
-                "第 %.1f s 那一跳 %s：%s，3D %.2f m —— 人机用不了，没建跳链"
-                % (e["t"], KIND_CN.get(e["kind"], e["kind"]), why, l3))
+                "第 %.1f s 那一跳 %s：太短（< %.1f m），3D %.2f m —— 人机只会原地跳，没建跳链"
+                % (e["t"], KIND_CN.get(kind, kind), LINK_MIN, l3))
+            continue
+        # 主动跳但净下落：只留 A->B（从高处跳下去能走，跳回来本来就不成立）
+        rec["oneway"] = dy < -0.5
+        out["jumps"].append(rec)
+        out["links"].append({"kind": "jump", "a": a, "b": b, "h": e["h"], "l3": l3,
+                             "oneway": rec["oneway"]})
 
     # ---- 走下落差（没跳事件的离地）也要连上：单向落地边 ----
     if sw["drop"]:
@@ -638,19 +736,23 @@ def analyse(samples, step=STEP_DEFAULT, sw=None, events=None):
                 "这一跳 3D %.2f m，录到时助跑 %.1f m/s；人机不会助跑，可能跳不过去"
                 "（要么拆成两跳，要么在跳点前留出助跑段）" % (j["l3"], j["run"]))
 
-    # 合并后跳链长度可能变了一点，重新按窗口分一遍
+    # 合并后跳链长度可能变了一点，重新过一遍下限
     if out["jumps"]:
         keep = []
         for j in out["jumps"]:
-            if LINK_MIN <= j["l3"] <= lmax:
+            if j["l3"] >= LINK_MIN:
                 keep.append(j)
             else:
                 out["links_bad"] += 1
                 out["skipped_jump"] += 1
-                out["issues"].append("合并后这一跳 3D %.2f m 超出 1.5~3.0，没建跳链" % j["l3"])
+                out["issues"].append(
+                    "合并后这一跳只剩 3D %.2f m（< %.1f m），没建跳链" % (j["l3"], LINK_MIN))
         out["jumps"] = keep
     out["links"] = [{"kind": "jump", "a": j["a"], "b": j["b"],
                      "h": j["h"], "l3": j["l3"],
+                     "oneway": bool(j.get("oneway")),
+                     "ct0": float(j.get("ct0", -1.0)), "ct1": float(j.get("ct1", -1.0)),
+                     "ctb": int(j.get("ctb") or 0),
                      "run": float(j.get("run") or 0.0)} for j in out["jumps"]]
 
     # 2026-11-26：两跳的「落点 / 下一起点」靠得很近却没能合并，说明合并后会超过 3 m。
@@ -770,7 +872,7 @@ def analyse(samples, step=STEP_DEFAULT, sw=None, events=None):
                    % (out["coverage"], out["cover_worst"]))
     if out["gaps"]:
         iss.append("路线在 %d 处断开（%s）：这里没有人机可用的跳链或边，"
-                   "要么把跳分成两跳，要么打开「超长跳也建链」实测"
+                   "要么把跳分成两跳，要么补一条跳链"
                    % (len(out["gaps"]),
                       " / ".join("%.1f m" % g["d"] for g in out["gaps"])))
     if long_edges:
@@ -814,7 +916,13 @@ def save_lines(result, allow_both=True):
     r"""复盘结果 -> 包 txt 的增量行（只增不覆盖；去重由调用方做）。
 
     走路的边双向；跳链 = jump add + A->B（参数固定 0 / 0.5，和竞技场原生跳链一致）；
-    落下只 A->B。只有通过 3D 1.5~3.0 体检的跳才会写进来（超长的已经在 issues 里）。
+    落下只 A->B。3D >= 1.5 m 的跳都写（2026-11-27 起不设上限）。
+
+    jump add 的列（老文件只有前 9 列，后 3 列是 2026-11-27 加的蹲信息）：
+        A(3) B(3) needSpeed accuracy direction  ct0 ct1 ctb
+    ct0 / ct1 = 空中开始 / 结束蹲（相对起跳秒，-1 = 没蹲 / 蹲到落地）；
+    ctb = 起跳那一帧是否已经蹲着。插件进图时读这三列（editor.c nav_load），
+    就算不认也不会报错 —— 老插件只读前 9 列。
     """
     lines = []
     if not result or not result.get("ok"):
@@ -847,9 +955,15 @@ def save_lines(result, allow_both=True):
             need = 0.0
             if (result.get("sw") or {}).get("need_speed"):
                 need = max(0.0, min(9.9, round(float(link.get("run") or 0.0), 1)))
-            lines.append("jump add %s %s %.1f 0.5 0" % (_fmt(a), _fmt(b), need))
+            line = "jump add %s %s %.1f 0.5 0" % (_fmt(a), _fmt(b), need)
+            # 蹲：-1 / -1 / 0 也是有效值（= 录到了，全程没蹲），和「老文件没这三列」区分开
+            line += " %.2f %.2f %d" % (float(link.get("ct0", -1.0)),
+                                       float(link.get("ct1", -1.0)),
+                                       1 if link.get("ctb") else 0)
+            lines.append(line)
         lines.append("edge add %s %s" % (_fmt(a), _fmt(b)))
-        if allow_both:
+        # 净下落的跳只留 A->B：跳下去能走，从低处「走」回高处不成立
+        if allow_both and not link.get("oneway"):
             lines.append("edge add %s %s" % (_fmt(b), _fmt(a)))
     # 高处落地：只写 A->B 的**单向**边（人机走过去自然掉下去，不需要跳链）
     for d in result.get("drops") or []:

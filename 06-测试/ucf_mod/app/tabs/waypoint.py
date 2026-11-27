@@ -14,7 +14,7 @@ import customtkinter as ctk
 from ui.consts import CMP_COLOR, CMP_SHORT, CMP_TEXT, FONT_S
 from ui.maps import _navmesh_name, find_map_doc, load_maps, load_scene_counts, maps_not_listed
 from ui.packs import (
-    final_stats, load_packs, pack_summary, pack_target_fp, pack_txt,
+    final_stats, load_packs, pack_summary, pack_target_fp, pack_txt, runtime_fp,
 )
 from ui.util import _cut, file_sha256
 
@@ -32,6 +32,19 @@ class WaypointTab:
             ctk.CTkLabel(head, text=sub, font=FONT_S, text_color="#9aa0a6",
                          anchor="e").pack(side="right")
         return box
+
+    @staticmethod
+    def map_label(lv, lab, fp=""):
+        r"""地图下拉的显示名：纯面图加「· 纯面图」，一眼看出它为什么不能画点。"""
+        return ("%s（%s · 纯面图）" % (lab, lv)) if not fp else ("%s（%s）" % (lab, lv))
+
+    def is_face_map(self):
+        r"""当前这场图是不是「纯面图」：原生只有可走面、没有 PointGraph（胜利广场 / 死亡擂台）。
+
+        判据就是 load_maps() 给的指纹为空 —— 没有点图就没有指纹，也就没有 <指纹>.txt 草稿。
+        """
+        lv, _lab, fp = self.current_map() if hasattr(self, "opt_map") else ("", "", "")
+        return bool(lv) and not fp
 
     def wp_var(self, key, default):
         if key in self.vars:
@@ -55,8 +68,8 @@ class WaypointTab:
         并显示当前图的指纹与原生点/边数。
         """
         # 地图 / 启动档由本页持有；一张图只有一个草稿，不再有包/版本下拉。
-        self.maps = load_maps()                 # [(level, 中文名, 指纹)]
-        self.map_disp = {("%s（%s）" % (lab, lv)): (lv, lab, fp) for lv, lab, fp in self.maps}
+        self.maps = load_maps()                 # [(level, 中文名, 指纹)]；纯面图（没有 PointGraph）指纹是空串
+        self.map_disp = {self.map_label(lv, lab, fp): (lv, lab, fp) for lv, lab, fp in self.maps}
         pk = self.cfg.get("pack") if isinstance(self.cfg.get("pack"), dict) else {}
         self.pack_on = tk.BooleanVar(value=bool(pk.get("on", False)))
         self.pack_map = str(pk.get("map") or (self.maps[0][0] if self.maps else ""))
@@ -168,6 +181,14 @@ class WaypointTab:
             return
         lv, lab, fp = self.current_map() if hasattr(self, "opt_map") else ("", "", "")
         where = lab or lv or "这张图"
+        if self.is_face_map() and not self.draft_exists():
+            self.lbl_mode.configure(
+                text=("%s 是纯面图：原生只有可走面 %s，没有 PointGraph（A* 里连点图对象都没有）。"
+                      "点「开始编辑这张图」建空白草稿后，插件进图会现场补一张 0 点的点图，"
+                      "grow 时再把可走面摘掉 —— 人机只走你画的点（和飓风危城一样）。"
+                      % (where, _navmesh_name(lv))),
+                text_color="#f7cd74")
+            return
         if getattr(self, "page_is_edit", True):
             if self.draft_exists():
                 man = self.draft_manifest()
@@ -241,7 +262,7 @@ class WaypointTab:
             row, text="重置本图草稿", width=96, height=28, font=FONT_S,
             fg_color="#8a4b1e", hover_color="#a55d26", command=self.clear_pack_map)
         self.btn_reset_draft.pack(side="left")
-        # 危险操作贴右边，和「重置」隔开：重置=清内容（草稿还在），删除=整份挪走（回到没有草稿）
+        # 危险操作贴右边，和「重置」隔开：重置=清内容（草稿还在），删除=只搬草稿（图还在，回到没有草稿）
         self.btn_delete_draft = ctk.CTkButton(
             row, text="删除本图草稿", width=100, height=28, font=FONT_S,
             fg_color="#8a1c1c", hover_color="#a32424", command=self.delete_draft)
@@ -273,8 +294,9 @@ class WaypointTab:
             text="草稿目录：packs\\<序号_场景名中文名>\\，一张图一个，不再有包名/版本号。\n"
                  "两种底图：空白地图（grow，原生点全禁用、从 0 画）/ 原版基础 + 新增（keep，原版路线照常走，只加你的点）。\n"
                  "成品里已有这张图时，默认「从成品继续改」；两种建法都不限点数，飓风危城原生 0 点用「空白地图」。\n"
-                 "「重置本图草稿」只清内容（草稿还在，接着画）；「删除本图草稿」整份挪到 archive\\pack_trash\\，"
-                 "这张图回到「还没有草稿」，成品不动。\n"
+                 "「重置本图草稿」只清内容（草稿还在，接着画）；「删除本图草稿」只把草稿三件"
+                 "（manifest.json / <指纹>.txt / nogen.txt）挪到 archive\\pack_trash\\，"
+                 "这张图回到「还没有草稿」；点图 map.json / 可走面 / 成品 / 标记都不动。\n"
                  "守卫区 / 守卫点 / 蹲守点 / 标签 / 出生点 不在草稿 txt 里，存在 markers\\<图>\\markers.txt；"
                  "「删除本图草稿」默认连它们一起清（弹窗里可取消勾选），也能单独点「清空本图标记」"
                  "（都先挪到 archive\\markers_trash\\，误清能挪回）。",
@@ -384,7 +406,10 @@ class WaypointTab:
     def compare_groups(self):
         r"""[(fp, 左=编辑中, 右=成品条目, 状态)]：每张有草稿的图一组，外加只在成品的图。"""
         fmaps = dict(final_stats().get("maps") or {})
-        known = {fp: (lv, lab) for lv, lab, fp in self.maps}
+        known = {fp: (lv, lab) for lv, lab, fp in self.maps if fp}
+        for lv, lab, fp0 in self.maps:          # 纯面图：草稿文件名/成品都是运行期指纹 n0-…
+            if not fp0:
+                known[runtime_fp(lv, fp0)] = (lv, lab)
         rows, used = [], set()
         for pid in load_packs():
             fp = pack_target_fp(pid)
@@ -525,6 +550,14 @@ class WaypointTab:
         if not hasattr(self, "wp_meta"):
             return
         lv, lab, fp = self.current_map() if hasattr(self, "opt_map") else ("", "", "")
+        if not fp:
+            has = self.draft_exists()
+            self.wp_meta.configure(
+                text="指纹 %s · 纯面图（原生没有 PointGraph，只有可走面 %s）· %s"
+                     % (runtime_fp(lv, fp) if has else "—", _navmesh_name(lv),
+                        "草稿有：插件进图补一张 0 点图再套草稿" if has else "草稿无"))
+            self.refresh_draft_panel()
+            return
         doc, _path = find_map_doc(fp)
         counts = (doc or {}).get("counts") or {}
         nodes = int(counts.get("nodes") or 0)
@@ -543,6 +576,7 @@ class WaypointTab:
         if not hasattr(self, "lbl_draft"):
             return
         lv, lab, fp = self.current_map() if hasattr(self, "opt_map") else ("", "", "")
+        self.btn_start_draft.configure(command=self.start_or_open_draft)
         exists = self.draft_exists()
         if exists:
             man = self.draft_manifest()
@@ -588,14 +622,20 @@ class WaypointTab:
                 self.btn_clear_markers.configure(state="disabled", fg_color="#3a3f47")
         except Exception:                 # noqa: BLE001
             pass
+        face = self.is_face_map()
         fmap = (final_stats().get("maps") or {}).get(fp) or {}
         try:
-            self.btn_promote.configure(state="normal" if exists else "disabled",
-                                       fg_color="#2f9e44" if exists else "#3a3f47")
+            self.btn_promote.configure(state="normal" if (exists and not face) else "disabled",
+                                       fg_color="#2f9e44" if (exists and not face) else "#3a3f47")
         except Exception:                     # noqa: BLE001
             pass
         if hasattr(self, "lbl_publish"):
-            if fmap:
+            if face:
+                self.lbl_publish.configure(
+                    text="纯面图：插件进图现场补点图，只能停在「编辑中」。"
+                         "成品档按指纹找文件，三张 0 点图（飓风危城 / 胜利广场 / 死亡擂台）指纹相同会互相覆盖。",
+                    text_color="#f7cd74")
+            elif fmap:
                 self.lbl_publish.configure(
                     text="成品里已有这张图（%d 点 / %d 边，%s 发布）；发布会覆盖，旧文件自动留快照。" % (
                         fmap.get("node", 0), fmap.get("edge", 0),

@@ -15,7 +15,7 @@ import tkinter as tk
 import customtkinter as ctk
 
 from ui.consts import FONT, FONT_S
-from ui.env import REC_RAW, ucf_rec
+from ui.env import REC_RAW, ucf_rec, ucf_trace
 from ui.packs import pack_dir, pack_manifest, pack_txt, write_nav_cmd
 from ui.util import game_running, tail_log
 
@@ -39,13 +39,16 @@ class RecordTab:
         except (TypeError, ValueError):
             step = ucf_rec.STEP_DEFAULT
         rec["step"] = step if step in ucf_rec.STEP_OPTIONS else ucf_rec.STEP_DEFAULT
-        if rec.get("who") not in ("player", "bots", "all"):
-            rec["who"] = "player"     # 采集对象：玩家 / 人机 / 全部
+        # 采集对象：玩家 / 人机 / 全部（和「开发者选项 → 原始轨迹采集」同一套 who，
+        # 中文 / 1·2·3 旧写法也能认；这里单独记 rec.who）
+        rec["who"] = ucf_trace.who_value(rec.get("who"))
         self.rec = rec
         self.rec_state = "ready"
         self.rec_file = ""
         self.rec_samples = []
         self.rec_events = []
+        self.rec_bots = {}         # 人机样本：id -> [rows]；只观察，不进路点
+        self.rec_who_active = "player"   # 这一段真正用的 who（中途改选只影响下一段）
         self.rec_result = None
         self.rec_paused = False
         self.rec_busy = False
@@ -160,9 +163,9 @@ class RecordTab:
             unselected_color="#2a2f36", unselected_hover_color="#343a42",
             command=self.on_rec_who)
         self.rec_who_seg.pack(side="left")
-        self.rec_who_seg.set({"player": "玩家", "bots": "人机", "all": "全部"}[self.rec["who"]])
-        ctk.CTkLabel(row2, text="人机 10 Hz（位置/动作/目标/跳跃）；轨迹分析只用玩家样本", font=FONT_S,
-                     text_color="#8a8f96").pack(side="left", padx=(10, 0))
+        self.rec_who_seg.set(ucf_trace.who_label(self.rec["who"]))
+        ctk.CTkLabel(row2, text="人机 10 Hz（位置/动作/目标/跳跃）；人机只写日志、不进路点",
+                     font=FONT_S, text_color="#8a8f96").pack(side="left", padx=(10, 0))
 
         grid = ctk.CTkFrame(box, fg_color="transparent")
         grid.pack(fill="x", padx=8, pady=(4, 4))
@@ -196,27 +199,6 @@ class RecordTab:
             font=("Consolas", 11), text_color="#8a8f96", anchor="w",
             justify="left", wraplength=600).pack(fill="x", padx=12, pady=(2, 10))
 
-        # ④ 人机验证（drive）
-        box = self.wp_card(frame, "人机验证（drive）",
-                           "把「没有 path」的人机沿点图赶着走，看路线通不通；只对测试包（blank）生效。"
-                           "关着是「观察原版 AI」，开着是「强制压测你画的路线」")
-        self.drv_state = ctk.CTkLabel(box, text="状态：点「刷新」看最近一次 drive",
-                                      font=FONT_S, text_color="#9aa0a6",
-                                      anchor="w", justify="left", wraplength=600)
-        self.drv_state.pack(fill="x", padx=12, pady=(6, 2))
-        rowd = ctk.CTkFrame(box, fg_color="transparent")
-        rowd.pack(fill="x", padx=12, pady=(0, 4))
-        for txt, fn, fg in (("开启", lambda: self.drive_set(True), "#2f9e44"),
-                            ("关闭", lambda: self.drive_set(False), "#2a2f36"),
-                            ("刷新", self.drive_refresh, "#2a2f36")):
-            ctk.CTkButton(rowd, text=txt, width=70, height=26, font=FONT_S,
-                          fg_color=fg, hover_color="#343a42",
-                          command=fn).pack(side="left", padx=(0, 6))
-        self.drv_stat = ctk.CTkLabel(box, text="", font=("Consolas", 11),
-                                     text_color="#8a8f96", anchor="w",
-                                     justify="left", wraplength=600)
-        self.drv_stat.pack(fill="x", padx=12, pady=(0, 8))
-
         # 每 2 s 自己刷一次「开始录制」：不然游戏后开、或换图之后按钮会一直是灰的
         self.after(2000, self._rec_auto_tick)
 
@@ -230,40 +212,6 @@ class RecordTab:
             self.after(2000, self._rec_auto_tick)
         except Exception:      # noqa: BLE001
             pass
-
-    def drive_set(self, on):
-        try:
-            write_nav_cmd("drive", "", "", {"act": "on" if on else "off"})
-        except OSError as exc:
-            self.set_status("写不进 ucf_navcmd.txt：%s" % exc)
-            return
-        self.set_status("已发送：drive %s（测试包里才会动）" % ("开" if on else "关"))
-        self.after(700, self.drive_refresh)
-
-    def drive_refresh(self):
-        lines = tail_log(600) or []
-        drv = [l for l in lines if "drive:" in l][-3:]
-        beh = [l for l in lines if "beh:" in l]
-        stuck = 0
-        for l in beh:
-            if " spd=0.00 " not in l:
-                continue
-            try:
-                d = float(l.split("nearD=")[1].split()[0])
-            except (IndexError, ValueError):
-                continue
-            if d > 3.0:
-                stuck += 1
-        onoff = "未知"
-        for l in reversed(drv):
-            if "drive: ON" in l:
-                onoff = "开"; break
-            if "drive: OFF" in l:
-                onoff = "关"; break
-        self.drv_state.configure(
-            text="状态：%s ｜ 最近 %d 条日志 ｜ 人机探针 %d 行，其中「原地 + 离图 >3 m」%d 行"
-                 % (onoff, len(drv), len(beh), stuck))
-        self.drv_stat.configure(text="\n".join(drv[-2:]) or "（还没有 drive 日志）")
 
     def build_rec_live(self, frame):
         box = self.wp_card(frame, "实时轨迹", "游戏里照常走；这里只看数字")
@@ -520,8 +468,15 @@ class RecordTab:
             self.rec_review_retry()
 
     def on_rec_who(self, disp):
-        self.rec["who"] = {"玩家": "player", "人机": "bots", "全部": "all"}.get(disp, "player")
+        who = ucf_trace.who_value(disp)
+        self.rec["who"] = who
+        seg = getattr(self, "rec_who_seg", None)
+        if seg is not None:
+            seg.set(ucf_trace.who_label(who))
         self.persist("采集对象")
+        if self.rec_state == "rec":
+            self.set_status("采集对象改为「%s」：当前这段仍按开始时的设置，下一段生效"
+                            % ucf_trace.who_label(who))
 
     def on_rec_switch(self, key):
         self.rec["sw"][key] = bool(self.rec_sw_vars[key].get())
@@ -564,6 +519,9 @@ class RecordTab:
             REC_RAW, "%s_%s_%s.jsonl" % (lv or "map", tail,
                                          time.strftime("%Y%m%d-%H%M%S")))
         self.rec_samples = []
+        self.rec_events = []
+        self.rec_bots = {}
+        self.rec_who_active = self.rec.get("who", "player")
         self.rec_result = None
         self.rec_saved = False
         self.rec_paused = False
@@ -573,7 +531,7 @@ class RecordTab:
             # 这样录制日志被拿去分析时知道是哪张图、哪个包
             seq = write_nav_cmd("rec", name, fp, {"act": "start", "out": self.rec_file,
                                                   "hz": 30,
-                                                  "who": self.rec.get("who", "player"),
+                                                  "who": self.rec_who_active,
                                                   "map": lv or "", "label": lab or ""})
         except OSError as exc:
             self.rec_busy = False
@@ -581,7 +539,9 @@ class RecordTab:
             return
         self.rec_error = ""
         self.rec_t0 = time.time()
-        self.set_status("已发送 #%d：等插件开始录（%s）" % (seq, os.path.basename(self.rec_file)))
+        self.set_status("已发送 #%d：等插件开始录（%s，采集对象：%s）"
+                        % (seq, os.path.basename(self.rec_file),
+                           ucf_trace.who_label(self.rec_who_active)))
         self.show_rec_state("rec")
         self.rec_aux.configure(text="暂停", fg_color="#3a3f47")
         self.rec_big.configure(text="00:00 · 等待插件…")
@@ -655,36 +615,68 @@ class RecordTab:
         except OSError:
             lines = []
         samples, events = ucf_rec.parse_rec(lines)
+        bots = (ucf_rec.parse_bots(lines)
+                if self.rec_who_active != "player" else {})
         self.rec_samples = samples
         self.rec_events = events
+        self.rec_bots = bots
         if samples:
             res = ucf_rec.analyse(samples, step=self.rec["step"], sw=self.rec["sw"],
                                   events=events)
             self.rec_result = res
             self.rec_update_live(res, samples)
+        elif bots:
+            # 只采人机：文件里有 k="b" 行，但没有玩家样本，做不了路点 ——
+            # 这不是失败，人机数据是给人机行为观察用的（日志原样保留）。
+            self.rec_update_bots_only()
         if not game_running(fresh=True):
             self.rec_finish(auto=True)
             return
         self.after(350, self.rec_poll)
 
+    def rec_bot_stats(self):
+        r"""人机样本统计 -> (台数, 条数, 最后时间)。只观察，不进路点。"""
+        bots = getattr(self, "rec_bots", None) or {}
+        rows = [r for v in bots.values() for r in v]
+        last_t = max([float(r.get("t") or 0.0) for r in rows] or [0.0])
+        return len(bots), len(rows), last_t
+
     def rec_update_live(self, res, samples):
         if not samples:
             return
         dur = samples[-1]["t"] - samples[0]["t"]
+        n_bots, n_bot_rows, _ = self.rec_bot_stats()
         self.rec_big.configure(text="%02d:%02d · %.1f m" % (
             int(dur // 60), int(dur % 60), res.get("dist", 0.0)))
+        bot_note = (" · 人机 %d 台 / %d 条" % (n_bots, n_bot_rows)) if n_bot_rows else ""
         if res.get("ok"):
-            self.rec_sub.configure(text="%d 样本 · %d 节点 / %d 边 · 跳 %d / 落 %d / 岔 %d%s%s%s" % (
+            self.rec_sub.configure(text="采集对象：%s · %d 玩家样本 · %d 节点 / %d 边 · "
+                                        "跳 %d / 落 %d / 岔 %d%s%s%s" % (
+                ucf_trace.who_label(self.rec_who_active),
                 res["samples"], res["nodes"], res["edges"], len(res["jumps"]),
                 len(res["drops"]), len(res["branches"]),
                 (" · 断口 %d" % len(res.get("gaps") or [])) if res.get("gaps") else "",
-                (" · 人机 %d 台" % len(self.rec_bots)) if self.rec_bots else "",
-                (" · 已暂停" if self.rec_paused else "")))
+                bot_note,
+                (" · 已暂停" if self.rec_paused else "")),
+                text_color="#9aa0a6")
         else:
-            self.rec_sub.configure(text="%d 样本 · %s" % (
-                res["samples"], res.get("why") or "还在识别"))
+            self.rec_sub.configure(text="采集对象：%s · %d 玩家样本 · %s%s" % (
+                ucf_trace.who_label(self.rec_who_active),
+                res["samples"], res.get("why") or "还在识别", bot_note),
+                text_color="#9aa0a6")
         self.rec_ev.configure(text="\n".join(self.rec_event_lines(res)))
         self.rec_draw(self.rec_live_cv, res)
+
+    def rec_update_bots_only(self):
+        r"""只采到人机时的实时状态：不算路点，只报台数 / 条数。"""
+        n_bots, n_rows, last_t = self.rec_bot_stats()
+        self.rec_big.configure(text="%02d:%02d · 人机 %d 台 / %d 条" % (
+            int(last_t // 60), int(last_t % 60), n_bots, n_rows))
+        self.rec_sub.configure(
+            text="采集对象：人机 · %d 台 / %d 条（10 Hz）· 录制分析只用玩家样本，"
+                 "不生成路点；原始日志照常保留" % (n_bots, n_rows),
+            text_color="#f7cd74")
+        self.rec_ev.configure(text="（人机样本只写日志，不进草稿；切「玩家 / 全部」再录一段才有路点）")
 
     def rec_event_lines(self, res):
         ev = []
@@ -695,9 +687,12 @@ class RecordTab:
                 d["drop"], " · 可能摔伤" if d.get("hurt") else " · 落差 ≥ 2 m"))
         for b in res.get("branches", [])[:2]:
             ev.append("岔路候选 · 2.5 m 内回访 · 绕 %.0f m" % b["gap"])
+        # 2026-11-27：不再报「超长 = 人机做不了」（长度上限取消，进游戏看）。
+        # 改报蹲：录到空中蹲的跳，把起蹲时间亮出来，方便对照人机复现。
         for j in res.get("jumps", []):
-            if not (ucf_rec.LINK_MIN <= j.get("l3", 0.0) <= ucf_rec.LINK_MAX):
-                ev.append("跳链跳过 · 3D %.1f m（人机做不了）" % j.get("l3", 0.0))
+            if j.get("ct0", -1.0) >= 0.0 or j.get("ctb"):
+                ev.append("蹲跳 · 空中 %.2f s 起蹲 · 3D %.1f m" % (
+                    max(0.0, j.get("ct0", 0.0)), j.get("l3", 0.0)))
         for st in res.get("statics", [])[:1]:
             ev.append("静止 %.1f s · 采样照常" % st["t"])
         return ev[-4:] or ["（还没有事件）"]
@@ -738,8 +733,19 @@ class RecordTab:
         except OSError:
             lines = []
         samples, events = ucf_rec.parse_rec(lines)
+        bots = ucf_rec.parse_bots(lines)
         self.rec_samples = samples
         self.rec_events = events
+        self.rec_bots = bots
+        if not samples and bots:
+            # 只采人机：没有玩家样本，复盘不出路点。这不是崩溃 / 没录到，
+            # 人机行只用于观察，日志原样保留（可以拿去离线分析）。
+            n_bots, n_rows, _ = self.rec_bot_stats()
+            self.rec_error = ("这段只采到人机（%d 台 / %d 条），没有玩家样本，不能生成路点；"
+                              "原始日志保留在 %s" % (n_bots, n_rows, self.rec_file))
+            self.set_status(self.rec_error)
+            self.show_rec_state("ready")
+            return
         res = ucf_rec.analyse(samples, step=self.rec["step"], sw=self.rec["sw"],
                               events=events)
         self.rec_result = res
@@ -754,10 +760,23 @@ class RecordTab:
         self.set_status("复盘完成：%s" % ucf_rec.summary(res))
 
     def rec_fill_done(self, res):
-        self.rec_sum.configure(text=ucf_rec.summary(res))
+        summary = "采集对象：%s · %s" % (
+            ucf_trace.who_label(self.rec_who_active), ucf_rec.summary(res))
+        n_bots, n_rows, _ = self.rec_bot_stats()
+        if n_rows:
+            summary += " · 人机 %d 台 / %d 条（只观察，不进草稿）" % (n_bots, n_rows)
+        self.rec_sum.configure(text=summary)
         lines = self.rec_event_lines(res)
         self.rec_done_ev.configure(text="\n".join(lines))
-        iss = res.get("issues") or []
+        iss = list(res.get("issues") or [])
+        if ucf_rec.code_stale():
+            # 控制台是常驻进程：改了 ucf_rec.py 没重启，复盘还是旧逻辑（2026-11-27 连踩两次）
+            iss.insert(0, "⚠ 磁盘上的 ucf_rec.py 比这个控制台进程新 —— 这次复盘用的是旧代码，"
+                          "重启控制台再看一遍")
+        if ucf_rec.dll_stale():
+            # 编译成功但 run\build\ucf_mod.dll 没换掉（游戏开着时文件锁着）——游戏还在跑旧插件
+            iss.insert(0, "⚠ run/build/ucf_mod.dll 比最新的 ucf_mod-*.dll 旧：游戏跑的是旧插件。"
+                          "关掉游戏后重跑 app/tools/build.ps1 -Payload，再开")
         self.rec_issue.configure(text=("· " + "\n· ".join(iss)) if iss else "没有发现问题")
         self.rec_draw(self.rec_done_cv, res)
         name = self.selected_pack() if hasattr(self, "opt_map") else ""
@@ -810,6 +829,8 @@ class RecordTab:
         self.rec_result = None
         self.rec_samples = []
         self.rec_events = []
+        self.rec_bots = {}
+        self.rec_who_active = self.rec.get("who", "player")
         self.rec_paused = False
         self.rec_busy = False
         self.rec_saved = False

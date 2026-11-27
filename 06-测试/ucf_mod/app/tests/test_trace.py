@@ -37,6 +37,8 @@ UI_ENV = os.path.join(PROJ, "app", "ui", "env.py")
 # 2026-11-27：解析搬进 core，两个功能都调它
 REC_ALG = os.path.join(PROJ, "app", "tabs", "record", "ucf_rec.py")
 TRACE_READER = os.path.join(PROJ, "app", "tabs", "dev", "ucf_trace.py")
+# 控制台不再调它，但报告工具本身还是命令行入口（2026-11-27 用户要求）
+JUMP_STATS = os.path.join(PROJ, "app", "tools", "data", "jump_stats.py")
 
 
 def read(path):
@@ -75,6 +77,10 @@ def check_c(editor):
     assert "ss_stop(\"quit\")" in editor, "退出游戏没收尾采样文件"
     assert "QueryPerformanceCounter" in editor, "采样没用 QPC（60 Hz 时间太粗）"
     assert '\\"who\\":\\"%s\\"' in editor, "header 没写 who（采集对象）"
+    # 2026-11-27 用户问「日志有没有区分人机和玩家」：人机行必须自带 k=b，
+    # end 行必须带 bots 条数；玩家行不带 k（录制 / 采集共用同一行，靠 k 区分）。
+    assert '\\"k\\":\\"b\\"' in editor, "人机样本没有 k=b 标记（和玩家分不开）"
+    assert '\\"bots\\":%u' in editor, "end 行没人机样本条数"
     assert "SS_SCHEMA" in editor and "ucf-trace/3" in editor, "schema 没升到 ucf-trace/3"
 
     # header 的 fields 数组 = ucf_trace.FIELDS
@@ -163,19 +169,56 @@ def check_shared(rec_src, trace_src):
             "ucf_rec 里又自己解析了一遍：%s" % bad
 
 
+def check_who():
+    r"""采集对象（玩家 / 人机 / 全部）的「记忆」：取值/显示名双向稳定。
+
+    2026-11-27 用户要求：原始轨迹采集的采集对象要保留上一次的选择。选择存在
+    ucf_mod.json 的 trace.who；这里钉住旧写法（中文 / 1·2·3 / 大小写）也能恢复，
+    认不出的值退回默认，不能把用户上次的选择悄悄变成「玩家」之外的东西。
+    """
+    for raw, want in (("player", "player"), ("玩家", "player"), ("1", "player"), (1, "player"),
+                      ("bots", "bots"), ("人机", "bots"), ("2", "bots"), (2, "bots"),
+                      ("all", "all"), ("全部", "all"), ("3", "all"), (3, "all"),
+                      (" ALL ", "all"), ("PLAYER", "player"), (None, "player"), ("wat", "player")):
+        got = ucf_trace.who_value(raw, "player")
+        assert got == want, "who_value(%r) = %r，应为 %r" % (raw, got, want)
+    assert ucf_trace.who_value("wat", "bots") == "bots", "认不出的值没按 default 退回"
+    for value, want in (("player", "玩家"), ("bots", "人机"), ("all", "全部"),
+                        ("玩家", "玩家"), ("wat", "玩家")):
+        got = ucf_trace.who_label(value)
+        assert got == want, "who_label(%r) = %r，应为 %r" % (value, got, want)
+
+
 def check_console(console):
-    for fn in ("build_trace_card", "on_trace_hz", "trace_start", "trace_poll",
-               "trace_live", "trace_stop", "trace_finish", "trace_open_dir",
-               "trace_open_file", "trace_copy_path"):
+    for fn in ("build_trace_card", "on_trace_hz", "on_trace_who", "trace_who_now",
+               "refresh_trace_who_memo", "trace_start", "trace_poll",
+               "trace_live", "trace_stop", "trace_finish", "trace_open_dir"):
         assert ("def %s(self" % fn) in console, "控制台少了 %s()" % fn
+    # 2026-11-27 用户要求：卡片上只留 开始采集 / 停止 / 打开日志文件夹
+    # （「打开日志」「复制路径」也去掉；文件名和目录本来就在卡片上显示着）
+    for gone in ("def trace_open_file(self", "def trace_copy_path(self",
+                 "复制路径", "text=\"打开日志\""):
+        assert gone not in console, "没删干净：%s" % gone
     assert "import ucf_trace" in console, "控制台没导入 ucf_trace"
     assert "原始轨迹采集（给 AI 分析用）" in console, "「开发者选项」页没有轨迹卡片标题"
     # 2026-11-21 用户要求：卡片从「录制」搬到「开发者选项」，状态在卡片前单独备好
     assert "def init_trace_state(self" in console, "控制台少了 init_trace_state()"
     assert "def on_trace_who(self" in console, "采集页没有「采集对象」"
-    assert '"who": self.trace.get("who"' in console, "开始采集时没把 who 发给插件"
-    assert "def trace_report_file(self" in console, "没有「选文件出报告」"
-    assert "def _trace_run_report(self" in console, "报告入口没抽成一个函数"
+    # 2026-11-27 用户要求：采集对象记住上一次的选择（存 ucf_mod.json 的 trace.who）
+    who_body = console.split("def on_trace_who(self")[1].split("def trace_who_now")[0]
+    assert "save_cfg(self.cfg)" in who_body, "采集对象改了没写进 ucf_mod.json（记不住）"
+    assert 'ucf_trace.who_label(self.trace["who"])' in console, \
+        "建卡片时没按 trace.who 恢复分段按钮（重启后又会默认玩家）"
+    assert "上次的采集对象：" in console, "卡片上没显示「上次的采集对象」（看不出记忆生效）"
+    assert "trace_who_now()" in console and '"who": who' in console, \
+        "开始采集时没以界面当前选择为准 / 没把 who 发给插件"
+    assert "scan_counts(self.tr_file" in console, "采集中没分玩家 / 人机两种样本数"
+    assert "人机 %d 条" in console, "界面没显示人机样本条数（和玩家混在一起）"
+    # 2026-11-27 用户要求：控制台里「生成跳跃报告」「选文件出报告」两颗按钮重复，整块删掉，
+    # 只保留命令行工具 jump_stats.py（采集页 = 只采不分析）
+    assert "def trace_report" not in console, "报告入口还留在控制台"
+    assert "生成跳跃报告" not in console, "「生成跳跃报告」按钮没删干净"
+    assert os.path.isfile(JUMP_STATS), "jump_stats.py 被删了：命令行还得能用"
     assert "self.init_trace_state()" in console, "建轨迹卡片前没初始化采集状态"
     assert "self.build_trace_card(body)" in console, "轨迹卡片没挂到「开发者选项」页"
     assert "打开日志文件夹" in console, "缺「打开日志文件夹」按钮"
@@ -276,6 +319,39 @@ def check_unit():
         assert ucf_trace.latest() == a, ucf_trace.latest()
     finally:
         ucf_trace.DIR = real_dir
+
+    # 采集对象：玩家 / 人机分开数（2026-11-27 用户要求「日志要能看出谁是谁」）
+    bpath = os.path.join(tmp, "level9_20261127-120000.jsonl")
+    head = {"kind": "trace", "schema": "ucf-trace/3", "who": "all", "hz": 30,
+            "map": "level9", "label": "飓风危城", "src": "player",
+            "fields": list(ucf_trace.FIELDS)}
+    lines = [json.dumps(head, ensure_ascii=False)]
+    for i in range(2):
+        lines.append(json.dumps({"t": i * 0.033, "dt": 0.033, "x": 1.0 + i, "y": -2.0,
+                                 "z": 3.0, "g": 1, "vy": 0.0, "sp": 0, "ct": 0}))
+    for i in range(3):
+        lines.append(json.dumps({"t": 0.1 + i, "k": "b", "id": "0000000%d" % i,
+                                 "x": 5.0 + i, "y": -2.0, "z": 6.0, "g": 1, "vy": 0.0,
+                                 "spd": 4.0, "j": 0, "en": 0, "act": "Move",
+                                 "tgt": [0, 0, 0], "njs": "", "near": "", "pts": -1}))
+    lines.append(json.dumps({"end": 1, "t": 2.0, "n": 2, "bots": 3, "dist": 1.0,
+                             "missed": 0, "ticks": 60}))
+    with open(bpath, "w", encoding="utf-8", newline="\n") as f:
+        f.write("\n".join(lines) + "\n")
+    off, n_players, n_bots, _last, bend = ucf_trace.scan_counts(bpath, 0)
+    assert (n_players, n_bots) == (2, 3), (n_players, n_bots)
+    assert bend and bend["bots"] == 3, bend
+    assert ucf_trace.scan(bpath, 0)[1] == 2, "老接口只该数玩家样本"
+    sm = ucf_trace.summary(bpath)
+    assert sm["who"] == "all" and sm["bots"] == 3 and sm["samples"] == 2, sm
+    btxt = ucf_trace.summary_text(sm)
+    for want in ("采集对象：全部", "2 玩家样本", "人机样本 3 条"):
+        assert want in btxt, btxt
+    # 只采人机（玩家 0 条）：摘要不能只报「没有样本」
+    sm["samples"] = 0
+    sm["bots"] = 3
+    btxt = ucf_trace.summary_text(sm)
+    assert "没有玩家样本" in btxt and "人机样本 3 条" in btxt, btxt
 
     # CSV 导出（列顺序 = FIELDS）
     csv_path = os.path.join(tmp, "out.csv")
@@ -415,6 +491,7 @@ def main():
     check_c(editor)
     check_hires_timer(editor, read(NAVFIX))
     check_c_format(editor)
+    check_who()
     check_console(chr(10).join([read(CONSOLE), read(DEV_TAB), read(UI_ENV)]))
     check_shared(read(REC_ALG), read(TRACE_READER))
     check_unit()

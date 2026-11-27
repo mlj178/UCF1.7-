@@ -97,11 +97,22 @@ def row(d):
 
 
 def jump(d):
-    r"""一行 ev=jump -> 跳事件 dict；字段不全就返回 None（不抛）。"""
+    r"""一行 ev=jump -> 跳事件 dict；字段不全就返回 None（不抛）。
+
+    2026-11-27 起事件带蹲信息（插件按采样帧的 Ctrl 状态结算，老文件没有 = 未知）：
+      "ct":[c0,c1]  c0 = 空中第一次按蹲（相对起跳秒，-1 = 空中没蹲）
+                    c1 = 空中松开蹲（-1 = 一直蹲到落地）
+      "ctb":0/1     起跳那一帧是不是已经蹲着
+    """
     try:
         a, b = d.get("a"), d.get("b")
         if not (isinstance(a, (list, tuple)) and isinstance(b, (list, tuple))):
             return None
+        ct = d.get("ct")
+        try:
+            c0, c1 = float(ct[0]), float(ct[1])
+        except (TypeError, ValueError, IndexError, KeyError):
+            c0, c1 = -1.0, -1.0
         return {
             "t": float(d.get("t") or 0.0),
             "a": (float(a[0]), float(a[1]), float(a[2])),
@@ -112,6 +123,8 @@ def jump(d):
             "v0": float(d.get("v0") or 0.0),
             "run": float(d.get("run") or 0.0),
             "kind": str(d.get("kind") or ""),
+            "ct0": c0, "ct1": c1,
+            "ctb": 1 if int(d.get("ctb") or 0) else 0,
         }
     except (TypeError, ValueError, IndexError):
         return None
@@ -244,25 +257,26 @@ def read(path):
     return hdr, rows, end
 
 
-def scan(path, offset=0):
-    r"""从 offset 往后读新写完的行（控制台 0.5 s 一次，不重读整个文件）。
+def scan_counts(path, offset=0):
+    r"""从 offset 往后读新写完的行，玩家 / 人机分开数（控制台 0.5 s 一次）。
 
-    返回 (新 offset, 新样本数, 最后一个样本, end 行或 None)。
+    返回 (新 offset, 玩家样本数, 人机样本数, 最后一个玩家样本, end 行或 None)。
     只处理以换行结尾的行：插件正在写的那一行留到下次。
-    人机行 / 事件行 / header 都不算进样本数（控制台的「样本数 / 实测 Hz」只按玩家算）。
+    事件行 / header 不算样本；玩家样本用于算「实测 Hz」，人机样本只数条数
+    （人机 10 Hz，混进玩家 Hz 会把数字拉歪）。
     """
     try:
         with open(path, "rb") as f:
             f.seek(offset)
             blob = f.read()
     except OSError:
-        return offset, 0, None, None
+        return offset, 0, 0, None, None
     cut = blob.rfind(b"\n")
     if cut < 0:
-        return offset, 0, None, None
+        return offset, 0, 0, None, None
     chunk = blob[:cut + 1]
     new_off = offset + len(chunk)
-    count, last, end = 0, None, None
+    players, bots, last, end = 0, 0, None, None
     for raw in chunk.split(b"\n"):
         s = raw.strip()
         if not s or not s.startswith(b"{"):
@@ -276,12 +290,24 @@ def scan(path, offset=0):
         if d.get("end"):
             end = d
             continue
-        if "x" not in d or "ev" in d or is_bot(d) or is_header(d):
+        if is_bot(d):
+            bots += 1
+            continue
+        if "x" not in d or "ev" in d or is_header(d):
             continue
         try:
             r = row(d)
         except (TypeError, ValueError):
             continue
-        count += 1
+        players += 1
         last = r
-    return new_off, count, last, end
+    return new_off, players, bots, last, end
+
+
+def scan(path, offset=0):
+    r"""从 offset 往后读新写完的行（老接口）：(offset, 玩家样本数, 最后样本, end)。
+
+    要同时拿人机行数就用 scan_counts()；这里保持 4 元组，录制页和旧测试不用改。
+    """
+    off, players, _bots, last, end = scan_counts(path, offset)
+    return off, players, last, end

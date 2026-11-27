@@ -8,7 +8,7 @@ r"""自检：身份（用户 / 开发者）与页表的对应关系。
   1) normalize_role 认得 user/dev/用户/开发者/大小写，认不出返回空串
   2) UCF_ROLE 环境变量优先
   3) USER_PAGES = 地图 / 部署，而且是开发页的子集
-  4) 开发页 11 个、一组一个不重不漏；TAB_OLD_MAP 覆盖全部页名
+  4) 开发页 9 个、一组一个不重不漏；TAB_OLD_MAP 覆盖全部页名
   5) 控制台入口有 on_flat_tab / switch_role / App(role=...)；ui/role.py 有 ask_role
   6) 用户页里没有开发页（防止手滑把「人机路点」塞进用户身份）
 """
@@ -68,12 +68,12 @@ def main():
     check(tuple(USER_PAGES) == ("地图", "部署"), "USER_PAGES = 地图 / 部署（实际 %s）" % (USER_PAGES,))
     check(set(USER_PAGES) <= set(dev_pages), "用户的两页都在开发页里（超集关系）")
     check(not (set(USER_PAGES) & {"地图总览", "人机路点", "录制", "数据", "可视化",
-                                  "快捷键", "车测", "开发者选项"}),
+                                  "车测", "开发者选项"}),
           "用户身份里没有开发页")
 
-    print("== 4) 开发身份的 10 页")
-    # 2026-11-26：「导出」页连同 Ctrl+E 导出一起删了，10 页
-    check(len(dev_pages) == len(set(dev_pages)) == 10, "开发页 10 个、不重不漏（实际 %d）" % len(dev_pages))
+    print("== 4) 开发身份的 9 页")
+    # 2026-11-26：「导出」页连同 Ctrl+E 导出一起删了；2026-11-27：「快捷键」页也删了
+    check(len(dev_pages) == len(set(dev_pages)) == 9, "开发页 9 个、不重不漏（实际 %d）" % len(dev_pages))
     check([g[0] for g in TAB_GROUPS] == ["插件开关", "路点数据", "部署与测试", "开发调试"],
           "4 个功能组的名字和顺序")
     check(all(p in TAB_OLD_MAP for p in dev_pages), "TAB_OLD_MAP 覆盖全部页名（旧配置能迁移）")
@@ -92,7 +92,7 @@ def main():
     if FAIL:
         print("\n!! %d 项没过" % len(FAIL))
         return 1
-    print("\nOK: 身份两页 / 开发十一页 / 组名 / 旧配置迁移 都对得上")
+    print("\nOK: 身份两页 / 开发九页 / 组名 / 旧配置迁移 都对得上")
     return 0
 
 

@@ -6,12 +6,9 @@ r"""「开发者选项」页：玩家坐标记录 + 原始轨迹采集。
 """
 
 
-from tkinter import filedialog, messagebox
+from tkinter import messagebox
 import os
-import subprocess
-import sys
 import time
-import tkinter as tk
 
 import customtkinter as ctk
 
@@ -208,14 +205,16 @@ class DevTab:
         except (TypeError, ValueError):
             thz = 30
         trace["hz"] = thz if thz in ucf_trace.GEARS else 30
-        # 2026-11-27：采集对象（玩家 / 人机 / 全部）和录制页同一套语义，存在会话 header 的 who
-        who = trace.get("who")
-        trace["who"] = who if who in ("player", "bots", "all") else "player"
+        # 2026-11-27：采集对象（玩家 / 人机 / 全部）和录制页同一套语义，存在会话 header 的 who。
+        # 选择本身记在 ucf_mod.json 的 trace.who —— 下次打开控制台按上一次的选择恢复。
+        # who_value() 顺手认中文 / 1/2/3，旧配置或手改过的文件不会把选择丢掉。
+        trace["who"] = ucf_trace.who_value(trace.get("who"))
         self.trace = trace
         self.tr_state = "idle"
         self.tr_file = ""
         self.tr_off = 0
-        self.tr_lines = 0
+        self.tr_lines = 0              # 玩家样本数（实时 Hz 只按它算）
+        self.tr_bots = 0               # 人机样本条数（10 Hz，单独数，不混进玩家 Hz）
         self.tr_last_t = 0.0
         self.tr_t0 = 0.0
         self.tr_hz = 0                 # 正在采的这份日志的档位（改档位不影响它）
@@ -259,10 +258,17 @@ class DevTab:
             unselected_color="#2a2f36", unselected_hover_color="#343a42",
             command=self.on_trace_who)
         self.tr_who_seg.pack(side="left")
-        self.tr_who_seg.set({"player": "玩家", "bots": "人机",
-                             "all": "全部"}[self.trace["who"]])
-        ctk.CTkLabel(row, text="人机 10 Hz（位置/动作/目标/跳跃）；轨迹统计只按玩家样本算",
+        self.tr_who_seg.set(ucf_trace.who_label(self.trace["who"]))
+        ctk.CTkLabel(row, text="人机 10 Hz（位置/动作/目标/跳跃）；实测 Hz 只按玩家样本算，人机单独计数",
                      font=FONT_S, text_color="#8a8f96").pack(side="left", padx=(10, 0))
+
+        # 2026-11-27 用户要求：采集对象要记住上一次的选择。这里把"记住了什么、存在哪"
+        # 写在卡片上，重启控制台后一眼能看出恢复的是上次那个，而不是又默认玩家。
+        self.tr_who_memo = ctk.CTkLabel(
+            box, text="", font=("Microsoft YaHei UI", 11), text_color="#6f7680",
+            anchor="w", justify="left", wraplength=600)
+        self.tr_who_memo.pack(fill="x", padx=12, pady=(2, 0))
+        self.refresh_trace_who_memo()
 
         row = ctk.CTkFrame(box, fg_color="transparent")
         row.pack(fill="x", padx=12, pady=(8, 0))
@@ -279,22 +285,6 @@ class DevTab:
             row, text="打开日志文件夹", width=124, height=30, font=FONT_S,
             fg_color="#2a2f36", hover_color="#343a42", command=self.trace_open_dir)
         self.tr_btn_dir.pack(side="right")
-        self.tr_btn_report = ctk.CTkButton(
-            row, text="生成跳跃报告(MD)", width=140, height=30, font=FONT_S,
-            fg_color="#1d5c3f", hover_color="#24704c", command=self.trace_report)
-        self.tr_btn_report.pack(side="right", padx=(0, 6))
-        self.tr_btn_report_file = ctk.CTkButton(
-            row, text="选文件出报告…", width=112, height=30, font=FONT_S,
-            fg_color="#1d5c3f", hover_color="#24704c", command=self.trace_report_file)
-        self.tr_btn_report_file.pack(side="right", padx=(0, 6))
-        self.tr_btn_file = ctk.CTkButton(
-            row, text="打开日志", width=84, height=30, font=FONT_S,
-            fg_color="#2a2f36", hover_color="#343a42", command=self.trace_open_file)
-        self.tr_btn_file.pack(side="right", padx=(0, 6))
-        ctk.CTkButton(
-            row, text="复制路径", width=84, height=30, font=FONT_S,
-            fg_color="#2a2f36", hover_color="#343a42",
-            command=self.trace_copy_path).pack(side="right", padx=(0, 6))
 
         self.tr_stat = ctk.CTkLabel(box, text="未开始", font=FONT_S,
                                     text_color="#9aa0a6", anchor="w",
@@ -323,9 +313,9 @@ class DevTab:
             box,
             text="每行：t 相对秒 / dt 距上一样本 / x,y,z 玩家脚底坐标 / g 是否在地面 / "
                  "vy 竖直速度 / sp 空格 ct Ctrl。\n"
-                 "落地那一帧插件会多写一行 ev=jump（起跳点、落点、跳距、跳高、滞空、起跳速度、类型），"
-                 "「生成跳跃报告」就是把它汇成一张 Markdown 表。\n"
-                 "录制页写出来的 jsonl 是同一套格式 —— 忘了开采集也不用重录，直接选那个文件就能出报告。",
+                 "落地那一帧插件会多写一行 ev=jump（起跳点、落点、跳距、跳高、滞空、起跳速度、类型）。\n"
+                 "这里只负责采、不负责分析：要汇总就命令行跑 "
+                 "python app\\tools\\data\\jump_stats.py <日志或目录>（录制日志同一套格式，也能直接喂）。",
             font=("Microsoft YaHei UI", 11), text_color="#8a8f96", anchor="w",
             justify="left", wraplength=600).pack(fill="x", padx=12, pady=(6, 10))
 
@@ -352,22 +342,50 @@ class DevTab:
             self.tr_stat.configure(text="档位改动从下一份日志生效（当前这份按开始时的频率写）")
 
     def on_trace_who(self, disp):
-        r"""采集对象：玩家 / 人机 / 全部。和录制页同一套语义，写进会话 header 的 who。"""
-        who = {"玩家": "player", "人机": "bots", "全部": "all"}.get(str(disp), "player")
+        r"""采集对象：玩家 / 人机 / 全部。和录制页同一套语义，写进会话 header 的 who。
+
+        2026-11-27 用户要求：选择要记住。这里一改就落进 ucf_mod.json 的 trace.who，
+        下次打开控制台由 build_trace_card 把它 set 回分段按钮（不是又默认玩家）。
+        """
+        who = ucf_trace.who_value(disp)
         self.trace["who"] = who
+        # 走到这里不一定是用户点的（也可能是程序直接调）：把分段按钮也摆正，
+        # 免得「配置里是 人机、界面还停在 全部」。set() 不会回调 command，不会递归。
+        seg = getattr(self, "tr_who_seg", None)
+        if seg is not None:
+            seg.set(ucf_trace.who_label(who))
+        saved = True
         try:
             save_cfg(self.cfg)
         except OSError:
-            pass
-        self.set_status("采集对象：%s（下一份日志生效；人机 10 Hz）" % disp)
+            saved = False
+        self.refresh_trace_who_memo()
+        self.set_status("采集对象：%s（%s；下一份日志生效；人机 10 Hz）"
+                        % (ucf_trace.who_label(who),
+                           "已记住" if saved else "记住了但写盘失败"))
         if self.tr_state in ("starting", "running", "stopping"):
             self.tr_stat.configure(text="采集对象改动从下一份日志生效（当前这份按开始时的设置）")
+
+    def trace_who_now(self):
+        r"""界面当前选中的采集对象（插件值）——开始采集时以它为准，控件和 trace 状态不打架。"""
+        seg = getattr(self, "tr_who_seg", None)
+        raw = seg.get() if seg is not None else self.trace.get("who", "player")
+        return ucf_trace.who_value(raw, self.trace.get("who", "player"))
+
+    def refresh_trace_who_memo(self):
+        r"""卡片上的「上次选择已记住」一行；选了新的即时刷新，重启后也能看出恢复的是哪个。"""
+        lbl = getattr(self, "tr_who_memo", None)
+        if lbl is None:
+            return
+        lbl.configure(text="上次的采集对象：%s（记在 ucf_mod.json 的 trace.who；"
+                           "下次打开控制台仍恢复成它）"
+                      % ucf_trace.who_label(self.trace.get("who", "player")))
 
     def trace_start(self):
         if self.tr_state in ("starting", "running", "stopping"):
             return
         # 一个写入者（2026-11-27）：插件里只有一个采样会话，接管前先把录制收尾。
-        # 录制文件不会因此丢失 —— 它照样能复盘保存，也能出跳跃报告。
+        # 录制文件不会因此丢失 —— 它照样能复盘保存，也能拿去分析（同一套格式）。
         if getattr(self, "rec_state", "idle") == "rec":
             try:
                 self.rec_finish()
@@ -384,17 +402,28 @@ class DevTab:
         except OSError as exc:
             self.set_status("建不了轨迹目录：%s" % exc)
             return
+        # 以界面当前选择为准（2026-11-27）：万一控件被程序改成和 trace 状态不一样，
+        # 开始这一份时也把它记下来 ——「上一次的选择」= 上一次真正开始采集的那个。
+        who = self.trace_who_now()
+        if who != self.trace.get("who"):
+            self.trace["who"] = who
+            self.refresh_trace_who_memo()
+            try:
+                save_cfg(self.cfg)
+            except OSError:
+                pass
         self.tr_file = ucf_trace.make_path(lv or "map")
         self.tr_hz = self.trace["hz"]
         self.tr_off = 0
         self.tr_lines = 0
+        self.tr_bots = 0
         self.tr_last_t = 0.0
         self.tr_t0 = time.time()
         try:
             seq = write_nav_cmd("trace", pid, fp or self.selected_fp(),
                                 {"act": "start", "out": self.tr_file,
                                  "hz": self.trace["hz"],
-                                 "who": self.trace.get("who", "player"),
+                                 "who": who,
                                  "map": lv or "", "label": lab or ""})
         except OSError as exc:
             self.set_status("写不进 ucf_navcmd.txt：%s" % exc)
@@ -404,9 +433,11 @@ class DevTab:
         self.tr_btn_stop.configure(state="normal")
         self.trace_show_file(self.tr_file)
         self.tr_stat.configure(
-            text="已发命令 #%d（%d Hz），等插件建文件…" % (seq, self.trace["hz"]),
+            text="已发命令 #%d（%d Hz，采集对象：%s），等插件建文件…"
+                 % (seq, self.trace["hz"], ucf_trace.who_label(who)),
             text_color="#9aa0a6")
-        self.set_status("轨迹采集：等插件开始写 %s" % os.path.basename(self.tr_file))
+        self.set_status("轨迹采集（采集对象：%s）：等插件开始写 %s"
+                        % (ucf_trace.who_label(who), os.path.basename(self.tr_file)))
         self.after(400, self.trace_poll)
 
     def trace_poll(self):
@@ -430,11 +461,12 @@ class DevTab:
         if self.tr_state == "starting":
             self.tr_state = "running"
         try:
-            off, n, last, end = ucf_trace.scan(self.tr_file, self.tr_off)
+            off, n, nb, last, end = ucf_trace.scan_counts(self.tr_file, self.tr_off)
         except OSError:
-            off, n, last, end = self.tr_off, 0, None, None
+            off, n, nb, last, end = self.tr_off, 0, 0, None, None
         self.tr_off = off
         self.tr_lines += n
+        self.tr_bots += nb
         if last is not None:
             self.tr_last_t = float(last.get("t") or 0.0)
         if size == 0:
@@ -457,8 +489,11 @@ class DevTab:
         dur = max(0.0, self.tr_last_t)
         hz = (self.tr_lines - 1) / dur if dur > 0.5 and self.tr_lines > 1 else 0.0
         self.tr_stat.configure(
-            text="● 采集中 %02d:%02d · %d 样本 · %.1f KB · 实测 %.1f Hz（档位 %d Hz）"
-                 % (int(dur) // 60, int(dur) % 60, self.tr_lines, size / 1024.0,
+            text="● 采集中 %02d:%02d · 采集对象：%s · 玩家 %d 样本 · 人机 %d 条 · "
+                 "%.1f KB · 实测 %.1f Hz（档位 %d Hz）"
+                 % (int(dur) // 60, int(dur) % 60,
+                    ucf_trace.who_label(self.trace.get("who", "player")),
+                    self.tr_lines, self.tr_bots, size / 1024.0,
                     hz, self.tr_hz or self.trace["hz"]),
             text_color="#ff9d9d")
 
@@ -479,9 +514,10 @@ class DevTab:
             return
         if self.tr_file:
             try:
-                off, n, last, _end = ucf_trace.scan(self.tr_file, self.tr_off)
+                off, n, nb, last, _end = ucf_trace.scan_counts(self.tr_file, self.tr_off)
                 self.tr_off = off
                 self.tr_lines += n
+                self.tr_bots += nb
                 if last is not None:
                     self.tr_last_t = float(last.get("t") or 0.0)
             except OSError:
@@ -490,6 +526,19 @@ class DevTab:
         self.tr_btn_start.configure(state="normal")
         self.tr_btn_stop.configure(state="disabled")
         if self.tr_lines <= 0:
+            bots = getattr(self, "tr_bots", 0)
+            if not bots:
+                try:
+                    bots = int(ucf_trace.summary(self.tr_file).get("bots") or 0)
+                except OSError:
+                    pass
+            if bots:
+                who = ucf_trace.who_label(self.trace.get("who", "player"))
+                self.tr_stat.configure(
+                    text="已停止：人机 %d 条样本、玩家 0 条（采集对象：%s）" % (bots, who),
+                    text_color="#f7cd74")
+                self.set_status("轨迹采集停止：人机 %d 条（玩家 0 条）" % bots)
+                return
             self.tr_stat.configure(
                 text="已停止：没有样本（人没进图，或插件不是带 trace 的版本）",
                 text_color="#f7cd74")
@@ -499,7 +548,7 @@ class DevTab:
             sm = ucf_trace.summary(self.tr_file)
             txt = ucf_trace.summary_text(sm)
         except OSError:
-            txt = "%d 样本" % self.tr_lines
+            txt = "玩家 %d 样本 · 人机 %d 条" % (self.tr_lines, getattr(self, "tr_bots", 0))
         head = "已收尾 · " if auto else "已停止 · "
         self.tr_stat.configure(text=head + txt, text_color="#9aa0a6")
         self.set_status(head + txt + " → " + os.path.basename(self.tr_file))
@@ -515,62 +564,6 @@ class DevTab:
         self.tr_file = path or ""
         self.tr_file_lbl.configure(text=os.path.basename(path) if path else "（还没有）")
 
-    def trace_report(self):
-        r"""把轨迹目录里的日志汇成一份 Markdown 跳跃报告并打开。
-
-        跑的是 app/tools/data/jump_stats.py（和命令行同一份代码）：
-        新格式直接用插件结算的 ev=jump；旧格式（相机坐标）会标「估算」。
-        """
-        self._trace_run_report([], ucf_trace.DIR)
-
-    def trace_report_file(self):
-        r"""选一份日志出报告 —— 采集的、录制的都可以（同一套格式）。
-
-        2026-11-27：录制会话写出来的 jsonl 本来就是可分析的原始轨迹，
-        所以「忘了开采集」不用重录，直接把录制文件指过来就行。
-        """
-        try:
-            os.makedirs(ucf_trace.DIR, exist_ok=True)
-        except OSError:
-            pass
-        init = ucf_trace.DIR if os.path.isdir(ucf_trace.DIR) else os.getcwd()
-        path = filedialog.askopenfilename(
-            title="选一份轨迹日志（采集 / 录制都行）",
-            initialdir=init,
-            filetypes=[("轨迹日志", "*.jsonl"), ("全部文件", "*.*")])
-        if not path:
-            return
-        self._trace_run_report([path], os.path.dirname(path) or ucf_trace.DIR)
-
-    def _trace_run_report(self, paths, outdir):
-        r"""跑 jump_stats.py：paths 为空 = 轨迹目录里全部；outdir 决定报告落哪。"""
-        script = os.path.join(ucf_trace.UCF_ROOT, "app", "tools", "data", "jump_stats.py")
-        if not os.path.isfile(script):
-            self.set_status("找不到报告脚本：%s" % script)
-            return
-        outdir = outdir if outdir else ucf_trace.DIR
-        try:
-            os.makedirs(outdir, exist_ok=True)
-        except OSError:
-            pass
-        out = os.path.join(outdir, "跳跃报告_%s.md" % time.strftime("%Y%m%d-%H%M%S"))
-        try:
-            r = subprocess.run([sys.executable, script, "--out", out] + list(paths),
-                               stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                               timeout=180, creationflags=0x08000000)   # CREATE_NO_WINDOW
-        except (OSError, subprocess.SubprocessError) as exc:
-            self.set_status("报告生成失败：%s" % exc)
-            return
-        if r.returncode != 0:
-            msg = (r.stderr or r.stdout or b"").decode("utf-8", "replace").strip()
-            self.set_status("报告生成失败：%s" % (msg[-200:] or "退出码 %d" % r.returncode))
-            return
-        self.set_status("跳跃报告已生成：%s" % os.path.basename(out))
-        try:
-            os.startfile(out)
-        except OSError:
-            pass
-
     def trace_open_dir(self):
         try:
             os.makedirs(ucf_trace.DIR, exist_ok=True)
@@ -584,24 +577,3 @@ class DevTab:
             return
         self.set_status("已打开轨迹目录：%s" % ucf_trace.DIR)
 
-    def trace_open_file(self):
-        path = self.tr_file
-        if not path or not os.path.isfile(path):
-            self.set_status("还没有轨迹文件：先点「开始采集」")
-            return
-        try:
-            os.startfile(path)               # noqa: S606  Windows 专用
-        except OSError as exc:
-            self.set_status("打不开日志：%s" % exc)
-
-    def trace_copy_path(self):
-        path = self.tr_file
-        if not path:
-            self.set_status("还没有轨迹文件")
-            return
-        try:
-            self.clipboard_clear()
-            self.clipboard_append(path)
-        except tk.TclError:
-            pass
-        self.set_status("已复制路径：%s" % path)

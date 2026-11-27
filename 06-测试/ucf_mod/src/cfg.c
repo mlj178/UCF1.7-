@@ -32,6 +32,7 @@ static const CFG_DEF g_defs[] = {
   { "vis_supply",     1, "MapManager：补给箱 / 红箱 / 蓝箱" },
   { "vis_jump",       1, "Bot_JumpLink：跳点（不走名单）" },
   { "vis_tag",        1, "PointNodeTagModifier：标签区（不走名单）" },
+  { "bot_crouchjump", 1, "人机蹲跳：录到 ct 的跳链，人机在空中自动蹲（写 Bot.crouchEndTime）" },
   { "vis_player_marks", 1, "玩家坐标记录：只画本次（当前场景）记的位置（金色方块，不连折线）；旧记录只写进 player_marks.txt" },
   { "vis_compass",    1, "方向罗盘：屏幕下方汉字东南西北（独立于可视化总开关）" },
   { "wp_menu",        1, "游戏内路点菜单（F2 / 长按 E）" },

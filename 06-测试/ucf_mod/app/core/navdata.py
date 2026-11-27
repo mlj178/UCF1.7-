@@ -1457,7 +1457,7 @@ def packs_root():
     return P.PACKS_DIR
 
 
-# 删草稿不真删：整份目录挪进 archive\pack_trash\（和发布前快照 final_prev\ 一个思路），
+# 删草稿不真删：草稿三件挪进 archive\pack_trash\（和发布前快照 final_prev\ 一个思路），
 # 界面上不出现，误删能从那儿挪回来。UCF_PACK_TRASH 只给自检指临时目录用。
 PACK_TRASH = (os.environ.get("UCF_PACK_TRASH", "").strip()
               or os.path.join(P.ARCHIVE, "pack_trash"))
@@ -1470,6 +1470,64 @@ def _is_pack(path):
         return any(re.match(r"^n\d+-[0-9a-fA-F]{16}\.txt$", fn) for fn in os.listdir(path))
     except OSError:
         return False
+
+
+# 草稿文件：manifest.json / nogen.txt / <指纹>.txt（外加插件写的 <指纹>.txt.bak-* 备份）
+_DRAFT_TXT = re.compile(r"^n\d+-[0-9a-fA-F]{16}\.txt(\..*)?$")
+_DRAFT_FIXED = ("manifest.json", "nogen.txt")
+
+
+def pack_draft_files(pdir):
+    r"""图文件夹里属于「草稿」的文件（绝对路径，排好序）。
+
+    2026-11-27 一图一夹以后草稿就在图文件夹里，同目录还躺着点图 / 可走面 / 标记 / 成品：
+
+        <图>\manifest.json  <图>\nogen.txt  <图>\<指纹>.txt   ← 草稿（删草稿只动这三样）
+        <图>\map.json  <图>\navmesh.bin  <图>\markers.txt      ← 图数据（一个字节都不许动）
+        <图>\native\  ① 冻结副本      <图>\final\  成品
+
+    2026-11-27 的事故：删草稿把整份目录搬进回收站，运输船 / 小型工厂的 map.json
+    跟着进了 archive\pack_trash\，控制台地图下拉里这两张图直接消失。
+    """
+    out = []
+    try:
+        names = sorted(os.listdir(pdir))
+    except OSError:
+        return out
+    for fn in names:
+        if fn in _DRAFT_FIXED or _DRAFT_TXT.match(fn):
+            p = os.path.join(pdir, fn)
+            if os.path.isfile(p):
+                out.append(p)
+    return out
+
+
+def is_map_folder(pdir):
+    r"""这个目录是不是「一张图的文件夹」：有点图 / 可走面 / 冻结副本 / 成品 / 标记。
+
+    判据故意放宽：运输船那张图的 map.json 2026-11-27 被误搬走过，只看 map.json 会把
+    「图文件夹」当成「老布局的包目录」，于是又整份挪走一次。
+    """
+    for fn in ("map.json", "navmesh.bin", "markers.txt"):
+        if os.path.isfile(os.path.join(pdir, fn)):
+            return True
+    for sub in (P.NATIVE_SUB, P.FINAL_SUB):
+        if os.path.isdir(os.path.join(pdir, sub)):
+            return True
+    return False
+
+
+def _pack_trash_dst(pdir):
+    r"""回收站目标目录：archive\pack_trash\<图文件夹>__<时间>（同一秒删两张加 -2 / -3）。"""
+    os.makedirs(PACK_TRASH, exist_ok=True)
+    base = os.path.basename(os.path.normpath(pdir))
+    stamp = time.strftime("%Y%m%d_%H%M%S")
+    dst = os.path.join(PACK_TRASH, "%s__%s" % (base, stamp))
+    n = 2
+    while os.path.exists(dst):
+        dst = os.path.join(PACK_TRASH, "%s__%s-%d" % (base, stamp, n))
+        n += 1
+    return dst
 
 
 def pack_ids():
@@ -1492,6 +1550,8 @@ def pack_ids():
         if _is_pack(d):
             out.append(entry)
             continue
+        if is_map_folder(d):
+            continue        # 图文件夹：native\ / final\ 是图数据，不当老的「图/包」布局找
         try:
             subs = sorted(os.listdir(d))
         except OSError:
@@ -1804,46 +1864,77 @@ def final_delete_dir(d):
 
 
 def pack_store_remove(name, hard=False):
-    r"""删掉一张图的草稿（packs\<地图文件夹>\ 整份目录）。
+    r"""删掉一张图的草稿 —— 只搬草稿三件，图数据原地不动。
 
-    默认不真删：整份挪到 archive\pack_trash\<文件夹>__<时间>\，返回
+    2026-11-27 一图一夹以后，草稿和图数据在同一个文件夹里：
+
+        <图>\manifest.json  <图>\nogen.txt  <图>\<指纹>.txt   ← 草稿，搬走
+        <图>\map.json  <图>\navmesh.bin  <图>\markers.txt      ← 图数据，一个字节都不动
+        <图>\native\（① 冻结副本）  <图>\final\（成品）         ← 也都不动
+
+    老行为是「整份目录挪进回收站」，一图一夹之后等于把 map.json 一起搬走，
+    运输船 / 小型工厂在控制台里就成了「地图没了、下拉里选不到」。
+    老布局（packs\<图>\<包>\ 这种没有点图 / 可走面 / 标记的子目录）还是整份挪。
+
+    默认不真删：草稿挪到 archive\pack_trash\<文件夹>__<时间>\，返回
     (原目录, 挪到哪, node 数, edge 数)；hard=True 才物理删除（返回的「挪到哪」为空）。
     成品 final\ 一个字节都不碰 —— 要撤发布用 final rm。
     """
     pdir, _man, fp = find_pack(name)
     nd, ed = edit_counts(os.path.join(pdir, fp + ".txt"))
+    whole = not is_map_folder(pdir)      # 老布局的包目录：里面本来就没有点图，整份挪
+    draft = [] if whole else pack_draft_files(pdir)
+    if not whole and not draft:
+        sys.exit("这张图没有草稿文件可删（manifest.json / <指纹>.txt / nogen.txt）：%s" % pdir)
     if hard:
-        final_delete_dir(pdir)
+        if whole:
+            final_delete_dir(pdir)
+        else:
+            for p in draft:
+                make_writable(p)
+                try:
+                    os.remove(p)
+                except OSError:
+                    pass
         return pdir, "", nd, ed
-    os.makedirs(PACK_TRASH, exist_ok=True)
-    base = os.path.basename(os.path.normpath(pdir))
-    dst = os.path.join(PACK_TRASH, "%s__%s" % (base, time.strftime("%Y%m%d_%H%M%S")))
-    n = 2
-    while os.path.exists(dst):           # 同一秒删两张：加 -2 / -3，别互相覆盖
-        dst = os.path.join(PACK_TRASH, "%s__%s-%d" % (base, time.strftime("%Y%m%d_%H%M%S"), n))
-        n += 1
-    try:
-        shutil.move(pdir, dst)
-    except OSError:
-        shutil.copytree(pdir, dst)       # 跨盘 / 占用：复制成功再删原目录
-        final_delete_dir(pdir)
+    dst = _pack_trash_dst(pdir)
+    if whole:
+        try:
+            shutil.move(pdir, dst)
+        except OSError:
+            shutil.copytree(pdir, dst)       # 跨盘 / 占用：复制成功再删原目录
+            final_delete_dir(pdir)
+        return pdir, dst, nd, ed
+    os.makedirs(dst, exist_ok=True)
+    for p in draft:
+        target = os.path.join(dst, os.path.basename(p))
+        try:
+            shutil.move(p, target)
+        except OSError:                      # 跨盘 / 占用：复制成功再删原件
+            shutil.copy2(p, target)
+            make_writable(p)
+            try:
+                os.remove(p)
+            except OSError:
+                pass
     return pdir, dst, nd, ed
 
 
 def cmd_pack_rm(args):
-    r"""删除一张图的草稿：默认整份挪到 archive\pack_trash\，--hard 才真删。
+    r"""删除一张图的草稿：只搬草稿三件到 archive\pack_trash\，--hard 才真删。
 
-    删完这张图回到「还没有草稿」；成品（已发布的 final\<指纹>.txt）不受影响。
+    删完这张图回到「还没有草稿」；图本身（map.json / 可走面 / 标记）和成品都不受影响。
     """
     name = str(args.name or "").strip()
     pdir, where, nd, ed = pack_store_remove(name, hard=bool(getattr(args, "hard", False)))
     print("已删除草稿：%s" % pdir)
     print("  node %d / edge %d（这张图现在「还没有草稿」）" % (nd, ed))
     if where:
-        print("  目录已移到：%s" % where)
-        print("  误删找回：把那个目录整个挪回 packs\\ 下（同名即可），状态就回来了。")
+        print("  草稿已移到：%s" % where)
+        print("  误删找回：把里面的 manifest.json / nogen.txt / <指纹>.txt 挪回上面的目录即可。")
     else:
-        print("  --hard：目录已物理删除，不保留（重做点控制台「开始编辑这张图」）。")
+        print("  --hard：草稿文件已物理删除，不保留（重做点控制台「开始编辑这张图」）。")
+    print("  图数据没动：map.json / 可走面 / markers.txt / native\\ / final\\ 都还在原处。")
     print("  成品不受影响：已发布的 final\\<指纹>.txt 还在，要撤发布用 final rm。")
     return 0
 
@@ -1969,7 +2060,7 @@ def main():
     q2.add_argument("--as", dest="as_name", metavar="版本名", default="", help="已废弃，忽略")
     q2.add_argument("--dry", action="store_true")
     q2.set_defaults(func=cmd_pack_promote)
-    q2 = ps.add_parser("rm", help="删除草稿（整份挪到 archive\\pack_trash\\，成品不动）")
+    q2 = ps.add_parser("rm", help="删除草稿（草稿三件挪到 archive\\pack_trash\\，图数据 / 成品不动）")
     q2.add_argument("name", help="地图文件夹，例：10_Nano30_Storm飓风危城")
     q2.add_argument("--hard", action="store_true", help="真删，不进 archive（不可恢复）")
     q2.set_defaults(func=cmd_pack_rm)

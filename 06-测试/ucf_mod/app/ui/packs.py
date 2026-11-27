@@ -146,6 +146,35 @@ def _is_pack_dir(path):
         return False
 
 
+def _is_map_root(path):
+    r"""这个目录是不是「一张图的文件夹」：点图 / 可走面 / 标记 / native\ / final\ 有一个就行。
+
+    2026-11-27 一图一夹以后草稿就在图文件夹里。老版本的 load_packs() 只认 manifest.json /
+    <指纹>.txt，于是删完草稿的图文件夹会被当成「老布局的图/包」继续往下找，
+    把 <图>\final\<指纹>.txt 列成一个叫 final 的草稿（对比表里多一行假的）。
+    """
+    for fn in ("map.json", "navmesh.bin", "markers.txt"):
+        if os.path.isfile(os.path.join(path, fn)):
+            return True
+    for sub in (P.NATIVE_SUB, P.FINAL_SUB):
+        if os.path.isdir(os.path.join(path, sub)):
+            return True
+    return False
+
+
+def runtime_fp(lv, fp=""):
+  r"""草稿文件 / 插件眼里的指纹：纯面图（没有 map.json）补完点图后是 n0-…（0 个点）。
+
+  2026-11-27：胜利广场 / 死亡擂台 场景里没有 PointGraph，插件现场补一张 0 点的，
+  运行期指纹就是 n0-0000000000000000（和飓风危城一样）。控制台这边它们的 map.json
+  指纹是空串（不能冒充飓风危城去做 find_map_doc / 成品的按指纹查找），
+  只在「写草稿文件名 / 告诉插件 UCF_FP」时换成这个运行期指纹。
+  """
+  if fp:
+    return fp
+  return "n0-0000000000000000" if lv else ""
+
+
 def pack_manifest(pid):
     r"""读 packs/<地图文件夹>/<包名>/manifest.json；没有就返回空 dict。"""
     try:
@@ -261,6 +290,8 @@ def load_packs():
         if _is_pack_dir(d):
             out.append(entry)                      # 老布局：直接放在根目录
             continue
+        if _is_map_root(d):
+            continue                               # 图文件夹：native\ / final\ 是图数据，不是包
         try:
             subs = sorted(os.listdir(d))
         except OSError:
@@ -388,6 +419,10 @@ class PackMixin:
         folder = self.current_folder() if hasattr(self, "opt_map") else ""
         if not folder:
             self.set_status("先在「编辑中」页选一张图")
+            return
+        if not self.current_map()[2]:
+            self.set_status("纯面图只能停在「编辑中」：成品档按指纹找文件，"
+                            "飓风危城 / 胜利广场 / 死亡擂台 三张 0 点图指纹都是 n0-…，会互相覆盖")
             return
         if not self.draft_exists():
             self.set_status("这张图还没有草稿：先点「开始编辑这张图」")
@@ -636,6 +671,14 @@ class PackMixin:
         """当前选择 → 写回 ucf_mod.json 的 pack 段（只给控制台自己用，插件不读它）。"""
         lv, lab, fp = self.current_map() if hasattr(self, "opt_map") else ("", "", "")
         folder = self.current_folder() if hasattr(self, "opt_map") else ""
+        if lv and not fp:
+            # 纯面图（胜利广场 / 死亡擂台）：场景里没有 PointGraph，插件进图会现场补一张
+            # （0 节点），再按 grow 套草稿。有草稿才带 UCF_PACK；指纹是运行期的 n0-…。
+            name = folder if (folder and self.draft_exists()) else ""
+            return {"on": bool(self.pack_on.get()) if hasattr(self, "pack_on") else False,
+                    "name": name, "map": lv, "label": lab,
+                    "fp": runtime_fp(lv, fp) if name else "",
+                    "face": True, "only_map": True}
         name = folder if (folder and self.draft_exists()) else ""
         return {
             "on": bool(self.pack_on.get()) if hasattr(self, "pack_on") else False,
@@ -785,10 +828,11 @@ class PackMixin:
         self.set_status("已清空 %s / %s：进图后从 0 画（Ctrl+Shift+N 加点）" % (name, fp))
 
     def delete_draft(self):
-        r"""删掉当前地图的草稿（整份目录）—— 和「重置」不是一回事。
+        r"""删掉当前地图的草稿 —— 只搬 manifest / <指纹>.txt / nogen.txt，图数据原地不动。
 
         重置 = 留着草稿、把点/边清成 0（下次接着画）；
-        删除 = 这张图回到「还没有草稿」，编辑中里没有它了，要重做得重新「开始编辑这张图」。
+        删除 = 这张图回到「还没有草稿」，地图本身还在（下拉里选得到），要重做得重新「开始编辑这张图」。
+        **不能整份目录搬**：一图一夹之后 map.json / navmesh.bin / native\ / final\ 都在同一个目录里。
         草稿之外还有 markers\ 里的守卫区 / 守卫点 / 蹲守点 / 标签 / 出生点：默认连草稿一起清
         （弹窗里的勾选框，默认勾上；取消勾选就只删草稿、留着标记）。
         两样都不真删：草稿挪 archive\pack_trash\，标记挪 archive\markers_trash\，误删都能挪回。
@@ -808,7 +852,7 @@ class PackMixin:
         nd, ed = self.draft_counts()
         mode = ("空白地图" if (man.get("grow") or man.get("blank")) else
                 "原版 + 新增" if man.get("keep") else "增量")
-        lines = ["「%s」这张图的草稿整份删掉。" % where,
+        lines = ["「%s」这张图的草稿删掉（点图、可走面、成品、标记都留着）。" % where,
                  "",
                  "草稿：%d 点 / %d 边 · %s · 创建于 %s" % (
                      nd, ed, mode, (man.get("created") or "-")[:16]),
@@ -816,7 +860,8 @@ class PackMixin:
                  "",
                  "删完这张图回到「还没有草稿」，要重做点「开始编辑这张图」。",
                  "成品里已发布的那份不动（要撤发布去「成品」页）。",
-                 "整份目录先移到 archive\\pack_trash\\，误删可以挪回来。"]
+                 "只搬草稿三件（manifest.json / nogen.txt / <指纹>.txt）到 archive\\pack_trash\\；",
+                 "map.json / 可走面 / 本图标记原地不动，误删可以挪回来。"]
         counts = self.marker_counts()
         has_markers = any(counts.values())
         marker_summary = self.marker_summary(counts) if has_markers else ""
@@ -1003,9 +1048,14 @@ class PackMixin:
         一张图只有一个草稿；已有草稿就直接打开目录，不再建第二个。
         """
         lv, lab, fp = self.current_map() if hasattr(self, "opt_map") else ("", "", "")
-        if not lv or not fp:
-            self.set_status("先选一张有指纹的图，再点「开始编辑这张图」")
+        if not lv:
+            self.set_status("先选一张图，再点「开始编辑这张图」")
             return
+        face = not fp
+        if face:
+            # 纯面图：插件进图会现场补一张 0 节点的 PointGraph（没有就没法 AddNode），
+            # 草稿文件名 / manifest 用运行期指纹 n0-…。grow 时插件还会把可走面摘掉。
+            fp = runtime_fp(lv, fp)
         folder = map_folder(lv, fp)
         if self.draft_exists():
             self.set_status("这张图已经有草稿：%s" % folder)
@@ -1105,11 +1155,13 @@ class PackMixin:
             now = time.strftime("%Y-%m-%d %H:%M:%S")
             summ = pack_summary(folder, fp)
             man = {
-                "name": "%s_%s" % (map_scene(lv, fp), time.strftime("%Y%m%d")),
+                "name": "%s_%s" % ((lab or lv) if face else map_scene(lv, fp),
+                                    time.strftime("%Y%m%d")),
                 "folder": folder, "level": lv, "label": lab, "fp": fp,
                 "created": now, "updated": now,
                 "source": ("copy-final" if mode.startswith("从成品") else
-                           "console-keep" if keep else "console-grow"),
+                           "console-keep" if keep else
+                           "console-grow-face" if face else "console-grow"),
                 "grow": bool(grow or summ["grow"]),
                 "keep": bool(keep or summ["keep"]),
                 "note": ("grow 草稿（空白地图）：原生点全禁用 + 新点按 AddNode 新建"

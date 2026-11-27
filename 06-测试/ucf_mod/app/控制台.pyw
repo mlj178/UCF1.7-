@@ -19,7 +19,6 @@ import customtkinter as ctk
 from tabs.autotest import AutotestTab
 from tabs.data import DataTab
 from tabs.dev.tab import DevTab
-from tabs.hotkey import HotkeyTab
 from tabs.map import MapTab
 from tabs.overview import OverviewTab
 from tabs.record.tab import RecordTab
@@ -37,7 +36,7 @@ from ui.packs import (
 from ui.util import _python, compact_path, game_running, game_tag, load_cfg, save_cfg, tail_log
 
 
-class App(Kit, PackMixin, MapTab, VisTab, HotkeyTab, WaypointTab, OverviewTab,
+class App(Kit, PackMixin, MapTab, VisTab, WaypointTab, OverviewTab,
           RecordTab, DataTab, AutotestTab, DevTab, ctk.CTk):
     def __init__(self, role=None):
         super().__init__()
@@ -267,10 +266,7 @@ class App(Kit, PackMixin, MapTab, VisTab, HotkeyTab, WaypointTab, OverviewTab,
         2026-11-24 分组重构：页签从「平铺 10 个」改成「4 组 × 组内页」，
         各页的 build_* 一行没改，只是父容器从 tabview 换成了组内 frame。
         """
-        if page == "快捷键":
-            hint, _items = hint_items["快捷键"]
-            self.build_hotkey_tab(frame, hint)          # 热键速查（游戏内已不显示）
-        elif page == "可视化":
+        if page == "可视化":
             hint, items = hint_items["可视化"]
             self.build_vis_tab(frame, hint, items)      # 总开关 + 十类数据（勾选）
         elif page == "地图":
@@ -498,7 +494,10 @@ class App(Kit, PackMixin, MapTab, VisTab, HotkeyTab, WaypointTab, OverviewTab,
                 return pos[0], pos[1]
         old = str(self.ui.get("tab") or "")
         if old in TAB_OLD_MAP:
-            return TAB_OLD_MAP[old], old
+            group = TAB_OLD_MAP[old]
+            # 老配置可能指向已经删掉的页（导出 / 快捷键）：落到这一组的首页
+            page = old if old in groups.get(group, ()) else groups[group][0]
+            return group, page
         groups = dict(TAB_GROUPS)
         if old in groups:
             page = str(self.ui.get("sub_%s" % old) or self.ui.get("sub") or "")
@@ -751,6 +750,10 @@ class App(Kit, PackMixin, MapTab, VisTab, HotkeyTab, WaypointTab, OverviewTab,
             # 总开关关 = 插件加载但待机（plugin.c: loaded but idle）
             self.btn_game.configure(text="开始游戏 · 插件已关（原版）" + suffix, state="normal",
                                     fg_color="#3a3f47", hover_color="#49505a")
+        elif pk.get("face") and not pk.get("name"):
+            self.btn_game.configure(
+                text="开始游戏 · 原版（%s 还没建草稿）" % (pk.get("label") or pk.get("map")) + suffix,
+                state="normal", fg_color="#3a3f47", hover_color="#49505a")
         elif pk.get("on") and pk.get("name"):
             label = self.folder_label(pk["name"]) if hasattr(self, "folder_label") else pk["name"]
             self.btn_game.configure(text="开始游戏 · 编辑中 %s" % label + suffix,
@@ -777,6 +780,12 @@ class App(Kit, PackMixin, MapTab, VisTab, HotkeyTab, WaypointTab, OverviewTab,
                     "title": "本次启动 = 原版（插件待机）",
                     "sub": "总开关关闭：插件加载但不动作，不读 nav、不出 F2 菜单",
                     "go": "去打开"}
+        if pk.get("face") and not pk.get("name"):
+            # 纯面图还没建草稿：选得中，但没有点图可套（原生只有可走面），启动 = 原版
+            return {"mode": "face", "badge": "纯面图",
+                    "title": "%s · 这张图没有点图，启动 = 原版" % (pk.get("label") or pk.get("map")),
+                    "sub": "原生只有可走面（NavMeshGraph），人机走三角网；插件照常加载，这张图不用改路线",
+                    "go": "去人机路点改"}
         if not (pk.get("on") and pk.get("name")):
             st = final_stats()
             if self.role == ROLE_USER:      # 用户身份不提示「切到编辑中」——那是开发页
@@ -834,13 +843,14 @@ class App(Kit, PackMixin, MapTab, VisTab, HotkeyTab, WaypointTab, OverviewTab,
             "off": ("#5a3434", "#2a1a1a", "#301c1c", "#ff9d9d"),
             "test": ("#7a5a17", "#2c2310", "#3a2c0d", "#f7cd74"),
             "final": ("#2f4f8a", "#1a2433", "#16233a", "#9cc3ff"),
+            "face": ("#5a4a2a", "#221d14", "#2e2717", "#d9c48b"),
         }[info["mode"]]
         self.strip.configure(border_color=style[0], fg_color=style[1])
         self.strip_badge.configure(text=info["badge"], fg_color=style[2],
                                    text_color=style[3],
                                    width=max(78, 15 * len(info["badge"]) + 14))
         self.strip_title.configure(text=info["title"],
-                                   text_color="#f7cd74" if info["mode"] == "test" else "#f0f0f0")
+                                   text_color="#f7cd74" if info["mode"] in ("test", "face") else "#f0f0f0")
         self.strip_sub.configure(text=info["sub"])
         self.strip_go.configure(text=info["go"])
         # 2026-11-24：用户身份平时没有这个按钮（跳转是开发页），只有「插件关着」时露出一个
@@ -1087,6 +1097,13 @@ class App(Kit, PackMixin, MapTab, VisTab, HotkeyTab, WaypointTab, OverviewTab,
         if not enabled:
             # 总开关关 = 插件加载但待机（plugin.c）；状态行别再写「mod + 测试包」
             note = "插件总开关关闭：插件待机（不读 nav、不出菜单）"
+        elif pk.get("face") and not pk.get("name"):
+            # 纯面图（胜利广场 / 死亡擂台）还没建草稿：场景里没有 PointGraph，插件没有点图可套 ——
+            # 当原版启动，别把 build 的 UCF_PACK / 成品搜索挂上，免得写一条永远生效不了的包。
+            for k in ("UCF_PACK", "UCF_FP", "UCF_FPLABEL", "UCF_NAV_DIR",
+                      "UCF_NAV_SEARCH", "UCF_NAV_SUB", "UCF_NAV_READONLY"):
+                env.pop(k, None)
+            note = "mod + 纯面图 %s（不套路线：这张图没有点图）" % (pk.get("label") or pk.get("map"))
         elif pk.get("on") and pk.get("name"):
             env["UCF_PACK"] = pk["name"]           # 只有一层：packs\\<地图文件夹>
             env.pop("UCF_NAV_READONLY", None)      # 草稿允许游戏内保存

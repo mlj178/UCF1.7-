@@ -135,7 +135,11 @@ def main():
     con_counts = CStats.data_counts(CEnv.DEV)
     check(con_counts[0] == n_maps and con_counts[3] == n_bins,
           "控制台 data_counts=(%d 图, %d 面)" % (con_counts[0], con_counts[3]))
-    check(len(CMaps.load_maps()) == 9, "控制台 load_maps 9 张能测的图")
+    ms = CMaps.load_maps()
+    check(len(ms) == 11, "控制台 load_maps 11 张（9 张点图 + 2 张纯面图 04/07，指纹空串）")
+    check(len([m for m in ms if m[2]]) == 9, "load_maps 里 9 张有点图指纹")
+    check([m[0] for m in ms if not m[2]] == ["level4", "level11"],
+          "纯面图是 04 胜利广场 / 07 死亡擂台（指纹空串）")
 
     import navserver as S
     rows = S.collect_maps()

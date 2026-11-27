@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-r"""跳跃数据 -> Markdown 报告（控制台「开发者选项 → 轨迹采集」旁边的按钮也调它）。
+r"""跳跃数据 -> Markdown 报告（**命令行工具**：2026-11-27 起控制台不再调它）。
+
+只读原始日志、只写 Markdown。日志可以是「原始轨迹采集」，也可以是「录制」——
+两边是同一套格式（ucf-trace/3），所以录制日志也能直接喂进来。
 
 用法：
     python app/tools/data/jump_stats.py                      # 目录里全部 .jsonl
@@ -14,8 +17,6 @@ r"""跳跃数据 -> Markdown 报告（控制台「开发者选项 → 轨迹采�
   * ucf-trace/1（旧日志）：只有相机坐标、没有 grounded / 竖直速度，
     这里用「竖直速度 > 5 m/s 起跳 + 连续 3 帧竖直速度接近 0 落地」估算，
     报告里会标成「（估）」，并提示用新 DLL 重采。
-
-只读原始日志、只写 Markdown。
 """
 import argparse
 import os

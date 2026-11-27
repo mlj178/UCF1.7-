@@ -718,7 +718,9 @@ function hasBlank(text) {
 function parseJumpAdds(text) {
   const out = [];
   String(text || "").split(/\r?\n/).forEach(function (raw) {
-    const m = /^jump\s+add\s+(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)$/.exec(raw.trim());
+    /* 前 6 个数是两端坐标；后面可能还有 needSpeed / accuracy / direction
+       （以及 2026-11-27 加的 ct0 / ct1 / ctb），一律忽略 —— 只画 A->B 那条线 */
+    const m = /^jump\s+add\s+(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)(?:\s+\S+)*$/.exec(raw.trim());
     if (m) out.push([ [+m[1], +m[2], +m[3]], [+m[4], +m[5], +m[6]] ]);
   });
   return out;

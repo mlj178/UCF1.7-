@@ -40,7 +40,7 @@ KIT = os.path.join(PROJ, "app", "ui", "kit.py")
 # 2026-11-19：用户要求删除 editor（允许游戏内编辑）；C 侧仍按默认 1 运行。
 # 2026-11-19：用户要求整个「手动」页删除，collect_only 入口一并下线（collect.flag 仍可用）。
 RETIRED = {"auto_waypoints", "auto_crouch", "ghost_areas", "editor", "collect_only"}
-TABS = ["地图", "可视化", "快捷键"]   # 「测试数据」「数据」「车测」不是开关页，不在此列
+TABS = ["地图", "可视化"]             # 「测试数据」「数据」「车测」不是开关页；「快捷键」页已删
 # 非 bool 开关（画笔字符串等）：控件不是 switch，但必须在对应页有入口
 CUSTOM = {"wp_menu": "人机路点", "wp_autoground": "人机路点"}
 # 2026-11-19：可视化改成逐类开关（读+画同一颗），全部落在「可视化」页
@@ -184,10 +184,10 @@ def main():
     assert group_names == ["插件开关", "路点数据", "部署与测试", "开发调试"], \
         "控制台分组应为 插件开关/路点数据/部署与测试/开发调试，实际 %s" % group_names
     flat_pages = [p for pages in pages_of.values() for p in pages]
-    assert len(flat_pages) == len(set(flat_pages)) == 10, \
-        "10 个页签必须一组一个、不重不漏，实际 %s" % flat_pages
-    assert pages_of["插件开关"] == ["地图", "可视化", "快捷键"], \
-        "「插件开关」组应为 地图/可视化/快捷键（导出页已删）"
+    assert len(flat_pages) == len(set(flat_pages)) == 9, \
+        "9 个页签必须一组一个、不重不漏，实际 %s" % flat_pages
+    assert pages_of["插件开关"] == ["地图", "可视化"], \
+        "「插件开关」组应为 地图/可视化（导出页、快捷键页都已删）"
     assert pages_of["路点数据"][0] == "地图总览", \
         "「地图总览」应排在「路点数据」第一位"
     assert pages_of["路点数据"].index("人机路点") < pages_of["路点数据"].index("数据"), \
