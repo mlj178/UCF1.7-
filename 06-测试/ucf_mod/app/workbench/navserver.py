@@ -189,7 +189,7 @@ WEB = P.WEB
 # ② 测试包目录（ucf_paths.PACKS_DIR）：只对某一张图生效的路线改动
 
 # ---------------------------------------------------------------- 可走面（NavMeshGraph）
-# 原生 A* 顶点数（网格顶点去重后），逐张图实测，见 docs/地图对照表.md
+# 原生 A* 顶点数（网格顶点去重后），逐张图实测，见 docs/07-地图对照表.md
 # §「原生可通行空间（A* 图）」；重新核对：python tools/data/scan_native_nav.py
 NATIVE_VERTS = {
     "level2": 840, "level3": 532, "level4": 716, "level5": 683,
@@ -346,7 +346,7 @@ def auto_organize_loop():
                 last = vis_stamp()      # 归档会把文件搬走，别把自己再触发一次
 
 # 内置中文名：key 可以是关卡名（level1）、小地图贴图名（level1_TransportShip）
-# 兜底表：地图对照表.md 缺失/损坏时才用
+# 兜底表：07-地图对照表.md 缺失/损坏时才用
 BUILTIN_DEFAULT_NAMES = {
     # 关卡 -> 官方中文名（证据：sharedassets0 里的选图表「模式名/场景名/中文名」，
     # 再用每个 levelN 场景文件里的场景名交叉验证）
@@ -375,11 +375,11 @@ MODE_BY_LEVEL = {
     "level7": ("生化剑客模式", 4),
     "level10": ("多人生化模式", 5), "level9": ("多人生化模式", 5),
 }
-# 原生场景里 0 个 WayPoint：只有可走面，永远采不到点图（见 docs/地图对照表.md §5）
+# 原生场景里 0 个 WayPoint：只有可走面，永远采不到点图（见 docs/07-地图对照表.md §5）
 NO_POINT_LEVELS = ("level4", "level11")
 
 # 权威对照表（手写在工程端 docs/，持久保存；改了不用重启服务，下次请求就生效）
-TABLE_FILE = doc("地图对照表.md")
+TABLE_FILE = doc("07-地图对照表.md")
 TABLE_ROW_RE = re.compile(r"^\|\s*(\d{1,3})\s*\|\s*(level\d+)\s*\|\s*([^|]+?)\s*\|\s*([^|]*?)\s*\|\s*([^|]*?)\s*\|")
 _table_cache = {"mtime": -1.0, "rows": []}
 
@@ -593,7 +593,7 @@ def list_snapshots():
                 level = (level_from_text(info.get("mapName") or "")
                          or level_from_text(fn) or "")
             entry["level"] = level
-            # 显示名以 docs/地图对照表.md 为准（maps 里的 label / names.json 是旧快照，
+            # 显示名以 docs/07-地图对照表.md 为准（maps 里的 label / names.json 是旧快照，
             # 隐藏图改叫「飓风危城」不用回写四版数据）
             label = default_names().get(level, "")
             if not label:
@@ -1054,7 +1054,7 @@ def _map_entry(file_name, path, info, row, ctx=None):
     info = info or {}
     row = row or {}
     level = str(info.get("level") or row.get("level") or "")
-    # 显示名以 docs/地图对照表.md 为准（level9 隐藏图 = 飓风危城，文件仍叫 10_暴风.json）
+    # 显示名以 docs/07-地图对照表.md 为准（level9 隐藏图 = 飓风危城，文件仍叫 10_暴风.json）
     label = (default_names().get(level, "") or str(info.get("label") or "")
              or str(row.get("name") or ""))
     fp = str(info.get("fp") or row.get("fingerprint") or "")

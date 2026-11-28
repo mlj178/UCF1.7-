@@ -107,7 +107,7 @@ ucf_mod/
 │   ├── core/                  ★ 路径与数据台账
 │   │   ├── ucf_paths.py       工程端 / 部署端 / 三区路径解析（唯一真相）+ P.tool()
 │   │   ├── ucf_sample.py      ★ 采样文件读取（ucf-trace/1·2·3）：录制和采集共用一份解析
-│   │   ├── map_table.py       读 docs/guide/地图对照表.md（序号_场景名中文名）
+│   │   ├── map_table.py       读 docs/guide/07-地图对照表.md（序号_场景名中文名）
 │   │   └── navdata.py         数据台账：status / verify / restore / diff / freeze / pack …
 │   ├── workbench/             网页端（只读）
 │   │   ├── navserver.py       本地只读服务（也托管网页）
@@ -406,6 +406,7 @@ python app/tests/test_workbench_views.py    # 工作台三档 + grow/jump/单向
 python app/tests/test_manual_save.py        # 手动保存：唯一入口 / 无自动保存 / 退房间丢弃
 python app/tests/test_logpaths.py           # 日志三级查找 + 注入 + 轮转
 python app/tests/test_layout.py             # 目录树与 README 一致（重构后新增）
+python app/tests/test_guide_docs.py         # guide 文档改名后：代码常量 / 对照表 / 编号 / 链接四处对上（2026-11-28）
 python app/tests/test_roles.py              # 身份（用户/开发）↔ 页表、旧配置迁移
 python app/tests/test_console_timers.py     # 控制台定时链只有一条：折叠停 / 展开续 / 关窗摘
 python app/tests/test_guard_entry_escape.py # 守卫区入口 / 逃跑点：菜单接线 / 数组 / 落盘 / 撤销
@@ -418,14 +419,14 @@ python app/tests/test_guard_zone_ops.py    # 删除入口 / 删除逃跑点 / �
 
 | 文件 | 内容 |
 | --- | --- |
-| `docs/guide/地图对照表.md` | ★ **唯一权威表**：11 张图的 序号/关卡/中文名/场景名（手写，脚本都读它）+ 原生 A* 数据 |
-| `docs/guide/地图数据标准_取用与核对.md` | 数据长什么样、谁写谁读、怎么核对 |
-| `docs/guide/部署总览.md` | 直读模式 + 一键部署（加载器 / 本体补丁 / 备份 / 卸载） |
-| `docs/guide/人机与路线设计.md` | **新手先看**：人机行为优先级、路线元素、各模式需要什么 |
-| `docs/guide/寻路全流程_从建图到蹲下.md` | 想懂原理：三层结构、类关系、五个阶段 |
-| `docs/guide/点图与可走面_为什么每张图不一样.md` | 一张图靠点、一张图靠面，为什么 |
-| `docs/guide/新增地图_完整工作流.md` | 加新地图：Blender → Unity → 字节补丁 → 修出生点 |
-| `docs/guide/游戏基础信息.md` | 模式枚举 + 阵营缩写 + 出生点容器 |
+| `docs/guide/07-地图对照表.md` | ★ **唯一权威表**：11 张图的 序号/关卡/中文名/场景名（手写，脚本都读它）+ 原生 A* 数据 |
+| `docs/guide/03-地图数据标准_取用与核对.md` | 数据长什么样、谁写谁读、怎么核对 |
+| `docs/guide/06-部署总览.md` | 直读模式 + 一键部署（加载器 / 本体补丁 / 备份 / 卸载） |
+| `docs/guide/09-人机与路线设计.md` | **新手先看**：人机行为优先级、路线元素、各模式需要什么 |
+| `docs/guide/08-寻路全流程_从建图到蹲下.md` | 想懂原理：三层结构、类关系、五个阶段 |
+| `docs/guide/04-点图与可走面_为什么每张图不一样.md` | 一张图靠点、一张图靠面，为什么 |
+| `docs/guide/02-新增地图_完整工作流.md` | 加新地图：Blender → Unity → 字节补丁 → 修出生点 |
+| `docs/guide/01-游戏基础信息.md` | 模式枚举 + 阵营缩写 + 出生点容器 |
 | `docs/record/一图一夹_2026-11-27.md` | ★ 2026-11-27 一图一夹：navdata 四处并进 data/maps，成品进 <图>/final |
 | `docs/record/目录重构_2026-11-24.md` | 2026-11-24 目录重构：旧路径 → 新路径对照 |
 | `docs/record/身份与页签_2026-11-24.md` | 2026-11-24 身份（用户/开发）：页表、切换、迁移、自检 |

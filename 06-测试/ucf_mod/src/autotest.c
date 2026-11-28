@@ -8,7 +8,7 @@
  *   3) 每张图等若干 tick，没崩就打 OK；全过之后写 autotest.txt 并 ExitProcess(0)。
  *
  * 只由环境变量打开，正常游戏不受影响：
- *   UCF_AUTOTEST=7,10   关卡序号（levelN 的 N，见 docs/地图对照表.md）
+ *   UCF_AUTOTEST=7,10   关卡序号（levelN 的 N，见 docs/07-地图对照表.md）
  *   UCF_AT_WARM=40      切图前等多少 tick（一 tick = 250 ms）
  *   UCF_AT_SETTLE=48    每张图等多少 tick
  *   UCF_AT_EXIT=1       全部通过后是否直接退出（1=退出，0=留在游戏里）

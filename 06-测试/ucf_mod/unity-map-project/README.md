@@ -15,7 +15,7 @@
 | `run\gamepatch\12_TestMap12龙城\` | 部署用补丁包（成品文件 + patch.json） | ✅ | ✅ |
 | `data\navdata\dev\12_TestMap12龙城\` | 点图 / navmesh / 成品路线 | ✅ | ❌（数据从工程端读） |
 
-名字由 `app\core\map_table.py` 从 `docs\guide\地图对照表.md` 第一张表生成 —— **表里没这张图，三处名字就对不上**。
+名字由 `app\core\map_table.py` 从 `docs\guide\07-地图对照表.md` 第一张表生成 —— **表里没这张图，三处名字就对不上**。
 
 ## 二、一张图的目录约定
 
@@ -38,7 +38,7 @@
 5. 跑 `tools\` 里的构建脚本 → 产物进 `run\gamepatch\NN_...\UnityCrossFire_Data\`；
 6. 跑字节补丁脚本（外部依赖名 / .resS 路径），把补丁结果写进 `patch.json`；
 7. `tools\verify.py`（或手算哈希）核对：对象数、名册条数、每件文件的 sha256；
-8. `docs\guide\地图对照表.md` 第一张表加一行（序号 = 显示顺序，不是关卡号）；
+8. `docs\guide\07-地图对照表.md` 第一张表加一行（序号 = 显示顺序，不是关卡号）；
 9. 控制台「插件开关 → 地图」自动多一行（读 `map.json`），勾上 → 应用 → 进游戏验证。
 
 ## 四、注意

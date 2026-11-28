@@ -223,8 +223,8 @@ def save_json(path, obj, indent=1):
 
 
 def load_table():
-    """序号 / 关卡 / 中文名 / 场景名 / 备注 —— 只读 docs/地图对照表.md 的第一张表。"""
-    path = P.doc("地图对照表.md")
+    """序号 / 关卡 / 中文名 / 场景名 / 备注 —— 只读 docs/07-地图对照表.md 的第一张表。"""
+    path = P.doc("07-地图对照表.md")
     rows, started = [], False
     if not os.path.exists(path):
         return rows
@@ -1253,7 +1253,7 @@ def rebuild_index(root):
     doc = {"format": "ucf-map-index", "version": 1,
            "generated": time.strftime("%Y-%m-%d %H:%M:%S"),
            "ucf": P.DATA,
-           "note": "这份索引由 core/navdata.py 按 docs/地图对照表.md 生成；节点/边是当前这一版里的原生数据。",
+           "note": "这份索引由 core/navdata.py 按 docs/07-地图对照表.md 生成；节点/边是当前这一版里的原生数据。",
            "maps": rows, "extras": prev_doc.get("extras") or []}
     out_dir = P.index_dir(root)
     os.makedirs(out_dir, exist_ok=True)

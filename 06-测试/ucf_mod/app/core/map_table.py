@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 r"""地图对照表读取：序号 / 关卡 / 中文名 / 场景名 —— 测试包文件夹编号的唯一来源。
 
-权威表是 docs/guide/地图对照表.md 的**第一张表**（5 列）；读不到才退回内置 11 条。
+权威表是 docs/guide/07-地图对照表.md 的**第一张表**（5 列）；读不到才退回内置 11 条。
 本模块只干两件事：
     rows()                      -> [(序号, 关卡, 中文名, 场景名)]，按序号排好
     folder_name(关卡, 场景名, 中文名) -> "01_TransportShip运输船"（测试包的地图文件夹名）
@@ -20,7 +20,7 @@ except Exception:                                   # 单独 import 时（测试
 
 ROW_RE = re.compile(r"^\|\s*(\d{1,3})\s*\|\s*(level\d+)\s*\|\s*([^|]+?)\s*\|\s*([^|]*?)\s*\|")
 
-# 兜底表：地图对照表.md 缺失/损坏时才用（顺序 = 序号）
+# 兜底表：07-地图对照表.md 缺失/损坏时才用（顺序 = 序号）
 _BUILTIN = [
     ("level1", "运输船", "TransportShip"),
     ("level2", "小型工厂", "Factory"),
@@ -41,7 +41,7 @@ _cache = None
 def table_path():
     if _doc is not None:
         try:
-            return _doc("地图对照表.md")
+            return _doc("07-地图对照表.md")
         except Exception:
             pass
     return ""

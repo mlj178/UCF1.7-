@@ -6,7 +6,7 @@ r"""把 ① 备份 / ② 开发 从「maps\ nav\ vis\ 三块平铺」改成「�
     python tools/_oneoff/migrate_map_folders.py --apply    # 真搬：每个文件搬前搬后算 sha256，逐个比对
     python tools/_oneoff/migrate_map_folders.py --undo     # 按上一次的日志原路退回
 
-搬成什么样（和 ② packs 同一套名字，出处 docs/guide/地图对照表.md）：
+搬成什么样（和 ② packs 同一套名字，出处 docs/guide/07-地图对照表.md）：
 
     <数据根>\01_TransportShip运输船\map.json           <- maps\01_运输船.json
     <数据根>\02_Factory小型工厂\navmesh.bin            <- vis\navmesh_nm840-<指纹>.bin

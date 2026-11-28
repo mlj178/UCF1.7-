@@ -62,12 +62,12 @@ def _find_in_history(glob_pat, name):
                 return cand
     return ""
 
-TABLE_FILE = doc("地图对照表.md")
+TABLE_FILE = doc("07-地图对照表.md")
 ROW_RE = re.compile(r"^\|\s*(\d{1,3})\s*\|\s*(level\d+)\s*\|\s*([^|]+?)\s*\|\s*([^|]*?)\s*\|\s*([^|]*?)\s*\|")
 
 
 def load_table(path=None):
-    """从「地图对照表.md」读 [序号, 关卡, 中文名, 场景名, 备注]。读不到就返回 []。
+    """从「07-地图对照表.md」读 [序号, 关卡, 中文名, 场景名, 备注]。读不到就返回 []。
 
     只读**第一张表**（那个 5 列的权威表）：同一份 md 后面还有「原生可通行空间」等表格，
     它们的第 1/2/3 列也是 序号/关卡/中文名，一起读会把每张图重复一遍（序号算错、文件名也跟着乱）。
@@ -99,7 +99,7 @@ def load_table(path=None):
     return rows
 
 
-# 兜底表：地图对照表.md 缺失/损坏时才用（平时以那个 md 为准，见 load_levels）
+# 兜底表：07-地图对照表.md 缺失/损坏时才用（平时以那个 md 为准，见 load_levels）
 _BUILTIN_LEVELS = [
     ("level1", "运输船", "TransportShip", ""),
     ("level2", "小型工厂", "Factory", ""),
@@ -116,7 +116,7 @@ _BUILTIN_LEVELS = [
 
 
 def load_levels():
-    """优先用 mod 里的 地图对照表.md（手写、持久），没有再用内置兜底表。"""
+    """优先用 mod 里的 07-地图对照表.md（手写、持久），没有再用内置兜底表。"""
     rows = load_table()
     if len(rows) >= 5:
         return [(lv, nm, sc or "", note) for (_no, lv, nm, sc, note) in rows]
@@ -394,7 +394,7 @@ def build_index(rows, suspect=None, extras=None):
     save_json(os.path.join(out_dir, "_index.json"), doc)
     md = ["# 原始地图数据集（自动生成，勿手改）", "",
           "生成时间：" + doc["generated"], "",
-          "序号 / 关卡 / 中文名 / 场景名的**权威表**在 docs/guide/地图对照表.md（手写、持久）；",
+          "序号 / 关卡 / 中文名 / 场景名的**权威表**在 docs/guide/07-地图对照表.md（手写、持久）；",
           "本文件只是按那张表整理出来的结果，每次跑脚本都会重写。", "",
           "| 序号 | 关卡 | 中文名 | 场景名 | 节点 | 边 | 特征 | 文件 | 状态 | 备注 |",
           "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |"]
@@ -421,7 +421,7 @@ def build_index(rows, suspect=None, extras=None):
            "- 只读还原点：navdata\\test\\archive\\maps_original_<日期>/（含 sha256 清单）。",
            "- 早先标成「疑似大厅数据」、还没进数据集的导出在 ucf_mod/backup/review_20261116/；",
            "  其中小型工厂那 12 点已证实是 node link 端点（真数据），已经收进数据集。",
-           "- 序号/关卡/中文名/场景名以 ucf_mod/docs/guide/地图对照表.md 为准，本文件不定义名字。"]
+           "- 序号/关卡/中文名/场景名以 ucf_mod/docs/guide/07-地图对照表.md 为准，本文件不定义名字。"]
     if extras:
         md += ["", "## maps/ 里的其它文件（不在对照表里，原样保留）", "",
                "| 文件 | 关卡 | 说明 | 节点 |", "| --- | --- | --- | --- |"]
@@ -664,7 +664,7 @@ def main():
     args = ap.parse_args()
     if args.show_table:
         rows = load_table()
-        srcs = "地图对照表.md" if rows else "内置兜底表（地图对照表.md 没读到）"
+        srcs = "07-地图对照表.md" if rows else "内置兜底表（07-地图对照表.md 没读到）"
         log("来源：" + srcs + "（" + TABLE_FILE + "）")
         log("%-6s %-8s %-10s %-18s %s" % ("序号", "关卡", "中文名", "场景名", "备注"))
         for (no, lv, nm, sc, note) in (rows or [(i + 1, lv, nm, sc, note) for i, (lv, nm, sc, note) in enumerate(LEVELS)]):

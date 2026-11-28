@@ -24,7 +24,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 UCF_ROOT = HERE
 while not os.path.isfile(os.path.join(UCF_ROOT, ".ucfroot")) and os.path.dirname(UCF_ROOT) != UCF_ROOT:
     UCF_ROOT = os.path.dirname(UCF_ROOT)      # 项目根：靠 .ucfroot 标记
-MAP_MD = os.path.join(UCF_ROOT, "docs", "guide", "地图对照表.md")
+MAP_MD = os.path.join(UCF_ROOT, "docs", "guide", "07-地图对照表.md")
 WAYPOINT_TAG = 20022
 
 
@@ -41,7 +41,7 @@ def find_data_dir(cli):
 
 
 def load_map_table():
-    """从 地图对照表.md 读 序号/关卡/中文名/场景名（它是唯一权威表）。
+    """从 07-地图对照表.md 读 序号/关卡/中文名/场景名（它是唯一权威表）。
 
     只读第一张表：本文件自带的结果表也在同一份 md 里，一起读会把每张图读两遍。
     """

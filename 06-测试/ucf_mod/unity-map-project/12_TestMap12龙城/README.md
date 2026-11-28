@@ -7,7 +7,7 @@
 | 骨架（借的场景） | `level11` 死亡擂台 DeathRing（原版一个字节没动） |
 | Unity | 2020.3.30f1c1 |
 | 原始资源 | `src\ForbiddenTD_Classic.GLB`（8.35 MB）+ `unity\Assets\Models\ForbiddenTD_Classic.fbx` |
-| 搭建日期 | 2026-11-21 ~ 11-22（原记录：`docs\guide\新增地图_完整工作流.md`） |
+| 搭建日期 | 2026-11-21 ~ 11-22（原记录：`docs\guide\02-新增地图_完整工作流.md`） |
 
 ## 一、做了什么
 

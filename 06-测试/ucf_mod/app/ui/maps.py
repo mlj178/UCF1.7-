@@ -227,7 +227,7 @@ _LEVELS_FALLBACK = [
 
 
 def load_level_table():
-    r"""[(level, 中文名)] —— 只读 docs\地图对照表.md 第一张表（唯一权威表）。
+    r"""[(level, 中文名)] —— 只读 docs\07-地图对照表.md 第一张表（唯一权威表）。
     车测传的是 buildIndex，也就是 levelN 的 N，**不是** maps\NN_中文名.json 的序号：
     序号 07 是死亡擂台、它的关卡是 level11，两者不能混。"""
     out = []
