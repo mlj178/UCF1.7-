@@ -2151,7 +2151,6 @@ int navfix_scan_navmesh(P graph);          /* 2026-11-28 离线可走面：单�
 int navfix_replace_tile(P g, P vertsArr, P trisArr);  /* 兜底：直接把三角形塞进 tile */
 void navfix_navmesh_reset(void);                     /* 换图：丢掉上一张图的自建面图 */
 int navfix_pg_rescan(P pg, float maxDist);           /* 用 A* 自己的 Scan 按射线重建连接 */
-P navfix_load_navmesh_bundle(const char* path, const char* assetName);
 int navfix_attach_graph(P g);
 int navfix_detach_graph(P g);
 int navfix_drop_navmesh(void);    /* 纯面图：grow 时把可走面摘掉，人机才走点图 */
@@ -12419,49 +12418,6 @@ static void nm_load_tick(void) {
       elog("nm: bbox %.0f..%.0f x %.0f..%.0f y %.0f..%.0f",
            g_nmBBox[0], g_nmBBox[3], g_nmBBox[2], g_nmBBox[5], g_nmBBox[1], g_nmBBox[4]);
     }
-    /* 2026-11-28：工作区有 Unity 打的 bundle 时优先用它（真资产），挂进 A* 扫一次；
-     * 扫出三角形 = 真正可寻路的面图；扫不出再退回"只显示 + 点图"。 */
-    {
-      char bpath[MAX_PATH];
-      P bmesh;
-      snprintf(bpath, sizeof bpath, "%s\\%s\\navmesh_bundle", g_packRoot, dir);
-      /* 2026-11-28：AssetBundle 这条线在游戏里会崩（崩在 LoadFromFile 里），先关掉。
-       * 改为：Unity 离线烘好 → 导出 UCFN → 插件照旧加载（不走 bundle）。 */
-      if (0 && GetFileAttributesA(bpath) != INVALID_FILE_ATTRIBUTES) {
-        /* 工作区路径含中文：先复制到 %LOCALAPPDATA%\UCF（纯 ASCII）再让 Unity 加载，
-         * 避免 GBK/UTF-8 混用把引擎搞崩。 */
-        char stagePath[MAX_PATH];
-        const char* la = getenv("LOCALAPPDATA");
-        if (la && la[0]) {
-          snprintf(stagePath, sizeof stagePath, "%s\\UCF", la);
-          CreateDirectoryA(stagePath, 0);
-          snprintf(stagePath, sizeof stagePath, "%s\\UCF\\navmesh_bundle", la);
-          if (CopyFileA(bpath, stagePath, FALSE)) {
-            elog("nm: bundle 已暂存到 %s", stagePath);
-            snprintf(bpath, sizeof bpath, "%s", stagePath);
-          }
-        }
-        bmesh = navfix_load_navmesh_bundle(bpath, "Nano30_Storm_NavMesh");
-        if (bmesh) {
-          P g2 = navfix_add_navmesh_graph(bmesh);
-          if (g2) {
-            int tt;
-            navfix_attach_graph(g2);
-            navfix_scan_navmesh(g2);
-            tt = nm_tile_tris(g2);
-            elog("nm: bundle 面图扫描 tile_tris=%d", tt);
-            if (tt > 0) {
-              elog("nm: 面图已作为真正的 A* 图生效（%d 个三角形）", tt);
-              stage = 2;
-              return;
-            }
-            navfix_detach_graph(g2);
-          }
-        } else {
-          elog("nm: bundle 加载失败，退回显示模式");
-        }
-      }
-    }
     graph = navfix_add_navmesh_graph(mesh);
     if (!graph) { elog("nm: graph create failed"); stage = 2; return; }
     {
@@ -12471,43 +12427,15 @@ static void nm_load_tick(void) {
         memcpy((char*)ai + 0x10, g_nmTris, (size_t)g_nmTN * 12);
         nm_force_tile(graph, av, ai);
         nm_log_tile("after force", graph);
+        /* 显示用面图已就绪：tiles/tris 打出来，进图看日志就知道面图有没有装上 */
+        elog("nm: 显示用面图已就绪 tiles=%d tris=%d（只显示，寻路走点图）",
+             graph ? *(int*)((char*)graph + 0xC8) : -1, nm_tile_tris(graph));
       } else {
         elog("nm: arrays bad (av=%p ai=%p)", av, ai);
       }
     }
     stage = 2;
     return;
-  }
-  if (stage == 1) {
-    if (--wait > 0) return;
-    elog("nm: scanning...");
-    if (navfix_scan_navmesh(graph)) {
-      int tt = nm_tile_tris(graph);
-      elog("nm: scan ok tile_tris=%d", tt);
-      nm_log_tile("after scan", graph);
-      if (tt == 0 && g_nmVN > 0 && g_nmTN > 0) {
-        P av, ai;
-        elog("nm: tile empty -> ReplaceTile 兜底");
-        av = nm_int3_array(g_nmVerts, g_nmVN);
-        ai = x_array_new(g_i32Cls, (unsigned)g_nmTN * 3);
-        if (av && ai && *(int*)((char*)ai + 0xC) == g_nmTN * 3) {
-          memcpy((char*)ai + 0x10, g_nmTris, (size_t)g_nmTN * 12);
-          if (navfix_replace_tile(graph, av, ai)) {
-            elog("nm: fallback ok tile_tris=%d", nm_tile_tris(graph));
-            nm_log_tile("after fallback", graph);
-          }
-          else elog("nm: fallback failed");
-        } else elog("nm: fallback arrays bad");
-        if (nm_tile_tris(graph) == 0 && av && ai) {
-          elog("nm: still empty -> display fallback");
-          nm_force_tile(graph, av, ai);
-          nm_log_tile("after force", graph);
-        }
-      }
-    } else {
-      elog("nm: scan failed (graph attached, maybe empty)");
-    }
-    stage = 2;
   }
 }
 

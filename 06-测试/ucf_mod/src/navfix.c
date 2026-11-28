@@ -414,40 +414,6 @@ int navfix_pg_rescan(P pg, float maxDist) {
 }
 
 
-/* 2026-11-28：从工作区加载 AssetBundle 里的 Mesh（Unity 打包的真资产）。
- * 之前用运行时手搓的 Mesh，Scan 出来是空 tile；换成真资产再试一次。 */
-/* 路径带中文时，C 里的字节是 GBK；直接塞给 il2cpp（UTF-8）会崩。转一下。 */
-static void to_utf8(const char* in, char* out, int cap) {
-  wchar_t wbuf[1024];
-  int wn = MultiByteToWideChar(CP_ACP, 0, in, -1, wbuf, 1024);
-  if (wn <= 0) { out[0] = 0; return; }
-  WideCharToMultiByte(CP_UTF8, 0, wbuf, -1, out, cap, 0, 0);
-}
-
-P navfix_load_navmesh_bundle(const char* path, const char* assetName) {
-  P cls, m, bundle, mesh;
-  void* args[1];
-  void* exc = 0;
-  char u8[1024];
-  if (!path || !assetName) return 0;
-  cls = nm_class_any("UnityEngine", "AssetBundle");
-  if (!cls) { nlog("bundle: AssetBundle 类没找到"); return 0; }
-  m = i_class_get_method_from_name(cls, "LoadFromFile", 1);
-  if (!m) { nlog("bundle: LoadFromFile 没找到"); return 0; }
-  to_utf8(path, u8, sizeof u8);
-  nlog("bundle: 开始加载 %s", u8);
-  args[0] = i_string_new(u8);
-  bundle = i_runtime_invoke(m, 0, args, &exc);
-  if (exc || !bundle) { nlog("bundle: LoadFromFile 失败 %s", u8); return 0; }
-  m = i_class_get_method_from_name(cls, "LoadAsset", 1);
-  if (!m) { nlog("bundle: LoadAsset 没找到"); return 0; }
-  args[0] = i_string_new(assetName);
-  mesh = i_runtime_invoke(m, bundle, args, &exc);
-  if (exc || !mesh) { nlog("bundle: LoadAsset(%s) 失败", assetName); return 0; }
-  nlog("bundle: 取到 Mesh %p", mesh);
-  return mesh;
-}
-
 /* 把我们的图挂进 AstarData.graphs（Scan 前必须先挂上，否则 NavGraph.Scan 会抛） */
 int navfix_attach_graph(P g) {
   P astar, data, old, elem, neu;
