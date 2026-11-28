@@ -58,6 +58,7 @@ def main():
     tick = section(ed, "static void ghost_tick(void) {", "static int make_jump_link_ex")
     block = section(ed, "if (g_wpMenuSub == 3 && off < (int)sizeof s - 460)",
                     "/* 准星处那个虚线框的坐标")
+    sub = section(ed, "static int guard_add_place(void) {", "/* 菜单确认")
 
     print("[0] 段落定位（找不到段落 = 后面的检查全是假的）")
     check(len(wp) > 1000, "找到 wp_place()")
@@ -69,21 +70,22 @@ def main():
     print("[1] 区外早退：两次交互都不建东西")
     check("g_wpBrush == 3 && area_at(&p) < 0" in wp,
           "笔刷放守卫点：区外先判 area_at，早退")
-    check("if (i == 1 && area_at(&p) < 0)" in act,
-          "菜单「2 加守卫点」：区外先判 area_at，早退")
+    check("ai = area_at(&p);" in sub and "if (ai < 0)" in sub,
+          "加守卫点子页：区外先判 area_at，早退")
     check(wp.find("g_wpBrush == 3 && area_at(&p) < 0") < wp.find("ed_step()"),
           "笔刷这条早退在 ed_step() 之前（不留空撤销步）")
-    check(act.find("if (i == 1 && area_at(&p) < 0)") < act.find("ed_step();"),
-          "菜单这条早退在 ed_step() 之前（不留空撤销步）")
+    check(sub.find("ai = area_at(&p);") < sub.find("ed_step();"),
+          "子页这条早退在 ed_step() 之前（不留空撤销步）")
     check("editor_dirty_mk" not in wp[:wp.find("ed_step()")],
           "笔刷早退路径不点亮「未保存」")
-    check("editor_dirty_mk" not in act[:act.find("ed_step();")],
-          "菜单早退路径不点亮「未保存」")
+    check("editor_dirty_mk" not in sub[:sub.find("ed_step()")],
+          "子页早退路径不点亮「未保存」")
 
     print("[2] 没有「区 + 点」连招的残留")
     check("make_area" not in case3, "笔刷 3 段里不再调用 make_area")
-    check("make_area" not in act.split("else if (i == 1)")[-1].split("} else {")[0],
-          "菜单第 2 项分支里不再调用 make_area")
+    check("make_area" not in sub, "加点子页里不建区（只放守卫点）")
+    check("if (i == 1)" in act and "g_wpMenuSub = 10" in act,
+          "菜单第 2 项只是进加点子页，不建区也不放点")
     check("okArea" not in ed, "旧的 okArea（建区失败也接着挂点）已删除")
     check("make_area(30, p); if (g_curArea" not in ed, "旧的「建区 + 立刻挂点」写法已删除")
     check("准星不在任何守卫区：已新建守卫区" not in ed, "旧的 toast 文案已删除")
@@ -95,7 +97,7 @@ def main():
     check("不建守卫点；先「1 新建守卫区」" in ed, "日志里写清「不建点，要先建区」")
 
     print("[4] 建区那条路径照旧")
-    check("if (i == 0) { make_area(30, p); }" in act, "菜单「1 新建守卫区」仍然立刻建区")
+    check("make_area(30, p);" in act, "菜单「1 新建守卫区」仍然立刻建区")
     check(ed.count("make_area(30, p)") == 2, "只有两处建 3 m 区：菜单第 1 项 + 笔刷 4")
     check("case 4:\n      if (make_area(30, p)) toast_ok" in ed, "笔刷 4（守卫区）仍然立刻建区")
 
@@ -109,6 +111,7 @@ def main():
     print("[6] 菜单文字")
     check("按 5 不会建点（守卫点只挂在区里）" in block,
           "第 2 项写明区外按 5 不会建点")
+    check("按 5 进入加守卫点子页" in block, "第 2 项写明按 5 进子页")
     check("先按 1 建区，再回来加点" in block, "第 2 项写明该怎么办")
     check("按 5 会在该点新建一个区" not in ed, "旧的「会新建一个区」说明已删除")
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-r"""自检：蹲守点 / 守卫点的「朝向」（2026-11-27）。
+r"""自检：蹲守点的「朝向」（2026-11-27；2026-11-28 守卫点去掉方向）。
 
 跑法：python app/tests/test_direction.py
 
@@ -66,21 +66,25 @@ def main():
     crouch = section(ed, "static int make_crouch(V3 p, float yaw) {", "static P vec3_arr_new")
     check("write_zoom(comp, &p, yaw)" in crouch, "蹲守点创建时就写 zoomPos（以前是 null，朝向未定义）")
     nano = section(ed, "static int make_nanopos(int aid, V3 p, int safety, float yaw) {", "static int area_at(")
-    check("dir_of_yaw(yaw, &zd)" in nano, "守卫点按朝向算世界目标点")
-    check("(0,0,1)" not in nano or "固定值" in nano, "不再写死 (0,0,1)/(1,0,0) 两个占位方向")
+    check("(void)yaw;" in nano, "守卫点不再使用 yaw（2026-11-28 用户要求去掉方向）")
+    check("vec3_arr_new(0, 0)" in nano, "守卫点自己的 zoomPos 留空")
+    check("make_entrance(aid, c)" in nano, "没有入口时自动补区中心入口（保证 zoomPos 非空）")
+    check("(0,0,1)" not in nano or "固定值" in nano, "不再写死 (0,0,1)/(1,0,0) 占位方向")
     place = section(ed, "static void wp_place(void) {", "static void pack_stat(void)")
-    check("cam_dir_yaw()" in place, "按 5 放置蹲守点 / 守卫点时用相机朝向")
-    act = section(ed, "if (g_wpMenuSub == 3) {                 /* 守卫区 */", "if (g_wpMenuSub == 4)")
-    check("make_nanopos(g_mk[ai].aid, p, 3, cam_dir_yaw())" in act, "守卫区工具建点也带相机朝向")
+    check("cam_dir_yaw()" in place, "按 5 放置蹲守点时仍用相机朝向")
+    sub = section(ed, "static int guard_add_place(void) {", "/* 菜单确认")
+    check("make_nanopos(g_mk[ai].aid, p, g_nanoSafety, YAW_NONE)" in sub,
+          "加守卫点子页放点用当前安全等级、不带方向")
 
     print("[3] markers.txt 兼容")
     save = section(ed, "static int save_file(void) {", "static void reset_markers(void)")
     check('"crouch %d %.3f %.3f %.3f %.1f' in save, "crouch 行可带第 5 列朝向")
-    check('"nanopos %d %.3f %.3f %.3f %d %.1f' in save, "nanopos 行可带第 6 列朝向")
-    check("m->yaw > YAW_NONE + 1.0f" in save, "朝向未知就不写这一列（老格式照旧）")
+    check('"nanopos %d %.3f %.3f %.3f %d' in save, "nanopos 行不再写第 6 列朝向")
+    check('"crouch %d %.3f %.3f %.3f %.1f' in save, "crouch 行仍带朝向")
     load = section(ed, "static int load_file(void) {", "/* ================= 出生点编辑")
     check('"crouch %d %f %f %f %f"' in load, "读 crouch 第 5 列")
-    check('"nanopos %d %f %f %f %d %f"' in load, "读 nanopos 第 6 列")
+    check('"nanopos %d %f %f %f %d"' in load, "读 nanopos 5 列（老第 6 列忽略）")
+    check("make_nanopos(a, p, b, YAW_NONE)" in load, "读档建守卫点时不再传朝向")
     check(">= 4" in load and ">= 5" in load, "列数不够（老文件）不会误判失败")
 
     print("[4] 撤销 / 重做带朝向")
@@ -88,15 +92,13 @@ def main():
     check("e.yaw = mk->yaw;" in note, "记撤销时存下朝向")
     rec = section(ed, "static int mk_recreate(const MKE* e) {", "static void mke_desc(")
     check("make_crouch(e->p, e->yaw)" in rec, "撤销重建蹲守点带朝向")
-    check("make_nanopos(e->aid, e->p, e->prm, e->yaw)" in rec, "撤销重建守卫点带朝向")
+    check("make_nanopos(e->aid, e->p, e->prm, YAW_NONE)" in rec, "撤销重建守卫点不再带朝向")
 
     print("[5] 显示：只画准星对着的那一个")
     pick = section(ed, "static int dir_pick(int* src", "/* 方向层网格")
-    check("g_mk[i].type != MT_CROUCH && g_mk[i].type != MT_NANOPOS" in pick,
-          "只看蹲守点 / 守卫点（用户指定范围，罗盘不算）")
+    check("g_mk[i].type != MT_CROUCH" in pick, "只看蹲守点（守卫点已去掉方向）")
     check("perp <= 0.9f" in pick, "按准星射线选点（垂直距离 <= 0.9 m）")
-    check("g_vf[i].kind != K_CROUCH && g_vf[i].kind != K_NPOS" in pick,
-          "自己建的点优先，其次读游戏里的点")
+    check("g_vf[i].kind != K_CROUCH" in pick, "自己建的点优先，其次读游戏里的蹲守点")
     tick = section(ed, "static void dir_tick(void) {", "static void overlay_init")
     check("dir_pick(&src, &idx, &p, yaw, &n, &unknown)" in tick, "每 tick 只挑一个点")
     check("dir_hide(); return;" in tick, "没对准就收起（不糊屏）")
@@ -131,7 +133,7 @@ def main():
     gt = section(ed, "static void ghost_dir_arrow_tick(V3 p, float yaw) {", "/* 换图 / 退出时把预览全部丢掉")
     check("dir_of_yaw(yaw, &d)" in gt, "预览箭头按同一套朝向摆")
     gk = section(ed, "static void ghost_tick(void) {", "static int make_jump_link_ex")
-    check("brush == 2 || brush == 3" in gk, "只有蹲守点 / 守卫点的预览画朝向")
+    check("brush == 2 && ok" in gk, "只有蹲守点预览画朝向（守卫点已去掉方向）")
     check("ghost_dir_arrow_hide();" in gk, "其它情况收起")
 
     print()

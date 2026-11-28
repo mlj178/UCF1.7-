@@ -46,7 +46,11 @@ def main():
     dirs = {d for d in os.listdir(UCF_ROOT) if os.path.isdir(j(d))}
     # 2026-11-24 新增 unity-map-project/：地图工程（Unity 源码 + 构建/补丁脚本）。
     # 它属于"生产侧"，进 git 但不进分发包；和 app/src/data/docs/log/run/archive 并列。
-    want = {"app", "data", "docs", "log", "run", "src", "archive", "unity-map-project"}
+    # 2026-11-28 新增 unity-navmesh/：面图烘焙专用的 Unity 工程
+    # （Assets/Editor/BuildNav.cs + map_geometry.obj + Bundle/），只在本机用 Unity 命令行跑，
+    # 产物（.navmesh / navmesh.bin）放进 data/，工程本身不进分发包。
+    want = {"app", "data", "docs", "log", "run", "src", "archive",
+            "unity-map-project", "unity-navmesh"}
     check(dirs == want, "根目录文件夹 = %s（实际 %s）" % ("/".join(sorted(want)), "/".join(sorted(dirs))))
     for legacy in ("console", "core", "tools", "tests", "geo", "navdata", "payload", "build"):
         check(not os.path.exists(j(legacy)), "旧目录 %s/ 没有回来" % legacy)

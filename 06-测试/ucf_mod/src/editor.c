@@ -164,6 +164,9 @@ static char g_navBaseFp[48];
 static int  g_inited, g_initFail;
 static int  g_team;
 static int  g_n, g_areaCount, g_curArea = -1;
+/* 新建守卫点的默认安全等级（0~3）。菜单「守卫区工具 → 5」循环；
+ * 存 markers.txt 的 # nano_safety 行，下次进图沿用。 */
+static int  g_nanoSafety = 3;
 static P    g_lastAstar;
 
 static P (*x_domain_get)(void);
@@ -247,7 +250,7 @@ typedef struct {
 #define JADD 5     /* jump add：进图套完点和边后建 Bot_JumpLink（跳箱 / 上下层） */
 #define NMOVE 6    /* 贴地：a = 原坐标，b = 新坐标（会话级，不落盘） */
 #define NPOPADD 7  /* 删掉「本次会话里加的点」：a = 坐标，dir = g_drop 槽位 */
-#define NAV_ED_MAX 4096
+#define NAV_ED_MAX 8192   /* 2026-11-28：4096 装不下一张面图铺出来的点+边（4.6k）；翻倍留余量 */
 #define NAV_MAXN 20000
 /* connections 数组的强根。
  * 只写 connections 字段 + GC 写屏障，在 138 点/105 边这种大图上仍然会在旧图
@@ -329,6 +332,9 @@ static P g_cat;          /* UGUI Text: D-layer category list (left edge) */
 static P g_catGo;
 static P g_menu;         /* UGUI Text: SyPB-style waypoint menu */
 static P g_menuGo;
+/* 跟随式采样的状态行（屏幕左上角）：只在采样开着时显示，gf_hud() 里改字 */
+static P g_gfHud, g_gfHudGo;
+static char g_gfHudText[160];
 /* 屏幕中央提示（toast）：禁止操作 / 失败原因直接显示在屏幕中间（2026-11-26 用户要求）。
  * 和 F2 菜单共用一张 Canvas：黑影 + 亮红字两个 Text，锚点/轴心都在中心，
  * Y 上移 TOAST_Y 免得压住准星，TOAST_MS 之后自动隐藏。 */
@@ -347,6 +353,9 @@ static int g_wpMenuSel;
 static int g_wpMenuSub;         /* 0 main 1 types 2 paths 3 areas 4 edit 5 display
                                  * 6 删路径/路点 7 删点位（按类型） 8 删区域（守卫区） */
 static int g_wpMenuSubSel;
+/* 2026-11-28：整体移动守卫区要按两次 5（先选原区、再在新位置确认）。
+ * 存 aid 而不是 g_mk 下标：中间删了别的标记，下标会左移。-1 = 没选中。 */
+static int g_areaMoveAid = -1;
 /* 删除页当前选中的类型：-1 还没选，MT_* = 只删这个类型，
  * MT_ANY_POINT = 任意点位（不含守卫区）。2026-11-25 用户要求按类型分开选，
  * 别靠"最近"盲删；2026-11-25 再拆成「删除点位 / 删除区域」两页。 */
@@ -432,6 +441,8 @@ static int g_tintLogged; /* one-shot material/shader diagnostic */
 #define R_MESH_CTOR   0x4E8030   /* Mesh..ctor()                            */
 #define R_MESH_VERTS  0x4E8510   /* Mesh.set_vertices(Vector3[])            */
 #define R_MESH_TRIS   0x4E8420   /* Mesh.set_triangles(int[])               */
+#define R_MESH_VCOUNT 0x4E82C0   /* Mesh.get_vertexCount() */
+#define R_MESH_GTRI   0x4E8230   /* Mesh.get_triangles() -> int[] */
 #define R_MESH_BOUNDS 0x4E6F50   /* Mesh.RecalculateBounds()                */
 #define R_MF_SETMESH  0x4E62A0   /* MeshFilter.set_mesh(Mesh)               */
 
@@ -511,6 +522,8 @@ typedef struct {
 #define MT_SPAWN_BL 6   /* 出生点：MapManager.SP_BL（幽灵 / 潜伏者） */
 #define MT_SPAWN_GR 7   /* 出生点：MapManager.SP_GR（保卫者 / 人类） */
 #define MT_SPAWN_NT 8   /* 出生点：MapManager.SP_Netural（中立；个人竞技全员用它） */
+#define MT_ENTRY   9    /* 守卫区入口点：Bot_NanoGuardArea.entrancePos（只做张望方向） */
+#define MT_ESCAPE  10   /* 守卫区逃跑点：Bot_NanoGuardArea.escapePos（被压时跑的落点） */
 #define WP_BRUSH_N 9    /* 笔刷总数（0 普通 / 1-5 点位类 / 6-8 三种出生点） */
 /* 删除「点位」页最后一项"任意"：只扫点位型标记，不含守卫区（区域单独一页）。
  * 老的无类型删除（游戏内 Delete / delete_nearest()）仍是 0 = 任意含区域。 */
@@ -627,12 +640,13 @@ static int   g_spawnHeightsFixed; /* 本图已经把新增点高度对齐过一�
 #define MKE_MAX 96
 #define MKE_ADD 1
 #define MKE_DEL 2
+#define MKE_MOVE 3     /* 整体移动守卫区：p = 旧中心，b = 新中心（按 aid 找回区） */
 typedef struct {
   int step;      /* 撤销步号（和 NAVED.grp 同一套） */
-  int kind;      /* MKE_ADD / MKE_DEL */
+  int kind;      /* MKE_ADD / MKE_DEL / MKE_MOVE */
   int type;      /* MT_CROUCH / MT_TAG / MT_AREA / MT_NANOPOS / MT_JUMP / MT_SPAWN_BL / MT_SPAWN_GR */
   V3  p;         /* 标记位置（出生点 = 出生点坐标） */
-  V3  b;         /* 跳链落点（其它类型为 0） */
+  V3  b;         /* 跳链落点 / 整体移动的新中心（其它类型为 0） */
   int aid, parent, prm;   /* MK 快照 */
   float yaw;     /* 出生点朝向 */
   float jspeed, jacc;     /* 跳链参数（重建时带回去） */
@@ -674,6 +688,7 @@ static const COL COL_PINK   = { 1.00f, 0.35f, 0.70f, 1.0f };
 static const COL COL_GOLD   = { 1.00f, 0.85f, 0.20f, 1.0f };
 static const COL COL_GRAY   = { 0.70f, 0.70f, 0.70f, 1.0f };
 static const COL COL_NAVM   = { 0.15f, 1.00f, 0.55f, 1.0f };  /* A* 可走面（NavMeshGraph 三角网） */
+static const COL COL_GF_HUD = { 0.45f, 1.00f, 0.70f, 1.0f };  /* 跟随采样状态行（亮绿青） */
 
 /* --- 最近日志环形缓冲：崩溃时回显最后几行到 ucf_mod.log ---------------- */
 #define LOG_RING 24
@@ -2131,6 +2146,14 @@ static P spawn_vis(V3 p, float s, int slot) {
  * ------------------------------------------------------------------------- */
 P navfix_point_graph(void);
 P navfix_add_point_graph(void);   /* 纯面图：现场补一张 0 节点的 PointGraph */
+P navfix_add_navmesh_graph(P mesh);        /* 2026-11-28 离线可走面：把 Mesh 挂成 NavMeshGraph */
+int navfix_scan_navmesh(P graph);          /* 2026-11-28 离线可走面：单独扫图（异常可捕获） */
+int navfix_replace_tile(P g, P vertsArr, P trisArr);  /* 兜底：直接把三角形塞进 tile */
+void navfix_navmesh_reset(void);                     /* 换图：丢掉上一张图的自建面图 */
+int navfix_pg_rescan(P pg, float maxDist);           /* 用 A* 自己的 Scan 按射线重建连接 */
+P navfix_load_navmesh_bundle(const char* path, const char* assetName);
+int navfix_attach_graph(P g);
+int navfix_detach_graph(P g);
 int navfix_drop_navmesh(void);    /* 纯面图：grow 时把可走面摘掉，人机才走点图 */
 void navfix_pg_reset(void);
 P navfix_astar(void);
@@ -2198,6 +2221,9 @@ static int g_nmShow = 1;          /* cfg: navmesh_show —— 画不画 A* 可�
  * 进图闪退就是这么死的）。哪一类出问题就单独关哪一类。 */
 static int g_visNodes  = 1;       /* PointGraph 路点 / 连线（A* 图，不是名单） */
 static int g_visNano   = 1;       /* SpareAreaList：守卫区 + 守卫点 */
+static int g_visEntry  = 1;       /* 我们建的守卫区入口点（黄球，g_mk MT_ENTRY） */
+static int g_visEscape = 1;       /* 我们建的守卫区逃跑点（白球，g_mk MT_ESCAPE） */
+static int g_visELine  = 1;       /* 粉色入口连线：区/守卫点 -> entrancePos 的示意线 */
 static int g_visCrouch = 1;       /* SpareList_BL/GR：人类蹲守点（蓝/红） */
 static int g_visBorn   = 1;       /* MapManager：幽灵出生 / 保卫者出生 */
 static int g_visSupply = 1;       /* MapManager：中立点 / 补给箱 / 红箱 / 蓝箱 */
@@ -2238,6 +2264,7 @@ static void nm_tick(void);           /* A* 可走面：按需重建（定义在 
 static void nm_toggle(void);
 static void ghost_reset(void);       /* 预置预览：换图时清掉（定义在 wp_place 之前） */
 static void nm_walk(int draw);       /* 只统计 = 0 / 画 = 1 */
+static void gf_scene_off(void);      /* 换图：跟随采样停掉（定义在 cmd 处理之前） */
 static P comp_tr(P comp);
 static void mk_vis_apply(void);       /* 标记球显隐 = Ctrl+V 开 且 Ctrl+0 开（定义在 add_mk 之前） */
 
@@ -2769,7 +2796,7 @@ static void read_nano(void) {
   V3 apos[VIS_MAXF];
   int n, an = 0, i;
   g_nanoSeenN = 0;                 /* 每次读都重算：读不到 = 这一轮没有可信列表 */
-  if (!g_visNano || !g_areaCls) return;
+  if ((!g_visNano && !g_visELine) || !g_areaCls) return;
   l = static_obj(g_areaCls, "SpareAreaList");
   if (!l) { miss("SpareAreaList"); return; }
   n = list_n(l);
@@ -3178,16 +3205,17 @@ static void vis_draw(void) {
      * 由 pend_area_tick() 单独用金色线框画 —— 它不受 VIS_SCENE_WAIT 的推迟影响。 */
     draw_vf(K_NAREA, 2, 1, 2.4f, 1.7f, 2.4f);
     draw_vf(K_NPOS, 6, 0, 0.16f, 0.26f, 0.16f);
-    if (g_eN) {
-      bs_reset();
-      for (i = 0; i < g_eN; i++) bs_line(g_eA[i], g_eB[i], 0.05f);
-      vis_flush_mesh("vis_entr", 9, g_eN);
-    }
     if (g_nN) {
       bs_reset();
       for (i = 0; i < g_nN; i++) bs_line(g_nA[i], g_nB[i], 0.06f);
       vis_flush_mesh("vis_nb", 7, g_nN);
     }
+  }
+  /* 粉色入口连线独立开关：先关守卫区/守卫点也能只留线看 */
+  if (g_visELine && g_eN) {
+    bs_reset();
+    for (i = 0; i < g_eN; i++) bs_line(g_eA[i], g_eB[i], 0.05f);
+    vis_flush_mesh("vis_entr", 9, g_eN);
   }
   if (g_visBorn || g_visSupply) {
     int k;
@@ -3376,7 +3404,7 @@ static int dir_pick(int* src, int* idx, V3* p, float* yaw, int* nyaw, int* unkno
   if (!cam_ray(&cp, &fw)) return 0;
   for (i = 0; i < g_n; i++) {
     float vx, vy, vz, t, px, py, pz, perp;
-    if (g_mk[i].type != MT_CROUCH && g_mk[i].type != MT_NANOPOS) continue;
+    if (g_mk[i].type != MT_CROUCH) continue;   /* 2026-11-28：守卫点不再有自己方向 */
     vx = g_mk[i].p.x - cp.x; vy = g_mk[i].p.y - cp.y; vz = g_mk[i].p.z - cp.z;
     t = vx * fw.x + vy * fw.y + vz * fw.z;
     if (t <= 0.2f || t > 60.0f) continue;
@@ -3396,7 +3424,7 @@ static int dir_pick(int* src, int* idx, V3* p, float* yaw, int* nyaw, int* unkno
   best = 1e9f; besti = -1;
   for (i = 0; i < g_vfN; i++) {
     float vx, vy, vz, t, px, py, pz, perp;
-    if (g_vf[i].kind != K_CROUCH && g_vf[i].kind != K_NPOS) continue;
+    if (g_vf[i].kind != K_CROUCH) continue;    /* 原生守卫点也不可改方向 */
     vx = g_vf[i].p.x - cp.x; vy = g_vf[i].p.y - cp.y; vz = g_vf[i].p.z - cp.z;
     t = vx * fw.x + vy * fw.y + vz * fw.z;
     if (t <= 0.2f || t > 60.0f) continue;
@@ -3413,6 +3441,54 @@ static int dir_pick(int* src, int* idx, V3* p, float* yaw, int* nyaw, int* unkno
     for (k = 0; k < nn; k++) yaw[k] = g_vf[besti].yaw[k];
     if (nyaw) *nyaw = nn;
     if (unknown) *unknown = (nn == 0);
+    return 1;
+  }
+  return 0;
+}
+
+/* 准星对着守卫点时，只显示它的安全等级（守卫点已经没有自己的方向了）。
+ * 先找我们建的（g_mk），再找游戏原生的（g_vf）；都按准星射线 0.9 m 内最近。 */
+static int guard_pick(int* src, int* idx, V3* p, int* safety) {
+  V3 cp, fw;
+  float best = 1e9f;
+  int i, besti = -1;
+  if (src) *src = 0;
+  if (idx) *idx = -1;
+  if (safety) *safety = 0;
+  if (!cam_ray(&cp, &fw)) return 0;
+  for (i = 0; i < g_n; i++) {
+    float vx, vy, vz, t, px, py, pz, perp;
+    if (g_mk[i].type != MT_NANOPOS) continue;
+    vx = g_mk[i].p.x - cp.x; vy = g_mk[i].p.y - cp.y; vz = g_mk[i].p.z - cp.z;
+    t = vx * fw.x + vy * fw.y + vz * fw.z;
+    if (t <= 0.2f || t > 60.0f) continue;
+    px = vx - fw.x * t; py = vy - fw.y * t; pz = vz - fw.z * t;
+    perp = sqrtf(px * px + py * py + pz * pz);
+    if (perp <= 0.9f && perp < best) { best = perp; besti = i; }
+  }
+  if (besti >= 0) {
+    if (src) *src = 1;
+    if (idx) *idx = besti;
+    *p = g_mk[besti].p;
+    if (safety) *safety = g_mk[besti].prm;
+    return 1;
+  }
+  best = 1e9f; besti = -1;
+  for (i = 0; i < g_vfN; i++) {
+    float vx, vy, vz, t, px, py, pz, perp;
+    if (g_vf[i].kind != K_NPOS) continue;
+    vx = g_vf[i].p.x - cp.x; vy = g_vf[i].p.y - cp.y; vz = g_vf[i].p.z - cp.z;
+    t = vx * fw.x + vy * fw.y + vz * fw.z;
+    if (t <= 0.2f || t > 60.0f) continue;
+    px = vx - fw.x * t; py = vy - fw.y * t; pz = vz - fw.z * t;
+    perp = sqrtf(px * px + py * py + pz * pz);
+    if (perp <= 0.9f && perp < best) { best = perp; besti = i; }
+  }
+  if (besti >= 0) {
+    if (src) *src = 2;
+    if (idx) *idx = besti;
+    *p = g_vf[besti].p;
+    if (safety) *safety = g_vf[besti].aux;
     return 1;
   }
   return 0;
@@ -3506,7 +3582,7 @@ static unsigned dir_sig(void) {
 /* 建立/刷新方向层的渲染对象（每个点只有一个，不存在批量上限问题） */
 static void dir_draw(void) {
   P mat;
-  int slot = 2;                    /* 2 = 绿（守卫点），1 = 红（蹲守点） */
+  int slot = 1;                    /* 方向层只剩蹲守点：红色 */
   if (g_dirSrc == 1 && g_dirIdx >= 0) slot = (g_mk[g_dirIdx].type == MT_CROUCH) ? 1 : 2;
   else if (g_dirSrc == 2 && g_dirIdx >= 0) slot = (g_vf[g_dirIdx].kind == K_CROUCH) ? 1 : 2;
   if (g_dirGo && !uobj_live(g_dirGo)) { g_dirGo = 0; g_dirMf = g_dirMr = 0; }
@@ -3575,7 +3651,23 @@ static void dir_tick(void) {
    * 编辑 / 放置 / 改朝向本来就都在菜单里做，菜单关掉时不需要这层。 */
   if (!g_visOn || g_dirStyle == 0 || !g_inited || !g_wpMenuOpen) { dir_hide(); return; }
   ok = dir_pick(&src, &idx, &p, yaw, &n, &unknown);
-  if (!ok) { dir_hide(); return; }
+  if (!ok) {
+    /* 守卫点没有方向，但准星指着它时显示安全等级；不用画射线。 */
+    int gs = 0, gi = -1, gsafety = 0;
+    V3 gp;
+    if (guard_pick(&gs, &gi, &gp, &gsafety)) {
+      char s[128];
+      if (g_dirShown && g_dirGo && uobj_live(g_dirGo))
+        ((set_active_t)RVA(R_SETACTIVE))(g_dirGo, 0, 0);
+      g_dirSrc = 3; g_dirIdx = gi; g_dirP = gp;
+      g_dirYawN = 0; g_dirUnknown = 0; g_dirShown = 1;
+      snprintf(s, sizeof s, "守卫点 · 安全等级 %d", gsafety);
+      dir_label_set(s, &COL_POS);
+      return;
+    }
+    dir_hide();
+    return;
+  }
   g_dirSrc = src; g_dirIdx = idx; g_dirP = p;
   g_dirYawN = (n > DIR_MAXN) ? DIR_MAXN : n;
   g_dirUnknown = unknown;
@@ -3585,17 +3677,14 @@ static void dir_tick(void) {
   dir_draw();
   {
     char s[128];
-    const char* what = "点位";
-    if (src == 1) what = (g_mk[idx].type == MT_CROUCH) ? "蹲守点" : "守卫点";
-    else if (src == 2) what = (g_vf[idx].kind == K_CROUCH) ? "蹲守点" : "守卫点";
+    const char* what = "蹲守点";
     if (unknown)
       snprintf(s, sizeof s, "%s · 朝向未知（读不到 zoomPos）", what);
     else if (g_dirYawN > 1)
       snprintf(s, sizeof s, "%s · 朝向 %s %.0f° · %d 个方向", what, yaw_zh(g_dirYawArr[0]), g_dirYawArr[0], g_dirYawN);
     else
       snprintf(s, sizeof s, "%s · 朝向 %s %.0f°", what, yaw_zh(g_dirYawArr[0]), g_dirYawArr[0]);
-    dir_label_set(s, (src == 1 && g_mk[idx].type == MT_CROUCH) || (src == 2 && g_vf[idx].kind == K_CROUCH)
-                       ? &COL_CROUCH : &COL_POS);
+    dir_label_set(s, &COL_CROUCH);
   }
 }
 
@@ -3630,7 +3719,8 @@ static void vis_rebuild(void) {
   g_cArea = g_cPos = g_cCrouch = g_cSpawn = g_cJump = g_cTag = 0;
   g_miss[0] = 0;
   read_nav();
-  if (g_visNano)   read_nano();   else miss("vis_nano=off");
+  if (g_visNano || g_visELine) read_nano();
+  else miss("vis_nano/vis_eline=off");
   if (g_visCrouch) read_crouch(); else miss("vis_crouch=off");
   if (g_visBorn || g_visSupply) read_spawns();
   else miss("vis_born/supply=off");
@@ -3685,6 +3775,8 @@ static void vis_scene_reset(void) {
   /* 可走面的 Mesh 对象随旧场景一起被销毁：指针作废，下一帧重建 */
   g_nmObjN = 0;
   g_nmDirty = 1;
+  /* 跟随采样：换图就停（加载那几秒玩家位置是假的；数据要写进新图自己的文件） */
+  gf_scene_off();
   /* 材质同样是"上一张图"的东西：旧图的 shader 会被游戏卸载，留着就是洋红。
    * 换图一律丢掉，下一帧按新场景重新 Shader.Find + 上色（2026-11-20 修）。 */
   mat_reset("scene change");
@@ -4453,6 +4545,17 @@ static int overlay_init(void) {
   toast_build(canvasTr);
   /* 方向浮字（瞄准蹲守点 / 守卫点时显示「朝向 东北 42°」） */
   dir_label_build(canvasTr);
+  /* 跟随采样状态行（左上角，默认隐藏；gf_tick 里按开关显隐） */
+  g_gfHud = mk_text_ui(canvasTr, "UCF_HUD_Follow", 0.0f, 1.0f, 0.0f, 1.0f,
+                       14.0f, -14.0f, 640.0f, 40.0f, 22);
+  root_put(g_gfHud);
+  if (g_gfHud) {
+    ((set_int1_t)RVA(R_TEXT_ALIGN))(g_gfHud, 3, 0);          /* MiddleLeft */
+    ((set_col_t)RVA(R_GRAPHIC_COL))(g_gfHud, COL_GF_HUD, 0);
+    g_gfHudGo = ((get_go_t)RVA(R_GETGO))(g_gfHud, 0);
+    if (g_gfHudGo) ((set_active_t)RVA(R_SETACTIVE))(g_gfHudGo, 0, 0);
+    g_gfHudText[0] = 0;
+  }
   /* 方向罗盘（东南西北）：和出生点图例共用这张 Canvas，开关见 vis_compass */
   dbg_init();
   elog("ui: step compass-begin");
@@ -4533,6 +4636,7 @@ static void overlay_reset(void) {
   g_toast = 0; g_toastGo = 0; g_toastSh = 0; g_toastShGo = 0; g_toastUntil = 0;
   g_dirLabel = 0; g_dirLabelGo = 0; g_dirText[0] = 0;
   g_dirGo = 0; g_dirMf = 0; g_dirMr = 0; g_dirMesh = 0; g_dirSig = 0; g_dirShown = 0;
+  g_gfHud = 0; g_gfHudGo = 0; g_gfHudText[0] = 0;
   compass_reset();          /* 罗盘挂在同一张 Canvas 上，一起丢 */
 }
 
@@ -4637,16 +4741,20 @@ static void toast_tick(void) {
  * 为什么取交集：Ctrl+V 是"整个场景要干净"的总闸，Ctrl+0 只是"编辑时单独把球收掉"
  * 的细开关，各自都要管用。 */
 static void mk_vis_apply(void) {
-  int i, on = g_visOn ? 1 : 0;
+  int i;
   for (i = 0; i < g_n; i++) {
     P v = g_mk[i].vis;
+    int on = g_visOn ? 1 : 0;
     if (!v || !uobj_live(v)) continue;
+    if (g_mk[i].type == MT_ENTRY) on = on && g_visEntry;
+    else if (g_mk[i].type == MT_ESCAPE) on = on && g_visEscape;
     ((set_active_t)RVA(R_SETACTIVE))(v, (unsigned char)on, 0);
   }
 }
 
 static int add_mk(int type, V3 p, int aid, int parent, int prm, P go, P comp, P vis) {
   MK* m;
+  int on;
   if (g_n >= MAXM) { elog("marker store full (%d)", MAXM); return 0; }
   m = &g_mk[g_n];
   m->type = type; m->p = p; m->aid = aid; m->parent = parent; m->prm = prm;
@@ -4656,9 +4764,27 @@ static int add_mk(int type, V3 p, int aid, int parent, int prm, P go, P comp, P 
   /* 新点的球也要按当前两个开关摆好：Ctrl+V 关着时建点不能在场景里冒出一个球。
    * 只处理这一个（不调 mk_vis_apply）：读图时几百个点逐个进来，全量刷 = 几十万次
    * SetActive，白等。 */
-  if (vis && !g_visOn) ((set_active_t)RVA(R_SETACTIVE))(vis, 0, 0);
+  on = g_visOn ? 1 : 0;
+  if (type == MT_ENTRY) on = on && g_visEntry;
+  else if (type == MT_ESCAPE) on = on && g_visEscape;
+  if (vis && !on) ((set_active_t)RVA(R_SETACTIVE))(vis, 0, 0);
   g_visDirty = 1;      /* 新建标记后让可视化/计数下一帧重读 */
   return 1;
+}
+
+/* 把标记的可视化小球挪到 m->p（spawn_vis 统一把球放在 p.y + 0.45）。
+ * 入口 / 逃跑点没有自己的 GameObject（go = 0，数据在区的数组里），
+ * 整体移动时球只能靠这里单独挪。 */
+static void mk_vis_move(const MK* m) {
+  P tr;
+  V3 v;
+  if (!m || !m->vis || !uobj_live(m->vis)) return;
+  tr = get_tr(m->vis);
+  if (!tr) return;
+  v.x = m->p.x;
+  v.y = m->p.y + 0.45f;
+  v.z = m->p.z;
+  ((set_pos_t)RVA(R_SET_POS))(tr, v, 0);
 }
 
 /* 守卫点 / 蹲守点「看哪儿」的读写（zoomPos@0x10，Vector3[]，世界目标点）
@@ -4742,6 +4868,87 @@ static P vec3_arr_new(const V3* v, int n) {
   a = x_array_new(g_vec3Cls, (unsigned)n);
   if (a && v && n > 0) memcpy((char*)a + 0x10, v, (size_t)n * 12);
   return a;
+}
+
+/* 守卫区里的两个 Vector3[]：entrancePos@0x0C / escapePos@0x1C。
+ * 游戏只读数组，不帮我们扩容；菜单加点时自己重建数组（保留旧元素 + 新点）。 */
+static int vec3_arr_count(P arr) {
+  int n;
+  if (!arr || !mem_ok(arr, 0x10)) return 0;
+  n = *(int*)((char*)arr + 0x0C);
+  if (n < 0 || n > 4096) return 0;
+  if (n && !mem_ok((char*)arr + 0x10, (size_t)n * 12)) return 0;
+  return n;
+}
+
+static int vec3_arr_push(P comp, int off, const V3* p) {
+  P old, na;
+  V3* buf;
+  int n, i;
+  if (!comp || !p || !mem_ok(comp, off + 4)) return 0;
+  old = *(P*)((char*)comp + off);
+  n = vec3_arr_count(old);
+  buf = (V3*)malloc(sizeof(V3) * (size_t)(n + 1));
+  if (!buf) return 0;
+  for (i = 0; i < n; i++) buf[i] = *(V3*)((char*)old + 0x10 + i * 12);
+  buf[n] = *p;
+  na = vec3_arr_new(buf, n + 1);
+  free(buf);
+  if (!na) return 0;
+  *(P*)((char*)comp + off) = na;
+  return 1;
+}
+
+static int vec3_arr_remove(P comp, int off, const V3* p) {
+  P old, na;
+  V3* buf;
+  int n, i, k = 0, found = -1;
+  if (!comp || !p || !mem_ok(comp, off + 4)) return 0;
+  old = *(P*)((char*)comp + off);
+  n = vec3_arr_count(old);
+  if (n <= 0) return 0;
+  for (i = 0; i < n; i++) {
+    V3 v = *(V3*)((char*)old + 0x10 + i * 12);
+    float dx = v.x - p->x, dy = v.y - p->y, dz = v.z - p->z;
+    if (dx * dx + dy * dy + dz * dz <= 0.0025f) { found = i; break; }   /* 5 cm */
+  }
+  if (found < 0) return 0;
+  if (n == 1) {
+    na = vec3_arr_new(0, 0);
+    if (!na) return 0;
+    *(P*)((char*)comp + off) = na;
+    return 1;
+  }
+  buf = (V3*)malloc(sizeof(V3) * (size_t)(n - 1));
+  if (!buf) return 0;
+  for (i = 0; i < n; i++) {
+    if (i == found) continue;
+    buf[k++] = *(V3*)((char*)old + 0x10 + i * 12);
+  }
+  na = vec3_arr_new(buf, n - 1);
+  free(buf);
+  if (!na) return 0;
+  *(P*)((char*)comp + off) = na;
+  return 1;
+}
+
+/* 就地平移 Vector3[] 的元素（入口 / 逃跑点是世界坐标，整体移动区时必须一起挪）。
+ * 只改 float 元素，不重建数组、也不写托管引用，不需要 GC 写屏障。 */
+static int vec3_arr_shift(P comp, int off, const V3* d) {
+  P arr;
+  V3* v;
+  int n, i;
+  if (!comp || !d || !mem_ok(comp, off + 4)) return 0;
+  arr = *(P*)((char*)comp + off);
+  n = vec3_arr_count(arr);
+  if (n <= 0) return 0;
+  v = (V3*)((char*)arr + 0x10);
+  for (i = 0; i < n; i++) {
+    v[i].x += d->x;
+    v[i].y += d->y;
+    v[i].z += d->z;
+  }
+  return n;
 }
 
 static int list_count(P l) {
@@ -4867,10 +5074,13 @@ static int make_area(int scale10, V3 p) {
   return make_area_aid(scale10, p, aid);
 }
 
+static void refresh_area_guard_dirs(int parent);
+static int make_entrance(int aid, V3 p);
+
 static int make_nanopos(int aid, V3 p, int safety, float yaw) {
   P go, comp, areaGo, areaComp, areaTr, tr, list, za;
-  V3 zd, zt;
-  int parent, live;
+  int parent, live, entN;
+  (void)yaw;                 /* 2026-11-28：守卫点不再自带方向，靠 area.entrancePos */
   if (aid < 0 || aid >= g_areaCount) { elog("nanopos: no area aid=%d", aid); return 0; }
   parent = (int)(INT_PTR)g_aidMk[aid];
   if (parent < 0 || parent >= g_n || g_mk[parent].type != 3) { elog("nanopos: bad parent aid=%d", aid); return 0; }
@@ -4888,30 +5098,30 @@ static int make_nanopos(int aid, V3 p, int safety, float yaw) {
   if (!comp) { elog("nanopos: AddComponent failed"); return 0; }
   if (!mem_ok(comp, 0x20)) { elog("nanopos: 组件不可读"); return 0; }
   *(int*)((char*)comp + 0x1C) = safety;                 /* _safety */
-  /* zoomPos 至少 1 个：Init() 里 AddRange(zoomPos) 碰 null 就抛，GetRandomZoomPos()
-   * 还要按随机下标取。
-   * 2026-11-27：以前给的是两个固定值 {(0,0,1),(1,0,0)}，被游戏当成**世界点** ——
-   * 所有人机都朝世界原点方向看（和点位无关），这就是「设了方向也看不出来」的根因。
-   * 现在按放置时的相机朝向写一个 p + dir*DIR_RANGE 的目标点；朝向未知时给正北，
-   * 只保证 Init 不炸，菜单/显示里照样标「未知」。 */
-  if (yaw > YAW_NONE + 1.0f) {
-    dir_of_yaw(yaw, &zd);
-    zt.x = p.x + zd.x * DIR_RANGE;
-    zt.y = p.y;
-    zt.z = p.z + zd.z * DIR_RANGE;
-  } else {
-    zt.x = p.x; zt.y = p.y; zt.z = p.z - DIR_RANGE;   /* 正北兜底 */
+  /* 2026-11-28 用户要求：守卫点不再自带方向，改成和原生一样靠 area.entrancePos。
+   * Init() 会做 zoomPos = own(空) + entrancePos；没有入口时先自动补一个区中心入口，
+   * 否则 zoomPos 空，GetRandomZoomPos() 按下标取会出问题。 */
+  entN = vec3_arr_count(*(P*)((char*)areaComp + 0x0C));
+  if (entN <= 0) {
+    V3 c = g_mk[parent].p;
+    if (make_entrance(aid, c))
+      elog("nanopos: 区 aid=%d 没有入口，自动补区中心入口（只当张望目标）", aid);
+    entN = vec3_arr_count(*(P*)((char*)areaComp + 0x0C));
   }
-  za = vec3_arr_new(&zt, 1);
+  za = vec3_arr_new(0, 0);          /* 自己的方向留空：不再写单点 yaw */
   if (!za) { elog("nanopos: zoomPos 分配失败"); return 0; }
   *(P*)((char*)comp + 0x10) = za;
   areaTr = get_tr(areaGo);
   tr = get_tr(go);
   if (areaTr && tr) ((set_parent_t)RVA(R_SET_PARENT))(tr, areaTr, 0, 0);
   if (tr) ((set_pos_t)RVA(R_SET_POS))(tr, p, 0);
-  /* 到这里 zoomPos / entrancePos 都非空了，Init 只做 area= 和
-   * zoomPos = (zoomPos + entrancePos)，不会再抛托管异常。 */
+  /* Init 只做 area= 和 zoomPos = own(空) + entrancePos；入口已经保证至少 1 个。 */
   ((pos_init_t)RVA(R_POS_INIT))(comp, areaComp, 0);
+  if (vec3_arr_count(*(P*)((char*)comp + 0x10)) <= 0) {
+    /* 入口数组仍是空（自动补入口失败 / 被删光）：给一个正北兜底，至少不空。 */
+    write_zoom(comp, &p, 0.0f);
+    elog("nanopos: 区 aid=%d 没有可用入口，方向兜底正北", aid);
+  }
   ((set_active_t)RVA(R_SETACTIVE))(go, 1, 0);
   list = *(P*)((char*)areaComp + 0x10);
   live = (aid >= 0 && aid < MAX_AID) ? g_areaLive[aid] : 0;
@@ -4934,11 +5144,136 @@ static int make_nanopos(int aid, V3 p, int safety, float yaw) {
     if (list_count(list) == 0) area_register(areaComp);   /* 删空过的区补登记 */
   }
   if (!add_mk(2, p, aid, parent, safety, go, comp, spawn_vis(p, 0.32f, 2))) return 0;
-  g_mk[g_n - 1].yaw = yaw;
-  elog("nanopos: 朝向 %s（yaw=%.1f -> zoomPos z=%.1f）",
-       (yaw > YAW_NONE + 1.0f) ? yaw_zh(yaw) : "未知", yaw, zt.z);
-  elog("nanopos #%d at %.2f %.2f %.2f aid=%d safety=%d areaPosList=%d",
+  g_mk[g_n - 1].yaw = YAW_NONE;      /* 守卫点不再有自己的方向 */
+  elog("nanopos #%d at %.2f %.2f %.2f aid=%d safety=%d areaPosList=%d（方向靠入口）",
        g_n, p.x, p.y, p.z, aid, safety, list_count(*(P*)((char*)areaComp + 0x10)));
+  overlay_refresh();
+  return 1;
+}
+
+/* 守卫区的 entrancePos / escapePos：两个只是 Vector3[]，游戏不帮扩容。
+ * 入口只影响“站到守卫点后往哪看”（Bot_NanoGuardPos.Init 会把它并进 zoomPos），
+ * 不决定从哪进区；逃跑点是被压时 GetRandomEscapePos() 随机取的落点。 */
+static int area_marker_of_aid(int aid) {
+  int parent;
+  if (aid < 0 || aid >= MAX_AID || !g_aidUsed[aid]) return -1;
+  parent = (int)(INT_PTR)g_aidMk[aid];
+  if (parent < 0 || parent >= g_n || g_mk[parent].type != MT_AREA) return -1;
+  return parent;
+}
+
+/* 入口点变了以后，已有守卫点的 zoomPos 已经按旧入口算过；重算一遍，
+ * 让新入口立刻参与“往哪看”。自己那一个方向从 g_mk[].yaw 恢复。 */
+static void refresh_area_guard_dirs(int parent) {
+  P areaComp;
+  int i, n = 0;
+  if (parent < 0 || parent >= g_n || g_mk[parent].type != MT_AREA) return;
+  areaComp = g_mk[parent].comp;
+  if (!areaComp || !uobj_live(areaComp)) return;
+  for (i = 0; i < g_n; i++) {
+    P comp, empty;
+    if (g_mk[i].type != MT_NANOPOS || g_mk[i].parent != parent) continue;
+    comp = g_mk[i].comp;
+    if (!comp || !uobj_live(comp)) continue;
+    if (vec3_arr_count(*(P*)((char*)areaComp + 0x0C)) > 0) {
+      /* 守卫点自己的方向留空，Init 只并 area.entrancePos */
+      empty = vec3_arr_new(0, 0);
+      if (!empty) continue;
+      *(P*)((char*)comp + 0x10) = empty;
+      ((pos_init_t)RVA(R_POS_INIT))(comp, areaComp, 0);
+    } else {
+      /* 入口被删光：保留一个正北兜底，别让 zoomPos 空 */
+      if (!write_zoom(comp, &g_mk[i].p, 0.0f)) continue;
+    }
+    n++;
+  }
+  if (n) elog("entrance: refreshed %d guard pos direction(s) for area #%d", n, parent);
+}
+
+/* 2026-11-28 用户要求：整体移动守卫区 —— 区 + 区下的守卫点 / 入口 / 逃跑点一起平移。
+ * 顺序固定：先移区 transform，再同步子物体和可视化球，最后平移两个世界坐标数组。
+ * 反过来先把子物体挪过去、再挪区，守卫点（区的子节点）会被二次位移。
+ * 只处理我们自己建的区（g_mk 里的 MT_AREA）；原生区不在表里，保持只读。 */
+static int area_move_whole(int ai, const V3* to) {
+  V3 old, d;
+  int i, n = 0;
+  P areaGo, areaComp;
+  if (ai < 0 || ai >= g_n || g_mk[ai].type != MT_AREA || !to) return 0;
+  areaGo = g_mk[ai].go;
+  areaComp = g_mk[ai].comp;
+  if (!areaGo || !uobj_live(areaGo) || !areaComp || !uobj_live(areaComp)) {
+    elog("areamove: 守卫区对象不可用（aid=%d）", g_mk[ai].aid);
+    return 0;
+  }
+  old = g_mk[ai].p;
+  d.x = to->x - old.x;
+  d.y = to->y - old.y;
+  d.z = to->z - old.z;
+  if (fabsf(d.x) < 0.001f && fabsf(d.y) < 0.001f && fabsf(d.z) < 0.001f) {
+    elog("areamove: 目标位置和现在一样，跳过");
+    return 0;
+  }
+  /* 1) 区本体（BoxCollider 跟 transform 走） */
+  g_mk[ai].p = *to;
+  if (get_tr(areaGo)) ((set_pos_t)RVA(R_SET_POS))(get_tr(areaGo), *to, 0);
+  mk_vis_move(&g_mk[ai]);
+  /* 2) 区下的守卫点 / 入口 / 逃跑点：g_mk 位置 + 子物体 + 球 */
+  for (i = 0; i < g_n; i++) {
+    V3 np;
+    if (i == ai || g_mk[i].parent != ai) continue;
+    g_mk[i].p.x += d.x;
+    g_mk[i].p.y += d.y;
+    g_mk[i].p.z += d.z;
+    np = g_mk[i].p;
+    if (g_mk[i].go && uobj_live(g_mk[i].go) && get_tr(g_mk[i].go))
+      ((set_pos_t)RVA(R_SET_POS))(get_tr(g_mk[i].go), np, 0);
+    mk_vis_move(&g_mk[i]);
+    n++;
+  }
+  /* 3) 入口 / 逃跑点数组是游戏真正读的世界坐标，必须一起平移 */
+  (void)vec3_arr_shift(areaComp, 0x0C, &d);    /* entrancePos */
+  (void)vec3_arr_shift(areaComp, 0x1C, &d);    /* escapePos */
+  /* 4) 入口挪了，守卫点的 zoomPos（Init 时从 entrancePos 算）重刷一遍 */
+  refresh_area_guard_dirs(ai);
+  g_visDirty = 1;
+  elog("areamove: 守卫区 aid=%d (%.2f %.2f %.2f) -> (%.2f %.2f %.2f) Δ=(%.2f %.2f %.2f)，子项 %d",
+       g_mk[ai].aid, old.x, old.y, old.z, to->x, to->y, to->z, d.x, d.y, d.z, n);
+  return 1;
+}
+
+static int make_entrance(int aid, V3 p) {
+  int parent = area_marker_of_aid(aid);
+  P areaComp;
+  if (parent < 0) { elog("entrance: no area aid=%d", aid); return 0; }
+  areaComp = g_mk[parent].comp;
+  if (!areaComp || !uobj_live(areaComp) || !area_fields_ok(areaComp)) {
+    elog("entrance: area comp bad aid=%d", aid);
+    return 0;
+  }
+  if (!vec3_arr_push(areaComp, 0x0C, &p)) { elog("entrance: array push failed"); return 0; }
+  if (!add_mk(MT_ENTRY, p, aid, parent, 0, 0, areaComp, spawn_vis(p, 0.20f, 4))) return 0;
+  g_mk[g_n - 1].yaw = YAW_NONE;
+  refresh_area_guard_dirs(parent);
+  elog("entrance #%d at %.2f %.2f %.2f aid=%d entrancePos=%d",
+       g_n, p.x, p.y, p.z, aid, vec3_arr_count(*(P*)((char*)areaComp + 0x0C)));
+  overlay_refresh();
+  return 1;
+}
+
+static int make_escape(int aid, V3 p) {
+  int parent = area_marker_of_aid(aid);
+  P areaComp;
+  if (parent < 0) { elog("escape: no area aid=%d", aid); return 0; }
+  areaComp = g_mk[parent].comp;
+  if (!areaComp || !uobj_live(areaComp) || !area_fields_ok(areaComp)) {
+    elog("escape: area comp bad aid=%d", aid);
+    return 0;
+  }
+  if (!vec3_arr_push(areaComp, 0x1C, &p)) { elog("escape: array push failed"); return 0; }
+  if (!add_mk(MT_ESCAPE, p, aid, parent, 0, 0, areaComp, spawn_vis(p, 0.20f, 5))) return 0;
+  g_mk[g_n - 1].yaw = YAW_NONE;
+  elog("escape #%d at %.2f %.2f %.2f aid=%d escapePos=%d",
+       g_n, p.x, p.y, p.z, aid, vec3_arr_count(*(P*)((char*)areaComp + 0x1C)));
   overlay_refresh();
   return 1;
 }
@@ -5041,6 +5376,21 @@ static void marker_unregister(MK* m) {
         if (list_drop_item(pl, m->comp)) elog("delete: nanopos removed from area.posList");
       }
     }
+  } else if (m->type == MT_ENTRY || m->type == MT_ESCAPE) {
+    int parent = m->parent;
+    if (parent >= 0 && parent < g_n && g_mk[parent].type == MT_AREA) {
+      P area = g_mk[parent].comp;
+      int off = (m->type == MT_ENTRY) ? 0x0C : 0x1C;
+      if (area && uobj_live(area)) {
+        if (vec3_arr_remove(area, off, &m->p))
+          elog("delete: %s removed from area aid=%d",
+               (m->type == MT_ENTRY) ? "entrancePos" : "escapePos", m->aid);
+        else
+          elog("delete: %s not found in area aid=%d",
+               (m->type == MT_ENTRY) ? "entrancePos" : "escapePos", m->aid);
+        if (m->type == MT_ENTRY) refresh_area_guard_dirs(parent);
+      }
+    }
   } else if (m->type == 3) {
     if (list_drop_item(static_obj(g_areaCls, "SpareAreaList"), m->comp))
       elog("delete: area removed from SpareAreaList");
@@ -5107,6 +5457,8 @@ static const char* mt_name(int t) {
     case MT_SPAWN_BL: return "出生点 BL";
     case MT_SPAWN_GR: return "出生点 GR";
     case MT_SPAWN_NT: return "出生点 中立";
+    case MT_ENTRY:    return "守卫区入口";
+    case MT_ESCAPE:   return "守卫区逃跑点";
     case MT_ANY_POINT:return "任意点位";
     default:          return "任意标记";
   }
@@ -5201,6 +5553,64 @@ static int delete_nearest_of(int want) {
 }
 static int delete_nearest(void) { return delete_nearest_of(0); }
 
+/* 准星严格删除（2026-11-28 用户要求：删除入口 / 逃跑点只认准星 0.6 m 内）。
+ * 入口 / 逃跑点的球只有 0.2，老 delete_nearest_of 的 12 m 兜底很容易删到旁边的点。
+ * 选不中就拒绝，不猜。 */
+static int delete_marker_strict(int want) {
+  V3 cp, fw, hp;
+  int i, byRay = -1, byHit = -1, target = -1;
+  float bestPerp = 1e9f, bestHit = 1e9f;
+  int haveHit;
+  const char* wn = (want > 0) ? mt_name(want) : "标记";
+  if (!g_n) { elog("delete: no markers"); toast_bad("图里还没有任何标记可删"); return 0; }
+  if (!cam_ray(&cp, &fw)) { elog("delete: no camera"); toast_bad("取不到相机，删不了"); return 0; }
+  haveHit = cam_point(&hp);
+  for (i = 0; i < g_n; i++) {
+    float vx, vy, vz, t;
+    if (g_mk[i].type != want) continue;
+    vx = g_mk[i].p.x - cp.x;
+    vy = g_mk[i].p.y - cp.y;
+    vz = g_mk[i].p.z - cp.z;
+    t = vx * fw.x + vy * fw.y + vz * fw.z;
+    if (t > 0.3f && t < 60.0f) {
+      float px = vx - fw.x * t, py = vy - fw.y * t, pz = vz - fw.z * t;
+      float perp = sqrtf(px * px + py * py + pz * pz);
+      if (perp < bestPerp) { bestPerp = perp; byRay = i; }
+    }
+    if (haveHit) {
+      float dx = g_mk[i].p.x - hp.x, dy = g_mk[i].p.y - hp.y, dz = g_mk[i].p.z - hp.z;
+      float d2 = dx * dx + dy * dy + dz * dz;
+      if (d2 < bestHit) { bestHit = d2; byHit = i; }
+    }
+  }
+  if (byRay >= 0 && bestPerp <= 0.6f) {
+    target = byRay;
+    elog("delete: strict aimed at %s #%d (ray offset %.2f m)", wn, byRay, bestPerp);
+  } else if (haveHit && byHit >= 0 && bestHit <= 6.25f) {   /* 落点 2.5 m 内 */
+    target = byHit;
+    elog("delete: strict nearest %s #%d to aim point (%.2f m)", wn, byHit, sqrtf(bestHit));
+  } else {
+    elog("delete: strict nothing chosen (want=%s, ray %.2f m, aim %.2f m) - aim closer",
+         wn, byRay >= 0 ? bestPerp : -1.0f, (haveHit && byHit >= 0) ? sqrtf(bestHit) : -1.0f);
+    toast_bad("准星没对准%s：靠近到 0.6 m 内再按 5", wn);
+    return 0;
+  }
+  if (target >= 0) {
+    const char* dname = mt_name(g_mk[target].type);
+    V3 dp = g_mk[target].p;
+    elog("delete: strict removing #%d type=%d(%s) at %.2f %.2f %.2f", target, g_mk[target].type,
+         dname, dp.x, dp.y, dp.z);
+    ed_step();                /* 一次删除 = 一步撤销（选不中就不占步号） */
+    del_index(target);
+    editor_dirty_mk();
+    elog("delete: 未保存（Ctrl+S 保存，退房间前不存会恢复）");
+    toast_ok("已删%s (%.1f %.1f %.1f)：可撤销", dname, dp.x, dp.y, dp.z);
+    overlay_refresh();
+    return 1;
+  }
+  return 0;
+}
+
 static void make_tag(V3 p, int tag, float radius);
 
 /* 编辑标记（蹲守点 / 守卫点 / 守卫区 / tag）按**地图**分文件夹存（2026-11-24 用户要求）：
@@ -5230,7 +5640,7 @@ static void mk_set_path(void) {
 
 static int save_file(void) {
   FILE* f;
-  int i, t, c1 = 0, c2 = 0, c3 = 0, c5 = 0, sa = 0, sd = 0;
+  int i, t, c1 = 0, c2 = 0, c3 = 0, c5 = 0, c6 = 0, c7 = 0, sa = 0, sd = 0;
   if (!g_file[0]) return 0;
   CreateDirectoryA(g_dir, 0);
   {
@@ -5246,15 +5656,20 @@ static int save_file(void) {
     else if (g_mk[i].type == 2) c2++;
     else if (g_mk[i].type == 3) c3++;
     else if (g_mk[i].type == 5) c5++;
+    else if (g_mk[i].type == MT_ENTRY) c6++;
+    else if (g_mk[i].type == MT_ESCAPE) c7++;
   }
   for (t = 0; t < SPAWN_TEAMS; t++) { sa += g_spawnAddN[t]; sd += g_spawnDelN[t]; }
-  fprintf(f, "# ucf_mod markers v1  crouch=%d nanopos=%d area=%d tag=%d spawnadd=%d spawndel=%d\n",
-          c1, c2, c3, c5, sa, sd);
+  fprintf(f, "# ucf_mod markers v1  crouch=%d nanopos=%d area=%d tag=%d entrance=%d escape=%d spawnadd=%d spawndel=%d\n",
+          c1, c2, c3, c5, c6, c7, sa, sd);
   fprintf(f, "# crouch <team> <x> <y> <z> [yaw]        yaw = 朝向(度,0=北,90=东)，未知则省略\n");
   fprintf(f, "# area <scale*10> <x> <y> <z> [aid]\n");
-  fprintf(f, "# nanopos <areaId> <x> <y> <z> <safety> [yaw]   同上\n");
+  fprintf(f, "# nanopos <areaId> <x> <y> <z> <safety>   守卫点不再写 yaw（方向由 entrance 决定）\n");
+  fprintf(f, "# entrance <areaId> <x> <y> <z>   守卫区观察方向（并进每个守卫点的 zoomPos）\n");
+  fprintf(f, "# escape <areaId> <x> <y> <z>     守卫区被压时的逃跑落点\n");
   fprintf(f, "# tag <tag> <x> <y> <z>\n");
   fprintf(f, "# spawn <team 0BL/1GR/2中立> <x> <y> <z> <yaw>   / spawndel <team> <x> <y> <z>\n");
+  fprintf(f, "# nano_safety %d   新建守卫点的默认安全等级（0~3，菜单里选）\n", g_nanoSafety);
   for (i = 0; i < g_n; i++) {
     MK* m = &g_mk[i];
     if (m->type == 1) {
@@ -5267,13 +5682,13 @@ static int save_file(void) {
     /* 2026-11-25：area 行补上 aid。以前靠「建的顺序」推 aid，删过区再进图，
      * nanopos 的 areaId 就对不上了（点位静默丢失）。旧文件只有 4 列，照样能读。 */
     else if (m->type == 3) fprintf(f, "area %d %.3f %.3f %.3f %d\n", m->prm, m->p.x, m->p.y, m->p.z, m->aid);
-    else if (m->type == 2) {
-      if (m->yaw > YAW_NONE + 1.0f)
-        fprintf(f, "nanopos %d %.3f %.3f %.3f %d %.1f\n", m->aid, m->p.x, m->p.y, m->p.z, m->prm, m->yaw);
-      else
-        fprintf(f, "nanopos %d %.3f %.3f %.3f %d\n", m->aid, m->p.x, m->p.y, m->p.z, m->prm);
-    }
+    else if (m->type == 2)
+      fprintf(f, "nanopos %d %.3f %.3f %.3f %d\n", m->aid, m->p.x, m->p.y, m->p.z, m->prm);
     else if (m->type == 5) fprintf(f, "tag %d %.3f %.3f %.3f\n", m->prm, m->p.x, m->p.y, m->p.z);
+    else if (m->type == MT_ENTRY)
+      fprintf(f, "entrance %d %.3f %.3f %.3f\n", m->aid, m->p.x, m->p.y, m->p.z);
+    else if (m->type == MT_ESCAPE)
+      fprintf(f, "escape %d %.3f %.3f %.3f\n", m->aid, m->p.x, m->p.y, m->p.z);
   }
   for (t = 0; t < SPAWN_TEAMS; t++) {
     for (i = 0; i < g_spawnAddN[t]; i++)
@@ -5285,8 +5700,8 @@ static int save_file(void) {
               g_spawnDel[t][i].p.x, g_spawnDel[t][i].p.y, g_spawnDel[t][i].p.z);
   }
   fclose(f);
-  elog("saved %d markers (crouch=%d nanopos=%d area=%d tag=%d spawnadd=%d spawndel=%d) -> %s",
-       g_n, c1, c2, c3, c5, sa, sd, g_file);
+  elog("saved %d markers (crouch=%d nanopos=%d area=%d tag=%d entrance=%d escape=%d spawnadd=%d spawndel=%d) -> %s",
+       g_n, c1, c2, c3, c5, c6, c7, sa, sd, g_file);
   overlay_refresh();
   return 1;
 }
@@ -5295,6 +5710,7 @@ static void reset_markers(void) {
   g_n = 0;
   g_areaCount = 0;
   g_curArea = -1;
+  g_areaMoveAid = -1;               /* 换图：待移动的区随旧场景一起作废 */
   memset(g_aidMk, 0, sizeof(g_aidMk));
   memset(g_areaLive, 0, sizeof(g_areaLive));   /* 换图：旧守卫区随场景销毁，激活标记一起清 */
   memset(g_aidUsed, 0, sizeof(g_aidUsed));
@@ -5346,6 +5762,10 @@ static int load_file(void) {
   while (fgets(line, sizeof(line), f)) {
     float x, y, z, yaw = YAW_NONE;      /* yaw：crouch / nanopos 的可选朝向列 */
     int a, b;
+    if (sscanf(line, "# nano_safety %d", &a) == 1) {
+      g_nanoSafety = (a >= 0 && a <= 3) ? a : 3;
+      continue;
+    }
     if (line[0] == '#' || line[0] == '\n' || line[0] == '\r') continue;
     if (spawn_parse_line(line)) continue;   /* spawn / spawndel */
     if (sscanf(line, "area %d %f %f %f %d", &a, &x, &y, &z, &b) == 5) {
@@ -5354,10 +5774,16 @@ static int load_file(void) {
     } else if (sscanf(line, "area %d %f %f %f", &a, &x, &y, &z) == 4) {
       V3 p; p.x = x; p.y = y; p.z = z;          /* 旧文件：没有 aid 列，按顺序分配 */
       if (make_area(a, p)) made++;
-    } else if (sscanf(line, "nanopos %d %f %f %f %d %f", &a, &x, &y, &z, &b, &yaw) >= 5) {
-      /* 老文件只有 5 列（没有 yaw）：sscanf 返回 5，yaw 保持 YAW_NONE = 未知 */
+    } else if (sscanf(line, "nanopos %d %f %f %f %d", &a, &x, &y, &z, &b) >= 5) {
+      /* 5 列；老文件的第 6 列 yaw 已经不再使用（守卫点方向由 entrance 决定） */
       V3 p; p.x = x; p.y = y; p.z = z;
-      if (make_nanopos(a, p, b, yaw)) made++;
+      if (make_nanopos(a, p, b, YAW_NONE)) made++;
+    } else if (sscanf(line, "entrance %d %f %f %f", &a, &x, &y, &z) == 4) {
+      V3 p; p.x = x; p.y = y; p.z = z;
+      if (make_entrance(a, p)) made++;
+    } else if (sscanf(line, "escape %d %f %f %f", &a, &x, &y, &z) == 4) {
+      V3 p; p.x = x; p.y = y; p.z = z;
+      if (make_escape(a, p)) made++;
     } else if (sscanf(line, "crouch %d %f %f %f %f", &a, &x, &y, &z, &yaw) >= 4) {
       V3 p; p.x = x; p.y = y; p.z = z;
       /* 文件里的队伍列要生效：make_crouch 用的是 g_team，临时切过去再还原 */
@@ -6493,6 +6919,51 @@ static void nav_refresh(P g) {
   if (g && g_ga) ((void (*)(P))RVA(R_PG_REBUILD))(g);
   g_visDirty = 1;
 }
+/* 2026-11-28：逐边射线过滤 —— 用游戏物理判断"这条边能不能过去"。
+ * 从 A 腰高 (y+0.9) 朝 B 打一根射线，长度比两点距离短 15 cm；被挡就删掉这条边（双向）。
+ * 只动边、不动点；不调用 A* 的 Scan（那会把节点清空）。 */
+static P g_rmA[4096], g_rmB[4096];
+static int g_rmN;
+
+static int edge_blocked(V3 a, V3 b) {
+  V3 o, d;
+  float len;
+  char hit[96];
+  o.x = a.x; o.y = a.y + 0.9f; o.z = a.z;
+  d.x = b.x - a.x; d.y = b.y - a.y + 0.9f - 0.9f; d.z = b.z - a.z;
+  len = sqrtf(d.x * d.x + d.y * d.y + d.z * d.z);
+  if (len < 0.2f) return 0;
+  d.x /= len; d.y /= len; d.z /= len;
+  if (((raycast_t)RVA(R_RAYCAST))(o, d, hit, len - 0.15f, 1, 0)) return 1;
+  return 0;
+}
+
+static int nav_ray_filter(P g) {
+  int n = nav_count(g), i, j, removed = 0;
+  if (!g || n <= 0) return 0;
+  g_rmN = 0;
+  for (i = 0; i < n && g_rmN < 4096; i++) {
+    P nd = nav_node(g, i), c = 0;
+    int cn;
+    if (!nd) continue;
+    cn = nav_conn_get(nd, &c);
+    if (cn <= 0) continue;
+    for (j = 0; j < cn && g_rmN < 4096; j++) {
+      P other = *(P*)((char*)c + 0x10 + j * 12);
+      V3 pa, pb;
+      if (!other) continue;
+      if (*(int*)((char*)other + 0x08) < i) continue;   /* 每对只测一次 */
+      nav_pos(nd, &pa); nav_pos(other, &pb);
+      if (edge_blocked(pa, pb)) { g_rmA[g_rmN] = nd; g_rmB[g_rmN] = other; g_rmN++; }
+    }
+  }
+  for (i = 0; i < g_rmN; i++) {
+    if (nav_conn_set(g_rmA[i], g_rmB[i], 0)) removed++;
+    nav_conn_set(g_rmB[i], g_rmA[i], 0);
+  }
+  return removed;
+}
+
 /* 彻底断开一个节点（不可走 + 清连接 + 清别人的反向引用） */
 static void nav_kill_node(P g, P nd) {
   int i, n = nav_count(g);
@@ -7588,6 +8059,19 @@ static void mke_note_del(const MK* mk, const NAVED* jump) {
   }
   mke_push(&e);
 }
+/* 整体移动守卫区：p = 旧中心，b = 新中心；撤销/重做都按 aid 找回区再平移回去。 */
+static void mke_note_area_move(int ai, const V3* oldp, const V3* newp) {
+  MKE e;
+  if (g_mkeMute || !oldp || !newp) return;
+  if (ai < 0 || ai >= g_n || g_mk[ai].type != MT_AREA) return;
+  memset(&e, 0, sizeof e);
+  e.kind = MKE_MOVE;
+  e.type = MT_AREA;
+  e.aid = g_mk[ai].aid;
+  e.p = *oldp;
+  e.b = *newp;
+  mke_push(&e);
+}
 /* 出生点队号 <-> 撤销记录里的类型（team 2 = 中立） */
 static int spawn_mt_of_team(int team) {
   if (team == 1) return MT_SPAWN_GR;
@@ -7685,7 +8169,13 @@ static int mk_recreate(const MKE* e) {
       ok = make_area_aid(e->prm, e->p, e->aid);
       break;
     case MT_NANOPOS:
-      ok = make_nanopos(e->aid, e->p, e->prm, e->yaw);
+      ok = make_nanopos(e->aid, e->p, e->prm, YAW_NONE);
+      break;
+    case MT_ENTRY:
+      ok = make_entrance(e->aid, e->p);
+      break;
+    case MT_ESCAPE:
+      ok = make_escape(e->aid, e->p);
       break;
     case MT_JUMP:
       /* 落点没记下来（这条跳链是套包时建的、清单里没有 jump add）：不能凭原点瞎建一个 */
@@ -7719,6 +8209,11 @@ static void mke_desc(const MKE* e, char* out, int cap) {
   const char* what = "";
   if (!out || cap <= 0) return;
   if (!e) { snprintf(out, (size_t)cap, "（没有可撤销的标记编辑）"); return; }
+  if (e->kind == MKE_MOVE) {
+    snprintf(out, (size_t)cap, "移动 守卫区 (%.1f %.1f %.1f) -> (%.1f %.1f %.1f)",
+             e->p.x, e->p.y, e->p.z, e->b.x, e->b.y, e->b.z);
+    return;
+  }
   switch (e->type) {
     case MT_CROUCH:   what = "蹲守点"; break;
     case MT_NANOPOS:  what = "守卫点"; break;
@@ -7728,6 +8223,8 @@ static void mke_desc(const MKE* e, char* out, int cap) {
     case MT_SPAWN_BL: what = "出生点 BL"; break;
     case MT_SPAWN_GR: what = "出生点 GR"; break;
     case MT_SPAWN_NT: what = "出生点 中立"; break;
+    case MT_ENTRY:    what = "守卫区入口"; break;
+    case MT_ESCAPE:   what = "守卫区逃跑点"; break;
     default:          what = "标记"; break;
   }
   snprintf(out, (size_t)cap, "%s %s (%.1f %.1f %.1f)",
@@ -7736,7 +8233,10 @@ static void mke_desc(const MKE* e, char* out, int cap) {
 static int mke_undo_one(const MKE* e) {
   int idx, ok = 0;
   g_mkeMute = 1;
-  if (e->type == MT_SPAWN_BL || e->type == MT_SPAWN_GR || e->type == MT_SPAWN_NT) {
+  if (e->kind == MKE_MOVE) {
+    int ai = area_marker_of_aid(e->aid);
+    if (ai >= 0) ok = area_move_whole(ai, &e->p);
+  } else if (e->type == MT_SPAWN_BL || e->type == MT_SPAWN_GR || e->type == MT_SPAWN_NT) {
     int team = spawn_team_of_mt(e->type);
     if (e->kind == MKE_ADD) {
       idx = spawn_add_index(team, &e->p);
@@ -7761,7 +8261,10 @@ static int mke_undo_one(const MKE* e) {
 static int mke_redo_one(const MKE* e) {
   int idx, ok = 0;
   g_mkeMute = 1;
-  if (e->type == MT_SPAWN_BL || e->type == MT_SPAWN_GR || e->type == MT_SPAWN_NT) {
+  if (e->kind == MKE_MOVE) {
+    int ai = area_marker_of_aid(e->aid);
+    if (ai >= 0) ok = area_move_whole(ai, &e->b);
+  } else if (e->type == MT_SPAWN_BL || e->type == MT_SPAWN_GR || e->type == MT_SPAWN_NT) {
     int team = spawn_team_of_mt(e->type);
     if (e->kind == MKE_ADD) {
       spawn_add_insert(team, -1, &e->p, e->yaw);
@@ -8244,6 +8747,9 @@ static int g_ghostPvIdx = -1;         /* 预置点吸到的路点索引；-1 = �
  * 只在这两项的**选中行**上预览：挪到「入口 / 逃跑点」（还没接）就收起来，
  * 免得让人以为那一项也会建东西。 */
 static int wp_guard_preview(void) {
+  if (g_wpMenuSub == 10) return 1;       /* 加守卫点子页：一直预览落点 */
+  /* 整体移动守卫区：选中第 7 项时也画框（框 = 新区中心；没选原区时先当落点指示） */
+  if (g_wpMenuSub == 3 && g_wpMenuSubSel == 6) return 1;
   return g_wpMenuSub == 3 && (g_wpMenuSubSel == 0 || g_wpMenuSubSel == 1);
 }
 
@@ -8543,7 +9049,10 @@ static void ghost_tick(void) {
   if (!cam_point_ray(&p, &ro, &rd)) { ghost_hide(); return; }
   /* 没开笔刷却走到这里 = 「守卫区工具」的落点预览：尺寸/颜色按真会建的东西取 */
   preview = (!g_wpArm && !g_wpLinkStep);
-  brush = preview ? (g_wpMenuSubSel == 0 ? 4 : 3) : (g_wpArm ? g_wpBrush : 0);
+  brush = preview ? ((g_wpMenuSub == 3 && g_wpMenuSubSel == 0) ? 4 : 3)
+                  : (g_wpArm ? g_wpBrush : 0);
+  /* 整体移动守卫区：预览框 = 3 m 区的落点（和真会移动的区同尺寸） */
+  if (preview && g_wpMenuSub == 3 && g_wpMenuSubSel == 6) brush = 4;
   if (brush < 0 || brush >= WP_BRUSH_N) brush = 0;
 
   /* 预置点必须和真正落点的规则一致，否则预览就是在骗人：
@@ -8574,6 +9083,9 @@ static void ghost_tick(void) {
   /* 2026-11-27：守卫点只挂在已有守卫区里（不再连带建区）。区外按 5 会被拒绝，
    * 预览框就照这个规则变灰（slot 13），别让虚线框看起来「按下去就能建」。 */
   if (ok && brush == 3 && area_at(&p) < 0) ok = 0;
+  /* 整体移动：还没选中原区时，准星不在任何 3 m 框里 -> 灰框（按 5 会被拒绝） */
+  if (ok && brush == 4 && g_wpMenuSub == 3 && g_wpMenuSubSel == 6 && g_areaMoveAid < 0
+      && area_at(&p) < 0) ok = 0;
   /* 颜色语义：这一步会变成「起点」就绿，会变成「终点」就红，其余按类型色。
    * （跳跃点两次点击也是先起点后落点，规则一样） */
   {
@@ -8643,7 +9155,7 @@ static void ghost_tick(void) {
   if (line && ok) ghost_arrow_tick(arrowMode, from, p);
   else ghost_arrow_hide();
   /* 蹲守点 / 守卫点的朝向预览：放之前先看见「人机会朝哪看」（= 相机朝向） */
-  if ((g_wpArm || preview) && (brush == 2 || brush == 3) && ok)
+  if ((g_wpArm || preview) && brush == 2 && ok)
     ghost_dir_arrow_tick(p, cam_dir_yaw());
   else ghost_dir_arrow_hide();
 
@@ -8946,8 +9458,8 @@ static void wp_place(void) {
           g_curArea = ai;
           elog("wpmenu: 准星落在守卫区 #%d（aid=%d）里，改成挂这个区", ai, g_mk[ai].aid);
         }
-        if (make_nanopos(g_mk[ai].aid, p, 3, cam_dir_yaw()))
-          toast_ok("守卫点已加到守卫区 #%d（aid=%d）朝向 %s", ai, g_mk[ai].aid, yaw_zh(cam_dir_yaw()));
+        if (make_nanopos(g_mk[ai].aid, p, g_nanoSafety, YAW_NONE))
+          toast_ok("守卫点已加到守卫区 #%d（aid=%d）；方向由入口决定", ai, g_mk[ai].aid);
         else toast_bad("守卫点没加上（区没激活？看日志）");
         elog("wpmenu: guard pos added under area #%d aid=%d", ai, g_mk[ai].aid);
       }
@@ -9232,6 +9744,505 @@ static void set_brush(int b);
 static void menu_open(void);
 static void menu_close(void);
 
+/* =============== 跟随式可通行性采样（player-follow traversability sampling） ===============
+ * 2026-11-28 用户要求：「根据我在游戏中的玩家的周围、根据我脚下的碰撞地面去采集，
+ * 根据地面的实际形状 —— 有的是土丘，有的是有斜坡等等各种情况」。
+ * 规则（用户给的）：只要**地面** —— 楼梯 / 上楼 / 小土丘 / 可走斜坡 / 室内地板都要；
+ *                    「跳上去的屋顶」不要（跳跃才够得着的地方不算地面）。
+ *
+ * 做法：每 250 ms 一次，以玩家脚底为中心、半径 GF_R 米、GF_CELL 米一格：
+ *   射线起点 = 脚底 + GF_UP(1.2 m)，向下 GF_DOWN(6 m)。
+ *   ★ 起点只抬 1.2 m 是关键：抬到天上打的是屋顶 / 上层楼板；起点低于天花板，
+ *     室内打到的一定是脚下那块地板 —— 这是"室内地面漏掉"的根因。
+ *   落点比脚低超过 GF_TOL(3 m) 的丢掉（桥下 / 悬崖下是另一层，不属于这一层）。
+ *   采过的格直接跳过（哈希表里查得到就不打射线），所以站着不动 0 开销。
+ *   「走过才采」天然满足规则：跳上去才够得着的屋顶，玩家不会站上去，也就采不到。
+ *
+ * 产物（都在日志目录；控制台启动游戏时是 <工程>\log\）：
+ *   ground_samples_<地图文件夹>.txt  每行「x z y」（米）—— 离线烘焙脚本直接吃。
+ *   ground_follow.log                会话日志：开 / 关 / 每 10 s 一行统计 / 换图。
+ *   ground_follow.status             每秒刷一次的状态（控制台「开发者选项」页读它显示计数）。
+ *
+ * 游戏里能看到什么（gf_draw，独立于 Ctrl+V，和方向罗盘一个口径）：
+ *   青色小方块 = 已经采到的地面格（只画玩家 20 m 内的）
+ *   亮绿小方块 = 最近 2 秒刚采到的格（走动时能看到一片片绿方块从脚下冒出来）
+ *   黄色圆环   = 采样范围（半径 8 m），带竖直短柱，起伏地形上也看得见
+ *   左上角一行字：跟随采样 ON · 已采 N 格 · 本次 +M
+ * ========================================================================================= */
+#define GF_CELL      1.00f     /* 采样格边长（米） */
+#define GF_R         8.00f     /* 玩家周围采样半径（米） */
+#define GF_DRAW_R   20.00f     /* 画多远（太远看不见，还费顶点） */
+#define GF_MAX      24000      /* 最多记多少格（内存表；1 m 格覆盖 24000 m²） */
+#define GF_UP        1.20f     /* 射线起点 = 脚底 + 这个高度（必须低于天花板） */
+#define GF_DOWN      6.00f     /* 向下打多长 */
+#define GF_TOL       3.00f     /* 落点比脚低多少米以内算"这一层的地面" */
+#define GF_PERIOD_MS 250       /* 采样间隔（心跳本来就只有 4 Hz） */
+#define GF_NEW_MS   2000       /* 「刚采到」高亮持续多久 */
+#define GF_HASH     65536      /* 去重哈希表（格坐标 -> 下标+1，0 = 空） */
+
+typedef struct { int kx, kz; float x, z, y; unsigned long long t; } GFCELL;
+
+static GFCELL  g_gf[GF_MAX];
+static int     g_gfIdx[GF_HASH];
+static int     g_gfN;                 /* 表里多少格 */
+static int     g_gfOn;                /* 采集中 */
+static int     g_gfDirty;             /* 网格要重建 */
+static unsigned g_gfVer = 1;          /* 格子集合的版本号（网格指纹） */
+static V3      g_gfP;                 /* 最近一次采样时的玩家脚底 */
+static int     g_gfSessN;             /* 本次开了以后新采到多少格 */
+static int     g_gfSec;               /* 心跳计数（4 次 = 1 s：刷状态文件） */
+static int     g_gfStatTurn;          /* 状态文件刷了多少次（10 次 = 10 s：写一行统计日志） */
+static unsigned long long g_gfNextMs, g_gfLastAddMs;
+static int     g_gfNoPl;              /* 拿不到玩家位置时只提示一次 */
+static int     g_gfGrounded = 1;      /* 玩家此刻是不是踩在地上（空中不采：位置不准） */
+static int     g_gfNoWrite;           /* 追加失败只提示一次 */
+static char    g_gfDat[MAX_PATH];     /* ground_samples_<地图>.txt */
+static char    g_gfLogP[MAX_PATH];    /* ground_follow.log */
+static char    g_gfStatP[MAX_PATH];   /* ground_follow.status */
+
+/* 游戏内三层网格：0 = 已采（青） 1 = 刚采（亮绿） 2 = 采样环（黄） */
+static P        g_gfMesh[3], g_gfObj[3], g_gfMf[3], g_gfMr[3];
+static unsigned g_gfSig[3];
+static int      g_gfShowA[3];
+
+/* ---- 小工具 ------------------------------------------------------------- */
+static unsigned gf_slot(int kx, int kz) {
+  unsigned h = (unsigned)kx * 2654435761u + (unsigned)kz * 2246822519u;
+  return (h ^ (h >> 15)) & (GF_HASH - 1);
+}
+
+static int gf_find(int kx, int kz) {              /* 返回下标，-1 = 没有 */
+  unsigned i = gf_slot(kx, kz);
+  int guard = 0;
+  while (g_gfIdx[i]) {
+    GFCELL* c = &g_gf[g_gfIdx[i] - 1];
+    if (c->kx == kx && c->kz == kz) return g_gfIdx[i] - 1;
+    i = (i + 1) & (GF_HASH - 1);
+    if (++guard > GF_HASH) break;
+  }
+  return -1;
+}
+
+static int gf_put(int kx, int kz, float x, float z, float y) {
+  unsigned i = gf_slot(kx, kz);
+  int guard = 0;
+  GFCELL* c;
+  while (g_gfIdx[i]) {
+    c = &g_gf[g_gfIdx[i] - 1];
+    if (c->kx == kx && c->kz == kz) return g_gfIdx[i] - 1;
+    i = (i + 1) & (GF_HASH - 1);
+    if (++guard > GF_HASH) return -1;
+  }
+  if (g_gfN >= GF_MAX) return -1;
+  c = &g_gf[g_gfN];
+  c->kx = kx; c->kz = kz; c->x = x; c->z = z; c->y = y;
+  c->t = GetTickCount64();
+  g_gfIdx[i] = g_gfN + 1;
+  g_gfN++;
+  return g_gfN - 1;
+}
+
+static void gf_clear(void) {
+  memset(g_gfIdx, 0, sizeof g_gfIdx);
+  g_gfN = 0;
+  g_gfVer++;
+}
+
+/* 日志正文是 UTF-8（源码里的中文），Win32 A 接口给的路径是 ANSI(GBK)：
+ * 直接 %s 打进去就是一串乱码（2026-11-28 实测 ground_follow.log 里
+ * 「06-测试」「飓风危城」全是问号）。打路径一律先过这个函数。
+ * 两个槽轮着用，同一条日志里出现两个路径也不会互相盖掉。 */
+static const char* gfp(const char* ansi) {
+  static char buf[2][MAX_PATH + 8];
+  static int turn;
+  char* out = buf[turn++ & 1];
+  if (!ansi || !ansi[0]) { out[0] = 0; return out; }
+  ucf_path_to_utf8(ansi, out, MAX_PATH + 8);
+  return out;
+}
+
+/* 会话日志：同时进 ground_follow.log 和 ucf_mod.log（排查时看哪份都行） */
+static void gflog(const char* fmt, ...) {
+  char buf[400];
+  va_list ap;
+  va_start(ap, fmt);
+  vsnprintf(buf, sizeof buf, fmt, ap);
+  va_end(ap);
+  if (g_gfLogP[0]) {
+    FILE* f = fopen(g_gfLogP, "a");
+    if (f) {
+      SYSTEMTIME st;
+      GetLocalTime(&st);
+      fprintf(f, "%04d-%02d-%02d %02d:%02d:%02d [follow] %s\n",
+              st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond, buf);
+      fclose(f);
+    }
+  }
+  elog("follow: %s", buf);
+}
+
+/* 路径：按「当前图」分文件 —— 不同地图的地面高度表混在一个文件里就没法用了。
+ * 地图名要等场景里认出来才有，所以 force=1 时重算一次（第一次采样时再对一次）。 */
+static void gf_paths(int force) {
+  char name[MAX_PATH + 32];
+  const char* map;
+  if (!force && g_gfDat[0]) return;
+  map = g_mapDirName[0] ? g_mapDirName : (g_packName[0] ? g_packName : "unknown");
+  snprintf(name, sizeof name, "ground_samples_%s.txt", map);
+  ucf_log_file(g_gfDat, sizeof g_gfDat, g_dir, name);
+  ucf_log_file(g_gfLogP, sizeof g_gfLogP, g_dir, "ground_follow.log");
+  ucf_log_file(g_gfStatP, sizeof g_gfStatP, g_dir, "ground_follow.status");
+}
+
+/* 玩家脚底。返回 1 = 玩家自己的脚底；2 = 拿不到玩家，退回「相机 - 眼高」
+ * （和采样会话同一套口径，日志里会写明是哪一种）；0 = 连相机都没有。 */
+static int gf_player_feet(V3* out) {
+  PlSt st;
+  P pl = tr_player();
+  P cam, go, tr;
+  V3 c;
+  if (pl && tr_read_player(pl, &st)) {
+    *out = st.pos;
+    g_gfGrounded = st.grounded ? 1 : 0;   /* 腾空那一瞬脚底不在任何地面上：跳过这一步 */
+    return 1;
+  }
+  cam = ((cam_main_t)RVA(R_CAM_MAIN))(0);
+  if (!cam) return 0;
+  go = ((get_go_t)RVA(R_GETGO))(cam, 0);
+  tr = get_tr(go);
+  if (!tr) return 0;
+  ((get_pos_t)RVA(R_GET_POS_INJ))(tr, &c, 0);
+  c.y -= (float)g_trEye;
+  *out = c;
+  return 2;
+}
+
+/* 读回以前采的（同一个图再玩一次不用重采，屏幕上也立刻有地毯） */
+static int gf_load(void) {
+  FILE* f;
+  char line[160];
+  int n = 0, lines = 0;
+  f = fopen(g_gfDat, "r");
+  if (!f) return 0;
+  while (fgets(line, sizeof line, f)) {
+    float x, z, y;
+    int kx, kz;
+    lines++;
+    if (line[0] == '#') continue;
+    if (sscanf(line, "%f %f %f", &x, &z, &y) != 3) continue;
+    if (!isfinite(x) || !isfinite(z) || !isfinite(y)) continue;
+    kx = (int)floorf(x / GF_CELL);
+    kz = (int)floorf(z / GF_CELL);
+    if (gf_find(kx, kz) >= 0) continue;
+    if (gf_put(kx, kz, x, z, y) >= 0) n++;
+  }
+  fclose(f);
+  if (lines) elog("follow: 读回 %s（%d 行 -> %d 格）", gfp(g_gfDat), lines, n);
+  return n;
+}
+
+/* 状态文件：控制台「开发者选项」页每秒读一次，显示计数（只写 ASCII，别混编码） */
+static void gf_status(void) {
+  FILE* f;
+  if (!g_gfStatP[0]) return;
+  f = fopen(g_gfStatP, "w");
+  if (!f) return;
+  fprintf(f, "on=%d\ncells=%d\nsess=%d\ncell=%.2f\nradius=%.2f\n", 
+          g_gfOn, g_gfN, g_gfSessN, GF_CELL, GF_R);
+  fclose(f);
+}
+
+/* 一格 = 一片平的小方块（高度表本身是平的，斜坡上看起来就是一段段台阶，
+ * 正好一眼能看出"这里是采到的地面"）。 */
+static void gf_quad(float cx, float cz, float y, float r) {
+  V3 a = { cx - r, y, cz - r };
+  V3 b = { cx + r, y, cz - r };
+  V3 c = { cx + r, y, cz + r };
+  V3 d = { cx - r, y, cz + r };
+  bs_face(a, b, c, d);
+}
+
+/* 用当前 bs_ 批次里的顶点更新第 k 层对象（网格只在指纹变了才重建） */
+static int gf_apply(int k, int slot, unsigned sig) {
+  P mat;
+  if (g_gfObj[k] && !uobj_live(g_gfObj[k])) { g_gfObj[k] = 0; g_gfMf[k] = g_gfMr[k] = 0; }
+  if (g_gfMesh[k] && !uobj_live(g_gfMesh[k])) g_gfMesh[k] = 0;
+  if (sig != g_gfSig[k] || !g_gfMesh[k]) {
+    if (g_gfMesh[k] && uobj_live(g_gfMesh[k])) ((destroy_t)RVA(R_DESTROY))(g_gfMesh[k], 0);
+    g_gfMesh[k] = build_mesh();          /* 批次为空时返回 0，不会挂空网格 */
+    g_gfSig[k] = sig;
+    if (g_gfMesh[k]) root_put(g_gfMesh[k]);
+  }
+  if (!g_gfMesh[k]) return 0;
+  if (!g_gfObj[k]) {
+    mat = mat_for(slot);
+    if (!mat_alive(mat)) return 0;
+    g_gfObj[k] = new_go(k == 2 ? "UCF_FollowRing" : "UCF_FollowCells");
+    if (!g_gfObj[k]) return 0;
+    ((set_layer_t)RVA(R_SETLAYER))(g_gfObj[k], 0, 0);
+    g_gfMf[k] = ((addcomp_t)RVA(R_ADDCOMP))(g_gfObj[k], g_mfType, 0);
+    g_gfMr[k] = ((addcomp_t)RVA(R_ADDCOMP))(g_gfObj[k], g_mrType, 0);
+    if (!g_gfMf[k] || !g_gfMr[k]) {
+      ((destroy_t)RVA(R_DESTROY))(g_gfObj[k], 0);
+      g_gfObj[k] = g_gfMf[k] = g_gfMr[k] = 0;
+      return 0;
+    }
+    ((set_shmat_t)RVA(R_REND_SETSM))(g_gfMr[k], mat, 0);
+    ((set_int1_t)RVA(R_REND_SHADOW))(g_gfMr[k], 0, 0);
+    root_put(g_gfObj[k]);
+  }
+  if (g_gfMf[k]) ((mf_setmesh_t)RVA(R_MF_SETMESH))(g_gfMf[k], g_gfMesh[k], 0);
+  ((set_active_t)RVA(R_SETACTIVE))(g_gfObj[k], 1, 0);
+  g_gfShowA[k] = 1;
+  return 1;
+}
+
+static void gf_layer_hide(int k) {
+  if (g_gfShowA[k] && g_gfObj[k] && uobj_live(g_gfObj[k]))
+    ((set_active_t)RVA(R_SETACTIVE))(g_gfObj[k], 0, 0);
+  g_gfShowA[k] = 0;
+}
+
+static void gf_hide(void) {
+  int k;
+  for (k = 0; k < 3; k++) gf_layer_hide(k);
+}
+
+/* 已采（青）/ 刚采（亮绿）两层。只画玩家周围 GF_DRAW_R 内，顶点有上限。 */
+static void gf_draw_cells(void) {
+  unsigned long long now = GetTickCount64();
+  float r2 = GF_DRAW_R * GF_DRAW_R;
+  int i, cn = 0, nn = 0;
+  bs_reset();
+  for (i = 0; i < g_gfN && cn < 1800; i++) {
+    float dx = g_gf[i].x - g_gfP.x, dz = g_gf[i].z - g_gfP.z;
+    if (dx * dx + dz * dz > r2) continue;
+    if (g_gf[i].t + GF_NEW_MS > now) continue;          /* 刚采的走绿层 */
+    gf_quad(g_gf[i].x, g_gf[i].z, g_gf[i].y + 0.04f, 0.40f);
+    cn++;
+  }
+  if (cn) gf_apply(0, 6, g_gfVer); else gf_layer_hide(0);   /* 6 = 青 */
+  bs_reset();
+  for (i = 0; i < g_gfN && nn < 1800; i++) {
+    float dx = g_gf[i].x - g_gfP.x, dz = g_gf[i].z - g_gfP.z;
+    if (dx * dx + dz * dz > r2) continue;
+    if (g_gf[i].t + GF_NEW_MS <= now) continue;
+    gf_quad(g_gf[i].x, g_gf[i].z, g_gf[i].y + 0.06f, 0.44f);
+    nn++;
+  }
+  if (nn) gf_apply(1, 2, g_gfVer); else gf_layer_hide(1);   /* 2 = 亮绿 */
+}
+
+/* 采样环：半径 GF_R 的一圈线 + 竖直短柱（地形起伏时也看得见）。
+ * 玩家挪了 0.2 m 以上才重建（很便宜，但没必要每帧建）。 */
+static void gf_draw_ring(void) {
+  const int seg = 36;
+  int s;
+  unsigned sig;
+  V3 c = g_gfP;
+  sig = (unsigned)(int)(c.x * 5.0f) * 73856093u
+      ^ (unsigned)(int)(c.z * 5.0f) * 19349663u
+      ^ (unsigned)(int)(c.y * 5.0f) * 83492791u;
+  if (sig == g_gfSig[2] && g_gfShowA[2]) return;
+  bs_reset();
+  for (s = 0; s < seg; s++) {
+    float a0 = 6.2831853f * (float)s / (float)seg;
+    float a1 = 6.2831853f * (float)(s + 1) / (float)seg;
+    V3 A = { c.x + cosf(a0) * GF_R, c.y + 0.10f, c.z + sinf(a0) * GF_R };
+    V3 B = { c.x + cosf(a1) * GF_R, c.y + 0.10f, c.z + sinf(a1) * GF_R };
+    bs_line(A, B, 0.09f);
+    if ((s % 3) == 0) {                       /* 每 30° 一根竖柱：别被土丘埋掉 */
+      V3 t0 = A, t1 = A;
+      t1.y += 0.90f;
+      bs_line(t0, t1, 0.07f);
+    }
+  }
+  gf_apply(2, 4, sig);                        /* 4 = 黄 */
+}
+
+/* 左上角状态行：只在字变了才 SetText（每帧建字符串会喂 GC） */
+static void gf_hud(int on) {
+  char s[160];
+  if (!g_gfHud || !uobj_live(g_gfHud)) {
+    g_gfHud = 0; g_gfHudGo = 0;
+    return;
+  }
+  if (!on) {
+    if (g_gfHudGo && uobj_live(g_gfHudGo)) ((set_active_t)RVA(R_SETACTIVE))(g_gfHudGo, 0, 0);
+    return;
+  }
+  if (g_cjk)
+    snprintf(s, sizeof s, "跟随采样 ON · 已采 %d 格 · 本次 +%d", g_gfN, g_gfSessN);
+  else
+    snprintf(s, sizeof s, "follow sampling ON - cells %d (+%d)", g_gfN, g_gfSessN);
+  if (strcmp(g_gfHudText, s) != 0) {
+    strncpy(g_gfHudText, s, sizeof(g_gfHudText) - 1);
+    g_gfHudText[sizeof(g_gfHudText) - 1] = 0;
+    ((set_txt_t)RVA(R_TEXT_SETTEXT))(g_gfHud, x_string_new(g_gfHudText), 0);
+  }
+  if (g_gfHudGo) ((set_active_t)RVA(R_SETACTIVE))(g_gfHudGo, 1, 0);
+}
+
+/* 一次采样：玩家周围没采过的格打一根向下的射线。返回这次采到多少格。 */
+static int gf_step(void) {
+  V3 p = g_gfP, hit;
+  int ix0, iz0, ix, iz, add = 0, first, R, rays = 0;
+  unsigned long long now = GetTickCount64();
+  if (!g_gfOn) return 0;
+  if (g_gfNextMs && now < g_gfNextMs) return 0;
+  g_gfNextMs = now + GF_PERIOD_MS;
+  if (!g_gfDat[0]) gf_paths(0);
+  R = (int)(GF_R / GF_CELL);
+  ix0 = (int)floorf(p.x / GF_CELL);
+  iz0 = (int)floorf(p.z / GF_CELL);
+  first = g_gfN;
+  for (ix = ix0 - R; ix <= ix0 + R; ix++) {
+    for (iz = iz0 - R; iz <= iz0 + R; iz++) {
+      float cx = ((float)ix + 0.5f) * GF_CELL;
+      float cz = ((float)iz + 0.5f) * GF_CELL;
+      float dx = cx - p.x, dz = cz - p.z;
+      V3 o;
+      if (dx * dx + dz * dz > GF_R * GF_R) continue;   /* 圆盘，不是方块 */
+      if (gf_find(ix, iz) >= 0) continue;             /* 采过：不再打射线 */
+      o.x = cx; o.y = p.y; o.z = cz;
+      rays++;
+      if (!ground_below(o, GF_UP, GF_DOWN, &hit)) continue;
+      if (hit.y > p.y + GF_UP) continue;              /* 打到的在头顶上：不是脚下这层 */
+      if (hit.y < p.y - GF_TOL) continue;             /* 低太多：桥下 / 悬崖下，另一层 */
+      if (gf_put(ix, iz, cx, cz, hit.y) < 0) continue;
+      add++;
+    }
+  }
+  if (add) {
+    FILE* f = fopen(g_gfDat, "a");
+    if (f) {
+      int k;
+      for (k = first; k < g_gfN; k++)
+        fprintf(f, "%.2f %.2f %.3f\n", g_gf[k].x, g_gf[k].z, g_gf[k].y);
+      fclose(f);
+      g_gfSessN += add;
+      g_gfVer++;
+      g_gfDirty = 1;
+      g_gfLastAddMs = now;
+    } else if (!g_gfNoWrite) {
+      g_gfNoWrite = 1;
+      gflog("!!! 写不进 %s（已采的留在内存里，这次关掉就没了）", gfp(g_gfDat));
+    }
+  }
+  /* 每步都写日志会刷爆 ucf_mod.log（走动时 4 条/秒）：只在"一次采到一大片"时记
+   * 一笔（换区域 / 刚进图 / 冲进室内），细账看 10 s 一行的那条统计。 */
+  if (add > 80) elog("follow: step rays=%d add=%d total=%d", rays, add, g_gfN);
+  return add;
+}
+
+/* 心跳里每 tick 调一次（4 Hz）。采样 / 画 / 状态都从这里走，和 Ctrl+V 无关。 */
+static void gf_tick(void) {
+  unsigned long long now;
+  V3 p;
+  int st;
+  if (!g_gfOn) {
+    if (g_gfShowA[0] || g_gfShowA[1] || g_gfShowA[2]) gf_hide();
+    gf_hud(0);
+    return;
+  }
+  /* 位置每 tick 取一次（4 Hz）：采样环要跟着人走，采样本身按 250 ms 节流 */
+  st = gf_player_feet(&p);
+  if (!st) {
+    if (!g_gfNoPl) { g_gfNoPl = 1; gflog("拿不到位置（玩家和相机都读不到）：先确认已经进图"); }
+    gf_layer_hide(2);
+    return;
+  }
+  if (!isfinite(p.x) || !isfinite(p.y) || !isfinite(p.z)) return;
+  if (fabsf(p.x) > 20000.0f || fabsf(p.z) > 20000.0f) return;
+  if (st == 2 && !g_gfNoPl) {
+    g_gfNoPl = 1;
+    gflog("读不到玩家对象，退回「相机 - 眼高」。数据仍可用，但蹲下时会偏一点");
+  }
+  g_gfP = p;
+  /* 只有"踩在地上"才采：跳跃 / 下落的那一两帧，脚底位置不代表任何一层地面，
+   * 拿它当射线起点会把半空中的位置当成地面高度。环照画，采样跳过。 */
+  if (g_gfGrounded) gf_step();
+  now = GetTickCount64();
+  /* 绿浪过期：整层重画一次，让这一片回到青色 */
+  if (g_gfLastAddMs && now > g_gfLastAddMs + GF_NEW_MS) {
+    g_gfLastAddMs = 0;
+    g_gfVer++;
+    g_gfDirty = 1;
+  }
+  if (g_gfDirty) { g_gfDirty = 0; gf_draw_cells(); }
+  gf_draw_ring();
+  gf_hud(1);
+  if (++g_gfSec >= 4) {                  /* 4 心跳 = 1 s：刷状态文件 */
+    g_gfSec = 0;
+    gf_status();
+    if ((g_gfStatTurn++ % 10) == 0)
+      gflog("采集中：%d 格（本次 +%d）· 格 %.1f m · 半径 %.1f m · %s",
+            g_gfN, g_gfSessN, GF_CELL, GF_R, gfp(g_gfDat));
+  }
+}
+
+static void gf_start(void) {
+  char stamp[64];
+  int back = 0;
+  SYSTEMTIME st;
+  if (g_gfOn) { gflog("已经在采（%d 格）", g_gfN); return; }
+  gf_paths(1);
+  gf_clear();
+  g_gfSessN = 0;
+  g_gfNoWrite = 0;
+  g_gfNoPl = 0;
+  g_gfNextMs = 0;
+  g_gfLastAddMs = 0;
+  g_gfDirty = 1;
+  /* 文件头：只在新建 / 空文件时写。参数留在文件里，以后能复现这次采样。 */
+  {
+    FILE* f = fopen(g_gfDat, "r");
+    long sz = 0;
+    if (f) { if (fseek(f, 0, SEEK_END) == 0) sz = ftell(f); fclose(f); }
+    if (sz <= 0) {
+      f = fopen(g_gfDat, "w");
+      if (f) {
+        fprintf(f, "# ucf-ground-samples v1 cell=%.2f radius=%.2f up=%.2f down=%.2f tol=%.2f\n",
+                GF_CELL, GF_R, GF_UP, GF_DOWN, GF_TOL);
+        fprintf(f, "# 跟随式可通行性采样：玩家脚下碰撞地面，每行 x z y（米）。\n");
+        fclose(f);
+      }
+    }
+  }
+  back = gf_load();
+  g_gfVer++;
+  GetLocalTime(&st);
+  snprintf(stamp, sizeof stamp, "%04d-%02d-%02d %02d:%02d:%02d",
+           st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond);
+  g_gfOn = 1;
+  gflog("==== start %s ====", stamp);
+  gflog("图=%s 读回 %d 格 · 格 %.2f m 半径 %.2f m 起点=脚+%.2f 向下 %.2f 容差 %.2f",
+        gfp(g_mapDirName[0] ? g_mapDirName : (g_packName[0] ? g_packName : "?")),
+        back, GF_CELL, GF_R, GF_UP, GF_DOWN, GF_TOL);
+  gflog("输出 %s", gfp(g_gfDat));
+  gflog("状态 %s", gfp(g_gfStatP));
+  gf_status();
+  toast_ok("跟随采样：开（读回 %d 格）· 走一圈地图，脚下方块会一片片冒出来", back);
+}
+
+static void gf_stop(const char* why) {
+  if (!g_gfOn) return;
+  g_gfOn = 0;
+  gf_status();
+  gf_hide();
+  gflog("==== stop(%s) 共 %d 格（本次新采 %d）-> %s ====",
+        why ? why : "-", g_gfN, g_gfSessN, gfp(g_gfDat));
+  toast_ok("跟随采样：停（本次新采 %d 格，共 %d）", g_gfSessN, g_gfN);
+}
+
+/* 换图：正在采就停掉。理由：加载那几秒玩家位置是假的，且新图的地面要写进
+ * 新图自己的文件（路径按图名分），中途换过去会把两张图的数据写到一起。 */
+static void gf_scene_off(void) {
+  if (!g_gfOn) return;
+  gf_stop("scene change");
+  g_gfDat[0] = 0;      /* 下一张图重新算路径 */
+}
+
 static void nav_cmd_tick(P g) {
   FILE* f;
   char line[256];
@@ -9251,6 +10262,7 @@ static void nav_cmd_tick(P g) {
   /* 可视化实时下发（控制台「插件开关 → 可视化」）：-1 = 这条命令没带这个字段，别动 */
   int v_on = -1, v_nodes = -1, v_nano = -1, v_crouch = -1, v_born = -1, v_supply = -1;
   int v_jump = -1, v_tag = -1, v_navmesh = -1, v_compass = -1, v_marks = -1;
+  int v_entry = -1, v_escape = -1, v_eline = -1;
   /* 控制台删了坐标：文件修改时间变了就重读并重画（0.5 s 一次，文件很小） */
   if (g_pmPath[0] && g_visPm && pm_load(0)) {
     elog("pmark: reloaded %d mark(s)", g_pmN);
@@ -9282,6 +10294,9 @@ static void nav_cmd_tick(P g) {
     if (sscanf(line, "navmesh=%d", &v_navmesh) == 1) continue;
     if (sscanf(line, "compass=%d", &v_compass) == 1) continue;
     if (sscanf(line, "marks=%d", &v_marks) == 1) continue;
+    if (sscanf(line, "entry=%d", &v_entry) == 1) continue;
+    if (sscanf(line, "escape=%d", &v_escape) == 1) continue;
+    if (sscanf(line, "eline=%d", &v_eline) == 1) continue;
     if (!strncmp(line, "out=", 4)) {              /* 路径里可能有空格：取整行 */
       char* q = line + 4;
       size_t n2;
@@ -9335,9 +10350,17 @@ static void nav_cmd_tick(P g) {
     }
     return;
   }
+  if (!strcmp(cmd, "follow")) {                   /* 2026-11-28 跟随式可通行性采样 */
+    if (!strcmp(act, "stop") || !strcmp(act, "off")) gf_stop("console");
+    else gf_start();
+    return;
+  }
   if (!strcmp(cmd, "vis")) {                      /* 可视化实时开关：控制台勾选框下发，不重进图 */
     if (v_nodes   >= 0) g_visNodes  = v_nodes ? 1 : 0;
     if (v_nano    >= 0) g_visNano   = v_nano ? 1 : 0;
+    if (v_entry   >= 0) g_visEntry  = v_entry ? 1 : 0;
+    if (v_escape  >= 0) g_visEscape = v_escape ? 1 : 0;
+    if (v_eline   >= 0) g_visELine  = v_eline ? 1 : 0;
     if (v_crouch  >= 0) g_visCrouch = v_crouch ? 1 : 0;
     if (v_born    >= 0) g_visBorn   = v_born ? 1 : 0;
     if (v_supply  >= 0) g_visSupply = v_supply ? 1 : 0;
@@ -9350,8 +10373,8 @@ static void nav_cmd_tick(P g) {
     else { vis_show(0); g_visDirty = 0; }
     mk_vis_apply();
     if (v_compass >= 0) compass_apply(v_compass);
-    elog("vis cmd: on=%d nodes=%d nano=%d crouch=%d born=%d supply=%d jump=%d tag=%d nm=%d compass=%d marks=%d",
-         g_visOn, g_visNodes, g_visNano, g_visCrouch, g_visBorn, g_visSupply,
+    elog("vis cmd: on=%d nodes=%d nano=%d entry=%d escape=%d eline=%d crouch=%d born=%d supply=%d jump=%d tag=%d nm=%d compass=%d marks=%d",
+         g_visOn, g_visNodes, g_visNano, g_visEntry, g_visEscape, g_visELine, g_visCrouch, g_visBorn, g_visSupply,
          g_visJump, g_visTag, g_nmShow, g_visCompass, g_visPm);
     return;
   }
@@ -9368,6 +10391,34 @@ static void nav_cmd_tick(P g) {
 }
 
 /* 主线程 tick：等图稳定 -> 读本图的编辑文件 -> 套用 */
+/* 2026-11-28：grow 重建点图后，人机手里还攥着旧 GraphNode 指针 ->
+ * Bot.Update 每帧空指针（实测只加 1 个点也刷）。把 Bot 上那几个节点引用清空，
+ * 让它们下一帧重新找路；开局时这些字段本来就是 null，Bot.Update 能处理。 */
+static P bot_type_get(void);
+
+static void bot_rebind_after_apply(void) {
+  P arr, bt;
+  int i, n, cleared = 0;
+  bt = bot_type_get();
+  if (!bt) { elog("rebind: Bot 类型没准备好"); return; }
+  arr = ((find_objs_t)RVA(R_FINDOBJS))(bt, 1, 0);
+  if (!arr) { elog("rebind: bots 数组为空"); return; }
+  n = *(int*)((char*)arr + 0xC);
+  if (n < 0 || n > 256) { elog("rebind: 数量异常 %d", n); return; }
+  for (i = 0; i < n; i++) {
+    P b = *(P*)((char*)arr + 0x10 + i * 4);
+    if (!b) continue;
+    *(P*)((char*)b + 0x80) = 0;          /* path */
+    *(P*)((char*)b + 0x88) = 0;          /* gNode_Nearset */
+    *(P*)((char*)b + 0x8C) = 0;          /* gNode_Next */
+    *(P*)((char*)b + 0xC8) = 0;          /* nextJumpStartNode */
+    *(P*)((char*)b + 0xCC) = 0;          /* nextJumpLink */
+    *(float*)((char*)b + 0xB8) = 0.0f;   /* nextFindPathTime */
+    cleared++;
+  }
+  elog("rebind: 清空 %d 只人机的节点引用（下一帧重新找路）", cleared);
+}
+
 static void nav_edit_tick(void) {
   P g;
   int n, ops, made = 0;
@@ -9493,6 +10544,13 @@ static void nav_edit_tick(void) {
     if (ops < 0) { g_nedWaitN = -1; return; }   /* grow 要等 A* 就绪：下一帧重来 */
     g_nedApplied = 1;
     pack_stat();
+    bot_rebind_after_apply();
+    {
+      int rm = nav_ray_filter(g);
+      elog("xray: 直线被挡的边删掉 %d 条", rm);
+    }
+    /* 2026-11-28：A* 的 PointGraph.Scan() 会把节点当"子对象"重建 —— 我们的点不是，
+     * 一调就把图清成 0 节点（实测 NRE 6104）。射线过滤改为自己做（按边打），不调 Scan。 */
     if (ops) elog("naved: applied %d/%d edits on %s (nodes %d -> %d)%s%s",
                   ops, g_nedN, g_nedFp, g_nedBaseN, nav_count(g),
                   g_nedBlank ? " [blank base]" : "", g_nedKeep ? " [keep native]" : "");
@@ -9539,7 +10597,7 @@ void editor_map_name(char* out, int cap) {
 static const char* WP_MENU[] = {
   "添加点位", "建立路径", "守卫区工具", "删除点图连线 / 路点",
   "删除点位（按类型选）", "删除区域（守卫区）", "落地 / 贴地", "撤销 / 恢复 / 保存",
-  "朝向工具（蹲守点 / 守卫点）", "显示图层", "关闭菜单（Esc 逐级返回）"
+  "朝向工具（蹲守点）", "显示图层", "关闭菜单（Esc 逐级返回）"
 };
 #define WP_MENU_N ((int)(sizeof WP_MENU / sizeof WP_MENU[0]))
 /* 添加点位子菜单只放点位型标记；守卫点/守卫区走「守卫区工具」，
@@ -9580,9 +10638,16 @@ static const char* wp_brush_label(int brush) {
   }
 }
 static const char* WP_PATHS[3] = { "双向", "单向 A -> B", "单向 B -> A" };
-static const char* WP_AREAS[4] = {
+static const char* WP_AREAS[7] = {
   "新建守卫区（Bot_NanoGuardArea）", "加守卫点（Bot_NanoGuardPos）",
-  "加入口 entrancePos", "加逃跑点 escapePos"
+  "加入口（站定后朝这看）", "加逃跑点（被压时跑这）",
+  "删除入口（准星对准 · 可撤销）", "删除逃跑点（准星对准 · 可撤销）",
+  "整体移动守卫区（连带守卫点/入口/逃跑点）"
+};
+/* 加守卫点子页（sub 10）：1-4 直接切安全等级，5 放一个；Esc 回守卫区工具。 */
+static const char* WP_GADD[5] = {
+  "安全等级 0", "安全等级 1", "安全等级 2", "安全等级 3",
+  "放一个守卫点"
 };
 /* 2026-11-25：保存改成唯一入口 Ctrl+S；菜单文字直接写出来，别再藏「保存到文件」。
  * 2026-11-26 用户要求：第 2 项「重做一步」改名「恢复」并带一句解释（撤销的反操作）；
@@ -9648,6 +10713,10 @@ static void menu_sub_title(char* out, int cap) {
   if (g_wpMenuSub == 1) s = g_wpArm ? "添加点位：连续放置中" : "添加点位：选类型";
   else if (g_wpMenuSub == 2) s = g_wpLinkStep ? "建立路径：连续连线中" : "建立路径：选方向";
   else if (g_wpMenuSub == 3) s = "守卫区工具（虚线框 = 预置落点）";
+  else if (g_wpMenuSub == 10) {
+    snprintf(out, (size_t)cap, "加守卫点：安全等级 %d（1-4 切，5 放）", g_nanoSafety);
+    return;
+  }
   else if (g_wpMenuSub == 4) s = "撤销 / 恢复 / 保存";
   else if (g_wpMenuSub == 5) s = "显示图层";
   else if (g_wpMenuSub == 6) s = "删除：选类型（可连续删）";
@@ -9661,14 +10730,15 @@ static void menu_sub_title(char* out, int cap) {
   }
 
   else if (g_wpMenuSub == 8) s = "删除区域：守卫区（5/Delete 删）";
-  else if (g_wpMenuSub == 9) s = "朝向工具（准星对着你放的蹲守点 / 守卫点）";
+  else if (g_wpMenuSub == 9) s = "朝向工具（准星对着你放的蹲守点）";
   snprintf(out, (size_t)cap, "%s", s);
 }
 
 static int menu_sub_count(void) {
   if (g_wpMenuSub == 1) return WP_TYPE_N;
   if (g_wpMenuSub == 2) return 3;
-  if (g_wpMenuSub == 3) return 4;
+  if (g_wpMenuSub == 3) return 7;
+  if (g_wpMenuSub == 10) return 5;
   if (g_wpMenuSub == 4) return 3;
   if (g_wpMenuSub == 5) return 3;
   if (g_wpMenuSub == 6) return 2;
@@ -9681,7 +10751,16 @@ static int menu_sub_count(void) {
 static const char* menu_sub_label(int i) {
   if (g_wpMenuSub == 1) return (i >= 0 && i < WP_TYPE_N) ? WP_TYPES[i] : "";
   if (g_wpMenuSub == 2) return (i >= 0 && i < 3) ? WP_PATHS[i] : "";
-  if (g_wpMenuSub == 3) return (i >= 0 && i < 4) ? WP_AREAS[i] : "";
+  if (g_wpMenuSub == 3) return (i >= 0 && i < 7) ? WP_AREAS[i] : "";
+  if (g_wpMenuSub == 10) {
+    static char gadd[64];
+    if (i >= 0 && i < 4) return WP_GADD[i];
+    if (i == 4) {
+      snprintf(gadd, sizeof gadd, "放一个守卫点（安全等级 %d）", g_nanoSafety);
+      return gadd;
+    }
+    return "";
+  }
   if (g_wpMenuSub == 4) return (i >= 0 && i < 3) ? WP_EDIT[i] : "";
   if (g_wpMenuSub == 5) return (i >= 0 && i < 3) ? WP_LAYERS[i] : "";
   if (g_wpMenuSub == 6) return (i >= 0 && i < 2) ? WP_DEL[i] : "";
@@ -9854,6 +10933,8 @@ static void menu_refresh(void) {
   /* 守卫区工具：写清「选中的这一项按下去会建什么、建在哪」（2026-11-26）。
    * 以前这一页只有四项名字，光看菜单根本不知道准星会落在哪，也没有任何预览。 */
   if (g_wpMenuSub == 3 && off < (int)sizeof s - 460) {
+    /* 待移动的区可能已经被删（Delete / 删区域）：刷新时先校验一次 aid */
+    if (g_areaMoveAid >= 0 && area_marker_of_aid(g_areaMoveAid) < 0) g_areaMoveAid = -1;
     if (g_wpMenuSubSel == 0) {
       off += snprintf(s + off, sizeof s - (size_t)off,
                       "\n虚线框 = 预置落点：守卫区 3.0 m 见方（BoxCollider 中心在准星落点）\n"
@@ -9868,21 +10949,103 @@ static void menu_refresh(void) {
                       "挂了点，这个点所在的守卫区就被激活：金色线框 → 绿框\n");
       if (ai >= 0)
         off += snprintf(s + off, sizeof s - (size_t)off,
-                        "准星在守卫区 #%d（aid=%d）里：按 5 就挂进这个区\n",
+                        "准星在守卫区 #%d（aid=%d）里：按 5 进入加守卫点子页（先选安全等级）\n",
                         ai, g_mk[ai].aid);
       else
         off += snprintf(s + off, sizeof s - (size_t)off,
                         "准星不在任何守卫区里：按 5 不会建点（守卫点只挂在区里）—— 先按 1 建区，再回来加点\n");
-    } else {
+    } else if (g_wpMenuSubSel == 2 || g_wpMenuSubSel == 3) {
+      int ai = g_curArea;
+      if (ai < 0 || ai >= g_n || g_mk[ai].type != MT_AREA) ai = g_ghostPvOk ? area_at(&g_ghostPv) : -1;
+      if (ai >= 0 && ai < g_n && g_mk[ai].type == MT_AREA) {
+        P ac = g_mk[ai].comp;
+        int ne = ac ? vec3_arr_count(*(P*)((char*)ac + 0x0C)) : 0;
+        int nx = ac ? vec3_arr_count(*(P*)((char*)ac + 0x1C)) : 0;
+        off += snprintf(s + off, sizeof s - (size_t)off,
+                        "\n当前区 #%d（aid=%d）：入口 %d 个 · 逃跑点 %d 个\n"
+                        "按 5 把准星落点加到当前区；准星在别的区里就加到那个区\n"
+                        "入口 / 逃跑点没有虚线预置框，按 5 直接加\n"
+                        "入口只影响站定后的张望方向，不决定从哪进区\n"
+                        "逃跑点在“被压且没有更安全守卫点”时随机取一个跑过去\n",
+                        ai, g_mk[ai].aid, ne, nx);
+      } else {
+        off += snprintf(s + off, sizeof s - (size_t)off,
+                        "\n还没有当前守卫区：先按 1 新建，或先按 2 加一个守卫点\n");
+      }
+    } else if (g_wpMenuSubSel == 4 || g_wpMenuSubSel == 5) {
+      /* 2026-11-28：删除入口 / 逃跑点（严格准星 0.6 m，见 delete_marker_strict） */
+      int want = (g_wpMenuSubSel == 4) ? MT_ENTRY : MT_ESCAPE;
+      int cnt = mt_count(want);
+      int ai = g_curArea;
+      if (ai < 0 || ai >= g_n || g_mk[ai].type != MT_AREA)
+        ai = g_ghostPvOk ? area_at(&g_ghostPv) : -1;
       off += snprintf(s + off, sizeof s - (size_t)off,
-                      "\n入口 / 逃跑点还没接（按 5 只写一行日志，图上不会变，也没有虚线）\n");
+                      "\n%s：图里现有 %d 个（%s）\n"
+                      "准星对准要删的那个，0.6 m 内按 5 / Delete 删除；对不准会拒绝\n"
+                      "只从 area.%s 摘掉这一个，不连带守卫点 / 区；删完可撤销一步\n",
+                      (want == MT_ENTRY) ? "删除入口" : "删除逃跑点", cnt,
+                      (want == MT_ENTRY) ? "黄球" : "白球",
+                      (want == MT_ENTRY) ? "entrancePos" : "escapePos");
+      if (ai >= 0 && ai < g_n && g_mk[ai].type == MT_AREA) {
+        P ac = g_mk[ai].comp;
+        off += snprintf(s + off, sizeof s - (size_t)off,
+                        "当前区 #%d（aid=%d）：入口 %d 个 · 逃跑点 %d 个\n",
+                        ai, g_mk[ai].aid,
+                        ac ? vec3_arr_count(*(P*)((char*)ac + 0x0C)) : 0,
+                        ac ? vec3_arr_count(*(P*)((char*)ac + 0x1C)) : 0);
+      }
+    } else if (g_wpMenuSubSel == 6) {
+      /* 2026-11-28：整体移动守卫区（两步确认；连带守卫点 / 入口 / 逃跑点） */
+      int ai = (g_areaMoveAid >= 0) ? area_marker_of_aid(g_areaMoveAid) : -1;
+      if (ai >= 0 && ai < g_n) {
+        int np2 = 0, ne, nx, k;
+        P ac = g_mk[ai].comp;
+        for (k = 0; k < g_n; k++)
+          if (g_mk[k].type == MT_NANOPOS && g_mk[k].parent == ai) np2++;
+        ne = ac ? vec3_arr_count(*(P*)((char*)ac + 0x0C)) : 0;
+        nx = ac ? vec3_arr_count(*(P*)((char*)ac + 0x1C)) : 0;
+        off += snprintf(s + off, sizeof s - (size_t)off,
+                        "\n已选守卫区 #%d（aid=%d）：守卫点 %d · 入口 %d · 逃跑点 %d\n"
+                        "准星处的蓝框 = 新区中心；再按 5 确认整体移动（0 / Esc 取消）\n",
+                        ai, g_mk[ai].aid, np2, ne, nx);
+        if (g_ghostPvOk)
+          off += snprintf(s + off, sizeof s - (size_t)off,
+                          "位移 Δ=(%.1f %.1f %.1f) m（入口 / 逃跑点数组一起挪）\n",
+                          g_ghostPv.x - g_mk[ai].p.x,
+                          (g_ghostPv.y - 0.02f) - g_mk[ai].p.y,
+                          g_ghostPv.z - g_mk[ai].p.z);
+      } else {
+        off += snprintf(s + off, sizeof s - (size_t)off,
+                        "\n整体移动守卫区：准星照着区的 3 m 框按 5 选中（第 1 次 5）\n"
+                        "然后走到新位置、准星瞄地面，再按 5 确认（第 2 次 5）；0 / Esc 取消\n"
+                        "守卫点 / 入口 / 逃跑点会和区一起平移，相对布局、safety 不变；一步可撤销\n");
+      }
     }
     if (off < (int)sizeof s - 120)
       off += snprintf(s + off, sizeof s - (size_t)off,
-                      "1-4 / 8/2 只切换选中 · 5 / 左键 / 回车 才真正执行\n");
+                      "1-7 / 8/2 只切换选中 · 5 / 左键 / 回车 才真正执行\n");
     if (g_wpMenuSubSel <= 1 && !g_ghostPvOk && off < (int)sizeof s - 200)
       off += snprintf(s + off, sizeof s - (size_t)off,
                       "准星没打到地面（朝天 / 太远）：虚线框不显示\n");
+    if (g_wpMenuSubSel == 6 && !g_ghostPvOk && off < (int)sizeof s - 200)
+      off += snprintf(s + off, sizeof s - (size_t)off,
+                      "准星没打到地面（朝天 / 太远）：虚线框不显示，按 5 也会拒绝移动\n");
+  }
+  if (g_wpMenuSub == 10 && off < (int)sizeof s - 420) {
+    int ai = g_ghostPvOk ? area_at(&g_ghostPv) : -1;
+    off += snprintf(s + off, sizeof s - (size_t)off,
+                    "\n当前安全等级：%d（0~3，越大越靠里/越安全）\n"
+                    "按 1-4 直接切换（不用 Esc）；按 5 / 回车放一个守卫点\n"
+                    "放完还留在这页，可连续放；Esc 回守卫区工具\n"
+                    "想让人机被压往里退：外层 1 / 中层 2 / 里层 3\n",
+                    g_nanoSafety);
+    if (ai >= 0)
+      off += snprintf(s + off, sizeof s - (size_t)off,
+                      "准星在守卫区 #%d（aid=%d）里：按 5 就挂进这个区\n",
+                      ai, g_mk[ai].aid);
+    else
+      off += snprintf(s + off, sizeof s - (size_t)off,
+                      "准星不在任何守卫区里：按 5 不会建点（先按 1 建区）\n");
   }
   /* 准星处那个虚线框的坐标（ghost_tick 每帧更新，文字 ~5 Hz 刷新）：
    * 位置不合法（附近没路点 / 离起点太近）时框变灰，这里也直说。 */
@@ -9894,7 +11057,9 @@ static void menu_refresh(void) {
       off += snprintf(s + off, sizeof s - (size_t)off, "预置 (%.1f %.1f %.1f)%s%s\n",
                       g_ghostPv.x, g_ghostPv.y, g_ghostPv.z,
                       g_ghostValid ? "" : "  × 这里按下去会被拒绝",
-                      prev ? "  仅预览 · 按 5 创建" : "");
+                      prev ? (g_areaMoveAid >= 0 ? "  仅预览 · 按 5 确认移动"
+                            : ((g_wpMenuSub == 3 && g_wpMenuSubSel == 6)
+                                   ? "  仅预览 · 按 5 选中这个区" : "  仅预览 · 按 5 创建")) : "");
   }
   /* 朝向工具页（2026-11-27）：把「准星现在对着谁、它朝哪」写在菜单里，
    * 不然按 5 之前完全不知道会改哪个点。 */
@@ -9922,7 +11087,7 @@ static void menu_refresh(void) {
                         g_vf[g_dirIdx].kind == K_CROUCH ? "蹲守点" : "守卫点");
     } else {
       off += snprintf(s + off, sizeof s - (size_t)off,
-                      "\n准星没对着蹲守点 / 守卫点：先把准星移过去\n");
+                      "\n准星没对着蹲守点：先把准星移过去（守卫点不再单独设方向）\n");
     }
     off += snprintf(s + off, sizeof s - (size_t)off,
                     "← / → 直接转（Shift 1°，普通 15°）· 5 执行选中项 · 0 返回\n"
@@ -9947,6 +11112,7 @@ static void menu_open(void) {
   g_wpMenuSubSel = 0;
   g_wpArm = 0;
   g_wpLinkStep = 0;
+  g_areaMoveAid = -1;                  /* 重开菜单：待移动的区不跨次保留 */
   elog("wpmenu: open");
   /* 准星射线自检（2026-11-26）：屏幕中心射线和 transform.forward 差多少度。
    * 0.00° = 投影本来就居中，以前选不中全是「落点不在方块那层表面」；
@@ -9975,6 +11141,7 @@ static void menu_close(void) {
   g_wpArm = 0;
   g_wpLinkStep = 0;
   g_wpMenuSub = 0;
+  g_areaMoveAid = -1;
   elog("wpmenu: close");
   menu_refresh();
 }
@@ -9987,6 +11154,14 @@ static void menu_back(void) {
   /* 连续模式下的 Esc / 0：只结束"当前这种动作"，人停在类型页/方向页，
    * 想换类型直接 1-6、想换方向直接 1-3，不用重开菜单（2026-11-20 用户需求：
    * "保持某一种类型的编辑，除非想换种类再 Esc 回退一下"）。 */
+  /* 整体移动只按了第一次 5：Esc / 0 先取消移动，人留在这一页 */
+  if (g_areaMoveAid >= 0) {
+    g_areaMoveAid = -1;
+    elog("wpmenu: 取消整体移动（没按第二次 5）");
+    toast_bad("已取消：守卫区没有移动");
+    menu_refresh();
+    return;
+  }
   if (g_wpArm) {
     g_wpArm = 0;
     if (g_wpMenuSub != 1) g_wpMenuSub = 1;
@@ -10002,6 +11177,12 @@ static void menu_back(void) {
     menu_refresh();
     return;
   }
+  if (g_wpMenuSub == 10) {                  /* 子页 -> 守卫区工具 */
+    g_wpMenuSub = 3;
+    g_wpMenuSubSel = 1;
+    menu_refresh();
+    return;
+  }
   if (g_wpMenuSub) { g_wpMenuSub = 0; g_wpMenuSubSel = 0; menu_refresh(); return; }
   menu_close();
 }
@@ -10011,6 +11192,16 @@ static void menu_move(int delta) {
   if (!n) return;
   if (g_wpMenuSub) {
     g_wpMenuSubSel = (g_wpMenuSubSel + delta + n) % n;
+    /* 8/2 离开「整体移动」项：待移动状态作废，免得在别的项上按 5 误移 */
+    if (g_wpMenuSub == 3 && g_areaMoveAid >= 0 && g_wpMenuSubSel != 6) {
+      g_areaMoveAid = -1;
+      elog("wpmenu: 离开「整体移动」项，取消待移动");
+    }
+    /* 加守卫点子页：8/2 移到 0~3 也直接换安全等级，和数字键一致 */
+    if (g_wpMenuSub == 10 && g_wpMenuSubSel < 4) {
+      g_nanoSafety = g_wpMenuSubSel;
+      editor_dirty_mk();
+    }
     /* 连续模式里 8/2 就是"换类型 / 换方向"：高亮一变就生效，
      * 否则 8/2 挪了高亮、按 5 放的却还是旧类型，很容易放错。 */
     if (g_wpMenuSub == 1 && g_wpArm) {
@@ -10066,20 +11257,20 @@ static void set_brush(int b) {
 }
 
 /* ---- 朝向工具：把准星对着的那个点位改朝向（2026-11-27）--------------------
- * 只改**我们自己放的**蹲守点 / 守卫点（g_mk）：原生点是场景资产，改了不落盘、
- * 重进图就没了，所以直接拒绝并说明，而不是给个假象。
+ * 只改**我们自己放的蹲守点**（g_mk）：原生点是场景资产，改了不落盘、重进图就没了。
+ * 2026-11-28 用户要求：守卫点不再自带方向，方向统一由 area.entrancePos 提供。
  * 写游戏 = zoomPos 一个元素 {p + dir*10 m, 同高}；见文件顶部 zoomPos 说明。 */
 static int dir_apply(float yaw, const char* why) {
   MK* m;
   if (g_dirSrc != 1 || g_dirIdx < 0 || g_dirIdx >= g_n) {
-    if (g_dirSrc == 2) toast_bad("这是原生点位，朝向改不了（只能改自己放的）");
-    else toast_bad("准星先对着你放的蹲守点 / 守卫点");
+    if (g_dirSrc == 2) toast_bad("这是原生点位，朝向改不了（只能改自己放的蹲守点）");
+    else toast_bad("准星先对着你放的蹲守点");
     elog("dir: 无法设置朝向（src=%d idx=%d why=%s）", g_dirSrc, g_dirIdx, why ? why : "?");
     return 0;
   }
   m = &g_mk[g_dirIdx];
-  if (m->type != MT_CROUCH && m->type != MT_NANOPOS) {
-    toast_bad("这个点上没有朝向（只有蹲守点 / 守卫点有）");
+  if (m->type != MT_CROUCH) {
+    toast_bad("这个点上没有朝向（守卫点已改为靠入口，不再单独设方向）");
     return 0;
   }
   if (yaw <= YAW_NONE + 1.0f) {
@@ -10109,6 +11300,32 @@ static int dir_rotate(float delta) {
   }
   base = (g_mk[g_dirIdx].yaw > YAW_NONE + 1.0f) ? g_mk[g_dirIdx].yaw : 0.0f;
   return dir_apply(base + delta, delta > 0 ? "顺时针" : "逆时针");
+}
+
+/* 加守卫点子页：按 5 放一个（当前 g_nanoSafety）。成功 = 建了点、进撤销栈、标未保存。 */
+static int guard_add_place(void) {
+  V3 p;
+  int ai, n0;
+  if (!cam_point(&p)) {
+    elog("wpmenu: no ground under crosshair (guard add)");
+    toast_bad("准星没打到地面：先对准地面再按 5");
+    return 0;
+  }
+  ai = area_at(&p);
+  if (ai < 0) {
+    toast_bad("这里没有守卫区：先按 1 建区，再在区里加点");
+    elog("wpmenu: 加守卫点：准星不在任何区里（%.2f %.2f %.2f）", p.x, p.y, p.z);
+    return 0;
+  }
+  ed_step();
+  n0 = g_n;
+  p.y += 0.05f;
+  g_curArea = ai;
+  elog("wpmenu: 加守卫点 safety=%d -> 区 #%d（aid=%d）", g_nanoSafety, ai, g_mk[ai].aid);
+  make_nanopos(g_mk[ai].aid, p, g_nanoSafety, YAW_NONE);
+  mke_note_add(n0);
+  editor_dirty_mk();
+  return 1;
 }
 
 /* 菜单确认：主菜单进子菜单 / 子菜单执行；不关菜单，便于连续操作。 */
@@ -10160,7 +11377,7 @@ static void menu_activate(void) {
     if (i == 8) {
       g_wpMenuSub = 9;
       g_wpMenuSubSel = 0;
-      elog("wpmenu: 朝向工具 —— 准星对着你放的蹲守点/守卫点，5 执行；←/→ 直接转（Shift 1°）");
+      elog("wpmenu: 朝向工具 —— 准星对着你放的蹲守点，5 执行；←/→ 直接转（Shift 1°）");
       menu_refresh();
       return;
     }
@@ -10184,44 +11401,127 @@ static void menu_activate(void) {
     menu_refresh();
     return;
   }
-  if (g_wpMenuSub == 3) {                 /* 守卫区 */
-    V3 p;
-    int n0;
-    if (i > 1) {                          /* 入口 / 逃跑点还没接：别开空步、别动脏标记 */
-      elog("wpmenu: entrance/escape not wired yet（这一项还没接，图上不会变）");
-      toast_bad("入口 / 逃跑点还没接线：这一项不会改图");
+  if (g_wpMenuSub == 10) {                /* 加守卫点子页：1-4 等级，5 放点 */
+    if (i >= 0 && i < 4) {
+      g_nanoSafety = i;
+      g_wpMenuSubSel = i;
+      elog("wpmenu: 守卫点安全等级 -> %d（放完仍在这页，1-4 可直接换）", g_nanoSafety);
+      editor_dirty_mk();
       menu_refresh();
       return;
     }
-    if (!cam_point(&p)) { elog("wpmenu: no ground under crosshair"); return; }
-    /* 2026-11-27：「加守卫点」只在已有守卫区里进行。区外不建点、也不连带新建一个区
-     * （以前这里会 make_area + make_nanopos 一次建两个，看着像「点变成了区」）。 */
-    if (i == 1 && area_at(&p) < 0) {
-      elog("wpmenu: 准星不在任何守卫区里（%.2f %.2f %.2f）-> 不建守卫点；先「1 新建守卫区」",
-           p.x, p.y, p.z);
-      toast_bad("这里没有守卫区：先按 1 建区，再在区里加点");
+    if (i == 4) {
+      guard_add_place();
+      g_wpMenuSubSel = 4;
       menu_refresh();
       return;
+    }
+    return;
+  }
+  if (g_wpMenuSub == 3) {                 /* 守卫区 */
+    V3 p;
+    int n0, ai = -1;
+    if (i == 1) {                         /* 进加守卫点子页，不直接放 */
+      g_wpMenuSub = 10;
+      g_wpMenuSubSel = 4;
+      elog("wpmenu: 加守卫点子页（当前安全等级 %d）；1-4 切换，5 放点", g_nanoSafety);
+      menu_refresh();
+      return;
+    }
+    /* 2026-11-28：删除入口 / 逃跑点走严格准星（0.6 m），不需要地面点；
+     * 这两个只看准星射线，所以放在 cam_point 之前。 */
+    if (i == 4 || i == 5) {
+      delete_marker_strict((i == 4) ? MT_ENTRY : MT_ESCAPE);
+      menu_refresh();
+      return;
+    }
+    if (!cam_point(&p)) {
+      elog("wpmenu: no ground under crosshair");
+      toast_bad("准星没打到地面：对准地面再按 5");
+      menu_refresh();
+      return;
+    }
+    if (i == 6) {                         /* 整体移动守卫区：两步（选中 -> 确认） */
+      if (g_areaMoveAid < 0) {
+        ai = area_at(&p);
+        if (ai < 0) {
+          elog("wpmenu: 移动守卫区：准星不在任何守卫区里（%.2f %.2f %.2f）", p.x, p.y, p.z);
+          toast_bad("准星对着要整体移动的守卫区（3 m 框）再按 5");
+          menu_refresh();
+          return;
+        }
+        g_areaMoveAid = g_mk[ai].aid;
+        {
+          int ne = 0, nx = 0, np2 = 0, k;
+          P ac = g_mk[ai].comp;
+          if (ac) {
+            ne = vec3_arr_count(*(P*)((char*)ac + 0x0C));
+            nx = vec3_arr_count(*(P*)((char*)ac + 0x1C));
+          }
+          for (k = 0; k < g_n; k++)
+            if (g_mk[k].type == MT_NANOPOS && g_mk[k].parent == ai) np2++;
+          elog("wpmenu: 已选中守卫区 #%d（aid=%d）：守卫点 %d · 入口 %d · 逃跑点 %d；移到新位置再按 5 确认",
+               ai, g_mk[ai].aid, np2, ne, nx);
+          toast_ok("已选守卫区 aid=%d（点 %d / 入口 %d / 逃跑 %d）；移到新位置按 5",
+                   g_mk[ai].aid, np2, ne, nx);
+        }
+        menu_refresh();
+        return;
+      }
+      ai = area_marker_of_aid(g_areaMoveAid);
+      if (ai < 0) {
+        elog("wpmenu: 移动守卫区：aid=%d 已经不在了，取消", g_areaMoveAid);
+        toast_bad("那个守卫区已经不在了（被删了？），重新选一次");
+        g_areaMoveAid = -1;
+        menu_refresh();
+        return;
+      }
+      {
+        V3 old = g_mk[ai].p;
+        int ok;
+        p.y += 0.05f;
+        ed_step();
+        ok = area_move_whole(ai, &p);
+        if (ok) {
+          mke_note_area_move(ai, &old, &p);
+          g_curArea = ai;
+          editor_dirty_mk();
+          elog("wpmenu: 整体移动守卫区 #%d（aid=%d）完成；未保存（Ctrl+S）", ai, g_mk[ai].aid);
+          toast_ok("守卫区已整体移动（守卫点/入口/逃跑点一起）· 可撤销 · Ctrl+S 保存");
+        } else {
+          toast_bad("没移动：目标位置和现在一样，或区对象不可用");
+        }
+        g_areaMoveAid = -1;
+        menu_refresh();
+        return;
+      }
+    }
+    if (i == 2 || i == 3) {
+      /* 入口 / 逃跑点：优先按准星归区；准星在区外就用当前区。 */
+      ai = area_at(&p);
+      if (ai < 0 && g_curArea >= 0 && g_curArea < g_n && g_mk[g_curArea].type == MT_AREA)
+        ai = g_curArea;
+      if (ai < 0) {
+        toast_bad("先按 1 建一个守卫区，或按 2 加一个守卫点把它设为当前区");
+        menu_refresh();
+        return;
+      }
+      if (ai != g_curArea) {
+        g_curArea = ai;
+        elog("wpmenu: 入口/逃跑点挂到守卫区 #%d（aid=%d）", ai, g_mk[ai].aid);
+      }
     }
     ed_step();
     n0 = g_n;
     p.y += 0.05f;
-    if (i == 0) { make_area(30, p); }
-    else if (i == 1) {
-      /* 按落点归区：落在哪个 3 m 框里就挂哪个（区外已经被上面拦掉了） */
-      int ai = area_at(&p);
-      if (ai >= 0) {
-        if (ai != g_curArea) {
-          g_curArea = ai;
-          elog("wpmenu: 准星落在守卫区 #%d（aid=%d）里，改成挂这个区", ai, g_mk[ai].aid);
-        }
-        make_nanopos(g_mk[ai].aid, p, 3, cam_dir_yaw());
-      }
-    } else {
-      elog("wpmenu: entrance/escape not wired yet");
-      toast_bad("入口 / 逃跑点还没接线：这一项不会改图");
+    if (i == 0) {
+      make_area(30, p);
+    } else if (i == 2) {
+      make_entrance(g_mk[ai].aid, p);
+    } else if (i == 3) {
+      make_escape(g_mk[ai].aid, p);
     }
-    mke_note_add(n0);                   /* 守卫区 / 守卫点也进撤销栈 */
+    mke_note_add(n0);                   /* 守卫区 / 入口 / 逃跑点都进撤销栈 */
     editor_dirty_mk();                  /* 手动保存：Ctrl+S 才写 markers.txt */
     menu_refresh();
     return;
@@ -10287,6 +11587,12 @@ static void menu_confirm(void) {
   if (!g_wpMenuOpen) return;
   if (g_wpArm) { wp_place(); menu_refresh(); return; }
   if (g_wpLinkStep) { nav_link_one(); menu_refresh(); return; }
+  if (g_wpMenuSub == 10) {                      /* 加守卫点子页：5 = 放一个，不管高亮在哪 */
+    guard_add_place();
+    g_wpMenuSubSel = 4;
+    menu_refresh();
+    return;
+  }
   if (g_wpMenuSub == 7 || g_wpMenuSub == 8) {   /* 删除页：5 = 删当前选中的类型 */
     if (g_delType < 0) { elog("wpmenu: 先选删除类型（1-8）再按 5"); toast_bad("先选删除类型（1-8）再按 5"); }
     else if (!delete_nearest_of(g_delType))
@@ -10339,6 +11645,10 @@ int editor_menu_key(unsigned vk, int ext) {
       else if (!delete_nearest_of(g_delType))
         elog("wpmenu: 没删到（类型 %s）", mt_name(g_delType));
       menu_refresh();
+    } else if (g_wpMenuSub == 3 && (g_wpMenuSubSel == 4 || g_wpMenuSubSel == 5)) {
+      /* 守卫区工具停在「删除入口 / 删除逃跑点」时，Delete 也走严格准星 */
+      delete_marker_strict((g_wpMenuSubSel == 4) ? MT_ENTRY : MT_ESCAPE);
+      menu_refresh();
     } else {
       editor_delete_nearest();
     }
@@ -10350,6 +11660,22 @@ int editor_menu_key(unsigned vk, int ext) {
   if (g_wpMenuSub == 9 && (vk == VK_LEFT || vk == VK_RIGHT)) {
     float step = (GetAsyncKeyState(VK_SHIFT) & 0x8000) ? 1.0f : 15.0f;
     dir_rotate(vk == VK_RIGHT ? step : -step);
+    return 1;
+  }
+  /* 加守卫点子页：1-4 直接换等级并保持，5 直接放一个；不用 Esc */
+  if (g_wpMenuSub == 10 && vk >= '1' && vk <= '5') {
+    int gi = (int)(vk - '1');
+    if (gi < 4) {
+      g_nanoSafety = gi;
+      g_wpMenuSubSel = gi;
+      elog("wpmenu: 守卫点安全等级 -> %d（1-4 直接换，5 放点）", g_nanoSafety);
+      editor_dirty_mk();
+      menu_refresh();
+    } else {
+      g_wpMenuSubSel = 4;
+      guard_add_place();
+      menu_refresh();
+    }
     return 1;
   }
   if (vk == VK_NUMPAD8 || vk == VK_UP) { menu_move(-1); return 1; }
@@ -10369,6 +11695,10 @@ int editor_menu_key(unsigned vk, int ext) {
     if (g_wpMenuSub) {
       if (i < menu_sub_count()) {
         g_wpMenuSubSel = i;
+        if (g_wpMenuSub == 3 && g_areaMoveAid >= 0 && i != 6) {
+          g_areaMoveAid = -1;
+          elog("wpmenu: 取消整体移动（切到别的项）");
+        }
         /* 2026-11-26 用户要求：这几页的数字键只是「切换选中」，5 / 左键 / 回车才执行 ——
          *   3 守卫区工具：想选 1 结果直接建了一个区；
          *   4 撤销 / 恢复 / 保存：按 1 就直接撤销；
@@ -10889,6 +12219,298 @@ static void nav_diag(void) {
        "walk=%d/%d%s", bots, withPath, bad, asks, phSum, phN, qHead, qBlk, qBr, qRcv,
        pr_walk_count(g), g ? nav_count(g) : -1, b0);
 }
+/* 2026-11-28：离线烘焙的可走面 -> 运行时 NavMeshGraph。分三步，每步之间打日志：
+ * 建 Mesh -> 挂图 -> 扫图。第一版一口气做完直接闪退，拆开才知道崩在哪一步。 */
+/* 解析出来的原始数据留一份：Mesh 那条路失败时用 ReplaceTile 直接兜底 */
+static float* g_nmVerts;
+static unsigned* g_nmTris;
+static int g_nmVN, g_nmTN;
+static P g_int3Cls;
+
+static void nm_log_tile(const char* tag, P g) {
+  P tiles, t0 = 0, tr = 0, vr = 0;
+  int nt = 0;
+  if (!g) { elog("nm: %s (no graph)", tag); return; }
+  tiles = *(P*)((char*)g + 0xD0);
+  nt = tiles ? *(int*)((char*)tiles + 0xC) : 0;
+  if (nt > 0) t0 = *(P*)((char*)tiles + 0x10);
+  if (t0) {
+    tr = *(P*)((char*)t0 + 0x8);
+    vr = *(P*)((char*)t0 + 0xC);
+  }
+  elog("nm: %s tiles=%d t0=%p tris=%p(%d) verts=%p(%d)", tag, nt, t0,
+       tr, tr ? *(int*)((char*)tr + 0xC) : -1, vr, vr ? *(int*)((char*)vr + 0xC) : -1);
+}
+
+/* 最后的显示兜底：直接把三角形塞进 tiles[0] 这张 NavmeshTile 里。
+ * 只保证"看得见"；A* 的 nodes/bbTree 留空，可能不能用来寻路。 */
+static int nm_force_tile(P g, P vertsArr, P trisArr) {
+  P tileCls, tiles, t, arr;
+  if (!g || !vertsArr || !trisArr) return 0;
+  tileCls = find_cls("Pathfinding", "NavmeshTile");
+  if (!tileCls) { elog("nm: NavmeshTile class missing"); return 0; }
+  tiles = *(P*)((char*)g + 0xD0);
+  if (!tiles || *(int*)((char*)tiles + 0xC) < 1) {
+    arr = x_array_new(tileCls, 1);
+    if (!arr) { elog("nm: tile array alloc fail"); return 0; }
+    *(P*)((char*)g + 0xD0) = arr;
+    *(int*)((char*)g + 0xC8) = 1;   /* tileXCount */
+    *(int*)((char*)g + 0xCC) = 1;   /* tileZCount */
+    tiles = arr;
+  }
+  t = *(P*)((char*)tiles + 0x10);
+  if (!t) {
+    t = x_object_new(tileCls);
+    if (!t) { elog("nm: tile alloc fail"); return 0; }
+    *(P*)((char*)tiles + 0x10) = t;
+  }
+  *(P*)((char*)t + 0x8) = trisArr;
+  *(P*)((char*)t + 0xC) = vertsArr;
+  *(int*)((char*)t + 0x14) = 0;     /* x */
+  *(int*)((char*)t + 0x18) = 0;     /* z */
+  *(int*)((char*)t + 0x1C) = 1;     /* w */
+  *(int*)((char*)t + 0x20) = 1;     /* d */
+  *(P*)((char*)t + 0x30) = g;       /* graph */
+  {
+    /* nodes 置空数组：A* 遍历 tile.nodes 时不会撞 null（这张图只用来显示） */
+    P nodeCls = find_cls("Pathfinding", "TriangleMeshNode");
+    if (nodeCls) {
+      P na = x_array_new(nodeCls, 0);
+      if (na) *(P*)((char*)t + 0x24) = na;
+    }
+  }
+  elog("nm: force tile ok tris=%d verts=%d", *(int*)((char*)trisArr + 0xC), *(int*)((char*)vertsArr + 0xC));
+  return 1;
+}
+
+static int nm_tile_tris(P g) {
+  P tiles;
+  int n, i, tt = 0;
+  if (!g) return 0;
+  tiles = *(P*)((char*)g + 0xD0);
+  n = tiles ? *(int*)((char*)tiles + 0xC) : 0;
+  for (i = 0; i < n && i < 4096; i++) {
+    P tl = *(P*)((char*)tiles + 0x10 + i * 4);
+    P tr = tl ? *(P*)((char*)tl + 0x8) : 0;
+    tt += tr ? *(int*)((char*)tr + 0xC) : 0;
+  }
+  return tt;
+}
+
+static P nm_int3_array(const float* v, int nv) {
+  P a;
+  int i, *p;
+  if (!g_int3Cls) g_int3Cls = find_cls("Pathfinding", "Int3");
+  if (!g_int3Cls) { elog("nm: Int3 class missing"); return 0; }
+  a = x_array_new(g_int3Cls, (unsigned)nv);
+  if (!a || *(int*)((char*)a + 0xC) != nv) { elog("nm: Int3 array bad"); return 0; }
+  p = (int*)((char*)a + 0x10);
+  for (i = 0; i < nv * 3; i++) p[i] = (int)lroundf(v[i] * 1000.0f);
+  return a;
+}
+
+static P nm_make_mesh(const char* path, int* nvOut, int* ntOut) {
+  FILE* f;
+  long sz;
+  unsigned char* buf;
+  unsigned ver, jl, nv, nt;
+  P mesh, av, ai;
+  if (!g_meshCls || !g_vec3Cls || !g_i32Cls || !x_object_new || !x_array_new) {
+    elog("nm: mesh classes missing");
+    return 0;
+  }
+  f = fopen(path, "rb");
+  if (!f) { elog("nm: open fail %s", path); return 0; }
+  fseek(f, 0, SEEK_END); sz = ftell(f); fseek(f, 0, SEEK_SET);
+  if (sz < 32 || sz > 64L * 1024 * 1024) { fclose(f); elog("nm: bad size %ld", sz); return 0; }
+  buf = (unsigned char*)malloc((size_t)sz);
+  if (!buf) { fclose(f); return 0; }
+  if (fread(buf, 1, (size_t)sz, f) != (size_t)sz) { fclose(f); free(buf); elog("nm: read fail"); return 0; }
+  fclose(f);
+  if (memcmp(buf, "UCFN", 4) != 0) { free(buf); elog("nm: bad magic"); return 0; }
+  ver = *(unsigned*)(buf + 4);
+  jl  = *(unsigned*)(buf + 8);
+  nv  = *(unsigned*)(buf + 12);
+  nt  = *(unsigned*)(buf + 16);
+  if (ver != 2 || jl > 4096 || !nv || !nt || nv > 2000000 || nt > 4000000) {
+    free(buf); elog("nm: bad header ver=%u nv=%u nt=%u", ver, nv, nt); return 0;
+  }
+  if ((long)(20 + jl) + (long)nv * 12 + (long)nt * 12 > sz) { free(buf); elog("nm: truncated"); return 0; }
+  {
+    float* verts = (float*)(buf + 20 + jl);
+    unsigned* tris = (unsigned*)(buf + 20 + jl + (long)nv * 12);
+    mesh = x_object_new(g_meshCls);
+    if (!mesh) { free(buf); elog("nm: mesh alloc fail"); return 0; }
+    ((mesh_ctor_t)RVA(R_MESH_CTOR))(mesh, 0);
+    av = x_array_new(g_vec3Cls, nv);
+    ai = x_array_new(g_i32Cls, (unsigned)nt * 3);
+    if (!av || !ai) { free(buf); elog("nm: array alloc fail"); return 0; }
+    /* 长度必须完全一致：元素类型不对时 il2cpp 可能给更小的数组，memcpy 会越界写坏堆 */
+    if (*(int*)((char*)av + 0xC) != (int)nv || *(int*)((char*)ai + 0xC) != (int)nt * 3) {
+      free(buf); elog("nm: array len mismatch"); return 0;
+    }
+    memcpy((char*)av + 0x10, verts, (size_t)nv * 12);
+    memcpy((char*)ai + 0x10, tris, (size_t)nt * 12);
+    ((mesh_arr_t)RVA(R_MESH_VERTS))(mesh, av, 0);
+    ((mesh_arr_t)RVA(R_MESH_TRIS))(mesh, ai, 0);
+    ((mesh_1_t)RVA(R_MESH_BOUNDS))(mesh, 0);
+    {
+      /* 回执：Unity 自己说这个 Mesh 有几个顶点/几个索引。set 没生效这里就是 0。 */
+      int vc = ((int(*)(P, void*))RVA(R_MESH_VCOUNT))(mesh, 0);
+      P ta = ((P(*)(P, void*))RVA(R_MESH_GTRI))(mesh, 0);
+      int tn = ta ? *(int*)((char*)ta + 0xC) : -1;
+      elog("nm: mesh check vc=%d tris=%d (wrote %d/%d)", vc, tn, (int)nv, (int)nt * 3);
+    }
+    if (g_nmVerts) free(g_nmVerts);
+    if (g_nmTris) free(g_nmTris);
+    g_nmVerts = (float*)malloc((size_t)nv * 12);
+    g_nmTris = (unsigned*)malloc((size_t)nt * 12);
+    if (g_nmVerts) memcpy(g_nmVerts, verts, (size_t)nv * 12);
+    if (g_nmTris) memcpy(g_nmTris, tris, (size_t)nt * 12);
+    g_nmVN = (int)nv;
+    g_nmTN = (int)nt;
+    *nvOut = (int)nv;
+    *ntOut = (int)nt;
+  }
+  free(buf);
+  return mesh;
+}
+
+static void nm_load_tick(void) {
+  static P lastAstar, graph;
+  static int stage, wait;
+  static char done[160];
+  P a = navfix_astar();
+  char dir[160], path[MAX_PATH];
+  if (a != lastAstar) { lastAstar = a; done[0] = 0; stage = 0; graph = 0; wait = 0; navfix_navmesh_reset(); }
+  if (!a || !g_packRoot[0]) return;
+  if (g_mapDirName[0]) snprintf(dir, sizeof dir, "%s", g_mapDirName);
+  else if (g_packName[0]) snprintf(dir, sizeof dir, "%s", g_packName);
+  else return;
+  if (stage == 0) {
+    int nv = 0, nt = 0;
+    P mesh;
+    if (!strcmp(dir, done)) return;
+    /* 图文件夹里的可走面统一叫 navmesh.bin（和 ucf_paths.NAVMESH 同一个约定）；
+     * 早期离线烘的是 navmesh_auto.bin，仍然认，老包不用改名。 */
+    snprintf(path, sizeof path, "%s\\%s\\navmesh.bin", g_packRoot, dir);
+    if (GetFileAttributesA(path) == INVALID_FILE_ATTRIBUTES) {
+      snprintf(path, sizeof path, "%s\\%s\\navmesh_auto.bin", g_packRoot, dir);
+      if (GetFileAttributesA(path) == INVALID_FILE_ATTRIBUTES) return;
+    }
+    snprintf(done, sizeof done, "%s", dir);
+    elog("nm: loading %s", path);
+    mesh = nm_make_mesh(path, &nv, &nt);
+    if (!mesh) { elog("nm: mesh build failed"); stage = 2; return; }
+    elog("nm: mesh ok nv=%d nt=%d", nv, nt);
+    {
+      extern float g_nmBBox[6];
+      int k;
+      for (k = 0; k < 3; k++) { g_nmBBox[k] = 1e9f; g_nmBBox[k + 3] = -1e9f; }
+      for (k = 0; k < g_nmVN; k++) {
+        float x = g_nmVerts[k*3], y = g_nmVerts[k*3+1], z = g_nmVerts[k*3+2];
+        if (x < g_nmBBox[0]) g_nmBBox[0] = x;
+        if (y < g_nmBBox[1]) g_nmBBox[1] = y;
+        if (z < g_nmBBox[2]) g_nmBBox[2] = z;
+        if (x > g_nmBBox[3]) g_nmBBox[3] = x;
+        if (y > g_nmBBox[4]) g_nmBBox[4] = y;
+        if (z > g_nmBBox[5]) g_nmBBox[5] = z;
+      }
+      elog("nm: bbox %.0f..%.0f x %.0f..%.0f y %.0f..%.0f",
+           g_nmBBox[0], g_nmBBox[3], g_nmBBox[2], g_nmBBox[5], g_nmBBox[1], g_nmBBox[4]);
+    }
+    /* 2026-11-28：工作区有 Unity 打的 bundle 时优先用它（真资产），挂进 A* 扫一次；
+     * 扫出三角形 = 真正可寻路的面图；扫不出再退回"只显示 + 点图"。 */
+    {
+      char bpath[MAX_PATH];
+      P bmesh;
+      snprintf(bpath, sizeof bpath, "%s\\%s\\navmesh_bundle", g_packRoot, dir);
+      /* 2026-11-28：AssetBundle 这条线在游戏里会崩（崩在 LoadFromFile 里），先关掉。
+       * 改为：Unity 离线烘好 → 导出 UCFN → 插件照旧加载（不走 bundle）。 */
+      if (0 && GetFileAttributesA(bpath) != INVALID_FILE_ATTRIBUTES) {
+        /* 工作区路径含中文：先复制到 %LOCALAPPDATA%\UCF（纯 ASCII）再让 Unity 加载，
+         * 避免 GBK/UTF-8 混用把引擎搞崩。 */
+        char stagePath[MAX_PATH];
+        const char* la = getenv("LOCALAPPDATA");
+        if (la && la[0]) {
+          snprintf(stagePath, sizeof stagePath, "%s\\UCF", la);
+          CreateDirectoryA(stagePath, 0);
+          snprintf(stagePath, sizeof stagePath, "%s\\UCF\\navmesh_bundle", la);
+          if (CopyFileA(bpath, stagePath, FALSE)) {
+            elog("nm: bundle 已暂存到 %s", stagePath);
+            snprintf(bpath, sizeof bpath, "%s", stagePath);
+          }
+        }
+        bmesh = navfix_load_navmesh_bundle(bpath, "Nano30_Storm_NavMesh");
+        if (bmesh) {
+          P g2 = navfix_add_navmesh_graph(bmesh);
+          if (g2) {
+            int tt;
+            navfix_attach_graph(g2);
+            navfix_scan_navmesh(g2);
+            tt = nm_tile_tris(g2);
+            elog("nm: bundle 面图扫描 tile_tris=%d", tt);
+            if (tt > 0) {
+              elog("nm: 面图已作为真正的 A* 图生效（%d 个三角形）", tt);
+              stage = 2;
+              return;
+            }
+            navfix_detach_graph(g2);
+          }
+        } else {
+          elog("nm: bundle 加载失败，退回显示模式");
+        }
+      }
+    }
+    graph = navfix_add_navmesh_graph(mesh);
+    if (!graph) { elog("nm: graph create failed"); stage = 2; return; }
+    {
+      P av = nm_int3_array(g_nmVerts, g_nmVN);
+      P ai = x_array_new(g_i32Cls, (unsigned)g_nmTN * 3);
+      if (av && ai && *(int*)((char*)ai + 0xC) == g_nmTN * 3) {
+        memcpy((char*)ai + 0x10, g_nmTris, (size_t)g_nmTN * 12);
+        nm_force_tile(graph, av, ai);
+        nm_log_tile("after force", graph);
+      } else {
+        elog("nm: arrays bad (av=%p ai=%p)", av, ai);
+      }
+    }
+    stage = 2;
+    return;
+  }
+  if (stage == 1) {
+    if (--wait > 0) return;
+    elog("nm: scanning...");
+    if (navfix_scan_navmesh(graph)) {
+      int tt = nm_tile_tris(graph);
+      elog("nm: scan ok tile_tris=%d", tt);
+      nm_log_tile("after scan", graph);
+      if (tt == 0 && g_nmVN > 0 && g_nmTN > 0) {
+        P av, ai;
+        elog("nm: tile empty -> ReplaceTile 兜底");
+        av = nm_int3_array(g_nmVerts, g_nmVN);
+        ai = x_array_new(g_i32Cls, (unsigned)g_nmTN * 3);
+        if (av && ai && *(int*)((char*)ai + 0xC) == g_nmTN * 3) {
+          memcpy((char*)ai + 0x10, g_nmTris, (size_t)g_nmTN * 12);
+          if (navfix_replace_tile(graph, av, ai)) {
+            elog("nm: fallback ok tile_tris=%d", nm_tile_tris(graph));
+            nm_log_tile("after fallback", graph);
+          }
+          else elog("nm: fallback failed");
+        } else elog("nm: fallback arrays bad");
+        if (nm_tile_tris(graph) == 0 && av && ai) {
+          elog("nm: still empty -> display fallback");
+          nm_force_tile(graph, av, ai);
+          nm_log_tile("after force", graph);
+        }
+      }
+    } else {
+      elog("nm: scan failed (graph attached, maybe empty)");
+    }
+    stage = 2;
+  }
+}
+
 void editor_tick(void) {
   static int ticks;
   if (!g_inited) return;
@@ -10916,6 +12538,7 @@ void editor_tick(void) {
   if (g_sceneAge < 1000000) g_sceneAge++;
   if (g_sceneAge >= VIS_SCENE_WAIT) g_sceneReadyOnce = 1;
   nm_auto_tick();
+  nm_load_tick();             /* 离线烘焙的可走面：本图有就挂上（2026-11-28） */
   spawn_early_tick();         /* 出生点：MapManager 一出现就套（抢在人机第一次出生前） */
   spawn_tick();               /* 出生点覆盖：进图后重套 / 游戏重建数组后自愈 */
   menu_tick();                /* F2 / 长按 E 路点菜单 */
@@ -10929,6 +12552,7 @@ void editor_tick(void) {
   compass_tick();             /* 方向罗盘独立于可视化：Ctrl+Shift+7 开关 */
   ghost_tick();               /* 放置前的虚影预览：独立于可视化，菜单一开就在 */
   dir_tick();                 /* 蹲守点 / 守卫点的朝向：只画准星正对着的那一个 */
+  gf_tick();                  /* 跟随式可通行性采样：采 + 画 + 状态（独立于 Ctrl+V） */
   edge_dir_sync();            /* 单向边箭头：只有菜单开着才显示 */
   if (!g_visOn) {
     if ((++ticks % 8) == 0) overlay_refresh();   /* 可视化关着也保持面板数字是活的 */
@@ -11030,6 +12654,7 @@ void editor_on_quit(void) {
     elog("quit: 退出游戏，丢弃未保存的游戏内编辑（点图 %d 项 / 标记 %d 个）-- 只有 Ctrl+S 会落盘",
          g_nedN, g_n);
   ss_stop("quit");            /* 游戏退出：把采样文件收尾（写 end 行），别留半截 */
+  gf_stop("quit");            /* 跟随采样：写 stop 行 + 刷状态文件（不丢已采的） */
   elog("quit: editor stop (markers=%d vis nodes=%d features=%d)", g_n, g_vnN, g_vfN);
   nav_conn_roots_release();
 }
@@ -11334,6 +12959,9 @@ void editor_start(const char* modDir) {
   g_nmShow     = cfg_bool("navmesh_show", 1);
   g_visNodes   = cfg_bool("vis_nodes", 1);
   g_visNano    = cfg_bool("vis_nano", 1);
+  g_visEntry   = cfg_bool("vis_entry", 1);
+  g_visEscape  = cfg_bool("vis_escape", 1);
+  g_visELine   = cfg_bool("vis_eline", 1);
   g_visCrouch  = cfg_bool("vis_crouch", 1);
   g_visBorn    = cfg_bool("vis_born", 1);
   g_visSupply  = cfg_bool("vis_supply", 1);
@@ -11357,8 +12985,9 @@ void editor_start(const char* modDir) {
     elog("spawn: hook 被配置关掉（spawn_hook=false），第一波出生仍会用原生点");
   elog("editor ready: visualizer=%d navmesh=%d file=%s", g_visOn, g_nmShow, g_file);
   elog("wpmenu: on=%d autoground=%d brush=%s", g_wpMenuOn, g_wpAutoGround, g_wpBrushName);
-  elog("vis data: nodes=%d nano=%d crouch=%d born=%d supply=%d jump=%d tag=%d",
-       g_visNodes, g_visNano, g_visCrouch, g_visBorn, g_visSupply, g_visJump, g_visTag);
+  elog("vis data: nodes=%d nano=%d entry=%d escape=%d eline=%d crouch=%d born=%d supply=%d jump=%d tag=%d",
+       g_visNodes, g_visNano, g_visEntry, g_visEscape, g_visELine,
+       g_visCrouch, g_visBorn, g_visSupply, g_visJump, g_visTag);
   elog("compass: vis_compass=%d (屏幕下方汉字罗盘；北=世界 -Z，Ctrl+Shift+7 开关)", g_visCompass);
   elog("navmesh dump dir=%s packs=%s officialNavSave=%s",
        g_expDir, g_packRoot, g_navReadOnly ? "blocked(read-only)" : "allowed");

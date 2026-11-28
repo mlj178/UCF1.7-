@@ -48,6 +48,9 @@ static P (*i_class_from_il2cpp_type)(P);
 static P (*i_array_new)(P,unsigned int);
 static P (*i_class_get_element_class)(P);
 static void (*i_field_static_set_value)(P,void*);
+static P (*i_class_get_methods)(P, void**);
+static const char* (*i_method_get_name)(P);
+static int (*i_method_get_param_count)(P);
 static P (*i_gchandle_new)(P,unsigned char);
 static void (*i_gchandle_free)(P);
 
@@ -228,6 +231,310 @@ P navfix_add_point_graph(void) {
   nlog("pointgraph: created -> graphs %d -> %d, nodes %d",
        n, n + 1, *(int*)((char*)pg + 0xEC));
   return pg;
+}
+
+
+/* ---- 2026-11-28：离线烘焙的可走面 -> 运行时 NavMeshGraph --------------------
+ * 文件 UCFN v2：'UCFN' + u32 ver + u32 jsonLen + u32 nv + u32 nt
+ *               + json(nv+nt 等) + verts(f32x3) + tris(u32x3)
+ * 做法：建 UnityEngine.Mesh（set_vertices / set_triangles）
+ *       -> 建 Pathfinding.NavMeshGraph（sourceMesh 指过去、scale=1）
+ *       -> 挂进 AstarData.graphs -> Scan()
+ * 任何一步失败只记日志，不动已有的图；一张图只试一次（换场景 navfix_nm_reset）。
+ */
+static P g_nmGraphCls;
+float g_nmBBox[6];     /* 调用方（editor.c）填：网格包围盒 minX,minY,minZ,maxX,maxY,maxZ */
+static P g_navGraph;   /* 我们自己造的面图：不入 AstarData.graphs（不参与寻路），只给可视化用 */
+static P g_navGraphH;  /* GC 句柄：C 静态变量不算 GC 根，不钉住的话图/数组会被回收（12:20 那次闪退） */
+void navfix_navmesh_reset(void) {
+  if (g_navGraphH && i_gchandle_free) i_gchandle_free(g_navGraphH);
+  g_navGraphH = 0;
+  g_navGraph = 0;
+}
+
+static P nm_class_any(const char* ns, const char* name) {
+  int n = 0, i;
+  P arr = (i_domain_get_assemblies && i_domain_get) ? i_domain_get_assemblies(i_domain_get(), &n) : 0;
+  if (!arr) return 0;
+  for (i = 0; i < n; i++) {
+    P a = *(P*)((char*)arr + 0x10 + i * 4);
+    P img, c;
+    if (!a) continue;
+    img = i_assembly_get_image ? i_assembly_get_image(a) : 0;
+    if (!img) continue;
+    c = i_class_from_name(img, ns, name);
+    if (c) return c;
+    c = i_class_from_name(img, "", name);
+    if (c) return c;
+  }
+  return 0;
+}
+
+
+
+
+
+/* ---- 2026-11-28 v2：把已经建好的 Mesh 挂成 NavMeshGraph（不做 Mesh、不扫图）----
+ * 拆开是因为第一版在 navfix_load_navmesh 里一口气做完全部事，进游戏直接闪退，
+ * 日志里只看到进了 GameAssembly 就没了。拆成"建 Mesh -> 挂图 -> 扫图"三步，
+ * 每步之间打日志，崩了能一眼看出停在哪一步。 */
+static void nm_log_exc(const char* tag, void* exc);
+
+/* 找 0 参构造函数：先按名字找，找不到就遍历方法表（dump 里没列 ctor） */
+static P nm_find_ctor(P cls) {
+  P m = i_class_get_method_from_name ? i_class_get_method_from_name(cls, ".ctor", 0) : 0;
+  void* it = 0;
+  if (m) return m;
+  if (!i_class_get_methods || !i_method_get_name) return 0;
+  while ((m = i_class_get_methods(cls, &it)) != 0) {
+    const char* n = i_method_get_name(m);
+    if (n && !strcmp(n, ".ctor")) {
+      if (!i_method_get_param_count || i_method_get_param_count(m) == 0) return m;
+    }
+  }
+  return 0;
+}
+
+P navfix_add_navmesh_graph(P mesh) {
+  P astar, data, old, elem, neu, g, nm;
+  int n, i;
+  if (!mesh) return 0;
+  astar = astar_active();
+  if (!n_live(astar)) { nlog("nm: no AstarPath.active"); return 0; }
+  data = *(P*)((char*)astar + 0x10);
+  if (!data) { nlog("nm: AstarData null"); return 0; }
+  old = *(P*)((char*)data + 0x20);
+  n = old ? *(int*)((char*)old + 0xC) : 0;
+  if (n < 0 || n > 15) { nlog("nm: bad graph count %d", n); return 0; }
+  for (i = 0; i < n; i++) {
+    P gg = *(P*)((char*)old + 0x10 + i * 4);
+    const char* cn = gg ? i_class_get_name(*(P*)gg) : 0;
+    if (cn && strstr(cn, "NavMeshGraph")) { nlog("nm: already has NavMeshGraph, skip"); return 0; }
+  }
+  if (!g_nmGraphCls) g_nmGraphCls = nm_class_any("Pathfinding", "NavMeshGraph");
+  if (!g_nmGraphCls) { nlog("nm: NavMeshGraph class missing"); return 0; }
+  elem = (old && n > 0 && i_class_get_element_class) ? i_class_get_element_class(*(P*)old) : 0;
+  if (!elem && i_class_get_parent) elem = i_class_get_parent(g_nmGraphCls);
+  if (!elem) { nlog("nm: element class missing"); return 0; }
+  neu = i_array_new(elem, (unsigned)(n + 1));
+  g = i_object_new(g_nmGraphCls);
+  if (!neu || !g) { nlog("nm: graph alloc fail"); return 0; }
+  {
+    /* NavmeshBase 的 ctor 会建 navmeshUpdateData / nodeRecyclingHashBuffer；
+     * 不跑 ctor 的话 ReplaceTile 里会 NRE（2026-11-28 实测）。 */
+    P ctor = nm_find_ctor(g_nmGraphCls);
+    if (ctor && i_runtime_invoke) {
+      void* e = 0;
+      i_runtime_invoke(ctor, g, 0, &e);
+      if (e) nm_log_exc("ctor", e);
+      nlog("nm: graph ctor %s", e ? "threw" : "ok");
+    } else {
+      nlog("nm: graph ctor not found");
+    }
+  }
+  if (n > 0) memcpy((char*)neu + 0x10, (char*)old + 0x10, (size_t)n * 4);
+  wfield(g, 0x08, astar);
+  *(unsigned char*)((char*)g + 0x24) = 1;          /* open */
+  *(unsigned*)((char*)g + 0x28) = (unsigned)n;     /* graphIndex */
+  nm = i_string_new("UCF NavMesh (baked)");
+  if (nm) wfield(g, 0x2C, nm);
+  wfield(g, 0xF8, mesh);                            /* sourceMesh */
+  *(float*)((char*)g + 0xFC) = 0.0f;
+  *(float*)((char*)g + 0x100) = 0.0f;
+  *(float*)((char*)g + 0x104) = 0.0f;
+  *(float*)((char*)g + 0x108) = 0.0f;
+  *(float*)((char*)g + 0x10C) = 0.0f;
+  *(float*)((char*)g + 0x110) = 0.0f;
+  *(float*)((char*)g + 0x114) = 1.0f;              /* scale */
+  *(unsigned char*)((char*)g + 0x118) = 0;         /* recalculateNormals */
+  /* 2026-11-28：把面图的包围盒写进 forcedBoundsSize。不写的话 Scan 按 0 边界裁三角形，
+   * 结果就是 tiles=1 但里面 0 个三角形（实测）。 */
+  if (g_nmBBox[3] > g_nmBBox[0] && g_nmBBox[5] > g_nmBBox[2]) {
+    float sx = g_nmBBox[3] - g_nmBBox[0] + 2.0f;
+    float sy = g_nmBBox[4] - g_nmBBox[1] + 4.0f;
+    float sz = g_nmBBox[5] - g_nmBBox[2] + 2.0f;
+    *(float*)((char*)g + 0xB8) = sx;
+    *(float*)((char*)g + 0xBC) = sy;
+    *(float*)((char*)g + 0xC0) = sz;
+    nlog("nm: forcedBoundsSize=%.1f x %.1f x %.1f", sx, sy, sz);
+  }
+  /* 2026-11-28：先不挂进 AstarData.graphs。挂着但不完整（没有节点/邻接）会让 A* 的
+   * 最近节点查询踩空，人机大面积拿不到路径；这一步只给可视化用。 */
+  g_navGraph = g;
+  if (i_gchandle_new) g_navGraphH = i_gchandle_new(g, 0);
+  nlog("nm: graph created (detached, display only) cls=%s src=%p mesh=%p gc=%p",
+       i_class_get_name(*(P*)g), *(P*)((char*)g + 0xF8), mesh, g_navGraphH);
+  return g;
+}
+
+/* 把托管异常打成一行：类名 + ToString()（只留 ASCII，够看原因） */
+static void nm_log_exc(const char* tag, void* exc) {
+  P cls, m, s;
+  void* e2 = 0;
+  if (!exc) return;
+  cls = *(P*)exc;
+  nlog("nm: %s threw %s", tag, cls ? i_class_get_name(cls) : "?");
+  if (!cls || !i_class_get_method_from_name || !i_runtime_invoke) return;
+  m = i_class_get_method_from_name(cls, "ToString", 0);
+  if (!m && i_class_get_parent) m = i_class_get_method_from_name(i_class_get_parent(cls), "ToString", 0);
+  if (!m) return;
+  s = i_runtime_invoke(m, exc, 0, &e2);
+  if (s && !e2) {
+    int len = *(int*)((char*)s + 8);
+    const unsigned short* ch = (const unsigned short*)((char*)s + 12);
+    char buf[220];
+    int i, n = len < 200 ? len : 200;
+    for (i = 0; i < n; i++) {
+      unsigned short c = ch[i];
+      buf[i] = (c >= 32 && c < 127) ? (char)c : '?';
+    }
+    buf[i] = 0;
+    nlog("nm: %s msg: %s", tag, buf);
+  }
+}
+
+/* 兜底：不走 Mesh，直接把顶点/三角形塞进第一块 tile（ReplaceTile(x,z,Int3[],int[])）。
+ * editor.c 负责把 float 顶点转成 Int3[]（毫米），这里只负责调用。 */
+/* 2026-11-28：用 A* 自己的 Scan 重建连接（距离 <= maxDist 且射线不被挡才连）。
+ * 等于让游戏物理判断"这条边能不能过去"，把贴着墙/栏杆的死边自动剔掉。 */
+int navfix_pg_rescan(P pg, float maxDist) {
+  P m;
+  void* exc = 0;
+  if (!pg) return 0;
+  *(float*)((char*)pg + 0xC0) = maxDist;    /* PointGraph.maxDistance */
+  *(unsigned char*)((char*)pg + 0xD0) = 1;  /* raycast：连接要做线检测 */
+  m = i_class_get_method_from_name(*(P*)pg, "Scan", 0);
+  if (!m && i_class_get_parent)
+    m = i_class_get_method_from_name(i_class_get_parent(*(P*)pg), "Scan", 0);
+  if (!m || !i_runtime_invoke) { nlog("rescan: Scan not found"); return 0; }
+  i_runtime_invoke(m, pg, 0, &exc);
+  if (exc) { nlog("rescan: Scan threw"); return 0; }
+  nlog("rescan: ok maxDist=%.1f", maxDist);
+  return 1;
+}
+
+
+/* 2026-11-28：从工作区加载 AssetBundle 里的 Mesh（Unity 打包的真资产）。
+ * 之前用运行时手搓的 Mesh，Scan 出来是空 tile；换成真资产再试一次。 */
+/* 路径带中文时，C 里的字节是 GBK；直接塞给 il2cpp（UTF-8）会崩。转一下。 */
+static void to_utf8(const char* in, char* out, int cap) {
+  wchar_t wbuf[1024];
+  int wn = MultiByteToWideChar(CP_ACP, 0, in, -1, wbuf, 1024);
+  if (wn <= 0) { out[0] = 0; return; }
+  WideCharToMultiByte(CP_UTF8, 0, wbuf, -1, out, cap, 0, 0);
+}
+
+P navfix_load_navmesh_bundle(const char* path, const char* assetName) {
+  P cls, m, bundle, mesh;
+  void* args[1];
+  void* exc = 0;
+  char u8[1024];
+  if (!path || !assetName) return 0;
+  cls = nm_class_any("UnityEngine", "AssetBundle");
+  if (!cls) { nlog("bundle: AssetBundle 类没找到"); return 0; }
+  m = i_class_get_method_from_name(cls, "LoadFromFile", 1);
+  if (!m) { nlog("bundle: LoadFromFile 没找到"); return 0; }
+  to_utf8(path, u8, sizeof u8);
+  nlog("bundle: 开始加载 %s", u8);
+  args[0] = i_string_new(u8);
+  bundle = i_runtime_invoke(m, 0, args, &exc);
+  if (exc || !bundle) { nlog("bundle: LoadFromFile 失败 %s", u8); return 0; }
+  m = i_class_get_method_from_name(cls, "LoadAsset", 1);
+  if (!m) { nlog("bundle: LoadAsset 没找到"); return 0; }
+  args[0] = i_string_new(assetName);
+  mesh = i_runtime_invoke(m, bundle, args, &exc);
+  if (exc || !mesh) { nlog("bundle: LoadAsset(%s) 失败", assetName); return 0; }
+  nlog("bundle: 取到 Mesh %p", mesh);
+  return mesh;
+}
+
+/* 把我们的图挂进 AstarData.graphs（Scan 前必须先挂上，否则 NavGraph.Scan 会抛） */
+int navfix_attach_graph(P g) {
+  P astar, data, old, elem, neu;
+  int n;
+  if (!g) return 0;
+  astar = astar_active();
+  if (!n_live(astar)) return 0;
+  data = *(P*)((char*)astar + 0x10);
+  if (!data) return 0;
+  old = *(P*)((char*)data + 0x20);
+  n = old ? *(int*)((char*)old + 0xC) : 0;
+  elem = (old && n > 0) ? i_class_get_element_class(*(P*)old) : i_class_get_parent(*(P*)g);
+  if (!elem) return 0;
+  neu = i_array_new(elem, (unsigned)(n + 1));
+  if (!neu) return 0;
+  if (n > 0) memcpy((char*)neu + 0x10, (char*)old + 0x10, (size_t)n * 4);
+  *(P*)((char*)neu + 0x10 + n * 4) = g;
+  *(unsigned*)((char*)g + 0x28) = (unsigned)n;
+  wfield(data, 0x20, neu);
+  nlog("nm: 面图已挂进 AstarData.graphs（%d -> %d 张）", n, n + 1);
+  return 1;
+}
+
+/* 把我们的图从 AstarData.graphs 里摘掉（Scan 出空 tile 时回退用） */
+int navfix_detach_graph(P g) {
+  P astar, data, old, neu;
+  int n, i, k = 0;
+  if (!g) return 0;
+  astar = astar_active();
+  if (!n_live(astar)) return 0;
+  data = *(P*)((char*)astar + 0x10);
+  if (!data) return 0;
+  old = *(P*)((char*)data + 0x20);
+  n = old ? *(int*)((char*)old + 0xC) : 0;
+  if (n <= 0) return 0;
+  neu = i_array_new(i_class_get_element_class(*(P*)old), (unsigned)n);
+  if (!neu) return 0;
+  for (i = 0; i < n; i++) {
+    P gg = *(P*)((char*)old + 0x10 + i * 4);
+    if (gg != g) *(P*)((char*)neu + 0x10 + (k++) * 4) = gg;
+  }
+  if (k == n) return 0;
+  /* 数组长度要改：按 k 重开一个 */
+  {
+    P neu2 = i_array_new(i_class_get_element_class(*(P*)old), (unsigned)k);
+    if (!neu2) return 0;
+    for (i = 0; i < k; i++) *(P*)((char*)neu2 + 0x10 + i * 4) = *(P*)((char*)neu + 0x10 + i * 4);
+    wfield(data, 0x20, neu2);
+  }
+  nlog("nm: 已把面图摘出 AstarData.graphs（剩 %d 张）", k);
+  return 1;
+}
+
+int navfix_replace_tile(P g, P vertsArr, P trisArr) {
+  P m;
+  int x = 0, z = 0;
+  void* args[4];
+  void* exc = 0;
+  if (!g || !vertsArr || !trisArr) return 0;
+  m = i_class_get_method_from_name(*(P*)g, "ReplaceTile", 4);
+  if (!m && i_class_get_parent)
+    m = i_class_get_method_from_name(i_class_get_parent(*(P*)g), "ReplaceTile", 4);
+  if (!m || !i_runtime_invoke) { nlog("nm: ReplaceTile not found"); return 0; }
+  args[0] = &x; args[1] = &z; args[2] = vertsArr; args[3] = trisArr;
+  i_runtime_invoke(m, g, args, &exc);
+  if (exc) { nm_log_exc("ReplaceTile", exc); return 0; }
+  nlog("nm: ReplaceTile ok");
+  return 1;
+}
+
+int navfix_scan_navmesh(P g) {
+  P m;
+  void* exc = 0;
+  if (!g) return 0;
+  m = i_class_get_method_from_name(*(P*)g, "Scan", 0);
+  if (!m && i_class_get_parent)
+    m = i_class_get_method_from_name(i_class_get_parent(*(P*)g), "Scan", 0);
+  if (!m || !i_runtime_invoke) { nlog("nm: Scan not found"); return 0; }
+  i_runtime_invoke(m, g, 0, &exc);
+  if (exc) { nm_log_exc("Scan", exc); return 0; }
+  {
+    P tiles = *(P*)((char*)g + 0xD0);
+    int ntile = tiles ? *(int*)((char*)tiles + 0xC) : 0;
+    nlog("nm: Scan ok tiles=%d tileX=%d tileZ=%d src=%p",
+         ntile, *(int*)((char*)g + 0xC8), *(int*)((char*)g + 0xCC), *(P*)((char*)g + 0xF8));
+  }
+  return 1;
 }
 
 /* 2026-11-27：纯面图补完点图以后，把这张图的可走面（NavMeshGraph）从 A* 里摘掉。
@@ -1190,6 +1497,7 @@ static DWORD WINAPI nav_worker(LPVOID x) {
   RE(class_from_il2cpp_type); RE(array_new); RE(class_get_element_class);
   RE(field_static_set_value);
   RE(field_static_get_value);
+  RE(class_get_methods); RE(method_get_name); RE(method_get_param_count);
   RE(gchandle_new); RE(gchandle_free);
   *(void**)&i_wbarrier = GetProcAddress(g_ga, "il2cpp_gc_wbarrier_set_field");
 #undef RE
@@ -1262,7 +1570,7 @@ static DWORD WINAPI nav_worker(LPVOID x) {
 P navfix_point_graph(void) { return point_graph(astar_active()); }
 
 /* 给 editor.c 用：A* 的第 [0] 张图 NavMeshGraph（真正的人机可走面） */
-P navfix_navmesh_graph(void) { return find_navmesh_graph(astar_active()); }
+P navfix_navmesh_graph(void) { return g_navGraph ? g_navGraph : find_navmesh_graph(astar_active()); }
 
 /* 1 = the current graph was generated by build_waypoints (we own the points),
  * 0 = the game scanned its own scene graph.  The JSON exporter records this as

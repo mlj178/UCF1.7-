@@ -111,8 +111,9 @@ def main():
     check("已重做" in body, "标记重做提示")
     body = n_toasts("void editor_save_all(void) {", "static void nav_edit_load", 4, "保存")
     check("已保存" in body, "保存成功提示")
-    body = n_toasts("static void menu_activate(void) {", "static void menu_confirm(void) {", 1, "菜单（未接线的入口/逃跑点）")
-    check("入口 / 逃跑点还没接线" in body, "没接线的菜单项会说明「不会改图」")
+    body = n_toasts("static void menu_activate(void) {", "static void menu_confirm(void) {", 1, "菜单（守卫区工具）")
+    check("入口 / 逃跑点还没接线" not in body and "入口 / 逃跑点还没接线" not in ed,
+          "旧的「入口 / 逃跑点还没接线」占位已删除（2026-11-28 已接线）")
     body = n_toasts("static void menu_confirm(void) {", "static int menu_sys_key", 1, "确认键（删除页未选类型）")
     check("先选删除类型" in body, "删除页没选类型也有提示")
 

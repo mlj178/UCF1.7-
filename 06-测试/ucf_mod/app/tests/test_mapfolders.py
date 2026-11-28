@@ -59,7 +59,9 @@ def main():
         want = P.map_dir(P.MAPS, level)
         check(os.path.normcase(os.path.abspath(folder)) == os.path.normcase(os.path.abspath(want)),
               "%s -> %s" % (level, os.path.basename(folder)))
-    check(len(P.navmesh_files(P.MAPS)) == 8, "8 个 navmesh.bin（实际 %d）"
+    # 2026-11-28：10_Nano30_Storm 原来没有可走面（原生 0 点、无 NavMeshGraph），现在由
+    # 跟随式采样（玩家脚下的碰撞地面）离线烘出第一张，所以是 9 个；native/ 仍是 8 个。
+    check(len(P.navmesh_files(P.MAPS)) == 9, "9 个 navmesh.bin（实际 %d）"
           % len(P.navmesh_files(P.MAPS)))
     for rel, path in P.navmesh_files(P.MAPS):
         check(os.path.basename(path) == P.NAVMESH, "%s 叫 navmesh.bin" % rel)

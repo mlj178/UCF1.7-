@@ -44,6 +44,9 @@ GROUPS = [
         ("vis_nodes", "路点 / 连线（PointNode / Connection）", "浅蓝点 = 普通路点，橙点 = 带标签，红点 = 禁走点；蓝线 = 连线", True),
         ("vis_crouch", "蹲守点（Bot_CrouchPos）", "红色实心小方块（两阵营同色）", True),
         ("vis_nano", "守卫区 / 守卫点（Bot_NanoGuardArea / Bot_NanoGuardPos）", "绿色线框区 + 青色实心点", True),
+        ("vis_entry", "守卫区入口点（Entrance）", "黄色小球 = F2「守卫区工具 → 3 加入口」加的 entrancePos；只影响守卫点站定后往哪看，不决定从哪进区", True),
+        ("vis_escape", "守卫区逃跑点（Escape）", "白色小球 = F2「守卫区工具 → 4 加逃跑点」加的 escapePos；被压且没有更安全守卫点时随机跑一个", True),
+        ("vis_eline", "入口连线（粉色）", "粉色线 = 守卫区/守卫点到 entrancePos 的示意线，不是人机走的路；关掉只隐藏线，不影响入口数据", True),
         ("vis_born", "出生点（SpawnPoint）", "潜伏者(蓝)/保卫者(红)/中立点(灰)；个人竞技用中立点、全员敌对；生化/剑客与补给箱混布，叠色偏粉紫", True),
         ("vis_supply", "补给箱（SupplyBox / RedBox / BlueBox）", "金/粉/青实心高柱 = 补给/红/蓝", True),
         ("vis_jump", "跳点（Bot_JumpLink）", "黄色连线 + 两端小方块；放跳链那次会话里起点上方还有个黄球，"
@@ -100,6 +103,9 @@ VIS_COLORS = {
     "vis_nodes": ("#CCE0FF", "#FF8C0D", "#FF261F", "#4073F2"),
     "vis_crouch": ("#FF261F",),
     "vis_nano": ("#1AFF40", "#1AF2F2"),
+    "vis_entry": ("#FFE00D",),
+    "vis_escape": ("#CCE0FF",),
+    "vis_eline": ("#FF59B3",),
     "vis_born": ("#2666FF", "#FF261F", "#B3B3B3"),
     "vis_supply": ("#FFD933", "#FF59B3", "#1AF2F2"),
     "vis_jump": ("#FFE00D",),
@@ -115,11 +121,12 @@ VIS_COLORS = {
 # 它不是游戏物体，也不写进 markers.txt / 包文件。只记颜色和是什么（不写直径 / RGB）。
 # 色值只用来画那个小圆点，界面上不显示；文字只给汉字色名（用户要求不写 RGB）。
 MARK_BALLS = (
-    ("#FFE00D", "黄", "跳链起点（每条跳链一个，落点没有球）"),
+    ("#FFE00D", "黄", "跳链起点（每条跳链一个，落点没有球）/ 守卫区入口点（Entrance）"),
     ("#1AFF40", "绿", "守卫点（Nanopos）"),
     ("#2666FF", "蓝", "守卫区（Area）中心；范围看那片蓝色线框"),
     ("#FF261F", "红", "蹲守点（Crouch）"),
     ("#1AF2F2", "青", "标签区（Tag）"),
+    ("#CCE0FF", "白", "守卫区逃跑点（Escape）"),
 )
 
 
@@ -129,6 +136,9 @@ LIVE_VIS_KEYS = {
     "visualizer": "on",
     "vis_nodes": "nodes",
     "vis_nano": "nano",
+    "vis_entry": "entry",
+    "vis_escape": "escape",
+    "vis_eline": "eline",
     "vis_crouch": "crouch",
     "vis_born": "born",
     "vis_supply": "supply",

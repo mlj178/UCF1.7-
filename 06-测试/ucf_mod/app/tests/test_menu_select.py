@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-r"""自检：守卫区工具里 1-4 只是「切换选中」，不能一按就建东西（2026-11-26 用户要求）。
+r"""自检：守卫区工具里 1-7 只是「切换选中」，不能一按就建东西（2026-11-26 用户要求）。
 
 跑法：python app/tests/test_menu_select.py
 
@@ -10,8 +10,9 @@ r"""自检：守卫区工具里 1-4 只是「切换选中」，不能一按就�
 查这几件事：
   1) 守卫区工具（sub 3）的数字键只改选中项，不调 menu_activate；
   2) 真正执行仍然走 5 / 左键 / 回车（menu_confirm -> menu_activate）；
-  3) 入口 / 逃跑点（3、4）按 5 也不开空撤销步、不动「未保存」；
-  4) 菜单里写明「1-4 / 8/2 只切换选中」；
+  3) 入口 / 逃跑点 / 删除入口 / 删除逃跑点 / 整体移动（3-7）按 5 才生效；
+     安全等级在「加守卫点」子页（sub 10）按 1-4 直接切；
+  4) 菜单里写明「1-7 / 8/2 只切换选中」；
   5) 其它子页（添加点位 / 建立路径）的数字键行为没被误改。
 """
 import os
@@ -72,18 +73,25 @@ def main():
     check("menu_activate();" in confirm, "5 / 左键 / 回车 仍然走 menu_activate")
     check("if (g_wpArm)" in confirm, "连续放置（添加点位）仍然直接放")
 
-    print("[3] 入口 / 逃跑点按 5 不产生副作用")
+    print("[3] 加守卫点子页：1-4 换等级，5 放点")
     act = section(ed, "if (g_wpMenuSub == 3) {                 /* 守卫区 */", "if (g_wpMenuSub == 4)")
-    guard_at = act.find("if (i > 1) {")
-    cam_at = act.find("if (!cam_point(&p))")
-    step_at = act.find("ed_step();")
-    check(guard_at >= 0, "有 i > 1 的提前 return")
-    check(0 <= guard_at < cam_at and 0 <= guard_at < step_at,
-          "提前 return 在 cam_point / ed_step 之前（不开空撤销步）")
+    sub = section(ed, "static int guard_add_place(void) {", "/* 菜单确认")
+    keys = section(ed, "int editor_menu_key(unsigned vk, int ext) {", "void editor_on_key_plain")
+    confirm = section(ed, "static void menu_confirm(void) {", "/* 菜单打开时：菜单键")
+    check("if (i == 1)" in act and "g_wpMenuSub = 10" in act, "守卫区第 2 项进入加点子页")
+    check("if (i == 2)" in act and "make_entrance" in act, "入口按 5 才落盘")
+    check("if (i == 3)" in act and "make_escape" in act, "逃跑点按 5 才落盘")
+    check("area_at(&p)" in sub and "make_nanopos(g_mk[ai].aid, p, g_nanoSafety" in sub,
+          "子页放点按准星归区、用当前安全等级")
+    check("ed_step();" in sub and "mke_note_add(n0);" in sub, "放点仍进撤销栈")
+    check("g_wpMenuSub == 10 && vk >= '1' && vk <= '5'" in keys, "子页数字键 1-4 直接换、5 放")
+    check("g_nanoSafety = gi" in keys, "1-4 立即设置 g_nanoSafety")
+    check("if (g_wpMenuSub == 10)" in confirm and "guard_add_place();" in confirm,
+          "回车 / 小键盘 5 / 左键在子页也直接放点")
 
     print("[4] 菜单提示")
     block = section(ed, "if (g_wpMenuSub == 3 && off < (int)sizeof s - 460)", "/* 准星处那个虚线框的坐标")
-    check("1-4 / 8/2 只切换选中 · 5 / 左键 / 回车 才真正执行" in block,
+    check("1-7 / 8/2 只切换选中 · 5 / 左键 / 回车 才真正执行" in block,
           "守卫区工具底部写明「先选后执行」")
     check("1-%d / 8/2 只切换选中 · 5 / 左键 / 回车 才执行" in ed,
           "撤销保存页 / 删除连线路点页也写明「先选后执行」")

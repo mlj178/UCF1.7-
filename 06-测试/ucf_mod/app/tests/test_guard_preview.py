@@ -59,8 +59,8 @@ def main():
     check("g_collectOnly" not in tick, "采集模式已删除，预览不再看它")
 
     print("[2] 预览画的就是真会建的东西")
-    check("brush = preview ? (g_wpMenuSubSel == 0 ? 4 : 3)" in tick,
-          "第 1 项 = 守卫区(4)，第 2 项 = 守卫点(3)")
+    check("(g_wpMenuSub == 3 && g_wpMenuSubSel == 0) ? 4 : 3" in tick,
+          "守卫区工具第 1 项 = 守卫区(4)，第 2 项/加守卫点子页 = 守卫点(3)")
     slot = section(ed, "static int ghost_slot(int brush) {", "static int ghost_mesh_key")
     check("case 3: return 2;" in slot, "守卫点预览 = 槽位 2（绿，和实体的 Bot_NanoGuardPos 同色）")
     check("case 4: return 3;" in slot, "守卫区预览 = 槽位 3（蓝，和 Bot_NanoGuardArea 同色）")
@@ -73,9 +73,11 @@ def main():
         check(bad not in tick, "ghost_tick 里不调用 " + bad)
     act = section(ed, "if (g_wpMenuSub == 3) {                 /* 守卫区 */", "if (g_wpMenuSub == 4)")
     check("make_area(30, p);" in act, "按 5 仍然立刻建守卫区（行为没变）")
-    check("make_nanopos(" in act, "按 5 仍然立刻建守卫点")
+    sub = section(ed, "static int guard_add_place(void) {", "/* 菜单确认")
+    check("if (i == 1)" in act and "g_wpMenuSub = 10" in act, "第 2 项先进加守卫点子页")
+    check("make_nanopos(" in sub, "子页按 5 才建守卫点")
     check("g_wpArm" not in act, "没有偷偷改成「先选中再放置」（不碰 g_wpArm）")
-    check("mke_note_add(n0);" in act, "创建仍进撤销栈（预览不进）")
+    check("mke_note_add(n0);" in sub, "创建仍进撤销栈（预览不进）")
 
     print("[4] 预览位置 = 创建位置")
     norm = tick.replace("\r\n", "\n")
@@ -98,13 +100,17 @@ def main():
     check("3.0 m 见方" in block, "第 1 项说明守卫区尺寸")
     check("BoxCollider 中心在准星落点" in block, "第 1 项说明中心落在准星")
     check("蓝色框" in block, "第 1 项说明颜色")
-    check("准星在守卫区 #%d（aid=%d）里：按 5 就挂进这个区" in block,
-          "第 2 项说明会挂进准星所在的那个区")
+    check("准星在守卫区 #%d（aid=%d）里：按 5 进入加守卫点子页" in block,
+          "第 2 项说明按 5 进入加点子页")
     # 2026-11-27 用户要求：守卫点只是"设立点"，区外按 5 不再连带建区，所以这里改成"不建"
     check("准星不在任何守卫区里：按 5 不会建点" in block,
           "不在任何区里时说明按 5 不会建点（区外不再自动建区）")
     check("area_at" in block, "用的是按落点归区（area_at），不是「当前区」")
-    check("入口 / 逃跑点还没接" in block, "第 3/4 项说明还没接（别让人等虚线）")
+    # 2026-11-28：3/4 已经接线（入口 = 张望方向，逃跑点 = 被压落点），不再提示"还没接"
+    check("当前区 #%d" in block and "入口 %d 个" in block and "逃跑点 %d 个" in block,
+          "第 3/4 项显示当前区 / 入口 / 逃跑点数量")
+    check("入口只影响站定后的张望方向" in block, "第 3 项说明入口只是观察方向")
+    check("逃跑点在" in block and "随机取一个跑过去" in block, "第 4 项说明逃跑点怎么用")
     check("准星没打到地面" in block, "打不到地面时说明虚线为何不显示")
     check("g_wpMenuSubSel <= 1 && !g_ghostPvOk" in block,
           "只有前两项才提示「没打到地面」（第 3/4 项本来就没框）")
